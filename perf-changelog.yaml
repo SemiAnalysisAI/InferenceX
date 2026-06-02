@@ -3400,4 +3400,4 @@
     - minimaxm2.5-fp4-b200-dynamo-vllm
   description:
     - "Add MiniMax-M2.5 NVFP4 B200 disaggregated multinode vLLM benchmarks via Dynamo"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1643
