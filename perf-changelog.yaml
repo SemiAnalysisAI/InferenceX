@@ -3382,7 +3382,7 @@
     - dsv4-fp4-b200-trt
     - dsv4-fp4-b300-trt
   description:
-    - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:fix-dsv4-swa-scratch-revert-shrink-c914d6d (TRT-LLM feat/deepseek_v4 @ 084cf2ba + kv_cache_manager_v2 fix: free SWA scratch slots on shrink instead of asserting, which crashed the engine on attention-DP context/generation reverts at high concurrency, e.g. b300 8k1k conc>=512)"
+    - "Revert the non-MTP TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-2dd03e6 and disable DSv4 SWA scratch reuse via TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE=0 in the launcher. Root cause of the prior attention-DP hangs/crashes: the V2 scheduler grows a context request's KV cache (incl. SWA scratch slots) before delay batching can defer it, so revert_allocate_context -> resize(shrink) must release scratch slots of a never-forwarded request, which has no finish_event -> crash on every dpa=true job. Disabling scratch reuse stops those slots from being allocated so the revert shrinks cleanly."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
 
 - config-keys:
