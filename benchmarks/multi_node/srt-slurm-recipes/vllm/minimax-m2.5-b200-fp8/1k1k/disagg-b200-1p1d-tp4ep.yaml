@@ -64,6 +64,6 @@ backend:
 
 benchmark:
   type: "sa-bench"
-  isl: 8192
+  isl: 1024
   osl: 1024
   concurrencies: "32x64"
