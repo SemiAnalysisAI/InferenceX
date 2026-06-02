@@ -3401,4 +3401,4 @@
   description:
     - "Add MiniMax-M2.5 FP8 B200 disaggregated multinode vLLM benchmarks via Dynamo"
     - "Add 1k1k/8k1k FP8 recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b200-fp8/"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1649
