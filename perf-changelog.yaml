@@ -3361,7 +3361,7 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM DP-attention benchmark; image rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1626
-  
+
 - config-keys:
     - dsv4-fp4-mi355x-vllm-mtp
   description:
@@ -3374,3 +3374,21 @@
   description:
     - "Update the TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-2dd03e6"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Add MTP/EAGLE speculative-decoding sibling for dsv4-fp4-mi355x-sglang (model: deepseek-ai/DeepSeek-V4-Pro) on v0.5.12.post1-rocm720-mi35x-20260601 (mainline ROCm nightly carrying sgl-project/sglang#26383); routes around the absent deep_gemm via SGLANG_OPT_FP8_WO_A_GEMM=0 + SGLANG_TOPK_TRANSFORM_512_TORCH=1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1631
+
+- config-keys:
+    - dsv4-fp4-b300-vllm
+  description:
+    - "Update DSv4 FP4 B300 vLLM image tag to v0.22.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1588
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-mtp
+  description:
+    - "Add DeepSeek-V4-Pro FP4 MI355X ATOM MTP3 benchmark; image rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1627
