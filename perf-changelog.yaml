@@ -3395,3 +3395,9 @@
   description:
     - "Add DeepSeek-V4-Pro FP4 MI355X ATOM MTP3 benchmark; image rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1627
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Update SGLang image from nightly-dev-cu13-20260509-9ee83034 to nightly-dev-20260527-14f81a67"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1637
