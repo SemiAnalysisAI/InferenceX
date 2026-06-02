@@ -9,6 +9,13 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX="${PYTHONPYCACHEPREFIX:-/tmp/inferencex-pycache}"
 mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 
+# Inference server port shared by every benchmark recipe. Launchers that need
+# a non-default value (e.g. launch_mi355x-amds.sh derives PORT from RUNNER_NAME
+# to avoid collisions across concurrent gh-runners on a shared host) set PORT
+# themselves before sourcing this file; the `:-` fallback only kicks in when
+# nothing upstream set it.
+export PORT="${PORT:-8888}"
+
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------
@@ -892,9 +899,6 @@ run_eval() {
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
 AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"
-# TRACE_REPLAY_DIR retained for any out-of-tree consumer that still
-# imports the kv-cache-tester scripts. Not used by the helpers below.
-TRACE_REPLAY_DIR="${TRACE_REPLAY_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/trace-replay}"
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -916,12 +920,27 @@ ensure_hf_cli() {
 }
 
 resolve_trace_source() {
-    local dataset="semianalysisai/cc-traces-weka-no-subagents-051226"
-    # aiperf reads the corpus via its public-dataset registry; the loader
-    # under the hood pulls from semianalysisai/cc-traces-weka-no-subagents-051226
-    # (949 traces, no-subagents variant — see plugins.yaml).
-    TRACE_SOURCE_FLAG="--public-dataset semianalysis_cc_traces_weka"
-    echo "Loading traces via aiperf public-dataset: semianalysis_cc_traces_weka ($dataset)"
+    # Per-recipe override: set WEKA_LOADER_OVERRIDE to one of the aiperf
+    # public-dataset loader names allowed by the inferencex-agentx-mvp
+    # scenario. Used by recipes whose servers have non-default context
+    # caps (e.g. minimaxm2.5 at max_model_len ~256k can't replay the
+    # unfiltered 052726 corpus and switches to the 256k-capped variant).
+    local loader="${WEKA_LOADER_OVERRIDE:-semianalysis_cc_traces_weka_with_subagents}"
+    local dataset
+    case "$loader" in
+        semianalysis_cc_traces_weka_with_subagents)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-052726"
+            ;;
+        semianalysis_cc_traces_weka_with_subagents_256k)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-052726-256k"
+            ;;
+        *)
+            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k" >&2
+            exit 1
+            ;;
+    esac
+    TRACE_SOURCE_FLAG="--public-dataset $loader"
+    echo "Loading traces via aiperf public-dataset: $loader ($dataset)"
     # Pre-download the dataset into the shared HF_HUB_CACHE (same mount used
     # for model weights) so subsequent runs read from cache instead of
     # re-downloading every job.
@@ -930,6 +949,12 @@ resolve_trace_source() {
 }
 
 install_agentic_deps() {
+    # vllm/vllm-openai container ships without git. pip needs git to
+    # introspect the aiperf source tree on install. Install on demand;
+    # no-op when git is already present (e.g. AMD images that ship it).
+    if ! command -v git >/dev/null 2>&1; then
+        apt-get update && apt-get install -y git
+    fi
     agentic_pip_install --quiet urllib3 requests 2>/dev/null || true
     agentic_pip_install -q -r "$AGENTIC_DIR/requirements.txt"
     # Editable install of aiperf from the submodule — gives us the
@@ -952,22 +977,25 @@ install_agentic_deps() {
 build_replay_cmd() {
     # aiperf invocation for the inferencex-agentx-mvp scenario.
     #
-    # Live-assistant mode is on by default
-    # (AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1): the loader emits
-    # user-only deltas and the worker threads the server's live assistant
-    # response back into the session. This preserves cache-hit reuse on
-    # the just-generated KV blocks at the cost of hash-id fidelity past
-    # turn 0 — which is exactly what we want for benchmark numbers.
+    # Pre-canned assistant replay is the default: recorded assistant responses
+    # are used for future prompt construction, and live server responses are
+    # discarded. Set AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1 explicitly
+    # to use live-assistant mode, where the loader emits user-only deltas and
+    # the worker threads the server's live assistant response back into the
+    # session.
     #
-    # The scenario plugin locks: --cache-bust first_turn_prefix,
-    # --inter-turn-delay-cap-seconds 60, etc., and auto-injects them — so
-    # we do not pass them. See utils/aiperf/docs/tutorials/agentx-mvp.md.
+    # The scenario plugin locks: --cache-bust first_turn_prefix and
+    # --trace-idle-gap-cap-seconds 60 (per-trace idle-gap compression
+    # against parent + subagent request-start timestamps; supersedes the
+    # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
+    # and auto-injects them — so we do not pass them. See
+    # utils/aiperf/docs/tutorials/agentx-mvp.md.
     local result_dir="$1"
-    local duration="${DURATION:-1800}"
+    local duration="$DURATION"
 
-    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES=1
+    export AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES="${AIPERF_DATASET_WEKA_LIVE_ASSISTANT_RESPONSES:-0}"
     # Dataset configuration (load + reconstruct + inputs.json + mmap)
-    # routinely takes 4-5 min for the 949-trace weka corpus on fast /tmp
+    # routinely takes 4-5 min for the Weka corpus on fast /tmp
     # (B300) but can stretch to 14 min on slower /tmp + parallel contention
     # (observed on H200 where all 14 R3 jobs hit aiperf's 900s Configure
     # Profiling timeout simultaneously). Bump to 1800s to absorb 3x
@@ -985,12 +1013,11 @@ build_replay_cmd() {
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"
-    # Abort the run if real-failure rate exceeds 5% after a grace floor of
-    # max(CONC, 10) records. Context-overflow records are dropped from the
-    # failure tally in AGENTIC_REPLAY scenarios (see record_processor_service
-    # in the aiperf submodule), so this threshold measures only real failures
-    # (server 5xx, parse errors, malformed responses).
-    REPLAY_CMD+=" --failed-request-threshold 0.05"
+    # Fail runs once more than 10% of requests error. This keeps known
+    # transient low-rate failures from killing long sweeps while still
+    # catching malformed payloads or server crashes before they get aggregated
+    # as benchmarkable data.
+    REPLAY_CMD+=" --failed-request-threshold 0.10"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count (was hardcoded 0%-70% upstream).
     # Avoids starting trajectories right at turn 0 where the KV cache is
@@ -1011,11 +1038,18 @@ build_replay_cmd() {
     # need trust_remote_code=True to load. Benign for models without
     # custom tokenizer code, so we set it unconditionally.
     REPLAY_CMD+=" --tokenizer-trust-remote-code"
-    # Default --num-dataset-entries is 100; the weka corpus has 949. Cap
-    # at 949 so all unique traces are loaded (the loader treats this as a
-    # ``min(cap, available)`` ceiling, not a target — see
+    # Keep replay inputs inside the same context window used to launch the
+    # server. The WEKA corpus contains a few very long parent/subagent traces;
+    # if we mmap and replay them against a smaller-context server they become
+    # deterministic 4xxs and can still pressure the engine while queued.
+    if [ -n "${MAX_MODEL_LEN:-}" ] && [ "$MAX_MODEL_LEN" != "0" ]; then
+        REPLAY_CMD+=" --max-context-length $MAX_MODEL_LEN"
+    fi
+    # Default --num-dataset-entries is 100; the with-subagents Weka corpus
+    # has 472. Cap at 472 so all unique traces are loaded (the loader treats
+    # this as a ``min(cap, available)`` ceiling, not a target — see
     # semianalysis_cc_traces_weka.py).
-    REPLAY_CMD+=" --num-dataset-entries 949"
+    REPLAY_CMD+=" --num-dataset-entries 472"
     # 1-second timeslices on the server-metrics scrape so the post-run
     # plotter has per-window time series (KV usage, cache hit rate,
     # throughput, etc.). Matches kv-cache-tester's poll_interval=1.0
@@ -1023,7 +1057,7 @@ build_replay_cmd() {
     # Without this, aiperf only emits aggregate stats and the 6x2 panels
     # collapse to flat lines.
     REPLAY_CMD+=" --slice-duration 1.0"
-    REPLAY_CMD+=" --output-artifact-dir $result_dir/trace_replay"
+    REPLAY_CMD+=" --output-artifact-dir $result_dir/aiperf_artifacts"
     # The inferencex-agentx-mvp scenario enforces a 900s minimum
     # benchmark duration. For smoke tests with shorter durations, opt
     # into --unsafe-override (the run's submission_valid will be flagged
@@ -1046,4 +1080,28 @@ write_agentic_result_json() {
     # don't fail the launcher if plot generation has trouble (e.g. matplotlib
     # missing in a stripped-down image). The agg JSON is the success gate.
     python3 "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" "$result_dir" 2>&1 || true
+}
+
+run_agentic_replay_and_write_outputs() {
+    local result_dir="$1"
+    local replay_rc
+
+    echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
+
+    set +e
+    set -x
+    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
+    replay_rc=${PIPESTATUS[0]}
+    set +x
+    set -e
+
+    write_agentic_result_json "$result_dir"
+
+    python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
+        "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
+
+    if [ "$replay_rc" -ne 0 ]; then
+        echo "ERROR: agentic trace replay exited with code $replay_rc after writing available results" >&2
+        return "$replay_rc"
+    fi
 }
