@@ -50,7 +50,7 @@ export PYTHONNOUSERSITE=1
 
 # Per recipe: EP + DP=8 (no --tensor-parallel-size). TP from search space is
 # used for GPU allocation by the runner and as the DP size.
-vllm serve $MODEL \
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
 --port $PORT \
 --trust-remote-code \

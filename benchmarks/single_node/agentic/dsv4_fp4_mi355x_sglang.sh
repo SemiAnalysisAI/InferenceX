@@ -145,7 +145,7 @@ fi
 
 echo "Starting sglang server..."
 python3 -m sglang.launch_server \
-    --model-path "$MODEL" \
+    --model-path "$MODEL_PATH" --served-model-name "$MODEL" \
     --host=0.0.0.0 \
     --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \

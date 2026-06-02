@@ -44,7 +44,7 @@ export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export PYTHONNOUSERSITE=1
 
 python3 -m sglang.launch_server \
---model-path=$MODEL \
+--model-path=$MODEL_PATH --served-model-name=$MODEL \
 --host=0.0.0.0 \
 --port=$PORT \
 --trust-remote-code \

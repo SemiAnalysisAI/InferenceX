@@ -66,7 +66,7 @@ echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 export VLLM_USE_FLASHINFER_MOE_INT4=1
 
-vllm serve $MODEL \
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
 --port $PORT \
 --gpu-memory-utilization 0.95 \

@@ -108,7 +108,7 @@ fi
 { set +x; } 2>/dev/null
 SGLANG_CMD=(
     python3 -m sglang.launch_server
-    --model-path="$MODEL"
+    --model-path="$MODEL_PATH" --served-model-name="$MODEL"
     --host=0.0.0.0
     --port="$PORT"
     --served-model-name "Qwen/Qwen3.5-397B-A17B-FP8"

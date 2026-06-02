@@ -46,7 +46,7 @@ export PYTHONNOUSERSITE=1
 
 python3 -m sglang.launch_server \
     --attention-backend triton \
-    --model-path $MODEL \
+    --model-path "$MODEL_PATH" --served-model-name "$MODEL" \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \

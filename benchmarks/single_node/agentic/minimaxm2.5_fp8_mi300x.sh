@@ -74,7 +74,7 @@ echo "Starting vllm server..."
 export VLLM_ROCM_USE_AITER=1
 export PYTHONNOUSERSITE=1
 
-vllm serve $MODEL \
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
 --port $PORT \
 --tensor-parallel-size=$TP \

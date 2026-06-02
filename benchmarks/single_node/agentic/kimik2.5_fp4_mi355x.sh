@@ -796,7 +796,7 @@ export PYTHONNOUSERSITE=1
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
-    vllm serve "$MODEL"
+    vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     --tensor-parallel-size="$TP"

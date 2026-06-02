@@ -74,7 +74,7 @@ esac
 
 echo "Starting vllm server..."
 
-vllm serve $MODEL \
+vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
 --port $PORT \
 --attention-backend ROCM_AITER_UNIFIED_ATTN \
