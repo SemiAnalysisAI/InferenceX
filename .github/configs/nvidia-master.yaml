@@ -9265,7 +9265,7 @@ minimaxm2.5-fp4-gb300-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.1
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
-  runner: gb300
+  runner: gb300-nv
   precision: fp4
   framework: dynamo-vllm
   multinode: true
