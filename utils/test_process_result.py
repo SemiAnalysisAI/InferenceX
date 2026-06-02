@@ -417,6 +417,39 @@ class TestCalculations:
         assert output_data["output_tput_per_gpu"] == pytest.approx(750.0)
         assert output_data["input_tput_per_gpu"] == pytest.approx(250.0)
 
+    def test_multinode_agg_detected_when_decode_gpus_zero(self, tmp_path, sample_benchmark_result, multinode_env_vars):
+        """decode_gpus == 0 marks an aggregated multinode run: it is classified as agg
+        (disagg=False, overriding the DISAGG env flag) and the DECODE_* detail vars are
+        no longer required."""
+        env = multinode_env_vars.copy()
+        env["DISAGG"] = "true"  # launcher mislabels it; topology is the source of truth
+        env["PREFILL_GPUS"] = "16"
+        env["DECODE_GPUS"] = "0"
+        env["PREFILL_TP"] = "16"
+        env["PREFILL_EP"] = "1"
+        env["PREFILL_NUM_WORKERS"] = "1"
+        env["PREFILL_DP_ATTN"] = "false"
+        # An agg run has no decode pool, so it does not export the DECODE_* detail vars.
+        for key in ("DECODE_NUM_WORKERS", "DECODE_TP", "DECODE_EP", "DECODE_DP_ATTN"):
+            env.pop(key, None)
+
+        result = run_script(tmp_path, env, sample_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        # Detected as aggregated despite DISAGG=true in the env.
+        assert output_data["disagg"] is False
+        assert output_data["is_multinode"] is True
+        assert output_data["num_prefill_gpu"] == 16
+        assert output_data["num_decode_gpu"] == 0
+        assert output_data["decode_tp"] == 0
+        assert output_data["decode_ep"] == 0
+        assert output_data["decode_num_workers"] == 0
+        # Cluster-wide per-GPU denominators (single colocated pool of 16 GPUs).
+        assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / 16)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 16)
+        assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 16)
+
     def test_multinode_zero_total_gpus_fails(self, tmp_path, sample_benchmark_result, multinode_env_vars):
         """Invalid multinode metadata should fail before throughput division."""
         env = multinode_env_vars.copy()
