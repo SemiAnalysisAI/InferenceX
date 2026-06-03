@@ -23,23 +23,22 @@ SERVER_LOG=/workspace/server.log
 
 export OMP_NUM_THREADS=1
 
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=""
-else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
-fi
-
+CALCULATED_MAX_MODEL_LEN=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     CALCULATED_MAX_MODEL_LEN=" --max-model-len $EVAL_MAX_MODEL_LEN "
 fi
 
-if [ "$EP_SIZE" -gt 1 ]; then
-  EP=" --enable-expert-parallel"
-else
-  EP=" "
-fi
+PARALLEL_ARGS=(-tp "$TP") #TP
+if [ "$DP_ATTENTION" = "true" ]; then
+    if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
+        PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
+    else #DP+TP
+        PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+    fi
+fi 
+
+SPEC_ARGS=(--method mtp --num-speculative-tokens 3 )
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -49,10 +48,10 @@ set -x
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    -tp $TP \
-    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN $EP \
-    --method mtp \
-    --num-speculative-tokens 3 \
+    "${PARALLEL_ARGS[@]}" \
+    "${SPEC_ARGS[@]}" \
+    --kv_cache_dtype fp8 $CALCULATED_MAX_MODEL_LEN \
+    --no-enable_prefix_caching \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
