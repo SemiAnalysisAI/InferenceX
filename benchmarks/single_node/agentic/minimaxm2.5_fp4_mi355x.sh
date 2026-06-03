@@ -34,14 +34,13 @@ rocm-smi || true
 amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
-# Cap the replay corpus at 256k (470 traces, max in+out <= 256k) instead of the
-# unfiltered 052726 corpus whose ~1M-token traces get rejected and add no perf
-# signal at high concurrency.
+# MiniMax-M2.5 servers run at max_model_len ~256k; the unfiltered 052726
+# corpus has requests up to ~1M proxy tokens that would be rejected.
+# Switch to the 256k-capped variant (470 traces, max in+out <= 256k).
 #export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
 #060226
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
 
-# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
@@ -111,7 +110,6 @@ case "$OFFLOADING" in
         # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
         # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
         # worker RSS / page cache / slurm cgroup).
-        #TODO: fix
         TOTAL_CPU_DRAM_GB=3000
         TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
@@ -122,6 +120,12 @@ case "$OFFLOADING" in
         # used. The shortcut --kv_offloading_backend native + --kv_offloading_size
         # form constructs the KVTransferConfig at engine startup
         # (vllm/config/vllm.py:662).
+
+        # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
+        # This gives extra cache hit than disabling hybrid kv cache manager
+        # srok,
+        # --no-disable-hybrid-kv-cache-manager is not compatible with lmcache, even for non-hma
+        # https://github.com/vllm-project/vllm/blob/0585b5ba2eaa7860d6976bc7ba376bdbca5119fc/vllm/distributed/kv_transfer/kv_connector/factory.py#L56-L60
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
             --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
@@ -144,7 +148,6 @@ case "$OFFLOADING" in
         # pool, but let the external MP server own that pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
         # LMCache backend.
-        #TODO: fix
         TOTAL_CPU_DRAM_GB=3000
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
@@ -167,6 +170,7 @@ case "$OFFLOADING" in
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
         export LMCACHE_BLOCKING_TIMEOUT_SECS=120
 
+        set -x
         echo "Starting LMCache MP server..."
         LMCACHE_CMD=(
             lmcache server
@@ -189,6 +193,9 @@ case "$OFFLOADING" in
         wait_for_lmcache_ready
 
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+        # srok,
+        # --no-disable-hybrid-kv-cache-manager is not compatible with lmcache, even for non-hma
+        # https://github.com/vllm-project/vllm/blob/0585b5ba2eaa7860d6976bc7ba376bdbca5119fc/vllm/distributed/kv_transfer/kv_connector/factory.py#L56-L60
         OFFLOAD_ARGS=(
             --kv-transfer-config
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
@@ -208,12 +215,7 @@ echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
 # Install amd-quark for MXFP4 (manual install due to ROCm vLLM bug)
-pip install amd-quark
-
-# Disable AITER RMSNorm for TP < 8 due to accuracy issues
-if [ "${TP}" -lt 8 ]; then
-  export VLLM_ROCM_USE_AITER_RMSNORM=0
-fi
+pip install -q amd-quark
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue
 version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
@@ -231,12 +233,12 @@ VLLM_CMD=(
     --port "$PORT"
     --tensor-parallel-size="$TP"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.90
+    --gpu-memory-utilization 0.95
     --kv-cache-dtype fp8 \
-    --block-size=1
+    --block-size=32
     --trust-remote-code
+    --attention-backend "ROCM_AITER_FA" 
     --max-num-seqs "$CONC"
-    --mm-encoder-tp-mode data
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
