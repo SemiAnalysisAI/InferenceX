@@ -3444,3 +3444,10 @@
     - "Add MiniMax-M2.5 NVFP4 GB300 disaggregated multinode vLLM benchmarks via Dynamo"
     - "Add 1k1k/8k1k minimax recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1641
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "Throwaway: conc-64-only gsm8k eval for DEP8+MTP3 to reproduce SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK < 256 corruption (dispatch=32 triggers broken All2All kernel, expect 0pct gsm8k). Not for merge."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659
+  evals-only: true
