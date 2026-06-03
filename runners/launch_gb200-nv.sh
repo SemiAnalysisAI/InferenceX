@@ -54,11 +54,14 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         # model.path alias in our DSV4 recipes.
         export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8"
         exit 1
     fi
 else
@@ -71,8 +74,59 @@ export SLURM_ACCOUNT="benchmark"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/mnt/lustre01/users-public/sa-shared/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+# === Cluster diagnostic probe (minimax only) ===
+# The gb200-nv_* runners may be hosted on different physical clusters
+# (e.g., the legacy NVIDIA Lustre cluster vs Oracle Cloud "watchtower").
+# Print enough info to identify the layout, then pick a writable
+# squash dir on a path that's also visible to compute nodes. Falls
+# back to the legacy sa-shared path so other configs are untouched.
+SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
+if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    echo "=== cluster diagnostic (minimax sweep) ==="
+    echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
+    echo "HOME=$HOME"
+    echo "HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
+    echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
+    echo "--- mount summary ---"
+    mount | grep -E 'lustre|nfs|home|shared|/mnt' || true
+    echo "--- /mnt contents ---"
+    ls -ld /mnt/* 2>/dev/null || true
+    echo "--- /mnt/lustre01 user dirs ---"
+    ls -ld /mnt/lustre01/users/* 2>/dev/null || true
+    ls -ld /mnt/lustre01/users-public/* 2>/dev/null || true
+    ls -ld /mnt/lustre01/groups/* 2>/dev/null || true
+    echo "--- /nfs contents (if present) ---"
+    ls -ld /nfs/* 2>/dev/null || true
+    echo "--- /home contents ---"
+    ls -ld /home/* 2>/dev/null || true
+    echo "=== end diagnostic ==="
+
+    # Probe candidate squash dirs in order, pick first writable one.
+    SQUASH_DIR=""
+    for cand in \
+        /mnt/lustre01/users/slurm-shared/squash \
+        /mnt/lustre01/users-public/slurm-shared/squash \
+        /mnt/lustre01/groups/slurm-shared/squash \
+        /mnt/lustre01/users-public/sa-shared \
+        /nfs/slurm-shared/squash \
+        /home/slurm-shared/gharunners/squash
+    do
+        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
+            rm -f "$cand/.write-probe.$$" 2>/dev/null
+            SQUASH_DIR="$cand"
+            echo "Selected SQUASH_DIR=$SQUASH_DIR (first writable candidate)"
+            break
+        else
+            echo "  not writable: $cand"
+        fi
+    done
+    if [ -z "$SQUASH_DIR" ]; then
+        echo "Error: no writable squash dir candidate found on this cluster" >&2
+        exit 1
+    fi
+fi
+SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 enroot import -o $SQUASH_FILE docker://$IMAGE
 enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
@@ -204,12 +258,20 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
     git checkout main || exit 1
-    mkdir -p recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200-fp8" recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
+    if [[ $PRECISION == "fp8" ]]; then
+        mkdir -p recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200-fp8" recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
+    elif [[ $PRECISION == "fp4" ]]; then
+        mkdir -p recipes/vllm/minimax-m2.5-gb200 || exit 1
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200 || exit 1
+    else
+        echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
+        exit 1
+    fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
