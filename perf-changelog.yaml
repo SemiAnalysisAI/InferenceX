@@ -3430,3 +3430,10 @@
     - "Image: vllm/vllm-openai:v0.20.1"
     - "Same 1k/1k and 8k/1k search space as gb300, plus a new tp8-1p1d at low concurrencies for both ISLs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1652
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Add expert-parallel sweep points for Kimi K2.5 FP4 B200/B300 vLLM aggregate benchmarks"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1658
