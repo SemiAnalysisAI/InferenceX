@@ -8,6 +8,87 @@ set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
+    # ------------------------------------------------------------------
+    # llm-d-vllm: InferenceX-owned multi-node path (no srt-slurm).
+    # Mirrors the AMD sglang-disagg dispatch shape: wrapper script ->
+    # benchmarks/multi_node/llm-d/submit.sh -> sbatch -> JOB_ID.
+    # ------------------------------------------------------------------
+    if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
+        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
+            export MODEL_PATH="/models/DeepSeek-R1-0528"
+            export MODEL_NAME="DeepSeek-R1-0528"
+        else
+            echo "Unsupported MODEL_PREFIX/PRECISION for llm-d-vllm on H200: $MODEL_PREFIX/$PRECISION" >&2
+            exit 1
+        fi
+
+        # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible); mirrors AMD path.
+        export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
+        mkdir -p "$BENCHMARK_LOGS_DIR"
+
+        SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_h200_llm-d-vllm.sh"
+        BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
+        if [[ ! -f "$BENCH_SCRIPT" ]]; then
+            echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
+            exit 1
+        fi
+
+        JOB_ID=$(bash "$BENCH_SCRIPT")
+        if [[ -z "$JOB_ID" ]]; then
+            echo "Error: failed to submit llm-d job" >&2
+            exit 1
+        fi
+        echo "Submitted llm-d job: $JOB_ID"
+
+        LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
+
+        # Wait for log file (also catch early failures).
+        while ! ls "$LOG_FILE" &>/dev/null; do
+            if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
+                echo "ERROR: job $JOB_ID failed before creating log file"
+                scontrol show job "$JOB_ID" || true
+                exit 1
+            fi
+            sleep 5
+        done
+
+        # Background poll, foreground tail.
+        (
+            while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
+                sleep 10
+            done
+        ) &
+        POLL_PID=$!
+
+        tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
+        wait $POLL_PID
+
+        # Result collection: same shape as AMD path.
+        for result_file in $(find "${BENCHMARK_LOGS_DIR}" -name "${RESULT_FILENAME}*.json" 2>/dev/null); do
+            file_name=$(basename "$result_file")
+            cp "$result_file" "$GITHUB_WORKSPACE/${file_name}"
+            echo "Copied result: $file_name"
+        done
+
+        if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+            EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results 2>/dev/null | head -1)
+            if [[ -n "$EVAL_DIR" && -d "$EVAL_DIR" ]]; then
+                shopt -s nullglob
+                for eval_file in "$EVAL_DIR"/*; do
+                    [ -f "$eval_file" ] || continue
+                    cp "$eval_file" "$GITHUB_WORKSPACE/"
+                    echo "Copied eval artifact: $(basename "$eval_file")"
+                done
+                shopt -u nullglob
+            else
+                echo "WARNING: RUN_EVAL=true but no eval_results found under $BENCHMARK_LOGS_DIR"
+            fi
+        fi
+
+        scancel "$JOB_ID" 2>/dev/null || true
+        exit 0
+    fi
+
     # MODEL_PATH: Override with pre-downloaded paths on H200 runner
     # The yaml files specify HuggingFace model IDs for portability, but we use
     # local paths to avoid repeated downloading on the shared H200 cluster.
@@ -29,7 +110,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             exit 1
         fi
     else
-        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
+        echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, llm-d-vllm"
         exit 1
     fi
 

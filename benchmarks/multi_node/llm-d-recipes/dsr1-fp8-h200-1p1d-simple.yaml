@@ -1,0 +1,101 @@
+# DeepSeek-R1-0528 fp8 on H200, simple 1P+1D P/D disagg.
+#
+# Phase 0 starting point - the simplest possible llm-d-vllm multi-node
+# config:
+#   1 prefill node (DP=8 EP=8 dp-attn, intra-node EP over NVLink)
+#   1 decode  node (DP=8 EP=8 dp-attn, intra-node EP over NVLink)
+#   total 2 H200 nodes / 16 GPUs.
+#
+# No DeepEP, no NVSHMEM ibgda, no full-mesh-RDMA requirement, no
+# cross-node MoE all-to-all. KV transfer between prefill and decode goes
+# through NIXL point-to-point. This mirrors the shape of the simplest
+# Dynamo H200 multi-node disagg entries (e.g. dsr1-fp8-h200-dynamo-sglang
+# 1P+1D EP=8) but with vLLM as the engine and llm-d as the router.
+#
+# Selected via additional-settings: CONFIG_FILE=dsr1-fp8-h200-1p1d-simple.yaml
+# with PREFILL_NODES=1 DECODE_NODES=1 from the wrapper.
+
+# ---- EPP scheduling config ----
+# Mirrors the upstream llm-d well-lit-path P/D guide:
+#   guides/pd-disaggregation/router/pd-disaggregation.values.yaml
+# in github.com/llm-d/llm-d. Plugins, scheduling profiles, and scorer
+# weights are unchanged from upstream. Single delta: file-discovery
+# replaces upstream's K8s endpoint discovery, since this benchmark runs
+# under SLURM. The coordinator node writes /tmp/endpoints.yaml at job
+# start (see benchmarks/multi_node/llm-d/README.md).
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags ----
+# Common flags (--enable-expert-parallel, --tensor-parallel-size,
+# --data-parallel-size, --kv_transfer_config, --moe-backend) are set in
+# server.sh. The cross-node DP coordination flags
+# (--data-parallel-hybrid-lb, --data-parallel-size-local, etc.) are NOT
+# emitted because LWS_GROUP_SIZE = PREFILL_NODES = DECODE_NODES = 1.
+prefill:
+  extra-args: >-
+    --gpu-memory-utilization 0.85
+    --kv-cache-dtype fp8
+    --max-num-batched-tokens 32768
+    --max-num-seqs 16
+    --block-size 256
+    --no-enable-prefix-caching
+  env: {}
+
+decode:
+  extra-args: >-
+    --gpu-memory-utilization 0.90
+    --kv-cache-dtype fp8
+    --max-num-batched-tokens 256
+    --max-num-seqs 256
+    --block-size 256
+    --no-enable-prefix-caching
+  env: {}
+
+# ---- SLURM resource directives ----
+slurm:
+  time_limit: "04:00:00"

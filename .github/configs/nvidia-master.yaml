@@ -11267,3 +11267,96 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
           tp: 4
           ep: 4
           dp-attn: true
+
+
+# llm-d-vllm wide-EP P/D disagg on H200.
+#
+# Mirrors the llm-d wide-EP-lws guide reference topology:
+#   1 prefill instance, 2 H200 nodes, DP=16 (EP across 16 ranks)
+#   1 decode  instance, 2 H200 nodes, DP=16
+#   total 4 H200 nodes / 32 GPUs.
+# Phase 1 entry: a single search-space row exercising the wide-EP-lws
+# guide's reference benchmark (ISL=2k / OSL=2k). EPP scheduling, per-role
+# vLLM extra-args, and SLURM time limit all live in
+# benchmarks/multi_node/llm-d-recipes/dsr1-fp8-h200-1p1d-wideep.yaml,
+# selected via additional-settings: CONFIG_FILE=...
+#
+# Note: each prefill / decode "instance" spans 2 nodes here. The
+# num-worker field in this schema describes Dynamo's worker-per-node
+# model; for llm-d it is fixed at 1 instance per role and the topology
+# is communicated via PREFILL_NODES / DECODE_NODES additional-settings.
+dsr1-fp8-h200-llm-d-vllm:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:v0.7.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: h200-multinode
+  precision: fp8
+  framework: llm-d-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 2048
+      osl: 2048
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 2048, 1024, 512, 256, 128 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "RANDOM_RANGE_RATIO=0.05"
+          - "CONFIG_FILE=dsr1-fp8-h200-1p1d-wideep.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 16
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+
+# llm-d-vllm simple 1P+1D P/D disagg on H200 (Phase 0).
+#
+# Simplest possible multi-node llm-d-vllm shape:
+#   1 prefill node (DP=8 EP=8 dp-attn) + 1 decode node (DP=8 EP=8 dp-attn).
+#   Total 2 H200 nodes. No DeepEP, no NVSHMEM ibgda, no full-mesh RDMA.
+#   KV transfer prefill -> decode via NIXL point-to-point.
+#
+# Apples-to-apples shape vs Dynamo's H200 1P+1D entries (which use
+# sglang or trt; this is the same topology but with vLLM and the llm-d
+# router).
+dsr1-fp8-h200-llm-d-vllm-simple:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:v0.7.0
+  model: deepseek-ai/DeepSeek-R1-0528
+  model-prefix: dsr1
+  runner: h200-multinode
+  precision: fp8
+  framework: llm-d-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 4, 16, 64, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "RANDOM_RANGE_RATIO=0.05"
+          - "CONFIG_FILE=dsr1-fp8-h200-1p1d-simple.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
