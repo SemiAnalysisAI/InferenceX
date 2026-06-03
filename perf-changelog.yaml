@@ -3415,4 +3415,4 @@
   description:
     - "Add minimax model routing and minimax srt-slurm fork path in runners/launch_gb300-nv.sh and runners/launch_gb300-cw.sh"
     - "Add 1k1k/8k1k minimax recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5/"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1560
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1653
