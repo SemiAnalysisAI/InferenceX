@@ -3435,4 +3435,4 @@
     - dsv4-fp4-b300-vllm
   description:
     - "Update B300 dsv4 image to nvfp4"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1652
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1656
