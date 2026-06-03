@@ -3416,4 +3416,4 @@
     - "Add MiniMax-M2.5 NVFP4 B300 disaggregated multinode vLLM benchmarks via Dynamo"
     - "Image: vllm/vllm-openai:v0.20.1"
     - "Same 1k/1k and 8k/1k search space as gb300, plus a new tp8-1p1d at low concurrencies for both ISLs"
-  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/83
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1652
