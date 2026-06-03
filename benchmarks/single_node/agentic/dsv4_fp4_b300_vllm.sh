@@ -19,27 +19,29 @@ set -x
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
-#
-# Optional DEP router env vars:
-#   VLLM_USE_ROUTER=false disables the native vLLM router baseline.
-#   VLLM_ROUTER_POLICY overrides the default consistent_hash policy.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
+if ! declare -p MAX_MODEL_LEN >/dev/null 2>&1; then
+    MAX_MODEL_LEN=1000000
+elif [[ -z "$MAX_MODEL_LEN" || "$MAX_MODEL_LEN" = "0" ]]; then
     MAX_MODEL_LEN=1000000
 fi
 
-if [[ -n "${SLURM_JOB_ID:-}" ]]; then
-    echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
+if declare -p SLURM_JOB_ID >/dev/null 2>&1 && [ -n "$SLURM_JOB_ID" ]; then
+    SLURM_NODE=unknown
+    if declare -p SLURMD_NODENAME >/dev/null 2>&1 && [ -n "$SLURMD_NODENAME" ]; then
+        SLURM_NODE="$SLURMD_NODENAME"
+    fi
+    echo "JOB $SLURM_JOB_ID running on $SLURM_NODE"
 fi
 
 # `hf download` creates the target dir if missing and is itself idempotent.
 # When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
 # Either way, MODEL_PATH is what the server is launched with.
-if [[ -n "${MODEL_PATH:-}" ]]; then
+if declare -p MODEL_PATH >/dev/null 2>&1 && [ -n "$MODEL_PATH" ]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
@@ -62,24 +64,15 @@ install_agentic_deps
 # testing older wheels that prioritize per-request X-Request-ID.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
-case "${VLLM_USE_ROUTER:-true}" in
-    true)
-        if [ "$DP_ATTENTION" = "true" ]; then
-            USE_VLLM_ROUTER=true
-            VLLM_BACKEND_PORT="${VLLM_BACKEND_PORT_OVERRIDE:-$((PORT + 1))}"
-            VLLM_ROUTER_VERSION="${VLLM_ROUTER_VERSION:-0.1.14}"
-            VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
-            VLLM_ROUTER_METRICS_PORT="${VLLM_ROUTER_METRICS_PORT:-$((PORT + 10000))}"
-            export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
-            agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
-        fi
-        ;;
-    false) ;;
-    *)
-        echo "Error: unsupported VLLM_USE_ROUTER value '${VLLM_USE_ROUTER}' (expected one of: true, false)" >&2
-        exit 1
-        ;;
-esac
+if [ "$DP_ATTENTION" = "true" ]; then
+    USE_VLLM_ROUTER=true
+    VLLM_BACKEND_PORT=$((PORT + 1))
+    VLLM_ROUTER_VERSION=0.1.14
+    VLLM_ROUTER_POLICY=consistent_hash
+    VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
+    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
+    agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
+fi
 
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
