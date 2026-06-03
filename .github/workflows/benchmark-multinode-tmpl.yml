@@ -139,7 +139,7 @@ env:
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
-  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
+  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
@@ -291,8 +291,8 @@ jobs:
             LOGS/agentic/benchmark_command.txt
             LOGS/agentic/workload_distribution_summary.txt
             LOGS/agentic/workload_distribution_plots.png
-            LOGS/agentic/trace_replay/detailed_results.csv
-            LOGS/agentic/trace_replay/debug_trace.jsonl
+            LOGS/agentic/aiperf_artifacts/detailed_results.csv
+            LOGS/agentic/aiperf_artifacts/debug_trace.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

@@ -3,9 +3,11 @@ import pytest
 from validation import (
     Fields,
     SingleNodeMatrixEntry,
+    SingleNodeAgenticMatrixEntry,
     MultiNodeMatrixEntry,
     WorkerConfig,
     SingleNodeSearchSpaceEntry,
+    AgenticCodingSearchSpaceEntry,
     MultiNodeSearchSpaceEntry,
     SingleNodeSeqLenConfig,
     MultiNodeSeqLenConfig,
@@ -303,6 +305,61 @@ class TestSingleNodeMatrixEntry:
         valid_single_node_matrix_entry["extra-field"] = "value"
         with pytest.raises(Exception):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
+
+
+# =============================================================================
+# Test Agentic Matrix Entries
+# =============================================================================
+
+class TestAgenticMatrixEntries:
+    """Tests for agentic coding validation models."""
+
+    def test_lmcache_mp_offloading_is_valid_for_single_node_agentic_entry(self):
+        """LMCache MP is a valid agentic offloading backend."""
+        entry = SingleNodeAgenticMatrixEntry(**{
+            "image": "cquil/vllm-openai:v0.21.0-8813c92",
+            "model": "deepseek-ai/DeepSeek-V4-Pro",
+            "model-prefix": "dsv4",
+            "precision": "fp4",
+            "framework": "vllm",
+            "runner": "b200-dgxc",
+            "tp": 8,
+            "ep": 1,
+            "dp-attn": False,
+            "conc": 1,
+            "offloading": "lmcache-mp",
+            "duration": 1800,
+            "exp-name": "dsv4_tp8_conc1_offloadlmcache-mp",
+            "scenario-type": "agentic-coding",
+        })
+        assert entry.offloading == "lmcache-mp"
+
+    def test_lmcache_mp_offloading_is_valid_for_agentic_search_space(self):
+        """Agentic search-space entries can request LMCache MP offloading."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "lmcache-mp",
+            "conc-list": [1, 2],
+        })
+        assert entry.offloading == "lmcache-mp"
+
+    def test_lmcache_offloading_is_valid_for_agentic_search_space(self):
+        """Agentic search-space entries can request in-process LMCache."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "lmcache",
+            "conc-list": [1, 2],
+        })
+        assert entry.offloading == "lmcache"
+
+    def test_hicache_offloading_is_valid_for_agentic_search_space(self):
+        """Agentic search-space entries can request SGLang HiCache."""
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "offloading": "hicache",
+            "conc-list": [1, 2],
+        })
+        assert entry.offloading == "hicache"
 
 
 # =============================================================================

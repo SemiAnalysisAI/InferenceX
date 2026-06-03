@@ -6,12 +6,12 @@ frontend:
   num_additional_frontends: 8
 
 dynamo:
-  hash: "34d55a596fb8d3d44daefe425ec1e303131f4d2c"
+  hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
   install: true
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260510-2473659e"
+  container: "lmsysorg/sglang:nightly-dev-20260527-14f81a67"
   precision: "mxfp4"
 
 sbatch_directives:
@@ -38,19 +38,12 @@ backend:
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_USE_JIT_NORM: "1"
-    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
-    SGLANG_OPT_USE_TOPK_V2: "1"
 
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
     SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2: "1"
-    SGLANG_OPT_USE_FAST_MASK_EP: "1"
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
-    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "9216"
-    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
 
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -67,18 +60,11 @@ backend:
     SGLANG_DEFAULT_THINKING: "1"
     SGLANG_DSV4_REASONING_EFFORT: "max"
     SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
-    SGLANG_OPT_USE_JIT_NORM: "1"
-    SGLANG_OPT_USE_JIT_INDEXER_METADATA: "1"
-    SGLANG_OPT_USE_TOPK_V2: "1"
 
     SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
-    SGLANG_OPT_USE_FAST_MASK_EP: "1"
-    SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE: "1"
-    SGLANG_OPT_FIX_HASH_MEGA_MOE: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS: "1"
+    SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND: "1"
     SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK: "2048"
-    SGLANG_OPT_FIX_MEGA_MOE_MEMORY: "1"
-    SGLANG_OPT_FIX_NEXTN_MEGA_MOE: "1"
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "0"
 
     NCCL_MNNVL_ENABLE: "1"
     NCCL_CUMEM_ENABLE: "1"
@@ -106,8 +92,7 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
 
-      moe-a2a-backend: "deepep"
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      moe-a2a-backend: "megamoe"
 
       mem-fraction-static: 0.9
       max-running-requests: 256
@@ -131,8 +116,7 @@ backend:
       enable-dp-attention: true
       enable-dp-lm-head: true
 
-      moe-a2a-backend: "deepep"
-      deepep-config: '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+      moe-a2a-backend: "megamoe"
 
       speculative-algo: "EAGLE"
       speculative-num-steps: 3

@@ -5,13 +5,35 @@
 # the dsv4-fp4-gb300-dynamo-vllm-disagg branch (PR #1150). The SGLang
 # recipes are copied exactly from the pinned srt-slurm commit below.
 
-set -x
+# -e: abort on any unhandled error. -o pipefail: pipeline fails if any
+# stage fails. Without these, errors like a bad `git checkout SHA` get
+# silently swallowed and the script continues with broken state. R5 of
+# dsv4-fp4-gb300-dynamo-vllm-agentic caught this — a bad checkout left
+# the cw shards on origin/HEAD (which happened to be the right commit),
+# masking the bug entirely until upstream main moves and breaks us.
+set -exo pipefail
 
 if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # Weights staged on shared storage; avoid node-local /scratch symlink drift.
     export MODEL_PATH="/mnt/vast/models/dsv4"
 
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
+    if [[ "$IS_AGENTIC" == "1" ]]; then
+        # Agentic multi-node uses upstream NVIDIA/srt-slurm@main, which has
+        # caught up on every schema feature we need:
+        #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+        #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+        #   - DynamoConfig.wheel (so our vllm recipes can pin the same
+        #     ai-dynamo wheel as the fixed-seq-len path)
+        #   - default_bash_preamble (no more "Unknown field" warning)
+        # Per-worker --mem=0 is set via `srun_options:` in the recipe yaml
+        # (a documented top-level field that srtctl threads through to
+        # start_srun_process → see docs/config-reference.md#srun_options).
+        # Pin to HEAD as of when this landed; bump as upstream evolves.
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="127597c2926467db06e6707e0aa9227261c6c02a"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic"
+        SRT_RECIPE_DST="recipes/vllm/deepseek-v4/agentic"
+    elif [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
         SRT_SLURM_RECIPES_REF="main"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
@@ -56,6 +78,15 @@ export SLURM_ACCOUNT="cw-sup"
 # into the enroot environment.
 export NVIDIA_VISIBLE_DEVICES=all
 export NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+# Host-side directory holding aiperf's content-addressed dataset mmap cache.
+# Bind-mounted into worker containers at /aiperf_mmap_cache via the
+# default_mounts: block in srtslurm.yaml below; aiperf reads it via
+# AIPERF_DATASET_MMAP_CACHE_DIR (set in each agentic recipe's benchmark.env).
+# Without it, every run re-tokenizes and re-writes ~65 GB of mmap files
+# per dataset on first use. 777 mode so all gharunner_X SLURM users can
+# write to it.
+export AIPERF_MMAP_CACHE_HOST_PATH="/mnt/vast/ai-perf-cache"
 
 NGINX_IMAGE="nginx:1.27.4"
 
@@ -144,7 +175,11 @@ if [ -e "$HOME/.local/bin/uv" ]; then
     exit 1
 fi
 
-uv venv
+# --seed installs pip+setuptools+wheel into the venv. Without it, the
+# upstream prefetch-ai-dynamo-wheel.sh script (called by srtctl when a
+# recipe has dynamo.wheel set) fails with "No module named pip" because
+# uv venv defaults to no-pip.
+uv venv --seed
 source .venv/bin/activate
 uv pip install -e .
 
@@ -185,6 +220,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 
 default_mounts:
   ${DYNAMO_WHEELS_CACHE_HOST}: /configs/dynamo-wheels
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
 
 model_paths:
   dspro: "${MODEL_PATH}"
@@ -257,6 +293,23 @@ echo "Extracted JOB_ID: $JOB_ID"
 LOGS_DIR="outputs/$JOB_ID/logs"
 LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 
+# Snapshot worker logs on any exit path — normal completion, error,
+# SIGTERM (gh run cancel sends this to the launcher), even SIGKILL of
+# our parent. Without this trap, the cancel-time tar lives only in the
+# main flow below (after `wait $POLL_PID`), so a manual `gh run cancel`
+# during the tail wait skips it entirely and the
+# `Upload server logs` workflow step finds nothing to upload.
+# Idempotent: the main-flow tar at the bottom of this script is now a
+# no-op because the trap already produced the artifact, but it stays
+# for narrative continuity in normal (non-cancel) runs.
+_snapshot_server_logs() {
+    if [ -n "${LOGS_DIR:-}" ] && [ -d "$LOGS_DIR" ] && [ -n "${GITHUB_WORKSPACE:-}" ]; then
+        cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+        tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" . 2>/dev/null || true
+    fi
+}
+trap _snapshot_server_logs EXIT
+
 while ! ls "$LOG_FILE" &>/dev/null; do
     if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
         echo "ERROR: Job $JOB_ID failed before creating log file"
@@ -287,8 +340,9 @@ echo "Collecting results..."
 
 if [ -d "$LOGS_DIR" ]; then
     echo "Found logs directory: $LOGS_DIR"
-    cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-    tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
+    # Tarball + LOGS copy are produced by the EXIT trap defined near
+    # JOB_ID extraction (so cancel paths also get them); just log here.
+    echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
