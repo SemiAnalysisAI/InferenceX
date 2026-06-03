@@ -56,7 +56,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimaxm2.5"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="minimaxm2.5-fp4"
@@ -105,6 +105,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout aflowers/vllm-gb200-v0.20.0
         mkdir -p recipes/vllm/deepseek-v4
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout main
+        mkdir -p recipes/vllm/minimax-m2.5-b200-fp8
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b200-fp8" recipes/vllm/minimax-m2.5-b200-fp8
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -122,7 +128,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     curl -LsSf https://astral.sh/uv/install.sh | sh
     export PATH="$UV_INSTALL_DIR:$PATH"
 
-    uv venv "$GITHUB_WORKSPACE/.venv"
+    if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
+        uv venv --seed "$GITHUB_WORKSPACE/.venv"
+    else
+        uv venv "$GITHUB_WORKSPACE/.venv"
+    fi
     source "$GITHUB_WORKSPACE/.venv/bin/activate"
     uv pip install -e .
 
@@ -133,12 +143,48 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
-    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    NGINX_SQUASH_FILE="/home/sa-shared/containers/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_DIR="${B200_SQUASH_DIR:-/home/sa-shared/containers}"
+    if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
+        SQUASH_DIR="${B200_SQUASH_DIR:-/home/slurm-shared/gharunners/squash}"
+    fi
+    if ! mkdir -p "$SQUASH_DIR" 2>/dev/null || [[ ! -w "$SQUASH_DIR" ]]; then
+        echo "Warning: $SQUASH_DIR is not writable; using workspace-local squash cache" >&2
+        SQUASH_DIR="$GITHUB_WORKSPACE/.container-squash"
+        mkdir -p "$SQUASH_DIR"
+    fi
+    chmod a+rx "$SQUASH_DIR" || true
+
+    SQUASH_FILE="$SQUASH_DIR/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    NGINX_SQUASH_FILE="$SQUASH_DIR/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
     # Import containers via enroot
-    enroot import -o $SQUASH_FILE docker://$IMAGE
-    enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
+    import_squash() {
+        local squash_file="$1"
+        local image_ref="$2"
+        local image_key
+        image_key=$(echo "$image_ref" | sed 's/[\/:@#]/_/g')
+        local lock_dir="${SQUASH_DIR}/.locks"
+        mkdir -p "$lock_dir"
+        local lock_file="${lock_dir}/${image_key}.lock"
+
+        (
+            flock -w 600 9 || { echo "Failed to acquire lock for $squash_file" >&2; exit 1; }
+            if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
+                echo "Squash file already exists and is valid, skipping import: $squash_file"
+            else
+                rm -f "$squash_file"
+                enroot import -o "$squash_file" "docker://$image_ref"
+                if ! unsquashfs -l "$squash_file" > /dev/null 2>&1; then
+                    echo "Error: enroot import did not produce a valid squash file: $squash_file" >&2
+                    exit 1
+                fi
+                chmod a+r "$squash_file" || true
+            fi
+        ) 9>"$lock_file"
+    }
+
+    import_squash "$SQUASH_FILE" "$IMAGE" || exit 1
+    import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE" || exit 1
 
     export ISL="$ISL"
     export OSL="$OSL"
@@ -182,6 +228,8 @@ EOF
     export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
     echo "Submitting job with srtctl..."
+    echo "MODEL_PATH=$MODEL_PATH (exists=$(test -d "$MODEL_PATH" && echo yes || echo NO))"
+    ls -ld "$MODEL_PATH" 2>&1 || ls /lustre/fsw/models/ 2>&1 | head -40
 
     if [[ -z "$CONFIG_FILE" ]]; then
         echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
