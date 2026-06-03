@@ -1801,7 +1801,7 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
 
 dsv4-fp4-b200-trt:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-2dd03e6
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
