@@ -49,6 +49,10 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     EPLB_ARGS=(--enable-eplb)
 fi
 
+# needed for NIXL EPLB
+export NCCL_NET_PLUGIN=none
+export UCX_TLS=self,tcp,cuda_ipc,cuda_copy
+
 if [ "${ISL}" -eq 8192 ] && [ "${CONC}" -le 128 ]; then
     MAX_NUM_BATCHED_TOKENS=${ISL}
 else
