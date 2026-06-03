@@ -3000,7 +3000,7 @@ dsv4-fp8-h200-sglang-mtp:
   # layouts on 4 allocated GPUs.
 dsv4-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.22.0
-  model: deepseek-ai/DeepSeek-V4-Pro
+  model: nvidia/DeepSeek-V4-Pro-NVFP4
   model-prefix: dsv4
   runner: b300
   precision: fp4
