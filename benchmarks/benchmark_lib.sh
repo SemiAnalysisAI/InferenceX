@@ -899,6 +899,7 @@ run_eval() {
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
 AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"
+AIPERF_FAILED_REQUEST_THRESHOLD=0.10
 
 agentic_pip_install() {
     local pip_install=(python3 -m pip install)
@@ -1034,7 +1035,7 @@ build_replay_cmd() {
     # transient low-rate failures from killing long sweeps while still
     # catching malformed payloads or server crashes before they get aggregated
     # as benchmarkable data.
-    REPLAY_CMD+=" --failed-request-threshold 0.10"
+    REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
     # [25%, 75%] of the trace's turn count (was hardcoded 0%-70% upstream).
     # Avoids starting trajectories right at turn 0 where the KV cache is
@@ -1095,8 +1096,9 @@ build_replay_cmd() {
 
 write_agentic_result_json() {
     # Aggregate aiperf's profile_export.{json,jsonl} + server_metrics_export.json
-    # into $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json. The workflow's existing
-    # retry-based existence check is the single success gate.
+    # into $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json. The workflow checks that
+    # this file exists; run_agentic_replay_and_write_outputs separately rejects
+    # aggregates whose request error rate exceeds the configured limit.
     local result_dir="$1"
     RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
         python3 "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py"
@@ -1110,6 +1112,7 @@ write_agentic_result_json() {
 run_agentic_replay_and_write_outputs() {
     local result_dir="$1"
     local replay_rc
+    local validation_rc
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
@@ -1125,8 +1128,20 @@ run_agentic_replay_and_write_outputs() {
     python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
 
+    set +e
+    python3 "$INFMAX_CONTAINER_WORKSPACE/utils/validate_agentic_result.py" \
+        "$result_dir/aiperf_artifacts" \
+        --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
+    validation_rc=$?
+    set -e
+
     if [ "$replay_rc" -ne 0 ]; then
         echo "ERROR: agentic trace replay exited with code $replay_rc after writing available results" >&2
         return "$replay_rc"
+    fi
+
+    if [ "$validation_rc" -ne 0 ]; then
+        echo "ERROR: agentic trace replay produced invalid results after writing available artifacts" >&2
+        return "$validation_rc"
     fi
 }
