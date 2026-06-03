@@ -9259,7 +9259,7 @@ glm5-fp8-gb300-dynamo-sglang:
           dp-attn: false
 
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  image: cquil/vllm-openai:v0.22.0-6c529f3001ab8bf44b1657e779dc54b622397045
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc

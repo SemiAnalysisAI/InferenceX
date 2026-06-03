@@ -13,16 +13,18 @@ set -x
 #       experts EP-sharded across DP ranks (per the vLLM blog recipe).
 #       Highest aggregate throughput at large CONC.
 #
-# Image is vllm/vllm-openai:v0.20.0-cu130. block_size=256, kv-cache-dtype=fp8,
-# FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph capture with
-# custom_ops=all (per the vLLM blog recipe at https://vllm.ai/blog/deepseek-v4).
+# Image is cquil/vllm-openai:v0.22.0-6c529f3001ab8bf44b1657e779dc54b622397045.
+# block_size=256, kv-cache-dtype=fp8, FP4 indexer cache enabled,
+# FULL_AND_PIECEWISE cudagraph capture with custom_ops=all (per the vLLM blog
+# recipe at https://vllm.ai/blog/deepseek-v4).
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
 # OFFLOADING values:
 #   none        - vLLM GPU KV only, with DSv4 hybrid KV manager enabled.
-#   cpu         - vLLM native OffloadingConnector, with hybrid KV manager enabled.
+#   cpu         - SimpleCPUOffloadConnector lazy offload, with hybrid KV manager
+#                 enabled.
 #   lmcache-mp  - Temporarily disabled for DSv4. LMCache PR #3261 must merge
 #                 first so LMCacheMPConnector can support HMA block-id tuples.
 
@@ -73,6 +75,12 @@ fi
 
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+
+# vllm-project/vllm#43447: keep SWA prefix-cache tails sparsely so transient
+# sliding-window allocations don't evict useful prefix entries. 32k matches
+# the trace-replay tuning the PR author validated (0% -> 74% hit rate).
+# Requires the custom cquil image configured for this recipe.
+export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -136,26 +144,28 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         # b200-dgxc compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~1.2 TB total native
-        # CPU offload pool across the engine(s); previously 2.8 TB but every
-        # DP-attn worker stalled for 4+ min during pinned-CPU-tensor allocation
-        # and the shm_broadcast watchdog killed them (run 26246044726). 150 GB
-        # per worker (1.2 TB / 8) completes the alloc within the 60 s window.
+        # individual jobs to a fraction of that. Aim for ~1.2 TB total host
+        # CPU pool across the engine(s); previously 2.8 TB but every DP-attn
+        # worker stalled for 4+ min during pinned-CPU-tensor allocation and the
+        # shm_broadcast watchdog killed them (run 26246044726). 150 GB per
+        # worker (1.2 TB / 8) completes the alloc within the 60 s window.
         #
-        # Native --kv-offloading-size becomes OffloadingConnector's
-        # cpu_bytes_to_use. For DP-attn there are $TP independent DP engines,
-        # so pre-divide to keep aggregate host commit near TOTAL_CPU_DRAM_GB.
-        # For pure TP, vLLM treats the size as the total across TP ranks.
+        # SimpleCPUOffloadConnector divides cpu_bytes_to_use by
+        # parallel_config.world_size (= TP*PP, NOT including DP). For DP-attn
+        # there are $TP independent engines with world_size=1, so pre-divide
+        # to keep aggregate host commit near TOTAL_CPU_DRAM_GB. For pure TP,
+        # pass the total and let the connector divide across TP ranks.
         TOTAL_CPU_DRAM_GB=1200
         if [ "$DP_ATTENTION" = "true" ]; then
             PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
         else
             PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
         fi
-        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
+        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS=(
-            --kv-offloading-backend native
-            --kv-offloading-size "$PER_ENGINE_GB"
+            --kv-transfer-config
+            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
         )
         ;;
     lmcache-mp)
