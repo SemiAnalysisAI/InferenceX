@@ -49,10 +49,10 @@ on:
         type: string
         default: '480'
       open-pr:
-        description: "Open a PR updating benchmarks/speedbench-reference-al.yaml"
+        description: "Open a PR updating benchmarks/speedbench-reference-al.yaml (default off: artifact-only, paste values in manually)"
         required: false
         type: boolean
-        default: true
+        default: false
       ref:
         description: "Git ref (branch/sha) to checkout"
         required: false
