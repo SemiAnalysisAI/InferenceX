@@ -872,21 +872,6 @@ minimaxm2.5-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
-minimaxm2.5-fp4-mi355x-vllm-agentic-lmcache:
-  image: vllm/vllm-openai-rocm:v0.22.0
-  model: amd/MiniMax-M2.5-MXFP4
-  model-prefix: minimaxm2.5
-  runner: mi355x
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 1, ep: 1, offloading: none, conc-list: [4, 8, 16, 32, 40, 48] }
-      - { tp: 1, ep: 1, offloading: lmcache, conc-list: [4, 8, 16, 32, 40, 48] }
-
 minimaxm2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/MiniMax-M2.5-MXFP4
@@ -2533,16 +2518,6 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
       - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
 
-kimik2.5-fp4-mi355x-vllm-agentic-lmcache:
-  image: vllm/vllm-openai-rocm:v0.22.0
-  model: amd/Kimi-K2.5-MXFP4
-  model-prefix: kimik2.5
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, ep: 1, offloading: none, conc-list:    [4, 8, 16, 32, 40, 48, 56, 64, 72] }
-      - { tp: 4, ep: 1, offloading: lmcache, conc-list: [4, 8, 16, 32, 40, 48, 56, 64, 72] }
-
 minimaxm2.5-fp8-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
@@ -2599,15 +2574,19 @@ minimaxm2.5-fp8-mi325x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
 qwen3.5-fp8-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260531
+  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, ep: 1, offloading: none, conc-list: [4, 8, 16, 32, 40, 48, 56, 64, 128] }
-      - { tp: 4, ep: 1, offloading: hicache, conc-list: [4, 8, 16, 32, 40, 48, 56, 64, 128] }
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
 
 dsv4-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0
