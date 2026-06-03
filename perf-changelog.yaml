@@ -3448,5 +3448,5 @@
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
   description:
-    - "Throwaway: validate Option A fix — sed-patch moriep.py to clamp num_max_dispatch_tokens_per_rank >= 64 (AMD warpSize). If gsm8k recovers, confirms warpSize is the minimum viable buffer floor for the MoRI All2All dispatch kernel."
+    - "Throwaway: validate warpSize floor fix — clamp MORI_MAX_DISPATCH_TOKENS_DECODE >= 64 (CDNA3/4 wavefront) in server_sglang.sh. The MoRI All2All dispatch kernel writes warpSize-aligned receive slots (destTokId = flagSlotId*warpSize + laneId), so a per-rank buffer < 64 overruns its region -> silent corruption (conc-64/TP8/MTP3 -> 32 tokens -> gsm8k=0). If gsm8k recovers, 64 is the minimal correct floor (best perf vs the proven-but-larger 256)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659

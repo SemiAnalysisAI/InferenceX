@@ -248,6 +248,25 @@ if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
+# ── MoRI dispatch-buffer warpSize floor ──────────────────────────────────────
+# The MoRI All2All dispatch kernel (EpDispatchInterNodeV1Kernel / IntraNode)
+# places dispatched tokens in warpSize-aligned receive slots:
+#     destTokId = flagSlotId * warpSize + laneId      (laneId = 0..warpSize-1)
+# i.e. each warp writes up to warpSize=64 (CDNA3/4 wavefront) token slots per
+# chunk. The per-rank receive region is sized to maxNumInpTokenPerRank, which
+# the harness derives from max(CONC_LIST)/TP*(MTP+1). At low concurrency this
+# collapses below 64 (e.g. conc-64 / TP8 / MTP3 -> 64/8*4 = 32), so a single
+# warp-chunk overruns the 32-slot region -> silent out-of-bounds writes ->
+# semantically corrupt output (decodes fine, gsm8k = 0.0). Clamp to one
+# wavefront so the slot arithmetic is always in-bounds. This only raises the
+# value at low conc (high conc is naturally larger); it adds a few MB of
+# staging buffer but no compute, so real throughput is unchanged.
+MORI_DISPATCH_TOKENS_FLOOR=64
+if [[ "$MORI_MAX_DISPATCH_TOKENS_DECODE" -lt "$MORI_DISPATCH_TOKENS_FLOOR" ]]; then
+    echo "[MoRI floor] DISPATCH_TOKENS=${MORI_MAX_DISPATCH_TOKENS_DECODE} < warpSize floor ${MORI_DISPATCH_TOKENS_FLOOR}; clamping to ${MORI_DISPATCH_TOKENS_FLOOR}"
+    MORI_MAX_DISPATCH_TOKENS_DECODE=$MORI_DISPATCH_TOKENS_FLOOR
+fi
+
 # =============================================================================
 # Cluster Topology Configuration
 # =============================================================================
@@ -711,39 +730,6 @@ else
     echo "Using decode config: $DECODE_SERVER_CONFIG"
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
-
-    # ── MoRI dispatch token floor patch ──────────────────────────────────
-    # When conc/TP is small (e.g. 64/8=8, ×4 MTP → 32 tokens), the MoRI
-    # All2All dispatch kernel silently corrupts output because buffer strides
-    # assume a minimum alignment of warpSize (64 on CDNA3/4).  Patch the
-    # installed SGLang moriep.py to clamp num_max_dispatch_tokens_per_rank
-    # to at least 64 before it reaches the kernel config.
-    SGLANG_PKG=$(python3 -c "import sglang; print(sglang.__path__[0])" 2>/dev/null || true)
-    MORIEP_FILE="${SGLANG_PKG}/srt/layers/moe/token_dispatcher/moriep.py"
-    if [[ -n "$SGLANG_PKG" ]] && [[ -f "$MORIEP_FILE" ]]; then
-        python3 - "$MORIEP_FILE" << 'MORI_PATCH_EOF'
-import re, sys
-p = sys.argv[1]
-with open(p) as f:
-    s = f.read()
-pattern = r'(self\.num_max_dispatch_tokens_per_rank\s*=\s*get_int_env_var\(\s*"SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK",\s*4096\s*\))'
-replacement = (r'\1\n'
-               r'        self.num_max_dispatch_tokens_per_rank = '
-               r'max(self.num_max_dispatch_tokens_per_rank, 64)')
-s2 = re.sub(pattern, replacement, s, count=1, flags=re.DOTALL)
-if s2 == s:
-    print(f'WARNING: MoRI patch pattern not found in {p}', file=sys.stderr)
-    sys.exit(1)
-with open(p, 'w') as f:
-    f.write(s2)
-print(f'[MORI PATCH] Clamped num_max_dispatch_tokens_per_rank >= 64 (warpSize) in {p}')
-MORI_PATCH_EOF
-        if [[ $? -ne 0 ]]; then
-            echo "WARNING: MoRI sed patch failed — run may still exhibit corruption"
-        fi
-    else
-        echo "WARNING: moriep.py not found at ${MORIEP_FILE} — skipping patch"
-    fi
 
     DECODE_MORI_MOE_ENV=""
     set -x
