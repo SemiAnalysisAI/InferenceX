@@ -46,7 +46,7 @@ MOE_ARGS=()
 EPLB_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ]; then
     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-    EPLB_ARGS=(--enable-eplb)
+    EPLB_ARGS=(--enable-eplb --eplb-config '{"communicator":"torch_nccl", "use_async": false}')
 fi
 
 # needed for NIXL EPLB
