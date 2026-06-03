@@ -19,6 +19,10 @@ set -x
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#
+# Optional DEP router env vars:
+#   VLLM_USE_ROUTER=false disables the native vLLM router baseline.
+#   VLLM_ROUTER_POLICY overrides the default consistent_hash policy.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -51,6 +55,32 @@ export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226
 resolve_trace_source
 install_agentic_deps
 
+# vllm-project/router expands the one HTTP backend into one logical worker per
+# DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
+# X-Correlation-ID is stable for every turn of a conversation; alias it to the
+# router's preferred X-Session-ID header. This also keeps affinity correct when
+# testing older wheels that prioritize per-request X-Request-ID.
+USE_VLLM_ROUTER=false
+VLLM_BACKEND_PORT="$PORT"
+case "${VLLM_USE_ROUTER:-true}" in
+    true)
+        if [ "$DP_ATTENTION" = "true" ]; then
+            USE_VLLM_ROUTER=true
+            VLLM_BACKEND_PORT="${VLLM_BACKEND_PORT_OVERRIDE:-$((PORT + 1))}"
+            VLLM_ROUTER_VERSION="${VLLM_ROUTER_VERSION:-0.1.14}"
+            VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
+            VLLM_ROUTER_METRICS_PORT="${VLLM_ROUTER_METRICS_PORT:-$((PORT + 10000))}"
+            export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
+            agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
+        fi
+        ;;
+    false) ;;
+    *)
+        echo "Error: unsupported VLLM_USE_ROUTER value '${VLLM_USE_ROUTER}' (expected one of: true, false)" >&2
+        exit 1
+        ;;
+esac
+
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
@@ -63,6 +93,7 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+ROUTER_LOG="$RESULT_DIR/router.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
@@ -134,7 +165,7 @@ export VLLM_FLOAT32_MATMUL_PRECISION=high
 
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
---port "$PORT" \
+--port "$VLLM_BACKEND_PORT" \
 --trust-remote-code \
 --kv-cache-dtype fp8 \
 --block-size 256 \
@@ -154,7 +185,23 @@ $OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+if [ "$USE_VLLM_ROUTER" = "true" ]; then
+    echo "Starting native vLLM router on port $PORT for $TP DP ranks..."
+    vllm-router \
+        --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
+        --policy "$VLLM_ROUTER_POLICY" \
+        --intra-node-data-parallel-size "$TP" \
+        --host 0.0.0.0 \
+        --port "$PORT" \
+        --prometheus-host 127.0.0.1 \
+        --prometheus-port "$VLLM_ROUTER_METRICS_PORT" \
+        --disable-retries > "$ROUTER_LOG" 2>&1 &
+    ROUTER_PID=$!
+    echo "Router PID: $ROUTER_PID"
+    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
+fi
 
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
