@@ -3448,5 +3448,5 @@
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
   description:
-    - "Throwaway: conc-64 DEP8+MTP3 benchmark+eval WITHOUT dispatch token clamp (Run B of A/B test). Expect corrupted output / 0pct gsm8k."
+    - "Throwaway: validate Option A fix — sed-patch moriep.py to clamp num_max_dispatch_tokens_per_rank >= 64 (AMD warpSize). If gsm8k recovers, confirms warpSize is the minimum viable buffer floor for the MoRI All2All dispatch kernel."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659
