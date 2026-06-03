@@ -3448,6 +3448,5 @@
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
   description:
-    - "Throwaway: conc-64-only gsm8k eval for DEP8+MTP3 to reproduce SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK < 256 corruption (dispatch=32 triggers broken All2All kernel, expect 0pct gsm8k). Not for merge."
+    - "Throwaway: conc-64 DEP8+MTP3 benchmark+eval WITH dispatch token clamp (MORI_MAX_DISPATCH_TOKENS_DECODE >= 256). A/B test for All2All kernel corruption fix."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659
-  evals-only: true

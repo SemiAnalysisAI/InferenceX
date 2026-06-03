@@ -248,6 +248,15 @@ if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
+# Clamp dispatch tokens to >= 256 to avoid the low-latency All2All kernel
+# variant in MoRI which silently corrupts outputs at small buffer sizes.
+if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; then
+    if [[ $MORI_MAX_DISPATCH_TOKENS_DECODE -lt 256 ]]; then
+        echo "[WARN] Clamping MORI_MAX_DISPATCH_TOKENS_DECODE from $MORI_MAX_DISPATCH_TOKENS_DECODE to 256 (All2All kernel threshold)"
+        MORI_MAX_DISPATCH_TOKENS_DECODE=256
+    fi
+fi
+
 # =============================================================================
 # Cluster Topology Configuration
 # =============================================================================
