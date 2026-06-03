@@ -165,7 +165,9 @@ case "$OFFLOADING" in
         # object present in L1 but no longer readable. Keep the 2.5 TB pool
         # size unchanged and only extend the lookup-to-retrieve lease.
         LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+        # (srok) check 256 vs 32
+        #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
         export LMCACHE_BLOCKING_TIMEOUT_SECS=120
