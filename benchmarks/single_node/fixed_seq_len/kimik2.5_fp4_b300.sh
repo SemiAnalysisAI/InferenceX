@@ -9,6 +9,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+    EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -47,9 +48,15 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+EP_ARGS=()
+if [ "$EP_SIZE" -gt 1 ]; then
+    EP_ARGS=(--enable-expert-parallel)
+fi
+
 set -x
 vllm serve $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
 --tensor-parallel-size $TP \
+"${EP_ARGS[@]}" \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --max-num-seqs $CONC \
