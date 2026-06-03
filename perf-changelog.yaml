@@ -3430,3 +3430,11 @@
     - "Image: vllm/vllm-openai:v0.20.1"
     - "Same 1k/1k and 8k/1k search space as gb300, plus a new tp8-1p1d at low concurrencies for both ISLs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1652
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Enable n-gram speculative decoding (prompt-lookup, num_speculative_tokens=3) for 3.26x decode throughput improvement"
+    - "Add full AITER env-var tuning: MXFP4, FP4 ASM GEMM, unified paged attention, inductor graph partition, opus MoE sorting"
+    - "Set gpu-memory-utilization=0.97, max-num-seqs=256, max-num-batched-tokens=16384, GPU_MAX_HW_QUEUES=4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1657
