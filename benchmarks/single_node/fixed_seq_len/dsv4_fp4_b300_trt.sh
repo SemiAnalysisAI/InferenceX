@@ -59,13 +59,6 @@ sanitize_slurm_mpi_env_for_trtllm
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 
-# Disable DSv4 SWA scratch reuse: with attention-DP the V2 scheduler grows ctx KV
-# (incl. SWA scratch) before delay batching defers a request, and the resulting
-# revert_allocate_context -> resize(shrink) can't release the scratch of a
-# never-forwarded request (no finish_event), crashing every dpa=true job.
-export TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE="${TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE:-0}"
-echo "TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE: $TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE"
-
 nvidia-smi
 
 SERVER_LOG="$PWD/server.log"
