@@ -3448,5 +3448,5 @@
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
   description:
-    - "Throwaway: conc-64 DEP8+MTP3 benchmark+eval WITH dispatch token clamp (MORI_MAX_DISPATCH_TOKENS_DECODE >= 256). A/B test for All2All kernel corruption fix."
+    - "Throwaway: conc-64 DEP8+MTP3 benchmark+eval WITHOUT dispatch token clamp (Run B of A/B test). Expect corrupted output / 0pct gsm8k."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659
