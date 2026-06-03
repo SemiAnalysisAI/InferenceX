@@ -9404,8 +9404,8 @@ dsv4-fp8-h200-vllm-agentic:
 
 dsv4-fp4-b300-vllm-agentic:
   # image: vllm/vllm-openai:v0.22.0
-  # includes https://github.com/vllm-project/vllm/pull/43447 up to 7ead0a0f27fc2b34efdcc8a557d542c5a372306f
-  image: cquil/vllm-openai:v0.22.0-7ead0a0f27fc2b34efdcc8a557d542c5a372306f
+  # includes https://github.com/vllm-project/vllm/pull/43447 up to 6c529f3001ab8bf44b1657e779dc54b622397045
+  image: cquil/vllm-openai:v0.22.0-6c529f3001ab8bf44b1657e779dc54b622397045
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
