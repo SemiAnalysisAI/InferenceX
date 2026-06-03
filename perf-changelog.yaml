@@ -3455,5 +3455,5 @@
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
   description:
-    - "Throwaway: validate warpSize floor fix — clamp MORI_MAX_DISPATCH_TOKENS_DECODE >= 64 (CDNA3/4 wavefront) in server_sglang.sh. The MoRI All2All dispatch kernel writes warpSize-aligned receive slots (destTokId = flagSlotId*warpSize + laneId), so a per-rank buffer < 64 overruns its region -> silent corruption (conc-64/TP8/MTP3 -> 32 tokens -> gsm8k=0). If gsm8k recovers, 64 is the minimal correct floor (best perf vs the proven-but-larger 256)."
+    - "Fix MoRI dispatch-buffer corruption at low concurrency: clamp MORI_MAX_DISPATCH_TOKENS_DECODE >= 256 in server_sglang.sh. The harness sizes the per-rank All2All dispatch buffer from max(CONC_LIST)/TP*(MTP+1), which collapses to 32 at conc-64/TP8/MTP3 and silently corrupts the dispatch kernel's receive slots (decodes fine, gsm8k=0). Confirmed on MI355X: dispatch=32->0.00, dispatch=64->0.00 (warpSize alone insufficient), dispatch>=256->0.94. Throughput unchanged (the corrupt run's ~3% edge was dropped work)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659
