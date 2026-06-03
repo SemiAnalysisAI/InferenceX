@@ -3430,3 +3430,9 @@
     - "Image: vllm/vllm-openai:v0.20.1"
     - "Same 1k/1k and 8k/1k search space as gb300, plus a new tp8-1p1d at low concurrencies for both ISLs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1652
+
+- config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Enable EPLB for DEP configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1655
