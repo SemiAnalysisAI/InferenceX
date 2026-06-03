@@ -379,7 +379,9 @@ if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
         shopt -s nullglob
         for eval_file in "$EVAL_DIR"/*; do
             [ -f "$eval_file" ] || continue
-            cp "$eval_file" "$GITHUB_WORKSPACE/"
+            eval_dest="$GITHUB_WORKSPACE/$(basename "$eval_file")"
+            rm -f "$eval_dest"
+            cp "$eval_file" "$eval_dest"
             echo "Copied eval artifact: $(basename "$eval_file")"
         done
         shopt -u nullglob
