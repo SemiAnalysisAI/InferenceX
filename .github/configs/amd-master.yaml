@@ -2510,6 +2510,23 @@ glm5.1-fp4-mi355x-sglang-agentic:
       # sglang manages KV eviction; mi355x glm5.1 caps at tp=4 conc=16 in fixed-seq, so cap conservatively
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
+# target
+glm5.1-fp4-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  model: amd/GLM-5.1-MXFP4
+  model-prefix: glm5.1
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      # sglang manages KV eviction; mi355x glm5.1 caps at tp=4 conc=16 in fixed-seq, so cap conservatively
+      - { tp: 2, ep: 1, offloading: none, conc-list: [4, 8, 16, 32, 40, 48] }
+      - { tp: 2, ep: 1, offloading: hicache, conc-list: [4, 8, 16, 32, 40, 48] }
+
 kimik2.5-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
