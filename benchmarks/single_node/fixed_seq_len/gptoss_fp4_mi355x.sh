@@ -33,12 +33,28 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-export AMDGCN_USE_BUFFER_OPS=0
+# --- AITER backend optimizations (env-var tuning) ---
 export VLLM_ROCM_USE_AITER=1
+export VLLM_USE_ROCM_AITER_MXFP4=1
+export VLLM_ROCM_USE_AITER_PAGED_ATTN=1
+export VLLM_ROCM_USE_AITER_LINEAR=1
 export VLLM_ROCM_USE_AITER_TRITON_ROPE=1
+export VLLM_ROCM_USE_AITER_FP4_ASM_GEMM=1
+export VLLM_ROCM_USE_AITER_TRITON_GEMM=0
+export VLLM_ROCM_MOE_PADDING=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export AITER_BF16_FP8_BOUND=0
+export AITER_USE_OPUS_MOE_SORTING=1
+export AITER_USE_NT=0
+export AMDGCN_USE_BUFFER_OPS=1
+export CK_MXFP4_MOE_DIM_ALIGNMENT=64
+export GPU_MAX_HW_QUEUES=4
+
 ATTN_BACKEND="--attention-backend ROCM_AITER_UNIFIED_ATTN"
 FUSE_ROPE_KVCACHE="-cc.pass_config.fuse_rope_kvcache=True -cc.use_inductor_graph_partition=True"
+
+# --- Speculative decoding (06/02 — n-gram prompt lookup, lossless) ---
+SPEC_DECODE="--speculative-config {\"method\":\"ngram\",\"num_speculative_tokens\":3,\"prompt_lookup_min\":2,\"prompt_lookup_max\":64}"
 
 SERVER_LOG=/workspace/server.log
 
@@ -53,10 +69,13 @@ set -x
 vllm serve $MODEL --port $PORT \
   $ATTN_BACKEND $FUSE_ROPE_KVCACHE \
   --tensor-parallel-size=$TP \
-  --gpu-memory-utilization 0.95 \
+  --gpu-memory-utilization 0.97 \
   --max-model-len $MAX_MODEL_LEN \
+  --max-num-seqs 256 \
+  --max-num-batched-tokens 16384 \
   --block-size=64 \
-  --no-enable-prefix-caching > $SERVER_LOG 2>&1 &
+  --no-enable-prefix-caching \
+  $SPEC_DECODE > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
