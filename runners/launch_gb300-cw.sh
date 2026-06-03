@@ -59,8 +59,21 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         echo "Unsupported framework on gb300-cw for glm5/fp8: $FRAMEWORK. Currently supported: dynamo-sglang"
         exit 1
     fi
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
+    # Weights staged on shared storage; mirrors the dsv4 convention.
+    export MODEL_PATH="/mnt/vast/models/MiniMax-M2.5-NVFP4"
+
+    if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="main"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5"
+        SRT_RECIPE_DST="recipes/vllm/minimax-m2.5"
+    else
+        echo "Unsupported framework on gb300-cw for minimaxm2.5/fp4: $FRAMEWORK. Currently supported: dynamo-vllm"
+        exit 1
+    fi
 else
-    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8"
+    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8, minimaxm2.5/fp4"
     exit 1
 fi
 
@@ -233,6 +246,9 @@ model_paths:
   deepseek-v4-pro: "${MODEL_PATH}"
   # GLM-5 FP8 sglang recipes use `model.path: glm-5-fp8`.
   glm-5-fp8: "${MODEL_PATH}"
+  # Minimax recipes use `model.path: minimax-m2.5-nvfp4`. Same preflight
+  # constraint as deepseek-v4-pro above.
+  minimax-m2.5-nvfp4: "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
