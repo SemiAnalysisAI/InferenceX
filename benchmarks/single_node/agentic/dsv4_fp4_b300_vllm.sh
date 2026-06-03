@@ -52,8 +52,6 @@ fi
 nvidia-smi
 
 # ---- Resolve traces and install deps ----------------------------------------
-# Opt this recipe out of the DSv4 052726 default; use the v6 corpus.
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226
 resolve_trace_source
 install_agentic_deps
 

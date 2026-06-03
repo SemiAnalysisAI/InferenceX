@@ -926,17 +926,12 @@ resolve_trace_source() {
     # scenario. Used by recipes whose servers have non-default context
     # caps (e.g. minimaxm2.5 at max_model_len ~256k can't replay the
     # unfiltered corpus and switches to the 256k-capped variant), or
-    # by recipes that want to pin a specific corpus generation rather
-    # than ride the model-prefix-aware default below.
+    # by recipes that want to pin an older corpus generation.
     #
-    # Default (no override) is model-prefix-aware:
-    #   DSv4 recipes      -> 052726 (v5 corpus, the original baseline)
-    #   everything else   -> 060226 (v6 corpus, newer CC versions)
-    # DSv4 stays on 052726 for continuity with prior published baselines.
+    # Default (no override): semianalysis_cc_traces_weka_with_subagents_060226
+    # (v6 corpus, newer CC versions). All recipes — including DSv4 — ride
+    # this default unless they opt out via WEKA_LOADER_OVERRIDE.
     local default_loader="semianalysis_cc_traces_weka_with_subagents_060226"
-    if [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
-        default_loader="semianalysis_cc_traces_weka_with_subagents"
-    fi
     local loader="${WEKA_LOADER_OVERRIDE:-$default_loader}"
     local dataset
     case "$loader" in
