@@ -1973,7 +1973,7 @@ dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
   
 
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  image: rocm/sgl-dev:sglang-0.5.12.post1-rocm720-mi35x-mori-0529-mla
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -2123,7 +2123,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
+        conc-list: [ 512, 4096 ]
         prefill:
           num-worker: 2
           tp: 8
