@@ -37,7 +37,6 @@ from pathlib import Path
 # Trace metadata lookup: conversation_id (= trace id) -> per-turn dict with
 # ``hash_ids`` and ``output_length``. Built lazily from the HF dataset cache.
 _TRACE_METADATA_CACHE: dict[str, list[dict]] | None = None
-_HF_DATASET = "semianalysisai/cc-traces-weka-with-subagents-051926"
 
 
 # ---- helpers ---------------------------------------------------------------
@@ -118,10 +117,17 @@ def load_server_metrics(path: Path) -> dict:
 def _hf_traces_dir() -> Path | None:
     """Locate the HuggingFace cache directory for the weka traces dataset.
 
-    Returns the directory containing per-trace JSON files, or None if the
-    dataset isn't present locally. Mirrors the layout
+    Returns the directory containing per-trace JSON files, or None if no
+    weka dataset is present locally. Mirrors the layout
     huggingface_hub.snapshot_download() produces:
     ``$HF_HUB_CACHE/datasets--<org>--<name>/snapshots/<revision>/``.
+
+    The bench script supports several corpus revisions
+    (cc-traces-weka-with-subagents-052726, ...-060226, ...-060226-256k, etc.)
+    and may switch between them per-recipe via WEKA_LOADER_OVERRIDE. Rather
+    than hardcode a single dataset name, scan all ``datasets--semianalysisai
+    --cc-traces-weka*`` directories in the cache and pick the most-recently-
+    modified snapshot that contains usable trace files.
     """
     hub_cache = os.environ.get("HF_HUB_CACHE") or os.environ.get("HUGGINGFACE_HUB_CACHE")
     if hub_cache:
@@ -130,17 +136,23 @@ def _hf_traces_dir() -> Path | None:
         home = os.environ.get("HF_HOME")
         cache_root = Path(home) / "hub" if home else Path.home() / ".cache" / "huggingface" / "hub"
 
-    org, name = _HF_DATASET.split("/", 1)
-    snapshots = cache_root / f"datasets--{org}--{name}" / "snapshots"
-    if not snapshots.is_dir():
+    if not cache_root.is_dir():
         return None
-    candidates = sorted(snapshots.iterdir(), key=lambda p: p.stat().st_mtime, reverse=True)
+
+    # Collect every weka-corpus snapshot dir across all matching dataset
+    # entries, sorted newest first.
+    snapshots: list[Path] = []
+    for dataset_dir in cache_root.glob("datasets--semianalysisai--cc-traces-weka*"):
+        snap_root = dataset_dir / "snapshots"
+        if not snap_root.is_dir():
+            continue
+        snapshots.extend(p for p in snap_root.iterdir() if p.is_dir())
+    snapshots.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+
     # Prefer the snapshot that contains usable trace files. The published HF
     # dataset ships a single ``traces.jsonl`` (one trace per line); older /
     # local mirrors may use per-trace ``*.json`` files instead. Accept either.
-    for c in candidates:
-        if not c.is_dir():
-            continue
+    for c in snapshots:
         if any(c.glob("*.jsonl")) or any(c.glob("*.json")):
             return c
     return None
@@ -382,16 +394,36 @@ def compute_throughput_stats(records: list[dict], aggregate: dict) -> dict:
 
 
 def compute_cache_stats(records: list[dict], server_metrics: dict) -> dict:
-    """Cache-hit metrics: theoretical (from trace metadata) + actual (server)."""
+    """Cache-hit metrics: theoretical (from trace metadata) + actual (server).
+
+    Server-metric coverage depends on the engine + KV connector combination,
+    so several fields are structurally null for some configs. The matrix:
+
+    | engine + connector                           | populated server fields            |
+    |----------------------------------------------|------------------------------------|
+    | vLLM, no connector                           | server_gpu_cache_hit_rate,         |
+    |                                              | gpu_kv_cache_usage_pct             |
+    | vLLM + SimpleCPUOffloadConnector             | same as above (the CPU tier        |
+    |                                              | extends the local LRU; reloads are |
+    |                                              | counted as prefix_cache_hits — no  |
+    |                                              | separate vllm:cpu_prefix_cache_*   |
+    |                                              | counter exists)                    |
+    | vLLM + LMCacheMPConnector (kv_role=kv_both)  | server_external_cache_hit_rate.    |
+    |                                              | server_gpu_cache_hit_rate goes to  |
+    |                                              | ~0 because delay_cache_blocks=True |
+    |                                              | suppresses local hash registration |
+    | SGLang                                       | not yet wired                      |
+    """
     result: dict = {
         "theoretical_cache_hit_rate": None,
         "server_gpu_cache_hit_rate": None,
-        "server_cpu_cache_hit_rate": None,
+        "server_external_cache_hit_rate": None,
+        "gpu_kv_cache_usage_pct": None,
+        "cpu_kv_cache_usage_pct": None,
         "kv_offload_bytes_gpu_to_cpu": None,
         "kv_offload_bytes_cpu_to_gpu": None,
         "kv_offload_time_gpu_to_cpu": None,
         "kv_offload_time_cpu_to_gpu": None,
-        "cpu_kv_cache_usage_pct": None,
         "total_prompt_tokens": None,
         "total_generation_tokens": None,
         "total_requests_completed": None,
@@ -476,15 +508,30 @@ def compute_cache_stats(records: list[dict], server_metrics: dict) -> dict:
                 return agg
         return None
 
+    # Local GPU prefix cache (every vLLM config emits these). Note: with
+    # LMCacheMPConnector + kv_role=kv_both, the scheduler sets
+    # delay_cache_blocks=True on every load and these hits stay at ~0 even
+    # when overall cache efficiency is high — read server_external_*.
     hits = _final_value("vllm:prefix_cache_hits")
     queries = _final_value("vllm:prefix_cache_queries")
     if hits is not None and queries and queries > 0:
         result["server_gpu_cache_hit_rate"] = hits / queries
 
-    cpu_hits = _final_value("vllm:cpu_prefix_cache_hits")
-    cpu_queries = _final_value("vllm:cpu_prefix_cache_queries")
-    if cpu_hits is not None and cpu_queries and cpu_queries > 0:
-        result["server_cpu_cache_hit_rate"] = cpu_hits / cpu_queries
+    # External KV connector (LMCacheMPConnector and similar). Only populated
+    # when the connector implements get_num_new_matched_tokens; absent for
+    # SimpleCPUOffloadConnector and for pure-vLLM (no connector) runs.
+    ext_hits = _final_value("vllm:external_prefix_cache_hits")
+    ext_queries = _final_value("vllm:external_prefix_cache_queries")
+    if ext_hits is not None and ext_queries and ext_queries > 0:
+        result["server_external_cache_hit_rate"] = ext_hits / ext_queries
+
+    # GPU KV pool fill ratio gauge. vLLM emits vllm:kv_cache_usage_perc on V1
+    # and vllm:gpu_cache_usage_perc on V0 (kept for older deployments).
+    kv_usage = _final_value("vllm:kv_cache_usage_perc")
+    if kv_usage is None:
+        kv_usage = _final_value("vllm:gpu_cache_usage_perc")
+    if kv_usage is not None:
+        result["gpu_kv_cache_usage_pct"] = kv_usage
 
     for src_key, dst_key in (
         ("vllm:kv_offload_bytes_gpu_to_cpu", "kv_offload_bytes_gpu_to_cpu"),
@@ -679,6 +726,13 @@ def main() -> int:
         )
     if agg.get("server_gpu_cache_hit_rate") is not None:
         print(f"  GPU cache hit rate: {agg['server_gpu_cache_hit_rate']:.1%}")
+    if agg.get("server_external_cache_hit_rate") is not None:
+        print(
+            f"  External cache hit rate: "
+            f"{agg['server_external_cache_hit_rate']:.1%}"
+        )
+    if agg.get("gpu_kv_cache_usage_pct") is not None:
+        print(f"  GPU KV cache usage:  {agg['gpu_kv_cache_usage_pct']:.1%}")
     if agg.get("response_cache_hit_rate") is not None:
         print(f"  Response cache hit rate: {agg['response_cache_hit_rate']:.1%}")
     if agg.get("theoretical_cache_hit_rate") is not None:
