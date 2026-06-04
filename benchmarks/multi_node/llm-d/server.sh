@@ -30,7 +30,12 @@ EPP_GRPC_PORT=9002
 EPP_HEALTH_PORT=9003
 EPP_METRICS_PORT=9090
 
-MODEL="${MODEL_DIR}/${MODEL_NAME}"
+# Filesystem path to the weights inside the container. job.slurm mounts
+# the host model directory at /models and sets MODEL_DIR=/models, so the
+# weights live directly under MODEL_DIR. MODEL_NAME is the OpenAI-API
+# served name passed via --served-model-name; it is not part of the
+# filesystem path.
+MODEL="${MODEL_DIR}"
 HOST_IP=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 # Default NIC for NCCL / Gloo / NVSHMEM bootstrap. Pulled from the same
 # default route HOST_IP came from so the iface and the IP stay
@@ -135,6 +140,7 @@ KV_TRANSFER_CONFIG='{"kv_connector":"NixlConnector","kv_role":"kv_both","kv_load
 
 COMMON_ARGS=(
     --port "$VLLM_PORT"
+    --served-model-name "$MODEL_NAME"
     --trust-remote-code
     --api-server-count 1
     --disable-access-log-for-endpoints=/health,/metrics
@@ -283,7 +289,7 @@ PY
         # Bench against Envoy. EPP routes to decode (and decode sidecar
         # pulls from prefill via NIXL).
         run_benchmark_serving \
-            --model "$MODEL" \
+            --model "$MODEL_NAME" \
             --port "$ENVOY_PORT" \
             --backend openai \
             --input-len "$BENCH_INPUT_LEN" \
