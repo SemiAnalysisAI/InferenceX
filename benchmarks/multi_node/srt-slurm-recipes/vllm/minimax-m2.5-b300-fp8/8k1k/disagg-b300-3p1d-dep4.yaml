@@ -9,7 +9,7 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
-setup_script: install-deps.sh
+setup_script: vllm-container-deps.sh
 
 resources:
   gpu_type: "b300"
