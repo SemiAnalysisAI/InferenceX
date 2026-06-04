@@ -121,6 +121,9 @@ case "$OFFLOADING" in
 }
 EOF
         export MOONCAKE_CONFIG_PATH
+        # Reuse TCP connections across KV transfers instead of exhausting the
+        # host's ephemeral port range with one short-lived socket per transfer.
+        export MC_TCP_ENABLE_CONNECTION_POOL=1
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
 
