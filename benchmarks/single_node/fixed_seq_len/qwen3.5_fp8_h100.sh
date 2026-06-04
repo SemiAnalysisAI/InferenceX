@@ -1,11 +1,7 @@
 #!/usr/bin/env bash
 
 # Qwen-3.5-397B-A17B FP8 on H100 via sglang.
-# Mirrors qwen3.5_fp8_h200.sh but with tighter memory accommodations:
-# H100 has 80GB HBM3 vs H200's 141GB HBM3e, so weights + KV cache fit
-# more snugly. Mem-fraction-static lowered from 0.8 → 0.75 and
-# chunked-prefill-size from 16384 → 8192 to leave more headroom.
-# Sweep tops out at conc=32 instead of 64 for the same reason.
+# Uses TP8/EP1 at conc 1-8 and TP8/EP8 at conc 16-256.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -34,7 +30,45 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     MAX_SEQ_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
-echo "CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
+PARALLEL_ARGS=(--tp "$TP")
+if [ "${EP_SIZE}" -gt 1 ]; then
+    PARALLEL_ARGS+=(--expert-parallel-size "$EP_SIZE")
+fi
+
+SCHEDULER_RECV_INTERVAL=
+case "$CONC" in
+  1|2|4)
+    SCHEDULER_RECV_INTERVAL=2
+    ;;
+  8)
+    SCHEDULER_RECV_INTERVAL=60
+    ;;
+  16)
+    SCHEDULER_RECV_INTERVAL=30
+    ;;
+  32)
+    SCHEDULER_RECV_INTERVAL=1200
+    ;;
+  64)
+    SCHEDULER_RECV_INTERVAL=600
+    ;;
+  128|256)
+    SCHEDULER_RECV_INTERVAL=1920
+    ;;
+  *)
+    echo "Unsupported CONC=$CONC for qwen3.5 FP8 H100 SGLang recipe" >&2
+    exit 1
+    ;;
+esac
+
+SCHEDULER_ARGS=()
+if [ -n "$SCHEDULER_RECV_INTERVAL" ]; then
+    SCHEDULER_ARGS=(--scheduler-recv-interval "$SCHEDULER_RECV_INTERVAL")
+fi
+
+echo "TP: $TP, EP_SIZE: $EP_SIZE, CONC: $CONC, ISL: $ISL, OSL: $OSL, MAX_SEQ_LEN: $MAX_SEQ_LEN"
+echo "SCHEDULER_RECV_INTERVAL: ${SCHEDULER_RECV_INTERVAL:-none}"
+echo "SCHEDULER_ARGS: ${SCHEDULER_ARGS[*]}"
 
 start_gpu_monitor
 
@@ -43,15 +77,14 @@ python3 -m sglang.launch_server \
   --model "$MODEL" \
   --host 0.0.0.0 \
   --port "$PORT" \
-  --tp "$TP" \
-  --expert-parallel-size "$EP_SIZE" \
+  "${PARALLEL_ARGS[@]}" \
   --reasoning-parser qwen3 \
   --tool-call-parser qwen3_coder \
   --enable-flashinfer-allreduce-fusion \
-  --max-running-requests 64 \
-  --chunked-prefill-size 8192 \
+  --max-running-requests 256 \
+  --chunked-prefill-size 16384 \
   --decode-log-interval 1 \
-  --mem-fraction-static 0.75 \
+  --mem-fraction-static 0.8 \
   --cuda-graph-max-bs "$CONC" \
   --context-length "$MAX_SEQ_LEN" \
   --kv-cache-dtype fp8_e4m3 \
@@ -61,7 +94,9 @@ python3 -m sglang.launch_server \
   --tokenizer-worker-num 6 \
   --mamba-ssm-dtype bfloat16 \
   --disable-radix-cache \
+  --enable-symm-mem \
   --trust-remote-code \
+  "${SCHEDULER_ARGS[@]}" \
   > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!

@@ -3465,3 +3465,12 @@
     - "Add MiniMax-M2.5 FP8 B300 disaggregated multinode vLLM benchmarks via Dynamo"
     - "Add 1k1k/8k1k FP8 recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1663
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+  description:
+    - "Tune Qwen3.5-397B-A17B-FP8 H100 SGLang aggregate recipe for 1k/1k and 8k/1k sweeps"
+    - "Use TP8/EP1 for conc 1-8 and TP8/EP8 for conc 16-256"
+    - "Use scheduler-recv-interval values 2/60/30/1200/600/1920 for conc 1-4/8/16/32/64/128-256"
+    - "Set max-running-requests=256, chunked-prefill-size=16384, mem-fraction-static=0.8, cuda-graph-max-bs=CONC, and enable symm-mem"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1544
