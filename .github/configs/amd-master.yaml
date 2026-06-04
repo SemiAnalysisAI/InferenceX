@@ -821,6 +821,27 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
+kimik2.5-fp4-mi355x-sglang:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260602
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
+
 # Diverged from kimik2.5-fp4-mi355x-vllm (agentic-coding sibling). Reasons below;
 # the original kimik2.5-fp4-mi355x-vllm entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
