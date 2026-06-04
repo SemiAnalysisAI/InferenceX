@@ -90,13 +90,8 @@ PY
 fi
 
 # ----------------------------------------------------------------
-# Wide-EP / P/D env (from the llm-d wide-EP-lws guide manifests).
+# Multi-node DP / NIXL P/D env: needed in any topology.
 # ----------------------------------------------------------------
-export NVIDIA_GDRCOPY=enabled
-export NVSHMEM_REMOTE_TRANSPORT=ibgda
-export NVSHMEM_IB_ENABLE_IBGDA=true
-export NVSHMEM_SYMMETRIC_SIZE=16G
-export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-eth0}
 export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-eth0}
 export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-eth0}
 export VLLM_SKIP_P2P_CHECK=1
@@ -104,6 +99,21 @@ export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=1
 export VLLM_USE_DEEP_GEMM=1
 export VLLM_NIXL_SIDE_CHANNEL_HOST="$HOST_IP"
 export VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+
+# ----------------------------------------------------------------
+# Wide-EP NVSHMEM / ibgda env (from the llm-d wide-EP-lws guide
+# manifests). Gated on LWS_GROUP_SIZE > 1 - the simple 1P+1D recipe
+# explicitly avoids DeepEP, NVSHMEM ibgda, and full-mesh RDMA, so
+# leaving these set on a single-node-per-role topology is misleading
+# and could trigger ibgda code paths it does not need.
+# ----------------------------------------------------------------
+if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
+    export NVIDIA_GDRCOPY=enabled
+    export NVSHMEM_REMOTE_TRANSPORT=ibgda
+    export NVSHMEM_IB_ENABLE_IBGDA=true
+    export NVSHMEM_SYMMETRIC_SIZE=16G
+    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-eth0}
+fi
 
 # ----------------------------------------------------------------
 # Start vLLM (every node, prefill or decode)
@@ -164,7 +174,8 @@ if [[ "$LWS_WORKER_INDEX" -eq 0 ]]; then
     fi
     echo "Starting pd-sidecar ($ROLE leader): ${SIDECAR_FLAGS[*]}"
     pd-sidecar "${SIDECAR_FLAGS[@]}" > "$SIDECAR_LOG" 2>&1 &
-    wait_for_server_ready --port "$SIDECAR_PORT" --server-log "$SIDECAR_LOG"
+    SIDECAR_PID=$!
+    wait_for_server_ready --port "$SIDECAR_PORT" --server-log "$SIDECAR_LOG" --server-pid "$SIDECAR_PID"
     echo "pd-sidecar ready on $HOST_IP:$SIDECAR_PORT"
 fi
 
@@ -217,25 +228,47 @@ PY
         > "$EPP_LOG" 2>&1 &
 
     envoy -c /etc/envoy/envoy.yaml > "$ENVOY_LOG" 2>&1 &
+    ENVOY_PID=$!
 
-    wait_for_server_ready --port "$ENVOY_PORT" --server-log "$ENVOY_LOG"
+    wait_for_server_ready --port "$ENVOY_PORT" --server-log "$ENVOY_LOG" --server-pid "$ENVOY_PID"
 
     # Wait for the prefill leader's sidecar before starting the bench.
-    wait_for_server_ready --port "$SIDECAR_PORT" --host "$PREFILL_LEADER_IP"
+    # wait_for_server_ready can only probe localhost; the prefill leader
+    # is on a different node, so poll directly with a deadline.
+    echo "Waiting for prefill sidecar at $PREFILL_LEADER_IP:$SIDECAR_PORT/health"
+    PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 300 ))
+    until curl --output /dev/null --silent --fail \
+            "http://$PREFILL_LEADER_IP:$SIDECAR_PORT/health"; do
+        if [[ "$(date +%s)" -ge "$PREFILL_WAIT_DEADLINE" ]]; then
+            echo "ERROR: prefill sidecar did not become ready within 5 min" >&2
+            exit 1
+        fi
+        sleep 5
+    done
+    echo "Prefill sidecar at $PREFILL_LEADER_IP:$SIDECAR_PORT is ready"
 
-    # Bench against Envoy. EPP routes to decode (and decode sidecar pulls
-    # from prefill via NIXL).
-    run_benchmark_serving \
-        --model "$MODEL" \
-        --port "$ENVOY_PORT" \
-        --backend openai \
-        --input-len "$BENCH_INPUT_LEN" \
-        --output-len "$BENCH_OUTPUT_LEN" \
-        --random-range-ratio "$BENCH_RANDOM_RANGE_RATIO" \
-        --num-prompts "$((BENCH_MAX_CONCURRENCY * BENCH_NUM_PROMPTS_MULTIPLIER))" \
-        --max-concurrency "$BENCH_MAX_CONCURRENCY" \
-        --result-filename "$RESULT_FILENAME" \
-        --result-dir "$BENCHMARK_LOGS_DIR/"
+    # Sweep concurrency. BENCH_MAX_CONCURRENCY arrives from submit.sh as
+    # an 'x'-delimited list (e.g. "2048x1024x512"); the runner / sweep
+    # configs expect one bench run per level. Same shape as
+    # benchmarks/multi_node/amd_utils/bench.sh.
+    IFS='x' read -r -a CONCURRENCIES <<< "$BENCH_MAX_CONCURRENCY"
+    for max_concurrency in "${CONCURRENCIES[@]}"; do
+        num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
+        [[ "$num_prompts" -lt 16 ]] && num_prompts=16
+        # Bench against Envoy. EPP routes to decode (and decode sidecar
+        # pulls from prefill via NIXL).
+        run_benchmark_serving \
+            --model "$MODEL" \
+            --port "$ENVOY_PORT" \
+            --backend openai \
+            --input-len "$BENCH_INPUT_LEN" \
+            --output-len "$BENCH_OUTPUT_LEN" \
+            --random-range-ratio "$BENCH_RANDOM_RANGE_RATIO" \
+            --num-prompts "$num_prompts" \
+            --max-concurrency "$max_concurrency" \
+            --result-filename "${RESULT_FILENAME}_c${max_concurrency}" \
+            --result-dir "$BENCHMARK_LOGS_DIR/"
+    done
 
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
         run_eval --framework lm-eval --port "$ENVOY_PORT"
