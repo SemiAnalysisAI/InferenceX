@@ -1,8 +1,10 @@
 #!/usr/bin/bash
 
-# System-specific configuration for H200 DGXC Slurm cluster
-SLURM_PARTITION="main"
-SLURM_ACCOUNT="sa-shared"
+# System-specific configuration for H200 DGXC Slurm cluster.
+# Exported so child processes (e.g. submit.sh invoked via nested bash)
+# inherit them.
+export SLURM_PARTITION="main"
+export SLURM_ACCOUNT="sa-shared"
 
 set -x
 

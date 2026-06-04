@@ -12,6 +12,11 @@
 
 set -euo pipefail
 
+# Repo root resolved from this script's location, so paths below are
+# independent of the caller's $PWD (the wrapper cd's into llm-d/ before
+# invoking this script).
+REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
+
 check_env() {
     local name="$1"
     if [[ -z "${!name:-}" ]]; then
@@ -69,7 +74,7 @@ export CONFIG_FILE="${CONFIG_FILE:-}"
 
 # Recipe may override SLURM time limit (longer topologies need more wall time).
 if [[ -n "$CONFIG_FILE" ]]; then
-    RECIPE_PATH="benchmarks/multi_node/llm-d-recipes/${CONFIG_FILE}"
+    RECIPE_PATH="${REPO_ROOT}/benchmarks/multi_node/llm-d-recipes/${CONFIG_FILE}"
     if [[ -f "$RECIPE_PATH" ]]; then
         RECIPE_TIME=$(python3 -c "
 import yaml, sys

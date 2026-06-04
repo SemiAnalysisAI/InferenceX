@@ -68,7 +68,7 @@ srun \
 set -euo pipefail
 echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 
-sudo docker ps -aq --filter name=^llmd_bench_ | xargs -r sudo docker rm -f || true
+sudo docker ps -aq --filter name=\"^${DOCKER_CONT_NAME}_\" | xargs -r sudo docker rm -f || true
 
 exec sudo docker run --rm \
     --init \
@@ -129,4 +129,4 @@ exec sudo docker run --rm \
     '
 "
 
-srun bash -c 'sudo docker ps -aq --filter name=^llmd_bench_ | xargs -r sudo docker rm -f' || true
+srun bash -c "sudo docker ps -aq --filter name=\"^${DOCKER_CONT_NAME}_\" | xargs -r sudo docker rm -f" || true

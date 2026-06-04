@@ -226,6 +226,26 @@ PY
         --grpc-health-port="$EPP_HEALTH_PORT" \
         --metrics-port="$EPP_METRICS_PORT" \
         > "$EPP_LOG" 2>&1 &
+    EPP_PID=$!
+
+    # Wait for EPP to bind its gRPC port before starting Envoy. Envoy's
+    # ext_proc filter dials 127.0.0.1:$EPP_GRPC_PORT - if Envoy comes up
+    # first the early bench requests hit ext_proc connection errors.
+    # gRPC has no plain HTTP /health, so probe the TCP listener directly.
+    echo "Waiting for EPP on 127.0.0.1:$EPP_GRPC_PORT"
+    EPP_WAIT_DEADLINE=$(( $(date +%s) + 60 ))
+    until (echo > "/dev/tcp/127.0.0.1/$EPP_GRPC_PORT") 2>/dev/null; do
+        if ! kill -0 "$EPP_PID" 2>/dev/null; then
+            echo "ERROR: EPP died before binding $EPP_GRPC_PORT" >&2
+            exit 1
+        fi
+        if [[ "$(date +%s)" -ge "$EPP_WAIT_DEADLINE" ]]; then
+            echo "ERROR: EPP did not bind $EPP_GRPC_PORT within 60s" >&2
+            exit 1
+        fi
+        sleep 1
+    done
+    echo "EPP listening on $EPP_GRPC_PORT"
 
     envoy -c /etc/envoy/envoy.yaml > "$ENVOY_LOG" 2>&1 &
     ENVOY_PID=$!
