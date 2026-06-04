@@ -28,12 +28,6 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 export TORCH_BLAS_PREFER_HIPBLASLT=1
 export SGLANG_USE_AITER=1
 
-# Disable AITER RMSNorm for TP < 8 due to known accuracy issues (matches the
-# vLLM Kimi MXFP4 recipe in this repo).
-if [ "${TP}" -lt 8 ]; then
-  export SGLANG_USE_AITER_RMSNORM=0
-fi
-
 SERVER_LOG=/workspace/server.log
 CONTEXT_LENGTH=$((ISL + OSL + 32))
 
