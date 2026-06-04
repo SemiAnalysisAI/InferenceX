@@ -1526,7 +1526,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
 kimik2.5-fp4-mi355x-vllm-disagg:
   # TODO(simondanielsson): change to pinned version once https://github.com/vllm-project/vllm/pull/40344
   # is part of official release, likely 0.22.0.
-  image: vllm/vllm-openai-rocm:nightly
+  image: vllm/vllm-openai-rocm:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1582,7 +1582,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
 minimaxm2.5-fp8-mi355x-vllm-disagg:
   # TODO(simondanielsson): change to pinned version once https://github.com/vllm-project/vllm/pull/40344
   # is part of official release, likely 0.22.0.
-  image: vllm/vllm-openai-rocm:nightly
+  image: vllm/vllm-openai-rocm:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x-disagg
