@@ -248,34 +248,11 @@ if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
-# ── MoRI dispatch-buffer minimum floor ───────────────────────────────────────
-# The MoRI All2All dispatch kernel (EpDispatchInterNodeV1Kernel / IntraNode)
-# silently corrupts output when the per-rank dispatch buffer
-# (maxNumInpTokenPerRank = SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK) is too
-# small. The harness derives that value from max(CONC_LIST)/TP*(MTP+1), which
-# collapses at low concurrency (conc-64 / TP8 / MTP3 -> 64/8*4 = 32). Two things
-# break: (1) the kernel writes tokens in warpSize-aligned chunks
-# (destTokId = flagSlotId*warpSize + laneId, laneId 0..63), so a buffer < 64
-# can't even hold one wavefront; (2) a receiving rank takes tokens from all
-# `worldSize` peers, so the per-rank buffer must hold the routing fan-in, not
-# just the local token count. The result is out-of-bounds receive-slot writes
-# -> output that decodes fine (acceptance length stays high) but is semantically
-# garbage (gsm8k = 0.0).
-#
-# Empirically validated on MI355X (conc-64 DEP8+MTP3, this config):
-#     dispatch=32 -> gsm8k 0.00   (run 26913235190)
-#     dispatch=64 -> gsm8k 0.00   (run 26919517564)  # warpSize alone insufficient
-#     dispatch>=256 -> gsm8k 0.94 (run 26912330265)
-# So clamp to 256. This only raises the value at low conc (high conc is already
-# larger); it adds a few MB of staging buffer but no compute, so real throughput
-# is unchanged (the ~3% edge of the corrupt run was an artifact of dropped work).
-# NOTE: 128 is untested; the proper upstream fix sizes the buffer from the
-# routing fan-in rather than a flat constant.
-MORI_DISPATCH_TOKENS_FLOOR=256
-if [[ "$MORI_MAX_DISPATCH_TOKENS_DECODE" -lt "$MORI_DISPATCH_TOKENS_FLOOR" ]]; then
-    echo "[MoRI floor] DISPATCH_TOKENS=${MORI_MAX_DISPATCH_TOKENS_DECODE} < floor ${MORI_DISPATCH_TOKENS_FLOOR}; clamping to ${MORI_DISPATCH_TOKENS_FLOOR}"
-    MORI_MAX_DISPATCH_TOKENS_DECODE=$MORI_DISPATCH_TOKENS_FLOOR
-fi
+# NOTE: the low-concurrency MoRI dispatch-buffer corruption (small
+# SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK -> silent OOB -> gsm8k=0) is fixed
+# at the root cause by the moriep.py overlay (patches/moriep.py, auto-mounted by
+# job.slurm), which floors num_max_dispatch_tokens_per_rank to 256 inside sglang.
+# The earlier harness-level env clamp here has been removed in favor of that.
 
 # =============================================================================
 # Cluster Topology Configuration

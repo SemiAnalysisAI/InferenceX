@@ -60,6 +60,45 @@ This is a stop-gap. The proper upstream fix is to migrate MoRI to the
 plural `state_types: List[StateType]` API (full design + diff in
 `scripts/sglang_disagg/docs/03-upstream-pr-proposal.md`).
 
+## `moriep.py`
+
+Overlays
+`/sgl-workspace/sglang/python/sglang/srt/layers/moe/token_dispatcher/moriep.py`.
+
+Source: forked from `lmsysorg/sglang-rocm:v0.5.12.post1-*` (sglang
+[v0.5.12.post1](https://github.com/sgl-project/sglang/tree/v0.5.12.post1)).
+The base file is **byte-identical to the upstream tag**
+(`md5 ac626f5459a699f9ac953d9d8e71d861`); the overlay is a single
++22-line insertion in `MoriTokenDispatcher.__init__`.
+
+**Bug it fixes:** at low concurrency the MoRI EP dispatch path silently
+corrupts output (decodes fine, acceptance length stays high, but gsm8k
+drops to 0). The per-rank dispatch buffer
+`num_max_dispatch_tokens_per_rank` (→ mori `max_num_inp_token_per_rank`)
+is derived by the harness as `max(CONC_LIST)/TP*(MTP+1)`, which collapses
+at low conc (conc-64 / TP8 / MTP3 → `64/8*4 = 32`). MoRI sizes its
+receive buffer `MaxNumTokensToRecv() = worldSize * maxNumInpTokenPerRank`
+(`max_total_recv_tokens` defaults to 0 → that fallback, and it is a *cap*
+not a floor — `dispatch_combine.hpp:126-136`). The intra-node dispatch
+kernel's per-dest atomic counter then runs past that buffer; the only
+guard is `assert(destTokId < MaxNumTokensToRecv())`, compiled out under
+`-DNDEBUG`, so the result is silent out-of-bounds writes
+(`internode_v1.cpp` `DispatchIntraNodeBlock`).
+
+The overlay floors `num_max_dispatch_tokens_per_rank` to **256** right at
+its env read — the single source of truth that feeds both
+`get_ep_dispatch_configs()` (kernel selection) and the buffer-sizing
+arg. Empirically validated on MI355X (conc-64 DEP8+MTP3):
+dispatch `32 → gsm8k 0.00`, `64 → 0.00` (one wavefront is not enough),
+`256 → 0.94`.
+
+This is a stop-gap. The proper upstream fix is in MoRI: size the receive
+buffer from the routing fan-in and turn the compiled-out `assert` into a
+real bounds guard (see [ROCm/mori#356](https://github.com/ROCm/mori/issues/356)).
+The integration-level guard belongs in sglang's `moriep.py`
+([sgl-project/sglang#27194](https://github.com/sgl-project/sglang/issues/27194)) —
+this overlay is exactly that guard, pending upstream merge.
+
 ## How to enable
 
 ```bash
