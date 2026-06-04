@@ -3,8 +3,8 @@
 # setup_deps.sh — Install missing disagg dependencies at container start.
 #
 # Dispatched by $ENGINE (set by server.sh dispatcher):
-#   vllm-disagg   -> vLLM/MoRI-IO patches + UCX/RIXL path exports
-#                    (base image: vllm/vllm-openai-rocm:v0.18.0)
+#   vllm-disagg   -> recipe deps + amd-quark + UCX/RIXL path exports
+#                    (base image: vllm/vllm-openai-rocm:nightly)
 #   sglang-disagg -> SGLang aiter gluon patch + per-model installs
 #                    (base image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-*)
 #

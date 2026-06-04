@@ -3200,3 +3200,11 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523, 1P1D TP8/EP1, dp-attn false, conc [8..512]"
     - "MoRI conn.py overlay (48e459bd) via job.slurm; launcher qwen3.5_fp4_mi355x_sglang-disagg.sh"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1579
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+    - minimaxm2.5-fp8-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:nightly (MoRI-IO fixes upstreamed in vllm#40344)"
+    - "Rename a2a backend mori to mori_low_latency; set read_mode via kv_connector_extra_config instead of VLLM_MORIIO_CONNECTOR_READ_MODE env var"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1585
