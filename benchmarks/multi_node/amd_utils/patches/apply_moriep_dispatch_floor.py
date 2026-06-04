@@ -65,13 +65,28 @@ def find_target():
               f"__path__={getattr(sglang, '__path__', '?')}); NOT patched")
         return None
 
-    path = os.path.join(
-        pkg_dir, "srt", "layers", "moe", "token_dispatcher", "moriep.py",
-    )
-    if not os.path.isfile(path):
-        print(f"{TAG} ERROR: moriep.py not found at {path}; NOT patched")
-        return None
-    return path
+    rel = os.path.join("srt", "layers", "moe", "token_dispatcher", "moriep.py")
+    candidates = [
+        os.path.join(pkg_dir, rel),
+        os.path.join(pkg_dir, "python", "sglang", rel),
+    ]
+    for path in candidates:
+        if os.path.isfile(path):
+            return path
+
+    # Last resort: walk the tree (bounded to 6 levels to avoid scanning /).
+    for root, _dirs, files in os.walk(pkg_dir):
+        if root.count(os.sep) - pkg_dir.count(os.sep) > 6:
+            _dirs.clear()
+            continue
+        if "moriep.py" in files:
+            found = os.path.join(root, "moriep.py")
+            print(f"{TAG} found moriep.py via walk: {found}")
+            return found
+
+    print(f"{TAG} ERROR: moriep.py not found under {pkg_dir} "
+          f"(tried {candidates}); NOT patched")
+    return None
 
 
 def main():
