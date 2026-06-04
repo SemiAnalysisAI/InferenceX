@@ -3465,4 +3465,4 @@
     - "Add Kimi-K2.5 MXFP4 SGLang single-node benchmark for MI355X"
     - "Image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260602; model: amd/Kimi-K2.5-MXFP4"
     - "Server flags: --attention-backend aiter, --kv-cache-dtype fp8_e4m3, --chunked-prefill-size 16384, --max-prefill-tokens 16384, --tool-call-parser kimi_k2, --reasoning-parser kimi_k2, --enable-aiter-allreduce-fusion, --mem-fraction-static 0.765, --disable-radix-cache; TORCH_BLAS_PREFER_HIPBLASLT=1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1661
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1662
