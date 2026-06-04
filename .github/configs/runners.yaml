@@ -116,19 +116,19 @@ mi325x-disagg:
 - 'mi325x-amds_07'
 - 'mi325x-amds_08'
 mi355x:
-- 'mi355x-amds_0'
-- 'mi355x-amds_1'
-- 'mi355x-amds_2'
-- 'mi355x-amds_3'
-- 'mi355x-amds_4'
-- 'mi355x-amds_5'
-- 'mi355x-amds_6'
-- 'mi355x-amds_7'
-- 'mi355x-amds_8'
+- 'mi355x-amds_00'
+- 'mi355x-amds_01'
+- 'mi355x-amds_02'
+- 'mi355x-amds_03'
+- 'mi355x-amds_04'
+- 'mi355x-amds_05'
+- 'mi355x-amds_06'
+- 'mi355x-amds_07'
+- 'mi355x-amds_08'
 mi355x-disagg:
-- 'mi355x-amds_6'
-- 'mi355x-amds_7'
-- 'mi355x-amds_8'
+- 'mi355x-amds_06'
+- 'mi355x-amds_07'
+- 'mi355x-amds_08'
 gb200:
 - gb200-nv_0
 - gb200-nv_1

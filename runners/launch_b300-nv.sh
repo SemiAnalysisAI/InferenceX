@@ -39,8 +39,11 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-
     fi
     export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm"
     exit 1
 fi
 
@@ -61,6 +64,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout main
+    mkdir -p recipes/vllm/minimax-m2.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300" recipes/vllm/minimax-m2.5
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -358,6 +367,23 @@ else
             echo "Squash file already exists and is valid, skipping import"
         else
             rm -f "$SQUASH_FILE"
+            # enroot's working dirs are pinned to NFS /scratch by
+            # /etc/enroot/enroot.conf, but enroot-aufs2ovlfs unpacks the image's
+            # root-owned whiteout markers into a sticky /tmp and then can't unlink
+            # them over NFS -- root-squash strips the CAP_FOWNER it would need, so
+            # it fails with "failed to remove aufs whiteout: Operation not
+            # permitted" and writes no .sqsh. Run the import on local disk, where
+            # the extracted files are owned by us and removable. Scoped to this
+            # subshell (and cleaned up on exit), so the salloc/srun below and the
+            # compute node's own /scratch are unaffected.
+            enroot_local="$(mktemp -d /tmp/enroot-import.XXXXXX)"
+            trap 'rm -rf "$enroot_local"' EXIT
+            export ENROOT_TEMP_PATH="$enroot_local/tmp"
+            export ENROOT_CACHE_PATH="$enroot_local/cache"
+            export ENROOT_DATA_PATH="$enroot_local/data"
+            export ENROOT_RUNTIME_PATH="$enroot_local/run"
+            mkdir -p "$ENROOT_TEMP_PATH" "$ENROOT_CACHE_PATH" \
+                     "$ENROOT_DATA_PATH" "$ENROOT_RUNTIME_PATH"
             enroot import -o "$SQUASH_FILE" "docker://$IMAGE"
         fi
     )

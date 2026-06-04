@@ -80,7 +80,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
-        BENCHMARK_SUBDIR="single_node"
+        BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
     JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
 
@@ -242,8 +242,8 @@ else
     fi
 
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
-    SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
-    SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
+    SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
     if [[ -f "$SCRIPT_FW" ]]; then
         BENCHMARK_SCRIPT="$SCRIPT_FW"
     else
