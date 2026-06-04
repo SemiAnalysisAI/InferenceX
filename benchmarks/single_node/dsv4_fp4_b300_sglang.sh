@@ -31,12 +31,10 @@ export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 
-# TODO(Cam): the deepseek-v4 sglang images install sglang editable at
-# /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
-# The runner mounts our repo at a non-/workspace path for these images so the
-# editable install stays visible. Paths in this script are $PWD-relative for
-# that reason. Drop the runner conditional once lmsys moves sglang back out of
-# /workspace.
+# This config uses a standard sglang dev image (lmsysorg/sglang:dev-cu13), which
+# installs sglang under /sgl-workspace, so launch_b300-nv.sh bind-mounts our repo
+# at /workspace (it only switches to /ix for the deepseek-v4 editable images).
+# Paths in this script are $PWD-relative so they work under either mount dir.
 
 SERVER_LOG="$PWD/server.log"
 PORT=${PORT:-8888}

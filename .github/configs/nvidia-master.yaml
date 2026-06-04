@@ -2004,7 +2004,7 @@ dsr1-fp8-b300-sglang:
 #   TP-only low-latency line: TP8/EP1, no DP attention, c1-c64
 #   DP-attention throughput line: DEP8, DP attention, c512-c2048
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260522-7cf193fe
+  image: lmsysorg/sglang:dev-cu13
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
