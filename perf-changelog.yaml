@@ -3224,6 +3224,7 @@
     - "Fix CONC=512 yaml ep from 4 to 1 (flashinfer_mxfp4 does not set ep=tp)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1506
   
+
 - config-keys:
     - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
   description:
@@ -3410,7 +3411,6 @@
     - "Update SGLang image from nightly-dev-cu13-20260509-9ee83034 to nightly-dev-20260527-14f81a67"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1637
 
-
 - config-keys:
     - minimaxm2.5-fp4-gb200-dynamo-vllm
   description:
@@ -3451,6 +3451,20 @@
     - "Add MiniMax-M2.5 FP8 GB300 disaggregated multinode vLLM benchmarks via Dynamo"
     - "Add 1k1k/8k1k FP8 recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1647
+
+- config-keys:
+    - minimaxm2.5-fp8-gb200-dynamo-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 GB200 disaggregated multinode vLLM benchmarks via Dynamo"
+    - "Add 1k1k/8k1k FP8 recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200-fp8/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1648
+
+- config-keys:
+    - minimaxm2.5-fp8-b300-dynamo-vllm
+  description:
+    - "Add MiniMax-M2.5 FP8 B300 disaggregated multinode vLLM benchmarks via Dynamo"
+    - "Add 1k1k/8k1k FP8 recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300-fp8/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1663
 
 - config-keys:
     - qwen3.5-fp8-h100-sglang
