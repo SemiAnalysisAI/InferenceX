@@ -2654,10 +2654,8 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
     agentic-coding:
     - duration: 1800
       search-space:
-      #- { tp: 4, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48] }
-      #- { tp: 4, ep: 1, offloading: hicache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48] }
-      - { tp: 4, ep: 1, offloading: none, conc-list: [56, 72, 88, 104, 120] }
-      - { tp: 4, ep: 1, offloading: hicache, conc-list: [56, 72, 88, 104, 120] }
+      - { tp: 4, ep: 1, offloading: none, conc-list: [8, 16, 32, 40, 48, 56, 72] }
+      - { tp: 4, ep: 1, offloading: hicache, conc-list: [8, 16, 32, 40, 48, 56, 72] }
 
 dsv4-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0
