@@ -87,38 +87,31 @@ SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 mkdir -p "$RESULT_DIR"
 
-OFFLOAD_ARGS=""
+OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
     cpu)
         # B300 compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~2.2 TB total host
+        # individual jobs to a fraction of that. Aim for ~2.5 TB total host
         # CPU pool across the engine(s).
         #
-        # SimpleCPUOffloadConnector divides cpu_bytes_to_use by
-        # parallel_config.world_size (= TP*PP, NOT including DP — see
-        # vllm/config/parallel.py docstring). So:
-        #   - DP-attn=true  → each of $TP DP engines has world_size=1 in
-        #     its parallel_config; the connector does no internal divide,
-        #     and each engine torch.zeros + pin_tensor allocates the full
-        #     --kv_offloading_size value. Pre-divide by $TP here so the
-        #     aggregate host commit ≈ TOTAL_CPU_DRAM_GB.
-        #   - DP-attn=false → single engine with world_size=TP. Pass the
-        #     full TOTAL_CPU_DRAM_GB; the connector's internal divide
-        #     yields TOTAL/TP per rank, and TP-shared mmap (PR #37206)
-        #     keeps the aggregate at TOTAL.
-        TOTAL_CPU_DRAM_GB=2200
+        # --kv_offloading_size configures one native OffloadingConnector pool
+        # per vLLM engine. DP-attn starts one engine per DP rank, so pre-divide
+        # the aggregate host budget across those engines.
+        TOTAL_CPU_DRAM_GB=2500
         if [ "$DP_ATTENTION" = "true" ]; then
             PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
         else
             PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
         fi
-        PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
-        # Temporarily run eager mode to isolate whether lazy offloading is
-        # required to reproduce the SimpleCPUOffloadConnector CUDA failures.
-        # See SimpleCPUOffloadConnector PR #37160 for the lazy_offload knob.
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":false}}"
+
+        # The native backend resolves to OffloadingConnector while this env var
+        # is unset.
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        OFFLOAD_ARGS=(
+            --kv_offloading_backend native
+            --kv_offloading_size "$PER_ENGINE_GB"
+        )
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
@@ -170,7 +163,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --no-disable-hybrid-kv-cache-manager \
 --max-model-len "$MAX_MODEL_LEN" \
 --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS" \
-$OFFLOAD_ARGS > "$SERVER_LOG" 2>&1 &
+"${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
