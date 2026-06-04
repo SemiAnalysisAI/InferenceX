@@ -56,8 +56,23 @@ DOCKER_MOUNT_PATH="/workspace"
 
 cleanup() {
     echo "[${SLURM_JOB_ID}] cleanup on $(hostname)"
+    [[ -n "${WATCHER_PID:-}" ]] && kill "$WATCHER_PID" 2>/dev/null || true
 }
 trap cleanup INT TERM HUP EXIT
+
+# Coordinator-done watcher. server.sh on the decode coordinator writes
+# this marker after the bench finishes; we then scancel the allocation
+# from outside the container (the image has no SLURM client tools).
+# Without this, workers `wait` on local vLLM forever and the job runs
+# to TIME_LIMIT.
+BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
+rm -f "$BENCH_DONE_MARKER"
+(
+    while [[ ! -f "$BENCH_DONE_MARKER" ]]; do sleep 5; done
+    echo "[${SLURM_JOB_ID}] coordinator finished; scancel'ing job"
+    scancel "$SLURM_JOB_ID" 2>/dev/null || true
+) &
+WATCHER_PID=$!
 
 # One docker run per node, one task per node. server.sh dispatches by NODE_RANK.
 srun \

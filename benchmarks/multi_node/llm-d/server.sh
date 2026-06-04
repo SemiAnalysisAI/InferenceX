@@ -295,7 +295,12 @@ PY
         append_lm_eval_summary
     fi
 
-    scancel "$SLURM_JOB_ID"
+    # Signal job.slurm (running outside the container, where SLURM
+    # client tools are available) to scancel the allocation. The image
+    # does not bundle scancel, so calling it here would just trip
+    # set -e. Workers end server.sh in `wait`; without this signal
+    # they would hold the job until TIME_LIMIT.
+    touch "$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
 else
     # Workers (prefill workers, decode workers, prefill leader): just keep vLLM alive.
     wait
