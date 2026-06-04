@@ -193,7 +193,7 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 ## 9. PR conventions for this repo
 
 - Image-bump / new-recipe PRs I open on behalf of the user (or that the user creates) get the **`[Klaud Cold]`** title prefix.
-- Add the `full-sweep-enabled` label so a full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-enabled`). Without it, the sweep is mostly SKIPPED.
+- Add the `full-sweep-enabled` label so a canary-gated full sweep actually runs (`gh api -X POST ... labels[]=full-sweep-enabled`). Use `non-canary-full-sweep-enabled` instead only when the single-node canary is flaky or unrepresentative; it runs the full sweep without the canary gate. Without one of the sweep labels, the sweep is mostly SKIPPED.
 - After any code change that shifts a PR's scope (drops a recipe, changes an image tag), **update the PR title AND body in the same step** and **verify** with `gh pr view <N> --json title,body` — `gh pr edit` silently fails (see §8).
 - `utils/merge_with_reuse.sh <N>` is the merge entrypoint; it handles the `perf-changelog.yaml` auto-append.
 

@@ -124,9 +124,11 @@ else
     # =========================================================================
 
     export SGLANG_USE_AITER=1
+    export AITER_LOG_LEVEL=ERROR
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
-    export SGLANG_MORI_FP8_COMB=true
+    export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
+    export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
     export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
@@ -139,6 +141,13 @@ else
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
+
+    # GLM-5: uses NSA (not MLA), needs fused-decode-MLA disabled + fast loading
+    if [[ "$MODEL_NAME" == "GLM-5-FP8" ]]; then
+        export SGLANG_ROCM_FUSED_DECODE_MLA=0
+        export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+        export SAFETENSORS_FAST_GPU=1
+    fi
 
     # Disable allocating memory in one pass
     export MORI_SHMEM_MODE=ISOLATION

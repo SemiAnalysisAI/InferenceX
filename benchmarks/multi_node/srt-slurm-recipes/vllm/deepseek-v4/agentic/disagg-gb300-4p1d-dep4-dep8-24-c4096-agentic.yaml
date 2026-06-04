@@ -1,0 +1,176 @@
+name: "svf-vllm-disagg-gb300-4p1d-dep4-dep8-24-c4096-agentic"
+
+# Agentic-coding variant of vllm/deepseek-v4/8k1k/disagg-gb300-4p1d-dep4-dep8-24-c4096.yaml.
+# Max-throughput shape: 4 prefill (DEP=4 each) + 1 decode (DEP=8). 6 GB300
+# nodes (4P + 2D = 24 GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra
+# node. Sized for concurrency 4096 with deep_gemm_mega_moe on both workers.
+#
+# Divergence vs the 8k1k sibling:
+#   - benchmark.type:        sa-bench -> custom (hands off to agentic_srt.sh)
+#   - max-model-len:         removed (let vLLM derive from model config; agentic
+#                              trajectories blow past any small explicit cap)
+#   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
+#                              trajectory reuse — entire point of agentic)
+# Note: --enable-auto-tool-choice / --tool-call-parser / --reasoning-parser
+# are NOT set on the worker. The dynamo-vllm worker entrypoint doesn't
+# accept them (different arg parser than `vllm serve`). In disagg, chat
+# parsing happens at the dynamo frontend, not at the worker.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.21.0-ubuntu2404"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260426"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 4
+  decode_nodes: 2
+  prefill_workers: 4
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: true
+  # See sibling 1p6d recipe for rationale — NATS 1 MiB default rejects
+  # agentic prompts; 32 MiB gives ~10x headroom over observed payloads.
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+
+  prefill_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+
+  decode_environment:
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_LOG_STATS_INTERVAL: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enforce-eager: true
+      max-num-seqs: 16
+      max-num-batched-tokens: 16384
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      safetensors-load-strategy: "prefetch"
+      block-size: 256
+      gpu-memory-utilization: 0.9
+      no-disable-hybrid-kv-cache-manager: true
+      no-async-scheduling: true
+      tokenizer-mode: deepseek_v4
+      enable-ep-weight-filter: true
+      enable-sleep-mode: true
+      moe-backend: "deep_gemm_mega_moe"
+
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
+      trust-remote-code: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 50
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+      enable-ep-weight-filter: true
+      enable-sleep-mode: true
+      moe-backend: "deep_gemm_mega_moe"
+
+# sbatch + srun resource grants for clusters without per-GPU defaults.
+#
+# mem=0: allocate all available node memory (~868 GB on CW gb300). Without
+# this, sbatch only requests ntasks × DefMemPerCPU = 8 × 4 GB = 32 GB for
+# the whole job and worker cgroups OOM-kill mid model load (R7-R11 hit
+# this; sacct showed AllocTRES mem=4G per step).
+#
+# cpus-per-task=72: give each task one CW gb300 NUMA socket (144 cores
+# split 2 × 72). Critical for the *infra step* (etcd + nats) which
+# srtctl spawns without --gres=gpu — on CW that means DefMemPerCPU
+# applies and the step gets 1 CPU by default. With 24 dynamo DP ranks
+# all hammering etcd for lease keep-alives, single-CPU etcd can't keep
+# up and dies (R12 hit this; etcd reported max-cpu-set=1, leases
+# deadline-exceeded, infra SIGKILL'd at 16:35:49). 72 CPUs is plenty
+# for both etcd + nats AND for vLLM worker auxiliary threads.
+#
+# nv gb300 doesn't need this because cluster default DefCpuPerGPU=35
+# auto-allocates 4*35=140 CPUs per GPU-bearing task; cw has no per-GPU
+# default. Setting it here is safe on both because the value is ≤ node
+# CPU count.
+#
+# srun_options.mem=0 forces each srun step to use the full node memory
+# (without it, srun steps default back to cpus_per_task × DefMemPerCPU).
+# Docs: docs/config-reference.md#sbatch_directives + #srun_options.
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
+srun_options:
+  mem: "0"
+  # gb300-nv: pyxis maps the calling user (sa-shared) into the container as
+  # uid 345200007. dpkg refuses to run without EUID 0 even though
+  # ENROOT_ROOTFS_WRITABLE=1 makes the rootfs writable, so the agentic_srt
+  # apt-get install git step fails. --container-remap-root asks pyxis to
+  # remap us to uid 0 inside the container, matching the gb300-cw behavior.
+  # No-op on cw (already root). srt-slurm renders empty-string values as
+  # flag-only srun args (see core/slurm.py:250).
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    # Container-side path of the aiperf mmap dataset cache; the host-side
+    # mount is wired via launch_gb300-*.sh's srtslurm.yaml default_mounts.
+    # Without this, aiperf re-tokenizes + re-writes ~65 GB of mmap files
+    # per dataset on every run.
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
