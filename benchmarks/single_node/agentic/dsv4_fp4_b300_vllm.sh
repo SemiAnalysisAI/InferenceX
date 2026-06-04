@@ -124,6 +124,9 @@ EOF
         # Reuse TCP connections across KV transfers instead of exhausting the
         # host's ephemeral port range with one short-lived socket per transfer.
         export MC_TCP_ENABLE_CONNECTION_POOL=1
+        # Mooncake defaults to 64 KiB TCP slices and can create thousands of
+        # concurrent sockets for one large KV batch. Use 4 MiB slices instead.
+        export MC_TCP_SLICE_SIZE=4194304
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
 
