@@ -175,8 +175,11 @@ def main():
                     raise
                 all_benchmark_results.extend(json.loads(result.stdout))
 
-        # Generate eval entries separately
-        eval_configs = [c for c in all_configs if c not in eval_configs_seen]
+        # Generate eval entries separately (skipped when the entry opts out via
+        # benchmarks-only, e.g. power-only re-runs that don't need eval scoring).
+        eval_configs = [] if entry.benchmarks_only else [
+            c for c in all_configs if c not in eval_configs_seen
+        ]
         if eval_configs:
             eval_configs_seen.update(eval_configs)
             base_cmd = [

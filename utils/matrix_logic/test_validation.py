@@ -1,6 +1,7 @@
 """Comprehensive tests for validation.py"""
 import pytest
 from validation import (
+    ChangelogEntry,
     Fields,
     SingleNodeMatrixEntry,
     SingleNodeAgenticMatrixEntry,
@@ -932,3 +933,44 @@ h100: not-a-list
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))
         assert "must be a list" in str(exc_info.value)
+
+
+class TestChangelogEntry:
+    """Tests for ChangelogEntry, incl. the benchmarks-only / evals-only options."""
+
+    def _base(self, **extra):
+        entry = {
+            "config-keys": ["minimaxm2.5-fp4-b200-vllm"],
+            "description": ["re-run for power capture"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1666",
+        }
+        entry.update(extra)
+        return entry
+
+    def test_defaults(self):
+        """Both opt-out flags default to False."""
+        entry = ChangelogEntry.model_validate(self._base())
+        assert entry.evals_only is False
+        assert entry.benchmarks_only is False
+
+    def test_benchmarks_only_alias(self):
+        """benchmarks-only YAML key maps to benchmarks_only."""
+        entry = ChangelogEntry.model_validate(self._base(**{"benchmarks-only": True}))
+        assert entry.benchmarks_only is True
+
+    def test_evals_only_alias(self):
+        entry = ChangelogEntry.model_validate(self._base(**{"evals-only": True}))
+        assert entry.evals_only is True
+
+    def test_evals_and_benchmarks_only_mutually_exclusive(self):
+        """Setting both opt-out flags is rejected."""
+        with pytest.raises(ValueError) as exc_info:
+            ChangelogEntry.model_validate(
+                self._base(**{"evals-only": True, "benchmarks-only": True})
+            )
+        assert "mutually exclusive" in str(exc_info.value)
+
+    def test_unknown_field_forbidden(self):
+        """extra='forbid' rejects typos like a singular 'benchmark-only'."""
+        with pytest.raises(ValueError):
+            ChangelogEntry.model_validate(self._base(**{"benchmark-only": True}))

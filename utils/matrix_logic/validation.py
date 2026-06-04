@@ -486,10 +486,22 @@ class ChangelogEntry(BaseModel):
     description: list[str] = Field(min_length=1)
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
+    benchmarks_only: bool = Field(
+        alias="benchmarks-only", default=False,
+        description="Skip the eval pass; generate benchmarks only (e.g. power-only re-runs)."
+    )
     scenario_type: Optional[List[str]] = Field(
         alias="scenario-type", default=None,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
     )
+
+    @model_validator(mode='after')
+    def check_evals_benchmarks_exclusive(self) -> "ChangelogEntry":
+        if self.evals_only and self.benchmarks_only:
+            raise ValueError(
+                "'evals-only' and 'benchmarks-only' are mutually exclusive; set at most one."
+            )
+        return self
 
 
 class ChangelogMetadata(BaseModel):
