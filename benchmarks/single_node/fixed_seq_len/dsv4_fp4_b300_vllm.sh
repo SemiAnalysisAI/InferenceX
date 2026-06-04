@@ -53,9 +53,9 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
 fi
 
 MOE_ARGS=()
-if [ "${DP_ATTENTION}" = "true" ]; then
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-fi
+# if [ "${DP_ATTENTION}" = "true" ]; then
+#     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
+# fi
 
 if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_NUM_BATCHED_TOKENS=2048
