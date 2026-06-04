@@ -3484,4 +3484,6 @@
   description:
     - "Re-run MiniMax-M2.5 single-node vLLM sweeps (H100/H200 FP8, B200/B300/MI355X FP4) with no recipe change, to capture per-GPU power telemetry (avg_power_w) added in #1558 for the power/energy canvas"
     - "Source rows for the canvas predate the 2026-05-27 power-capture merge, so they carry throughput/latency but no measured power; this re-run replaces the modeled power layer with measured power"
+    - "benchmarks-only: power comes from the benchmark runs, evals add nothing here"
+  benchmarks-only: true
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1666
