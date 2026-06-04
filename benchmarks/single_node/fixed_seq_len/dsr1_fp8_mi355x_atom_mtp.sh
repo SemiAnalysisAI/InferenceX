@@ -36,7 +36,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     else #DP+TP
         PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
     fi
-fi 
+fi
 
 SPEC_ARGS=(--method mtp --num-speculative-tokens 3 )
 
