@@ -3480,4 +3480,4 @@
   description:
     - "Switch attention backend from FLASHINFER to FLASH_ATTN for the 8k/1k cell of MiniMax-M2.5 FP8 H200 vLLM."
     - "1k/1k cell not changed in this PR: at 1k/1k all three measured configs."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TODO
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1667
