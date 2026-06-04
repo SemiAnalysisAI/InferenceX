@@ -167,11 +167,15 @@ vllm serve "$MODEL" "${COMMON_ARGS[@]}" $ROLE_EXTRA_ARGS \
     > "$VLLM_LOG" 2>&1 &
 VLLM_PID=$!
 
+# Every rank waits for its own engine to bind /health before falling
+# through. For wide-EP (LWS_GROUP_SIZE > 1) this prevents the bench
+# from starting before the worker-side DP shards have come up; for the
+# single-node case it is a no-op extra check.
+wait_for_server_ready --port "$VLLM_PORT" --server-log "$VLLM_LOG" --server-pid "$VLLM_PID"
+echo "vLLM ready on rank $NODE_RANK ($ROLE worker_index=$LWS_WORKER_INDEX)"
+
 # Only the leader of each instance accepts external requests on $VLLM_PORT.
 if [[ "$LWS_WORKER_INDEX" -eq 0 ]]; then
-    wait_for_server_ready --port "$VLLM_PORT" --server-log "$VLLM_LOG" --server-pid "$VLLM_PID"
-    echo "vLLM leader ready on rank $NODE_RANK"
-
     # ------------------------------------------------------------
     # Start pd-sidecar on each leader (prefill leader and decode leader).
     # The decode-side sidecar is what EPP routes to; the prefill-side
