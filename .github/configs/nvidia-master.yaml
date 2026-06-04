@@ -9270,12 +9270,6 @@ dsv4-fp4-b200-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      # TEMPORARILY COMMENTED OUT — running offloading=none only this iteration.
-      # cpu offload only this iteration — none entries already validated in
-      # earlier runs (B200 25332045030: TP=8 1..32 + DEP=8 16..128 all 100%).
-      # Re-add when investigating regressions in offload=none.
-      # - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
-      # - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
       - { tp: 8, offloading: none,  conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 64, 72] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
 
