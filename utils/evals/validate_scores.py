@@ -23,6 +23,35 @@ def load_thresholds(path: str) -> dict[str, float]:
         return json.load(f)
 
 
+def validate_speedbench_al(data: dict, source: str) -> tuple[bool, int]:
+    """Validate a compact SpeedBench AL result JSON."""
+    if "speedbench_al_eval_version" not in data:
+        return False, 0
+
+    actual = data.get("acceptance_length")
+    minimum = data.get("min_acceptance_length")
+    passed = data.get("passed")
+    label = (
+        f"{data.get('task', 'speedbench_al')} "
+        f"{data.get('thinking_mode', 'unknown')} "
+        f"mtp{data.get('num_speculative_tokens', 'unknown')}"
+    )
+
+    if passed is True:
+        print(f"PASS: {label} AL = {float(actual):.4f} (>= {float(minimum):.4f})")
+        return True, 1
+
+    if isinstance(actual, (int, float)) and isinstance(minimum, (int, float)):
+        print(
+            f"FAIL: {label} AL = {actual:.4f} (< {minimum:.4f})",
+            file=sys.stderr,
+        )
+    else:
+        error = data.get("error", "missing acceptance length or threshold")
+        print(f"FAIL: {label} in {source}: {error}", file=sys.stderr)
+    return False, 1
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Validate eval scores")
     parser.add_argument(
@@ -63,6 +92,14 @@ def main() -> int:
     for f in sorted(glob.glob(args.results_glob)):
         with open(f) as fh:
             data = json.load(fh)
+
+        speedbench_ok, speedbench_checked = validate_speedbench_al(data, f)
+        if speedbench_checked:
+            checked += speedbench_checked
+            if not speedbench_ok:
+                failed = True
+            continue
+
         for task, metrics in data.get("results", {}).items():
             min_score = thresholds.get(task, args.min_score)
             for name, val in metrics.items():

@@ -34,6 +34,7 @@ All benchmark scripts in `benchmarks/` follow one of two flows:
 # 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
 # 4. Run evals:
 if [ "${RUN_EVAL}" = "true" ]; then
+    # MTP evals also run SpeedBench AL validation first when a reference exists.
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary  # Writes meta_env.json and moves artifacts
 fi
@@ -51,6 +52,7 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | Function | Description |
 |----------|-------------|
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
+| `run_speedbench_al_eval` | Runs SpeedBench on MTP eval jobs, records measured acceptance length, and defers threshold failure to `validate_scores.py` |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
@@ -131,9 +133,11 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
+| `SPEEDBENCH_DIR` | `$(pwd)/speed_bench_data` | Prepared SpeedBench dataset directory; resolves to `/workspace/speed_bench_data` or `/ix/speed_bench_data` through the runner's container workdir |
+| `SPEEDBENCH_NUM_SPEC_TOKENS` | script-provided or `2` | MTP level used to select the reference AL row |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`utils/evals/validate_scores.py` checks lm-eval results against thresholds in `utils/evals/thresholds.json` and checks `results_speedbench_al_*.json` against the embedded minimum AL. It runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 

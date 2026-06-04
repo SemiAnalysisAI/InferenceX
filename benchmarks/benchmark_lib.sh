@@ -694,6 +694,219 @@ setup_eval_context() {
     export EVAL_MAX_MODEL_LEN
 }
 
+# ------------------------------
+# SpeedBench acceptance-length eval helpers
+# ------------------------------
+
+_prometheus_metric_sum() {
+    local port="$1"
+    local name="$2"
+    local metrics
+    metrics=$(curl -fsS "http://0.0.0.0:${port}/metrics" 2>/dev/null) || return 1
+    awk -v name="$name" '
+        /^#/ { next }
+        {
+            metric = $1
+            sub(/\{.*/, "", metric)
+            if (metric == name && $NF ~ /^-?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?$/) {
+                sum += $NF
+                found = 1
+            }
+        }
+        END {
+            if (found) {
+                printf "%.10f\n", sum
+            } else {
+                exit 1
+            }
+        }
+    ' <<< "$metrics"
+}
+
+_speedbench_write_eval_result() {
+    local output="$1"
+    local mode="$2"
+    local mtp="$3"
+    local al="${4:-}"
+    local accepted="${5:-}"
+    local drafts="${6:-}"
+    local error="${7:-}"
+    local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
+
+    local record_cmd=(
+        python3 "$(pwd)/utils/evals/speedbench_al.py"
+        record
+        --output "$output"
+        --reference-yaml "benchmarks/speedbench-reference-al.yaml"
+        --model "$speedbench_model"
+        --model-prefix "${MODEL_PREFIX:-}"
+        --thinking-mode "$mode"
+        --num-speculative-tokens "$mtp"
+        --category "coding"
+        --output-len "4096"
+        --temperature "1.0"
+        --threshold-ratio "0.90"
+    )
+    if [[ -n "$al" ]]; then
+        record_cmd+=(--acceptance-length "$al")
+    fi
+    if [[ -n "$accepted" ]]; then
+        record_cmd+=(--accepted-tokens "$accepted")
+    fi
+    if [[ -n "$drafts" ]]; then
+        record_cmd+=(--draft-tokens "$drafts")
+    fi
+    if [[ -n "$error" ]]; then
+        record_cmd+=(--error "$error")
+    fi
+    "${record_cmd[@]}" || true
+}
+
+_speedbench_reference_available() {
+    local mode="$1"
+    local mtp="$2"
+    local reference="benchmarks/speedbench-reference-al.yaml"
+    local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
+    [[ -f "$reference" ]] || return 1
+    python3 "$(pwd)/utils/evals/speedbench_al.py" resolve \
+        --reference-yaml "$reference" \
+        --model "$speedbench_model" \
+        --model-prefix "${MODEL_PREFIX:-}" \
+        --thinking-mode "$mode" \
+        --num-speculative-tokens "$mtp" \
+        --threshold-ratio "0.90" >/dev/null
+}
+
+_speedbench_prepare_dataset() {
+    local speedbench_dir="$1"
+    if [[ -f "$speedbench_dir/qualitative.jsonl" ]]; then
+        return 0
+    fi
+    mkdir -p "$speedbench_dir"
+    python3 -m pip install -q datasets tiktoken
+    curl -LsSf https://raw.githubusercontent.com/NVIDIA-NeMo/Skills/refs/heads/main/nemo_skills/dataset/speed-bench/prepare.py \
+      | python3 - --config qualitative --output_dir "$speedbench_dir"
+    [[ -f "$speedbench_dir/qualitative.jsonl" ]]
+}
+
+run_speedbench_al_eval() {
+    local port="${PORT:-8888}"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port) port="$2"; shift 2 ;;
+            *)
+                if [[ $# -gt 1 && "$2" != --* ]]; then
+                    shift 2
+                else
+                    shift
+                fi
+                ;;
+        esac
+    done
+
+    local mtp="${SPEEDBENCH_NUM_SPEC_TOKENS:-${NUM_SPEC_TOKENS:-${SPECULATIVE_DRAFT_TOKENS:-2}}}"
+    local default_thinking_mode="off"
+    if [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
+        default_thinking_mode="on"
+    fi
+    local mode="$default_thinking_mode"
+
+    if [[ "${SPEC_DECODING:-none}" != "mtp" ]]; then
+        echo "SpeedBench AL eval: skipping non-MTP config (SPEC_DECODING=${SPEC_DECODING:-none})"
+        return 0
+    fi
+
+    if [[ -z "${EVAL_RESULT_DIR:-}" ]]; then
+        EVAL_RESULT_DIR="$(mktemp -d /tmp/eval_out-XXXXXX)"
+        export EVAL_RESULT_DIR
+    fi
+
+    # TODO: Add unified support for SGLang, TRT-LLM, and disagg (Dynamo).
+    if ! command -v vllm >/dev/null 2>&1; then
+        local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
+        echo "SpeedBench AL eval: vllm CLI is not available for SpeedBench client" >&2
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "vllm CLI is not available for SpeedBench client"
+        return 0
+    fi
+
+    local speedbench_dir="${SPEEDBENCH_DIR:-$(pwd)/speed_bench_data}"
+    if ! _speedbench_prepare_dataset "$speedbench_dir"; then
+        local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
+        echo "SpeedBench AL eval: SpeedBench dataset download failed" >&2
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "SpeedBench dataset download failed"
+        return 0
+    fi
+
+    local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
+    if ! _speedbench_reference_available "$mode" "$mtp"; then
+        echo "SpeedBench AL eval: no reference for mode=${mode} mtp=${mtp}" >&2
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "No SpeedBench AL reference for this eval cell"
+        return 0
+    fi
+
+    local think_args=()
+    if [[ "$mode" == "on" ]]; then
+        think_args=(--chat-template-kwargs '{"thinking": true, "reasoning_effort": "high"}')
+    fi
+
+    local accepted_before="" draft_before=""
+    accepted_before=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_accepted_tokens_total" 2>/dev/null || true)
+    draft_before=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_drafts_total" 2>/dev/null || true)
+    accepted_before="${accepted_before:-0}"
+    draft_before="${draft_before:-0}"
+
+    local raw_result_dir
+    raw_result_dir="$(mktemp -d /tmp/speedbench_al_raw-XXXXXX)"
+    local bench_rc=0
+    local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
+    local bench_cmd=(
+        vllm bench serve
+        --model "$speedbench_model"
+        --port "$port"
+        --dataset-name speed_bench
+        --dataset-path "$speedbench_dir"
+        --speed-bench-category coding
+        --speed-bench-output-len 4096
+        --num-prompts -1
+        --max-concurrency 1
+        --save-result
+        --result-dir "$raw_result_dir"
+        --result-filename "speedbench_al_${mode}_mtp${mtp}"
+        --trust-remote-code
+        --tokenizer-mode deepseek_v4
+        --temperature 1.0
+        "${think_args[@]}"
+    )
+
+    echo "SpeedBench AL eval: running mode=${mode} mtp=${mtp}"
+    "${bench_cmd[@]}" || bench_rc=$?
+    if [[ "$bench_rc" -ne 0 ]]; then
+        echo "SpeedBench AL eval: vllm bench serve failed with exit code ${bench_rc}" >&2
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "vllm bench serve failed with exit code ${bench_rc}"
+        rm -rf "$raw_result_dir" || true
+        return 0
+    fi
+
+    local accepted_after="" draft_after="" al="" delta_acc="" delta_draft=""
+    accepted_after=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_accepted_tokens_total" 2>/dev/null || true)
+    draft_after=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_drafts_total" 2>/dev/null || true)
+    if [[ -n "$accepted_after" && -n "$draft_after" ]]; then
+        delta_acc=$(awk "BEGIN {printf \"%d\", ${accepted_after} - ${accepted_before}}")
+        delta_draft=$(awk "BEGIN {printf \"%d\", ${draft_after} - ${draft_before}}")
+        if [[ "$delta_draft" -gt 0 ]]; then
+            al=$(awk "BEGIN {printf \"%.4f\", 1 + (${delta_acc} / ${delta_draft})}")
+        fi
+    fi
+
+    if [[ -z "$al" ]]; then
+        echo "SpeedBench AL eval: could not collect speculative acceptance metrics from server" >&2
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "$delta_acc" "$delta_draft" "Could not collect speculative acceptance metrics from server"
+    else
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "$al" "$delta_acc" "$delta_draft"
+    fi
+    rm -rf "$raw_result_dir" || true
+}
+
 run_lm_eval() {
     local port="${PORT:-8888}"
     local tasks_dir="${EVAL_TASKS_DIR:-utils/evals/gsm8k.yaml}"
@@ -876,6 +1089,7 @@ run_eval() {
     fi
 
     local eval_rc=0
+    run_speedbench_al_eval "${forwarded[@]}" || true
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;

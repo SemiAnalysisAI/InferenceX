@@ -36,8 +36,8 @@ def find_eval_sets(root: Path) -> List[Path]:
     return out
 
 
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return (lm_eval_json) if present.
+def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], List[Path]]:
+    """Return (lm_eval_json, speedbench_al_jsons) if present.
     
     Checks immediate directory for result JSONs.
     """
@@ -46,7 +46,7 @@ def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
     ]
     
     lm_path = None
-    le_path = None
+    speedbench_paths: List[Path] = []
     
     for p in immediate_jsons:
         data = load_json(p)
@@ -57,8 +57,12 @@ def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
             # lm-eval harness - pick latest if multiple
             if lm_path is None or p.stat().st_mtime > lm_path.stat().st_mtime:
                 lm_path = p
-                
-    return lm_path, le_path
+
+        if 'speedbench_al_eval_version' in data:
+            speedbench_paths.append(p)
+
+    speedbench_paths.sort()
+    return lm_path, speedbench_paths
 
 
 def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
@@ -145,6 +149,32 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     return extracted
 
 
+def extract_speedbench_al_metrics(json_path: Path) -> List[Dict[str, Any]]:
+    """Extract a compact SpeedBench AL result as an eval metric row."""
+    data = load_json(json_path) or {}
+    if 'speedbench_al_eval_version' not in data:
+        return []
+
+    mode = data.get('thinking_mode', 'unknown')
+    mtp = data.get('num_speculative_tokens', 'unknown')
+    task_label = f"speedbench_al/{mode}/mtp{mtp}"
+    return [{
+        'metric_type': 'speedbench_al',
+        'task': 'speedbench_al',
+        'task_label': task_label,
+        'acceptance_length': data.get('acceptance_length'),
+        'reference_acceptance_length': data.get('reference_acceptance_length'),
+        'min_acceptance_length': data.get('min_acceptance_length'),
+        'threshold_ratio': data.get('threshold_ratio'),
+        'thinking_mode': mode,
+        'num_speculative_tokens': mtp,
+        'passed': data.get('passed'),
+        'error': data.get('error'),
+        'model': data.get('model'),
+        'source': str(json_path),
+    }]
+
+
 def pct(x: Any) -> str:
     """Format value as percentage."""
     try:
@@ -222,7 +252,7 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'dp_attention': str(dp_attention).lower(),
         'prefill_dp_attention': str(prefill_dp_attention).lower(),
         'decode_dp_attention': str(decode_dp_attention).lower(),
-        'task': m.get('task', 'unknown'),
+        'task': m.get('task_label') or m.get('task', 'unknown'),
         'em_strict': m.get('strict'),
         'em_strict_se': m.get('strict_se'),
         'em_flexible': m.get('flex'),
@@ -232,7 +262,18 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     }
 
     # Add universal score field (primary metric for unified comparison)
-    if m.get('strict') is not None:
+    if m.get('metric_type') == 'speedbench_al':
+        row['score'] = m.get('acceptance_length')
+        row['score_name'] = 'acceptance_length'
+        row['score_se'] = None
+        row['speedbench_reference_acceptance_length'] = m.get('reference_acceptance_length')
+        row['speedbench_min_acceptance_length'] = m.get('min_acceptance_length')
+        row['speedbench_threshold_ratio'] = m.get('threshold_ratio')
+        row['speedbench_thinking_mode'] = m.get('thinking_mode')
+        row['speedbench_num_speculative_tokens'] = m.get('num_speculative_tokens')
+        row['speedbench_passed'] = m.get('passed')
+        row['speedbench_error'] = m.get('error')
+    elif m.get('strict') is not None:
         row['score'] = m.get('strict')
         row['score_name'] = 'em_strict'
         row['score_se'] = m.get('strict_se')
@@ -248,6 +289,24 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+def score_cell(r: Dict[str, Any]) -> str:
+    """Format the primary score for lm-eval and non-percentage eval rows."""
+    if r.get('score_name') == 'acceptance_length':
+        score = r.get('score')
+        minimum = r.get('speedbench_min_acceptance_length')
+        passed = r.get('speedbench_passed')
+        if score is None:
+            return 'FAIL'
+        try:
+            status = 'PASS' if passed else 'FAIL'
+            if minimum is None:
+                return f"{float(score):.2f} ({status})"
+            return f"{float(score):.2f} >= {float(minimum):.2f} ({status})"
+        except Exception:
+            return str(score)
+    return f"{pct(r['score'])}{se(r['score_se'])}"
+
+
 def main():
     if len(sys.argv) < 3:
         print('Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]')
@@ -259,13 +318,14 @@ def main():
     rows: List[Dict[str, Any]] = []
     for d in find_eval_sets(root):
         meta = load_json(d / 'meta_env.json') or {}
-        lm_path, le_path = detect_eval_jsons(d)
+        lm_path, speedbench_paths = detect_eval_jsons(d)
 
-        # Extract metrics (prefer lm-eval) - returns list for multi-task support
+        metrics_list: List[Dict[str, Any]] = []
+        # Extract metrics - lm-eval returns one row per task.
         if lm_path:
-            metrics_list = extract_lm_metrics(lm_path)
-        else:
-            continue
+            metrics_list.extend(extract_lm_metrics(lm_path))
+        for speedbench_path in speedbench_paths:
+            metrics_list.extend(extract_speedbench_al_metrics(speedbench_path))
 
         if not metrics_list:
             continue
@@ -332,7 +392,7 @@ def main():
                     r['conc'],
                     r['dp_attention'],
                     r['task'],
-                    f"{pct(r['score'])}{se(r['score_se'])}",
+                    score_cell(r),
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
                     r['n_eff'] or '',
@@ -367,7 +427,7 @@ def main():
                     r['decode_num_workers'],
                     r['conc'],
                     r['task'],
-                    f"{pct(r['score'])}{se(r['score_se'])}",
+                    score_cell(r),
                     f"{pct(r['em_strict'])}{se(r['em_strict_se'])}",
                     f"{pct(r['em_flexible'])}{se(r['em_flexible_se'])}",
                     r['n_eff'] or '',
