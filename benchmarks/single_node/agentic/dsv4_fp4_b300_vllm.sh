@@ -144,6 +144,9 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+# Temporary diagnostic: surface asynchronous CUDA failures at the operation
+# that caused them instead of at a later synchronization point.
+export CUDA_LAUNCH_BLOCKING=1
 
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
