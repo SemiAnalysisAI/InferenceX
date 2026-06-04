@@ -42,9 +42,31 @@ def find_target():
     except Exception as e:  # pragma: no cover
         print(f"{TAG} ERROR: could not import sglang ({e}); NOT patched")
         return None
+
+    # sglang may be a namespace package (no __init__.py) where __file__ is
+    # None.  Fall through several strategies to locate the package root.
+    pkg_dir = None
+    if getattr(sglang, "__file__", None) is not None:
+        pkg_dir = os.path.dirname(sglang.__file__)
+    elif getattr(sglang, "__path__", None):
+        pkg_dir = list(sglang.__path__)[0]
+    else:
+        try:
+            import importlib.util
+            spec = importlib.util.find_spec("sglang")
+            if spec and spec.submodule_search_locations:
+                pkg_dir = list(spec.submodule_search_locations)[0]
+        except Exception:
+            pass
+
+    if pkg_dir is None:
+        print(f"{TAG} ERROR: could not determine sglang install path "
+              f"(__file__={getattr(sglang, '__file__', '?')}, "
+              f"__path__={getattr(sglang, '__path__', '?')}); NOT patched")
+        return None
+
     path = os.path.join(
-        os.path.dirname(sglang.__file__),
-        "srt", "layers", "moe", "token_dispatcher", "moriep.py",
+        pkg_dir, "srt", "layers", "moe", "token_dispatcher", "moriep.py",
     )
     if not os.path.isfile(path):
         print(f"{TAG} ERROR: moriep.py not found at {path}; NOT patched")
