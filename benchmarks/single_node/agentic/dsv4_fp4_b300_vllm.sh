@@ -92,14 +92,13 @@ OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # B300 compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~2.5 TB total host
-        # CPU pool across all GPU ranks.
+        # Leave enough host-memory headroom for model workers and the runtime.
+        # Aim for ~1 TB total host CPU pool across all GPU ranks.
         #
         # Mooncake embedded mode contributes one global segment per GPU rank to
         # a shared distributed store. Pre-divide the aggregate host budget
         # across those rank-contributed segments.
-        TOTAL_CPU_DRAM_GB=2500
+        TOTAL_CPU_DRAM_GB=1000
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
         MOONCAKE_VERSION=0.3.11.post1
@@ -116,7 +115,7 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
-  "protocol": "rdma",
+  "protocol": "tcp",
   "device_name": "",
   "enable_offload": false
 }
