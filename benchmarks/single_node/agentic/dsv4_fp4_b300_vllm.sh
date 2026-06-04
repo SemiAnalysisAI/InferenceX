@@ -114,13 +114,11 @@ case "$OFFLOADING" in
             PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
         fi
         PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
-        # Use --kv-transfer-config JSON to also pass lazy_offload=true. Eager
-        # mode (default) hits an AssertionError in
-        # vllm/v1/core/kv_cache_utils.py:269 popleft_n at low/mid CONC; lazy
-        # mode defers the store path and clears low/mid CONC at 80-100%.
+        # Temporarily run eager mode to isolate whether lazy offloading is
+        # required to reproduce the SimpleCPUOffloadConnector CUDA failures.
         # See SimpleCPUOffloadConnector PR #37160 for the lazy_offload knob.
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
+        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":false}}"
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
