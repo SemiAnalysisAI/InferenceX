@@ -32,6 +32,11 @@ EPP_METRICS_PORT=9090
 
 MODEL="${MODEL_DIR}/${MODEL_NAME}"
 HOST_IP=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
+# Default NIC for NCCL / Gloo / NVSHMEM bootstrap. Pulled from the same
+# default route HOST_IP came from so the iface and the IP stay
+# consistent across clusters where the routed NIC is not eth0.
+DEFAULT_IFACE=$(ip -o -4 route show to default | awk '{print $5; exit}')
+DEFAULT_IFACE="${DEFAULT_IFACE:-eth0}"
 
 VLLM_LOG="/benchmark_logs/vllm_rank${NODE_RANK}.log"
 SIDECAR_LOG="/benchmark_logs/sidecar_rank${NODE_RANK}.log"
@@ -92,8 +97,8 @@ fi
 # ----------------------------------------------------------------
 # Multi-node DP / NIXL P/D env: needed in any topology.
 # ----------------------------------------------------------------
-export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-eth0}
-export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-eth0}
+export GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-$DEFAULT_IFACE}
+export NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-$DEFAULT_IFACE}
 export VLLM_SKIP_P2P_CHECK=1
 export VLLM_RANDOMIZE_DP_DUMMY_INPUTS=1
 export VLLM_USE_DEEP_GEMM=1
@@ -112,7 +117,7 @@ if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
     export NVSHMEM_REMOTE_TRANSPORT=ibgda
     export NVSHMEM_IB_ENABLE_IBGDA=true
     export NVSHMEM_SYMMETRIC_SIZE=16G
-    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-eth0}
+    export NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME=${NVSHMEM_BOOTSTRAP_UID_SOCK_IFNAME:-$DEFAULT_IFACE}
 fi
 
 # ----------------------------------------------------------------
