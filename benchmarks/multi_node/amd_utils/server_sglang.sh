@@ -49,6 +49,16 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
+# Root-cause fix for low-concurrency MoRI dispatch-buffer corruption: surgically
+# floor num_max_dispatch_tokens_per_rank to >=256 in the installed (vendor-patched)
+# sglang moriep.py, in place, before any sglang.launch_server starts. A full-file
+# overlay can't be used here because the lmsysorg image ships a downstream-patched
+# moriep.py (class MoriEPDispatcher / expert_mask_gpu) that diverges from upstream.
+# See patches/apply_moriep_dispatch_floor.py and patches/README.md.
+echo "[server_sglang] applying MoRI dispatch-floor patch to installed sglang moriep.py"
+python3 "$SGLANG_WS_PATH/patches/apply_moriep_dispatch_floor.py" \
+    || echo "[server_sglang] WARN: moriep dispatch-floor patch returned non-zero"
+
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
 

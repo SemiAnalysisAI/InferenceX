@@ -79,27 +79,6 @@ if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
     echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
 fi
 
-# ── MoRI dispatch-buffer corruption fix: moriep.py overlay ────────────
-# sglang v0.5.12.post1 silently corrupts the MoRI EP dispatch path when the
-# per-rank dispatch buffer (num_max_dispatch_tokens_per_rank) is small: the
-# receive buffer is sized worldSize*maxNumInpTokenPerRank and the only overflow
-# guard is an assert() compiled out in release builds, so low concurrency
-# (e.g. conc-64 DEP8+MTP3 -> 32 tokens) yields out-of-bounds writes and gsm8k=0.
-# The overlay floors num_max_dispatch_tokens_per_rank to 256 at its env read
-# (the single source of truth for kernel selection + buffer sizing). The base
-# file is byte-identical to upstream v0.5.12.post1 (md5 ac626f5459...), so the
-# overlay is a +22-line diff. See patches/README.md and sgl-project/sglang#27194.
-_MORIEP_PATCH_FILE="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriep.py"
-_MORIEP_PATCH_TARGET="/sgl-workspace/sglang/python/sglang/srt/layers/moe/token_dispatcher/moriep.py"
-if [[ "${MORIEP_PATCH:-auto}" != "skip" ]] \
-   && [[ -f "$_MORIEP_PATCH_FILE" ]] \
-   && [[ "${DOCKER_IMAGE_NAME:-}" == *"v0.5.12.post1"* ]] \
-   && [[ "${EXTRA_DOCKER_MOUNTS:-}" != *"$_MORIEP_PATCH_TARGET"* ]]; then
-    EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v ${_MORIEP_PATCH_FILE}:${_MORIEP_PATCH_TARGET}:ro"
-    export EXTRA_DOCKER_MOUNTS
-    echo "[job.slurm] auto-applied MoRI moriep.py dispatch-floor overlay: ${_MORIEP_PATCH_FILE}"
-fi
-
 xP="${xP:-1}"
 yD="${yD:-1}"
 
