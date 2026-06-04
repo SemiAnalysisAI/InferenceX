@@ -241,6 +241,8 @@ jobs:
             results/server.log
             results/router.log
             results/lmcache_server.log
+            results/mooncake_master.log
+            results/mooncake_config.json
             results/benchmark.log
             results/config.yaml
             results/lmcache_command.txt
@@ -282,6 +284,8 @@ jobs:
             ${{ inputs.scenario-type == 'agentic-coding' && 'results/server.log' || 'server.log' }}
             ${{ inputs.scenario-type == 'agentic-coding' && 'results/router.log' || '' }}
             ${{ inputs.scenario-type == 'agentic-coding' && 'results/lmcache_server.log' || '' }}
+            ${{ inputs.scenario-type == 'agentic-coding' && 'results/mooncake_master.log' || '' }}
+            ${{ inputs.scenario-type == 'agentic-coding' && 'results/mooncake_config.json' || '' }}
           if-no-files-found: ignore
 
       - name: Upload GPU metrics

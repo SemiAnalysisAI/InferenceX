@@ -85,6 +85,7 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
@@ -93,24 +94,52 @@ case "$OFFLOADING" in
     cpu)
         # B300 compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
         # individual jobs to a fraction of that. Aim for ~2.5 TB total host
-        # CPU pool across the engine(s).
+        # CPU pool across all GPU ranks.
         #
-        # --kv_offloading_size configures one native OffloadingConnector pool
-        # per vLLM engine. DP-attn starts one engine per DP rank, so pre-divide
-        # the aggregate host budget across those engines.
+        # Mooncake embedded mode contributes one global segment per GPU rank to
+        # a shared distributed store. Pre-divide the aggregate host budget
+        # across those rank-contributed segments.
         TOTAL_CPU_DRAM_GB=2500
-        if [ "$DP_ATTENTION" = "true" ]; then
-            PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
-        else
-            PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+        python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "rdma",
+  "device_name": "",
+  "enable_offload": false
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        # Identical prefixes must hash to identical store keys across DP ranks.
+        export PYTHONHASHSEED=0
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup." >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2
+            exit 1
         fi
 
-        # The native backend resolves to OffloadingConnector while this env var
-        # is unset.
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         OFFLOAD_ARGS=(
-            --kv_offloading_backend native
-            --kv_offloading_size "$PER_ENGINE_GB"
+            --kv-transfer-config
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
         ;;
     *)
@@ -144,9 +173,6 @@ echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-# Temporary diagnostic: surface asynchronous CUDA failures at the operation
-# that caused them instead of at a later synchronization point.
-export CUDA_LAUNCH_BLOCKING=1
 
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --host 0.0.0.0 \
