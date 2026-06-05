@@ -45,7 +45,7 @@ python3 -m sglang.launch_server \
     --disable-radix-cache \
     --chunked-prefill-size 32768 \
     --scheduler-recv-interval 30 \
-    --mem-fraction-static 0.9 \
+    --mem-fraction-static 0.8 \
     --model-loader-extra-config '{"enable_multithread_load": true}' \
     --page-size 16 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
