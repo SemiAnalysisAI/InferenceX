@@ -182,6 +182,10 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
     acceptance_length = _optional_float(args.acceptance_length)
     accepted_tokens = _optional_int(args.accepted_tokens)
     draft_tokens = _optional_int(args.draft_tokens)
+    verify_steps = _optional_int(getattr(args, "verify_steps", None))
+    proposed_draft_tokens = _optional_int(getattr(args, "proposed_draft_tokens", None))
+    if verify_steps is None:
+        verify_steps = draft_tokens
     passed = (
         error is None
         and acceptance_length is not None
@@ -200,8 +204,12 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         "category": args.category,
         "output_len": args.output_len,
         "temperature": args.temperature,
+        "framework": getattr(args, "framework", ""),
+        "metric_source": getattr(args, "metric_source", ""),
         "acceptance_length": acceptance_length,
         "accepted_tokens": accepted_tokens,
+        "verify_steps": verify_steps,
+        "proposed_draft_tokens": proposed_draft_tokens,
         "draft_tokens": draft_tokens,
         "reference_acceptance_length": reference_al,
         "threshold_ratio": args.threshold_ratio,
@@ -274,9 +282,13 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--output-len", type=int, default=4096)
     record.add_argument("--temperature", type=float, default=1.0)
     record.add_argument("--threshold-ratio", type=float, default=0.90)
+    record.add_argument("--framework", default="")
+    record.add_argument("--metric-source", default="")
     record.add_argument("--acceptance-length", default=None)
     record.add_argument("--accepted-tokens", default=None)
     record.add_argument("--draft-tokens", default=None)
+    record.add_argument("--verify-steps", default=None)
+    record.add_argument("--proposed-draft-tokens", default=None)
     record.add_argument("--error", default=None)
     record.add_argument("--exit-status", action="store_true")
     record.set_defaults(func=cmd_record)

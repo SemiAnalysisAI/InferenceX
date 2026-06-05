@@ -135,6 +135,12 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
 | `SPEEDBENCH_DIR` | `$(pwd)/speed_bench_data` | Prepared SpeedBench dataset directory; resolves to `/workspace/speed_bench_data` or `/ix/speed_bench_data` through the runner's container workdir |
 | `SPEEDBENCH_NUM_SPEC_TOKENS` | script-provided or `2` | MTP level used to select the reference AL row |
+| `SPEEDBENCH_METRICS_FRAMEWORK` | `FRAMEWORK` or `vllm` | Override speculative metrics parser. Supports `vllm`, `sglang`, `trtllm`/`trt`, and `dynamo-*` variants |
+| `SPEEDBENCH_DECODE_METRICS_URLS` | unset | Comma/space-separated decode worker Prometheus `/metrics` URLs for disaggregated runs |
+| `SPEEDBENCH_METRICS_URLS` | unset | Generic comma/space-separated Prometheus endpoints when decode-specific naming is not applicable |
+| `SPEEDBENCH_METRICS_PORTS` | unset | Localhost Prometheus ports to scrape when full URLs are not supplied |
+
+SpeedBench AL computes vLLM acceptance length from raw accepted-token and verify-step counters. TRT-LLM records its acceptance-length gauge and token counters because it does not expose verify steps through Prometheus. SGLang records its acceptance-length gauge, verify-call counter when present, and derived token counts. Dynamo/disaggregated runs scrape all configured decode endpoints, summing counters and averaging gauge-only AL values.
 
 ### Score validation
 `utils/evals/validate_scores.py` checks lm-eval results against thresholds in `utils/evals/thresholds.json` and checks `results_speedbench_al_*.json` against the embedded minimum AL. It runs as a separate workflow step after artifact upload so results are preserved even if validation fails.

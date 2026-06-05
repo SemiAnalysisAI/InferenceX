@@ -88,6 +88,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --speculative-eagle-topk 1
         --speculative-num-draft-tokens 2
     )
+    export SPEEDBENCH_NUM_SPEC_TOKENS=1
     PARALLEL_ARGS=(
         --dp-size "$TP"
         --enable-dp-attention
@@ -107,6 +108,7 @@ else
         --speculative-eagle-topk 1
         --speculative-num-draft-tokens 4
     )
+    export SPEEDBENCH_NUM_SPEC_TOKENS=3
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune

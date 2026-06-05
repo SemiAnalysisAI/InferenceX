@@ -170,6 +170,11 @@ def extract_speedbench_al_metrics(json_path: Path) -> List[Dict[str, Any]]:
         'threshold_ratio': data.get('threshold_ratio'),
         'thinking_mode': mode,
         'num_speculative_tokens': mtp,
+        'speedbench_framework': data.get('framework'),
+        'speedbench_metric_source': data.get('metric_source'),
+        'speedbench_accepted_tokens': data.get('accepted_tokens'),
+        'speedbench_verify_steps': data.get('verify_steps', data.get('draft_tokens')),
+        'speedbench_proposed_draft_tokens': data.get('proposed_draft_tokens'),
         'passed': data.get('passed'),
         'error': data.get('error'),
         'model': data.get('model'),
@@ -273,6 +278,11 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         row['speedbench_threshold_ratio'] = m.get('threshold_ratio')
         row['speedbench_thinking_mode'] = m.get('thinking_mode')
         row['speedbench_num_speculative_tokens'] = m.get('num_speculative_tokens')
+        row['speedbench_framework'] = m.get('speedbench_framework')
+        row['speedbench_metric_source'] = m.get('speedbench_metric_source')
+        row['speedbench_accepted_tokens'] = m.get('speedbench_accepted_tokens')
+        row['speedbench_verify_steps'] = m.get('speedbench_verify_steps')
+        row['speedbench_proposed_draft_tokens'] = m.get('speedbench_proposed_draft_tokens')
         row['speedbench_passed'] = m.get('passed')
         row['speedbench_error'] = m.get('error')
     elif m.get('strict') is not None:

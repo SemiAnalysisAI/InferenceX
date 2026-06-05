@@ -698,29 +698,286 @@ setup_eval_context() {
 # SpeedBench acceptance-length eval helpers
 # ------------------------------
 
-_prometheus_metric_sum() {
-    local port="$1"
-    local name="$2"
-    local metrics
-    metrics=$(curl -fsS "http://0.0.0.0:${port}/metrics" 2>/dev/null) || return 1
+_prometheus_metric_values_from_text() {
+    local name="$1"
     awk -v name="$name" '
         /^#/ { next }
         {
             metric = $1
             sub(/\{.*/, "", metric)
             if (metric == name && $NF ~ /^-?([0-9]+(\.[0-9]*)?|\.[0-9]+)([eE][-+]?[0-9]+)?$/) {
-                sum += $NF
+                print $NF
                 found = 1
             }
         }
         END {
-            if (found) {
-                printf "%.10f\n", sum
-            } else {
+            if (!found) {
                 exit 1
             }
         }
-    ' <<< "$metrics"
+    '
+}
+
+_prometheus_metric_values_url() {
+    local url="$1"
+    local name="$2"
+    local metrics
+    metrics=$(curl -fsS --max-time "${SPEEDBENCH_METRICS_CURL_TIMEOUT:-10}" "$url" 2>/dev/null) || return 1
+    _prometheus_metric_values_from_text "$name" <<< "$metrics"
+}
+
+_prometheus_metric_sum_url() {
+    local url="$1"
+    local name="$2"
+    local values
+    values=$(_prometheus_metric_values_url "$url" "$name") || return 1
+    awk '
+        { sum += $1; found = 1 }
+        END {
+            if (!found) {
+                exit 1
+            }
+            printf "%.10f\n", sum
+        }
+    ' <<< "$values"
+}
+
+_prometheus_metric_avg_url() {
+    local url="$1"
+    local name="$2"
+    local values
+    values=$(_prometheus_metric_values_url "$url" "$name") || return 1
+    awk '
+        { sum += $1; count += 1 }
+        END {
+            if (count == 0) {
+                exit 1
+            }
+            printf "%.10f\n", sum / count
+        }
+    ' <<< "$values"
+}
+
+_prometheus_metric_sum() {
+    local port="$1"
+    local name="$2"
+    _prometheus_metric_sum_url "http://0.0.0.0:${port}/metrics" "$name"
+}
+
+_speedbench_normalize_metrics_url() {
+    local endpoint="$1"
+    endpoint="${endpoint%,}"
+    endpoint="${endpoint%/}"
+    [[ -z "$endpoint" ]] && return 0
+
+    if [[ "$endpoint" =~ ^https?:// ]]; then
+        if [[ "$endpoint" == */metrics || "$endpoint" == */metrics\?* ]]; then
+            echo "$endpoint"
+        else
+            echo "${endpoint}/metrics"
+        fi
+    elif [[ "$endpoint" =~ ^[0-9]+$ ]]; then
+        echo "http://0.0.0.0:${endpoint}/metrics"
+    elif [[ "$endpoint" =~ ^:[0-9]+$ ]]; then
+        echo "http://0.0.0.0${endpoint}/metrics"
+    elif [[ "$endpoint" == */metrics || "$endpoint" == */metrics\?* ]]; then
+        echo "http://${endpoint}"
+    else
+        echo "http://${endpoint}/metrics"
+    fi
+}
+
+_speedbench_metric_urls() {
+    local port="$1"
+    local raw="${SPEEDBENCH_DECODE_METRICS_URLS:-${SPEEDBENCH_METRICS_URLS:-}}"
+    local endpoint
+
+    if [[ -n "$raw" ]]; then
+        for endpoint in ${raw//,/ }; do
+            _speedbench_normalize_metrics_url "$endpoint"
+        done
+        return 0
+    fi
+
+    raw="${SPEEDBENCH_METRICS_PORTS:-}"
+    if [[ -n "$raw" ]]; then
+        for endpoint in ${raw//,/ }; do
+            _speedbench_normalize_metrics_url "$endpoint"
+        done
+        return 0
+    fi
+
+    echo "http://0.0.0.0:${port}/metrics"
+}
+
+_speedbench_metric_sum() {
+    local port="$1"
+    local name="$2"
+    local url value
+    local total="0"
+    local found=0
+
+    while IFS= read -r url; do
+        [[ -z "$url" ]] && continue
+        value=$(_prometheus_metric_sum_url "$url" "$name" 2>/dev/null || true)
+        if [[ -n "$value" ]]; then
+            total=$(awk -v a="$total" -v b="$value" 'BEGIN { printf "%.10f", a + b }')
+            found=1
+        fi
+    done < <(_speedbench_metric_urls "$port")
+
+    [[ "$found" -eq 1 ]] || return 1
+    awk -v total="$total" 'BEGIN { printf "%.10f\n", total }'
+}
+
+_speedbench_metric_avg() {
+    local port="$1"
+    local name="$2"
+    local url value
+    local total="0"
+    local count=0
+
+    while IFS= read -r url; do
+        [[ -z "$url" ]] && continue
+        while IFS= read -r value; do
+            [[ -z "$value" ]] && continue
+            total=$(awk -v a="$total" -v b="$value" 'BEGIN { printf "%.10f", a + b }')
+            count=$((count + 1))
+        done < <(_prometheus_metric_values_url "$url" "$name" 2>/dev/null || true)
+    done < <(_speedbench_metric_urls "$port")
+
+    [[ "$count" -gt 0 ]] || return 1
+    awk -v total="$total" -v count="$count" 'BEGIN { printf "%.10f\n", total / count }'
+}
+
+_speedbench_metric_endpoint_count() {
+    local port="$1"
+    local url count=0
+    while IFS= read -r url; do
+        [[ -n "$url" ]] && count=$((count + 1))
+    done < <(_speedbench_metric_urls "$port")
+    echo "$count"
+}
+
+_speedbench_metric_delta() {
+    local before="$1"
+    local after="$2"
+    [[ -n "$before" && -n "$after" ]] || return 1
+    awk -v before="$before" -v after="$after" '
+        BEGIN {
+            delta = after - before
+            if (delta < 0) {
+                delta = after
+            }
+            printf "%.10f\n", delta
+        }
+    '
+}
+
+_speedbench_round_metric() {
+    local value="$1"
+    [[ -n "$value" ]] || return 1
+    awk -v value="$value" 'BEGIN { printf "%.0f\n", value }'
+}
+
+_speedbench_metrics_framework() {
+    local fw="${SPEEDBENCH_METRICS_FRAMEWORK:-${FRAMEWORK:-vllm}}"
+    fw="${fw,,}"
+    if [[ "$fw" == "dynamo" ]]; then
+        local inner="${SPEEDBENCH_DYNAMO_BACKEND_FRAMEWORK:-${DYNAMO_BACKEND_FRAMEWORK:-${DYNAMO_BACKEND:-}}}"
+        [[ -n "$inner" ]] && fw="dynamo-${inner,,}"
+    fi
+
+    case "$fw" in
+        vllm|dynamo-vllm)
+            echo "vllm"
+            ;;
+        sglang|dynamo-sglang)
+            echo "sglang"
+            ;;
+        trt|trtllm|tensorrt-llm|tensorrt_llm|dynamo-trt|dynamo-trtllm|dynamo-tensorrt-llm|dynamo-tensorrt_llm)
+            echo "trtllm"
+            ;;
+        *)
+            echo "$fw"
+            ;;
+    esac
+}
+
+_speedbench_metric_source_base() {
+    local framework="$1"
+    local configured="${SPEEDBENCH_METRICS_FRAMEWORK:-${FRAMEWORK:-$framework}}"
+    configured="${configured,,}"
+    if [[ "$configured" == dynamo* ]]; then
+        echo "dynamo-${framework}-prometheus"
+    else
+        echo "${framework}-prometheus"
+    fi
+}
+
+_speedbench_spec_counter_metric() {
+    local framework="$1"
+    local kind="$2"
+    case "${framework}:${kind}" in
+        vllm:accepted)
+            echo "vllm:spec_decode_num_accepted_tokens_total"
+            ;;
+        vllm:proposed)
+            echo "vllm:spec_decode_num_draft_tokens_total"
+            ;;
+        vllm:verify)
+            echo "vllm:spec_decode_num_drafts_total"
+            ;;
+        trtllm:accepted)
+            echo "trtllm_spec_decode_num_accepted_tokens_total"
+            ;;
+        trtllm:proposed)
+            echo "trtllm_spec_decode_num_draft_tokens_total"
+            ;;
+        sglang:verify)
+            echo "sglang:spec_verify_calls_total"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+_speedbench_spec_gauge_metric() {
+    local framework="$1"
+    local kind="$2"
+    case "${framework}:${kind}" in
+        trtllm:acceptance_length)
+            echo "trtllm_spec_decode_acceptance_length"
+            ;;
+        sglang:acceptance_length)
+            echo "sglang:spec_accept_length"
+            ;;
+        sglang:draft_tokens_per_step)
+            echo "sglang:spec_num_draft_tokens"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+_speedbench_spec_counter_sum() {
+    local framework="$1"
+    local port="$2"
+    local kind="$3"
+    local metric
+    metric=$(_speedbench_spec_counter_metric "$framework" "$kind") || return 1
+    _speedbench_metric_sum "$port" "$metric"
+}
+
+_speedbench_spec_gauge_avg() {
+    local framework="$1"
+    local port="$2"
+    local kind="$3"
+    local metric
+    metric=$(_speedbench_spec_gauge_metric "$framework" "$kind") || return 1
+    _speedbench_metric_avg "$port" "$metric"
 }
 
 _speedbench_write_eval_result() {
@@ -729,8 +986,11 @@ _speedbench_write_eval_result() {
     local mtp="$3"
     local al="${4:-}"
     local accepted="${5:-}"
-    local drafts="${6:-}"
-    local error="${7:-}"
+    local verify_steps="${6:-}"
+    local proposed_drafts="${7:-}"
+    local framework="${8:-${SPEEDBENCH_METRICS_FRAMEWORK:-${FRAMEWORK:-}}}"
+    local metric_source="${9:-}"
+    local error="${10:-}"
     local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
 
     local record_cmd=(
@@ -747,14 +1007,24 @@ _speedbench_write_eval_result() {
         --temperature "1.0"
         --threshold-ratio "0.90"
     )
+    if [[ -n "$framework" ]]; then
+        record_cmd+=(--framework "$framework")
+    fi
+    if [[ -n "$metric_source" ]]; then
+        record_cmd+=(--metric-source "$metric_source")
+    fi
     if [[ -n "$al" ]]; then
         record_cmd+=(--acceptance-length "$al")
     fi
     if [[ -n "$accepted" ]]; then
         record_cmd+=(--accepted-tokens "$accepted")
     fi
-    if [[ -n "$drafts" ]]; then
-        record_cmd+=(--draft-tokens "$drafts")
+    if [[ -n "$verify_steps" ]]; then
+        record_cmd+=(--draft-tokens "$verify_steps")
+        record_cmd+=(--verify-steps "$verify_steps")
+    fi
+    if [[ -n "$proposed_drafts" ]]; then
+        record_cmd+=(--proposed-draft-tokens "$proposed_drafts")
     fi
     if [[ -n "$error" ]]; then
         record_cmd+=(--error "$error")
@@ -821,26 +1091,40 @@ run_speedbench_al_eval() {
         export EVAL_RESULT_DIR
     fi
 
-    # TODO: Add unified support for SGLang, TRT-LLM, and disagg (Dynamo).
+    local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
+    local metrics_framework result_framework metric_source_base metrics_endpoint_count
+    metrics_framework=$(_speedbench_metrics_framework)
+    result_framework="${SPEEDBENCH_METRICS_FRAMEWORK:-${FRAMEWORK:-$metrics_framework}}"
+    metric_source_base=$(_speedbench_metric_source_base "$metrics_framework")
+    metrics_endpoint_count=$(_speedbench_metric_endpoint_count "$port")
+
+    case "$metrics_framework" in
+        vllm|sglang|trtllm)
+            ;;
+        *)
+            echo "SpeedBench AL eval: unsupported speculative metrics framework=${metrics_framework}" >&2
+            _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "Unsupported speculative metrics framework: ${metrics_framework}"
+            return 0
+            ;;
+    esac
+
+    echo "SpeedBench AL eval: metrics framework=${metrics_framework}, endpoints=${metrics_endpoint_count}"
     if ! command -v vllm >/dev/null 2>&1; then
-        local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
         echo "SpeedBench AL eval: vllm CLI is not available for SpeedBench client" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "vllm CLI is not available for SpeedBench client"
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "vllm CLI is not available for SpeedBench client"
         return 0
     fi
 
     local speedbench_dir="${SPEEDBENCH_DIR:-$(pwd)/speed_bench_data}"
     if ! _speedbench_prepare_dataset "$speedbench_dir"; then
-        local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
         echo "SpeedBench AL eval: SpeedBench dataset download failed" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "SpeedBench dataset download failed"
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "SpeedBench dataset download failed"
         return 0
     fi
 
-    local output="${EVAL_RESULT_DIR}/results_speedbench_al_${mode}_mtp${mtp}.json"
     if ! _speedbench_reference_available "$mode" "$mtp"; then
         echo "SpeedBench AL eval: no reference for mode=${mode} mtp=${mtp}" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "No SpeedBench AL reference for this eval cell"
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "No SpeedBench AL reference for this eval cell"
         return 0
     fi
 
@@ -849,11 +1133,13 @@ run_speedbench_al_eval() {
         think_args=(--chat-template-kwargs '{"thinking": true, "reasoning_effort": "high"}')
     fi
 
-    local accepted_before="" draft_before=""
-    accepted_before=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_accepted_tokens_total" 2>/dev/null || true)
-    draft_before=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_drafts_total" 2>/dev/null || true)
+    local accepted_before="" proposed_before="" verify_before=""
+    accepted_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "accepted" 2>/dev/null || true)
+    proposed_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "proposed" 2>/dev/null || true)
+    verify_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "verify" 2>/dev/null || true)
     accepted_before="${accepted_before:-0}"
-    draft_before="${draft_before:-0}"
+    proposed_before="${proposed_before:-0}"
+    verify_before="${verify_before:-0}"
 
     local raw_result_dir
     raw_result_dir="$(mktemp -d /tmp/speedbench_al_raw-XXXXXX)"
@@ -882,27 +1168,65 @@ run_speedbench_al_eval() {
     "${bench_cmd[@]}" || bench_rc=$?
     if [[ "$bench_rc" -ne 0 ]]; then
         echo "SpeedBench AL eval: vllm bench serve failed with exit code ${bench_rc}" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "vllm bench serve failed with exit code ${bench_rc}"
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "vllm bench serve failed with exit code ${bench_rc}"
         rm -rf "$raw_result_dir" || true
         return 0
     fi
 
-    local accepted_after="" draft_after="" al="" delta_acc="" delta_draft=""
-    accepted_after=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_accepted_tokens_total" 2>/dev/null || true)
-    draft_after=$(_prometheus_metric_sum "$port" "vllm:spec_decode_num_drafts_total" 2>/dev/null || true)
-    if [[ -n "$accepted_after" && -n "$draft_after" ]]; then
-        delta_acc=$(awk "BEGIN {printf \"%d\", ${accepted_after} - ${accepted_before}}")
-        delta_draft=$(awk "BEGIN {printf \"%d\", ${draft_after} - ${draft_before}}")
-        if [[ "$delta_draft" -gt 0 ]]; then
-            al=$(awk "BEGIN {printf \"%.4f\", 1 + (${delta_acc} / ${delta_draft})}")
+    local accepted_after="" proposed_after="" verify_after=""
+    local al="" delta_acc="" delta_proposed="" delta_verify="" metric_source=""
+    accepted_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "accepted" 2>/dev/null || true)
+    proposed_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "proposed" 2>/dev/null || true)
+    verify_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "verify" 2>/dev/null || true)
+
+    if [[ -n "$accepted_after" ]]; then
+        delta_acc=$(_speedbench_round_metric "$(_speedbench_metric_delta "$accepted_before" "$accepted_after")")
+    fi
+    if [[ -n "$proposed_after" ]]; then
+        delta_proposed=$(_speedbench_round_metric "$(_speedbench_metric_delta "$proposed_before" "$proposed_after")")
+    fi
+    if [[ -n "$verify_after" ]]; then
+        delta_verify=$(_speedbench_round_metric "$(_speedbench_metric_delta "$verify_before" "$verify_after")")
+    fi
+
+    if [[ "$metrics_framework" == "vllm" && -n "$delta_acc" && -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
+        al=$(awk -v accepted="$delta_acc" -v verify="$delta_verify" 'BEGIN { printf "%.4f", 1 + (accepted / verify) }')
+        metric_source="${metric_source_base}-counters-endpoints${metrics_endpoint_count}"
+    elif [[ "$metrics_framework" == "trtllm" ]]; then
+        al=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "acceptance_length" 2>/dev/null | awk '{ printf "%.4f", $1 }' || true)
+        if [[ -n "$al" ]]; then
+            metric_source="${metric_source_base}-gauge-endpoints${metrics_endpoint_count}"
+            if [[ -n "$delta_acc" || -n "$delta_proposed" ]]; then
+                metric_source="${metric_source}+token-counters"
+            fi
+        fi
+    elif [[ "$metrics_framework" == "sglang" ]]; then
+        al=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "acceptance_length" 2>/dev/null | awk '{ printf "%.4f", $1 }' || true)
+        if [[ -n "$al" ]]; then
+            metric_source="${metric_source_base}-gauge-endpoints${metrics_endpoint_count}"
+        fi
+        if [[ -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
+            local draft_depth=""
+            draft_depth=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "draft_tokens_per_step" 2>/dev/null || true)
+            if [[ -n "$draft_depth" ]]; then
+                delta_proposed=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v depth="$draft_depth" 'BEGIN { value = verify * (depth - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")
+            fi
+            if [[ -n "$al" ]]; then
+                delta_acc=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v al="$al" 'BEGIN { value = verify * (al - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")
+                metric_source="${metric_source:-${metric_source_base}-gauge-endpoints${metrics_endpoint_count}}+derived-token-counters"
+            fi
         fi
     fi
 
     if [[ -z "$al" ]]; then
         echo "SpeedBench AL eval: could not collect speculative acceptance metrics from server" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "$delta_acc" "$delta_draft" "Could not collect speculative acceptance metrics from server"
+        local metric_error="Could not collect speculative acceptance metrics from server"
+        if [[ "${FRAMEWORK:-}" == dynamo* && -z "${SPEEDBENCH_DECODE_METRICS_URLS:-}${SPEEDBENCH_METRICS_URLS:-}${SPEEDBENCH_METRICS_PORTS:-}" ]]; then
+            metric_error="${metric_error}; for Dynamo/disagg set SPEEDBENCH_DECODE_METRICS_URLS or SPEEDBENCH_METRICS_PORTS to decode-worker /metrics endpoints"
+        fi
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "$delta_acc" "$delta_verify" "$delta_proposed" "$result_framework" "$metric_source_base" "$metric_error"
     else
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "$al" "$delta_acc" "$delta_draft"
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "$al" "$delta_acc" "$delta_verify" "$delta_proposed" "$result_framework" "$metric_source"
     fi
     rm -rf "$raw_result_dir" || true
 }

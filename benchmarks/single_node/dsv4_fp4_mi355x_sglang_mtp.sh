@@ -166,6 +166,7 @@ SPEC_FLAGS=(
     --speculative-eagle-topk 1
     --speculative-num-draft-tokens 4
 )
+export SPEEDBENCH_NUM_SPEC_TOKENS=3
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
@@ -178,6 +179,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --speculative-eagle-topk 1
         --speculative-num-draft-tokens 3
     )
+    export SPEEDBENCH_NUM_SPEC_TOKENS=2
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")

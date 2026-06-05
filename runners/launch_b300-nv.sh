@@ -2,7 +2,7 @@
 
 # System-specific configuration for B300 NV Slurm cluster
 SLURM_PARTITION="batch_1"
-SLURM_ACCOUNT="benchmark"
+SLURM_ACCOUNT="restricted"
 
 set -x
 

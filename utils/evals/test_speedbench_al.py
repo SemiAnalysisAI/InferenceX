@@ -64,6 +64,10 @@ deepseek-v4-pro:
         acceptance_length="2.30",
         accepted_tokens="13",
         draft_tokens="10",
+        verify_steps="10",
+        proposed_draft_tokens="20",
+        framework="vllm",
+        metric_source="vllm-prometheus-counters-endpoints1",
         error=None,
     )
 
@@ -71,6 +75,10 @@ deepseek-v4-pro:
 
     assert result["reference_acceptance_length"] == 2.50
     assert result["min_acceptance_length"] == 2.25
+    assert result["framework"] == "vllm"
+    assert result["metric_source"] == "vllm-prometheus-counters-endpoints1"
+    assert result["verify_steps"] == 10
+    assert result["proposed_draft_tokens"] == 20
     assert result["passed"] is True
 
 
@@ -103,6 +111,11 @@ def test_collect_eval_results_formats_speedbench_row(tmp_path: Path) -> None:
                 "thinking_mode": "thinking_on",
                 "num_speculative_tokens": 2,
                 "acceptance_length": 2.3,
+                "framework": "sglang",
+                "metric_source": "sglang-prometheus-gauge-endpoints1+derived-token-counters",
+                "accepted_tokens": 13,
+                "verify_steps": 10,
+                "proposed_draft_tokens": 20,
                 "reference_acceptance_length": 2.5,
                 "min_acceptance_length": 2.25,
                 "threshold_ratio": 0.9,
@@ -124,6 +137,11 @@ def test_collect_eval_results_formats_speedbench_row(tmp_path: Path) -> None:
 
     assert row["task"] == "speedbench_al/thinking_on/mtp2"
     assert row["score_name"] == "acceptance_length"
+    assert row["speedbench_framework"] == "sglang"
+    assert row["speedbench_metric_source"] == "sglang-prometheus-gauge-endpoints1+derived-token-counters"
+    assert row["speedbench_accepted_tokens"] == 13
+    assert row["speedbench_verify_steps"] == 10
+    assert row["speedbench_proposed_draft_tokens"] == 20
     assert score_cell(row) == "2.30 >= 2.25 (PASS)"
 
 
