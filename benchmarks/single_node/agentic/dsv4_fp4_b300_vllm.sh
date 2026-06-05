@@ -123,6 +123,11 @@ EOF
         export MOONCAKE_CONFIG_PATH
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
+        # Large agentic KV writes can exceed Mooncake Store's fixed 60-second
+        # transfer deadline at the default 64 KiB RDMA slice size. Reduce
+        # per-transfer bookkeeping and give the shared RNIC more workers.
+        export MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX=4
 
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
