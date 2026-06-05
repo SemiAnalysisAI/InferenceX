@@ -76,6 +76,7 @@ cuda_graph_config:
     max_batch_size: $CUDA_GRAPH_MAX_BATCH_SIZE
 enable_attention_dp: $DP_ATTENTION$ATTENTION_DP_CONFIG
 print_iter_log: true
+disable_overlap_scheduler: true
 kv_cache_config:
     tokens_per_block: 128
     dtype: fp8

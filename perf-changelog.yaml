@@ -3464,6 +3464,7 @@
     - dsv4-fp4-b200-trt-mtp
   description:
     - "Update B200 DeepSeek-V4-Pro TRT image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-2dd03e6 (non-MTP and MTP), replacing the older 9aa3715 build."
+    - "Set disable_overlap_scheduler: true so the 2dd03e6 build's slot pool is sized max_num_requests = max_batch_size x 1 (256) instead of x2 (512) under the overlap scheduler, matching the 9aa3715 footprint that fit conc-256 on B200 (avoids the conc-256 dpa=true prefill-warmup OOM)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1664
 
 - config-keys:
