@@ -9,14 +9,8 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC RESULT_DIR
+check_env_vars MODEL TP CONC RESULT_DIR DURATION EP_SIZE
 
-PORT=${PORT:-8888}
-DURATION=${DURATION:-1800}
-MAX_DELAY=${MAX_DELAY:-60}
-ADVANCE_MIN=${ADVANCE_MIN:-0.0}
-ADVANCE_MAX=${ADVANCE_MAX:-0.7}
-EP_SIZE=${EP_SIZE:-1}
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-5}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
@@ -67,14 +61,4 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
 
-echo "$REPLAY_CMD" > "$RESULT_DIR/benchmark_command.txt"
-
-set -x
-$REPLAY_CMD 2>&1 | tee "$RESULT_DIR/benchmark.log" || true
-set +x
-
-write_agentic_result_json "$RESULT_DIR"
-
-# ---- Post-processing --------------------------------------------------------
-python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
-    "$RESULT_DIR/trace_replay" -o "$RESULT_DIR" 2>&1 || true
+run_agentic_replay_and_write_outputs "$RESULT_DIR"

@@ -1,6 +1,6 @@
 """Smoke tests for process_agentic_result.py against synthetic aiperf output.
 
-The processor consumes three files in $RESULT_DIR/trace_replay/:
+The processor consumes three files in $RESULT_DIR/aiperf_artifacts/:
 profile_export.jsonl, profile_export_aiperf.json, and
 (optionally) server_metrics_export.json. It writes one
 $RESULT_FILENAME.json under $AGENTIC_OUTPUT_DIR. We build a minimal
@@ -94,7 +94,7 @@ def _make_record(
 def _write_fixture(tmp_path: Path) -> Path:
     """Build a $RESULT_DIR with aiperf-shaped artifacts. Returns RESULT_DIR."""
     result_dir = tmp_path / "results"
-    artifact = result_dir / "trace_replay"
+    artifact = result_dir / "aiperf_artifacts"
     artifact.mkdir(parents=True)
 
     # 5 records across 2 conversations; turn indices grow within each.
@@ -264,7 +264,7 @@ def test_processor_response_cache_hit_rate_populated_when_cached_tokens_present(
     tmp_path: Path,
 ):
     result_dir = tmp_path / "results"
-    artifact = result_dir / "trace_replay"
+    artifact = result_dir / "aiperf_artifacts"
     artifact.mkdir(parents=True)
     rec = _make_record(
         conv_id="trace-A",
@@ -301,7 +301,7 @@ def test_processor_parses_real_server_metrics_schema(tmp_path: Path):
     iterated the metrics dict like a list.
     """
     result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "trace_replay"
+    artifact = result_dir / "aiperf_artifacts"
     server_metrics = {
         "schema_version": "1.0",
         "summary": {
@@ -368,7 +368,7 @@ def test_processor_parses_real_server_metrics_schema(tmp_path: Path):
 def test_processor_aggregates_across_multiple_series(tmp_path: Path):
     """Counters with multiple series (multi-endpoint) sum across them."""
     result_dir = _write_fixture(tmp_path)
-    artifact = result_dir / "trace_replay"
+    artifact = result_dir / "aiperf_artifacts"
     server_metrics = {
         "metrics": {
             "vllm:prefix_cache_hits": {
@@ -468,7 +468,7 @@ def test_processor_loads_traces_jsonl_for_theoretical_cache(tmp_path: Path):
 def test_processor_supports_per_run_subdir_layout(tmp_path: Path):
     """When --num-profile-runs > 1, aiperf writes into a per-run subdir."""
     result_dir = tmp_path / "results"
-    artifact = result_dir / "trace_replay" / "run_0"
+    artifact = result_dir / "aiperf_artifacts" / "run_0"
     artifact.mkdir(parents=True)
     rec = _make_record(
         conv_id="trace-A",
