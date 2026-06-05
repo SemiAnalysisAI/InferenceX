@@ -928,10 +928,17 @@ resolve_trace_source() {
     # unfiltered corpus and switches to the 256k-capped variant), or
     # by recipes that want to pin an older corpus generation.
     #
-    # Default (no override): semianalysis_cc_traces_weka_with_subagents_060226
-    # (v6 corpus, newer CC versions). All recipes — including DSv4 — ride
-    # this default unless they opt out via WEKA_LOADER_OVERRIDE.
-    local default_loader="semianalysis_cc_traces_weka_with_subagents_060226"
+    # Default (no override): the 060526 v6 corpus, selected by model family.
+    # DSv4 (full context) rides the unfiltered base corpus; every non-DSv4
+    # recipe defaults to the 256k-capped variant because those servers run at
+    # max_model_len ~256k and would reject >256k requests. Any recipe can still
+    # pin a specific corpus via WEKA_LOADER_OVERRIDE.
+    local default_loader
+    if [[ "${MODEL_PREFIX:-}" == dsv4* ]]; then
+        default_loader="semianalysis_cc_traces_weka_with_subagents_060526"
+    else
+        default_loader="semianalysis_cc_traces_weka_with_subagents_060526_256k"
+    fi
     local loader="${WEKA_LOADER_OVERRIDE:-$default_loader}"
     local dataset
     case "$loader" in
@@ -947,8 +954,14 @@ resolve_trace_source() {
         semianalysis_cc_traces_weka_with_subagents_060226_256k)
             dataset="semianalysisai/cc-traces-weka-with-subagents-060226-256k"
             ;;
+        semianalysis_cc_traces_weka_with_subagents_060526)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-060526"
+            ;;
+        semianalysis_cc_traces_weka_with_subagents_060526_256k)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-060526-256k"
+            ;;
         *)
-            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k, semianalysis_cc_traces_weka_with_subagents_060226, semianalysis_cc_traces_weka_with_subagents_060226_256k" >&2
+            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k, semianalysis_cc_traces_weka_with_subagents_060226, semianalysis_cc_traces_weka_with_subagents_060226_256k, semianalysis_cc_traces_weka_with_subagents_060526, semianalysis_cc_traces_weka_with_subagents_060526_256k" >&2
             exit 1
             ;;
     esac
