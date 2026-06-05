@@ -6,7 +6,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from collect_eval_results import build_row, extract_speedbench_al_metrics, score_cell
+from collect_eval_results import (
+    build_row,
+    detect_eval_jsons,
+    extract_speedbench_al_metrics,
+    score_cell,
+)
 from speedbench_al import build_result, load_reference, lookup_reference
 from validate_scores import validate_speedbench_al
 
@@ -120,3 +125,25 @@ def test_collect_eval_results_formats_speedbench_row(tmp_path: Path) -> None:
     assert row["task"] == "speedbench_al/thinking_on/mtp2"
     assert row["score_name"] == "acceptance_length"
     assert score_cell(row) == "2.30 >= 2.25 (PASS)"
+
+
+def test_detect_eval_jsons_dedupes_flat_speedbench_result(tmp_path: Path) -> None:
+    result_path = tmp_path / "results_speedbench_al_thinking_on_mtp2.json"
+    result_path.write_text(
+        json.dumps(
+            {
+                "speedbench_al_eval_version": 1,
+                "task": "speedbench_al",
+                "thinking_mode": "thinking_on",
+                "num_speculative_tokens": 2,
+                "acceptance_length": 2.3,
+                "min_acceptance_length": 2.25,
+                "passed": True,
+            }
+        )
+    )
+
+    lm_path, speedbench_paths = detect_eval_jsons(tmp_path)
+
+    assert lm_path is None
+    assert speedbench_paths == [result_path]

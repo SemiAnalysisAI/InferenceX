@@ -41,9 +41,11 @@ def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], List[Path]]:
     
     Checks immediate directory for result JSONs.
     """
-    immediate_jsons = list(d.glob('results*.json')) + [
-        p for p in d.glob('*.json') if p.name != 'meta_env.json'
-    ]
+    immediate_jsons = sorted(
+        set(d.glob('results*.json')).union(
+            p for p in d.glob('*.json') if p.name != 'meta_env.json'
+        )
+    )
     
     lm_path = None
     speedbench_paths: List[Path] = []
