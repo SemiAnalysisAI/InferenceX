@@ -18,9 +18,11 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
+export SGLANG_USE_AITER_UNIFIED_ATTN=1
+export SGLANG_USE_AITER=1
+
 SERVER_LOG=/workspace/server.log
 CONTEXT_LENGTH=$((ISL + OSL + 20))
-MAX_PREFILL_TOKENS=32768
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -32,7 +34,7 @@ fi
 start_gpu_monitor
 
 python3 -m sglang.launch_server \
-    --attention-backend triton \
+    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
@@ -41,11 +43,14 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
+    --max-running-requests $CONC \
     --cuda-graph-max-bs $CONC \
     --disable-radix-cache \
-    --max-prefill-tokens $MAX_PREFILL_TOKENS \
+    --chunked-prefill-size 32768 \
     --scheduler-recv-interval 30 \
     --mem-fraction-static 0.8 \
+    --model-loader-extra-config '{"enable_multithread_load": true}' \
+    --page-size 16 \
     --speculative-algorithm EAGLE \
     --speculative-num-steps 3 \
     --speculative-eagle-topk 1 \
