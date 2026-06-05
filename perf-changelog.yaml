@@ -3502,3 +3502,9 @@
     - "Update GPT-OSS model for MI355X vLLM from amd/gpt-oss-120b-w-mxfp4-a-fp8 to openai/gpt-oss-120b"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1670
 
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Expand concurrency sweep for the 1k/1k and 8k/1k cells: TP4/EP1 conc 4-64 -> 1-128, TP8/EP1 conc-start 4 -> 1 (conc-end 4 unchanged)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<TODO>
+
