@@ -3508,5 +3508,5 @@
     - "Initial submission: DSv4-Pro FP4 disagg on GB200 with SGLang (8k/1k)."
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85"
     - "8 topologies sweeping low-latency (1p1d-tp8-tp8) through max throughput (6p1d-dep8-dep12)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1675
 
