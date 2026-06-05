@@ -13,20 +13,17 @@ set -x
 #       experts EP-sharded across DP ranks (per the vLLM blog recipe).
 #       Highest aggregate throughput at large CONC.
 #
-# Image is cquil/vllm-openai:v0.22.0-6c529f3001ab8bf44b1657e779dc54b622397045.
-# block_size=256, kv-cache-dtype=fp8, FP4 indexer cache enabled,
-# FULL_AND_PIECEWISE cudagraph capture with custom_ops=all (per the vLLM blog
-# recipe at https://vllm.ai/blog/deepseek-v4).
+# Image is configured in nvidia-master.yaml. block_size=256,
+# kv-cache-dtype=fp8, FP4 indexer cache enabled, FULL_AND_PIECEWISE cudagraph
+# capture with custom_ops=all (per the vLLM blog recipe at
+# https://vllm.ai/blog/deepseek-v4).
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
 # OFFLOADING values:
-#   none        - vLLM GPU KV only, with DSv4 hybrid KV manager enabled.
-#   cpu         - SimpleCPUOffloadConnector lazy offload, with hybrid KV manager
-#                 enabled.
-#   lmcache-mp  - Temporarily disabled for DSv4. LMCache PR #3261 must merge
-#                 first so LMCacheMPConnector can support HMA block-id tuples.
+#   none - vLLM GPU KV only.
+#   cpu  - MooncakeStoreConnector with a shared 2.5 TB host-memory KV tier.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -85,147 +82,76 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
-LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-HYBRID_KV_ARGS=(--no-disable-hybrid-kv-cache-manager)
-LMCACHE_PID=""
-
-cleanup_lmcache_server() {
-    if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
-        kill "$LMCACHE_PID" 2>/dev/null || true
-        wait "$LMCACHE_PID" 2>/dev/null || true
-    fi
-}
-
-trap cleanup_lmcache_server EXIT
-
-wait_for_lmcache_ready() {
-    { set +x; } 2>/dev/null
-    local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
-    local tail_pid=""
-
-    while [ ! -f "$LMCACHE_LOG" ]; do
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before creating log file. Exiting." >&2
-            exit 1
-        fi
-        sleep 1
-    done
-
-    tail -f -n +1 "$LMCACHE_LOG" &
-    tail_pid=$!
-
-    for ((i = 1; i <= attempts; i++)); do
-        if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
-            kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
-            return 0
-        fi
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before becoming healthy. Log follows:" >&2
-            kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
-            cat "$LMCACHE_LOG" >&2 || true
-            exit 1
-        fi
-        sleep 1
-    done
-
-    echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
-    kill "$tail_pid" 2>/dev/null || true
-    wait "$tail_pid" 2>/dev/null || true
-    cat "$LMCACHE_LOG" >&2 || true
-    exit 1
-}
 
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # b200-dgxc compute nodes have ~3.8 TiB host RAM; SLURM cgroup limits
-        # individual jobs to a fraction of that. Aim for ~1.2 TB total host
-        # CPU pool across the engine(s); previously 2.8 TB but every DP-attn
-        # worker stalled for 4+ min during pinned-CPU-tensor allocation and the
-        # shm_broadcast watchdog killed them (run 26246044726). 150 GB per
-        # worker (1.2 TB / 8) completes the alloc within the 60 s window.
+        # B200 DGXC compute nodes have about 3.9 TB host RAM. Leave enough
+        # headroom for model workers and the runtime, and use the same 2.5 TB
+        # Mooncake budget validated by the B300 recipe.
         #
-        # SimpleCPUOffloadConnector divides cpu_bytes_to_use by
-        # parallel_config.world_size (= TP*PP, NOT including DP). For DP-attn
-        # there are $TP independent engines with world_size=1, so pre-divide
-        # to keep aggregate host commit near TOTAL_CPU_DRAM_GB. For pure TP,
-        # pass the total and let the connector divide across TP ranks.
-        TOTAL_CPU_DRAM_GB=1200
-        if [ "$DP_ATTENTION" = "true" ]; then
-            PER_ENGINE_GB=$((TOTAL_CPU_DRAM_GB / TP))
-        else
-            PER_ENGINE_GB=$TOTAL_CPU_DRAM_GB
+        # Embedded mode contributes one segment per GPU rank to a shared
+        # distributed store, so pre-divide the aggregate host-memory budget.
+        TOTAL_CPU_DRAM_GB=2500
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+        python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "rdma",
+  "device_name": "mlx5_0",
+  "enable_offload": false
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        # Identical prefixes must hash to identical store keys across DP ranks.
+        export PYTHONHASHSEED=0
+        # Reduce per-transfer bookkeeping for large agentic KV writes and give
+        # the shared RNIC more transfer workers.
+        export MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX=4
+
+        # Each rank contributes a separate segment. Evict early enough to
+        # avoid an imbalanced rank exhausting its segment.
+        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
+        MOONCAKE_EVICTION_RATIO=0.10
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
+            --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup." >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2
+            exit 1
         fi
-        PER_ENGINE_BYTES=$((PER_ENGINE_GB * 1024 * 1024 * 1024))
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
-        )
-        ;;
-    lmcache-mp)
-        { set +x; } 2>/dev/null
-        # LMCacheMPConnector needs HMA support before it can run DSv4 with the
-        # hybrid KV manager. Re-enable this path after
-        # https://github.com/LMCache/LMCache/pull/3261 is merged.
-        echo "Error: OFFLOADING=lmcache-mp is disabled for DSv4 until LMCache PR #3261 adds HMA support." >&2
-        exit 1
-
-        # LMCache docs recommend MP mode for production: start an external
-        # `lmcache server`, then point vLLM's LMCacheMPConnector at it. For
-        # vLLM >= 0.20, prefer the LMCache-shipped connector module because it
-        # tracks the latest server protocol ahead of vLLM's vendored copy.
-        #
-        # Important DSv4 caveat: LMCacheMPConnector currently only accepts the
-        # non-hybrid KV block layout. The connector raises if vLLM returns the
-        # hybrid block-id tuple used by the CSA/HCA hybrid KV manager. This
-        # mode therefore disables the hybrid manager; `none` and `cpu` keep it
-        # enabled for the normal B200 DSv4 path.
-        agentic_pip_install --quiet --no-cache-dir lmcache
-        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
-
-        TOTAL_CPU_DRAM_GB=2800
-        LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
-        LMCACHE_PORT="${LMCACHE_PORT:-5555}"
-        LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
-        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-200}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
-
-        echo "Starting LMCache MP server..."
-        LMCACHE_CMD=(
-            lmcache server
-            --host "$LMCACHE_HOST"
-            --port "$LMCACHE_PORT"
-            --http-host "$LMCACHE_HOST"
-            --http-port "$LMCACHE_HTTP_PORT"
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
-            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
-            --chunk-size "$LMCACHE_CHUNK_SIZE"
-            --max-workers "$LMCACHE_MAX_WORKERS"
-            --eviction-policy LRU
-        )
-        printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
-        printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
-        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
-        LMCACHE_PID=$!
-        echo "LMCache server PID: $LMCACHE_PID"
-        wait_for_lmcache_ready
-
-        HYBRID_KV_ARGS=(--disable-hybrid-kv-cache-manager)
-        OFFLOAD_ARGS=(
-            --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
         ;;
     *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu, lmcache-mp)" >&2
+        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
         exit 1
         ;;
 esac
@@ -273,7 +199,7 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
     --enable-prefix-caching
-    "${HYBRID_KV_ARGS[@]}"
+    --no-disable-hybrid-kv-cache-manager
     --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
