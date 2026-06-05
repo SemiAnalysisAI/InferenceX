@@ -9416,11 +9416,11 @@ dsv4-fp4-b300-vllm-agentic:
       search-space:
       # TEMPORARY: run only MooncakeStore CPU-offload scenarios while
       # diagnosing the native/SimpleCPU offload failures.
-      # - { tp: 4, offloading: none,  conc-list: [1, 4, 8, 16, 32] }
-      # - { tp: 8, offloading: none,  conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 64, 72] }
-      # - { tp: 4, ep: 4, dp-attn: true, offloading: none,  conc-list: [8, 16, 32, 64, 128] }
+      - { tp: 4, offloading: none,  conc-list: [1, 4, 8, 16, 32] }
+      - { tp: 8, offloading: none,  conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 64, 72] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none,  conc-list: [8, 16, 32, 64, 128] }
       - { tp: 4, ep: 4, dp-attn: true, offloading: cpu,   conc-list: [32, 48, 64, 96, 128, 192, 256] }
-      # - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
 
 gptoss-fp4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
