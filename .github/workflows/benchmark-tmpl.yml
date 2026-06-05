@@ -92,7 +92,7 @@ on:
         type: string
         default: ''
       offloading:
-        description: "KV offload backend for agentic scenarios (none/cpu/ssd)"
+        description: "KV offload backend for agentic scenarios (none/cpu/ssd/lmcache/lmcache-mp/hicache)"
         required: false
         type: string
         default: 'none'
@@ -128,7 +128,7 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
-  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || '' }}
+  SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   DRAFT_MODEL: ${{ inputs.draft-model }}
   NUM_SPECULATIVE_TOKENS: ${{ inputs.num-speculative-tokens }}
@@ -174,7 +174,7 @@ jobs:
           fi
 
           # Cleanup results/ from a prior job on this runner. Agentic jobs
-          # write to fixed subpaths (trace_replay/, metrics_*, etc.), so stale
+          # write to fixed subpaths (aiperf_artifacts/, metrics_*, etc.), so stale
           # data from a previous job would otherwise be picked up as this
           # job's output when replay fails early.
           rm -rf "${{ github.workspace }}/results" 2>/dev/null || true
@@ -249,7 +249,7 @@ jobs:
           path: agg_${{ env.RESULT_FILENAME }}.json
 
       - name: Upload agentic aggregated result
-        if: ${{ inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
@@ -262,33 +262,36 @@ jobs:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
             results/server.log
+            results/lmcache_server.log
             results/benchmark.log
             results/config.yaml
+            results/lmcache_command.txt
+            results/sglang_command.txt
             results/vllm_command.txt
             results/benchmark_command.txt
             results/workload_distribution_summary.txt
             results/workload_distribution_plots.png
             results/metrics_plots.png
-            results/trace_replay/profile_export.jsonl
-            results/trace_replay/profile_export_aiperf.json
-            results/trace_replay/profile_export_aiperf.csv
-            results/trace_replay/profile_export_aiperf_timeslices.json
-            results/trace_replay/profile_export_aiperf_timeslices.csv
-            results/trace_replay/profile_export_aiperf_aggregate.json
-            results/trace_replay/profile_export_aiperf_aggregate.csv
-            results/trace_replay/profile_export_aiperf_collated.json
-            results/trace_replay/server_metrics_export.json
-            results/trace_replay/server_metrics_export.jsonl
-            results/trace_replay/server_metrics_export.csv
-            results/trace_replay/server_metrics_export.parquet
-            results/trace_replay/gpu_telemetry_export.jsonl
-            results/trace_replay/logs/aiperf.log
-            results/trace_replay/logs/*.log
+            results/aiperf_artifacts/profile_export.jsonl
+            results/aiperf_artifacts/profile_export_aiperf.json
+            results/aiperf_artifacts/profile_export_aiperf.csv
+            results/aiperf_artifacts/profile_export_aiperf_timeslices.json
+            results/aiperf_artifacts/profile_export_aiperf_timeslices.csv
+            results/aiperf_artifacts/profile_export_aiperf_aggregate.json
+            results/aiperf_artifacts/profile_export_aiperf_aggregate.csv
+            results/aiperf_artifacts/profile_export_aiperf_collated.json
+            results/aiperf_artifacts/server_metrics_export.json
+            results/aiperf_artifacts/server_metrics_export.jsonl
+            results/aiperf_artifacts/server_metrics_export.csv
+            results/aiperf_artifacts/server_metrics_export.parquet
+            results/aiperf_artifacts/gpu_telemetry_export.jsonl
+            results/aiperf_artifacts/logs/aiperf.log
+            results/aiperf_artifacts/logs/*.log
           # Excluded by design (multi-GB debug artifacts, not consumed by
-          # post-processing): results/trace_replay/inputs.json (pre-formatted
+          # post-processing): results/aiperf_artifacts/inputs.json (pre-formatted
           # request bodies — the mmap'd binary equivalent is rebuilt from
           # --public-dataset + --random-seed) and
-          # results/trace_replay/profile_export_raw.jsonl (full HTTP bodies
+          # results/aiperf_artifacts/profile_export_raw.jsonl (full HTTP bodies
           # per request — recoverable by re-running the same trace).
           if-no-files-found: ignore
 
@@ -297,7 +300,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
-          path: ${{ inputs.scenario-type == 'agentic-coding' && 'results/server.log' || 'server.log' }}
+          path: |
+            ${{ inputs.scenario-type == 'agentic-coding' && 'results/server.log' || 'server.log' }}
+            ${{ inputs.scenario-type == 'agentic-coding' && 'results/lmcache_server.log' || '' }}
           if-no-files-found: ignore
 
       - name: Upload GPU metrics

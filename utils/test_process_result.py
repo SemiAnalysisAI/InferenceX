@@ -533,3 +533,119 @@ class TestEdgeCases:
 
         output_data = json.loads(result.stdout)
         assert output_data["conc"] == 128
+
+
+# =============================================================================
+# Integration: power aggregation patches the agg JSON
+# =============================================================================
+
+class TestPowerAggregationIntegration:
+    """End-to-end wiring: process_result.py invokes aggregate_power.py and
+    patches avg_power_w + joules_per_output_token into the agg JSON.
+
+    Exercises the env-var path resolution (GPU_METRICS_CSV), the subprocess
+    boundary, and the best-effort try/except that wraps the aggregator call.
+    """
+
+    @staticmethod
+    def _write_nvidia_csv(path, start_unix, end_unix, watts_per_gpu=500.0, num_gpus=8):
+        """Stage a 1Hz nvidia-smi-style CSV bracketing the bench window with
+        warmup/eval phases that should be filtered out by the aggregator."""
+        from datetime import datetime
+
+        def ts(t):
+            return datetime.fromtimestamp(t).strftime("%Y/%m/%d %H:%M:%S.%f")
+
+        lines = ["timestamp, index, power.draw [W], temperature.gpu"]
+        # 5s warmup at 100W (before start) — must be excluded.
+        for s in range(5):
+            for g in range(num_gpus):
+                lines.append(f"{ts(start_unix - 5 + s)}, {g}, 100.00 W, 50")
+        # Bench window samples at the requested wattage.
+        duration_s = int(end_unix - start_unix)
+        for s in range(duration_s + 1):
+            for g in range(num_gpus):
+                lines.append(f"{ts(start_unix + s)}, {g}, {watts_per_gpu:.2f} W, 75")
+        # 5s eval at 200W (after end) — must be excluded.
+        for s in range(5):
+            for g in range(num_gpus):
+                lines.append(f"{ts(end_unix + 1 + s)}, {g}, 200.00 W, 65")
+        path.write_text("\n".join(lines) + "\n")
+
+    def test_agg_json_gets_patched_with_power_and_joules(self, tmp_path, single_node_env_vars):
+        """The full pipeline: process_result.py + aggregate_power.py."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0  # 60s bench window
+        csv_path = tmp_path / "gpu_metrics.csv"
+        self._write_nvidia_csv(csv_path, start, end, watts_per_gpu=600.0, num_gpus=8)
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            # Fields read by aggregate_power.py.
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+        }
+        env = {**single_node_env_vars, "GPU_METRICS_CSV": str(csv_path)}
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        agg_path = tmp_path / "agg_benchmark_result.json"
+        assert agg_path.is_file()
+        patched = json.loads(agg_path.read_text())
+
+        # Pre-existing fields still present.
+        assert patched["hw"] == "mi300x"
+        assert patched["tp"] == 8
+        assert patched["conc"] == 64
+        # New power fields.
+        assert patched["avg_power_w"] == pytest.approx(600.0, abs=0.5)
+        # 600W × 8 GPUs × 60s / 30_000 tokens = 9.6 J/tok
+        assert patched["joules_per_output_token"] == pytest.approx(9.6, abs=0.05)
+
+    def test_missing_csv_does_not_break_process_result(self, tmp_path, single_node_env_vars):
+        """Without GPU_METRICS_CSV (or with a missing file), process_result.py
+        still succeeds and writes the agg JSON — just without the power fields.
+        This is the production case for runs that ship without monitoring."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+        }
+
+        result = run_script(tmp_path, single_node_env_vars, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        agg_path = tmp_path / "agg_benchmark_result.json"
+        patched = json.loads(agg_path.read_text())
+        assert "avg_power_w" not in patched
+        assert "joules_per_output_token" not in patched
+
+    def test_missing_bench_timestamps_does_not_patch(self, tmp_path, single_node_env_vars):
+        """A CSV is present but the bench JSON predates the timestamp fields
+        (legacy benchmark_serving.py). Aggregator should skip silently."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0
+        csv_path = tmp_path / "gpu_metrics.csv"
+        self._write_nvidia_csv(csv_path, start, end, watts_per_gpu=600.0, num_gpus=1)
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            # NOTE: deliberately missing benchmark_start_time_unix/end/total_output_tokens.
+        }
+        env = {**single_node_env_vars, "GPU_METRICS_CSV": str(csv_path)}
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        agg_path = tmp_path / "agg_benchmark_result.json"
+        patched = json.loads(agg_path.read_text())
+        assert "avg_power_w" not in patched
+        assert "joules_per_output_token" not in patched

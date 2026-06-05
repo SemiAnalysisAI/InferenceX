@@ -158,8 +158,8 @@ backend:
       enable-flashinfer-allreduce-fusion: true
 
       moe-runner-backend: "flashinfer_trtllm"
-      max-running-requests: 4096
-      cuda-graph-max-bs:    4096
+      max-running-requests: 64
+      cuda-graph-max-bs:    64
 
 
 
@@ -171,5 +171,5 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1024"
+  concurrencies: "64"
   req_rate: "inf"

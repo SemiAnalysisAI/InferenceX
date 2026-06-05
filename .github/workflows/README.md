@@ -180,18 +180,18 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 
 ## Reusing an Approved PR Full Sweep
 
-If a PR has already run the full untrimmed sweep (`full-sweep-enabled` label),
-a maintainer can avoid running the same sweep again after merge by leaving a
-PR comment before merging:
+If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
+sequential canary, or `non-canary-full-sweep-enabled` without one), a
+maintainer can avoid running the same sweep again after merge by leaving a PR
+comment before merging:
 
 ```
 /reuse-sweep-run
 ```
 
-That reuses the latest successful `run-sweep.yml` `pull_request` run for the
-PR's current head SHA. If the PR was rebased or had to merge `main` after the
-successful sweep — so the current head no longer has a matching run — pin the
-source run explicitly:
+That reuses the latest successful `run-sweep.yml` `pull_request` run whose
+commit is still part of the PR. To select a particular eligible successful
+run, pin the source run explicitly:
 
 ```
 /reuse-sweep-run <run_id>
@@ -209,10 +209,11 @@ Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier
 pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
 
-Reuse fails closed: if the comment is present but the `full-sweep-enabled`
-label, source PR run, or artifacts cannot be validated, the push-to-main
-workflow fails instead of falling back to a cluster sweep. Without the comment,
-the push-to-main workflow runs the normal full sweep.
+Reuse fails closed: if the comment is present but neither full-sweep label
+(`full-sweep-enabled` or `non-canary-full-sweep-enabled`) is present, or if
+the source PR run or artifacts cannot be validated, the push-to-main workflow
+fails instead of falling back to a cluster sweep. Without the comment, the
+push-to-main workflow runs the normal full sweep.
 
 ## Validation Architecture
 
