@@ -116,7 +116,7 @@ case "$OFFLOADING" in
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": "mlx5_2,mlx5_8,mlx5_4,mlx5_0",
+  "device_name": "mlx5_0",
   "enable_offload": false
 }
 EOF
