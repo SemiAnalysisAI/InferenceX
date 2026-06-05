@@ -3474,3 +3474,11 @@
     - "Use scheduler-recv-interval values 2/60/30/1200/600/1920 for conc 1-4/8/16/32/64/128-256"
     - "Set max-running-requests=256, chunked-prefill-size=16384, mem-fraction-static=0.8, cuda-graph-max-bs=CONC, and enable symm-mem"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1544
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Update DeepSeek-V4-Pro FP4 B300 SGLang non-MTP sweep to the 2026-05-19 8k/1k submission frontier: TP8 no-DP-attention c1-c64 and DEP8 DP-attention c512/c768/c1024/c1536/c2048"
+    - "Use lmsysorg/sglang:nightly-dev-cu13-20260604-14ed9b44 to pick up the merged SGLang warmup path"
+    - "Map dp-attn=false to TP8 flashinfer_mxfp4 with chunked-prefill 8192; map dp-attn=true to DEP8 mixed-chunk MegaMoE throughput settings"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1575

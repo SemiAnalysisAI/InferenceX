@@ -2003,37 +2003,27 @@ dsr1-fp8-b300-sglang:
 # DeepSeek-V4-Pro on B300 with sglang (non-MTP).
 # Uses nightly image with megamoe backend for high-concurrency profiles.
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260529-a8cfae0b
+  image: lmsysorg/sglang:nightly-dev-cu13-20260604-14ed9b44
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
   precision: fp4
   framework: sglang
   multinode: false
-  # Recipes are selected inside benchmarks/single_node/dsv4_fp4_b300_sglang.sh
-  # by CONC:
-  #   CONC 1|32:         TP-only, flashinfer_mxfp4
-  #   CONC 512:          DP-attn, flashinfer_mxfp4
-  #   CONC 2048-8192:    DP-attn, megamoe
-  # ep is implicit in sglang: --moe-a2a-backend megamoe forces ep_size=tp_size,
-  # while low-latency leaves ep_size at the default of 1.
+  # The benchmark script maps dp-attn=false to the TP-only recipe and
+  # dp-attn=true to the mixed-chunk DEP8 throughput recipe.
   scenarios:
     fixed-seq-len:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 1, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8192, conc-end: 8192 }
+      - { tp: 8, ep: 1, dp-attn: false, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, conc-list: [512, 768, 1024, 1536, 2048] }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
-      - { tp: 4, ep: 1, conc-start: 32, conc-end: 32 }
-      - { tp: 4, ep: 1, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4096, conc-end: 4096 }
+      - { tp: 8, ep: 1, dp-attn: false, conc-list: [1, 2, 4, 8, 16, 32, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, conc-list: [512, 768, 1024, 1536, 2048] }
 
   # DeepSeek-V4-Pro on B300 with EAGLE/MTP speculative decoding. Recipe is
   # selected inside benchmarks/single_node/dsv4_fp4_b300_sglang_mtp.sh by
