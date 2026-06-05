@@ -249,13 +249,10 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Mirrors the dynamo-vllm dsv4 branch above: pin to the q2-2026
-    # NVIDIA srt-slurm (newer srtctl + dynamo-sglang container alias)
-    # and overlay our hand-rolled DSV4 sglang recipes. NVIDIA/srt-slurm
-    # has no upstream sglang DSV4 disagg recipes yet, hence the overlay.
+    # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
+    # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
