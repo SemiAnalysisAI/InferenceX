@@ -129,8 +129,16 @@ EOF
         export MC_SLICE_SIZE=1048576
         export MC_WORKERS_PER_CTX=4
 
+        # The store is shared, but each rank contributes a separate segment.
+        # Start eviction before an imbalanced rank exhausts its segment, and
+        # reclaim enough space for several concurrent multi-GB batch puts.
+        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
+        MOONCAKE_EVICTION_RATIO=0.10
+
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
+            --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
             > "$MOONCAKE_MASTER_LOG" 2>&1 &
         MOONCAKE_MASTER_PID=$!
         sleep 2
