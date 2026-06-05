@@ -42,6 +42,14 @@ else
   EP=()
 fi
 
+if [ "$ISL" = "8192" ]; then
+  ATTN_BACKEND="FLASH_ATTN"
+  AUTOTUNE_FLAG=()
+else
+  ATTN_BACKEND="FLASHINFER"
+  AUTOTUNE_FLAG=(--enable-flashinfer-autotune)
+fi
+
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -55,8 +63,8 @@ vllm serve "$MODEL" --port "$PORT" \
 --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
 --kv-cache-dtype fp8 \
 --moe-backend triton \
---attention-backend FLASHINFER \
---enable-flashinfer-autotune \
+--attention-backend "$ATTN_BACKEND" \
+"${AUTOTUNE_FLAG[@]}" \
 --compilation-config "$COMPILATION_CONFIG" \
 --no-enable-prefix-caching \
 --trust-remote-code > "$SERVER_LOG" 2>&1 &
