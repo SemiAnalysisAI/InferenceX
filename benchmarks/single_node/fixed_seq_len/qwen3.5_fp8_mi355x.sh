@@ -22,11 +22,13 @@ export SGLANG_USE_AITER_UNIFIED_ATTN=1
 export SGLANG_USE_AITER=1
 
 SERVER_LOG=/workspace/server.log
+CONTEXT_LENGTH=$((ISL + OSL + 20))
 
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
+else EVAL_CONTEXT_ARGS="--context-length $CONTEXT_LENGTH"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -41,7 +43,8 @@ python3 -m sglang.launch_server \
     --trust-remote-code \
     --tokenizer-worker-num 6 \
     --enable-aiter-allreduce-fusion \
-    --max-running-requests 512 \
+    --max-running-requests $CONC \
+    --cuda-graph-max-bs $CONC \
     --disable-radix-cache \
     --chunked-prefill-size 32768 \
     --scheduler-recv-interval 30 \
