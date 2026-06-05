@@ -59,6 +59,11 @@ sanitize_slurm_mpi_env_for_trtllm
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 
+# Disable DSv4 SWA scratch reuse to test whether the rc15.post1 DPA crash
+# is the same SWA-scratch bug or a separate FMHA kernel issue.
+export TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE="${TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE:-0}"
+echo "TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE: $TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE"
+
 nvidia-smi
 
 SERVER_LOG="$PWD/server.log"

@@ -3451,3 +3451,10 @@
     - "Add MiniMax-M2.5 NVFP4 GB300 disaggregated multinode vLLM benchmarks via Dynamo"
     - "Add 1k1k/8k1k minimax recipe set under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1641
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Switch B300 DSv4 TRT (non-MTP + MTP) to official rc15.post1 image with TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE=0 to test whether DPA crash is same SWA-scratch bug"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
