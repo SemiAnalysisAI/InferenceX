@@ -649,3 +649,213 @@ class TestPowerAggregationIntegration:
         patched = json.loads(agg_path.read_text())
         assert "avg_power_w" not in patched
         assert "joules_per_output_token" not in patched
+
+    def test_multinode_csv_glob_aggregates_across_per_node_csvs(self, tmp_path, single_node_env_vars):
+        """Multinode wiring: srt-slurm launchers set GPU_METRICS_CSV_GLOB to a
+        shell glob expanding to one perf_samples_<node>.csv per worker node.
+        process_result.py must expand it and hand the list to the aggregator,
+        which namespaces local GPU indices per source so they don't collide.
+
+        Without this bridge the launcher would set the env var, process_result.py
+        would ignore it (fall back to a non-existent /workspace/gpu_metrics.csv),
+        and the chart would silently show no power data — the failure mode that
+        motivated catching this in the contract check."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0  # 60s bench window
+        # Two per-node CSVs at the same local indices 0-3. Without per-source
+        # namespacing the union would collapse to 4 GPUs instead of 8.
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_node1.csv", start, end, watts_per_gpu=600.0, num_gpus=4
+        )
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_node2.csv", start, end, watts_per_gpu=600.0, num_gpus=4
+        )
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+        }
+        env = {
+            **single_node_env_vars,
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        agg_path = tmp_path / "agg_benchmark_result.json"
+        patched = json.loads(agg_path.read_text())
+        # 2 nodes × 4 GPUs = 8 total. Per-GPU mean stays at 600W.
+        assert patched["avg_power_w"] == pytest.approx(600.0, abs=0.5)
+        # 600W × 8 GPUs × 60s / 30_000 tokens = 9.6 J/tok.
+        # If namespacing failed we'd see ~4.8 (only 4 GPUs counted).
+        assert patched["joules_per_output_token"] == pytest.approx(9.6, abs=0.05)
+
+    def test_multinode_csv_glob_takes_precedence_over_single_csv(self, tmp_path, single_node_env_vars):
+        """If both GLOB and single CSV are set, the glob wins.
+
+        Reflects the ownership split: the multinode launcher sets the glob
+        after the job, while the single CSV env var is only meaningful for
+        single-node runs. If a stale single-CSV value leaks through (e.g. a
+        runner with persistent env), the glob should still take precedence."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0
+        glob_csv = tmp_path / "perf_samples_node1.csv"
+        stale_csv = tmp_path / "stale_single.csv"
+        self._write_nvidia_csv(glob_csv, start, end, watts_per_gpu=600.0, num_gpus=4)
+        self._write_nvidia_csv(stale_csv, start, end, watts_per_gpu=100.0, num_gpus=1)
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+        }
+        env = {
+            **single_node_env_vars,
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+            "GPU_METRICS_CSV": str(stale_csv),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        agg_path = tmp_path / "agg_benchmark_result.json"
+        patched = json.loads(agg_path.read_text())
+        # Glob respected → 600W (4 GPUs). Stale fallback would give 100W (1 GPU).
+        assert patched["avg_power_w"] == pytest.approx(600.0, abs=0.5)
+
+    def test_multinode_csv_glob_empty_match_falls_through_silently(self, tmp_path, single_node_env_vars):
+        """If GPU_METRICS_CSV_GLOB is set but matches no files (perfmon failed
+        to start on any node), process_result.py still succeeds and writes the
+        agg JSON without power fields. The run must not block on telemetry."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+        }
+        env = {
+            **single_node_env_vars,
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        agg_path = tmp_path / "agg_benchmark_result.json"
+        patched = json.loads(agg_path.read_text())
+        assert "avg_power_w" not in patched
+
+    def test_disagg_multinode_emits_workers_and_per_stage_joules(self, tmp_path, multinode_env_vars):
+        """End-to-end disagg wiring: DISAGG=true + per-node labeled CSVs →
+        process_result.py passes disagg through to aggregate_power, which emits
+        workers[] + per-stage scalars alongside the cluster-wide joules.
+
+        Without the disagg=disagg propagation in process_result.py, the
+        per-stage scalars (joules_per_input_token, joules_per_output_token_decode,
+        prefill_avg_power_w, decode_avg_power_w) would be missing."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0  # 60s bench window
+        # 1 prefill worker × 4 GPUs @ 600W on its own node
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_prefill_w0_pn0.csv",
+            start, end, watts_per_gpu=600.0, num_gpus=4,
+        )
+        # 1 decode worker × 4 GPUs @ 400W on its own node
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_decode_w0_dn0.csv",
+            start, end, watts_per_gpu=400.0, num_gpus=4,
+        )
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+            "total_input_tokens": 240_000,
+        }
+        env = {
+            **multinode_env_vars,
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+
+        # Per-stage attribution: input divided by prefill energy, output by decode.
+        # Prefill: 600 × 4 × 60 = 144_000 J  → / 240_000 = 0.6 J/input_tok.
+        # Decode:  400 × 4 × 60 =  96_000 J  → /  30_000 = 3.2 J/output_tok.
+        assert patched["joules_per_input_token"] == pytest.approx(0.6, abs=0.01)
+        assert patched["joules_per_output_token"] == pytest.approx(3.2, abs=0.01)  # decode
+        assert "joules_per_output_token_decode" not in patched
+        assert patched["prefill_avg_power_w"] == pytest.approx(600.0, abs=0.5)
+        assert patched["decode_avg_power_w"] == pytest.approx(400.0, abs=0.5)
+
+        # Cluster-wide total efficiency still counts ALL energy.
+        # Total energy = (600+400) × 4 × 60 = 240_000 J → / 270_000 ≈ 0.889 J/total_tok.
+        assert patched["joules_per_total_token"] == pytest.approx(240_000 / 270_000, abs=0.01)
+
+        # Per-worker breakdown labeled with role.
+        workers = patched["workers"]
+        assert {w["role"] for w in workers} == {"prefill", "decode"}
+        for w in workers:
+            assert w["num_gpus"] == 4
+            assert w["worker_idx"] == 0
+
+    def test_non_disagg_multinode_keeps_cluster_wide_joules_math(self, tmp_path, multinode_env_vars):
+        """Multinode but DISAGG=false → keep cluster-wide ratios, no per-stage
+        scalars.
+
+        Sanity check that the disagg flag is the gate, not just multinode-ness."""
+        start, end = 1_700_000_100.0, 1_700_000_160.0
+        self._write_nvidia_csv(
+            tmp_path / "perf_samples_agg_w0_n0.csv",
+            start, end, watts_per_gpu=500.0, num_gpus=4,
+        )
+
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 64,
+            "total_token_throughput": 1000.0,
+            "output_throughput": 500.0,
+            "benchmark_start_time_unix": start,
+            "benchmark_end_time_unix": end,
+            "duration": 60.0,
+            "total_output_tokens": 30_000,
+            "total_input_tokens": 240_000,
+        }
+        # Multinode env, but DISAGG=false → non-disagg multinode (rare but valid).
+        env = {
+            **multinode_env_vars,
+            "DISAGG": "false",
+            "GPU_METRICS_CSV_GLOB": str(tmp_path / "perf_samples_*.csv"),
+        }
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        patched = json.loads((tmp_path / "agg_benchmark_result.json").read_text())
+        for absent in (
+            "joules_per_input_token",
+            "joules_per_output_token_decode",
+            "prefill_avg_power_w",
+            "decode_avg_power_w",
+        ):
+            assert absent not in patched, f"unexpected per-stage key {absent}"
+        # workers[] still emitted (filename labels exist) — useful for
+        # observability even on non-disagg runs.
+        assert patched["workers"][0]["role"] == "agg"

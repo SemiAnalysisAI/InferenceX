@@ -90,11 +90,27 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Give slurm time to start the job and create log file
     sleep 10
 
+    # Whether $JOB_ID is still in the SLURM queue, resilient to transient
+    # slurmctld timeouts ("slurm_load_jobs error: Socket timed out") — common
+    # when a full sweep floods the controller. A FAILED squeue (non-zero exit)
+    # is treated as "still alive" so a scheduler blip can't be misread as job
+    # death; only a SUCCESSFUL squeue that omits the job means it's gone, and we
+    # re-check once before declaring it gone to avoid a single-sample race.
+    job_alive() {
+        local out rc
+        out=$(squeue -u "$USER" --noheader --format='%i' 2>/dev/null); rc=$?
+        [[ $rc -ne 0 ]] && return 0          # scheduler hiccup → assume alive
+        grep -qw "$JOB_ID" <<<"$out" && return 0
+        sleep 5
+        out=$(squeue -u "$USER" --noheader --format='%i' 2>/dev/null) || return 0
+        grep -qw "$JOB_ID" <<<"$out"
+    }
+
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
+        if ! job_alive; then
+            echo "ERROR: Job $JOB_ID is no longer in the queue and never created a log file"
+            scontrol show job "$JOB_ID" 2>/dev/null || true
             exit 1
         fi
         sleep 5
@@ -102,9 +118,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     set +x
 
-    # Poll for job completion in background
+    # Poll for job completion in background (tolerant of transient squeue
+    # timeouts via job_alive — a scheduler blip must not look like completion).
     (
-        while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
+        while job_alive; do
             sleep 10
         done
     ) &
@@ -116,6 +133,43 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     wait $POLL_PID
 
     set -x
+
+    # ── Per-node measured-power CSVs ──────────────────────────────────────
+    # Collect these FIRST — immediately after the job completes and before the
+    # result-processing block below, which has early `exit 1` paths (e.g. no
+    # logs dir found). Any early exit fires the EXIT trap (cleanup_and_save_logs),
+    # which `sudo rm -rf`s the whole $BENCHMARK_LOGS_DIR — so anything that needs
+    # to survive must be copied out before then. This mirrors launch_gb300-cw.sh,
+    # which collects srt-slurm's perfmon CSVs right after the job completes.
+    #
+    # Each node's server script (server_sglang.sh / server_vllm.sh) wrote
+    # perf_samples_<role>_w<idx>_<host>.csv into $BENCHMARK_LOGS_DIR/perfmon
+    # (NFS-shared, one file per node). Copy them into the GH workspace and point
+    # the downstream "Process result" step at them via GPU_METRICS_CSV_GLOB so
+    # utils/aggregate_power.py can do the multi-CSV per-worker / per-stage
+    # aggregation. Best-effort: a monitoring hiccup must never fail the upload.
+    PERFMON_SRC_DIR="$BENCHMARK_LOGS_DIR/perfmon"
+    if ls "$PERFMON_SRC_DIR"/perf_samples_*.csv >/dev/null 2>&1; then
+        PERFMON_DST_DIR="$GITHUB_WORKSPACE/perfmon"
+        mkdir -p "$PERFMON_DST_DIR"
+        cp "$PERFMON_SRC_DIR"/perf_samples_*.csv "$PERFMON_DST_DIR"/ 2>/dev/null \
+            || sudo cp "$PERFMON_SRC_DIR"/perf_samples_*.csv "$PERFMON_DST_DIR"/ 2>/dev/null \
+            || true
+        # CSVs may be root-owned on NFS (containers run as root); make them
+        # readable by the runner user for the Process result step.
+        sudo chown -R "$(id -u):$(id -g)" "$PERFMON_DST_DIR" 2>/dev/null || true
+        perf_csv_count=$(ls "$PERFMON_DST_DIR"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$perf_csv_count" -gt 0 ]; then
+            echo "[perfmon] Collected $perf_csv_count per-node perf_samples_*.csv -> $PERFMON_DST_DIR"
+            if [ -n "${GITHUB_ENV:-}" ]; then
+                echo "GPU_METRICS_CSV_GLOB=$PERFMON_DST_DIR/perf_samples_*.csv" >> "$GITHUB_ENV"
+            fi
+        else
+            echo "[perfmon] WARNING: perf_samples_*.csv present under $PERFMON_SRC_DIR but none copied to $PERFMON_DST_DIR — measured power aggregation will be skipped"
+        fi
+    else
+        echo "[perfmon] No perf_samples_*.csv found under $PERFMON_SRC_DIR — measured power aggregation will be skipped"
+    fi
 
     # FIXME: The below is bad and is a result of the indirection of the ways in which
     # Dynamo jobs are launched. In a follow-up PR, the location of the result file should not
@@ -182,6 +236,7 @@ PY
     fi
 
     echo "All result files processed"
+
     # Use sync scancel to ensure nfs file handle is released in time
     set +x
     scancel_sync $JOB_ID

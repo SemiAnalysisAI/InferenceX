@@ -3502,3 +3502,23 @@
     - "Update GPT-OSS model for MI355X vLLM from amd/gpt-oss-120b-w-mxfp4-a-fp8 to openai/gpt-oss-120b"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1670
 
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Smoke run validating multinode measured-power aggregation (PR #1574). No config change; entry exists to trigger a sweep that produces the first multinode agg JSON with avg_power_w + joules_per_*_token populated from per-node srt-slurm perfmon CSVs. Validates per-source GPU-id namespacing in aggregate_power.py (without it, 14 nodes × 4 GPUs would report num_gpus=4 instead of 56) and the GPU_METRICS_CSV_GLOB env var bridge in process_result.py. Only the gb300-cw runner has the perfmon launcher changes; any gb300-nv runs in the sweep will succeed normally without power fields, which the dashboard handles gracefully (chart gates on field presence)."
+    - "Re-run after launcher recurse-glob fix (6da2f1b6) — prior sweep (#26548110246) completed green at the workflow level but produced 0 measured-power rows because the flat *.yaml glob in the monitoring-injection loop matched zero recipes (recipes live in 8k1k/ subdir). Fix uses `find -type f -name '*.yaml'`. Also re-pointed SemiAnalysisAI/srt-slurm@feat/inferencex-perfmon onto current NVIDIA/srt-slurm main so the launcher's `default_bash_preamble:` srtslurm.yaml field is accepted by srtctl schema."
+    - "Re-run after per-worker aggregation (24f46ffe) — validates new agg JSON fields: workers[] with role labels (prefill/decode/agg/frontend) parsed from srt-slurm perfmon CSV filenames, plus per-stage scalars (prefill_avg_power_w, decode_avg_power_w, joules_per_input_token = prefill_energy / input_tokens, joules_per_output_token_decode = decode_energy / output_tokens). joules_per_output_token and joules_per_total_token stay cluster-wide on all topologies so the metric is comparable across single-node, multinode-agg, and multinode-disagg. Per-stage scalars emitted only for disagg runs with both prefill and decode workers present. workers[] entries also carry per-worker avg_temp_c/peak_temp_c/avg_util_pct/avg_mem_used_mb when the CSV exposes those columns."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1574
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+    - glm5-fp8-mi355x-sglang-disagg
+    - dsr1-fp8-mi355x-sglang-disagg
+    - dsr1-fp4-mi355x-sglang-disagg
+    - kimik2.5-fp4-mi355x-vllm-disagg
+    - minimaxm2.5-fp8-mi355x-vllm-disagg
+  description:
+    - "Smoke run validating AMD multinode measured-power aggregation — the AMD analogue of the NVIDIA gb300/srt-slurm path (PR #1574). No config change; entry exists to trigger a sweep that produces the first AMD multinode agg JSONs with avg_power_w + joules_per_*_token + per-worker workers[] populated from per-node amd-smi perfmon CSVs."
+    - "The AMD amd_utils SLURM job has no orchestrator perfmon, so each SGLang/vLLM disagg node starts its own amd-smi monitor via start_perf_monitor (benchmarks/benchmark_lib.sh), writing perf_samples_<role>_w<idx>_<host>.csv into the NFS-shared /benchmark_logs/perfmon mount (wired in amd_utils/job.slurm). launch_mi355x-amds.sh collects the per-node CSVs into the GH workspace before the EXIT trap wipes the logs dir and sets GPU_METRICS_CSV_GLOB so the existing Process-result step runs the same vendor-agnostic utils/aggregate_power.py used for NVIDIA: per-source GPU-id namespacing (8 GPUs/node on MI355X, so a TP16 worker over 2 nodes counts 16 GPUs not 8), per-stage prefill/decode energy attribution, and per-worker temp/util/mem when amd-smi exposes those columns."
+    - "Covers both engine paths: SGLang disagg (server_sglang.sh role = NODE_RANK bucketed by PREFILL_NODES_PER_WORKER / NODE_OFFSET) and vLLM disagg (server_vllm.sh one worker per node, ranks [0,xP) prefill / [xP,xP+yD) decode). Monitoring is best-effort end-to-end — a missing amd-smi or empty CSV skips power patching without failing the benchmark upload; DISAGG=true threads through to per-stage attribution while agg/non-disagg runs still get cluster-wide power."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1574

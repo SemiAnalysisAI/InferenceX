@@ -48,6 +48,9 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 # =============================================================================
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
+# Power-monitoring helpers (start_perf_monitor / stop_gpu_monitor). WS_PATH is
+# .../benchmarks/multi_node/amd_utils, so the shared lib is two levels up.
+source "$SGLANG_WS_PATH/../../benchmark_lib.sh"
 
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
@@ -278,6 +281,27 @@ done
 
 echo "Prefill worker headnode list: ${PREFILL_HEADNODE_URLS[@]}"
 echo "Decode  worker headnode list: ${DECODE_HEADNODE_URLS[@]}"
+
+# =============================================================================
+# Per-node measured-power monitor (best-effort)
+# =============================================================================
+# Classify this node into the same worker buckets the role branches below use:
+#   NODE_RANK in [0, NODE_OFFSET)  -> prefill, worker = NODE_RANK / PREFILL_NODES_PER_WORKER
+#   NODE_RANK >= NODE_OFFSET       -> decode,  worker = (NODE_RANK - NODE_OFFSET) / DECODE_NODES_PER_WORKER
+# (NODE_OFFSET = PREFILL_NODES_PER_WORKER * xP.) Node 0 is the proxy too, but
+# its GPUs run the prefill head, so labeling it prefill attributes its energy
+# to the right stage. The monitor runs for the whole server lifetime;
+# aggregate_power.py windows the samples down to each concurrency's load window.
+if [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
+    PERF_ROLE="prefill"
+    PERF_WORKER_IDX=$(( NODE_RANK / PREFILL_NODES_PER_WORKER ))
+else
+    PERF_ROLE="decode"
+    PERF_WORKER_IDX=$(( (NODE_RANK - NODE_OFFSET) / DECODE_NODES_PER_WORKER ))
+fi
+if [[ "$DRY_RUN" -ne 1 ]]; then
+    start_perf_monitor "$PERF_ROLE" "$PERF_WORKER_IDX"
+fi
 
 # =============================================================================
 # Configuration Builder Functions
@@ -636,6 +660,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
         echo "ERROR: eval failed; exiting node-0 with rc=1"
+        stop_gpu_monitor
         exit 1
     fi
 
@@ -776,6 +801,9 @@ else
     fi
 
 fi
+
+# Stop the per-node power monitor and flush its CSV before the container exits.
+stop_gpu_monitor
 
 echo "Script completed successfully"
 exit 0

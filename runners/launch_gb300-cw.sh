@@ -34,8 +34,13 @@ if [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic"
         SRT_RECIPE_DST="recipes/vllm/deepseek-v4/agentic"
     elif [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
-        SRT_SLURM_RECIPES_REF="main"
+        # Pinned to our SemiAnalysisAI fork of NVIDIA/srt-slurm to pick up
+        # PR #35 (per-node nvidia-smi monitoring during the benchmark sweep)
+        # ahead of its upstream merge. The branch tracks PR #35's head SHA:
+        # to bump, re-fetch refs/pull/35/head from NVIDIA/srt-slurm and force-
+        # push to SemiAnalysisAI/srt-slurm:feat/inferencex-perfmon.
+        SRT_SLURM_RECIPES_REPO="https://github.com/SemiAnalysisAI/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="feat/inferencex-perfmon"
         SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4"
         SRT_RECIPE_DST="recipes/sglang/deepseek-v4"
     elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
@@ -148,6 +153,39 @@ git checkout "$SRT_SLURM_RECIPES_REF"
 # Overlay the hand-rolled DSV4 recipes onto the selected srt-slurm checkout.
 mkdir -p "$SRT_RECIPE_DST"
 cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
+
+# Enable per-node GPU perfmon (PR #35) on every overlaid recipe. `monitoring`
+# is a top-level SrtConfig field and defaults to None, so without this the
+# orchestrator's _start_perf_monitor short-circuits and no perf_samples_*.csv
+# are ever written — multinode measured-power aggregation would silently
+# skip. Idempotent: skips recipes that already declare `monitoring:`.
+#
+# CRITICAL: use `find` recursively, not a flat `*.yaml` glob. Recipes live
+# in $SRT_RECIPE_DST/<workload>/*.yaml (e.g. .../8k1k/*.yaml) — a flat glob
+# matches zero files, the loop runs zero times, no recipe gets monitoring,
+# and perfmon never spawns. PR #1574's first real sweep (#26548110246) hit
+# exactly this: completed "success" with no power data because the glob
+# matched nothing and the failure was silent end-to-end.
+FOUND_COUNT=0
+INJECTED_COUNT=0
+while IFS= read -r recipe; do
+    FOUND_COUNT=$((FOUND_COUNT + 1))
+    if ! grep -q '^monitoring:' "$recipe"; then
+        printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$recipe"
+        echo "[perfmon] enabled monitoring in recipe: $recipe"
+        INJECTED_COUNT=$((INJECTED_COUNT + 1))
+    fi
+done < <(find "$SRT_RECIPE_DST" -type f -name '*.yaml')
+# Distinguish "found 0 recipes" (real bug — directory wrong/empty) from "all
+# already had monitoring:" (benign — happens on reruns or if a recipe author
+# pre-declared the block). Only the former is a missing-power-data risk.
+if [ "$FOUND_COUNT" -eq 0 ]; then
+    echo "[perfmon] WARNING: zero recipe YAMLs found under $SRT_RECIPE_DST. The directory layout may have changed — power data will be MISSING from this run." >&2
+elif [ "$INJECTED_COUNT" -eq 0 ]; then
+    echo "[perfmon] all $FOUND_COUNT recipes already declared monitoring: — no injection needed."
+else
+    echo "[perfmon] injected monitoring: into $INJECTED_COUNT of $FOUND_COUNT recipes."
+fi
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
@@ -345,6 +383,25 @@ if [ -d "$LOGS_DIR" ]; then
     echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
+fi
+
+# Hand the per-node perfmon CSVs off to the downstream "Process result" step
+# in benchmark-multinode-tmpl.yml. srt-slurm's perfmon (PR #35) writes
+# perf_samples_{node}.csv straight into $LOGS_DIR on the host. process_result.py
+# already invokes aggregate_power.run() inline; teaching it to read
+# GPU_METRICS_CSV_GLOB lets utils/aggregate_power.py do the multi-CSV
+# aggregation (each agg JSON gets avg_power_w / joules_per_*_token patched in
+# place). Use an absolute glob because process_result.py runs from
+# $GITHUB_WORKSPACE, not from this srt-slurm checkout.
+if [ -d "$LOGS_DIR" ]; then
+    perf_glob_dir="$(pwd)/$LOGS_DIR"
+    perf_csv_count=$(ls "$perf_glob_dir"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$perf_csv_count" -gt 0 ]; then
+        echo "[perfmon] Found $perf_csv_count per-node perf_samples_*.csv under $perf_glob_dir/"
+        echo "GPU_METRICS_CSV_GLOB=$perf_glob_dir/perf_samples_*.csv" >> "$GITHUB_ENV"
+    else
+        echo "[perfmon] WARNING: monitoring enabled but no perf_samples_*.csv found in $perf_glob_dir — measured power aggregation will be skipped"
+    fi
 fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

@@ -298,6 +298,16 @@ export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 export KEEP_CONTAINERS="${KEEP_CONTAINERS:-0}"
 export ENGINE=$ENGINE
 
+# Per-node measured-power monitoring. Each node's server script starts an
+# amd-smi/nvidia-smi monitor (start_perf_monitor in benchmark_lib.sh) that
+# writes perf_samples_<role>_w<idx>_<host>.csv into PERFMON_OUTPUT_DIR. That
+# dir is the /benchmark_logs/perfmon mount, which maps to BENCHMARK_LOGS_DIR
+# on the (NFS-shared) host so every node's CSV lands in one place the runner
+# can collect. Pre-create it on the host so the directory exists before any
+# container writes to it.
+export PERFMON_SAMPLE_INTERVAL="${PERFMON_SAMPLE_INTERVAL:-1}"
+mkdir -p "${BENCHMARK_LOGS_DIR}/perfmon" 2>/dev/null || true
+
 # Eval-related env vars (threaded from submit.sh)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
@@ -375,6 +385,8 @@ DOCKER_ENV_COMMON=(
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    -e PERFMON_OUTPUT_DIR=/benchmark_logs/perfmon
+    -e PERFMON_SAMPLE_INTERVAL=\$PERFMON_SAMPLE_INTERVAL
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
