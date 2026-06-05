@@ -28,7 +28,7 @@ EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     EVAL_CONTEXT_ARGS="--context-length $EVAL_MAX_MODEL_LEN"
-else EVAL_CONTEXT_ARGS="--context-length
+else EVAL_CONTEXT_ARGS="--context-length"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
