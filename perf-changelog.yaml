@@ -3507,3 +3507,9 @@
   description:
     - "Update vLLM image from v0.21.0 to v0.22.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1674
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Expand concurrency sweep for the 1k/1k and 8k/1k cells: TP4/EP1 conc 4-64 -> 1-128, TP8/EP1 conc-start 4 -> 1 (conc-end 4 unchanged)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1674
