@@ -3479,4 +3479,4 @@
     - gptoss-fp4-mi355x-vllm
   description:
     - "Update GPT-OSS model for MI355X vLLM from amd/gpt-oss-120b-w-mxfp4-a-fp8 to openai/gpt-oss-120b"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1638
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1670
