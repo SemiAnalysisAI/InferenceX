@@ -3446,6 +3446,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1641
 
 - config-keys:
+    - dsv4-fp4-b200-vllm
+  description:
+    - "Enable EPLB for DEP configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1655
+
+- config-keys:
     - minimaxm2.5-fp8-gb300-dynamo-vllm
   description:
     - "Add MiniMax-M2.5 FP8 GB300 disaggregated multinode vLLM benchmarks via Dynamo"
@@ -3474,3 +3480,17 @@
     - "Use scheduler-recv-interval values 2/60/30/1200/600/1920 for conc 1-4/8/16/32/64/128-256"
     - "Set max-running-requests=256, chunked-prefill-size=16384, mem-fraction-static=0.8, cuda-graph-max-bs=CONC, and enable symm-mem"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1544
+
+- config-keys:
+    - minimaxm2.5-fp8-h200-vllm
+  description:
+    - "Switch attention backend from FLASHINFER to FLASH_ATTN for the 8k/1k cell of MiniMax-M2.5 FP8 H200 vLLM."
+    - "1k/1k cell not changed in this PR: at 1k/1k all three measured configs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1668
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Update GPT-OSS model for MI355X vLLM from amd/gpt-oss-120b-w-mxfp4-a-fp8 to openai/gpt-oss-120b"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1670
+
