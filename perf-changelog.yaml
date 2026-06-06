@@ -3514,3 +3514,12 @@
   description:
     - "Expand concurrency sweep for the 1k/1k and 8k/1k cells: TP4/EP1 conc 4-64 -> 1-128, TP8/EP1 conc-start 4 -> 1 (conc-end 4 unchanged)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1677
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add wide-EP sweep configs (EP=12/16/24/32/40) matching srt-slurm PR#173 topology (18 nodes total)"
+    - "EP=12 15P+3D conc=12000, EP=16 14P+4D conc=8192, EP=24 12P+6D conc=3000, EP=32 10P+8D conc=2500, EP=40 8P+10D conc=2048"
+    - "Aligned decode params with Weiliang config: swa-full-tokens-ratio=0.20, max-running-requests=18432, moe-dense-tp-size=1; added prefill enable-dp-lm-head and cuda-graph-max-bs=512"
+    - "Remove 4 dominated old configs (4p-dep16-8n, 8p-dep16-12n, 10p-dep16-14n, 12p-dep12-15n) superseded by wide-EP frontier"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
