@@ -50,7 +50,7 @@ amd-smi || true
 # signal at high concurrency.
 #export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
 #060226
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226
+export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
@@ -164,8 +164,7 @@ case "$OFFLOADING" in
         # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
         # ZMQ-style host string.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        #LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
         LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
         # LMCache read locks are leases on chunks that lookup has promised
         # vLLM can retrieve. The default 300s TTL is too short for this
