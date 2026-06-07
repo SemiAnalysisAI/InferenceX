@@ -2584,7 +2584,7 @@ kimik2.5-fp4-mi355x-vllm-agentic-lmcache:
       - { tp: 4, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 # target
-kimik2.5-fp4-mi355x-vllm-agentic-lmcache-060226DRAM3000GB:
+kimik2.5-fp4-mi355x-vllm-agentic-lmcache-060226DRAM2500GB:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
