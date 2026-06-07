@@ -1,0 +1,87 @@
+{
+  "_README": "Standardized replay format produced by make_replay_dataset.py and consumed by replay_bench.py. ONE such object per line in a *.replay.jsonl file (this file is pretty-printed with truncated content for readability). The replayer slices messages[:prefix_len] per turn \u2014 see field docs below.",
+  "_field_docs": {
+    "session_id": "stable id for this conversation (one agentic session = one trajectory)",
+    "entry_point": "provenance: the KernelBook task class name",
+    "source": "provenance tag",
+    "kernelbook_uuid": "provenance: KernelBook row id (null if unknown)",
+    "messages": "the FULL reconstructed conversation, flat OpenAI chat format, stored ONCE. system_prompt.md is message 0 (shared prefix); then user(task)/assistant/user(tool result)/... alternation",
+    "turns": "one entry per assistant turn to replay (this is the unit of load)",
+    "turns[].prefix_len": "request body = messages[:prefix_len]; i.e. everything BEFORE this assistant turn. Growing per turn -> long shared prefix -> KV prefix-cache reuse",
+    "turns[].max_tokens": "tokens to generate (with ignore_eos) = the recorded decode load for this turn",
+    "turns[].delay_before_s": "recorded inter-turn idle/think gap (capped). ONLY used if replay_bench --use-think-time; ignored by default",
+    "turns[].rec_input_tokens": "ANALYSIS ONLY: Claude's recorded prompt tokens for this turn (not sent to server)",
+    "turns[].rec_output_tokens": "ANALYSIS ONLY: recorded output tokens for this turn (== max_tokens)",
+    "turns[].rec_cache_read_tokens": "ANALYSIS ONLY: Claude's recorded cache-read tokens for this turn",
+    "recorded": "ANALYSIS ONLY: session-level ground truth (num_turns, correct, final speedup)"
+  },
+  "example_session": {
+    "session_id": "57331579-8841-4929-ab2a-b4f165438507",
+    "entry_point": "MultiHeadAttention",
+    "source": "GPUMODE/KernelBook",
+    "kernelbook_uuid": 311,
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are an expert GPU kernel engineer writing Triton kernels that replace PyTorch modules. The context below describes the exact hardware, software, and evaluation harness your code runs under. Use it.  # Hardware  - GPU \u2026[truncated, 4853 chars total]"
+      },
+      {
+        "role": "user",
+        "content": "You are an expert GPU kernel engineer specializing in Triton.  The file `/mnt/home/ppbhatt500/gpumode-triton/runs/work/311/reference.py` contains a PyTorch module named `MultiHeadAttention` (a subclass of torch.nn.Module \u2026[truncated, 899 chars total]"
+      },
+      {
+        "role": "assistant",
+        "content": "<tool:Read> {\"file_path\": \"/mnt/home/ppbhatt500/gpumode-triton/runs_8t/work/311/reference.py\"} </tool>"
+      },
+      {
+        "role": "user",
+        "content": "1\timport math 2\timport torch 3\timport numpy as np 4\tfrom torch import nn 5\t 6\t 7\tclass MultiHeadAttention(nn.Module): 8\t 9\t    def __init__(self, n_heads, input_dim, embed_dim, val_dim=None, key_dim 10\t        =None): 11 \u2026[truncated, 3311 chars total]"
+      },
+      {
+        "role": "assistant",
+        "content": "Let me analyze the reference. It's multi-head attention with tiny dims (n_heads=4, input_dim=4, embed_dim=4, so key_dim=val_dim=1, B=T=Nq=4). Let me write a Triton implementation. <tool:Bash> cat > /tmp/mha_kernel.py <<' \u2026[truncated, 6778 chars total]"
+      },
+      {
+        "role": "user",
+        "content": "done"
+      },
+      {
+        "_note": "... 21 more messages (assistant/user alternating) ..."
+      }
+    ],
+    "turns": [
+      {
+        "prefix_len": 2,
+        "max_tokens": 89,
+        "delay_before_s": 0.0,
+        "rec_input_tokens": 23522,
+        "rec_output_tokens": 89,
+        "rec_cache_read_tokens": 15825
+      },
+      {
+        "prefix_len": 4,
+        "max_tokens": 5920,
+        "delay_before_s": 60.0,
+        "rec_input_tokens": 25073,
+        "rec_output_tokens": 5920,
+        "rec_cache_read_tokens": 21321
+      },
+      {
+        "prefix_len": 6,
+        "max_tokens": 111,
+        "delay_before_s": 10.991,
+        "rec_input_tokens": 35513,
+        "rec_output_tokens": 111,
+        "rec_cache_read_tokens": 25071
+      },
+      {
+        "_note": "... 10 more turns ..."
+      }
+    ],
+    "recorded": {
+      "num_turns": 13,
+      "correct": true,
+      "speedup": 12.221531412242445
+    }
+  }
+}
