@@ -79,6 +79,72 @@ def reconstruct_task(entry: str, uuid: str, min_evals: int = 8) -> str:
     )
 
 
+# --- base system-prompt reconstruction -------------------------------------
+# Claude Code's real first-turn input is ~23.5k tokens, but the only system text
+# we have is system_prompt.md (~1.2k tokens). The missing ~21k is Claude Code's
+# hidden BASE system prompt + full tool-schema definitions, which sit at the very
+# front of EVERY turn and are the workload's dominant cached prefix. For an
+# inference benchmark only token-counts + prefix-sharing matter, so we prepend a
+# fixed, representative base preamble sized to close that gap. It is IDENTICAL
+# across all sessions -> reproduces Claude's cross-session prefix-cache behavior.
+_BASE_PREAMBLE = (
+    "You are Claude Code, an agentic coding assistant operating in a terminal. "
+    "You help engineers by reading files, running shell commands, editing code, "
+    "and iterating against tests. Follow the user's instructions precisely, keep "
+    "responses concise, prefer the provided tools over guessing, and never fabricate "
+    "results. You operate over multiple turns: you call a tool, observe its result, "
+    "reason about the next step, and continue until the task is complete.\n\n"
+    "# Tools\n"
+    "You have access to the following tools. Each tool call must be a well-formed "
+    "request with the documented parameters; tool results are returned to you as the "
+    "next user message.\n"
+)
+
+
+def _est_tokens(s: str) -> int:
+    """Cheap, tokenizer-free estimate (~4 chars/token) — good enough for sizing a
+    representative prefix; exact cross-tokenizer ISL matching is impossible anyway."""
+    return max(1, len(s) // 4)
+
+
+def extract_tool_names(recs) -> list[str]:
+    for r in recs:
+        for e in r.get("trace") or []:
+            if e.get("type") == "system" and e.get("subtype") == "init":
+                tools = e.get("tools") or []
+                if tools:
+                    return list(tools)
+    return ["Bash", "Read", "Edit", "Write", "Task"]
+
+
+def build_base_preamble(tool_names, target_tokens: int) -> str:
+    """A fixed, representative base prompt + tool block, padded to ~target_tokens.
+    Deterministic (no randomness) so every session shares the exact same prefix."""
+    lines = [_BASE_PREAMBLE]
+    for t in tool_names:
+        lines.append(
+            f"## {t}\nThe {t} tool performs the {t} operation. Provide the required "
+            f"parameters as a JSON object. The result of {t} is returned to you as a "
+            f"tool result that you must read before deciding your next action.\n")
+    base = "\n".join(lines)
+    if _est_tokens(base) >= target_tokens:
+        # trim to target (keep it a clean prefix)
+        return base[: target_tokens * 4]
+    # pad with a fixed, structured filler block until we reach the token target
+    filler_unit = ("\n# Additional operating guidance\n"
+                   "Be rigorous and verify your work with the available tools before "
+                   "concluding. Prefer minimal, correct changes. Read context fully. "
+                   "When a tool result indicates an error, diagnose and retry rather "
+                   "than guessing. Maintain the conversation's prior decisions.\n")
+    chunks = [base]
+    cur = _est_tokens(base)
+    while cur < target_tokens:
+        chunks.append(filler_unit)
+        cur += _est_tokens(filler_unit)
+    out = "".join(chunks)
+    return out[: target_tokens * 4]
+
+
 def _parse_ts(s):
     if not s:
         return None
@@ -270,6 +336,11 @@ def main():
     ap.add_argument("--idle-cap-s", type=float, default=60.0,
                     help="cap inter-turn think-time at this many seconds "
                          "(matches InferenceX --trace-idle-gap-cap-seconds 60)")
+    ap.add_argument("--base-tokens", default="auto",
+                    help="size of the reconstructed Claude Code base prompt + tool "
+                         "defs prepended to every session's system message. 'auto' "
+                         "(default) closes the gap to the recorded turn-1 ISL; an int "
+                         "sets it explicitly; '0' disables (system_prompt.md only)")
     args = ap.parse_args()
 
     sp = Path(args.system_prompt) if args.system_prompt else None
@@ -282,6 +353,30 @@ def main():
         if s is not None:
             sessions.append(s)
 
+    # --- prepend a fixed base preamble so reconstructed ISL ~ recorded ISL -----
+    import statistics as st
+    base_tokens = 0
+    if args.base_tokens != "0" and sessions:
+        recon_turn1 = [_est_tokens(system_prompt) + _est_tokens(s["messages"][1]["content"])
+                       for s in sessions]
+        if args.base_tokens == "auto":
+            rec_turn1 = [s["turns"][0]["rec_input_tokens"] for s in sessions
+                         if s["turns"][0]["rec_input_tokens"] > 0]
+            target_total = int(st.median(rec_turn1)) if rec_turn1 else 0
+            base_tokens = max(0, target_total - int(st.median(recon_turn1)))
+        else:
+            base_tokens = max(0, int(args.base_tokens))
+        if base_tokens > 0:
+            base = build_base_preamble(extract_tool_names(recs), base_tokens)
+            for s in sessions:
+                msgs = s["messages"]
+                if msgs and msgs[0]["role"] == "system":
+                    msgs[0]["content"] = base + "\n\n" + msgs[0]["content"]
+                else:
+                    msgs.insert(0, {"role": "system", "content": base})
+                    for t in s["turns"]:          # we added a message at index 0
+                        t["prefix_len"] += 1
+
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w") as fh:
@@ -292,10 +387,15 @@ def main():
     n_turns = sum(len(s["turns"]) for s in sessions)
     rec_isl = [t["rec_input_tokens"] for s in sessions for t in s["turns"]]
     rec_osl = [t["rec_output_tokens"] for s in sessions for t in s["turns"]]
-    import statistics as st
     print(f"wrote {out}")
     print(f"  sessions: {len(sessions)} / {len(recs)} records")
     print(f"  replay turns: {n_turns}  (mean {n_turns/max(len(sessions),1):.1f}/session)")
+    print(f"  base preamble: ~{base_tokens:,} tokens prepended to every system message "
+          f"({'auto-matched to recorded ISL' if args.base_tokens=='auto' else args.base_tokens})")
+    if sessions:
+        t1_chars = sum(len(m['content']) for m in sessions[0]['messages'][:sessions[0]['turns'][0]['prefix_len']])
+        print(f"  reconstructed turn-1 prompt: ~{t1_chars//4:,} tokens "
+              f"(recorded turn-1 input: {sessions[0]['turns'][0]['rec_input_tokens']:,})")
     if rec_isl:
         print(f"  recorded ISL: median {int(st.median(rec_isl)):,}  max {max(rec_isl):,}")
         print(f"  recorded OSL: median {int(st.median(rec_osl)):,}  max {max(rec_osl):,}")
