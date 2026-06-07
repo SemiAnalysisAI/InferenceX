@@ -2568,7 +2568,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
 
 # target
-kimik2.5-fp4-mi355x-vllm-agentic-lmcache-longISLlargeDRAM:
+kimik2.5-fp4-mi355x-vllm-agentic-lmcache:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
@@ -2581,6 +2581,22 @@ kimik2.5-fp4-mi355x-vllm-agentic-lmcache-longISLlargeDRAM:
     - duration: 1800
       search-space:
       - { tp: 4, ep: 1, offloading: none, conc-list:    [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 4, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+
+# target
+kimik2.5-fp4-mi355x-vllm-agentic-lmcache-060226DRAM3000GB:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      #- { tp: 4, ep: 1, offloading: none, conc-list:    [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
       - { tp: 4, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 minimaxm2.5-fp8-mi355x-vllm-agentic:
