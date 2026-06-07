@@ -13,7 +13,7 @@ emits:
 Usage:
   python sweep_pareto.py --dataset replay/batch_1.replay.jsonl \
       --base-url http://0.0.0.0:8888 --model deepseek-ai/DeepSeek-V4-Pro \
-      --concurrencies 1,2,4,8,16,32,64,128 --duration 120 --warmup 20 \
+      --concurrencies 1,2,4,8,16,32,64,128 --repeats 1 \
       --result-dir results/dsv4_b1
 """
 from __future__ import annotations
@@ -38,8 +38,7 @@ def run_one(conc: int, args) -> dict:
         "--endpoint", args.endpoint,
         "--model", args.model,
         "--concurrency", str(conc),
-        "--duration", str(args.duration),
-        "--warmup", str(args.warmup),
+        "--repeats", str(args.repeats),
         "--request-timeout", str(args.request_timeout),
         "--result-dir", args.result_dir,
         "--result-filename", f"conc{conc}.json",
@@ -117,8 +116,10 @@ def parse_args():
     ap.add_argument("--model", default="deepseek-ai/DeepSeek-V4-Pro")
     ap.add_argument("--concurrencies", default="1,2,4,8,16,32,64,128",
                     help="comma-separated concurrency levels to sweep")
-    ap.add_argument("--duration", type=float, default=120)
-    ap.add_argument("--warmup", type=float, default=20)
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="replay the whole dataset N times (each repeat>0 gets a "
+                         "varied prefix = realistic cache miss). Completion-based: "
+                         "every turn runs to completion, none dropped.")
     ap.add_argument("--request-timeout", type=float, default=1800)
     ap.add_argument("--use-think-time", action="store_true")
     ap.add_argument("--extra-body", default=None)
