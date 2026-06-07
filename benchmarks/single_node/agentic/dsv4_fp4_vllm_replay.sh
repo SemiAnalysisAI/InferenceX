@@ -17,8 +17,9 @@ set -x
 #   RESULT_DIR     output dir for pareto.csv / pareto.png / conc*.json
 # Optional:
 #   CONCURRENCIES  comma list to sweep            (default 1,2,4,8,16,32,64,128)
-#   DURATION       measurement window per point s (default 120)
-#   WARMUP         warmup ramp per point s        (default 20)
+#   REPEATS        replay dataset N times; repeat>0 gets a varied prefix =
+#                  realistic cache miss (default 1). Completion-based: every
+#                  turn runs to completion, no time window.
 #   MAX_MODEL_LEN  server context cap             (default 1000000)
 #   MAX_NUM_SEQS   server max running seqs        (default = max(CONCURRENCIES))
 #   USE_THINK_TIME 1 to replay recorded idle gaps (default 0 = saturate)
@@ -28,8 +29,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP DATASET RESULT_DIR
 
 CONCURRENCIES="${CONCURRENCIES:-1,2,4,8,16,32,64,128}"
-DURATION="${DURATION:-120}"
-WARMUP="${WARMUP:-20}"
+REPEATS="${REPEATS:-1}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-1000000}"
 # max-num-seqs must be >= the largest concurrency we sweep
 if [ -z "${MAX_NUM_SEQS:-}" ]; then
@@ -79,14 +79,17 @@ wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$S
 
 # ---- Replayer deps via uv (isolated from the container's vLLM python) --------
 REPLAY_DIR="$(cd "$(dirname "$0")/../../../utils/custom_replay" && pwd)"
-if ! command -v uv >/dev/null 2>&1; then
-    curl -LsSf https://astral.sh/uv/install.sh | sh
+# Use the container's own (aarch64) python for the replayer deps. Do NOT use uv:
+# a mounted x86_64 uv on PATH causes "cannot execute binary file: Exec format error".
+REPLAY_VENV="$RESULT_DIR/.rvenv"
+if python3 -m venv --system-site-packages "$REPLAY_VENV" 2>/dev/null; then
+    "$REPLAY_VENV/bin/pip" install -q -r "$REPLAY_DIR/requirements.txt"
+    REPLAY_PY="$REPLAY_VENV/bin/python"
+else
+    echo "venv unavailable; installing replayer deps into container python"
+    python3 -m pip install --break-system-packages -q -r "$REPLAY_DIR/requirements.txt"
+    REPLAY_PY=python3
 fi
-export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
-REPLAY_VENV="$RESULT_DIR/.replay-venv"
-uv venv "$REPLAY_VENV" --python 3.12
-uv pip install --python "$REPLAY_VENV/bin/python" -r "$REPLAY_DIR/requirements.txt"
-REPLAY_PY="$REPLAY_VENV/bin/python"
 
 # ---- Sweep concurrency -> pareto --------------------------------------------
 THINK_FLAG=()
@@ -100,8 +103,7 @@ start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval 1 || true
     --endpoint /v1/chat/completions \
     --model "$MODEL" \
     --concurrencies "$CONCURRENCIES" \
-    --duration "$DURATION" \
-    --warmup "$WARMUP" \
+    --repeats "$REPEATS" \
     --result-dir "$RESULT_DIR" \
     --title "DeepSeek-V4 FP4 vLLM TP$TP — $(basename "$DATASET")" \
     "${THINK_FLAG[@]}"
