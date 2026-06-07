@@ -1,0 +1,3 @@
+aiohttp>=3.10
+numpy>=1.24
+matplotlib>=3.7
