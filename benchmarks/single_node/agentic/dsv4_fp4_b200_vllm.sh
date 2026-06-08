@@ -98,24 +98,10 @@ case "$OFFLOADING" in
         TOTAL_CPU_DRAM_GB=2500
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
-        # v0.3.11.post1 predates configurable TCP slice sizing and recent
-        # connection-pool correctness fixes. The B200 cluster cache contains a
-        # CUDA 13 wheel built from this pinned upstream main commit.
-        MOONCAKE_MAIN_COMMIT=4719229d88b10a7a8948a6b1e60705ffdb223077
-        MOONCAKE_WHEEL="/aiperf_mmap_cache/mooncake/mooncake_transfer_engine_cuda13-0.3.11.post1-cp312-cp312-manylinux_2_35_x86_64.whl"
-        MOONCAKE_WHEEL_SHA256=88d66c34244f4487afdcef007b988bebf8b14091837214efe5a4dda6e28b4fc4
-        if [[ ! -f "$MOONCAKE_WHEEL" ]]; then
-            echo "Missing Mooncake wheel for commit $MOONCAKE_MAIN_COMMIT: $MOONCAKE_WHEEL" >&2
-            exit 1
-        fi
-        echo "$MOONCAKE_WHEEL_SHA256  $MOONCAKE_WHEEL" | sha256sum --check -
+        MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
-            --force-reinstall "$MOONCAKE_WHEEL"
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        # Mooncake TCP currently has no transfer-concurrency limit. Bound each
-        # vLLM store/load call so large DSv4 requests do not exhaust TCP ports.
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -126,22 +112,20 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
-  "protocol": "tcp",
-  "device_name": "",
+  "protocol": "rdma",
+  "device_name": "mlx5_0",
   "enable_offload": false
 }
 EOF
         export MOONCAKE_CONFIG_PATH
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
-        # The B200 DGXC nodes do not expose nvidia_peermem, so GPUDirect RDMA
-        # cannot register vLLM's GPU KV buffers. The CUDA-enabled Mooncake
-        # wheel stages GPU buffers through host memory for TCP transfers.
-        # Reuse connections because agentic KV traffic otherwise exhausts the
-        # node's ephemeral TCP ports during warmup. Use 4 MiB slices instead
-        # of the old 64 KiB default to reduce concurrent socket sessions.
-        export MC_TCP_ENABLE_CONNECTION_POOL=1
-        export MC_TCP_SLICE_SIZE=4194304
+        # B200 GPU memory registration works through DMA-BUF, but the compute
+        # nodes do not expose nvidia_peermem. Force Mooncake's DMA-BUF
+        # GPUDirect RDMA path instead of its legacy ibv_reg_mr path.
+        export WITH_NVIDIA_PEERMEM=0
+        export MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX=4
 
         # Each rank contributes a separate segment. Evict early enough to
         # avoid an imbalanced rank exhausting its segment.
