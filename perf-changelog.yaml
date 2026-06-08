@@ -3532,4 +3532,5 @@
     - "Update script for aiter attention backend from triton."
     - "Enable aiter unfied attention."
     - "Enable aiter allreduce fusion."
+    - "Remove sweep config mtp+cc256+tp2, which may OOM."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1680
