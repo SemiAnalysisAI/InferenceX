@@ -13,9 +13,12 @@ concurrency levels.
 
 Completion-based: up to `--concurrency` sessions are in flight at once; each
 worker replays one session's turns to completion then pulls the next, until ALL
-sessions (x `--repeats`) are done. No time window — every turn runs to completion
-and is counted (nothing censored). `--concurrency` is the "number of concurrent
-sessions" knob you sweep to trace the latency/throughput pareto.
+sessions are done. No time window — every turn runs to completion and is counted
+(nothing censored). `--concurrency` is the "number of concurrent sessions" knob
+you sweep to trace the latency/throughput pareto.
+
+`--warmup` runs one untimed pass over the whole dataset first, priming the server
+prefix cache so every concurrency point is measured from the same warm state.
 
 Metrics (per completed turn, server-authoritative token counts via
 stream_options.include_usage): TTFT, TPOT, ITL, end-to-end latency, ISL, OSL,
@@ -25,7 +28,7 @@ result tooling.
 Usage:
   python replay_bench.py --dataset replay/batch_1.replay.jsonl \
       --base-url http://0.0.0.0:8888 --model deepseek-ai/DeepSeek-V4-Pro \
-      --concurrency 16 --repeats 1 \
+      --concurrency 16 --warmup \
       --result-dir results --result-filename conc16.json
 
   python replay_bench.py --dataset replay/batch_1.replay.jsonl --dry-run
@@ -140,27 +143,17 @@ async def run_benchmark(args):
     url = args.base_url.rstrip("/") + args.endpoint
     extra_body = json.loads(args.extra_body) if args.extra_body else {}
 
-    # Completion-based: every session is replayed to completion exactly once
-    # (x --repeats), and EVERY turn is recorded. No time window, no censoring —
-    # the run ends only when all turns have finished. Concurrency = how many
-    # sessions are in flight at once: each worker pulls a session from the shared
-    # queue, replays its turns sequentially to completion, then pulls the next.
-    def _variant(s, rep):
-        # repeat 0 = the dataset as-is. For repeat>0, prepend a unique marker to
-        # the first message so this pass has a DIFFERENT prefix -> a realistic
-        # cold-start cache MISS instead of a free replay hit. Within a repeat the
-        # sessions still share that marker, so within-batch prefix reuse is kept.
-        if rep == 0:
-            return s
-        msgs = [dict(m) for m in s["messages"]]
-        msgs[0] = {**msgs[0], "content": f"[session batch {rep}] " + msgs[0]["content"]}
-        return {**s, "messages": msgs}
-
-    work = [_variant(s, rep) for rep in range(max(1, args.repeats)) for s in sessions]
+    # Completion-based: every session is replayed to completion exactly once and
+    # EVERY turn is recorded. No time window, no censoring — the run ends only
+    # when all turns have finished. Concurrency = how many sessions are in flight
+    # at once: each worker pulls a session from the shared queue, replays its
+    # turns sequentially to completion, then pulls the next. To grow the workload
+    # past the recorded session count, refactor the dataset into more DISTINCT
+    # sessions (see replay/make_variants.py) instead of re-replaying identical
+    # ones — identical replays would just be free prefix-cache hits.
+    work = sessions
     total_turns = sum(len(s["turns"]) for s in work)
     results: list[TurnResult] = []
-    counter = {"i": 0}
-    done = {"n": 0}
 
     headers = {"Content-Type": "application/json"}
     if args.api_key:
@@ -171,35 +164,54 @@ async def run_benchmark(args):
     n_workers = min(args.concurrency, len(work))
     if args.concurrency > len(work):
         print(f"[replay] concurrency {args.concurrency} > {len(work)} sessions; "
-              f"effective concurrency capped at {len(work)} (raise --repeats)", flush=True)
+              f"effective concurrency capped at {len(work)} (add more distinct "
+              f"sessions to the dataset)", flush=True)
     print(f"[replay] concurrency {args.concurrency}: replaying {len(work)} sessions / "
-          f"{total_turns} turns to completion (no time limit)", flush=True)
+          f"{total_turns} turns to completion (no time limit)"
+          + (" [+warmup]" if args.warmup else ""), flush=True)
 
     async with aiohttp.ClientSession(connector=conn, headers=headers) as http:
 
-        async def worker():
-            while True:
-                i = counter["i"]
-                counter["i"] += 1
-                if i >= len(work):
-                    return
-                s = work[i]
-                msgs = s["messages"]
-                for turn in s["turns"]:
-                    if args.use_think_time and turn.get("delay_before_s"):
-                        await asyncio.sleep(min(turn["delay_before_s"], args.max_think_time))
-                    tr = await replay_turn(
-                        http, url, args.model, msgs[:turn["prefix_len"]],
-                        turn["max_tokens"], extra_body, timeout)
-                    results.append(tr)          # record EVERY turn — nothing censored
-                    done["n"] += 1
+        async def drain(record: bool):
+            counter = {"i": 0}
+
+            async def worker():
+                while True:
+                    i = counter["i"]
+                    counter["i"] += 1
+                    if i >= len(work):
+                        return
+                    s = work[i]
+                    msgs = s["messages"]
+                    for turn in s["turns"]:
+                        if args.use_think_time and turn.get("delay_before_s"):
+                            await asyncio.sleep(min(turn["delay_before_s"], args.max_think_time))
+                        tr = await replay_turn(
+                            http, url, args.model, msgs[:turn["prefix_len"]],
+                            turn["max_tokens"], extra_body, timeout)
+                        if record:
+                            results.append(tr)   # record EVERY turn — nothing censored
+
+            await asyncio.gather(*[worker() for _ in range(n_workers)])
+
+        # Warmup: one untimed pass over ALL sessions to prime the server prefix
+        # cache, so EVERY concurrency point is measured from the same warm cache
+        # state. Without it, the FIRST point in a sweep absorbs the entire global
+        # cold start — which for big-prefill models like DSv4 dominates the p99
+        # TTFT tail and makes the curve read backwards vs concurrency.
+        if args.warmup:
+            print(f"[replay] warmup: untimed pass over {len(work)} sessions / "
+                  f"{total_turns} turns to prime the prefix cache...", flush=True)
+            await drain(record=False)
+            print("[replay] warmup done; starting measured pass", flush=True)
 
         t0 = time.perf_counter()
-        await asyncio.gather(*[worker() for _ in range(n_workers)])
+        await drain(record=True)
         runtime = time.perf_counter() - t0
 
-    print(f"[replay] done: {done['n']}/{total_turns} turns in {runtime:.1f}s "
-          f"at concurrency {args.concurrency}", flush=True)
+    print(f"[replay] done: {len(results)}/{total_turns} turns in {runtime:.1f}s "
+          f"at concurrency {args.concurrency}"
+          + (" (after warmup)" if args.warmup else ""), flush=True)
     return aggregate(results, args, runtime)
 
 
@@ -265,8 +277,8 @@ def dry_run(args):
           f"({len(turns)/max(len(sessions),1):.1f}/session)")
     print(f"[dry-run] planned OSL (max_tokens): median {int(np.median(osl))} "
           f"max {max(osl)} sum {sum(osl):,}")
-    print(f"[dry-run] would replay all {len(sessions)*max(1,args.repeats)} sessions / "
-          f"{len(turns)*max(1,args.repeats)} turns to completion at "
+    print(f"[dry-run] would replay all {len(sessions)} sessions / "
+          f"{len(turns)} turns to completion at "
           f"concurrency={args.concurrency} against {args.base_url}{args.endpoint}")
     print("[dry-run] OK — dataset is replay-ready.")
 
@@ -280,10 +292,10 @@ def parse_args():
     ap.add_argument("--model", default="deepseek-ai/DeepSeek-V4-Pro")
     ap.add_argument("--concurrency", type=int, default=16,
                     help="number of concurrent sessions (the pareto sweep knob)")
-    ap.add_argument("--repeats", type=int, default=1,
-                    help="replay the whole dataset this many times (more samples / "
-                         "lets concurrency exceed the session count). Run is completion-"
-                         "based: every turn runs to completion, none are dropped.")
+    ap.add_argument("--warmup", action="store_true",
+                    help="run one untimed full pass over the dataset before the "
+                         "measured pass, to prime the server prefix cache so every "
+                         "concurrency point starts from the same warm cache state.")
     ap.add_argument("--request-timeout", type=float, default=1800)
     ap.add_argument("--use-think-time", action="store_true",
                     help="sleep the recorded inter-turn idle gap before each turn "

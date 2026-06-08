@@ -13,7 +13,7 @@ emits:
 Usage:
   python sweep_pareto.py --dataset replay/batch_1.replay.jsonl \
       --base-url http://0.0.0.0:8888 --model deepseek-ai/DeepSeek-V4-Pro \
-      --concurrencies 1,2,4,8,16,32,64,128 --repeats 1 \
+      --concurrencies 1,2,4,8,16,32,64,128 --warmup \
       --result-dir results/dsv4_b1
 """
 from __future__ import annotations
@@ -38,11 +38,12 @@ def run_one(conc: int, args) -> dict:
         "--endpoint", args.endpoint,
         "--model", args.model,
         "--concurrency", str(conc),
-        "--repeats", str(args.repeats),
         "--request-timeout", str(args.request_timeout),
         "--result-dir", args.result_dir,
         "--result-filename", f"conc{conc}.json",
     ]
+    if args.warmup:
+        cmd.append("--warmup")
     if args.use_think_time:
         cmd.append("--use-think-time")
     if args.extra_body:
@@ -87,19 +88,32 @@ def plot_pareto(rows: list[dict], path: Path, title: str):
 
     rows = sorted(rows, key=lambda s: s["concurrency"])
     thr = [s["output_throughput_tok_per_s"] for s in rows]
-    ttft = [s["ttft_ms"]["p99"] for s in rows]
-    tpot = [s["tpot_ms"]["p50"] for s in rows]
     conc = [s["concurrency"] for s in rows]
+    ttft_p50 = [s["ttft_ms"]["p50"] for s in rows]
+    ttft_p99 = [s["ttft_ms"]["p99"] for s in rows]
+    tpot_p50 = [s["tpot_ms"]["p50"] for s in rows]
+    tpot_p99 = [s["tpot_ms"]["p99"] for s in rows]
 
+    # Lead with the median (p50) — it's the robust, steady-state latency. The p99
+    # tail is plotted lightly/dashed for honesty: at low concurrency on an
+    # unsaturated server p99 is dominated by a handful of cold-start outliers and
+    # is noisy, so it must not be the headline curve.
+    panels = (
+        (ttft_p50, ttft_p99, "TTFT (ms)"),
+        (tpot_p50, tpot_p99, "TPOT (ms)"),
+    )
     fig, ax = plt.subplots(1, 2, figsize=(13, 5.2))
-    for a, y, lab in ((ax[0], ttft, "p99 TTFT (ms)"), (ax[1], tpot, "p50 TPOT (ms)")):
-        a.plot(thr, y, "-o", color="#c25a3a", lw=2)
-        for x, yy, c in zip(thr, y, conc):
+    for a, (p50, p99, lab) in zip(ax, panels):
+        a.plot(thr, p50, "-o", color="#c25a3a", lw=2, label="p50 (median)")
+        a.plot(thr, p99, "--o", color="#c25a3a", lw=1, alpha=0.35,
+               markersize=4, label="p99 (tail)")
+        for x, yy, c in zip(thr, p50, conc):
             a.annotate(f"c{c}", (x, yy), textcoords="offset points",
                        xytext=(6, 4), fontsize=8)
         a.set_xlabel("Output throughput (tok/s)")
         a.set_ylabel(lab)
         a.grid(True, alpha=0.3)
+        a.legend(fontsize=8, loc="best")
         a.set_title(lab + " vs throughput")
     fig.suptitle(title)
     fig.tight_layout()
@@ -116,29 +130,48 @@ def parse_args():
     ap.add_argument("--model", default="deepseek-ai/DeepSeek-V4-Pro")
     ap.add_argument("--concurrencies", default="1,2,4,8,16,32,64,128",
                     help="comma-separated concurrency levels to sweep")
-    ap.add_argument("--repeats", type=int, default=1,
-                    help="replay the whole dataset N times (each repeat>0 gets a "
-                         "varied prefix = realistic cache miss). Completion-based: "
-                         "every turn runs to completion, none dropped.")
+    ap.add_argument("--warmup", action="store_true",
+                    help="prime the server prefix cache with one untimed pass "
+                         "before EACH concurrency point's measured pass, so every "
+                         "point starts from the same warm cache state.")
     ap.add_argument("--request-timeout", type=float, default=1800)
     ap.add_argument("--use-think-time", action="store_true")
     ap.add_argument("--extra-body", default=None)
     ap.add_argument("--api-key", default=None)
     ap.add_argument("--result-dir", default="results")
     ap.add_argument("--title", default=None)
+    ap.add_argument("--replot", action="store_true",
+                    help="do NOT run anything; rebuild pareto.csv + pareto.png "
+                         "from the conc*.json files already in --result-dir.")
     return ap.parse_args()
+
+
+def load_existing(result_dir: Path) -> list[dict]:
+    rows = []
+    for p in sorted(result_dir.glob("conc*.json"),
+                    key=lambda q: int(q.stem.replace("conc", ""))):
+        rows.append(json.loads(p.read_text()))
+    return rows
 
 
 def main():
     args = parse_args()
     Path(args.result_dir).mkdir(parents=True, exist_ok=True)
-    concs = [int(x) for x in args.concurrencies.split(",") if x.strip()]
-    rows = []
-    for c in concs:
-        try:
-            rows.append(run_one(c, args))
-        except subprocess.CalledProcessError as e:
-            print(f"concurrency {c} failed: {e}", file=sys.stderr)
+    if args.replot:
+        rows = load_existing(Path(args.result_dir))
+        if not rows:
+            print(f"no conc*.json in {args.result_dir}", file=sys.stderr)
+            sys.exit(1)
+        print(f"replotting from {len(rows)} existing run(s): "
+              f"{[r['concurrency'] for r in rows]}")
+    else:
+        concs = [int(x) for x in args.concurrencies.split(",") if x.strip()]
+        rows = []
+        for c in concs:
+            try:
+                rows.append(run_one(c, args))
+            except subprocess.CalledProcessError as e:
+                print(f"concurrency {c} failed: {e}", file=sys.stderr)
     if not rows:
         print("no successful runs", file=sys.stderr)
         sys.exit(1)
