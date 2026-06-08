@@ -1,35 +1,8 @@
-name: "disagg-gb300-12p1d-dep4-dep12-15-c21504"
+name: "disagg-gb300-12p1d-dep4-dep24-18-c3000"
 
-# 8k/1k high-throughput topology for the wideep DSV4-Pro setup.
-#
-# Schema/values come from PR #1213 (513cbef) — that PR introduced the
-# `dsv4-pro-gb300-fp4` upstream-style recipe with two `zip_override`
-# variants (wideep [0] / narrow_ep [1]) and `backend.benchmark`. Our
-# pinned srtctl (NVIDIA/srt-slurm @ sa-submission-q2-2026) doesn't
-# support either: `zip_override_*_hightpt` rejects with `Unknown field`
-# and `benchmark` only validates at top level. So this file inlines the
-# wideep [0] override and lifts `benchmark` back out — same operational
-# values, schema the pinned srtctl will accept.
-#
-# Other adjustments back to the InferenceX cluster shape: container &
-# model.path restored to the aliases mapped in launch_gb300.sh's
-# srtslurm.yaml (`lmsysorg/sglang:deepseek-v4-grace-blackwell` and
-# `deepseek-v4-pro`); `dynamo.install: true` added so the container
-# (which has no dynamo baked in) installs from the pinned hash.
-#
-# Cluster-specific items NOT inlined (require InferenceX-side equivalents):
-#   - slurm.partition (yangminl's gb300-cw uses `hpc-mid`)
-#   - frontend.nginx_container (yangminl's `nginx-1.27.4.sqsh` path)
-#   - extra_mount: yangminl/sglang-patched/sglang. Earlier diff analysis
-#     showed only `expert_location_dispatch.py` topk_ids int32 cast is an
-#     active runtime diff vs container sglang; other patched files are
-#     env-gated dead code under the same SGLANG_OPT_* flags this yaml
-#     already sets.
-#
-# DG-related env intentionally diverged (DG cache path is host-specific):
-#   - SGLANG_DG_CACHE_DIR=/configs/deepgemm_cache (yangminl host)
-#   - SGLANG_JIT_DEEPGEMM_PRECOMPILE=0 (yangminl uses prebuilt cache)
-#   This yaml uses SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1 instead.
+# Weiliang wide-EP sweep point: EP=24, 12P+6D = 18 nodes, conc=3000.
+# Matches srt-slurm PR#173 zip_override EP=24 topology.
+# Env vars and sglang_config from InferenceX main (not Weiliang's 0510 image).
 
 model:
   path: "deepseek-v4-pro"
@@ -53,15 +26,16 @@ resources:
   prefill_nodes: 12
   prefill_workers: 12
   gpus_per_prefill: 4
-  decode_nodes: 3
+  decode_nodes: 6
   decode_workers: 1
-  gpus_per_decode: 12
+  gpus_per_decode: 24
 
 frontend:
   type: dynamo
-  enable_multiple_frontends: false
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
   env:
-    DYN_ROUTER_LOAD_BLOCK_SIZE: "1" 
+    DYN_ROUTER_LOAD_BLOCK_SIZE: "1"
   args:
     router-mode: "kv"
     router-kv-overlap-score-weight: 0
@@ -120,7 +94,6 @@ backend:
     SGLANG_LOG_FORWARD_ITERS: "1"
     SGLANG_LOG_MS: "1"
     SGLANG_REQUEST_STATE_WAIT_TIMEOUT: "60"
-    # is single-node only and corrupts results in 2-node decode setups.
 
   sglang_config:
     prefill:
@@ -141,9 +114,11 @@ backend:
 
       disaggregation-mode: "prefill"
       disaggregation-transfer-backend: mooncake
+      enable-dp-lm-head: true
 
       mem-fraction-static: 0.90
       max-running-requests: 512
+      cuda-graph-max-bs: 512
       chunked-prefill-size: 32768
 
     decode:
@@ -153,22 +128,23 @@ backend:
       skip-tokenizer-init: true
       stream-interval: 60
 
-      load-balance-method: "total_requests"
       moe-a2a-backend: "megamoe"
+
+      moe-dense-tp-size: 1
 
       disaggregation-mode: "decode"
       disaggregation-transfer-backend: mooncake
       disaggregation-decode-polling-interval: 8
 
       mem-fraction-static: 0.94
-      swa-full-tokens-ratio: 0.056
+      swa-full-tokens-ratio: 0.20
       context-length: 9216
-      tensor-parallel-size: 12
-      data-parallel-size: 12
-      expert-parallel-size: 12
+      tensor-parallel-size: 24
+      data-parallel-size: 24
+      expert-parallel-size: 24
       enable-dp-attention: true
       enable-dp-lm-head: true
-      max-running-requests: 21504
+      max-running-requests: 18432
       cuda-graph-max-bs: 1280
 
 
@@ -176,7 +152,7 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "21504"
+  concurrencies: "3000"
   req_rate: "inf"
   use_chat_template: false
   custom_tokenizer: "sa_bench_tokenizers.sglang_deepseek_v4.SGLangDeepseekV4Tokenizer"

@@ -25,6 +25,7 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_USE_RUST_FRONTEND=1
 EXTRA_VLLM_ARGS=""
 # if [ "$TP" -ge 4 ]; then
 #     # AITER CK fused MoE kernels lack compiled tiles for N=intermediate_size/TP
