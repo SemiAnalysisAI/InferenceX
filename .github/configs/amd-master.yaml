@@ -2716,3 +2716,36 @@ dsv4-fp4-mi355x-sglang-agentic:
 # async scheduling, max-num-seqs=128, max-num-batched-tokens=8192,
 # gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
 # probe to validate the ROCm DP+EP path.
+
+dsv4-fp4-mi355x-atom-disagg:
+  #TODO: (srok), temporary dev img. will update
+  image: rocm/atom-dev:nightly_202606071111-Jasen-fix_dockerfile
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 2P1D DP+TP8
+      # TODO: (srok), spot check
+      - conc-list: [ 256 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
