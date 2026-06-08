@@ -147,11 +147,15 @@ EOF
         # avoid an imbalanced rank exhausting its segment.
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
+        # Mooncake's default 5s read lease is shorter than the observed
+        # transfer latency for large DSv4 hybrid-KV loads on B200 TCP.
+        MOONCAKE_KV_LEASE_TTL=60s
 
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
             --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
             --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
+            --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
             > "$MOONCAKE_MASTER_LOG" 2>&1 &
         MOONCAKE_MASTER_PID=$!
         sleep 2
