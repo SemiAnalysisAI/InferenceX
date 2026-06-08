@@ -3523,3 +3523,13 @@
     - "Aligned decode params with Weiliang config: swa-full-tokens-ratio=0.20, max-running-requests=18432, moe-dense-tp-size=1; added prefill enable-dp-lm-head and cuda-graph-max-bs=512"
     - "Remove 4 dominated old configs (4p-dep16-8n, 8p-dep16-12n, 10p-dep16-14n, 12p-dep12-15n) superseded by wide-EP frontier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604."
+    - "Update script for aiter attention backend from triton."
+    - "Enable aiter unfied attention."
+    - "Enable aiter allreduce fusion."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1680
