@@ -59,8 +59,22 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         echo "Unsupported framework on gb300-cw for glm5/fp8: $FRAMEWORK. Currently supported: dynamo-sglang"
         exit 1
     fi
+elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+    # MEASURED-POWER CAMPAIGN — CoreWeave fallback for dsr1 (the gb300-nv fleet
+    # was wedged on its pre-run cleanup). Clone the perfmon fork directly: it
+    # already carries BOTH the gb300-fp4 dsr1 recipes (recipes/gb300-fp4/1k1k/
+    # *.yaml) AND the nvidia-smi perfmon machinery, so no hand-rolled recipe
+    # overlay is needed. Weights are pre-staged on CoreWeave at
+    # /mnt/vast/models/dsr1-fp4; the recipe's `model.path: dsr1` alias is mapped
+    # to that path in the srtslurm.yaml model_paths block below.
+    export MODEL_PATH="/mnt/vast/models/dsr1-fp4"
+    SRT_SLURM_RECIPES_REPO="https://github.com/SemiAnalysisAI/srt-slurm.git"
+    SRT_SLURM_RECIPES_REF="feat/inferencex-perfmon"
+    SRT_RECIPE_SRC=""   # fork ships the recipes; skip the overlay step
+    SRT_RECIPE_DST=""
+    export PERFMON_ENABLED=1
 else
-    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8"
+    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8, dsr1/fp4"
     exit 1
 fi
 
@@ -145,9 +159,25 @@ git clone "$SRT_SLURM_RECIPES_REPO" "$SRT_REPO_DIR"
 cd "$SRT_REPO_DIR"
 git checkout "$SRT_SLURM_RECIPES_REF"
 
-# Overlay the hand-rolled DSV4 recipes onto the selected srt-slurm checkout.
-mkdir -p "$SRT_RECIPE_DST"
-cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
+# Overlay the hand-rolled recipes onto the selected srt-slurm checkout — unless
+# the chosen repo already ships them (the dsr1 perfmon fork leaves
+# SRT_RECIPE_SRC empty because its recipes/gb300-fp4 dsr1 recipes are built in).
+if [ -n "$SRT_RECIPE_SRC" ]; then
+    mkdir -p "$SRT_RECIPE_DST"
+    cp -rT "$SRT_RECIPE_SRC" "$SRT_RECIPE_DST"
+fi
+
+# MEASURED-POWER CAMPAIGN: enable per-node nvidia-smi perfmon. `monitoring` is a
+# top-level SrtConfig field (defaults to None) that the orchestrator reads to
+# spawn perfmon.py, which writes perf_samples_*.csv. Inject it into the chosen
+# CONFIG_FILE recipe when running the perfmon fork (idempotent). srtctl applies
+# only this CONFIG_FILE, so injecting here is sufficient.
+if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_FILE" ]; then
+    if ! grep -q '^monitoring:' "$CONFIG_FILE"; then
+        printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$CONFIG_FILE"
+        echo "[perfmon] injected monitoring: into $CONFIG_FILE"
+    fi
+fi
 
 echo "Installing srtctl..."
 # CRITICAL — uv install location.
@@ -233,6 +263,10 @@ model_paths:
   deepseek-v4-pro: "${MODEL_PATH}"
   # GLM-5 FP8 sglang recipes use `model.path: glm-5-fp8`.
   glm-5-fp8: "${MODEL_PATH}"
+  # dsr1 fp4 sglang recipe (perfmon fork) uses `model.path: dsr1`; for dsr1 runs
+  # MODEL_PATH points at /mnt/vast/models/dsr1-fp4. Harmless on dsv4/glm5 runs
+  # (their recipes never reference the `dsr1` alias).
+  dsr1: "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
@@ -345,6 +379,24 @@ if [ -d "$LOGS_DIR" ]; then
     echo "multinode_server_logs.tar.gz will be (re)produced on script EXIT."
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
+fi
+
+# MEASURED-POWER CAMPAIGN: stage per-node perfmon CSVs for the downstream
+# "Process result" workflow step. The fork's perfmon writes perf_samples_*.csv
+# under the srt-slurm job logs dir; copy them into $GITHUB_WORKSPACE and export
+# GPU_METRICS_CSV_GLOB so process_result.py runs aggregate_power.py over them and
+# patches the agg JSON with measured power + temp/util/mem. Guarded on
+# PERFMON_ENABLED so dsv4/glm5 runs on this launcher are unaffected.
+if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -d "$LOGS_DIR" ]; then
+    if find "$LOGS_DIR" -name 'perf_samples_*.csv' 2>/dev/null | grep -q .; then
+        mkdir -p "$GITHUB_WORKSPACE/perf_samples"
+        find "$LOGS_DIR" -name 'perf_samples_*.csv' -exec cp {} "$GITHUB_WORKSPACE/perf_samples/" \;
+        perf_csv_count=$(ls "$GITHUB_WORKSPACE/perf_samples"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+        echo "GPU_METRICS_CSV_GLOB=$GITHUB_WORKSPACE/perf_samples/perf_samples_*.csv" >> "$GITHUB_ENV"
+        echo "[perfmon] staged $perf_csv_count per-node perf_samples_*.csv to \$GITHUB_WORKSPACE/perf_samples/"
+    else
+        echo "[perfmon] WARNING: monitoring enabled but no perf_samples_*.csv found under $LOGS_DIR — measured power aggregation will be skipped" >&2
+    fi
 fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
