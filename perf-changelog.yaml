@@ -3531,3 +3531,13 @@
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Restructure the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to an 8k1k-only, 6-variant configuration backed by local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/)"
+    - "Variants: 3 low-latency (1p5d / 1p3d / 1p1d, TP4 prefill / TP8 decode, conc up to 512) + 3 MTP2 high-throughput (2p1d / 3p1d / 5p1d, DEP4 prefill / DEP8 decode, single concurrency 768 / 1024 / 2048)"
+    - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130) to match the recipe model.container"
+    - "MTP2 throughput recipes use scheduler-recv-interval=1, enable-dp-lm-head, and spec 2 steps / 3 draft tokens; add UCX_TLS to the prefill/decode environments"
+    - "Clone srt-slurm at NVIDIA/srt-slurm@main for the dsr1-fp4 b200 recipes"
+  pr-link: XXX
