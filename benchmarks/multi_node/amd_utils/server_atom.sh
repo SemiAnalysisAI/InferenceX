@@ -62,7 +62,10 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 source $ATOM_WS_PATH/setup_deps.sh
 source $ATOM_WS_PATH/env_atom.sh
 
-host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
+host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
+if [[ -z "$host_ip" ]]; then
+    host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+fi
 host_name=$(hostname)
 
 # =============================================================================
