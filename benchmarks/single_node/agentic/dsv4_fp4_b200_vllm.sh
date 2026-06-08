@@ -123,6 +123,9 @@ EOF
         # The B200 DGXC nodes do not expose nvidia_peermem, so GPUDirect RDMA
         # cannot register vLLM's GPU KV buffers. The CUDA-enabled Mooncake
         # wheel stages GPU buffers through host memory for TCP transfers.
+        # Reuse connections because agentic KV traffic otherwise exhausts the
+        # node's ephemeral TCP ports during warmup.
+        export MC_TCP_ENABLE_CONNECTION_POOL=1
 
         # Each rank contributes a separate segment. Evict early enough to
         # avoid an imbalanced rank exhausting its segment.
