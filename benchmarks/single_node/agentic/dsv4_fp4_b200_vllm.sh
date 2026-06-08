@@ -98,9 +98,19 @@ case "$OFFLOADING" in
         TOTAL_CPU_DRAM_GB=2500
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
-        MOONCAKE_VERSION=0.3.11.post1
+        # v0.3.11.post1 predates configurable TCP slice sizing and recent
+        # connection-pool correctness fixes. The B200 cluster cache contains a
+        # CUDA 13 wheel built from this pinned upstream main commit.
+        MOONCAKE_MAIN_COMMIT=4719229d88b10a7a8948a6b1e60705ffdb223077
+        MOONCAKE_WHEEL="/aiperf_mmap_cache/mooncake/mooncake_main_4719229d_cuda13_py312.whl"
+        MOONCAKE_WHEEL_SHA256=88d66c34244f4487afdcef007b988bebf8b14091837214efe5a4dda6e28b4fc4
+        if [[ ! -f "$MOONCAKE_WHEEL" ]]; then
+            echo "Missing Mooncake wheel for commit $MOONCAKE_MAIN_COMMIT: $MOONCAKE_WHEEL" >&2
+            exit 1
+        fi
+        echo "$MOONCAKE_WHEEL_SHA256  $MOONCAKE_WHEEL" | sha256sum --check -
         agentic_pip_install --quiet --no-cache-dir --no-deps \
-            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+            --force-reinstall "$MOONCAKE_WHEEL"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
@@ -124,8 +134,10 @@ EOF
         # cannot register vLLM's GPU KV buffers. The CUDA-enabled Mooncake
         # wheel stages GPU buffers through host memory for TCP transfers.
         # Reuse connections because agentic KV traffic otherwise exhausts the
-        # node's ephemeral TCP ports during warmup.
+        # node's ephemeral TCP ports during warmup. Use 4 MiB slices instead
+        # of the old 64 KiB default to reduce concurrent socket sessions.
         export MC_TCP_ENABLE_CONNECTION_POOL=1
+        export MC_TCP_SLICE_SIZE=4194304
 
         # Each rank contributes a separate segment. Evict early enough to
         # avoid an imbalanced rank exhausting its segment.
