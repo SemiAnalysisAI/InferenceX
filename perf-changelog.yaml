@@ -3516,3 +3516,32 @@
     - "Switch B300 DSv4 TRT (non-MTP + MTP) image from rc15.post1 to nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
 
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Update vLLM image from v0.21.0 to v0.22.0"
+    - "Expand concurrency sweep for the 1k/1k and 8k/1k cells: TP4/EP1 conc 4-64 -> 1-128, TP8/EP1 conc-start 4 -> 1 (conc-end 4 unchanged)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1674
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm
+  description:
+    - "Expand concurrency sweep for the 1k/1k and 8k/1k cells: TP4/EP1 conc 4-64 -> 1-128, TP8/EP1 conc-start 4 -> 1 (conc-end 4 unchanged)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1677
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang
+  description:
+    - "Add wide-EP sweep configs (EP=12/16/24/32/40) matching srt-slurm PR#173 topology (18 nodes total)"
+    - "EP=12 15P+3D conc=12000, EP=16 14P+4D conc=8192, EP=24 12P+6D conc=3000, EP=32 10P+8D conc=2500, EP=40 8P+10D conc=2048"
+    - "Aligned decode params with Weiliang config: swa-full-tokens-ratio=0.20, max-running-requests=18432, moe-dense-tp-size=1; added prefill enable-dp-lm-head and cuda-graph-max-bs=512"
+    - "Remove 4 dominated old configs (4p-dep16-8n, 8p-dep16-12n, 10p-dep16-14n, 12p-dep12-15n) superseded by wide-EP frontier"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
+
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Enable vLLM Rust request frontend by exporting VLLM_USE_RUST_FRONTEND=1 in benchmarks/single_node/minimaxm2.5_fp4_mi355x.sh (v0.22.0 ROCm image ships the vllm-rs binary, so the flag engages it). Environment-only change; serve flags, TP/EP, attention/kernel settings unchanged"
+    - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
+    - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
