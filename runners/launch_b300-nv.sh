@@ -353,6 +353,12 @@ else
         BENCH_SCRIPT="${BENCH_BASE}${LEGACY_FW_SUFFIX}${SPEC_SUFFIX}.sh"
     fi
 
+    # Allow callers (e.g. the speedbench-al.yml AL-collection workflow) to run a
+    # specific script instead of the auto-selected throughput benchmark.
+    if [[ -n "${BENCH_SCRIPT_OVERRIDE:-}" ]]; then
+        BENCH_SCRIPT="$BENCH_SCRIPT_OVERRIDE"
+    fi
+
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     # TODO(Cam): the deepseek-v4 sglang images (lmsysorg/sglang:deepseek-v4-blackwell
@@ -398,7 +404,9 @@ else
         fi
     )
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    # Default 180 min; AL-matrix collection (16 server starts) needs longer and
+    # overrides via SALLOC_TIME_LIMIT.
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time="${SALLOC_TIME_LIMIT:-180}" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
