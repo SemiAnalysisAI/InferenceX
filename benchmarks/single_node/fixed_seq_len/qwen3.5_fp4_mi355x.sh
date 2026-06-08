@@ -39,7 +39,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --model-loader-extra-config '{"enable_multithread_load": true}' \
 --watchdog-timeout 1200  \
 --disable-radix-cache \
---enable-aiter-allreduce-fusion --max-running-requests 512 \
+--enable-aiter-allreduce-fusion --max-running-requests $CONC \
 --page-size 16 \
 > $SERVER_LOG 2>&1 &
 
