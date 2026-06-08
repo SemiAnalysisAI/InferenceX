@@ -23,7 +23,7 @@ set -x
 #
 # OFFLOADING values:
 #   none - vLLM GPU KV only.
-#   cpu  - MooncakeStoreConnector with a shared 2.0 TB host-memory KV tier.
+#   cpu  - MooncakeStoreConnector with a shared 2.5 TB host-memory KV tier.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -91,12 +91,11 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         # B200 DGXC compute nodes have about 3.9 TB host RAM. Leave enough
-        # headroom for model workers and the runtime. Keep the Mooncake budget
-        # below the 2.5 TB allocation that failed GPU-buffer registration.
+        # headroom for model workers and the runtime.
         #
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
-        TOTAL_CPU_DRAM_GB=2000
+        TOTAL_CPU_DRAM_GB=2500
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
         MOONCAKE_VERSION=0.3.11.post1
@@ -113,18 +112,17 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
-  "protocol": "rdma",
-  "device_name": "mlx5_0",
+  "protocol": "tcp",
+  "device_name": "",
   "enable_offload": false
 }
 EOF
         export MOONCAKE_CONFIG_PATH
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
-        # Reduce per-transfer bookkeeping for large agentic KV writes and give
-        # the shared RNIC more transfer workers.
-        export MC_SLICE_SIZE=1048576
-        export MC_WORKERS_PER_CTX=4
+        # The B200 DGXC nodes do not expose nvidia_peermem, so GPUDirect RDMA
+        # cannot register vLLM's GPU KV buffers. The CUDA-enabled Mooncake
+        # wheel stages GPU buffers through host memory for TCP transfers.
 
         # Each rank contributes a separate segment. Evict early enough to
         # avoid an imbalanced rank exhausting its segment.
