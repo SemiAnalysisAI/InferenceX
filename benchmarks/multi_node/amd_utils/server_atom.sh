@@ -134,7 +134,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
 
     PREFILL_CMD="python3 -m atom.entrypoints.openai_server \
-        --model ${MODEL_HF_ID:-${MODEL_DIR}/${MODEL_NAME}} \
+        --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
         -tp ${PREFILL_TP_SIZE} \
@@ -244,7 +244,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     PREFILL_HEADNODE_IP="${PREFILL_IPS[$prefill_worker_idx]}"
 
     PREFILL_CMD="python3 -m atom.entrypoints.openai_server \
-        --model ${MODEL_HF_ID:-${MODEL_DIR}/${MODEL_NAME}} \
+        --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
         -tp ${PREFILL_TP_SIZE} \
@@ -291,7 +291,7 @@ else
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
     DECODE_CMD="python3 -m atom.entrypoints.openai_server \
-        --model ${MODEL_HF_ID:-${MODEL_DIR}/${MODEL_NAME}} \
+        --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${DECODE_PORT} \
         --trust-remote-code \
         -tp ${DECODE_TP_SIZE} \

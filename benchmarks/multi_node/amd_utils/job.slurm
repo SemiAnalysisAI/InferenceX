@@ -124,12 +124,7 @@ if [[ -z "$MODEL_DIR" ]]; then
 fi
 export MODEL_DIR
 
-if [[ "$ENGINE" == "atom-disagg" ]]; then
-    # ATOM: Model is in HF hub cache format; pass MODEL_HF_ID directly to container.
-    # No filesystem check needed here — the container resolves it via HF_HUB_CACHE.
-    echo "Looking for model: ${MODEL_HF_ID:-$MODEL_NAME} (atom-disagg, HF hub cache)"
-    MODEL_PATH=""  # Not used by atom-disagg; MODEL_HF_ID passed via env
-elif [[ "$ENGINE" == "vllm-disagg" ]]; then
+if [[ "$ENGINE" == "vllm-disagg" ]]; then
     # vLLM: Extract hf_dir from models.yaml, search multiple paths, resolve HF cache snapshots
     DISK_DIR_NAME=$(awk '/^'"$MODEL_NAME"':/{found=1; next}
         found && /^[^ ]/{exit}
@@ -419,12 +414,8 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e BLOCK_SIZE=${BLOCK_SIZE:-16}
         -e MAX_NUM_SEQS=${MAX_NUM_SEQS:-256}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
-        -e HF_HUB_CACHE=/hf-hub-cache
-        -e MODEL_HF_ID=${MODEL_HF_ID:-}
         -e IBDEVICES=${IBDEVICES:-}
     )
-    # Mount the HF hub cache directory into the container
-    EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v /it-share/hf-hub-cache:/hf-hub-cache:ro"
 else
     DOCKER_ENV_ENGINE=(
         -e SGLANG_WS_PATH=${WS_PATH}
