@@ -221,6 +221,8 @@ srtctl_root: "${SRTCTL_ROOT}"
 default_mounts:
   ${DYNAMO_WHEELS_CACHE_HOST}: /configs/dynamo-wheels
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  /mnt/home: /mnt/home
+  /mnt/vast: /mnt/vast
 
 model_paths:
   dspro: "${MODEL_PATH}"
@@ -275,6 +277,12 @@ else
     awk -v runner_name="${RUNNER_NAME}" 'BEGIN { print "name: \"" runner_name "\"" } { print }' "$CONFIG_FILE" > "$TMP_CONFIG_FILE"
     mv "$TMP_CONFIG_FILE" "$CONFIG_FILE"
 fi
+
+# Prevent the login-node x86 .venv from leaking into the (aarch64) compute job
+# via sbatch --export=ALL: the worker's uv would honor the active VIRTUAL_ENV and
+# choke on its x86 python3 ("Exec format error"). srtctl stays on PATH, so this
+# is safe; the job builds its own .venv-compute via UV_PROJECT_ENVIRONMENT.
+unset VIRTUAL_ENV
 
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 echo "$SRTCTL_OUTPUT"
