@@ -522,6 +522,7 @@ if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
 else
     echo \"[rdma] no out-of-tree RDMA mounts needed\"
 fi
+fi  # end: if ENGINE == atom-disagg
 
 # Pre-clean (idempotent)
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
