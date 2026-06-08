@@ -19,8 +19,6 @@ nvidia-smi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
-
 export SGL_ENABLE_JIT_DEEPGEMM=1
 
 SERVER_LOG=/workspace/server.log
