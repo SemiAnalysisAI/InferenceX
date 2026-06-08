@@ -139,22 +139,48 @@ with open(agg_path, 'w') as f:
 
 # Best-effort: patch measured power into the agg JSON. Never fails the run.
 try:
+    import glob as _glob_module
     from aggregate_power import run as _aggregate_power_run
 
-    _csv_candidates = [
-        os.environ.get('GPU_METRICS_CSV'),
-        'gpu_metrics.csv',
-        '/workspace/gpu_metrics.csv',
-    ]
-    _csv_path = next(
-        (Path(p) for p in _csv_candidates if p and Path(p).is_file()),
-        None,
-    )
-    if _csv_path is not None:
+    # Two mutually-exclusive sources, decided up front. If GPU_METRICS_CSV_GLOB
+    # is set, the run is multinode (the launcher set it deliberately) and we
+    # MUST NOT fall back to single-CSV — a stale gpu_metrics.csv left over from
+    # a previous single-node run on the same runner pod would silently publish
+    # wrong power numbers for the multinode run.
+    _csv_arg = None
+    _glob_pattern = os.environ.get('GPU_METRICS_CSV_GLOB')
+    if _glob_pattern:
+        # Multinode path: glob to per-node perf_samples_<role>_w<idx>_<host>.csv.
+        _matched = sorted(Path(p) for p in _glob_module.glob(_glob_pattern))
+        if _matched:
+            _csv_arg = _matched
+        else:
+            print(
+                f'[process_result] GPU_METRICS_CSV_GLOB={_glob_pattern!r} matched no files '
+                f'— skipping power aggregation (NOT falling back to single-CSV: the launcher '
+                f'set the glob, indicating a multinode run; any single-CSV present would be '
+                f'stale single-node data)',
+                file=sys.stderr,
+            )
+    else:
+        # Single-node path: gpu_metrics.csv written by start_gpu_monitor in the
+        # bench container.
+        _csv_candidates = [
+            os.environ.get('GPU_METRICS_CSV'),
+            'gpu_metrics.csv',
+            '/workspace/gpu_metrics.csv',
+        ]
+        _csv_arg = next(
+            (Path(p) for p in _csv_candidates if p and Path(p).is_file()),
+            None,
+        )
+
+    if _csv_arg is not None:
         _aggregate_power_run(
-            csv_path=_csv_path,
+            csv_path=_csv_arg,
             bench_result=Path(f'{result_filename}.json'),
             agg_result=agg_path,
+            disagg=disagg,
         )
 except Exception as exc:  # noqa: BLE001 — never block on telemetry
     print(f'[process_result] power aggregation skipped: {exc}', file=sys.stderr)
