@@ -114,7 +114,7 @@ case "$OFFLOADING" in
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         # Mooncake TCP currently has no transfer-concurrency limit. Bound each
         # vLLM store/load call so large DSv4 requests do not exhaust TCP ports.
-        export VLLM_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=8
+        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
         python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))

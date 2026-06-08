@@ -21,7 +21,7 @@ _INFERENCEX_MOONCAKE_BATCH_PATCH = True
 
 
 def _run_mooncake_transfer_batches(fn, keys, addrs, sizes, *args):
-    max_keys = int(os.getenv("VLLM_MOONCAKE_MAX_TRANSFER_BATCH_KEYS", "0"))
+    max_keys = int(os.getenv("INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS", "0"))
     if max_keys <= 0 or len(keys) <= max_keys:
         return fn(keys, addrs, sizes, *args)
 
