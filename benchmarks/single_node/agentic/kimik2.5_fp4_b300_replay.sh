@@ -29,7 +29,7 @@ check_env_vars MODEL TP DATASET RESULT_DIR
 
 OFFLOADING="${OFFLOADING:-none}"
 CONCURRENCIES="${CONCURRENCIES:-1,2,4,8,16,32,64,128}"
-REPEATS="${REPEATS:-1}"
+WARMUP="${WARMUP:-1}"          # 1 = prime prefix cache before each point (default on)
 # server max batch must cover the largest concurrency we sweep
 MAX_NUM_SEQS=$(echo "$CONCURRENCIES" | tr ',' '\n' | sort -n | tail -1)
 
@@ -115,15 +115,18 @@ fi
 
 start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval 1 || true
 
+WARMUP_FLAG=()
+[ "$WARMUP" = "1" ] && WARMUP_FLAG=(--warmup)
+
 "$REPLAY_PY" "$REPLAY_DIR/sweep_pareto.py" \
     --dataset "$DATASET" \
     --base-url "http://0.0.0.0:$PORT" \
     --endpoint /v1/chat/completions \
     --model "$MODEL" \
     --concurrencies "$CONCURRENCIES" \
-    --repeats "$REPEATS" \
     --result-dir "$RESULT_DIR" \
-    --title "Kimi-K2.5 NVFP4 vLLM TP$TP — $(basename "$DATASET")"
+    --title "Kimi-K2.5 NVFP4 vLLM TP$TP — $(basename "$DATASET")" \
+    "${WARMUP_FLAG[@]}"
 
 stop_gpu_monitor || true
 

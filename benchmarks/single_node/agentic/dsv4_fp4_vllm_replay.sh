@@ -29,7 +29,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP DATASET RESULT_DIR
 
 CONCURRENCIES="${CONCURRENCIES:-1,2,4,8,16,32,64,128}"
-REPEATS="${REPEATS:-1}"
+WARMUP="${WARMUP:-1}"          # 1 = prime prefix cache before each point (default on)
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-1000000}"
 # max-num-seqs must be >= the largest concurrency we sweep
 if [ -z "${MAX_NUM_SEQS:-}" ]; then
@@ -94,6 +94,8 @@ fi
 # ---- Sweep concurrency -> pareto --------------------------------------------
 THINK_FLAG=()
 [ "${USE_THINK_TIME:-0}" = "1" ] && THINK_FLAG=(--use-think-time)
+WARMUP_FLAG=()
+[ "$WARMUP" = "1" ] && WARMUP_FLAG=(--warmup)
 
 start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval 1 || true
 
@@ -103,9 +105,9 @@ start_gpu_monitor --output "$RESULT_DIR/gpu_metrics.csv" --interval 1 || true
     --endpoint /v1/chat/completions \
     --model "$MODEL" \
     --concurrencies "$CONCURRENCIES" \
-    --repeats "$REPEATS" \
     --result-dir "$RESULT_DIR" \
     --title "DeepSeek-V4 FP4 vLLM TP$TP — $(basename "$DATASET")" \
+    "${WARMUP_FLAG[@]}" \
     "${THINK_FLAG[@]}"
 
 stop_gpu_monitor || true
