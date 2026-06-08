@@ -3540,4 +3540,4 @@
     - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130) to match the recipe model.container"
     - "MTP2 throughput recipes use scheduler-recv-interval=1, enable-dp-lm-head, and spec 2 steps / 3 draft tokens; add UCX_TLS to the prefill/decode environments"
     - "Clone srt-slurm at NVIDIA/srt-slurm@main for the dsr1-fp4 b200 recipes"
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1688
