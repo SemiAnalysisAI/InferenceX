@@ -22,8 +22,10 @@ if [[ -z "$IBDEVICES" ]]; then
         export IBDEVICES="$DETECTED"
         echo "[INFO] Auto-detected IBDEVICES=$IBDEVICES via ibv_devinfo on $(hostname -s)"
     else
-        echo "ERROR: Unable to detect RDMA devices. Set IBDEVICES explicitly." >&2
-        exit 1
+        # ATOM uses mooncake proxy_ip/handshake_port for KV transfer — IBDEVICES is
+        # not passed as a server argument (unlike SGLang --disaggregation-ib-device).
+        # Log a warning but do not fail; mooncake will use its own RDMA device selection.
+        echo "[WARN] Unable to detect RDMA devices via ibv_devinfo; IBDEVICES unset (non-fatal for ATOM/mooncake)" >&2
     fi
 else
     echo "[INFO] Using IBDEVICES=$IBDEVICES (set by runner or environment)"

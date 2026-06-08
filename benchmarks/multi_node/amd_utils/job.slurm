@@ -421,6 +421,7 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
         -e HF_HUB_CACHE=/hf-hub-cache
         -e MODEL_HF_ID=${MODEL_HF_ID:-}
+        -e IBDEVICES=${IBDEVICES:-}
     )
     # Mount the HF hub cache directory into the container
     EXTRA_DOCKER_MOUNTS="${EXTRA_DOCKER_MOUNTS:-} -v /it-share/hf-hub-cache:/hf-hub-cache:ro"
