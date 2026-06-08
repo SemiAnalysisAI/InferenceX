@@ -19,7 +19,7 @@ nvidia-smi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-export SGL_ENABLE_JIT_DEEPGEMM=1
+export SGLANG_ENABLE_JIT_DEEPGEMM=1
 
 SERVER_LOG=/workspace/server.log
 
