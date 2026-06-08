@@ -3535,9 +3535,9 @@
 - config-keys:
     - dsr1-fp4-b200-dynamo-sglang-mtp
   description:
-    - "Update the 8k1k scenario of the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to a 6-variant configuration backed by local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/); the 1k1k scenario is unchanged"
-    - "8k1k variants: 3 low-latency (1p5d / 1p3d / 1p1d, TP4 prefill / TP8 decode, conc up to 512) + 3 MTP2 high-throughput (2p1d / 3p1d / 5p1d, DEP4 prefill / DEP8 decode, single concurrency 768 / 1024 / 2048)"
-    - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130) to match the 8k1k recipe model.container; the 1k1k in-repo recipes use the dynamo-sglang container alias and follow the config image"
-    - "8k1k MTP2 throughput recipes use scheduler-recv-interval=1, enable-dp-lm-head, and spec 2 steps / 3 draft tokens; add UCX_TLS to the prefill/decode environments"
-    - "Point the dsr1-fp4 srt-slurm clone at NVIDIA/srt-slurm@main, which carries both the b200-fp4 1k1k and 8k1k in-repo recipes"
+    - "Move both the 1k1k and 8k1k scenarios of the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/{1k1k,8k1k}/disagg/mtp/), rather than referencing recipes from the srt-slurm repo"
+    - "1k1k: 4 MTP variants, behavior unchanged from the previous srt-slurm 1k1k recipe — 2 low-latency (dep4-1p prefill / tep8 decode at 5 and 6 decode nodes, conc up to 512) + 2 max-throughput (dep4-1p prefill / dep8 decode at 1 and 2 decode nodes, conc up to 1024)"
+    - "8k1k: 6-variant sweep — 3 low-latency (1p5d / 1p3d / 1p1d, TP4 prefill / TP8 decode, conc up to 512) + 3 MTP2 high-throughput (2p1d / 3p1d / 5p1d, DEP4 prefill / DEP8 decode, single concurrency 768 / 1024 / 2048); MTP2 recipes use scheduler-recv-interval=1, enable-dp-lm-head, spec 2 steps / 3 draft tokens, and UCX_TLS in the prefill/decode environments"
+    - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130); the 1k1k recipes keep the dynamo-sglang container alias and follow the config image"
+    - "Clone srt-slurm at NVIDIA/srt-slurm@main for the srtctl/dynamo tooling and copy the local b200-fp4 recipes into the checkout"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1688
