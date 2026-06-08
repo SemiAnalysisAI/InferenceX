@@ -186,6 +186,16 @@ if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_F
         printf '\nsbatch_directives:\n  mem: "0"\n' >> "$CONFIG_FILE"
         echo "[perfmon] injected sbatch_directives.mem=0 into $CONFIG_FILE"
     fi
+    # dsr1 warmup (load 671B weights + FlashInfer autotune + capture 36 CUDA-graph
+    # batch sizes up to cuda-graph-max-bs 256) takes ~35 min, exceeding the default
+    # health_check ceiling (max_attempts 180 x interval 10 = 1800s/30min) — the
+    # orchestrator timed out and killed etcd mid-capture. Raise the ceiling to
+    # 90 min. It is a CEILING, not a fixed wait: the sweep proceeds the instant the
+    # servers report healthy, so generous headroom costs nothing.
+    if ! grep -q '^health_check:' "$CONFIG_FILE"; then
+        printf '\nhealth_check:\n  max_attempts: 540\n  interval_seconds: 10\n' >> "$CONFIG_FILE"
+        echo "[perfmon] injected health_check (90min ceiling) into $CONFIG_FILE"
+    fi
 fi
 
 echo "Installing srtctl..."
