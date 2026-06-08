@@ -11502,15 +11502,17 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
 # Minimal single-job validation of the perfmon plumbing on GB300 before the
 # full dsr1-disagg-NVIDIA measured sweep. Identical to the 1k1k low-latency
 # scenario of dsr1-fp4-gb300-dynamo-sglang (same recipe + topology), trimmed
-# to one concurrency so it runs as ONE gb300 job. runner: gb300 routes to
-# runners/launch_gb300-nv.sh, whose dsr1 branch clones the perfmon fork and
+# to one concurrency so it runs as ONE gb300 job. runner: gb300-nv pins the
+# NVIDIA pool (the bare 'gb300' label is SHARED with gb300-cw, whose launcher
+# hard-rejects dsr1 with exit 1) and routes to runners/launch_gb300-nv.sh,
+# whose dsr1 branch clones the perfmon fork and
 # injects monitoring: -> per-node perf_samples_*.csv -> measured per-phase
 # board power. Remove once the path is proven (or keep as a power canary).
 dsr1-fp4-gb300-dynamo-sglang-powercheck:
   image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
   model-prefix: dsr1
-  runner: gb300
+  runner: gb300-nv
   precision: fp4
   framework: dynamo-sglang
   multinode: true
