@@ -2724,7 +2724,7 @@ dsv4-fp4-mi355x-atom-disagg:
   model-prefix: dsv4
   runner: mi355x
   precision: fp4
-  framework: atom
+  framework: atom-disagg
   multinode: true
   disagg: true
   scenarios:
