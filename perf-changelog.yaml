@@ -3531,5 +3531,6 @@
     - glm5-fp8-b200-sglang-mtp
   description:
     - "Update SGLang image from v0.5.12-cu130 to nightly-dev-cu13-20260605-7dc73766"
+    - "glm5-fp4-b200-sglang-mtp: override --mem-fraction-static from 0.85 to 0.8 when ISL=8192, OSL=1024, and CONC>128 (default 0.85 elsewhere)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1567
 

@@ -28,6 +28,12 @@ SERVER_LOG=/workspace/server.log
 
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
+MEM_FRACTION_STATIC=0.85
+if [[ "$ISL" -eq 8192 && "$OSL" -eq 1024 && "$CONC" -gt 128 ]]; then
+    MEM_FRACTION_STATIC=0.8
+fi
+echo "MEM_FRACTION_STATIC: $MEM_FRACTION_STATIC"
+
 EVAL_CONTEXT_ARGS=""
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -48,7 +54,7 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
 --moe-runner-backend flashinfer_trtllm \
 --cuda-graph-max-bs $CONC --max-running-requests $CONC \
---mem-fraction-static 0.85 \
+--mem-fraction-static $MEM_FRACTION_STATIC \
 --chunked-prefill-size 32768 --max-prefill-tokens 32768 \
 --enable-flashinfer-allreduce-fusion --disable-radix-cache \
 --stream-interval 30 \
