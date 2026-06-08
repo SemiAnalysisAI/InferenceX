@@ -1,0 +1,127 @@
+name: "disagg-gb300-1p1d-tp4-tp4-agentic"
+
+# Topology A: 1 prefill (TP4, 1 node/4 GPU) + 1 decode (TP4, 1 node/4 GPU).
+# 2 GB300 nodes total. Copied from
+# ../8k1k/disagg-gb300-1p1d-tp4-tp4-2-c1.yaml (which IS topology A); only the
+# benchmark stanza is swapped to our custom replay-sweep hook.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260602-98a1b58c"
+  precision: "fp4"
+
+dynamo:
+  hash: "81d0555ee23519cea80a42b4fe824e30368b7300"
+  install: true
+
+slurm:
+  time_limit: "03:00:00"
+
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+# Topology A: 1 prefill (TP=4 / 1 node) + 1 decode (TP=4 / 1 node). 2 nodes.
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 4
+  decode_nodes: 1
+  decode_workers: 1
+  gpus_per_decode: 4
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: true
+  num_additional_frontends: 8
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+
+  decode_environment:
+    PYTHONUNBUFFERED: "1"
+    SGLANG_RADIX_FORCE_MISS: "1"
+    SGLANG_JIT_DEEPGEMM_FAST_WARMUP: "1"
+    SGLANG_DEFAULT_THINKING: "1"
+    SGLANG_DSV4_REASONING_EFFORT: "max"
+    SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT: "1"
+    SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    MC_FORCE_MNNVL: "1"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW: "1"
+    # is single-node only and corrupts results in 2-node decode setups.
+
+  sglang_config:
+    prefill:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      disable-radix-cache: true
+
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: mooncake
+
+      tensor-parallel-size: 4
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+
+      mem-fraction-static: 0.90
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      chunked-prefill-size: 32768
+
+    decode:
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      model-path: "/model/"
+      trust-remote-code: true
+      disable-radix-cache: true
+
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: mooncake
+
+      tensor-parallel-size: 4
+      data-parallel-size:   1
+      expert-parallel-size: 1
+
+      moe-runner-backend: "flashinfer_mxfp4"
+      disable-flashinfer-autotune: true
+
+      mem-fraction-static: 0.9
+      max-running-requests: 1024
+      cuda-graph-max-bs:    512
+      swa-full-tokens-ratio: 0.1
+      context-length: 16384
+
+benchmark:
+  type: custom
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_replay_custom.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/dsv4_sglang_4p_4d
+    PORT: "8000"
+    CONCURRENCIES: "4,8,16"
