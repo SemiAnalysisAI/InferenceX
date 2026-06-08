@@ -102,7 +102,7 @@ case "$OFFLOADING" in
         # connection-pool correctness fixes. The B200 cluster cache contains a
         # CUDA 13 wheel built from this pinned upstream main commit.
         MOONCAKE_MAIN_COMMIT=4719229d88b10a7a8948a6b1e60705ffdb223077
-        MOONCAKE_WHEEL="/aiperf_mmap_cache/mooncake/mooncake_main_4719229d_cuda13_py312.whl"
+        MOONCAKE_WHEEL="/aiperf_mmap_cache/mooncake/mooncake_transfer_engine_cuda13-0.3.11.post1-cp312-cp312-manylinux_2_35_x86_64.whl"
         MOONCAKE_WHEEL_SHA256=88d66c34244f4487afdcef007b988bebf8b14091837214efe5a4dda6e28b4fc4
         if [[ ! -f "$MOONCAKE_WHEEL" ]]; then
             echo "Missing Mooncake wheel for commit $MOONCAKE_MAIN_COMMIT: $MOONCAKE_WHEEL" >&2
