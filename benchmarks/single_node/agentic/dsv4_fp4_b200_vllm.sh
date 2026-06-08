@@ -83,7 +83,6 @@ export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
-MOONCAKE_CLIENT_LOG="$RESULT_DIR/mooncake_client.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
@@ -94,10 +93,10 @@ case "$OFFLOADING" in
         # B200 DGXC compute nodes have about 3.9 TB host RAM. Leave enough
         # headroom for model workers and the runtime.
         #
-        # Use one standalone owner for the aggregate host-memory budget. The
-        # vLLM ranks are pure requesters, avoiding per-rank store-segment
-        # imbalance and reducing TCP destination fan-out.
+        # Embedded mode contributes one segment per GPU rank to a shared
+        # distributed store, so pre-divide the aggregate host-memory budget.
         TOTAL_CPU_DRAM_GB=2500
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
         # v0.3.11.post1 predates configurable TCP slice sizing and recent
         # connection-pool correctness fixes. The B200 cluster cache contains a
@@ -113,16 +112,19 @@ case "$OFFLOADING" in
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "$MOONCAKE_WHEEL"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+        # Mooncake TCP currently has no transfer-concurrency limit. Bound each
+        # vLLM store/load call so large DSv4 requests do not exhaust TCP ports.
+        export VLLM_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=8
+        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
-        MOONCAKE_CLIENT_PORT=$((PORT + 12001))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF
 {
-  "mode": "standalone-store",
+  "mode": "embedded",
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
-  "global_segment_size": 0,
+  "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "tcp",
   "device_name": "",
@@ -130,7 +132,6 @@ case "$OFFLOADING" in
 }
 EOF
         export MOONCAKE_CONFIG_PATH
-        export MOONCAKE_PREFERRED_SEGMENT="127.0.0.1:$MOONCAKE_CLIENT_PORT"
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
         # The B200 DGXC nodes do not expose nvidia_peermem, so GPUDirect RDMA
@@ -159,24 +160,6 @@ EOF
             cat "$MOONCAKE_MASTER_LOG" >&2
             exit 1
         fi
-        echo "Starting standalone Mooncake owner on port $MOONCAKE_CLIENT_PORT..."
-        mooncake_client \
-            --host=127.0.0.1 \
-            --metadata_server=P2PHANDSHAKE \
-            --master_server_address="127.0.0.1:$MOONCAKE_MASTER_PORT" \
-            --protocol=tcp \
-            --port="$MOONCAKE_CLIENT_PORT" \
-            --global_segment_size="${TOTAL_CPU_DRAM_GB}GB" \
-            --device_names="" \
-            > "$MOONCAKE_CLIENT_LOG" 2>&1 &
-        MOONCAKE_CLIENT_PID=$!
-        sleep 5
-        if ! kill -0 "$MOONCAKE_CLIENT_PID" 2>/dev/null; then
-            echo "Standalone Mooncake owner died during startup." >&2
-            cat "$MOONCAKE_CLIENT_LOG" >&2
-            exit 1
-        fi
-
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         OFFLOAD_ARGS=(
             --kv-transfer-config
