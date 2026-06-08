@@ -177,6 +177,15 @@ if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -n "$CONFIG_FILE" ] && [ -f "$CONFIG_F
         printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$CONFIG_FILE"
         echo "[perfmon] injected monitoring: into $CONFIG_FILE"
     fi
+    # CoreWeave: request unlimited node memory so pyxis/enroot can extract the
+    # 15-30 GB container squashfs without the cgroup OOM-killing unsquashfs
+    # (exit 137 -> prefill container never starts -> etcd down -> decode workers
+    # crash with "Could not connect to etcd"). The fork's gb300-fp4 recipe omits
+    # this; every working CW recipe (dsv4/glm5) sets sbatch_directives.mem: "0".
+    if ! grep -q '^sbatch_directives:' "$CONFIG_FILE"; then
+        printf '\nsbatch_directives:\n  mem: "0"\n' >> "$CONFIG_FILE"
+        echo "[perfmon] injected sbatch_directives.mem=0 into $CONFIG_FILE"
+    fi
 fi
 
 echo "Installing srtctl..."
