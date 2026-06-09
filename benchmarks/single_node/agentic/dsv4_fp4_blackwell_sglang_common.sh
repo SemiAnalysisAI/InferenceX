@@ -49,9 +49,17 @@ case "$OFFLOADING" in
     hicache)
         # DeepSeek V4 HiCache currently rejects --hicache-size and supports
         # capacity control only through a host/device token-capacity ratio.
-        # Ratio 4 matches SGLang's DSv4 HiCache correctness test and generally
-        # keeps host allocation within the 2-2.5 TB available on these nodes.
-        HICACHE_RATIO="${HICACHE_RATIO:-4}"
+        # DSv4 allocates several physical host sub-pools for each logical host
+        # token. At TP8, ratio=4 consumes about 237 GB/rank (1.9 TB total) while
+        # model loading/page cache is still resident and the OS kills a rank.
+        # Keep the proven ratio=4 TP4 path, but use ratio=2 at TP8 to leave
+        # enough transient host-memory headroom during initialization.
+        if [ "$TP" -ge 8 ]; then
+            DEFAULT_HICACHE_RATIO=2
+        else
+            DEFAULT_HICACHE_RATIO=4
+        fi
+        HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
