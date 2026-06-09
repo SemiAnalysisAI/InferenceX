@@ -141,7 +141,7 @@ python3 $ATOM_WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 100
+    --timeout 300
 
 # =============================================================================
 # Node Role Assignment
@@ -191,7 +191,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports ${PREFILL_PORT} \
         --wait-for-all-ports \
-        --timeout 100"
+        --timeout 1800"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -226,7 +226,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${NODE0_ADDR} \
             --node-ports ${ROUTER_PORT} \
             --wait-for-all-ports \
-            --timeout 100"
+            --timeout 1800"
         eval "$HEALTH_BARRIER_CMD"
         echo "Router is ready for benchmarking"
     fi
@@ -373,7 +373,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 100"
+        --timeout 1800"
     if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $BARRIER_CMD"; else eval "$BARRIER_CMD"; fi
 
     echo "Waiting until router closes..."
@@ -431,7 +431,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 100"
+        --timeout 1800"
     if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $BARRIER_CMD"; else eval "$BARRIER_CMD"; fi
 
     echo "Waiting until router closes..."
