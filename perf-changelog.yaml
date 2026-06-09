@@ -3544,4 +3544,4 @@
     - dsv4-fp4-b300-sglang
   description:
     - "Add --enable-breakable-cuda-graph, --enforce-piecewise-cuda-graph, and --enable-mixed-chunk to all concurrency profiles"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1694
