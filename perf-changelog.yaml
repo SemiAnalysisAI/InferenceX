@@ -3537,5 +3537,4 @@
     - kimik2.5-fp4-b300-vllm
   description:
     - "Add expert-parallel sweep points for Kimi K2.5 FP4 B200/B300 vLLM aggregate benchmarks"
-    - "Use vLLM image v0.22.1 for B200/B300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1658
