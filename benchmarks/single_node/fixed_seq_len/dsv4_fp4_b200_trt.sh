@@ -107,7 +107,7 @@ echo "Generated config file contents:"
 cat "$EXTRA_CONFIG_FILE"
 
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
-MAX_NUM_TOKENS=$(( ISL + OSL + 256 ))
+MAX_NUM_TOKENS=$(( ISL + 256 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
 if [ "${EVAL_ONLY}" = "true" ]; then

@@ -110,14 +110,14 @@ moe_config:
     use_low_precision_moe_combine: true
 speculative_config:
     decoding_type: MTP
-    num_nextn_predict_layers: $MTP
+    max_draft_len: $MTP
 EOF
 
 echo "Generated config file contents:"
 cat "$EXTRA_CONFIG_FILE"
 
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
-MAX_NUM_TOKENS=$(( ISL + OSL + (MTP + 1) * MAX_BATCH_SIZE + 256 ))
+MAX_NUM_TOKENS=$(( ISL + (MTP + 1) * MAX_BATCH_SIZE + 256 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
 if [ "${EVAL_ONLY}" = "true" ]; then
