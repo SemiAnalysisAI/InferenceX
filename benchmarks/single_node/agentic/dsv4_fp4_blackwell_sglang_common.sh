@@ -52,14 +52,15 @@ case "$OFFLOADING" in
         # DSv4 allocates several physical host sub-pools for each logical host
         # token. At TP8, ratio=4 consumes about 237 GB/rank (1.9 TB total) while
         # model loading/page cache is still resident and the OS kills a rank.
-        # TP4 ratio=4 works but fills its roughly 500 GB host tier during the
-        # C48/C64 focused tests and useful host hits collapse. Ratio=8 doubles
-        # that logical capacity while remaining below the node's host budget.
+        # TP4 ratio=4 works at C32 but fills its roughly 500 GB host tier at
+        # C48/C64. Ratio=8 still cannot retain the C64 session working set long
+        # enough to produce host hits. Ratio=16 provides roughly 21M logical
+        # host tokens while remaining below the B300 node's host budget.
         # Use ratio=2 at TP8 to leave enough transient headroom during startup.
         if [ "$TP" -ge 8 ]; then
             DEFAULT_HICACHE_RATIO=2
         else
-            DEFAULT_HICACHE_RATIO=8
+            DEFAULT_HICACHE_RATIO=16
         fi
         HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
