@@ -9276,7 +9276,7 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,   conc-list: [64, 128, 196, 256, 512] }
 
 dsv4-fp4-b200-sglang-agentic-hicache:
-  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  image: lmsysorg/sglang:v0.5.12.post1-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc
