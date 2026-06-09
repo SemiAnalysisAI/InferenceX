@@ -17,35 +17,6 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 export PORT="${PORT:-8888}"
 
 # --------------------------------
-# Stale server cleanup
-# --------------------------------
-# Kill leftover inference-server processes from a prior run on this node.
-# DP-attention mode derives deterministic TCP ports from $PORT:
-#   metrics_port = PORT + 233 (ZMQ_TCP_PORT_DELTA) + 1 + 3 = PORT + 237
-# A stale sglang process holding that port blocks the next launch.
-kill_stale_servers() {
-    echo "[Cleanup] Killing stale inference-server processes ..."
-    # Use python3+psutil (always present in sglang/vllm images) to find and
-    # kill any process listening on our server port or the derived metrics port.
-    python3 -c "
-import os, signal, psutil
-targets = {int(os.environ.get('PORT', 8888))}
-targets.add(min(targets) + 237)          # metrics_port
-killed = set()
-for c in psutil.net_connections('inet'):
-    if c.laddr.port in targets and c.pid and c.pid not in killed:
-        try:
-            os.kill(c.pid, signal.SIGKILL)
-            killed.add(c.pid)
-            print(f'  killed pid {c.pid} (port {c.laddr.port})')
-        except OSError:
-            pass
-" 2>/dev/null || true
-    sleep 2
-    echo "[Cleanup] Done."
-}
-
-# --------------------------------
 # GPU monitoring helpers
 # --------------------------------
 

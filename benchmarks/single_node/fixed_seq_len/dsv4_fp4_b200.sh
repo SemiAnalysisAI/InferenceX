@@ -82,8 +82,6 @@ fi
     echo "==================================="
 } | tee "$SERVER_LOG"
 
-kill_stale_servers
-
 set -x
 PYTHONNOUSERSITE=1 sglang serve \
     --model-path $MODEL \
