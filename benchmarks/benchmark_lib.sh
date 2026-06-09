@@ -1059,6 +1059,73 @@ _speedbench_prepare_dataset() {
     [[ -f "$speedbench_dir/qualitative.jsonl" ]]
 }
 
+_speedbench_apply_chat_template_kwargs_shim() {
+    echo "SpeedBench AL eval: patching vLLM benchmark --chat-template-kwargs support if needed"
+    python3 - <<'PYEOF'
+import vllm.benchmarks.serve as S
+import vllm.benchmarks.datasets.datasets as D
+
+
+def patch(mod, edits, marker):
+    f = mod.__file__
+    with open(f) as handle:
+        src = handle.read()
+    if marker in src:
+        print("already patched:", f)
+        return
+    for old, new in edits:
+        n = src.count(old)
+        assert n == 1, f"anchor matched {n} times in {f}, aborting:\n{old[:80]}..."
+        src = src.replace(old, new, 1)
+    with open(f, "w") as handle:
+        handle.write(src)
+    print("patched OK ->", f)
+
+
+serve_old = '''    parser.add_argument(
+        "--extra-body",'''
+serve_new = '''    parser.add_argument(
+        "--chat-template-kwargs",
+        type=json.loads,
+        default=None,
+        help="JSON dict forwarded to apply_chat_template during "
+        "client-side prompt rendering, e.g. to enable reasoning mode.",
+    )
+    parser.add_argument(
+        "--extra-body",'''
+patch(S, [(serve_old, serve_new)], marker='"--chat-template-kwargs"')
+
+disp_old = '''                output_len=args.speed_bench_output_len,
+                enable_multimodal_chat=args.enable_multimodal_chat,'''
+disp_new = '''                output_len=args.speed_bench_output_len,
+                chat_template_kwargs=args.chat_template_kwargs,
+                enable_multimodal_chat=args.enable_multimodal_chat,'''
+
+samp_old = '''                # apply template
+                if not skip_chat_template:
+                    prompt = tokenizer.apply_chat_template(
+                        [{"role": "user", "content": prompt}],
+                        add_generation_prompt=True,
+                        tokenize=False,
+                    )
+
+                prompt_len = len(tokenizer(prompt).input_ids)'''
+samp_new = '''                # apply template
+                if not skip_chat_template:
+                    _ctk = kwargs.get("chat_template_kwargs") or {}
+                    prompt = tokenizer.apply_chat_template(
+                        [{"role": "user", "content": prompt}],
+                        add_generation_prompt=True,
+                        tokenize=False,
+                        **_ctk,
+                    )
+
+                prompt_len = len(tokenizer(prompt).input_ids)'''
+patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
+      marker="chat_template_kwargs=args.chat_template_kwargs")
+PYEOF
+}
+
 run_speedbench_al_eval() {
     local port="${PORT:-8888}"
     while [[ $# -gt 0 ]]; do
@@ -1130,6 +1197,11 @@ run_speedbench_al_eval() {
 
     local think_args=()
     if [[ "$mode" == "on" ]]; then
+        if ! _speedbench_apply_chat_template_kwargs_shim; then
+            echo "SpeedBench AL eval: --chat-template-kwargs shim failed" >&2
+            _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "--chat-template-kwargs shim failed"
+            return 0
+        fi
         think_args=(--chat-template-kwargs '{"thinking": true, "reasoning_effort": "high"}')
     fi
 
