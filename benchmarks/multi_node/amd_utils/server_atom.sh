@@ -186,7 +186,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Wait for all prefill and decode servers to be ready
-    WAIT_SERVER_TIMEOUT="${WAIT_SERVER_TIMEOUT:-10}"
+    WAIT_SERVER_TIMEOUT="${WAIT_SERVER_TIMEOUT:-1800}"
     echo "Waiting for all servers to be up (timeout=${WAIT_SERVER_TIMEOUT}s)..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for prefill/decode /health endpoints"
@@ -239,7 +239,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         proxy_pid=$!
 
         # Wait for router to accept connections
-        WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-10}"
+        WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
         echo "[wait] router http://0.0.0.0:${ROUTER_PORT}/v1/models (timeout=${WAIT_ROUTER_TIMEOUT}s)"
         _router_deadline=$(( $(date +%s) + WAIT_ROUTER_TIMEOUT ))
         while ! curl -sf --max-time 10 "http://0.0.0.0:${ROUTER_PORT}/v1/models" >/dev/null 2>&1; do
@@ -392,7 +392,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     fi
 
     echo "Waiting for router to be up..."
-    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-10}"
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
     else
@@ -462,7 +462,7 @@ else
     fi
 
     echo "Waiting for router to be up..."
-    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-10}"
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
     else
