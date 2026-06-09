@@ -2729,9 +2729,6 @@ dsv4-fp4-mi355x-atom-disagg:
   disagg: true
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
       # 1P1D DPA+TP8
       # TODO: (srok), spot check
     - isl: 8192
