@@ -3536,4 +3536,4 @@
     - kimik2.5-fp4-b300-vllm
   description:
     - "Align server launch with the B200 recipe by adding the tuning args that were missing on B300: --kv-cache-dtype fp8, --max-cudagraph-capture-size 2048, --max-num-batched-tokens \"$((ISL * 2))\", and --stream-interval 20."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/<TODO>
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1698
