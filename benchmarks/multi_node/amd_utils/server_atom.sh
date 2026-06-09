@@ -111,7 +111,7 @@ python3 $ATOM_WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 30
+    --timeout 300
 
 # =============================================================================
 # Node Role Assignment
