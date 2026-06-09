@@ -46,9 +46,6 @@ sanitize_slurm_mpi_env_for_trtllm
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 
-# DeepSeek-V4 TRTLLM worker tuning envs, synced from the 0608-B200 agg frontier
-# (env_vars: worker_env_var + gen_worker_env_var; the user-specific
-# TLLM_AUTOTUNER_CACHE_PATH is intentionally omitted). All overridable.
 export TRTLLM_SERVER_DISABLE_GC="${TRTLLM_SERVER_DISABLE_GC:-1}"
 export TRTLLM_WORKER_DISABLE_GC="${TRTLLM_WORKER_DISABLE_GC:-1}"
 export NCCL_GRAPH_MIXING_SUPPORT="${NCCL_GRAPH_MIXING_SUPPORT:-0}"
@@ -64,38 +61,30 @@ nvidia-smi
 SERVER_LOG="$PWD/server.log"
 EXTRA_CONFIG_FILE="dsv4-fp4-trt-mtp.yml"
 
-# MoE backend: TRTLLM is the frontier default across the sweep. The 0608-B200
-# MTP data used MEGAMOE_DEEPGEMM only at the top concurrencies (1k1k conc>=512);
-# set MOE_BACKEND=MEGAMOE_DEEPGEMM to reproduce those points.
 MOE_BACKEND="${MOE_BACKEND:-TRTLLM}"
-# 0608-B200 MTP frontier runs at MTP level 3 (overridable).
 MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
-# free_gpu_memory_fraction from 0608-B200 MTP: 0.9 (TP / no DP-attn), 0.6 (DP-attn).
 if [[ "$DP_ATTENTION" == "true" ]]; then
     KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.6}"
 else
     KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.9}"
 fi
 
-# enable_lm_head_tp_in_adp: the 0608-B200 MTP frontier sets this on the DP-attn path.
-LM_HEAD_TP_IN_ADP_CONFIG=""
 ATTENTION_DP_CONFIG=""
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    LM_HEAD_TP_IN_ADP_CONFIG="
-enable_lm_head_tp_in_adp: true"
     ATTENTION_DP_CONFIG="
 attention_dp_config:
     batching_wait_iters: 30
-    enable_balance: true"
+    enable_balance: true
+enable_lm_head_tp_in_adp: true"
 fi
 
 cat > "$EXTRA_CONFIG_FILE" << EOF
 cuda_graph_config:
     enable_padding: true
     max_batch_size: $CUDA_GRAPH_MAX_BATCH_SIZE
-enable_attention_dp: $DP_ATTENTION$ATTENTION_DP_CONFIG$LM_HEAD_TP_IN_ADP_CONFIG
+enable_attention_dp: $DP_ATTENTION$ATTENTION_DP_CONFIG
 print_iter_log: true
 kv_cache_config:
     tokens_per_block: 128
