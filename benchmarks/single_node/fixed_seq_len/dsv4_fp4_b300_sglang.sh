@@ -163,6 +163,8 @@ fi
     echo "==================================="
 } | tee "$SERVER_LOG"
 
+cleanup_server_ports
+
 set -x
 PYTHONNOUSERSITE=1 sglang serve \
     --model-path $MODEL_PATH --served-model-name $MODEL \
