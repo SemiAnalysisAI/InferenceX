@@ -50,15 +50,22 @@ case "$OFFLOADING" in
         # DeepSeek V4 HiCache currently rejects --hicache-size and supports
         # capacity control only through a host/device token-capacity ratio.
         # DSv4 allocates several physical host sub-pools for each logical host
-        # token. At TP8, ratio=4 consumes about 237 GB/rank (1.9 TB total) while
-        # model loading/page cache is still resident and the OS kills a rank.
+        # token. On B300 TP8, ratio=4 consumes about 237 GB/rank (1.9 TB total)
+        # while model loading/page cache is still resident and the OS kills a
+        # rank, so leave transient startup headroom with ratio=2. B200 has a
+        # smaller device KV pool and 3.8 TiB of host RAM, so ratio=8 provides a
+        # substantially larger useful CPU tier while staying within its node
+        # budget.
         # TP4 ratio=4 works at C32 but fills its roughly 500 GB host tier at
         # C48/C64. Ratio=8 still cannot retain the C64 session working set long
         # enough to produce host hits. Ratio=16 provides roughly 21M logical
         # host tokens while remaining below the B300 node's host budget.
-        # Use ratio=2 at TP8 to leave enough transient headroom during startup.
         if [ "$TP" -ge 8 ]; then
-            DEFAULT_HICACHE_RATIO=2
+            if [ "${DSV4_SGLANG_PLATFORM:-}" = "B200" ]; then
+                DEFAULT_HICACHE_RATIO=8
+            else
+                DEFAULT_HICACHE_RATIO=2
+            fi
         else
             DEFAULT_HICACHE_RATIO=16
         fi
