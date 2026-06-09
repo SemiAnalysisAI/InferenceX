@@ -3531,3 +3531,14 @@
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang MTP 1k/1k coverage using lmsysorg/sglang:nightly-dev-cu13-20260603-83bc7766"
+    - "New top-level config (sibling of dsv4-fp4-gb300-dynamo-sglang-mtp which stays on the older 8k/1k image nightly-dev-20260527-14f81a67); separate entry is required because the launcher builds one squashfs per top-level image and the 1k/1k recipes pin a newer container string"
+    - "Wires 5 disagg recipes adapted from NVIDIA/srt-slurm PR #177 (recipes/dsv4-pro/sglang/gb300-fp4/1k1k/disagg/mtp/), staged locally under benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4/1k1k/: 3 high-throughput conc=8192 recipes (1p1d-dep8, 1p1d-dep16, 2p1d-dep16) plus 2 low-latency templates (disagg-low-latency-dep4-mtp matrix-point at conc=64, disagg-low-latency-tp4-mtp matrix-point at conc=2)"
+    - "Decode side runs EAGLE (num-steps=3, eagle-topk=1, num-draft-tokens=4) on all 5 recipes"
+    - "The 2 low-latency recipe yamls retain their upstream container reference (lmsysorg/sglang:nightly-dev-cu13-20260510-2473659e); that image is not currently on Docker Hub, so the squash-import step would 404 without a launcher-side container alias or an upstream image push"
+    - "Matrix tracks one representative point per low-latency template; the recipe itself uses srt-slurm's base+zip_override_1k1k_lowlat syntax to internally generate 4 decode_nodes variants (1/2/4/6) per template"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
