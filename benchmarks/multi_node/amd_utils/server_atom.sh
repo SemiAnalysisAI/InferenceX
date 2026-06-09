@@ -99,19 +99,19 @@ done
 echo "Prefill IPs : ${PREFILL_IPS[*]}"
 echo "Decode  IPs : ${DECODE_IPS[*]}"
 
-# =============================================================================
-# Container Synchronization
-# =============================================================================
-
-echo "Waiting at the container creation barrier on $host_name"
-python3 $ATOM_WS_PATH/sync.py barrier \
-    --local-ip 0.0.0.0 \
-    --local-port 5000 \
-    --enable-port \
-    --node-ips ${IPADDRS} \
-    --node-ports 5000 \
-    --wait-for-all-ports \
-    --timeout 300
+## =============================================================================
+## Container Synchronization
+## =============================================================================
+#
+#echo "Waiting at the container creation barrier on $host_name"
+#python3 $ATOM_WS_PATH/sync.py barrier \
+#    --local-ip 0.0.0.0 \
+#    --local-port 5000 \
+#    --enable-port \
+#    --node-ips ${IPADDRS} \
+#    --node-ports 5000 \
+#    --wait-for-all-ports \
+#    --timeout 300
 
 # =============================================================================
 # Node Role Assignment
@@ -157,17 +157,34 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Wait for all prefill and decode servers to be ready
-    echo "Waiting for all servers to be up..."
-    BARRIER_CMD="python3 $ATOM_WS_PATH/sync.py barrier \
-        --node-ips ${IPADDRS} \
-        --node-ports ${PREFILL_PORT} \
-        --wait-for-all-ports \
-        --timeout 3000"
-
+    WAIT_SERVER_TIMEOUT="${WAIT_SERVER_TIMEOUT:-1800}"
+    echo "Waiting for all servers to be up (timeout=${WAIT_SERVER_TIMEOUT}s)..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
-        echo "DRY RUN: $BARRIER_CMD"
+        echo "DRY RUN: wait for prefill/decode /health endpoints"
     else
-        eval "$BARRIER_CMD"
+        _deadline=$(( $(date +%s) + WAIT_SERVER_TIMEOUT ))
+        for _ip in "${PREFILL_IPS[@]}"; do
+            echo "[wait] prefill http://${_ip}:${PREFILL_PORT}/health"
+            while ! curl -sf --max-time 10 "http://${_ip}:${PREFILL_PORT}/health" >/dev/null 2>&1; do
+                if [[ $(date +%s) -ge $_deadline ]]; then
+                    echo "[wait][FAIL] prefill ${_ip}:${PREFILL_PORT} not ready after ${WAIT_SERVER_TIMEOUT}s" >&2
+                    exit 1
+                fi
+                sleep 10
+            done
+            echo "[wait][OK] prefill ${_ip}:${PREFILL_PORT} ready"
+        done
+        for _ip in "${DECODE_IPS[@]}"; do
+            echo "[wait] decode http://${_ip}:${DECODE_PORT}/health"
+            while ! curl -sf --max-time 10 "http://${_ip}:${DECODE_PORT}/health" >/dev/null 2>&1; do
+                if [[ $(date +%s) -ge $_deadline ]]; then
+                    echo "[wait][FAIL] decode ${_ip}:${DECODE_PORT} not ready after ${WAIT_SERVER_TIMEOUT}s" >&2
+                    exit 1
+                fi
+                sleep 10
+            done
+            echo "[wait][OK] decode ${_ip}:${DECODE_PORT} ready"
+        done
     fi
     echo "All servers up. Starting atomesh router..."
 
@@ -193,12 +210,45 @@ if [ "$NODE_RANK" -eq 0 ]; then
         proxy_pid=$!
 
         # Wait for router to accept connections
-        HEALTH_BARRIER_CMD="python3 $ATOM_WS_PATH/sync.py barrier \
-            --node-ips ${NODE0_ADDR} \
-            --node-ports ${ROUTER_PORT} \
-            --wait-for-all-ports \
-            --timeout 3000"
-        eval "$HEALTH_BARRIER_CMD"
+        WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
+        echo "[wait] router http://0.0.0.0:${ROUTER_PORT}/v1/models (timeout=${WAIT_ROUTER_TIMEOUT}s)"
+        _router_deadline=$(( $(date +%s) + WAIT_ROUTER_TIMEOUT ))
+        while ! curl -sf --max-time 10 "http://0.0.0.0:${ROUTER_PORT}/v1/models" >/dev/null 2>&1; do
+            if [[ $(date +%s) -ge $_router_deadline ]]; then
+                echo "[wait][FAIL] router ${ROUTER_PORT}/v1/models not ready after ${WAIT_ROUTER_TIMEOUT}s" >&2
+                exit 1
+            fi
+            sleep 10
+        done
+        echo "[wait][OK] router /v1/models ready"
+
+        # Verify end-to-end inference pipeline is ready
+        echo "[wait-inference] router http://0.0.0.0:${ROUTER_PORT}/v1/completions (timeout=${WAIT_SERVER_TIMEOUT}s)"
+        _infer_deadline=$(( $(date +%s) + WAIT_SERVER_TIMEOUT ))
+        _infer_attempt=0
+        while true; do
+            _infer_attempt=$((_infer_attempt + 1))
+            _infer_resp=$(curl -sS --max-time 120 -X POST "http://0.0.0.0:${ROUTER_PORT}/v1/completions" \
+                -H 'Content-Type: application/json' \
+                -d "{\"model\":\"${MODEL_DIR}/${MODEL_NAME}\",\"prompt\":\"hi\",\"max_tokens\":4,\"temperature\":0}" 2>&1 || true)
+            _text_len=$(echo "$_infer_resp" | python3 -c 'import sys,json
+try:
+    d=json.loads(sys.stdin.read())
+    print(len(d.get("choices",[{}])[0].get("text","")))
+except Exception:
+    print(0)' 2>/dev/null || echo 0)
+            if [[ "$_text_len" -gt 0 ]]; then
+                echo "[wait-inference][OK] router pipeline ready (attempt #${_infer_attempt}, text_len=${_text_len})"
+                break
+            fi
+            if [[ $(date +%s) -ge $_infer_deadline ]]; then
+                echo "[wait-inference][FAIL] router pipeline not ready after ${WAIT_SERVER_TIMEOUT}s (attempts=${_infer_attempt})" >&2
+                echo "[wait-inference] last response (truncated): ${_infer_resp:0:500}" >&2
+                exit 1
+            fi
+            sleep 15
+        done
+
         echo "Router is ready for benchmarking"
     fi
 
@@ -252,7 +302,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port ${ROUTER_PORT} (conc=${EVAL_CONCURRENT_REQUESTS})"
             else
-                run_eval --framework lm-eval --port ${ROUTER_PORT}
+                MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" run_eval --framework lm-eval --port ${ROUTER_PORT}
                 eval_rc=$?
 
                 if [[ $eval_rc -ne 0 ]]; then
@@ -341,18 +391,30 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     fi
 
     echo "Waiting for router to be up..."
-    BARRIER_CMD="python3 $ATOM_WS_PATH/sync.py barrier \
-        --node-ips ${NODE0_ADDR} \
-        --node-ports ${ROUTER_PORT} \
-        --wait-for-all-ports \
-        --timeout 3600"
-    if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $BARRIER_CMD"; else eval "$BARRIER_CMD"; fi
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
+    else
+        _router_deadline=$(( $(date +%s) + WAIT_ROUTER_TIMEOUT ))
+        while ! curl -sf --max-time 10 "http://${NODE0_ADDR}:${ROUTER_PORT}/health" >/dev/null 2>&1; do
+            if [[ $(date +%s) -ge $_router_deadline ]]; then
+                echo "[wait][FAIL] router ${NODE0_ADDR}:${ROUTER_PORT} not ready after ${WAIT_ROUTER_TIMEOUT}s" >&2
+                exit 1
+            fi
+            sleep 10
+        done
+        echo "[wait][OK] router ${NODE0_ADDR}:${ROUTER_PORT} ready"
+    fi
 
     echo "Waiting until router closes..."
-    WAIT_CMD="python3 $ATOM_WS_PATH/sync.py wait \
-        --remote-ip ${NODE0_ADDR} \
-        --remote-port ${ROUTER_PORT}"
-    if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $WAIT_CMD"; else eval "$WAIT_CMD"; fi
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: wait until router ${NODE0_ADDR}:${ROUTER_PORT} closes"
+    else
+        while curl -sf --max-time 10 "http://${NODE0_ADDR}:${ROUTER_PORT}/health" >/dev/null 2>&1; do
+            sleep 10
+        done
+        echo "[wait] router ${NODE0_ADDR}:${ROUTER_PORT} closed"
+    fi
 
     echo "Killing prefill server (rank ${NODE_RANK})"
     if [[ "$DRY_RUN" -eq 0 ]]; then kill $prefill_pid; fi
@@ -389,18 +451,30 @@ else
     fi
 
     echo "Waiting for router to be up..."
-    BARRIER_CMD="python3 $ATOM_WS_PATH/sync.py barrier \
-        --node-ips ${NODE0_ADDR} \
-        --node-ports ${ROUTER_PORT} \
-        --wait-for-all-ports \
-        --timeout 3600"
-    if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $BARRIER_CMD"; else eval "$BARRIER_CMD"; fi
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
+    else
+        _router_deadline=$(( $(date +%s) + WAIT_ROUTER_TIMEOUT ))
+        while ! curl -sf --max-time 10 "http://${NODE0_ADDR}:${ROUTER_PORT}/health" >/dev/null 2>&1; do
+            if [[ $(date +%s) -ge $_router_deadline ]]; then
+                echo "[wait][FAIL] router ${NODE0_ADDR}:${ROUTER_PORT} not ready after ${WAIT_ROUTER_TIMEOUT}s" >&2
+                exit 1
+            fi
+            sleep 10
+        done
+        echo "[wait][OK] router ${NODE0_ADDR}:${ROUTER_PORT} ready"
+    fi
 
     echo "Waiting until router closes..."
-    WAIT_CMD="python3 $ATOM_WS_PATH/sync.py wait \
-        --remote-ip ${NODE0_ADDR} \
-        --remote-port ${ROUTER_PORT}"
-    if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $WAIT_CMD"; else eval "$WAIT_CMD"; fi
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        echo "DRY RUN: wait until router ${NODE0_ADDR}:${ROUTER_PORT} closes"
+    else
+        while curl -sf --max-time 10 "http://${NODE0_ADDR}:${ROUTER_PORT}/health" >/dev/null 2>&1; do
+            sleep 10
+        done
+        echo "[wait] router ${NODE0_ADDR}:${ROUTER_PORT} closed"
+    fi
 
     echo "Killing decode server (rank ${RANK})"
     if [[ "$DRY_RUN" -eq 0 ]]; then kill $decode_pid; fi
