@@ -37,6 +37,11 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+if [ "$DP_ATTENTION" = "true" ]; then
+    echo "Error: current SGLang nightly self-collides on internal IPC ports during single-node DP-attention startup; use pure TP until upstream fixes PortArgs initialization." >&2
+    exit 1
+fi
+
 CACHE_ARGS=()
 case "$OFFLOADING" in
     none)
@@ -70,35 +75,12 @@ PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics)
 MEM_FRACTION_STATIC=0.88
 CHUNKED_PREFILL_SIZE=8192
-if [ "$DP_ATTENTION" = "true" ]; then
-    PARALLEL_ARGS+=(
-        --dp "$TP"
-        --enable-dp-attention
-        --ep-size "$EP_SIZE"
-        --moe-a2a-backend deepep
-        --deepep-config '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-        --enable-prefill-delayer
-    )
-    # Current SGLang DP-attention startup binds the main metrics IPC port and
-    # then rejects that same port while constructing the DP controller's
-    # per-rank PortArgs. Until upstream fixes that self-collision, omit
-    # --enable-metrics for DEP; server.log still records HiCache allocation and
-    # transfer activity, while pure-TP runs retain the full Prometheus export.
-    METRICS_ARGS=()
-    MEM_FRACTION_STATIC=0.82
-    CHUNKED_PREFILL_SIZE=16384
-else
-    PARALLEL_ARGS+=(
-        --moe-runner-backend flashinfer_mxfp4
-        --disable-flashinfer-autotune
-    )
-fi
+PARALLEL_ARGS+=(
+    --moe-runner-backend flashinfer_mxfp4
+    --disable-flashinfer-autotune
+)
 
-if [ "$DP_ATTENTION" = "true" ]; then
-    PER_ENGINE_MAX_RUNNING=$(( (CONC + TP - 1) / TP ))
-else
-    PER_ENGINE_MAX_RUNNING=$CONC
-fi
+PER_ENGINE_MAX_RUNNING=$CONC
 [ "$PER_ENGINE_MAX_RUNNING" -lt 1 ] && PER_ENGINE_MAX_RUNNING=1
 CUDA_GRAPH_MAX_BS=$PER_ENGINE_MAX_RUNNING
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
@@ -111,9 +93,6 @@ export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
-if [ "$DP_ATTENTION" = "true" ]; then
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
-fi
 
 SGLANG_CMD=(
     python3 -m sglang.launch_server
