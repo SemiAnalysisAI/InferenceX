@@ -47,6 +47,15 @@ sanitize_slurm_mpi_env_for_trtllm
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 
+# DeepSeek-V4 TRTLLM worker tuning envs, synced from the 0608-B200 agg frontier
+# (env_vars: worker_env_var + gen_worker_env_var; the user-specific
+# TLLM_AUTOTUNER_CACHE_PATH is intentionally omitted). All overridable.
+export TRTLLM_SERVER_DISABLE_GC="${TRTLLM_SERVER_DISABLE_GC:-1}"
+export TRTLLM_WORKER_DISABLE_GC="${TRTLLM_WORKER_DISABLE_GC:-1}"
+export NCCL_GRAPH_MIXING_SUPPORT="${NCCL_GRAPH_MIXING_SUPPORT:-0}"
+export MIMALLOC_PURGE_DELAY="${MIMALLOC_PURGE_DELAY:-0}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+
 if [[ "$MODEL" != /* ]]; then
     hf download "$MODEL"
 fi
@@ -56,18 +65,25 @@ nvidia-smi
 SERVER_LOG="$PWD/server.log"
 EXTRA_CONFIG_FILE="dsv4-fp4-trt.yml"
 
-MOE_BACKEND="TRTLLM"
+# MoE backend: TRTLLM is the frontier default across the sweep. The 0608-B200
+# data used MEGAMOE_DEEPGEMM only at the very top concurrency (1k1k conc=2048);
+# set MOE_BACKEND=MEGAMOE_DEEPGEMM to reproduce that point.
+MOE_BACKEND="${MOE_BACKEND:-TRTLLM}"
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
-KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.50}"
+# free_gpu_memory_fraction from 0608-B200: 0.9 (TP / no DP-attn), 0.7 (DP-attn).
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.7}"
+else
+    KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.9}"
+fi
 
 ATTENTION_DP_CONFIG=""
 if [[ "$DP_ATTENTION" == "true" ]]; then
     ATTENTION_DP_CONFIG="
 attention_dp_config:
-    batching_wait_iters: 0
-    enable_balance: true
-    timeout_iters: 60"
+    batching_wait_iters: 30
+    enable_balance: true"
 fi
 
 cat > "$EXTRA_CONFIG_FILE" << EOF
@@ -81,10 +97,11 @@ kv_cache_config:
     dtype: fp8
     free_gpu_memory_fraction: $KV_CACHE_FREE_MEM_FRACTION
     enable_block_reuse: false
-stream_interval: 10
+stream_interval: 100
 num_postprocess_workers: 4
 moe_config:
     backend: $MOE_BACKEND
+    use_low_precision_moe_combine: true
 EOF
 
 echo "Generated config file contents:"
