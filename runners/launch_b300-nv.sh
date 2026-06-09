@@ -411,8 +411,10 @@ else
     # Kill stale sglang/vllm processes on the compute node (outside container).
     # DP-attention uses deterministic TCP ports; a leftover process blocks the
     # next launch with "metrics_port not available".
+    # [s]glang trick: the regex [s]glang matches "sglang" but not the literal
+    # "[s]glang" in pkill's own argv, preventing pkill from killing itself.
     srun --jobid=$JOB_ID --mpi=none \
-        bash -c 'echo "[Host cleanup] killing stale inference processes ..."; pkill -9 -f "sglang" 2>/dev/null; pkill -9 -f "vllm" 2>/dev/null; sleep 2; echo "[Host cleanup] done."' \
+        bash -c 'echo "[Host cleanup] killing stale inference processes ..."; pkill -9 -f "[s]glang" 2>/dev/null; pkill -9 -f "[v]llm" 2>/dev/null; sleep 2; echo "[Host cleanup] done."' \
         || true
 
     srun --jobid=$JOB_ID \
@@ -421,7 +423,7 @@ else
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
-        --no-container-entrypoint --export=ALL,PORT=8888 \
+        --no-container-entrypoint --export=ALL,PORT=30000 \
         bash "$BENCH_SCRIPT"
 
 fi
