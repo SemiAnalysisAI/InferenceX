@@ -252,33 +252,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         done
         echo "[wait][OK] router /v1/models ready"
 
-        # Verify end-to-end inference pipeline is ready
-        echo "[wait-inference] router http://0.0.0.0:${ROUTER_PORT}/v1/completions (timeout=${WAIT_SERVER_TIMEOUT}s)"
-        _infer_deadline=$(( $(date +%s) + WAIT_SERVER_TIMEOUT ))
-        _infer_attempt=0
-        while true; do
-            _infer_attempt=$((_infer_attempt + 1))
-            _infer_resp=$(curl -sS --max-time 120 -X POST "http://0.0.0.0:${ROUTER_PORT}/v1/completions" \
-                -H 'Content-Type: application/json' \
-                -d "{\"model\":\"${MODEL_DIR}/${MODEL_NAME}\",\"prompt\":\"hi\",\"max_tokens\":4,\"temperature\":0}" 2>&1 || true)
-            _text_len=$(echo "$_infer_resp" | python3 -c 'import sys,json
-try:
-    d=json.loads(sys.stdin.read())
-    print(len(d.get("choices",[{}])[0].get("text","")))
-except Exception:
-    print(0)' 2>/dev/null || echo 0)
-            if [[ "$_text_len" -gt 0 ]]; then
-                echo "[wait-inference][OK] router pipeline ready (attempt #${_infer_attempt}, text_len=${_text_len})"
-                break
-            fi
-            if [[ $(date +%s) -ge $_infer_deadline ]]; then
-                echo "[wait-inference][FAIL] router pipeline not ready after ${WAIT_SERVER_TIMEOUT}s (attempts=${_infer_attempt})" >&2
-                echo "[wait-inference] last response (truncated): ${_infer_resp:0:500}" >&2
-                exit 1
-            fi
-            sleep 15
-        done
-
         echo "Router is ready for benchmarking"
     fi
 
