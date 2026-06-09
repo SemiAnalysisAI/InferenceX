@@ -1800,6 +1800,10 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, offloading: cpu,  conc-list: [16, 32, 64] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [64, 128, 256] }
 
+# Recipe config (worker envs + trtllm-serve YAML in dsv4_fp4_b200_trt.sh) synced
+# from the 0608-B200 DeepSeek-V4-Pro agg frontier (deepseek-v4-pro-agg-202606,
+# MTP0 blocks): free_gpu_memory_fraction 0.9/0.7 (TP / DP-attn), stream_interval
+# 100, attention_dp batching_wait_iters 30, moe use_low_precision_moe_combine.
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1821,6 +1825,9 @@ dsv4-fp4-b200-trt:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 1024 }
 
+# Recipe config (dsv4_fp4_b200_trt_mtp.sh) synced from the 0608-B200 agg frontier
+# (MTP blocks): MTP level 3, free_gpu_memory_fraction 0.9/0.6 (TP / DP-attn),
+# enable_lm_head_tp_in_adp on the DP-attn path; other fields as dsv4-fp4-b200-trt.
 dsv4-fp4-b200-trt-mtp:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
   model: deepseek-ai/DeepSeek-V4-Pro
