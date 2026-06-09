@@ -2719,7 +2719,7 @@ dsv4-fp4-mi355x-sglang-agentic:
 
 dsv4-fp4-mi355x-atom-disagg:
   #TODO: (srok), temporary dev img. will update
-  image: rocm/atom-dev:nightly_202606071111-Jasen-fix_dockerfile
+  image: rocm/atom-dev:nightly_202606081625
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2734,6 +2734,25 @@ dsv4-fp4-mi355x-atom-disagg:
       search-space:
       # 1P1D DP+TP8
       # TODO: (srok), spot check
+      - conc-list: [ 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1P1D DP+TP8 (eval target)
       - conc-list: [ 256 ]
         prefill:
           num-worker: 1
