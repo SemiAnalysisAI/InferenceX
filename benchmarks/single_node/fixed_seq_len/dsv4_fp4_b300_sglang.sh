@@ -80,7 +80,7 @@ if [ "$CONC" = "1" ] || [ "$CONC" = "32" ]; then
         --moe-runner-backend flashinfer_mxfp4
         --chunked-prefill-size 8192
         --disable-flashinfer-autotune
-
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "512" ]; then
@@ -94,7 +94,7 @@ elif [ "$CONC" = "512" ]; then
         --disable-flashinfer-autotune
         --chunked-prefill-size 16384
         --enable-prefill-delayer
-
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "2048" ]; then
@@ -111,7 +111,7 @@ elif [ "$CONC" = "2048" ]; then
         --chunked-prefill-size 65536
         --tokenizer-worker-num 4
         --enable-prefill-delayer
-
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "4096" ]; then
@@ -129,7 +129,7 @@ elif [ "$CONC" = "4096" ]; then
         --tokenizer-worker-num 8
         --enable-prefill-delayer
         --decode-log-interval 5
-
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "8192" ]; then
@@ -147,7 +147,7 @@ elif [ "$CONC" = "8192" ]; then
         --tokenizer-worker-num 16
         --enable-prefill-delayer
         --stream-interval 30
-
+        --enable-deepseek-v4-fp4-indexer
     )
 
 else

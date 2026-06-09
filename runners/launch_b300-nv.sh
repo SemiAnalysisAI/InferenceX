@@ -408,15 +408,6 @@ else
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time="${SALLOC_TIME_LIMIT:-180}" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
-    # Kill stale sglang/vllm processes on the compute node (outside container).
-    # DP-attention uses deterministic TCP ports; a leftover process blocks the
-    # next launch with "metrics_port not available".
-    # [s]glang trick: the regex [s]glang matches "sglang" but not the literal
-    # "[s]glang" in pkill's own argv, preventing pkill from killing itself.
-    srun --jobid=$JOB_ID --mpi=none \
-        bash -c 'echo "[Host cleanup] killing stale inference processes ..."; pkill -9 -f "[s]glang" 2>/dev/null; pkill -9 -f "[v]llm" 2>/dev/null; sleep 2; echo "[Host cleanup] done."' \
-        || true
-
     srun --jobid=$JOB_ID \
         --mpi=none \
         --container-image=$SQUASH_FILE \
