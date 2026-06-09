@@ -3400,5 +3400,5 @@
     - dsv4-fp4-b200-sglang-agentic-hicache
     - dsv4-fp4-b300-sglang-agentic-hicache
   description:
-    - "Add DeepSeek-V4-Pro FP4 B200 and B300 SGLang agentic benchmarks with HiCache CPU KV offloading on the June 9 nightly, including the UnifiedRadixCache TP deadlock fix"
+    - "Add DeepSeek-V4-Pro FP4 B200 and B300 SGLang agentic benchmarks with HiCache CPU KV offloading; use the B200-specific DeepSeek-V4 Blackwell image and the June 9 nightly on B300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1640
