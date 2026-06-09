@@ -2732,23 +2732,8 @@ dsv4-fp4-mi355x-atom-disagg:
     - isl: 1024
       osl: 1024
       search-space:
-      # 1P1D DP+TP8
+      # 1P1D DPA+TP8
       # TODO: (srok), spot check
-      - conc-list: [ 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
     - isl: 8192
       osl: 1024
       search-space:
