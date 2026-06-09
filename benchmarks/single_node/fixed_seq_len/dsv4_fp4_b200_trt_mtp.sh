@@ -61,8 +61,20 @@ nvidia-smi
 SERVER_LOG="$PWD/server.log"
 EXTRA_CONFIG_FILE="dsv4-fp4-trt-mtp.yml"
 
-MOE_BACKEND="${MOE_BACKEND:-TRTLLM}"
-MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
+# MoE backend: TRTLLM at low/mid concurrency; switch to MEGAMOE_DEEPGEMM at high
+# concurrency for short ISL (1k).
+if [[ "$ISL" -le 1024 && "$CONC" -ge 512 ]]; then
+    MOE_BACKEND="${MOE_BACKEND:-MEGAMOE_DEEPGEMM}"
+else
+    MOE_BACKEND="${MOE_BACKEND:-TRTLLM}"
+fi
+# MTP draft length: 3 at low/mid concurrency; steps down to 2 at high concurrency
+# for long ISL (8k).
+if [[ "$ISL" -ge 4096 && "$CONC" -ge 128 ]]; then
+    MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-2}"
+else
+    MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
+fi
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
 if [[ "$DP_ATTENTION" == "true" ]]; then
