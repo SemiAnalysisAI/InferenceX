@@ -117,12 +117,26 @@ esac
 
 PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics)
-MEM_FRACTION_STATIC=0.88
 CHUNKED_PREFILL_SIZE=8192
 PARALLEL_ARGS+=(
     --moe-runner-backend flashinfer_mxfp4
     --disable-flashinfer-autotune
 )
+
+MODEL_ARGS=()
+if [ "${DSV4_SGLANG_PLATFORM:-}" = "B200" ]; then
+    # Match the established B200 DSv4 recipe. The B200-specialized image
+    # deadlocks immediately after weight loading when forced through the
+    # B300-oriented compressed-attention/page-size overrides.
+    MEM_FRACTION_STATIC=0.90
+else
+    MEM_FRACTION_STATIC=0.88
+    MODEL_ARGS+=(
+        --attention-backend compressed
+        --page-size 256
+        --disable-shared-experts-fusion
+    )
+fi
 
 PER_ENGINE_MAX_RUNNING=$CONC
 [ "$PER_ENGINE_MAX_RUNNING" -lt 1 ] && PER_ENGINE_MAX_RUNNING=1
@@ -153,19 +167,17 @@ SGLANG_CMD=(
     --port "$PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
-    --attention-backend compressed
-    --page-size 256
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.1
     --max-running-requests "$PER_ENGINE_MAX_RUNNING"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --context-length "$MAX_MODEL_LEN"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
-    --disable-shared-experts-fusion
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
     --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
+    "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
