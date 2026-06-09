@@ -3531,3 +3531,11 @@
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "Bump SGLang ROCm image to nightly v0.5.12.post1-rocm720-mi35x-20260609, reported to carry the upstream MoRI EP dispatch-buffer fix (sgl-project/sglang#27194, ROCm/mori#356)"
+    - "Narrow the 8k1k MTP search space to the single conc-64 DEP8 + 1xDEP8 (MTP3) point. At conc-64/TP8/MTP3 the per-rank dispatch buffer num_max_dispatch_tokens_per_rank = max(CONC_LIST)/TP*(MTP+1) = 64/8*4 = 32 (<256), the regime that silently corrupted decode output on -20260529 (decodes fine, acceptance length stays high, but gsm8k=0)"
+    - "Harness/env settings left at main values (no env clamp, no in-place patcher) so a green conc-64 gsm8k validates the nightly itself fixes the kernel; pre-fix MI355X reference: dispatch=32->0.00, 64->0.00, >=256->0.94. Search space narrowed for this validation only -- restore the full sweep once confirmed"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1696
