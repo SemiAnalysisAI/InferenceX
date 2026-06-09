@@ -20,20 +20,27 @@ export PORT="${PORT:-8888}"
 # Stale server cleanup
 # --------------------------------
 # Kill leftover inference-server processes from a prior run on this node.
-# DP-attention mode derives deterministic TCP ports from $PORT, so a stale
-# sglang process that didn't die cleanly will block the next launch.
-# This runs on the compute node (inside srun), where the processes live.
+# DP-attention mode derives deterministic TCP ports from $PORT:
+#   metrics_port = PORT + 233 (ZMQ_TCP_PORT_DELTA) + 1 + 3 = PORT + 237
+# A stale sglang process holding that port blocks the next launch.
 kill_stale_servers() {
     echo "[Cleanup] Killing stale inference-server processes ..."
-    # Kill by port: main server port and DP-attention ZMQ ports (port+234..port+238)
-    local _port
-    for _port in "$PORT" $(seq $((PORT + 234)) $((PORT + 238))); do
-        fuser -k "$_port/tcp" 2>/dev/null || true
-    done
-    # Belt-and-suspenders: kill any remaining sglang/vllm serve processes
-    pkill -9 -f "sglang serve" 2>/dev/null || true
-    pkill -9 -f "sglang.srt" 2>/dev/null || true
-    pkill -9 -f "vllm serve" 2>/dev/null || true
+    # Use python3+psutil (always present in sglang/vllm images) to find and
+    # kill any process listening on our server port or the derived metrics port.
+    python3 -c "
+import os, signal, psutil
+targets = {int(os.environ.get('PORT', 8888))}
+targets.add(min(targets) + 237)          # metrics_port
+killed = set()
+for c in psutil.net_connections('inet'):
+    if c.laddr.port in targets and c.pid and c.pid not in killed:
+        try:
+            os.kill(c.pid, signal.SIGKILL)
+            killed.add(c.pid)
+            print(f'  killed pid {c.pid} (port {c.laddr.port})')
+        except OSError:
+            pass
+" 2>/dev/null || true
     sleep 2
     echo "[Cleanup] Done."
 }
