@@ -163,7 +163,7 @@ fi
     echo "==================================="
 } | tee "$SERVER_LOG"
 
-cleanup_server_ports
+kill_stale_servers
 
 set -x
 PYTHONNOUSERSITE=1 sglang serve \

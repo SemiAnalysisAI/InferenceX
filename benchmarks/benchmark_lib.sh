@@ -17,6 +17,28 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 export PORT="${PORT:-8888}"
 
 # --------------------------------
+# Stale server cleanup
+# --------------------------------
+# Kill leftover inference-server processes from a prior run on this node.
+# DP-attention mode derives deterministic TCP ports from $PORT, so a stale
+# sglang process that didn't die cleanly will block the next launch.
+# This runs on the compute node (inside srun), where the processes live.
+kill_stale_servers() {
+    echo "[Cleanup] Killing stale inference-server processes ..."
+    # Kill by port: main server port and DP-attention ZMQ ports (port+234..port+238)
+    local _port
+    for _port in "$PORT" $(seq $((PORT + 234)) $((PORT + 238))); do
+        fuser -k "$_port/tcp" 2>/dev/null || true
+    done
+    # Belt-and-suspenders: kill any remaining sglang/vllm serve processes
+    pkill -9 -f "sglang serve" 2>/dev/null || true
+    pkill -9 -f "sglang.srt" 2>/dev/null || true
+    pkill -9 -f "vllm serve" 2>/dev/null || true
+    sleep 2
+    echo "[Cleanup] Done."
+}
+
+# --------------------------------
 # GPU monitoring helpers
 # --------------------------------
 
