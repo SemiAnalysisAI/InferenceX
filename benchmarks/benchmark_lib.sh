@@ -78,60 +78,6 @@ stop_gpu_monitor() {
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set
-# Kill any process listening on the given TCP port.
-# Usage: kill_port_users PORT [PORT ...]
-# Silently succeeds if the port is already free.
-kill_port_users() {
-    for port in "$@"; do
-        local pids
-        # lsof is the most portable way; fall back to fuser / ss+awk.
-        if command -v lsof >/dev/null 2>&1; then
-            pids=$(lsof -ti "tcp:$port" 2>/dev/null || true)
-        elif command -v fuser >/dev/null 2>&1; then
-            pids=$(fuser "$port/tcp" 2>/dev/null | tr -s ' ' '\n' || true)
-        elif command -v ss >/dev/null 2>&1; then
-            pids=$(ss -tlnp "sport = :$port" 2>/dev/null \
-                   | awk -F'pid=' 'NR>1 && $2{split($2,a,","); print a[1]}' || true)
-        fi
-
-        pids=$(echo "$pids" | xargs)  # trim whitespace
-        if [[ -z "$pids" ]]; then
-            continue
-        fi
-
-        echo "[cleanup] Killing process(es) on port $port: $pids"
-        # SIGTERM first, give 3s, then SIGKILL
-        kill $pids 2>/dev/null || true
-        for _i in $(seq 1 6); do
-            if ! lsof -ti "tcp:$port" >/dev/null 2>&1 && \
-               ! fuser "$port/tcp" >/dev/null 2>&1; then
-                break
-            fi
-            sleep 0.5
-        done
-        kill -9 $pids 2>/dev/null || true
-    done
-}
-
-# Kill stale processes on the server port and the range of ZMQ/NCCL ports
-# that sglang derives from it (port+233 … port+239). Call before launching
-# the inference server to avoid "port not available" errors from leftover
-# processes of a prior run.
-# Usage: cleanup_server_ports [PORT]   (defaults to $PORT / 8888)
-cleanup_server_ports() {
-    local base="${1:-${PORT:-8888}}"
-    local zmq_base=$((base + 234))  # port + ZMQ_TCP_PORT_DELTA(233) + 1
-    local ports=("$base")
-    for offset in $(seq 0 5); do
-        ports+=($((zmq_base + offset)))
-    done
-    # Also kill the NCCL port range (base + 234 + 100 … +108 for tp=8)
-    for offset in $(seq 100 108); do
-        ports+=($((zmq_base + offset)))
-    done
-    kill_port_users "${ports[@]}"
-}
-
 check_env_vars() {
     local missing_vars=()
 
