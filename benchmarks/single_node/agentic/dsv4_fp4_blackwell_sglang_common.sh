@@ -47,6 +47,17 @@ fi
 nvidia-smi
 
 resolve_trace_source
+
+# Keep AIPerf's Transformers-main dependency from replacing the older
+# Transformers build pinned by the B200-specialized SGLang image. The server
+# always launches with the image's original interpreter; AIPerf and result
+# processing use the isolated environment when InferenceX is mounted at /ix.
+SGLANG_PYTHON="$(command -v python3)"
+if [[ "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
+    AGENTIC_VENV="${AGENTIC_VENV:-/tmp/inferencex-agentic-venv}"
+    "$SGLANG_PYTHON" -m venv "$AGENTIC_VENV"
+    export PATH="$AGENTIC_VENV/bin:$PATH"
+fi
 install_agentic_deps
 
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -135,7 +146,7 @@ export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 
 SGLANG_CMD=(
-    python3 -m sglang.launch_server
+    "$SGLANG_PYTHON" -m sglang.launch_server
     --model-path "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
