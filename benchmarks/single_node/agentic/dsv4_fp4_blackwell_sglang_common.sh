@@ -9,7 +9,22 @@ set -x
 #   none    - SGLang GPU KV cache with RadixAttention prefix caching.
 #   hicache - SGLang HiCache local CPU tier with DSv4 UnifiedRadixCache.
 
-source "$(dirname "${BASH_SOURCE[0]}")/../../benchmark_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INFERENCEX_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+
+# The B200 DeepSeek-V4 Blackwell image installs SGLang editable under
+# /workspace, so its launcher mounts InferenceX at /ix instead. Resolve the
+# agentic tooling and results against the actual repository mount so the image
+# can keep its /workspace install and GitHub Actions can collect the outputs.
+if [[ ! -d "$INFMAX_CONTAINER_WORKSPACE/utils/aiperf" ]]; then
+    export INFMAX_CONTAINER_WORKSPACE="$INFERENCEX_ROOT"
+fi
+if [[ "${RESULT_DIR:-}" == /workspace/* && "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
+    export RESULT_DIR="$INFMAX_CONTAINER_WORKSPACE/${RESULT_DIR#/workspace/}"
+fi
+
+source "$INFERENCEX_ROOT/benchmarks/benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
@@ -138,7 +153,7 @@ SGLANG_CMD=(
     --disable-shared-experts-fusion
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
-    --chat-template "$(dirname "${BASH_SOURCE[0]}")/../chat_templates/deepseek_v4_thinking.jinja"
+    --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
