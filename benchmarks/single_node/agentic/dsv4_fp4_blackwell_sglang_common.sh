@@ -67,6 +67,7 @@ case "$OFFLOADING" in
 esac
 
 PARALLEL_ARGS=(--tp "$TP")
+METRICS_ARGS=(--enable-metrics)
 MEM_FRACTION_STATIC=0.88
 CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -78,6 +79,12 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --deepep-config '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
         --enable-prefill-delayer
     )
+    # Current SGLang DP-attention startup binds the main metrics IPC port and
+    # then rejects that same port while constructing the DP controller's
+    # per-rank PortArgs. Until upstream fixes that self-collision, omit
+    # --enable-metrics for DEP; server.log still records HiCache allocation and
+    # transfer activity, while pure-TP runs retain the full Prometheus export.
+    METRICS_ARGS=()
     MEM_FRACTION_STATIC=0.82
     CHUNKED_PREFILL_SIZE=16384
 else
@@ -129,7 +136,7 @@ SGLANG_CMD=(
     --reasoning-parser deepseek-v4
     --chat-template "$(dirname "${BASH_SOURCE[0]}")/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
-    --enable-metrics
+    "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
 )
 
@@ -158,8 +165,10 @@ capture_cache_metrics() {
 }
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
-capture_cache_metrics
-trap capture_cache_metrics EXIT
+if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
+    capture_cache_metrics
+    trap capture_cache_metrics EXIT
+fi
 
 build_replay_cmd "$RESULT_DIR"
 run_agentic_replay_and_write_outputs "$RESULT_DIR"
