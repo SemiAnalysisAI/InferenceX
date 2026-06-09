@@ -3539,3 +3539,9 @@
     - "Add shared DP-attention env vars: MEGA_MOE_USE_FP4_ACTS, USE_MXF4_KIND, USE_ONLINE_COMPRESS, unified NUM_MAX_TOKENS_PER_RANK=8192"
     - "Bump image to nightly-dev-cu13-20260601-373cadc9"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1682
+
+- config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Add --enable-breakable-cuda-graph, --enforce-piecewise-cuda-graph, and --enable-mixed-chunk to all concurrency profiles"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PLACEHOLDER
