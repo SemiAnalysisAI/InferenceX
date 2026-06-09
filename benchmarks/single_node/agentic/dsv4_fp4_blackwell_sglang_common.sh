@@ -97,6 +97,13 @@ CUDA_GRAPH_MAX_BS=$PER_ENGINE_MAX_RUNNING
 
 export PYTHONNOUSERSITE=1
 export TORCH_CUDA_ARCH_LIST=10.0
+# Agentic warmup dispatches hundreds of large prompts at once. SGLang's
+# tokenizer process can leave request bytes unacknowledged for longer than
+# AIPerf's 30-second TCP_USER_TIMEOUT while it admits that initial burst,
+# causing Linux to abort otherwise-live localhost connections. Keep the
+# six-hour request timeout unchanged, but allow up to 15 minutes for TCP
+# progress before declaring the connection dead.
+export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
 export SGLANG_OPT_USE_JIT_NORM=1
