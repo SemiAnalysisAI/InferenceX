@@ -81,8 +81,7 @@ if [ "$CONC" = "1" ] || [ "$CONC" = "32" ]; then
         --chunked-prefill-size 8192
         --disable-flashinfer-autotune
         --enable-deepseek-v4-fp4-indexer
-        --enforce-piecewise-cuda-graph
-        --enable-mixed-chunk
+        --enable-flashinfer-allreduce-fusion
     )
 
 elif [ "$CONC" = "512" ]; then
@@ -97,8 +96,7 @@ elif [ "$CONC" = "512" ]; then
         --chunked-prefill-size 16384
         --enable-prefill-delayer
         --enable-deepseek-v4-fp4-indexer
-        --enforce-piecewise-cuda-graph
-        --enable-mixed-chunk
+        --enable-flashinfer-allreduce-fusion
     )
 
 elif [ "$CONC" = "2048" ]; then
@@ -116,8 +114,7 @@ elif [ "$CONC" = "2048" ]; then
         --tokenizer-worker-num 4
         --enable-prefill-delayer
         --enable-deepseek-v4-fp4-indexer
-        --enforce-piecewise-cuda-graph
-        --enable-mixed-chunk
+        --enable-flashinfer-allreduce-fusion
     )
 
 elif [ "$CONC" = "4096" ]; then
@@ -136,8 +133,7 @@ elif [ "$CONC" = "4096" ]; then
         --enable-prefill-delayer
         --decode-log-interval 5
         --enable-deepseek-v4-fp4-indexer
-        --enforce-piecewise-cuda-graph
-        --enable-mixed-chunk
+        --enable-flashinfer-allreduce-fusion
     )
 
 elif [ "$CONC" = "8192" ]; then
@@ -156,8 +152,7 @@ elif [ "$CONC" = "8192" ]; then
         --enable-prefill-delayer
         --stream-interval 30
         --enable-deepseek-v4-fp4-indexer
-        --enforce-piecewise-cuda-graph
-        --enable-mixed-chunk
+        --enable-flashinfer-allreduce-fusion
     )
 
 else
