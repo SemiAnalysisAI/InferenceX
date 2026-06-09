@@ -9442,7 +9442,7 @@ gptoss-fp4-b200-vllm-agentic:
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
 minimaxm2.5-fp8-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b200-dgxc
@@ -9464,7 +9464,7 @@ minimaxm2.5-fp8-b200-vllm-agentic:
   # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 minimaxm2.5-fp8-b300-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: b300
@@ -9485,7 +9485,7 @@ minimaxm2.5-fp8-b300-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
 
 minimaxm2.5-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.22.1
   model: nvidia/MiniMax-M2.5-NVFP4
   model-prefix: minimaxm2.5
   runner: b200
@@ -9503,7 +9503,7 @@ minimaxm2.5-fp4-b200-vllm-agentic:
   # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 minimaxm2.5-fp8-h100-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h100
@@ -9521,7 +9521,7 @@ minimaxm2.5-fp8-h100-vllm-agentic:
       - { tp: 4, ep: 4, offloading: cpu,  conc-list: [5, 6, 7, 8, 10, 12] }
 
 minimaxm2.5-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: h200

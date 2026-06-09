@@ -2519,7 +2519,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
 
 minimaxm2.5-fp8-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -2537,7 +2537,7 @@ minimaxm2.5-fp8-mi355x-vllm-agentic:
       - { tp: 4, ep: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
 
 minimaxm2.5-fp8-mi300x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x
@@ -2555,7 +2555,7 @@ minimaxm2.5-fp8-mi300x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
 minimaxm2.5-fp8-mi325x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
