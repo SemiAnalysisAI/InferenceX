@@ -270,7 +270,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
                     export ISL="${BENCH_INPUT_LEN}"
                     export OSL="${BENCH_OUTPUT_LEN}"
 
-                    append_lm_eval_summary
+                    MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" append_lm_eval_summary
 
                     EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
                     mkdir -p "$EVAL_COPY_DIR"
