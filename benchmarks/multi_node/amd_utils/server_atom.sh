@@ -226,7 +226,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${NODE0_ADDR} \
             --node-ports ${ROUTER_PORT} \
             --wait-for-all-ports \
-            --timeout 1800"
+            --timeout 60"
         eval "$HEALTH_BARRIER_CMD"
         echo "Router is ready for benchmarking"
     fi
