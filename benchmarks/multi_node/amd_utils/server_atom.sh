@@ -141,7 +141,7 @@ python3 $ATOM_WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300
+    --timeout 100
 
 # =============================================================================
 # Node Role Assignment
@@ -167,7 +167,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        -tp ${PREFILL_TP_SIZE} \
+        "${PREFILL_PARALLEL_ARGS[@]}" \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRACTION} \
@@ -191,7 +191,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports ${PREFILL_PORT} \
         --wait-for-all-ports \
-        --timeout 3000"
+        --timeout 100"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -226,7 +226,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${NODE0_ADDR} \
             --node-ports ${ROUTER_PORT} \
             --wait-for-all-ports \
-            --timeout 3000"
+            --timeout 100"
         eval "$HEALTH_BARRIER_CMD"
         echo "Router is ready for benchmarking"
     fi
@@ -373,7 +373,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 3600"
+        --timeout 100"
     if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $BARRIER_CMD"; else eval "$BARRIER_CMD"; fi
 
     echo "Waiting until router closes..."
@@ -431,7 +431,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 3600"
+        --timeout 100"
     if [[ "$DRY_RUN" -eq 1 ]]; then echo "DRY RUN: $BARRIER_CMD"; else eval "$BARRIER_CMD"; fi
 
     echo "Waiting until router closes..."
