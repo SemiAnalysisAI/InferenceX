@@ -8,6 +8,11 @@ model:
   path: dsr1
   container: dynamo-sglang
   precision: fp4
+
+dynamo:
+  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+  install: true
+
 resources:
   gpu_type: b200
   prefill_nodes: 1
