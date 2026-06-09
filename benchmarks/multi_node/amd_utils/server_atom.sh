@@ -29,7 +29,11 @@ IPADDRS="${IPADDRS:-localhost}"
 
 # Parallelism
 PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
+PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
+PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
 DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
+DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
+DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
 # ATOM server ports (different from SGLang which uses 8000 for all)
 PREFILL_PORT="${PREFILL_PORT:-8010}"
@@ -99,6 +103,32 @@ done
 echo "Prefill IPs : ${PREFILL_IPS[*]}"
 echo "Decode  IPs : ${DECODE_IPS[*]}"
 
+PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
+PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
+DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
+DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
+
+PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
+if [ "$PREFILL_ENABLE_DP" = "true" ]; then
+    if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
+    else #DPA+TP
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
+    fi
+fi 
+
+DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
+if [ "$DECODE_ENABLE_DP" = "true" ]; then
+    if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
+    else #DPA+TP
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
+    fi
+fi 
+
+echo "Prefill Parallel args : ${PREFILL_PARALLEL_ARGS[*]}"
+echo "Decode  Parallel args : ${DECODE_PARALLEL_ARGS[*]}"
+
 ## =============================================================================
 ## Container Synchronization
 ## =============================================================================
@@ -137,7 +167,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        -tp ${PREFILL_TP_SIZE} \
+        "${PREFILL_PARALLEL_ARGS[@]}" \
         --enable-dp-attention \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
@@ -371,7 +401,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        -tp ${PREFILL_TP_SIZE} \
+        "${PREFILL_PARALLEL_ARGS[@]}" \
         --enable-dp-attention \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
@@ -430,7 +460,7 @@ else
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${DECODE_PORT} \
         --trust-remote-code \
-        -tp ${DECODE_TP_SIZE} \
+        "${DECODE_PARALLEL_ARGS[@]}" \
         --enable-dp-attention \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
