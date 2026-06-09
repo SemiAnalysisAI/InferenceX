@@ -111,7 +111,7 @@ python3 $ATOM_WS_PATH/sync.py barrier \
     --node-ips ${IPADDRS} \
     --node-ports 5000 \
     --wait-for-all-ports \
-    --timeout 300
+    --timeout 3000
 
 # =============================================================================
 # Node Role Assignment
@@ -162,7 +162,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports ${PREFILL_PORT} \
         --wait-for-all-ports \
-        --timeout 1800"
+        --timeout 3000"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
@@ -211,12 +211,81 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    if [[ "$DRY_RUN" -eq 1 ]]; then
+    if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
+        echo "EVAL_ONLY mode: skipping throughput benchmark"
+    elif [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BENCH_CMD"
     else
         set -x
         eval "$BENCH_CMD"
         set +x
+    fi
+
+    # Run evaluation if requested (before killing router)
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        echo "Running lm-eval evaluation on Node 0..."
+
+        # Health check: verify the router is still serving before running eval.
+        EVAL_HEALTH_OK=false
+        for _attempt in 1 2 3; do
+            if curl -sf --max-time 10 "http://0.0.0.0:${ROUTER_PORT}/health" >/dev/null 2>&1; then
+                EVAL_HEALTH_OK=true
+                break
+            fi
+            echo "Eval health check attempt $_attempt failed, retrying in 10s..."
+            sleep 10
+        done
+
+        if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
+            echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
+        else
+            pushd /workspace
+
+            source /workspace/benchmarks/benchmark_lib.sh
+
+            if [[ -n "${EVAL_CONC:-}" ]]; then
+                export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+            else
+                export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+            fi
+
+            if [[ "$DRY_RUN" -eq 1 ]]; then
+                echo "DRY RUN: run_eval --framework lm-eval --port ${ROUTER_PORT} (conc=${EVAL_CONCURRENT_REQUESTS})"
+            else
+                run_eval --framework lm-eval --port ${ROUTER_PORT}
+                eval_rc=$?
+
+                if [[ $eval_rc -ne 0 ]]; then
+                    echo "ERROR: run_eval exited rc=$eval_rc; skipping metadata write and eval artifact staging" >&2
+                    EVAL_FAILED=1
+                else
+                    export TP="${PREFILL_TP_SIZE}"
+                    export CONC="${EVAL_CONCURRENT_REQUESTS}"
+                    export PREFILL_TP="${PREFILL_TP_SIZE}"
+                    export PREFILL_EP=1
+                    export PREFILL_NUM_WORKERS="${xP}"
+                    export DECODE_TP="${DECODE_TP_SIZE}"
+                    export DECODE_EP=1
+                    export DECODE_NUM_WORKERS="${yD}"
+                    export ISL="${BENCH_INPUT_LEN}"
+                    export OSL="${BENCH_OUTPUT_LEN}"
+
+                    append_lm_eval_summary
+
+                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                    mkdir -p "$EVAL_COPY_DIR"
+                    for f in meta_env.json; do
+                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+                    done
+                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+
+                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                fi
+            fi
+
+            popd
+        fi
     fi
 
     # Copy results
@@ -231,6 +300,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 0 ]]; then
         kill $proxy_pid
         kill $prefill0_pid
+    fi
+
+    if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
+        echo "ERROR: eval failed; exiting node-0 with rc=1"
+        exit 1
     fi
 
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
