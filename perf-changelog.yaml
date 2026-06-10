@@ -3540,4 +3540,4 @@
   description:
     - "Use vLLM image v0.22.0 for MiniMax-M2.5 FP8/FP4 B200/B300 aggregate benchmarks."
     - "Set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0 in the B200/B300 MiniMax aggregate launch scripts."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1704
