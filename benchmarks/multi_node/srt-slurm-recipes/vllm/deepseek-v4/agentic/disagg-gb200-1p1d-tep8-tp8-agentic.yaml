@@ -1,38 +1,26 @@
-name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-agentic"
+name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 
-# Agentic-coding variant of vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe.yaml.
-# Topology is identical (1 prefill DEP=8 + 1 decode DEP=8, 16 GPUs across 4
-# GB200 nodes + 1 dedicated NATS/etcd infra node) so we can compare against
-# the fixed-seq-len mid-curve baseline. Serves the low-latency (conc 32) and
-# mid (conc 192) agentic tiers.
+# Agentic-coding recipe for GB200: 1 prefill (TEP=8) + 1 decode (TP=8),
+# 16 GPUs across 4 GB200 nodes + 1 dedicated NATS/etcd infra node.
 #
-# Divergence vs the 8k1k sibling (same deltas as the gb300 agentic recipes):
-#   - benchmark.type:        sa-bench -> custom (hands off to agentic_srt.sh)
-#   - max-model-len:         262144 (NOT removed like on gb300). GB200 has
-#                              186 GB HBM vs GB300's 288 GB; letting vLLM
-#                              derive DSv4's 1M context needs 24.06 GiB KV
-#                              per DEP8 rank but only ~7.9 GiB is free after
-#                              FP4 weights + MegaMOE buffers — engine init
-#                              dies in _check_enough_kv_cache_memory (R3,
-#                              job 18592). 256k fits (~6 GiB) and pairs with
-#                              the 256k-capped corpus below, mirroring the
-#                              minimaxm2.5 agentic configs.
-#   - WEKA_LOADER_OVERRIDE:  060826 *256k* corpus variant + MAX_MODEL_LEN env
-#                              so aiperf filters replay inputs to the served
-#                              context window.
-#   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
-#                              trajectory reuse — entire point of agentic)
-#   - infra.nats_max_payload_mb: 32 (agentic prompts at 50k-200k DSv4 tokens
-#                              serialize to 1-3 MB JSON; NATS' 1 MiB default
-#                              rejects them — see gb300 1p6d recipe comment)
-#   - srun_options.container-remap-root: pyxis may map the calling user to a
-#                              non-root uid in the container; agentic_srt.sh
-#                              needs root for `apt-get install git`. No-op
-#                              when the container user is already root.
-# Note: --enable-auto-tool-choice / --tool-call-parser / --reasoning-parser
-# are NOT set on the worker. The dynamo-vllm worker entrypoint doesn't
-# accept them (different arg parser than `vllm serve`). In disagg, chat
-# parsing happens at the dynamo frontend, not at the worker.
+# Why TEP/TP instead of the fixed-seq-len DEP8/DEP8 family
+# (disagg-gb200-mid-curve-megamoe.yaml): with data-parallel ranks each rank
+# holds the FULL KV of its sequences, and DSv4's hybrid KV needs 19.82 GiB
+# per rank just to admit one 256k-token request — but only ~8.8 GiB is free
+# on a 186 GB GB200 GPU after FP4 weights + MegaMOE buffers (engine init
+# died in _check_enough_kv_cache_memory; R4 jobs 18598/18600). Tensor
+# parallelism shards the KV 8-ways (~2.5 GiB/GPU at 256k), which fits with
+# room for concurrent sequences. Worker flag sets mirror the validated
+# gb300 TEP/TP recipes (disagg-gb300-1p17d-tep4-tp4.yaml and the 1p6d
+# agentic decode): no data-parallel, no deep_gemm_mega_moe.
+#
+# Standard agentic deltas (see the gb300 agentic recipes):
+#   - benchmark.type custom -> agentic_srt.sh
+#   - prefix caching ON (no no-enable-prefix-caching)
+#   - max-model-len 262144 + 060826 256k-capped corpus (GB200 cannot serve
+#     the full 1M DSv4 context, mirroring the minimaxm2.5 agentic configs)
+#   - infra.nats_max_payload_mb 32 (long agentic prompts exceed NATS' 1 MiB)
+#   - srun_options.container-remap-root (apt-get git in agentic_srt.sh)
 
 model:
   path: "deepseek-v4-pro"
@@ -110,13 +98,10 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      moe-backend: deep_gemm_mega_moe
       enforce-eager: true
       max-model-len: 262144
       max-num-seqs: 16
@@ -134,13 +119,9 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
       enable-ep-weight-filter: true
-      moe-backend: deep_gemm_mega_moe
       max-model-len: 262144
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
@@ -151,6 +132,7 @@ backend:
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
+      all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
