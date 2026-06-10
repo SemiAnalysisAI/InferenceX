@@ -859,6 +859,133 @@ _speedbench_metric_endpoint_count() {
     echo "$count"
 }
 
+_speedbench_trtllm_json_metrics_urls() {
+    local port="$1"
+    local raw="${SPEEDBENCH_TRTLLM_JSON_METRICS_URLS:-}"
+    local endpoint url
+
+    if [[ -n "$raw" ]]; then
+        for endpoint in ${raw//,/ }; do
+            _speedbench_normalize_metrics_url "$endpoint"
+        done
+        return 0
+    fi
+
+    while IFS= read -r url; do
+        [[ -z "$url" ]] && continue
+        echo "$url" | sed -E 's#/prometheus/metrics([?].*)?$#/metrics#'
+    done < <(_speedbench_metric_urls "$port")
+}
+
+_speedbench_trtllm_json_spec_metrics() {
+    local port="$1"
+    local mtp="$2"
+    local urls=()
+    local url
+
+    while IFS= read -r url; do
+        [[ -n "$url" ]] && urls+=("$url")
+    done < <(_speedbench_trtllm_json_metrics_urls "$port")
+
+    [[ "${#urls[@]}" -gt 0 ]] || return 1
+
+    python3 - "$mtp" "${urls[@]}" <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+
+def number(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def stats_from_payload(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        return [payload]
+    return []
+
+
+try:
+    mtp = float(sys.argv[1])
+except (IndexError, ValueError):
+    mtp = 0.0
+
+timeout = float(os.environ.get("SPEEDBENCH_METRICS_CURL_TIMEOUT", "10"))
+total_draft = 0.0
+total_accepted = 0.0
+total_requests = 0.0
+weighted_acceptance_length = 0.0
+unweighted_acceptance_length = 0.0
+unweighted_count = 0
+used_endpoints = 0
+
+for url in sys.argv[2:]:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            payload = json.load(response)
+    except Exception as exc:  # noqa: BLE001 - diagnostics for CI logs
+        print(f"SpeedBench AL eval: TRT-LLM JSON metrics fetch failed for {url}: {exc}", file=sys.stderr)
+        continue
+
+    endpoint_had_spec = False
+    for stat in stats_from_payload(payload):
+        if not isinstance(stat, dict):
+            continue
+        spec = stat.get("specDecodingStats")
+        if not isinstance(spec, dict):
+            continue
+
+        draft = number(spec.get("numDraftTokens"))
+        if draft <= 0:
+            continue
+
+        accepted = number(spec.get("numAcceptedTokens"))
+        requests = number(spec.get("numRequestsWithDraftTokens"))
+        acceptance_length = number(spec.get("acceptanceLength"), default=-1.0)
+
+        total_draft += draft
+        total_accepted += accepted
+        endpoint_had_spec = True
+
+        if acceptance_length > 0:
+            if requests > 0:
+                total_requests += requests
+                weighted_acceptance_length += acceptance_length * requests
+            else:
+                unweighted_acceptance_length += acceptance_length
+                unweighted_count += 1
+
+    if endpoint_had_spec:
+        used_endpoints += 1
+
+if total_requests > 0:
+    acceptance_length = weighted_acceptance_length / total_requests
+elif unweighted_count > 0:
+    acceptance_length = unweighted_acceptance_length / unweighted_count
+elif total_draft > 0 and mtp > 0:
+    acceptance_length = 1.0 + (total_accepted / (total_draft / mtp))
+else:
+    sys.exit(1)
+
+verify_steps = round(total_draft / mtp) if total_draft > 0 and mtp > 0 else 0
+print(
+    f"{acceptance_length:.4f}\t"
+    f"{int(round(total_accepted))}\t"
+    f"{int(verify_steps)}\t"
+    f"{int(round(total_draft))}\t"
+    f"{used_endpoints}"
+)
+PY
+}
+
 _speedbench_metric_delta() {
     local before="$1"
     local after="$2"
@@ -1304,6 +1431,13 @@ run_speedbench_al_eval() {
             metric_source="${metric_source_base}-gauge-endpoints${metrics_endpoint_count}"
             if [[ -n "$delta_acc" || -n "$delta_proposed" ]]; then
                 metric_source="${metric_source}+token-counters"
+            fi
+        else
+            local trt_json_metrics="" trt_json_endpoints=""
+            trt_json_metrics=$(_speedbench_trtllm_json_spec_metrics "$port" "$mtp" 2>/dev/null || true)
+            if [[ -n "$trt_json_metrics" ]]; then
+                IFS=$'\t' read -r al delta_acc delta_verify delta_proposed trt_json_endpoints <<< "$trt_json_metrics"
+                metric_source="trtllm-json-iteration-stats-endpoints${trt_json_endpoints}"
             fi
         fi
     elif [[ "$metrics_framework" == "sglang" ]]; then

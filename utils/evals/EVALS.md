@@ -139,8 +139,9 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `SPEEDBENCH_DECODE_METRICS_URLS` | unset | Comma/space-separated decode worker Prometheus `/metrics` URLs for disaggregated runs |
 | `SPEEDBENCH_METRICS_URLS` | unset | Generic comma/space-separated Prometheus endpoints when decode-specific naming is not applicable |
 | `SPEEDBENCH_METRICS_PORTS` | unset | Localhost Prometheus ports to scrape when full URLs are not supplied |
+| `SPEEDBENCH_TRTLLM_JSON_METRICS_URLS` | unset | Optional TRT-LLM JSON iteration-stats `/metrics` endpoints used when Prometheus spec metrics are unavailable |
 
-SpeedBench AL computes vLLM acceptance length from raw accepted-token and verify-step counters. TRT-LLM records its acceptance-length gauge and token counters because it does not expose verify steps through Prometheus. SGLang records its acceptance-length gauge, verify-call counter when present, and derived token counts. Dynamo/disaggregated runs scrape all configured decode endpoints, summing counters and averaging gauge-only AL values.
+SpeedBench AL computes vLLM acceptance length from raw accepted-token and verify-step counters. TRT-LLM prefers its Prometheus acceptance-length gauge and token counters, then falls back to JSON iteration stats from `/metrics` when the Prometheus spec series are unavailable. SGLang records its acceptance-length gauge, verify-call counter when present, and derived token counts. Dynamo/disaggregated runs scrape all configured decode endpoints, summing counters and averaging gauge-only AL values.
 
 ### Score validation
 `utils/evals/validate_scores.py` checks lm-eval results against thresholds in `utils/evals/thresholds.json` and checks `results_speedbench_al_*.json` against the embedded minimum AL. It runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
