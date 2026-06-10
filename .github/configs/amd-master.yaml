@@ -2718,8 +2718,7 @@ dsv4-fp4-mi355x-sglang-agentic:
 # probe to validate the ROCm DP+EP path.
 
 dsv4-fp4-mi355x-atom-disagg:
-  #TODO: (srok), temporary dev img. will update
-  image: rocm/atom-dev:nightly_202606081625
+  image: rocm/atom-dev:nightly_202606101403
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
