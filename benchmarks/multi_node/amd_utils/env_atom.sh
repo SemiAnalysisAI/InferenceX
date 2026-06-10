@@ -33,6 +33,11 @@ fi
 export IBDEVICES
 
 export SAFETENSORS_FAST_GPU=1
+export VLLM_LOG_LEVEL=WARNING
+export ATOM_LOG_LEVEL=WARNING
+export AITER_LOG_LEVEL=WARNING
+export LOG_LEVEL=WARNING
+export LOGLEVEL=WARNING
 
 # =============================================================================
 # ATOM/mooncake-specific environment
