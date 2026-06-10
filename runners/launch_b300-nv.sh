@@ -314,6 +314,7 @@ else
         DeepSeek-R1-0528-NVFP4-v2
         DeepSeek-V4-Flash
         DeepSeek-V4-Pro
+        DeepSeek-V4-Pro-NVFP4
         GLM-5-FP8
         GLM-5-NVFP4
         GLM-5.1

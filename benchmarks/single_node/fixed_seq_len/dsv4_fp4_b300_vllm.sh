@@ -53,9 +53,9 @@ if [ "${EP_SIZE:-1}" -gt 1 ]; then
 fi
 
 MOE_ARGS=()
-if [ "${DP_ATTENTION}" = "true" ]; then
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-fi
+# if [ "${DP_ATTENTION}" = "true" ]; then
+#     MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
+# fi
 
 if [ "${DP_ATTENTION}" = "true" ]; then
     MAX_NUM_BATCHED_TOKENS=2048
@@ -92,6 +92,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port "$PO
     --tool-call-parser deepseek_v4 \
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
+    --gpu-memory-utilization 0.97 \
     --max-cudagraph-capture-size 2048 \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
