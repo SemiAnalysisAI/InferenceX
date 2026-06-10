@@ -180,7 +180,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log) 2>&1 &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
         set +x
         prefill0_pid=$!
     fi
@@ -246,6 +246,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    BENCH_CMD="SKIP"
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -371,10 +372,9 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log) 2>&1 &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
         set +x
         prefill_pid=$!
-        trap 'echo "Caught signal, killing prefill (pid=$prefill_pid)"; kill $prefill_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
@@ -441,10 +441,9 @@ else
     else
         set -x
         eval "$DECODE_CMD" \
-            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log) 2>&1 &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
         set +x
         decode_pid=$!
-        trap 'echo "Caught signal, killing decode (pid=$decode_pid)"; kill $decode_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
