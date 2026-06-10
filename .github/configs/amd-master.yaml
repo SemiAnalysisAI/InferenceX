@@ -2140,7 +2140,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 dsv4-fp4-mi355x-sglang:
-  image: rocm/sgl-dev:rocm720-mi35x-f96ac98-20260526-DSv4
+  image: rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260610
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
