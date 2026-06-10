@@ -117,25 +117,6 @@ elif [ "$CONC" = "2048" ]; then
         --enable-mixed-chunk
     )
 
-elif [ "$CONC" = "4096" ]; then
-    # DP attention, megamoe
-    export NVSHMEM_DISABLE_IB=1
-    MEM_FRACTION_STATIC=0.835
-    SWA_FULL_TOKENS_RATIO=0.075
-    MAX_RUNNING_REQUESTS=4352
-    PARALLEL_ARGS=(
-        --dp-size "$TP"
-        --enable-dp-attention
-        --moe-a2a-backend megamoe
-        --cuda-graph-max-bs 544
-        --chunked-prefill-size 16384
-        --tokenizer-worker-num 8
-        --enable-prefill-delayer
-        --decode-log-interval 5
-        --enable-deepseek-v4-fp4-indexer
-        --enable-mixed-chunk
-    )
-
 elif [ "$CONC" = "8192" ]; then
     # DP attention, megamoe
     export NVSHMEM_DISABLE_IB=1
