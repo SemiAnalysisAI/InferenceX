@@ -120,11 +120,12 @@ case "$OFFLOADING" in
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": "mlx5_0",
+  "device_name": "",
   "enable_offload": false
 }
 EOF
         export MOONCAKE_CONFIG_PATH
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         # Identical prefixes must hash to identical store keys across DP ranks.
         export PYTHONHASHSEED=0
         # Large agentic KV writes can exceed Mooncake Store's fixed 60-second
