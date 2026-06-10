@@ -105,12 +105,19 @@ backend:
       enforce-eager: true
       max-model-len: 262144
       max-num-seqs: 16
-      max-num-batched-tokens: 32768
+      # 16384 batched tokens + util 0.90 (the fixed-seq megamoe recipes use
+      # 32768 + 0.95, tuned for 9k contexts): at 256k contexts the first
+      # long prefill's activation spike (sparse indexer logits, mhc fused
+      # kernels) needs ~2 GiB of runtime headroom that 0.95 doesn't leave —
+      # R5 job 18603 died with "CUDA out of memory. Tried to allocate
+      # 1.98 GiB ... 1.53 GiB free" on the first scheduled request. Matches
+      # the green gb300 agentic prefill (0.9 / 16384).
+      max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       no-async-scheduling: true
       block-size: 256
-      gpu-memory-utilization: 0.95
+      gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
       enable-sleep-mode: true
       numa-bind: true
