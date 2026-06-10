@@ -986,6 +986,106 @@ print(
 PY
 }
 
+_speedbench_trtllm_avg_decoded_al() {
+    local port="$1"
+    local value
+    value=$(_speedbench_metric_avg "$port" "trtllm_avg_decoded_tokens_per_iter" 2>/dev/null || true)
+    [[ -n "$value" ]] || return 1
+    awk -v value="$value" '
+        BEGIN {
+            if (value < 1.0) {
+                exit 1
+            }
+            printf "%.4f\n", value
+        }
+    '
+}
+
+_speedbench_trtllm_json_avg_decoded_al() {
+    local port="$1"
+    local urls=()
+    local url
+
+    while IFS= read -r url; do
+        [[ -n "$url" ]] && urls+=("$url")
+    done < <(_speedbench_trtllm_json_metrics_urls "$port")
+
+    [[ "${#urls[@]}" -gt 0 ]] || return 1
+
+    python3 - "${urls[@]}" <<'PY'
+import json
+import os
+import sys
+import urllib.request
+
+
+def number(value, default=0.0):
+    try:
+        if value is None:
+            return default
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def stats_from_payload(payload):
+    if isinstance(payload, list):
+        return payload
+    if isinstance(payload, dict):
+        return [payload]
+    return []
+
+
+timeout = float(os.environ.get("SPEEDBENCH_METRICS_CURL_TIMEOUT", "10"))
+weighted_total = 0.0
+total_requests = 0.0
+unweighted_total = 0.0
+unweighted_count = 0
+used_endpoints = 0
+
+for url in sys.argv[1:]:
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            payload = json.load(response)
+    except Exception as exc:  # noqa: BLE001 - diagnostics for CI logs
+        print(f"SpeedBench AL eval: TRT-LLM JSON metrics fetch failed for {url}: {exc}", file=sys.stderr)
+        continue
+
+    endpoint_had_avg = False
+    for stat in stats_from_payload(payload):
+        if not isinstance(stat, dict):
+            continue
+        ifb = stat.get("inflightBatchingStats")
+        if not isinstance(ifb, dict):
+            continue
+
+        avg_decoded = number(ifb.get("avgNumDecodedTokensPerIter"), default=-1.0)
+        if avg_decoded < 1.0:
+            continue
+
+        gen_requests = number(ifb.get("numGenRequests"))
+        endpoint_had_avg = True
+        if gen_requests > 0:
+            weighted_total += avg_decoded * gen_requests
+            total_requests += gen_requests
+        else:
+            unweighted_total += avg_decoded
+            unweighted_count += 1
+
+    if endpoint_had_avg:
+        used_endpoints += 1
+
+if total_requests > 0:
+    acceptance_length = weighted_total / total_requests
+elif unweighted_count > 0:
+    acceptance_length = unweighted_total / unweighted_count
+else:
+    sys.exit(1)
+
+print(f"{acceptance_length:.4f}\t{used_endpoints}")
+PY
+}
+
 _speedbench_metric_delta() {
     local before="$1"
     local after="$2"
@@ -1434,10 +1534,24 @@ run_speedbench_al_eval() {
             fi
         else
             local trt_json_metrics="" trt_json_endpoints=""
-            trt_json_metrics=$(_speedbench_trtllm_json_spec_metrics "$port" "$mtp" 2>/dev/null || true)
+            trt_json_metrics=$(_speedbench_trtllm_json_spec_metrics "$port" "$mtp" || true)
             if [[ -n "$trt_json_metrics" ]]; then
                 IFS=$'\t' read -r al delta_acc delta_verify delta_proposed trt_json_endpoints <<< "$trt_json_metrics"
                 metric_source="trtllm-json-iteration-stats-endpoints${trt_json_endpoints}"
+            fi
+            if [[ -z "$al" ]]; then
+                al=$(_speedbench_trtllm_avg_decoded_al "$port" || true)
+                if [[ -n "$al" ]]; then
+                    metric_source="${metric_source_base}-avg-decoded-tokens-endpoints${metrics_endpoint_count}"
+                fi
+            fi
+            if [[ -z "$al" ]]; then
+                local trt_json_avg_metrics="" trt_json_avg_endpoints=""
+                trt_json_avg_metrics=$(_speedbench_trtllm_json_avg_decoded_al "$port" || true)
+                if [[ -n "$trt_json_avg_metrics" ]]; then
+                    IFS=$'\t' read -r al trt_json_avg_endpoints <<< "$trt_json_avg_metrics"
+                    metric_source="trtllm-json-avg-decoded-tokens-endpoints${trt_json_avg_endpoints}"
+                fi
             fi
         fi
     elif [[ "$metrics_framework" == "sglang" ]]; then
