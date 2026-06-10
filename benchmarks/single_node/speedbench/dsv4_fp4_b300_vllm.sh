@@ -48,7 +48,8 @@ TEMPERATURE="${TEMPERATURE:-1.0}"
 # thinking-on chat_template_kwargs. MUST match the production/golden config:
 # the reference matrix (benchmarks/speedbench-reference-al.yaml) was measured
 # with reasoning_effort=high.
-CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-{\"thinking\": true, \"reasoning_effort\": \"high\"}}"
+DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true, "reasoning_effort": "high"}'
+CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
 
 SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
 RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
