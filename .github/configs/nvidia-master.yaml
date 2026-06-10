@@ -9627,7 +9627,17 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
 # Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 dsv4-fp4-gb300-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  # Pinned to the R30-validated stack (vllm v0.21.0-ubuntu2404 + ai-dynamo
+  # wheel 1.2.0.dev20260426). The repo-wide bump to v0.22.0 (76aedd65) broke
+  # this config silently: the agentic recipes' `model.container` field must
+  # match this image string for srtctl's containers-map lookup to resolve to
+  # the squash file the launcher imports — on mismatch srtctl passes the
+  # recipe string verbatim to pyxis, which re-pulls from Docker Hub on every
+  # node and ignores the imported squash. Bump this together with
+  # `model.container` in benchmarks/multi_node/srt-slurm-recipes/vllm/
+  # deepseek-v4/agentic/*.yaml once v0.22.x + the dynamo wheel is validated
+  # on GB300 disagg.
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   # gb300-nv (not generic gb300) — the generic label is shared by both NV
@@ -9716,7 +9726,9 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
 # overlay (recipes/vllm/deepseek-v4/agentic/), so a change to the recipe
 # applies to both clusters with no duplication.
 dsv4-fp4-gb300-cw-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.22.0
+  # Image pinned to match the agentic recipes' `model.container` — see the
+  # comment on dsv4-fp4-gb300-dynamo-vllm-agentic.
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-cw
