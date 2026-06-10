@@ -3531,3 +3531,12 @@
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - qwen3.5-bf16-mi355x-sglang
+    - qwen3.5-bf16-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260517 to lmsysorg/sglang:v0.5.12.post1-rocm720-mi35x to fix MTP performance drop."
+    - "Root cause: the old image shipped an AITER build that lacked Qwen3.5-397B TP8 MoE kernel tuning and kernel-selection coverage. EAGLE/MTP ran functionally, but the verify and MoE decode paths selected suboptimal AITER kernels, erasing the expected speculative-decoding speedup on MI355X. The newer v0.5.12.post1 image includes later AITER changes (candidate PRs: aiter#3453, aiter#3341) that add proper Qwen3.5-397B TP8 MoE kernel coverage and retuning, restoring the MTP throughput gap to +34..69% (conc 1..32)."
+    - "On the new image, EAGLE-MTP delivers +34..69% total token throughput and -28..42% median TPOT over non-MTP at conc 1..32 (1k/1k, TP=8, EP=1, triton attention). conc=64 throughput speedup limited to +6.9% by EAGLE silent max_running_requests=48 cap, while TPOT speedup stays at 1.39x."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1673
