@@ -7,8 +7,9 @@ name: "svf-vllm-disagg-gb200-2p1d-dep8-dep8-agentic"
 #
 # Divergence vs the 8k1k sibling — same agentic deltas as the 1p1d recipe;
 # see disagg-gb200-1p1d-dep8-dep8-agentic.yaml for the full rationale:
-#   - benchmark.type custom, max-model-len removed, prefix caching ON,
-#     nats_max_payload_mb 32, container-remap-root.
+#   - benchmark.type custom, max-model-len 262144 (GB200 HBM can't fit the
+#     derived 1M-context KV requirement) + 256k-capped corpus override,
+#     prefix caching ON, nats_max_payload_mb 32, container-remap-root.
 
 model:
   path: "deepseek-v4-pro"
@@ -94,6 +95,7 @@ backend:
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
       enforce-eager: true
+      max-model-len: 262144
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -116,6 +118,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
+      max-model-len: 262144
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -152,3 +155,8 @@ benchmark:
     # dataset isn't re-downloaded on every run. Overrides the workflow-level
     # HF_HUB_CACHE=/mnt/hf_hub_cache, which doesn't exist on these nodes.
     HF_HUB_CACHE: "/hf_hub_cache"
+    # The server runs at max-model-len 262144 (see header comment) — replay
+    # the 256k-capped corpus and tell aiperf to filter inputs to the served
+    # window, mirroring the minimaxm2.5 agentic configs.
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_with_subagents_060826_256k"
+    MAX_MODEL_LEN: "262144"

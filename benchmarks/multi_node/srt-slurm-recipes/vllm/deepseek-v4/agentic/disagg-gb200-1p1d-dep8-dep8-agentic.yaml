@@ -8,8 +8,18 @@ name: "svf-vllm-disagg-gb200-1p1d-dep8-dep8-agentic"
 #
 # Divergence vs the 8k1k sibling (same deltas as the gb300 agentic recipes):
 #   - benchmark.type:        sa-bench -> custom (hands off to agentic_srt.sh)
-#   - max-model-len:         removed (let vLLM derive from model config; agentic
-#                              trajectories blow past any small explicit cap)
+#   - max-model-len:         262144 (NOT removed like on gb300). GB200 has
+#                              186 GB HBM vs GB300's 288 GB; letting vLLM
+#                              derive DSv4's 1M context needs 24.06 GiB KV
+#                              per DEP8 rank but only ~7.9 GiB is free after
+#                              FP4 weights + MegaMOE buffers — engine init
+#                              dies in _check_enough_kv_cache_memory (R3,
+#                              job 18592). 256k fits (~6 GiB) and pairs with
+#                              the 256k-capped corpus below, mirroring the
+#                              minimaxm2.5 agentic configs.
+#   - WEKA_LOADER_OVERRIDE:  060826 *256k* corpus variant + MAX_MODEL_LEN env
+#                              so aiperf filters replay inputs to the served
+#                              context window.
 #   - no-enable-prefix-caching: dropped (prefix caching MUST be on for
 #                              trajectory reuse — entire point of agentic)
 #   - infra.nats_max_payload_mb: 32 (agentic prompts at 50k-200k DSv4 tokens
@@ -108,6 +118,7 @@ backend:
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
       enforce-eager: true
+      max-model-len: 262144
       max-num-seqs: 16
       max-num-batched-tokens: 32768
       trust-remote-code: true
@@ -130,6 +141,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       moe-backend: deep_gemm_mega_moe
+      max-model-len: 262144
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -166,3 +178,8 @@ benchmark:
     # dataset isn't re-downloaded on every run. Overrides the workflow-level
     # HF_HUB_CACHE=/mnt/hf_hub_cache, which doesn't exist on these nodes.
     HF_HUB_CACHE: "/hf_hub_cache"
+    # The server runs at max-model-len 262144 (see header comment) — replay
+    # the 256k-capped corpus and tell aiperf to filter inputs to the served
+    # window, mirroring the minimaxm2.5 agentic configs.
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_with_subagents_060826_256k"
+    MAX_MODEL_LEN: "262144"

@@ -277,8 +277,14 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 
 echo "Submitting job with srtctl..."
 
-# Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
+# Override the job name in the config file with the runner name, prefixed
+# "ifx-": another runner fleet on watchtower (user slurm-shared, uid 1010,
+# with Slurm operator rights) names ITS jobs after the same runner names
+# (gb200-nv_N) and its pre-job cleanup scancels by job name across users —
+# it killed our job 18593 mid-startup (CANCELLED by 1010). The distinct
+# prefix keeps their --name match away from our jobs. The workflow's own
+# pre-run cleanup scancels both the bare and ifx- prefixed names.
+sed -i "s/^name:.*/name: \"ifx-${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
 
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
