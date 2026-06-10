@@ -30,8 +30,11 @@ fi
 
 nvidia-smi
 
-# ─── Common env vars (all profiles) ───────────────────────────────────────────
-export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
+# ─── Common env vars (all profiles, GB300-aligned) ──────────────────────────
+export SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1
+export SGLANG_RADIX_FORCE_MISS=1
+export SGLANG_DEFAULT_THINKING=1
+export SGLANG_DSV4_REASONING_EFFORT=max
 export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
 
 SERVER_LOG="$PWD/server.log"
@@ -46,9 +49,25 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
+# ─── DP-attention env vars (GB300-aligned) ───────────────────────────────────
+# Shared across all DP-attention profiles (conc >= 512). Set before per-conc
+# tuning so individual blocks only carry NVSHMEM / batch-size overrides.
+if [ "$CONC" != "1" ] && [ "$CONC" != "32" ]; then
+    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
+    export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+    export SGLANG_OPT_USE_ONLINE_COMPRESS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8192
+    export SGLANG_LOG_FORWARD_ITERS=1
+    export SGLANG_LOG_MS=1
+    export SGLANG_REQUEST_STATE_WAIT_TIMEOUT=60
+    export SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION=8
+fi
+
 # ─── Per-concurrency launch profile ──────────────────────────────────────────
 # Each block sets: PARALLEL_ARGS, MEM_FRACTION_STATIC, SWA_FULL_TOKENS_RATIO,
-# and optionally MAX_RUNNING_REQUESTS plus profile-specific env vars.
+# and optionally MAX_RUNNING_REQUESTS.
 #
 # SWA ratio: 1k inputs need more SWA cache headroom than 8k inputs; 0.5 was
 # tuned empirically for the 1k1k recipe, while 0.1 is the cookbook default.
@@ -61,11 +80,11 @@ if [ "$CONC" = "1" ] || [ "$CONC" = "32" ]; then
         --moe-runner-backend flashinfer_mxfp4
         --chunked-prefill-size 8192
         --disable-flashinfer-autotune
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "512" ]; then
     # DP attention, flashinfer_mxfp4
-    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     MEM_FRACTION_STATIC=0.94
     SWA_FULL_TOKENS_RATIO=$([[ "$ISL" == "1024" ]] && echo 0.5 || echo 0.1)
     PARALLEL_ARGS=(
@@ -75,15 +94,12 @@ elif [ "$CONC" = "512" ]; then
         --disable-flashinfer-autotune
         --chunked-prefill-size 16384
         --enable-prefill-delayer
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "2048" ]; then
     # DP attention, megamoe
-    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export NVSHMEM_DISABLE_IB=1
-    export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
-    export SGLANG_LOG_FORWARD_ITERS=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
     MEM_FRACTION_STATIC=0.87
     SWA_FULL_TOKENS_RATIO=0.06
     MAX_RUNNING_REQUESTS=2560
@@ -95,14 +111,12 @@ elif [ "$CONC" = "2048" ]; then
         --chunked-prefill-size 65536
         --tokenizer-worker-num 4
         --enable-prefill-delayer
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "4096" ]; then
     # DP attention, megamoe
-    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export NVSHMEM_DISABLE_IB=1
-    export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8320
     MEM_FRACTION_STATIC=0.835
     SWA_FULL_TOKENS_RATIO=0.075
     MAX_RUNNING_REQUESTS=4352
@@ -115,15 +129,12 @@ elif [ "$CONC" = "4096" ]; then
         --tokenizer-worker-num 8
         --enable-prefill-delayer
         --decode-log-interval 5
+        --enable-deepseek-v4-fp4-indexer
     )
 
 elif [ "$CONC" = "8192" ]; then
     # DP attention, megamoe
-    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export NVSHMEM_DISABLE_IB=1
-    export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
-    export SGLANG_OPT_USE_ONLINE_COMPRESS=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8256
     MEM_FRACTION_STATIC=0.80
     SWA_FULL_TOKENS_RATIO=0.3
     MAX_RUNNING_REQUESTS=8192
@@ -136,6 +147,7 @@ elif [ "$CONC" = "8192" ]; then
         --tokenizer-worker-num 16
         --enable-prefill-delayer
         --stream-interval 30
+        --enable-deepseek-v4-fp4-indexer
     )
 
 else

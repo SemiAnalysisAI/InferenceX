@@ -414,7 +414,7 @@ else
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
-        --no-container-entrypoint --export=ALL,PORT=8888 \
+        --no-container-entrypoint --export=ALL,PORT=30000 \
         bash "$BENCH_SCRIPT"
 
 fi
