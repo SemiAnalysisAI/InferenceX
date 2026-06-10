@@ -396,6 +396,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
             2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
         set +x
         prefill_pid=$!
+        trap 'echo "Caught signal, killing prefill (pid=$prefill_pid)"; kill $prefill_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
@@ -417,18 +418,20 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting until router closes..."
+    trap 'echo "Caught signal, killing prefill (pid=$prefill_pid)"; kill $prefill_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait until router ${NODE0_ADDR}:${ROUTER_PORT} closes"
     else
         while curl -sf --max-time 10 "http://${NODE0_ADDR}:${ROUTER_PORT}/health" >/dev/null 2>&1; do
-            sleep 10
+            sleep 10 &
+            wait $!
         done
         echo "[wait] router ${NODE0_ADDR}:${ROUTER_PORT} closed"
     fi
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing prefill server (rank ${NODE_RANK})"
-    if [[ "$DRY_RUN" -eq 0 ]]; then kill $prefill_pid; fi
+    if [[ "$DRY_RUN" -eq 0 ]]; then kill $prefill_pid 2>/dev/null; fi
 
 else
     # ──────────────────────────────────────────────────────────────────────────
@@ -469,6 +472,7 @@ else
             2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
         set +x
         decode_pid=$!
+        trap 'echo "Caught signal, killing decode (pid=$decode_pid)"; kill $decode_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
@@ -490,18 +494,20 @@ else
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting until router closes..."
+    trap 'echo "Caught signal, killing decode (pid=$decode_pid)"; kill $decode_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait until router ${NODE0_ADDR}:${ROUTER_PORT} closes"
     else
         while curl -sf --max-time 10 "http://${NODE0_ADDR}:${ROUTER_PORT}/health" >/dev/null 2>&1; do
-            sleep 10
+            sleep 10 &
+            wait $!
         done
         echo "[wait] router ${NODE0_ADDR}:${ROUTER_PORT} closed"
     fi
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing decode server (rank ${RANK})"
-    if [[ "$DRY_RUN" -eq 0 ]]; then kill $decode_pid; fi
+    if [[ "$DRY_RUN" -eq 0 ]]; then kill $decode_pid 2>/dev/null; fi
 fi
 
 echo "Script completed successfully"
