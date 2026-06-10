@@ -9259,7 +9259,9 @@ glm5-fp8-gb300-dynamo-sglang:
           dp-attn: false
 
 dsv4-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:nightly-d0975a4b50140a9d953f00955a1cbb2a4945edef
+  # Includes vllm-project/vllm#44774 so Mooncake honors sparse-attention
+  # prefix-cache retention when deciding which hybrid-KV blocks to store.
+  image: cquil/vllm-openai:v0.22.1-dcc957098904749bf375ffbf85aba6c74dfc9fe9
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dgxc
@@ -9417,10 +9419,9 @@ dsv4-fp8-h200-vllm-agentic:
 # --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 
 dsv4-fp4-b300-vllm-agentic:
-  # image: vllm/vllm-openai:v0.22.0
-  # includes https://github.com/vllm-project/vllm/pull/43447 up to 6c529f3001ab8bf44b1657e779dc54b622397045
-  # image: cquil/vllm-openai:v0.22.0-6c529f3001ab8bf44b1657e779dc54b622397045'
-  image: vllm/vllm-openai:nightly-d0975a4b50140a9d953f00955a1cbb2a4945edef
+  # Includes vllm-project/vllm#44774 so Mooncake honors sparse-attention
+  # prefix-cache retention when deciding which hybrid-KV blocks to store.
+  image: cquil/vllm-openai:v0.22.1-dcc957098904749bf375ffbf85aba6c74dfc9fe9
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
