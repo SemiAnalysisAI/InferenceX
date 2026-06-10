@@ -470,6 +470,8 @@ else
         trap 'echo "Caught signal, killing decode (pid=$decode_pid)"; kill $decode_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
+    echo "Waiting for router to be up..."
     WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-2800}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
