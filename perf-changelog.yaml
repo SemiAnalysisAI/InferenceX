@@ -3540,3 +3540,9 @@
     - "Unify EAGLE spec-decoding to (3,1,4) for both DP-attn and TP-only paths, add --enable-deepseek-v4-fp4-indexer"
     - "Bump image to nightly-dev-cu13-20260610-f332e526"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1700
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Add --enforce-piecewise-cuda-graph, --enable-mixed-chunk, --enable-breakable-cuda-graph to both DP-attn and TP-only launch profiles"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1702

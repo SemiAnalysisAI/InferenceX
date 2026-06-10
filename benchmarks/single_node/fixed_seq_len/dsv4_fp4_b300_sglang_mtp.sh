@@ -93,6 +93,9 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --deepep-config "$DEEPEP_CONFIG"
         --cuda-graph-max-bs 256
         --enable-deepseek-v4-fp4-indexer
+        --enforce-piecewise-cuda-graph
+        --enable-mixed-chunk
+        --enable-breakable-cuda-graph
     )
     CHUNKED_PREFILL_SIZE=32768
     MEM_FRACTION_STATIC=0.92
@@ -109,6 +112,9 @@ else
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
         --enable-deepseek-v4-fp4-indexer
+        --enforce-piecewise-cuda-graph
+        --enable-mixed-chunk
+        --enable-breakable-cuda-graph
     )
     CHUNKED_PREFILL_SIZE=8192
     MEM_FRACTION_STATIC=0.90
