@@ -13,6 +13,11 @@ from collect_eval_results import (
     score_cell,
 )
 from speedbench_al import build_result, load_reference, lookup_reference
+from speedbench_client import (
+    _chat_payload,
+    _completion_payload,
+    _load_speedbench_requests,
+)
 from validate_scores import validate_speedbench_al
 
 
@@ -165,3 +170,51 @@ def test_detect_eval_jsons_dedupes_flat_speedbench_result(tmp_path: Path) -> Non
 
     assert lm_path is None
     assert speedbench_paths == [result_path]
+
+
+def test_speedbench_client_loads_coding_and_builds_dsv4_payloads(tmp_path: Path) -> None:
+    dataset = tmp_path / "speed_bench_data"
+    dataset.mkdir()
+    (dataset / "qualitative.jsonl").write_text(
+        "\n".join(
+            [
+                json.dumps(
+                    {
+                        "category": "coding",
+                        "messages": [{"role": "user", "content": "Write fizzbuzz."}],
+                    }
+                ),
+                json.dumps(
+                    {
+                        "category": "math",
+                        "messages": [{"role": "user", "content": "Solve 2+2."}],
+                    }
+                ),
+            ]
+        )
+    )
+
+    prompts = _load_speedbench_requests(dataset, "coding", -1)
+    chat = _chat_payload(
+        prompts[0],
+        model="deepseek-ai/DeepSeek-V4-Pro",
+        output_len=4096,
+        temperature=1.0,
+        thinking_mode="on",
+        thinking_kwargs={"thinking": True, "reasoning_effort": "high"},
+    )
+    completions = _completion_payload(
+        prompts[0],
+        model="deepseek-ai/DeepSeek-V4-Pro",
+        output_len=4096,
+        temperature=1.0,
+        thinking_mode="on",
+        thinking_kwargs={"thinking": True, "reasoning_effort": "high"},
+        dsv4=True,
+    )
+
+    assert len(prompts) == 1
+    assert chat["chat_template_kwargs"]["thinking"] is True
+    assert chat["reasoning_effort"] == "high"
+    assert "<think>" in completions["prompt"]
+    assert completions["max_tokens"] == 4096

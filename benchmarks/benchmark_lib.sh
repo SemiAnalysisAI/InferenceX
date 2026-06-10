@@ -1176,11 +1176,6 @@ run_speedbench_al_eval() {
     esac
 
     echo "SpeedBench AL eval: metrics framework=${metrics_framework}, endpoints=${metrics_endpoint_count}"
-    if ! command -v vllm >/dev/null 2>&1; then
-        echo "SpeedBench AL eval: vllm CLI is not available for SpeedBench client" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "vllm CLI is not available for SpeedBench client"
-        return 0
-    fi
 
     local speedbench_dir="${SPEEDBENCH_DIR:-$(pwd)/speed_bench_data}"
     if ! _speedbench_prepare_dataset "$speedbench_dir"; then
@@ -1195,14 +1190,23 @@ run_speedbench_al_eval() {
         return 0
     fi
 
+    local thinking_kwargs='{"thinking": true, "reasoning_effort": "high"}'
+    local client="${SPEEDBENCH_CLIENT:-auto}"
+    local use_vllm_client=0
+    if [[ "$client" != "openai" && "$client" != "native" ]] && command -v vllm >/dev/null 2>&1; then
+        use_vllm_client=1
+    fi
+
     local think_args=()
     if [[ "$mode" == "on" ]]; then
-        if ! _speedbench_apply_chat_template_kwargs_shim; then
-            echo "SpeedBench AL eval: --chat-template-kwargs shim failed" >&2
-            _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "--chat-template-kwargs shim failed"
-            return 0
+        if [[ "$use_vllm_client" -eq 1 ]]; then
+            if ! _speedbench_apply_chat_template_kwargs_shim; then
+                echo "SpeedBench AL eval: --chat-template-kwargs shim failed" >&2
+                _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "--chat-template-kwargs shim failed"
+                return 0
+            fi
+            think_args=(--chat-template-kwargs "$thinking_kwargs")
         fi
-        think_args=(--chat-template-kwargs '{"thinking": true, "reasoning_effort": "high"}')
     fi
 
     local accepted_before="" proposed_before="" verify_before=""
@@ -1213,35 +1217,62 @@ run_speedbench_al_eval() {
     proposed_before="${proposed_before:-0}"
     verify_before="${verify_before:-0}"
 
-    local raw_result_dir
-    raw_result_dir="$(mktemp -d /tmp/speedbench_al_raw-XXXXXX)"
     local bench_rc=0
     local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
-    local bench_cmd=(
-        vllm bench serve
-        --model "$speedbench_model"
-        --port "$port"
-        --dataset-name speed_bench
-        --dataset-path "$speedbench_dir"
-        --speed-bench-category coding
-        --speed-bench-output-len 4096
-        --num-prompts -1
-        --max-concurrency 1
-        --save-result
-        --result-dir "$raw_result_dir"
-        --result-filename "speedbench_al_${mode}_mtp${mtp}"
-        --trust-remote-code
-        --tokenizer-mode deepseek_v4
-        --temperature 1.0
-        "${think_args[@]}"
-    )
-
     echo "SpeedBench AL eval: running mode=${mode} mtp=${mtp}"
-    "${bench_cmd[@]}" || bench_rc=$?
-    if [[ "$bench_rc" -ne 0 ]]; then
-        echo "SpeedBench AL eval: vllm bench serve failed with exit code ${bench_rc}" >&2
-        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "vllm bench serve failed with exit code ${bench_rc}"
+    if [[ "$use_vllm_client" -eq 1 ]]; then
+        local raw_result_dir
+        raw_result_dir="$(mktemp -d /tmp/speedbench_al_raw-XXXXXX)"
+        local bench_cmd=(
+            vllm bench serve
+            --model "$speedbench_model"
+            --port "$port"
+            --dataset-name speed_bench
+            --dataset-path "$speedbench_dir"
+            --speed-bench-category coding
+            --speed-bench-output-len 4096
+            --num-prompts -1
+            --max-concurrency 1
+            --save-result
+            --result-dir "$raw_result_dir"
+            --result-filename "speedbench_al_${mode}_mtp${mtp}"
+            --trust-remote-code
+            --tokenizer-mode deepseek_v4
+            --temperature 1.0
+            "${think_args[@]}"
+        )
+        "${bench_cmd[@]}" || bench_rc=$?
         rm -rf "$raw_result_dir" || true
+    else
+        export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
+        local native_cmd=(
+            python3 "$(pwd)/utils/evals/speedbench_client.py"
+            --model "$speedbench_model"
+            --base-url "http://0.0.0.0:${port}"
+            --dataset-path "$speedbench_dir"
+            --category coding
+            --output-len 4096
+            --temperature 1.0
+            --thinking-mode "$mode"
+            --timeout "${SPEEDBENCH_CLIENT_TIMEOUT:-1800}"
+            --retries "${SPEEDBENCH_CLIENT_RETRIES:-2}"
+        )
+        if [[ -n "${SPEEDBENCH_CLIENT_ENDPOINT:-}" ]]; then
+            native_cmd+=(--endpoint "$SPEEDBENCH_CLIENT_ENDPOINT")
+        elif [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
+            native_cmd+=(--endpoint completions)
+        fi
+        if [[ "$mode" == "on" ]]; then
+            native_cmd+=(--thinking-kwargs "$thinking_kwargs")
+        fi
+        if [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
+            native_cmd+=(--dsv4)
+        fi
+        "${native_cmd[@]}" || bench_rc=$?
+    fi
+    if [[ "$bench_rc" -ne 0 ]]; then
+        echo "SpeedBench AL eval: client failed with exit code ${bench_rc}" >&2
+        _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "SpeedBench client failed with exit code ${bench_rc}"
         return 0
     fi
 
@@ -1300,7 +1331,6 @@ run_speedbench_al_eval() {
     else
         _speedbench_write_eval_result "$output" "$mode" "$mtp" "$al" "$delta_acc" "$delta_verify" "$delta_proposed" "$result_framework" "$metric_source"
     fi
-    rm -rf "$raw_result_dir" || true
 }
 
 run_lm_eval() {
