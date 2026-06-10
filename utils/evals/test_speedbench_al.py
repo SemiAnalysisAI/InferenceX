@@ -12,6 +12,7 @@ from collect_eval_results import (
     extract_speedbench_al_metrics,
     score_cell,
 )
+from dynamo_speedbench_al_from_logs import aggregate_log_metrics
 from speedbench_al import build_result, load_reference, lookup_reference
 from speedbench_client import (
     _chat_payload,
@@ -170,6 +171,41 @@ def test_detect_eval_jsons_dedupes_flat_speedbench_result(tmp_path: Path) -> Non
 
     assert lm_path is None
     assert speedbench_paths == [result_path]
+
+
+def test_dynamo_log_parser_aggregates_decode_workers(tmp_path: Path) -> None:
+    def write_log(name: str, rows: list[tuple[float, int, int]]) -> None:
+        lines = []
+        for al, accepted, drafted in rows:
+            lines.append(
+                "INFO metrics.log: SpecDecoding metrics: "
+                f"Mean acceptance length: {al}, "
+                "Accepted throughput: 1.0 tokens/s, "
+                "Drafted throughput: 1.0 tokens/s, "
+                f"Accepted: {accepted} tokens, Drafted: {drafted} tokens, "
+                "Per-position acceptance rate: 0.9, 0.7, "
+                "Avg Draft acceptance rate: 80.0%"
+            )
+        (tmp_path / name).write_text("\n".join(lines))
+
+    write_log("node-a_decode_w0.out", [(2.0, 10, 20)])
+    write_log("node-b_decode_w0.out", [(2.5, 15, 20), (2.5, 5, 10)])
+    write_log("node-c_decode_w1.out", [(2.0, 10, 20)])
+    write_log("node-d_decode_w1.out", [])
+
+    metrics = aggregate_log_metrics(tmp_path, mtp=2)
+
+    assert metrics is not None
+    assert metrics.workers == 2
+    assert metrics.samples == 3
+    assert metrics.accepted_tokens == 30
+    assert metrics.proposed_draft_tokens == 50
+    assert metrics.verify_steps == 25
+    assert metrics.acceptance_length == 2.2
+    assert [p.name for p in metrics.selected_logs] == [
+        "node-b_decode_w0.out",
+        "node-c_decode_w1.out",
+    ]
 
 
 def test_speedbench_client_loads_coding_and_builds_dsv4_payloads(tmp_path: Path) -> None:
