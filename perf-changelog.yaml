@@ -3531,3 +3531,13 @@
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsv4-fp4-b200-trt
+    - dsv4-fp4-b200-trt-mtp
+  description:
+    - "Update the B200 TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066"
+    - "Sync the dsv4-fp4-b200-trt and dsv4-fp4-b200-trt-mtp recipes with the B200 aggregated frontier config (worker GC off, NCCL graph mixing off, mimalloc/PyTorch alloc tweaks, higher KV cache fractions by DP path, stream_interval 100, use_low_precision_moe_combine, DP batching_wait_iters 30, max_num_tokens drops the OSL term)"
+    - "MTP recipe uses max_draft_len with a variable default draft length, enable_lm_head_tp_in_adp on the DP-attn path, and removes timeout_iters from the DP config"
+    - "Raise dsv4-fp4-b200-trt-mtp DP-attn conc-end (1k ISL: 512->1024; 8k ISL: 128->256) to cover the new high-concurrency regime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1699
