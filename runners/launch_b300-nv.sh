@@ -380,9 +380,10 @@ else
     )
 
     SALLOC_MEMORY_ARGS=()
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "vllm" && "${OFFLOADING:-none}" == "cpu" ]]; then
-        # Give the 2.5 TB embedded Mooncake store the full memory allocation of
-        # the exclusive node instead of relying on the partition's default.
+    if [[ "${OFFLOADING:-none}" != "none" ]]; then
+        # Host KV tiers (vLLM Mooncake cpu offload, SGLang HiCache) allocate
+        # multi-TB pinned host pools. Give them the full memory allocation of
+        # the exclusive node instead of Slurm's implicit 2 TB default.
         SALLOC_MEMORY_ARGS=(--mem=0)
     fi
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time=180 --no-shell --job-name="$RUNNER_NAME"

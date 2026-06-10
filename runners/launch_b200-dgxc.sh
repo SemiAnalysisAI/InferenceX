@@ -365,10 +365,11 @@ else
     # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
     # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
     SALLOC_MEMORY_ARGS=()
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "vllm" && "${OFFLOADING:-none}" == "cpu" ]]; then
-        # The embedded Mooncake segments total 2.5 TB. Without an explicit
-        # request, Slurm caps this exclusive job at 2 TB and OOM-kills it even
-        # though the B200 node has about 4 TB of physical RAM.
+    if [[ "${OFFLOADING:-none}" != "none" ]]; then
+        # Host KV tiers (vLLM Mooncake cpu offload, SGLang HiCache) allocate
+        # multi-TB pinned host pools. Without an explicit request, Slurm caps
+        # this exclusive job at 2 TB and OOM-kills it even though the B200
+        # node has about 4 TB of physical RAM.
         SALLOC_MEMORY_ARGS=(--mem=0)
     fi
     salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time=180 --no-shell --job-name="$RUNNER_NAME"
