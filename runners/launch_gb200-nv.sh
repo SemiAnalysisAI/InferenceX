@@ -255,6 +255,14 @@ containers:
   dynamo-sglang: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+# srtctl defaults this to true, which adds #SBATCH --segment=<total_nodes>.
+# On watchtower the whole batch partition (blue-cn01-18) is a single NVL72
+# rack, so segment contiguity buys nothing for MNNVL — but it DOES make
+# jobs unschedulable when the partition is fragmented: Slurm backfills a
+# non-contiguous node set, fails segment placement at start, and the job
+# dies with "CANCELLED Reason=Resources" at RunTime=0 (hit by the first
+# gb200 agentic run, job 18582). Mirror launch_gb300-nv.sh and disable.
+use_segment_sbatch_directive: false
 ${DEFAULT_MOUNTS_BLOCK}
 EOF
 
