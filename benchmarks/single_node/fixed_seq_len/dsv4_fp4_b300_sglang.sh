@@ -81,7 +81,7 @@ if [ "$CONC" = "1" ] || [ "$CONC" = "32" ]; then
         --chunked-prefill-size 8192
         --disable-flashinfer-autotune
         --enable-deepseek-v4-fp4-indexer
-        --enable-flashinfer-allreduce-fusion
+        --enable-mixed-chunk
     )
 
 elif [ "$CONC" = "512" ]; then
@@ -96,7 +96,7 @@ elif [ "$CONC" = "512" ]; then
         --chunked-prefill-size 16384
         --enable-prefill-delayer
         --enable-deepseek-v4-fp4-indexer
-        --enable-flashinfer-allreduce-fusion
+        --enable-mixed-chunk
     )
 
 elif [ "$CONC" = "2048" ]; then
@@ -110,11 +110,11 @@ elif [ "$CONC" = "2048" ]; then
         --enable-dp-attention
         --moe-a2a-backend megamoe
         --cuda-graph-max-bs 288
-        --chunked-prefill-size 65536
+        --chunked-prefill-size 16384
         --tokenizer-worker-num 4
         --enable-prefill-delayer
         --enable-deepseek-v4-fp4-indexer
-        --enable-flashinfer-allreduce-fusion
+        --enable-mixed-chunk
     )
 
 elif [ "$CONC" = "4096" ]; then
@@ -128,12 +128,12 @@ elif [ "$CONC" = "4096" ]; then
         --enable-dp-attention
         --moe-a2a-backend megamoe
         --cuda-graph-max-bs 544
-        --chunked-prefill-size 65536
+        --chunked-prefill-size 16384
         --tokenizer-worker-num 8
         --enable-prefill-delayer
         --decode-log-interval 5
         --enable-deepseek-v4-fp4-indexer
-        --enable-flashinfer-allreduce-fusion
+        --enable-mixed-chunk
     )
 
 elif [ "$CONC" = "8192" ]; then
@@ -147,12 +147,12 @@ elif [ "$CONC" = "8192" ]; then
         --enable-dp-attention
         --moe-a2a-backend megamoe
         --cuda-graph-max-bs 1088
-        --chunked-prefill-size 65536
+        --chunked-prefill-size 16384
         --tokenizer-worker-num 16
         --enable-prefill-delayer
         --stream-interval 30
         --enable-deepseek-v4-fp4-indexer
-        --enable-flashinfer-allreduce-fusion
+        --enable-mixed-chunk
     )
 
 else
