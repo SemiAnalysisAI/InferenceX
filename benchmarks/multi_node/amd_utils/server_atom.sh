@@ -180,7 +180,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log) 2>&1 &
         set +x
         prefill0_pid=$!
     fi
@@ -386,7 +386,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log) 2>&1 &
         set +x
         prefill_pid=$!
     fi
@@ -456,7 +456,7 @@ else
     else
         set -x
         eval "$DECODE_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
+            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log) 2>&1 &
         set +x
         decode_pid=$!
     fi
