@@ -29,7 +29,7 @@ SERVER_LOG=/workspace/server.log
 echo "CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
 MEM_FRACTION_STATIC=0.85
-if [[ "$ISL" -eq 8192 && "$OSL" -eq 1024 && "$CONC" -gt 128 ]]; then
+if [[ "$CONC" -gt 128 ]]; then
     MEM_FRACTION_STATIC=0.8
 fi
 echo "MEM_FRACTION_STATIC: $MEM_FRACTION_STATIC"
