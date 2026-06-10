@@ -2734,7 +2734,7 @@ dsv4-fp4-mi355x-atom-disagg:
       osl: 1024
       search-space:
       # 2P1D DP+TP8 
-      - conc-list: [ 256, 512, 768, 1024, 2048 ]
+      - conc-list: [ 512, 768, 1024, 2048, 4096 ]
         prefill:
           num-worker: 2
           tp: 8
