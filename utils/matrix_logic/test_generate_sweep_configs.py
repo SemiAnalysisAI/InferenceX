@@ -290,6 +290,11 @@ class TestMarkEvalEntries:
 
     def test_multi_node_eval_conc_uses_only_conc_values_at_or_above_min_conc(self):
         """Multinode eval-conc should be chosen from conc values >= MIN_EVAL_CONC."""
+        # Build conc lists relative to the floor so this stays correct regardless
+        # of the MIN_EVAL_CONC value: `below` is excluded, eligible = {at, above}.
+        below = MIN_EVAL_CONC // 2
+        at = MIN_EVAL_CONC
+        above = MIN_EVAL_CONC * 2
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -311,7 +316,7 @@ class TestMarkEvalEntries:
                     "ep": 1,
                     "dp-attn": False,
                 },
-                "conc": [8, 16, 32],
+                "conc": [below, at, above],
             },
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -333,14 +338,15 @@ class TestMarkEvalEntries:
                     "ep": 1,
                     "dp-attn": False,
                 },
-                "conc": [8],
+                "conc": [below],
             },
         ]
 
         result = mark_eval_entries(matrix_values)
 
         assert result[0]["run-eval"] is True
-        assert result[0]["eval-conc"] == 32
+        # eligible = sorted([at, above]); median (index len//2 == 1) == above
+        assert result[0]["eval-conc"] == above
         assert result[1]["run-eval"] is False
 
     def test_marks_highest_and_median_conc(self):

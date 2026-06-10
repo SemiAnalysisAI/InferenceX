@@ -20,7 +20,10 @@ seq_len_stoi = {
     "8k1k": (8192, 1024)
 }
 
-MIN_EVAL_CONC = 16
+# Lowered 16 -> 8 for the DEP8 MoRI dispatch-buffer validation sweep so the
+# conc-8 point (dispatch=4) is eval-eligible. Restore to 16 when the full
+# search space is restored.
+MIN_EVAL_CONC = 8
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -116,11 +119,16 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         mn_groups[key].append((i, entry))
 
     for entries in mn_groups.values():
-        best_idx, best_entry = max(entries, key=_max_eval_conc)
-        eval_indices.add(best_idx)
-        # Set eval-conc to median of eligible conc values to avoid OOM during eval
-        eval_concs = _eligible_eval_concs(best_entry)
-        mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
+        # VALIDATION SWEEP: eval EVERY eligible entry in the group (each at its
+        # own concurrency), not just the highest-conc one, so the per-dispatch-
+        # size gsm8k ladder (conc 8/16/32/64 -> dispatch 4/8/16/32) is covered.
+        # Revert to `best_idx, best_entry = max(entries, key=_max_eval_conc)`
+        # (single eval per group) when the full search space is restored.
+        for idx, entry in entries:
+            eval_indices.add(idx)
+            # Set eval-conc to median of eligible conc values to avoid OOM during eval
+            eval_concs = _eligible_eval_concs(entry)
+            mn_eval_conc[idx] = eval_concs[len(eval_concs) // 2]
 
     # Mark the selected entries (skip agentic entries which don't support evals)
     for i, entry in enumerate(matrix_values):

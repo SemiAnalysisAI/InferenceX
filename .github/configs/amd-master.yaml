@@ -1967,7 +1967,7 @@ dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
   
 
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260609
   model: amd/DeepSeek-R1-0528-MXFP4-v2
   model-prefix: dsr1
   runner: mi355x-disagg
@@ -1980,123 +1980,11 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
     - isl: 8192
       osl: 1024
       search-space:
-      # MTP configurations
-      # 1P1D pure TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 1, 2, 4, 8 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 2, 4, 8, 16, 32 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1P2D TP8
-      - spec-decoding: "mtp"
-        conc-list: [ 32, 64 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=2"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 640, 512 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 256 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-
-      # 1*DEP8 + 1*DEP8
-      - spec-decoding: "mtp"
-        conc-list: [ 128 ]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=3"
-
-      # 1*DEP8 + 1*DEP8
+      # Per-concurrency DEP8 + 1*DEP8 (MTP3) ladder to validate the nightly's
+      # MoRI dispatch-buffer fix across sub-256 dispatch sizes. Each conc is its
+      # own entry (own server launch) so dispatch = max(conc-list)/TP*(MTP+1)
+      # varies per point: conc 64->32, 32->16, 16->8, 8->4 (all <256, the bug
+      # regime). conc<=4 omitted: floor(conc/8)*4 = 0 under main's formula.
       - spec-decoding: "mtp"
         conc-list: [ 64 ]
         prefill:
@@ -2115,16 +2003,15 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
 
-      # 2*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
-        conc-list: [ 1024, 2048, 4096 ]
+        conc-list: [ 32 ]
         prefill:
-          num-worker: 2
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
           additional-settings:
-          - "PREFILL_NODES=2"
+          - "PREFILL_NODES=1"
         decode:
           num-worker: 1
           tp: 8
@@ -2132,7 +2019,43 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=1"
+          - "DECODE_MTP_SIZE=3"
+
+      - spec-decoding: "mtp"
+        conc-list: [ 16 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+
+      - spec-decoding: "mtp"
+        conc-list: [ 8 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
 
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
