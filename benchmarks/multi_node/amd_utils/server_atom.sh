@@ -174,14 +174,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --max-num-seqs ${MAX_NUM_SEQS} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
-    PREFILL_CMD="echo prefill 0"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill0_${host_name}.log &
         set +x
         prefill0_pid=$!
     fi
@@ -232,7 +231,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --disable-circuit-breaker \
         --prometheus-port 29100"
 
-    ROUTER_CMD="echo router"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
@@ -268,7 +266,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
-    BENCH_CMD="bench"
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
     elif [[ "$DRY_RUN" -eq 1 ]]; then
@@ -355,7 +352,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     echo "Waiting 60s before killing router and prefill server..."
-    sleep 120
+    sleep 60
 
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing router and prefill server"
@@ -391,7 +388,6 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
-    PREFILL_CMD="echo prefill 1"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
@@ -465,7 +461,6 @@ else
         --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"
 
-    DECODE_CMD="echo decode"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $DECODE_CMD"
     else
