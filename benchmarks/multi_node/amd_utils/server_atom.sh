@@ -333,6 +333,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
+    echo "Waiting 60s before killing router and prefill server..."
+    sleep 60
+
     echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing router and prefill server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
@@ -384,6 +387,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
         --timeout 2000"
+
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
@@ -395,6 +399,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     WAIT_CMD="python3 $ATOM_WS_PATH/sync.py wait \
         --remote-ip ${NODE0_ADDR} \
         --remote-port ${ROUTER_PORT}"
+
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $WAIT_CMD"
     else
