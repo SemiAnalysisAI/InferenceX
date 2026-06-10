@@ -389,10 +389,11 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log) 2>&1 &
         set +x
         prefill_pid=$!
+        trap 'echo "Caught signal, killing prefill (pid=$prefill_pid)"; kill $prefill_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
     echo "Waiting for router to be up..."
-    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-300}"
+    WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-2800}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for router ${NODE0_ADDR}:${ROUTER_PORT}/health"
     else
@@ -459,6 +460,7 @@ else
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log) 2>&1 &
         set +x
         decode_pid=$!
+        trap 'echo "Caught signal, killing decode (pid=$decode_pid)"; kill $decode_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
     WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-2800}"
