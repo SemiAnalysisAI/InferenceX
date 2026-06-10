@@ -1163,6 +1163,9 @@ run_speedbench_al_eval() {
     metrics_framework=$(_speedbench_metrics_framework)
     result_framework="${SPEEDBENCH_METRICS_FRAMEWORK:-${FRAMEWORK:-$metrics_framework}}"
     metric_source_base=$(_speedbench_metric_source_base "$metrics_framework")
+    if [[ "$metrics_framework" == "trtllm" && -z "${SPEEDBENCH_DECODE_METRICS_URLS:-}${SPEEDBENCH_METRICS_URLS:-}${SPEEDBENCH_METRICS_PORTS:-}" ]]; then
+        export SPEEDBENCH_METRICS_URLS="http://0.0.0.0:${port}/prometheus/metrics"
+    fi
     metrics_endpoint_count=$(_speedbench_metric_endpoint_count "$port")
 
     case "$metrics_framework" in
