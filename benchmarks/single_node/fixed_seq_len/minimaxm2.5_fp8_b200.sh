@@ -24,6 +24,7 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 SERVER_LOG=/workspace/server.log
 
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
 
 if [ "$EP_SIZE" -gt 1 ]; then
   EP=" --enable-expert-parallel"
