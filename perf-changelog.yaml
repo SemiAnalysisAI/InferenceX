@@ -3523,3 +3523,11 @@
     - "Aligned decode params with Weiliang config: swa-full-tokens-ratio=0.20, max-running-requests=18432, moe-dense-tp-size=1; added prefill enable-dp-lm-head and cuda-graph-max-bs=512"
     - "Remove 4 dominated old configs (4p-dep16-8n, 8p-dep16-12n, 10p-dep16-14n, 12p-dep12-15n) superseded by wide-EP frontier"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
+
+- config-keys:
+    - minimaxm2.5-fp4-mi355x-vllm
+  description:
+    - "Enable vLLM Rust request frontend by exporting VLLM_USE_RUST_FRONTEND=1 in benchmarks/single_node/minimaxm2.5_fp4_mi355x.sh (v0.22.0 ROCm image ships the vllm-rs binary, so the flag engages it). Environment-only change; serve flags, TP/EP, attention/kernel settings unchanged"
+    - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
+    - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
