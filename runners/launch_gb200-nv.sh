@@ -148,8 +148,21 @@ fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    # Agentic multi-node uses the same pinned cquil11/srt-slurm-nv commit as
+    # launch_gb300-nv.sh — everything the agentic recipes need is there:
+    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+    #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+    #   - DynamoConfig.wheel (recipes pin the ai-dynamo wheel)
+    #   - srtctl apply --no-preflight (model path /mnt/numa1 is compute-node
+    #     local NVMe, invisible to the login-node runner)
+    #   - benchmark_stage srun_options propagation (container-remap-root
+    #     must reach the agentic_srt.sh srun)
+    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
+    git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -200,6 +213,24 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
+
+# Agentic runs bind-mount two persistent caches into every worker container
+# (Lustre, shared across nodes): aiperf's content-addressed dataset mmap
+# cache (~65 GB per corpus, re-tokenized from scratch without it) and the
+# HF hub cache holding the trace dataset download. The container-side paths
+# are referenced by the agentic recipes' benchmark.env
+# (AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache, HF_HUB_CACHE=/hf_hub_cache).
+DEFAULT_MOUNTS_BLOCK=""
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    AIPERF_MMAP_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/ai-perf-cache"
+    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
+    chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+    DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+fi
+
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB200
@@ -224,6 +255,7 @@ containers:
   dynamo-sglang: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -240,10 +272,18 @@ echo "Submitting job with srtctl..."
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
 
+# --no-preflight is only safe on the agentic path, where the recipe resolves
+# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
+# runner can't see. Fixed-seq-len recipes keep enforcement on.
+PREFLIGHT_FLAG=""
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    PREFLIGHT_FLAG="--no-preflight"
+fi
+
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply $PREFLIGHT_FLAG -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply $PREFLIGHT_FLAG -f "$CONFIG_FILE" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 fi
 echo "$SRTCTL_OUTPUT"
 

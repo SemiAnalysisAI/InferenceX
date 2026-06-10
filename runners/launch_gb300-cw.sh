@@ -88,6 +88,12 @@ export NVIDIA_DRIVER_CAPABILITIES=compute,utility
 # write to it.
 export AIPERF_MMAP_CACHE_HOST_PATH="/mnt/vast/ai-perf-cache"
 
+# Persistent HF hub cache for the agentic trace datasets — see the
+# launch_gb300-nv.sh comment. Mounted at /hf_hub_cache; agentic recipes set
+# HF_HUB_CACHE=/hf_hub_cache in benchmark.env.
+export HF_HUB_CACHE_HOST_PATH="/mnt/vast/hf-hub-cache"
+mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+
 NGINX_IMAGE="nginx:1.27.4"
 
 # Squash files live alongside models on /mnt/vast (shared across nodes).
@@ -221,6 +227,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 default_mounts:
   ${DYNAMO_WHEELS_CACHE_HOST}: /configs/dynamo-wheels
   ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache
 
 model_paths:
   dspro: "${MODEL_PATH}"
