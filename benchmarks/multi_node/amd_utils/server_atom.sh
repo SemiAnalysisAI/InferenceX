@@ -187,6 +187,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     # Wait for all prefill and decode servers to be ready
     WAIT_SERVER_TIMEOUT="${WAIT_SERVER_TIMEOUT:-2500}"
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting for all servers to be up (timeout=${WAIT_SERVER_TIMEOUT}s)..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait for prefill/decode /health endpoints"
@@ -215,6 +216,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             echo "[wait][OK] decode ${_ip}:${DECODE_PORT} ready"
         done
     fi
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "All servers up. Starting atomesh router..."
 
     ROUTER_CMD="/usr/local/bin/atomesh launch \
@@ -254,6 +256,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Router is ready for benchmarking"
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
 
     cd $ATOM_WS_PATH
@@ -348,6 +351,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing router and prefill server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
         kill $proxy_pid
@@ -392,6 +396,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         trap 'echo "Caught signal, killing prefill (pid=$prefill_pid)"; kill $prefill_pid 2>/dev/null; exit 0' SIGTERM SIGINT
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting for router to be up..."
     WAIT_ROUTER_TIMEOUT="${WAIT_ROUTER_TIMEOUT:-2800}"
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -408,6 +413,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         echo "[wait][OK] router ${NODE0_ADDR}:${ROUTER_PORT} ready"
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting until router closes..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait until router ${NODE0_ADDR}:${ROUTER_PORT} closes"
@@ -418,6 +424,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         echo "[wait] router ${NODE0_ADDR}:${ROUTER_PORT} closed"
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing prefill server (rank ${NODE_RANK})"
     if [[ "$DRY_RUN" -eq 0 ]]; then kill $prefill_pid; fi
 
@@ -478,6 +485,7 @@ else
         echo "[wait][OK] router ${NODE0_ADDR}:${ROUTER_PORT} ready"
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Waiting until router closes..."
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: wait until router ${NODE0_ADDR}:${ROUTER_PORT} closes"
@@ -488,6 +496,7 @@ else
         echo "[wait] router ${NODE0_ADDR}:${ROUTER_PORT} closed"
     fi
 
+    echo "[-------]" NODE $NODE_RANK "[--------]"
     echo "Killing decode server (rank ${RANK})"
     if [[ "$DRY_RUN" -eq 0 ]]; then kill $decode_pid; fi
 fi
