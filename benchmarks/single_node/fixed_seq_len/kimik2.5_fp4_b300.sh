@@ -38,6 +38,12 @@ nvidia-smi
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 
+# vLLM v0.20.2+'s CUDA-graph memory profiler pre-reserves a large chunk of GPU
+# memory upfront, which collides with --gpu-memory-utilization=0.90 and shrinks
+# the effective budget left for the KV cache. Disable the profiler so 0.90 means
+# 0.90 (same pattern as benchmarks/single_node/fixed_seq_len/kimik2.5_fp4_b200.sh).
+export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+
 SERVER_LOG=/workspace/server.log
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -56,7 +62,10 @@ vllm serve $MODEL_PATH --served-model-name $MODEL --host 0.0.0.0 --port $PORT \
 --reasoning-parser kimi_k2 \
 --tool-call-parser kimi_k2 \
 --compilation_config.pass_config.fuse_allreduce_rms true \
---no-enable-prefix-caching \
+--kv-cache-dtype fp8 \
+--max-cudagraph-capture-size 8192 \
+--max-num-batched-tokens 8192 \
+--stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
