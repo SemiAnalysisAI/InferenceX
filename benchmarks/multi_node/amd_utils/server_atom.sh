@@ -192,7 +192,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --node-ips ${IPADDRS} \
         --node-ports ${PREFILL_PORT} \
         --wait-for-all-ports \
-        --timeout 2500"
+        --timeout 2000"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
@@ -227,7 +227,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
             --node-ips ${NODE0_ADDR} \
             --node-ports ${ROUTER_PORT} \
             --wait-for-all-ports \
-            --timeout 2500"
+            --timeout 2000"
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
         else
@@ -383,7 +383,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 2500"
+        --timeout 2000"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
@@ -452,7 +452,7 @@ else
         --node-ips ${NODE0_ADDR} \
         --node-ports ${ROUTER_PORT} \
         --wait-for-all-ports \
-        --timeout 2500"
+        --timeout 2000"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
