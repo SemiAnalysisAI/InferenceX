@@ -280,6 +280,15 @@ echo "Submitting job with srtctl..."
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
 
+# Don't leak the login-node venv to the compute-node orchestrator. sbatch's
+# default --export=ALL propagates VIRTUAL_ENV (set by `source
+# .venv/bin/activate` above) into job_script_minimal.j2, whose
+# `uv run` step then tries to inspect the *active* venv — and dies with
+# "Broken symlink at .venv/bin/python3" because the login-node interpreter
+# path doesn't exist on compute nodes (gb200 agentic R2, job 18587).
+# srtctl itself still resolves through PATH (.venv/bin is on it).
+unset VIRTUAL_ENV
+
 # --no-preflight is only safe on the agentic path, where the recipe resolves
 # model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
 # runner can't see. Fixed-seq-len recipes keep enforcement on.
