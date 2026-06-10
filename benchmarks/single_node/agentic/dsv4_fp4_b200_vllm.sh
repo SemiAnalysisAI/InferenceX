@@ -54,6 +54,12 @@ nvidia-smi
 resolve_trace_source
 install_agentic_deps
 
+# vLLM v0.22.1 can ship CUTLASS DSL 4.5.2 with stale native MLIR bindings,
+# which fails DSV4 indexer compilation with mlir_global_dtors(..., data).
+# Reinstall the matching native wheel until NVIDIA/cutlass#3259 is resolved.
+agentic_pip_install --quiet --force-reinstall --no-deps \
+    'nvidia-cutlass-dsl-libs-cu13==4.5.2'
+
 # vllm-project/router expands the one HTTP backend into one logical worker per
 # DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
 # X-Correlation-ID is stable for every turn of a conversation; alias it to the
