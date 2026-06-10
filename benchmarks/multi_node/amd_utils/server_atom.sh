@@ -129,20 +129,6 @@ fi
 echo "Prefill Parallel args : ${PREFILL_PARALLEL_ARGS[*]}"
 echo "Decode  Parallel args : ${DECODE_PARALLEL_ARGS[*]}"
 
-## =============================================================================
-## Container Synchronization
-## =============================================================================
-#
-#echo "Waiting at the container creation barrier on $host_name"
-#python3 $ATOM_WS_PATH/sync.py barrier \
-#    --local-ip 0.0.0.0 \
-#    --local-port 5000 \
-#    --enable-port \
-#    --node-ips ${IPADDRS} \
-#    --node-ports 5000 \
-#    --wait-for-all-ports \
-#    --timeout 300
-
 # =============================================================================
 # Node Role Assignment
 #
