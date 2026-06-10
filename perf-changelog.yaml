@@ -3535,5 +3535,5 @@
 - config-keys:
     - kimik2.5-fp4-b300-vllm
   description:
-    - "Align server launch with the B200 recipe by adding the tuning args that were missing on B300: --kv-cache-dtype fp8, --max-cudagraph-capture-size 2048, --max-num-batched-tokens \"$((ISL * 2))\", and --stream-interval 20."
+    - "Tune the B300 vLLM server launch: set --kv-cache-dtype fp8, --max-cudagraph-capture-size 8192, --max-num-batched-tokens 8192 (matched to the cudagraph capture size), and --stream-interval 20; disable the CUDA-graph memory profiler (VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0) so --gpu-memory-utilization is honored in full."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1698
