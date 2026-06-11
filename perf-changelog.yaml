@@ -3525,6 +3525,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604."
+    - "Update script for aiter attention backend from triton."
+    - "Enable aiter unfied attention."
+    - "Enable aiter allreduce fusion."
+    - "Remove sweep config mtp+cc256+tp2, which may OOM."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1680
+
+- config-keys:
     - minimaxm2.5-fp4-mi355x-vllm
   description:
     - "Enable vLLM Rust request frontend by exporting VLLM_USE_RUST_FRONTEND=1 in benchmarks/single_node/minimaxm2.5_fp4_mi355x.sh (v0.22.0 ROCm image ships the vllm-rs binary, so the flag engages it). Environment-only change; serve flags, TP/EP, attention/kernel settings unchanged"
@@ -3543,6 +3554,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
   
 - config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch back to the main branch on InferenceX benchmarking. Since the AMD v4 model code has been merged into main, we now use the main branch instead of the previously used amd/deepseek_v4 branch. The image is bumped to the main branch image rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260610."
+    - "Refresh the script's env vars. The main branch introduced several env var renames and new default settings, so we refreshed the env vars in the script accordingly."
+    - "Enable the unified KV attention kernel. Set export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton for better performance."
+    - "Specify the prefill delay explicitly. Set --prefill-delayer-max-delay-ms 5000 to define a concrete prefill delay, allowing DP to batch more requests together per execution."
+  pr-link: 
+    https://github.com/SemiAnalysisAI/InferenceX/pull/1701
+
+- config-keys:
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Align MTP env vars to GB300: replace PRECOMPILE=0 with FAST_WARMUP=1, add RADIX_FORCE_MISS, DEFAULT_THINKING, DSV4_REASONING_EFFORT=max"
@@ -3550,3 +3571,10 @@
     - "Unify EAGLE spec-decoding to (3,1,4) for both DP-attn and TP-only paths, add --enable-deepseek-v4-fp4-indexer"
     - "Bump image to nightly-dev-cu13-20260610-f332e526"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1700
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
+    - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
