@@ -735,6 +735,54 @@ install_transformers_glm5() {
     _SETUP_INSTALLED+=("transformers-glm5")
 }
 
+# ---------------------------------------------------------------------------
+# SGLang: DeepSeek-V4-Pro config.json model_type patch.
+#
+# Transformers in these images doesn't recognize the `deepseek_v4` model_type,
+# so AutoConfig.from_pretrained crashes before SGLang can dispatch. The
+# single-node DSv4 recipes patch the HF-cache config.json directly; for disagg
+# the weights live on shared NFS at $MODEL_DIR/$MODEL_NAME, so patch that
+# config.json instead. Set model_type -> deepseek_v3 (so AutoConfig succeeds)
+# while keeping architectures=['DeepseekV4ForCausalLM'] so SGLang still
+# dispatches to its native DSv4 model class.
+#
+# Idempotent (no-op once model_type is deepseek_v3) and crash-safe under the
+# concurrent multi-node start: writes a temp file in the same dir and os.replace()
+# (atomic same-filesystem rename), so a reader never sees a half-written config.
+# Only runs for MODEL_NAME == DeepSeek-V4-Pro.
+# ---------------------------------------------------------------------------
+patch_dsv4_config() {
+    if [[ "$MODEL_NAME" != "DeepSeek-V4-Pro" ]]; then
+        return 0
+    fi
+    local cfg="${MODEL_DIR}/${MODEL_NAME}/config.json"
+    if [[ ! -f "$cfg" ]]; then
+        echo "[SETUP] WARN: DSv4 config.json not found at $cfg; skipping model_type patch"
+        return 0
+    fi
+    python3 - "$cfg" <<'PYEOF'
+import json, os, sys, tempfile
+cfg = sys.argv[1]
+with open(cfg) as f:
+    config = json.load(f)
+if config.get("model_type") != "deepseek_v4":
+    print(f"[SETUP] DSv4 config.json already patched (model_type={config.get('model_type')!r})")
+    sys.exit(0)
+config["model_type"] = "deepseek_v3"
+d = os.path.dirname(cfg)
+fd, tmp = tempfile.mkstemp(dir=d, prefix=".config.json.", suffix=".tmp")
+try:
+    with os.fdopen(fd, "w") as f:
+        json.dump(config, f, indent=2)
+    os.replace(tmp, cfg)
+    print(f"[SETUP] Patched {cfg}: model_type deepseek_v4 -> deepseek_v3")
+except Exception:
+    os.path.exists(tmp) and os.remove(tmp)
+    raise
+PYEOF
+    _SETUP_INSTALLED+=("dsv4-config-model-type")
+}
+
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
@@ -759,6 +807,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 else
     patch_gluon_pa_mqa_logits_instr_shape
     install_transformers_glm5
+    patch_dsv4_config
 fi
 
 _SETUP_END=$(date +%s)

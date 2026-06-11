@@ -349,3 +349,45 @@ DeepSeek-R1-0528-MXFP4-v2:
       max_running_requests: 128
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
+
+# DeepSeek-V4-Pro (FP4 experts) PD-disaggregation. Serving flags mirror the
+# validated single-node SGLang recipe (benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh
+# + the MTP variant): compressed attention backend, SWA, page-size 256, the
+# deepseekv4 tool-call / deepseek-v4 reasoning parsers, the DSv4 thinking chat
+# template, and shared-experts-fusion disabled. The DSv4 FP4-experts SGLANG_*
+# env block + deep_gemm-absence fallback live in env.sh, and the config.json
+# model_type patch (deepseek_v4 -> deepseek_v3) in setup_deps.sh, both gated on
+# MODEL_NAME == DeepSeek-V4-Pro. --context-length is pinned (model default is
+# very long; would over-reserve KV); 9472 covers the 8k/1k smoke point.
+# kv-cache-dtype is intentionally left at the model default (the single-node DSv4
+# recipe sets none), unlike the fp8_e4m3 DeepSeek-R1 disagg entries.
+DeepSeek-V4-Pro:
+  base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --disaggregation-transfer-backend mori --attention-backend compressed --swa-full-tokens-ratio 0.15 --page-size 256 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --context-length 9472 --chat-template /workspace/benchmarks/single_node/chat_templates/deepseek_v4_thinking.jinja"
+  mtp_flags: ""
+  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    dp:
+      max_running_requests: 24
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_PREFILL * PREFILL_TP_SIZE"
+      cuda_graph_bs: "1 2 3"
+    no_dp:
+      max_running_requests: 32
+      chunked_prefill_size: 8192
+      cuda_graph_bs_range: "1-32"
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 4096
+      chunked_prefill_size: "MORI_MAX_DISPATCH_TOKENS_DECODE * DECODE_TP_SIZE"
+      cuda_graph_bs_range: "1-160"
+    ep_only:
+      max_running_requests: 256
+      chunked_prefill_size: 262144
+      cuda_graph_bs_range: "1-256"
+    no_dp:
+      max_running_requests: 64
+      chunked_prefill_size: 8192
+      cuda_graph_bs_range: "1-64"
