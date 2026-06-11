@@ -3547,3 +3547,12 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-disagg
+  description:
+    - "New recipe: DeepSeek-V4-Pro disaggregated prefill/decode on MI355X via vLLM + MoRI-IO. Combines the validated single-node DSv4 vLLM serving recipe (dsv4-fp4-mi355x-vllm, vllm-project/recipes#433) with the vllm-disagg framework from the kimi/minimax mi355x recipes"
+    - "New benchmarks/multi_node/dsv4_fp4_mi355x_vllm-disagg.sh launcher + DeepSeek-V4-Pro entry in amd_utils/models_vllm.yaml. Per-node flags reuse the aggregated recipe verbatim (--moe-backend triton_unfused required for the FP4 expert format, deepseek_v4 tokenizer/reasoning parser, fp8 KV, --enforce-eager); framework adds the MoRIIO kv-transfer role"
+    - "Image vllm/vllm-openai-rocm:v0.22.0 (same as the aggregated entry): carries both DeepseekV4ForCausalLM (vllm#40871) and the MoRIIO connector (vllm#29304), and stays pullable unlike the GC'd disagg nightly tags"
+    - "1P1D topology, TP8/EP1 prefill+decode. Starts at a single ISL/OSL (1k/1k) conc=1 as an end-to-end smoke test before expanding to the full 1k1k+8k1k, conc 8-512 sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1707
