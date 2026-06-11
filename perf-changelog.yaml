@@ -3544,6 +3544,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch back to the main branch on InferenceX benchmarking. Since the AMD v4 model code has been merged into main, we now use the main branch instead of the previously used amd/deepseek_v4 branch. The image is bumped to the main branch image rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260610."
+    - "Refresh the script's env vars. The main branch introduced several env var renames and new default settings, so we refreshed the env vars in the script accordingly."
+    - "Enable the unified KV attention kernel. Set export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton for better performance."
+    - "Specify the prefill delay explicitly. Set --prefill-delayer-max-delay-ms 5000 to define a concrete prefill delay, allowing DP to batch more requests together per execution."
+  pr-link: 
+    https://github.com/SemiAnalysisAI/InferenceX/pull/1701
+
+- config-keys:
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Align MTP env vars to GB300: replace PRECOMPILE=0 with FAST_WARMUP=1, add RADIX_FORCE_MISS, DEFAULT_THINKING, DSV4_REASONING_EFFORT=max"
