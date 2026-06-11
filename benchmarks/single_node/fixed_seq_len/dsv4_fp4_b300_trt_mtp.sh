@@ -84,7 +84,13 @@ else
     MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
 fi
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
-CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
+# Cap CUDA-graph capture at batch 1024. TRTLLM_MLA_EXTRA_OVERLAP hands MLA
+# prologue tensors across streams without record_stream(), so graph warmup at
+# decode batch >1024 (repros at 1088, e.g. tp8/ep8 dp-attn conc-2048 on B300)
+# hits a use-after-free -> CUDA_ERROR_ILLEGAL_ADDRESS. Fixed upstream in
+# NVIDIA/TensorRT-LLM#15265; cap until that fix ships in the image. Runtime
+# --max_batch_size stays = CONC, so batches >1024 just run eager.
+CUDA_GRAPH_MAX_BATCH_SIZE=$(( MAX_BATCH_SIZE < 1024 ? MAX_BATCH_SIZE : 1024 ))
 if [[ "$DP_ATTENTION" == "true" ]]; then
     KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.6}"
 else
