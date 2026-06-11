@@ -24,63 +24,28 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 # from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
 # bump the image tag in .github/configs/amd-master.yaml.
 
-# Transformers in the container doesn't recognize the `deepseek_v4` model_type.
-# PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
-# by writing a patched config to /tmp, but in practice isn't catching the error
-# in this image. Patch the cached config.json directly instead: set model_type
-# to `deepseek_v3` so AutoConfig.from_pretrained succeeds, and keep
-# architectures=['DeepseekV4ForCausalLM'] so SGLang dispatches to its native
-# DSv4 model class (python/sglang/srt/models/deepseek_v4.py).
-python3 << PYEOF
-import json
-from huggingface_hub import hf_hub_download
-path = hf_hub_download(repo_id="$MODEL", filename="config.json")
-with open(path) as f:
-    config = json.load(f)
-if config.get("model_type") == "deepseek_v4":
-    config["model_type"] = "deepseek_v3"
-    with open(path, "w") as f:
-        json.dump(config, f, indent=2)
-    print(f"Patched {path}: model_type deepseek_v4 -> deepseek_v3")
-else:
-    print(f"No patch needed: model_type is {config.get('model_type')!r}")
-PYEOF
-
-# DSv4 FP4-experts path. Tracks the env block in python/run_dsv4.sh on the
-# amd/deepseek_v4 branch (HEAD's active block is FP8; we override the two
-# FP4-specific flags below):
-#   SGLANG_DSV4_FP4_EXPERTS=True   -> route experts through the FP4 kernels
-#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter and apply
-#                                    the swiglu_limit clamp in the triton
-#                                    MoE fallback path.
-export SGLANG_REASONING_EFFORT=max
-export SGLANG_OPT_USE_FUSED_COMPRESS=true
-export SGLANG_OPT_USE_OLD_COMPRESSOR=false
-export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
-export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
-export SGLANG_OPT_USE_FUSED_HASH_TOPK=true
+export SGLANG_DEFAULT_THINKING=1
+export SGLANG_DSV4_REASONING_EFFORT=max
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+export SGLANG_USE_AITER=1
+export SGLANG_USE_ROCM700A=0
+export SGLANG_OPT_USE_FUSED_COMPRESS=true
+export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
+export SGLANG_OPT_FP8_WO_A_GEMM=false
+export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
+export SGLANG_OPT_USE_TOPK_V2=false
+export SGLANG_OPT_USE_AITER_INDEXER=true
+export SGLANG_OPT_USE_TILELANG_INDEXER=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
-export SGLANG_OPT_USE_AITER_MHC_PRE=true
-export SGLANG_OPT_USE_AITER_MHC_POST=true
-export SGLANG_ENABLE_THINKING=1
-export SGLANG_USE_AITER=1
-export SGLANG_USE_ROCM700A=1
-export SGLANG_TOPK_TRANSFORM_512_TORCH=0
 export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-export SGLANG_DSV4_FP4_EXPERTS=True
-export SGLANG_OPT_DPSK_V4_RADIX=1
-export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
-export SGLANG_OPT_USE_FUSED_STORE_CACHE=true
-export SGLANG_FORCE_TRITON_MOE_FP8=0
-export SGLANG_HACK_FLASHMLA_BACKEND=triton
-export SGLANG_OPT_USE_TILELANG_INDEXER=true
-export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
+export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
 export AITER_BF16_FP8_MOE_BOUND=0
-export SGLANG_OPT_FUSE_WQA_WKV=true
-export SGLANG_OPT_USE_FUSED_PAGED_COMPRESS=true
-export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=0
+export SGLANG_EAGER_INPUT_NO_COPY=true
+
+# multi-stream
+export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+export SGLANG_ROCM_USE_MULTI_STREAM=false
 
 SERVER_LOG=/workspace/server.log
 
@@ -100,20 +65,21 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
+	--prefill-delayer-max-delay-ms 5000
     )
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
 fi
 
-python3 -m sglang.launch_server \
+sglang serve \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
     "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
     --disable-radix-cache \
-    --attention-backend compressed \
+    --attention-backend dsv4 \
     --max-running-requests ${CONC} \
     --mem-fraction-static 0.90 \
     --swa-full-tokens-ratio 0.15 \

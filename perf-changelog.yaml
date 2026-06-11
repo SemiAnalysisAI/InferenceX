@@ -3525,12 +3525,60 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604."
+    - "Update script for aiter attention backend from triton."
+    - "Enable aiter unfied attention."
+    - "Enable aiter allreduce fusion."
+    - "Remove sweep config mtp+cc256+tp2, which may OOM."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1680
+
+- config-keys:
     - minimaxm2.5-fp4-mi355x-vllm
   description:
     - "Enable vLLM Rust request frontend by exporting VLLM_USE_RUST_FRONTEND=1 in benchmarks/single_node/minimaxm2.5_fp4_mi355x.sh (v0.22.0 ROCm image ships the vllm-rs binary, so the flag engages it). Environment-only change; serve flags, TP/EP, attention/kernel settings unchanged"
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Move both the 1k1k and 8k1k scenarios of the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/{1k1k,8k1k}/disagg/mtp/), rather than referencing recipes from the srt-slurm repo"
+    - "1k1k: 4 MTP variants, behavior unchanged from the previous srt-slurm 1k1k recipe — 2 low-latency (dep4-1p prefill / tep8 decode at 5 and 6 decode nodes, conc up to 512) + 2 max-throughput (dep4-1p prefill / dep8 decode at 1 and 2 decode nodes, conc up to 1024)"
+    - "8k1k: 6-variant sweep — 3 low-latency (1p5d / 1p3d / 1p1d, TP4 prefill / TP8 decode, conc up to 512) + 3 MTP2 high-throughput (2p1d / 3p1d / 5p1d, DEP4 prefill / DEP8 decode, single concurrency 768 / 1024 / 2048); MTP2 recipes use scheduler-recv-interval=1, enable-dp-lm-head, spec 2 steps / 3 draft tokens, and UCX_TLS in the prefill/decode environments"
+    - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130); the 1k1k recipes keep the dynamo-sglang container alias and follow the config image"
+    - "Clone srt-slurm at NVIDIA/srt-slurm@main for the srtctl/dynamo tooling and copy the local b200-fp4 recipes into the checkout"
+    - "Pin the 1k1k MTP recipes to the same dynamo source hash as the 8k1k recipes (dynamo.hash=5b4bc1dd70965017a737c71b19db5a0aeaa88727, install: true), so both scenarios build dynamo from an identical revision instead of relying on whatever is baked into the dynamo-sglang container alias"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1688
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch back to the main branch on InferenceX benchmarking. Since the AMD v4 model code has been merged into main, we now use the main branch instead of the previously used amd/deepseek_v4 branch. The image is bumped to the main branch image rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260610."
+    - "Refresh the script's env vars. The main branch introduced several env var renames and new default settings, so we refreshed the env vars in the script accordingly."
+    - "Enable the unified KV attention kernel. Set export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton for better performance."
+    - "Specify the prefill delay explicitly. Set --prefill-delayer-max-delay-ms 5000 to define a concrete prefill delay, allowing DP to batch more requests together per execution."
+  pr-link: 
+    https://github.com/SemiAnalysisAI/InferenceX/pull/1701
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Align MTP env vars to GB300: replace PRECOMPILE=0 with FAST_WARMUP=1, add RADIX_FORCE_MISS, DEFAULT_THINKING, DSV4_REASONING_EFFORT=max"
+    - "Replace DP-attn env vars with shared GB300 block: MEGA_MOE_USE_FP4_ACTS, USE_MXF4_KIND, NUM_MAX_TOKENS_PER_RANK=8192"
+    - "Unify EAGLE spec-decoding to (3,1,4) for both DP-attn and TP-only paths, add --enable-deepseek-v4-fp4-indexer"
+    - "Bump image to nightly-dev-cu13-20260610-f332e526"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1700
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
+    - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
 
 - config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k
@@ -3541,3 +3589,4 @@
     - "Flat dep4 and tp4 splits replace the upstream disagg-low-latency-dep4-mtp.yaml and disagg-low-latency-tp4-mtp.yaml templates (each base + zip_override_1k1k_lowlat with decode_nodes [1,2,4,6]). The templated form silently broke under the gb300-cw launcher: srtctl fans the single recipe into 4 Slurm submissions per `srtctl apply`, but launch_gb300-cw.sh:282 captures the job IDs with `grep -oP '✅ Job \\K[0-9]+'` into a scalar JOB_ID, jamming 4 newline-separated IDs into one variable. Downstream uses (LOGS_DIR path interpolation at :293-294, squeue polls at :313-314, error message at :315) all corrupt, producing the observed `ERROR: Job 7079\\n7082 failed before creating log file` and orphaning the real Slurm jobs. Single-config files match the 8k1k convention (one recipe per decode-worker count) and force srtctl to emit exactly 1 job per launcher invocation"
     - "Decode side runs EAGLE (num-steps=3, eagle-topk=1, num-draft-tokens=4) on all 11 recipes; recipe container strings are kept upstream-faithful (high-tput recipes pin nightly-dev-cu13-20260603-83bc7766, low-latency recipes pin nightly-dev-cu13-20260510-2473659e)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1697
+ 
