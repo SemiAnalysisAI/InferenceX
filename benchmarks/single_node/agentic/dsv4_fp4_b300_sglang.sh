@@ -28,11 +28,7 @@ source "$INFERENCEX_ROOT/benchmarks/benchmark_lib.sh"
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    if [ "$DP_ATTENTION" = "true" ]; then
-        MAX_MODEL_LEN=131072
-    else
-        MAX_MODEL_LEN=1000000
-    fi
+    MAX_MODEL_LEN=1000000
 fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
