@@ -360,12 +360,12 @@ DeepSeek-R1-0528-MXFP4-v2:
 # --context-length is pinned (model default is very long; would over-reserve KV);
 # 9472 covers the 8k/1k smoke point. kv-cache-dtype is left at the model default
 # (the #1701 single-node recipe sets none), unlike the fp8_e4m3 DeepSeek-R1
-# disagg entries. dp_flags add --enable-prefill-delayer + max-delay-ms 5000 (the
-# #1701 DP path) for the future DP-attention expansion.
+# disagg entries. The prefill delayer (--enable-prefill-delayer) is intentionally
+# not used here.
 DeepSeek-V4-Pro:
   base_flags: "--decode-log-interval 1000 --log-level warning --watchdog-timeout 3600 --load-balance-method round_robin --disaggregation-transfer-backend mori --attention-backend dsv4 --swa-full-tokens-ratio 0.15 --page-size 256 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --context-length 9472 --chat-template /workspace/benchmarks/single_node/chat_templates/deepseek_v4_thinking.jinja"
   mtp_flags: ""
-  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head --enable-prefill-delayer --prefill-delayer-max-delay-ms 5000"
+  dp_flags: "--moe-a2a-backend mori --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
   prefill:
     mem_fraction_static: 0.8
     disable_radix_cache: true
