@@ -1519,7 +1519,9 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
+  # TODO(simondanielsson): change to pinned version once https://github.com/vllm-project/vllm/pull/40344
+  # is part of official release, likely 0.22.0.
+  image: vllm/vllm-openai-rocm:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1542,7 +1544,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1563,7 +1564,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1573,7 +1573,9 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:nightly-a6682d1d259cca69a9ae737ea5608fbbe7520031
+  # TODO(simondanielsson): change to pinned version once https://github.com/vllm-project/vllm/pull/40344
+  # is part of official release, likely 0.22.0.
+  image: vllm/vllm-openai-rocm:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x-disagg
@@ -1598,7 +1600,6 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1619,7 +1620,6 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 2
           tp: 8
@@ -1639,19 +1639,23 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
 # InferenceX classifies this as fp4 — same as the dsv4-fp4-mi355x-{sglang,vllm,atom}
 # entries below.
 #
-# Image: vllm/vllm-openai-rocm:v0.22.0 — the same release the single-node
-# dsv4-fp4-mi355x-vllm entry pins. v0.22.0 (released 2026-05-29) postdates both
-# the DSv4 model class (vllm#40871, 2026-05-05) and the MoRIIO P/D connector
-# (vllm#29304 + hardening through 2026-04-28), so it carries both. A pinned
-# release tag is used rather than a digest-suffixed `:nightly` because those
-# nightly tags are garbage-collected from Docker Hub and would fail enroot import
-# on a fresh runner; v0.22.0 stays pullable.
+# Image: the same vLLM ROCm nightly the kimi / minimax vllm-disagg recipes use
+# (#1585). This nightly carries the upstreamed MoRI-IO fixes (vllm#40344, merged
+# 2026-05-28), which let setup_deps.sh drop the large runtime MoRIIO patches and
+# use the native read_mode flag (set by server_vllm.sh in kv_connector_extra_config)
+# instead of the VLLM_MORIIO_CONNECTOR_READ_MODE env var. #40344 is NOT in the
+# v0.22.0 / v0.22.1 release tags (it landed ~1 day before the v0.22.0 cut and was
+# not backported), so the release tags can't be used with the patch-free path —
+# hence the nightly. It also postdates the DSv4 model class (vllm#40871,
+# 2026-05-05) and the MoRIIO connector (vllm#29304), so it carries both.
 #
 # Topology 1P1D: each prefill/decode worker is a full TP=8 node (EP=1), matching
-# the aggregated recipe which runs DSv4 on TP=8 without expert parallelism. DEP
-# decode + multi-node 1P2D are follow-ups once the base disagg path validates.
+# the aggregated recipe which runs DSv4 on TP=8 without expert parallelism (so no
+# all2all backend is needed — the mori_low_latency a2a rename from #1585 applies
+# only to the EP decode of kimi/minimax). DEP decode + multi-node 1P2D are
+# follow-ups once the base disagg path validates.
 dsv4-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x-disagg
@@ -1678,7 +1682,6 @@ dsv4-fp4-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "PREFILL_NODES=1"
-          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
         decode:
           num-worker: 1
           tp: 8
