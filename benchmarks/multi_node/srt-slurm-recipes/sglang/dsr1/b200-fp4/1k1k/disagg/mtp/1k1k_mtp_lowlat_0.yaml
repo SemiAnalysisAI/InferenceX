@@ -1,0 +1,122 @@
+# Derived from the srt-slurm b200-fp4 1k1k recipe (recipes/b200-fp4/1k1k.yaml
+# base + zip_override_mtp_lowlat[0]): 1p5d low-latency (dep4 prefill / tep8 decode, 5 decode nodes).
+# One flat YAML per concrete topology, matching the 8k1k local recipe layout
+# (sglang/<model>/<hw>-<precision>/<seq>/disagg/<variant>/...).
+
+name: b200-fp4-mtp-low-latency-dep4-1p-tep8-5d
+model:
+  path: dsr1
+  container: dynamo-sglang
+  precision: fp4
+
+dynamo:
+  hash: "5b4bc1dd70965017a737c71b19db5a0aeaa88727"
+  install: true
+
+resources:
+  gpu_type: b200
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 4
+  decode_nodes: 5
+  decode_workers: 5
+  gpus_per_node: 8
+backend:
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: '1'
+    DYN_REQUEST_PLANE: nats
+    SGLANG_ENABLE_SPEC_V2: '1'
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: '1800'
+    PYTHONUNBUFFERED: '1'
+    DYN_SKIP_SGLANG_LOG_FORMATTING: '1'
+    SGLANG_ENABLE_JIT_DEEPGEMM: 'false'
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: '100000'
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: '100000'
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: '100000'
+    SGLANG_DECODE_BOOTSTRAP_TIMEOUT: '1000'
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: 'True'
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: '0'
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: '1'
+    MC_FORCE_MNNVL: '1'
+    NCCL_MNNVL_ENABLE: '1'
+    NCCL_CUMEM_ENABLE: '1'
+    SGLANG_PER_TOKEN_GROUP_QUANT_8BIT_V2: '1'
+    DYN_REQUEST_PLANE: nats
+    SGLANG_ENABLE_SPEC_V2: '1'
+  sglang_config:
+    prefill:
+      served-model-name: deepseek-ai/DeepSeek-R1
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      disaggregation-mode: prefill
+      disaggregation-transfer-backend: nixl
+      mem-fraction-static: 0.85
+      max-prefill-tokens: 32768
+      chunked-prefill-size: 32768
+      context-length: 2200
+      max-running-requests: 512
+      disable-cuda-graph: true
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      attention-backend: trtllm_mla
+      kv-cache-dtype: fp8_e4m3
+      moe-runner-backend: flashinfer_trtllm
+      moe-dense-tp-size: 1
+      stream-interval: 30
+      watchdog-timeout: 1000000
+      enable-flashinfer-allreduce-fusion: true
+      disable-radix-cache: true
+      fp4-gemm-backend: flashinfer_trtllm
+    decode:
+      served-model-name: deepseek-ai/DeepSeek-R1
+      trust-remote-code: true
+      quantization: modelopt_fp4
+      disaggregation-mode: decode
+      disaggregation-transfer-backend: nixl
+      mem-fraction-static: 0.85
+      max-prefill-tokens: 32768
+      chunked-prefill-size: 32768
+      context-length: 2200
+      max-running-requests: 512
+      cuda-graph-max-bs: 512
+      tensor-parallel-size: 8
+      data-parallel-size: 1
+      expert-parallel-size: 8
+      attention-backend: trtllm_mla
+      kv-cache-dtype: fp8_e4m3
+      moe-runner-backend: flashinfer_trtllm
+      stream-interval: 30
+      watchdog-timeout: 1000000
+      enable-flashinfer-allreduce-fusion: true
+      disable-radix-cache: true
+      fp4-gemm-backend: flashinfer_trtllm
+      speculative-algorithm: EAGLE
+      speculative-num-steps: 2
+      speculative-eagle-topk: 1
+      speculative-num-draft-tokens: 3
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+benchmark:
+  type: sa-bench
+  isl: 1024
+  osl: 1024
+  req_rate: inf
+  concurrencies: 16x512

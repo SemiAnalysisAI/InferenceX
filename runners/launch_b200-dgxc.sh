@@ -122,6 +122,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         git checkout sa-submission-q2-2026
         mkdir -p recipes/sglang/glm5/b200-fp8
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/b200-fp8" recipes/sglang/glm5/b200-fp8
+    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
+        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        cd "$SRT_REPO_DIR" || exit 1
+        git checkout main
+        mkdir -p recipes/sglang/dsr1/b200-fp4
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
