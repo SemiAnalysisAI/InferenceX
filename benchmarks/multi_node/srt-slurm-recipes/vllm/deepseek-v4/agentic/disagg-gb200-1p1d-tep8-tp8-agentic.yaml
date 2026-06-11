@@ -164,6 +164,17 @@ backend:
       enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
 
+# cpus-per-task=72: one full GB200 NUMA socket (144 cores split 2 x 72) per
+# task. Critical for the *infra step* (etcd + nats), which srtctl spawns
+# without --gres — on watchtower the per-GPU CPU default (CpusPerTres=gpu:35)
+# doesn't apply to GPU-less steps, so etcd lands with 1 CPU, falls behind on
+# lease keep-alives, and worker registrations silently expire mid-run: R8's
+# decode worker logged "Keep-alive lease expired" 11 min after going healthy
+# and the frontend 500'd every benchmark request with "Instance not found".
+# Same failure mode and fix as the gb300 agentic recipes (their R12).
+sbatch_directives:
+  cpus-per-task: "72"
+
 srun_options:
   # See gb300 agentic recipes: pyxis may map the calling user to a non-root
   # uid inside the container; remap to uid 0 so agentic_srt.sh's apt-get
