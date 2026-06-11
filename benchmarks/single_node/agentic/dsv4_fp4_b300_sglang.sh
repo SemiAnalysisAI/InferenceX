@@ -163,6 +163,13 @@ export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
+TRITON_BUNDLED_PTXAS=$(
+    "$SGLANG_PYTHON" -c \
+        'from pathlib import Path; import triton; print(Path(triton.__file__).parent / "backends/nvidia/bin/ptxas")'
+)
+if [ -x "$TRITON_BUNDLED_PTXAS" ]; then
+    export TRITON_PTXAS_PATH="$TRITON_BUNDLED_PTXAS"
+fi
 SGLANG_CMD=(
     "$SGLANG_PYTHON" -m sglang.launch_server
     --model-path "$MODEL_PATH"
