@@ -3542,3 +3542,19 @@
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Align MTP env vars to GB300: replace PRECOMPILE=0 with FAST_WARMUP=1, add RADIX_FORCE_MISS, DEFAULT_THINKING, DSV4_REASONING_EFFORT=max"
+    - "Replace DP-attn env vars with shared GB300 block: MEGA_MOE_USE_FP4_ACTS, USE_MXF4_KIND, NUM_MAX_TOKENS_PER_RANK=8192"
+    - "Unify EAGLE spec-decoding to (3,1,4) for both DP-attn and TP-only paths, add --enable-deepseek-v4-fp4-indexer"
+    - "Bump image to nightly-dev-cu13-20260610-f332e526"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1700
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
+    - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
