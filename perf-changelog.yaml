@@ -3547,3 +3547,13 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+  description:
+    - "New recipe: DeepSeek-V4-Pro FP4 prefill/decode-disaggregated on MI355X via SGLang + MoRI. Combines the validated single-node DSv4 SGLang recipe with the sglang-disagg framework from the dsr1/qwen3.5/glm5 mi355x recipes"
+    - "New benchmarks/multi_node/dsv4_fp4_mi355x_sglang-disagg.sh launcher + DeepSeek-V4-Pro entry in amd_utils/models.yaml (compressed attention, SWA, page-size 256, deepseekv4/deepseek-v4 parsers, DSv4 thinking chat template, shared-experts-fusion off, context-length pinned, kv-cache-dtype at model default)"
+    - "DSv4 FP4-experts SGLANG_* env block + deep_gemm-absence fallback added to amd_utils/env.sh; idempotent atomic config.json model_type patch (deepseek_v4->deepseek_v3) added to amd_utils/setup_deps.sh, both gated on MODEL_NAME"
+    - "Image lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260601 (mainline, carries DSv4 sgl#26383 + MoRI disagg backend, auto-applies the MoRI conn.py overlay; rocm/sgl-dev:*-DSv4 branch image lacks both)"
+    - "1P1D TP8/EP1 dp-attn false. Starts at a single ISL/OSL (8k/1k) conc=1 as an end-to-end smoke test before expanding the conc / DEP sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1708
