@@ -63,7 +63,7 @@ install_agentic_deps
 # port, so PortArgs derives the same RPC/metrics TCP range for every rank and
 # rank 1 collides with rank 0 before startup completes. Give each scheduler a
 # private derivation port until the upstream image includes the fix.
-if [ "$DP_ATTENTION" = "true" ] && [ "${SGLANG_BUILD_COMMIT:-}" = "317fc6a9ddb62eb0320a7517c267bef4f9040853" ]; then
+if [ "$DP_ATTENTION" = "true" ]; then
     "$SGLANG_PYTHON" - <<'PY'
 from pathlib import Path
 
@@ -82,6 +82,8 @@ if old in source:
     controller_path.write_text(source)
 elif new not in source:
     raise RuntimeError(f"Unexpected SGLang DP controller source: {controller_path}")
+if new not in controller_path.read_text():
+    raise RuntimeError(f"Failed to patch SGLang DP controller: {controller_path}")
 PY
 fi
 
