@@ -433,6 +433,22 @@ qwen3.5-fp4-mi355x-sglang:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
 
+# target
+qwen3.5-fp4-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang:v0.5.12-rocm720-mi35x
+  model: amd/Qwen3.5-397B-A17B-MXFP4
+  model-prefix: qwen3.5
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 2, ep: 1, offloading: none, conc-list: [8, 16, 32, 40, 48, 56, 72] }
+      - { tp: 2, ep: 1, offloading: hicache, conc-list: [8, 16, 32, 40, 48, 56, 72] }
+
 qwen3.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
   model: amd/Qwen3.5-397B-A17B-MXFP4
@@ -871,6 +887,22 @@ minimaxm2.5-fp4-mi355x-atom:
       - { tp: 2, conc-start: 4, conc-end: 1024 }
       - { tp: 4, conc-start: 4, conc-end: 128 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
+
+# target
+minimaxm2.5-fp4-mi355x-vllm-agentic-lmcache:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: amd/MiniMax-M2.5-MXFP4
+  model-prefix: minimaxm2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 1, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48] }
+      - { tp: 1, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48] }
 
 minimaxm2.5-fp4-mi355x-vllm:
   image: vllm/vllm-openai-rocm:v0.22.0
@@ -2494,6 +2526,23 @@ glm5.1-fp4-mi355x-sglang-agentic:
       # sglang manages KV eviction; mi355x glm5.1 caps at tp=4 conc=16 in fixed-seq, so cap conservatively
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
+# target
+glm5.1-fp4-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  model: amd/GLM-5.1-MXFP4
+  model-prefix: glm5.1
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      # sglang manages KV eviction; mi355x glm5.1 caps at tp=4 conc=16 in fixed-seq, so cap conservatively
+      - { tp: 2, ep: 1, offloading: none, conc-list: [4, 8, 16, 32, 40, 48] }
+      - { tp: 2, ep: 1, offloading: hicache, conc-list: [4, 8, 16, 32, 40, 48] }
+
 kimik2.5-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
@@ -2518,8 +2567,40 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
       - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
 
+# target
+kimik2.5-fp4-mi355x-vllm-agentic-lmcache:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 4, ep: 1, offloading: none, conc-list:    [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 4, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+
+# target
+kimik2.5-fp4-mi355x-vllm-agentic-lmcache-060226DRAM1500GB:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      #- { tp: 4, ep: 1, offloading: none, conc-list:    [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 4, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+
 minimaxm2.5-fp8-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.1
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x
@@ -2536,8 +2617,27 @@ minimaxm2.5-fp8-mi355x-vllm-agentic:
       - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 72, 96] }
       - { tp: 4, ep: 4, offloading: cpu,  conc-list: [48, 56, 64, 72, 96] }
 
+# target
+minimaxm2.5-fp8-mi355x-vllm-agentic-lmcache:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: MiniMaxAI/MiniMax-M2.5
+  model-prefix: minimaxm2.5
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # MI355X tp=4 ep=4: compute ceiling ~60 (empirical), KV cliff ~91 (analytical).
+    # Compute saturates first; cpu offload likely won't help, but worth confirming.
+    # AMD uses native OffloadingConnector (NOT SimpleCPUOffloadConnector).
+    - duration: 1800
+      search-space:
+      - { tp: 2, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48] }
+      - { tp: 2, ep: 1, offloading: lmcache, conc-list: [1, 2, 4, 8, 16, 32, 40, 48] }
+
 minimaxm2.5-fp8-mi300x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.1
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x
@@ -2555,7 +2655,7 @@ minimaxm2.5-fp8-mi300x-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
 minimaxm2.5-fp8-mi325x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.1
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi325x
@@ -2573,8 +2673,9 @@ minimaxm2.5-fp8-mi325x-vllm-agentic:
       - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 20, 24, 28, 32, 40, 48] }
       - { tp: 4, offloading: cpu,  conc-list: [16, 20, 24, 28, 32] }
 
+# target
 qwen3.5-fp8-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260531
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: mi355x
@@ -2585,8 +2686,8 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
+      - { tp: 4, ep: 1, offloading: none, conc-list: [8, 16, 32, 40, 48, 56, 72] }
+      - { tp: 4, ep: 1, offloading: hicache, conc-list: [8, 16, 32, 40, 48, 56, 72] }
 
 dsv4-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:v0.22.0

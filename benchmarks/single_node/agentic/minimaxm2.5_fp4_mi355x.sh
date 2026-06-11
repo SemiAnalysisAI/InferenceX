@@ -29,10 +29,6 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
-rocm-smi || true
-amd-smi || true
-
 # `hf download` creates the target dir if missing and is itself idempotent.
 # When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
 # Either way, MODEL_PATH is what the server is launched with.
@@ -44,6 +40,9 @@ else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
 fi
+
+rocm-smi || true
+amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
 # MiniMax-M2.5 servers run at max_model_len ~256k; the unfiltered 052726
@@ -135,9 +134,13 @@ case "$OFFLOADING" in
 
         # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
         # This gives extra cache hit than disabling hybrid kv cache manager
+        # srok,
+        # --no-disable-hybrid-kv-cache-manager is not compatible with lmcache, even for non-hma
+        # https://github.com/vllm-project/vllm/blob/0585b5ba2eaa7860d6976bc7ba376bdbca5119fc/vllm/distributed/kv_transfer/kv_connector/factory.py#L56-L60
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
             --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
+            --disable-hybrid-kv-cache-manager
         )
         ;;
     lmcache)
@@ -206,11 +209,13 @@ case "$OFFLOADING" in
         wait_for_lmcache_ready
 
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
-        # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
-        # This gives extra cache hit than disabling hybrid kv cache manager
+        # srok,
+        # --no-disable-hybrid-kv-cache-manager is not compatible with lmcache, even for non-hma
+        # https://github.com/vllm-project/vllm/blob/0585b5ba2eaa7860d6976bc7ba376bdbca5119fc/vllm/distributed/kv_transfer/kv_connector/factory.py#L56-L60
         OFFLOAD_ARGS=(
             --kv-transfer-config
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
+            --disable-hybrid-kv-cache-manager
         )
         ;;
     *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
@@ -236,42 +241,20 @@ fi
 
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-VLLM_BLOCK_SIZE=32
-ASYNC_SCHEDULING_ARGS=""
-
-if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
-    export VLLM_ROCM_USE_AITER_MOE=0
-    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    echo "TP8/EP8: using block size 32, shuffle disabled, AITER MoE disabled, async scheduling disabled."
-elif (( CONC < 64 )); then
-    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    echo "c${CONC}: using block size 32, shuffle disabled, async scheduling disabled."
-elif (( CONC == 64 )); then
-    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-    VLLM_BLOCK_SIZE=16
-    echo "c64: using block size 16, shuffle enabled, async scheduling disabled."
-else
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-    VLLM_BLOCK_SIZE=16
-    echo "c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
-fi
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
-    vllm serve "$MODEL"
+    vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     --tensor-parallel-size="$TP"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.95
-    --kv-cache-dtype fp8 
-    --block-size=$VLLM_BLOCK_SIZE 
+    --kv-cache-dtype fp8 \
+    --block-size=32
     --trust-remote-code
     --attention-backend "ROCM_AITER_FA" 
     --max-num-seqs "$CONC"
-    $ASYNC_SCHEDULING_ARGS 
     "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )

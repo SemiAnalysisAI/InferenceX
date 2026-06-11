@@ -26,6 +26,8 @@ PORT=${PORT:-8888}
 DURATION=${DURATION:-1800}
 EP_SIZE=${EP_SIZE:-1}
 
+SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-30}
+
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -44,6 +46,7 @@ fi
 
 rocm-smi || true
 amd-smi || true
+
 # ---- Resolve traces and install deps ----------------------------------------
 # Cap the replay corpus at 256k (470 traces, max in+out <= 256k) instead of the
 # unfiltered 052726 corpus whose ~1M-token traces get rejected and add no perf
@@ -56,16 +59,9 @@ export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_25
 resolve_trace_source
 install_agentic_deps
 
-# ROCm / SGLang performance tuning for MI355X
-export SGLANG_ROCM_FUSED_DECODE_MLA=0
-export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export SAFETENSORS_FAST_GPU=1
-
-# ---- Start SGLang server ----------------------------------------------------
+# ---- Cache / offload config -------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
-
-pip install -U transformers
 
 CACHE_ARGS=()
 WARMUP_ARGS=()
@@ -76,16 +72,16 @@ case "$OFFLOADING" in
         # replay needs it; --disable-radix-cache would zero the hit rate.
         ;;
     hicache)
-        # GLM-5.1 FP4 uses a standard transformer (no hybrid Mamba path),
-        # so one HiCache host pool per TP rank is sufficient.
-        # The node-total DRAM budget divides by TP and host-pool count.
+        # Qwen3.5's hybrid GDN/Mamba path allocates two HiCache host pools per
+        # TP rank (one hierarchical KV, one hierarchical Mamba), so the
+        # node-total DRAM budget divides by TP and the host-pool count.
         TOTAL_CPU_DRAM_GB=3000
-        HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
-        HICACHE_MAX_SIZE_GB_PER_RANK_POOL="${HICACHE_MAX_SIZE_GB_PER_RANK_POOL:-${HICACHE_MAX_SIZE_GB_PER_RANK:-500}}"
+        HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
+        HICACHE_MAX_SIZE_GB_PER_RANK_POOL="${HICACHE_MAX_SIZE_GB_PER_RANK_POOL:-${HICACHE_MAX_SIZE_GB_PER_RANK:-300}}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-        # GLM-5.1 uses standard paged attention (no no_buffer scheduler constraint),
-        # so page_size can be left at the default. Keep the safer direct/layer_first
-        # copy path on ROCm.
+        # Qwen3.5's hybrid Mamba path runs SGLang's no_buffer scheduler, which
+        # requires page_size=1. Keep the safer direct/layer_first copy path;
+        # kernel/page_first faults on first prefill in this mode on ROCm.
         HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-1}"
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
@@ -111,7 +107,7 @@ case "$OFFLOADING" in
         WARMUP_ARGS=(--skip-server-warmup)
         # Don't force ROCm graph capture at every high concurrency point; conc=16
         # is the highest known-good capture size for this model/server path.
-        HICACHE_CUDA_GRAPH_MAX_BS="${HICACHE_CUDA_GRAPH_MAX_BS:-16}"
+        HICACHE_CUDA_GRAPH_MAX_BS="${HICACHE_CUDA_GRAPH_MAX_BS:-256}"
         if [ "$HICACHE_CUDA_GRAPH_MAX_BS" -lt "$CUDA_GRAPH_MAX_BS" ]; then
             CUDA_GRAPH_MAX_BS="$HICACHE_CUDA_GRAPH_MAX_BS"
         fi
@@ -125,25 +121,21 @@ esac
 echo "Starting SGLang server..."
 export PYTHONNOUSERSITE=1
 
-pip install -U transformers
 python3 -m sglang.launch_server \
-    --model-path "$MODEL_PATH" \
-    --served-model-name "$MODEL" \
+    --attention-backend aiter \
+    --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
+    --ep-size $EP_SIZE \
     --trust-remote-code \
+    --model-loader-extra-config '{"enable_multithread_load": true}' \
+    --watchdog-timeout 1200  \
+    --tokenizer-worker-num 6 \
     --cuda-graph-max-bs $CONC \
     --max-running-requests $CONC \
-    --mem-fraction-static 0.85 \
-    --tool-call-parser glm47 \
-    --reasoning-parser glm45 \
-    --model-loader-extra-config '{"enable_multithread_load": true, "num_threads": 8}' \
-    --nsa-prefill-backend tilelang \
-    --nsa-decode-backend tilelang \
-    --watchdog-timeout 1200 \
-    --kv-cache-dtype fp8_e4m3 \
-    --tokenizer-worker-num $((TP*2)) \
+    --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
+    --mem-fraction-static 0.8 \
     "${CACHE_ARGS[@]}" \
     "${WARMUP_ARGS[@]}" \
     --enable-metrics > "$SERVER_LOG" 2>&1 &
