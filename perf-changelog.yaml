@@ -3540,3 +3540,10 @@
     - "Unify EAGLE spec-decoding to (3,1,4) for both DP-attn and TP-only paths, add --enable-deepseek-v4-fp4-indexer"
     - "Bump image to nightly-dev-cu13-20260610-f332e526"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1700
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
+    - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
