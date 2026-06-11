@@ -3533,7 +3533,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
 
 - config-keys:
-<<<<<<< sync-dsv4-fp4-b300-trt-0608-config
     - dsv4-fp4-b300-trt
     - dsv4-fp4-b300-trt-mtp
   description:
@@ -3542,7 +3541,8 @@
     - "MTP recipe uses max_draft_len with a variable default draft length, enable_lm_head_tp_in_adp on the DP-attn path, and removes timeout_iters from the DP config"
     - "B300-specific bits preserved (MODEL_PATH download block, TRTLLM_MHC_ENABLE_FUSED_HC=1, trtllm-serve MODEL_PATH); 1k1k search space left as-is, 8k1k dsv4-fp4-b300-trt conc-end trimmed from 1024 to 256 on the tp8/ep8 DP-attn row"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1703
-=======
+
+- config-keys:
     - dsv4-fp4-b300-sglang-mtp
   description:
     - "Align MTP env vars to GB300: replace PRECOMPILE=0 with FAST_WARMUP=1, add RADIX_FORCE_MISS, DEFAULT_THINKING, DSV4_REASONING_EFFORT=max"
