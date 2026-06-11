@@ -1,0 +1,214 @@
+name: SpeedBench AL Collection
+
+# Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
+# (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
+# DeepSeek-V4-Pro). Produces the golden reference consumed by the
+# synthetic-acceptance framework and (optionally) opens a PR updating
+# benchmarks/speedbench-reference-al.yaml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "Self-hosted GPU runner label (B300)"
+        required: false
+        type: string
+        default: 'b300'
+      model:
+        description: "HF model id (basename must be in launcher STAGED_MODELS for pre-staged local weights)"
+        required: false
+        type: string
+        default: 'deepseek-ai/DeepSeek-V4-Pro'
+      model-prefix:
+        description: "Model prefix; drives launcher MODEL_PATH resolution, exp name, collector script, and artifact names"
+        required: false
+        type: string
+        default: 'dsv4'
+      image:
+        description: "vLLM container image"
+        required: false
+        type: string
+        default: 'vllm/vllm-openai:v0.21.0'
+      mtp-list:
+        description: "Space-separated MTP levels (num_speculative_tokens)"
+        required: false
+        type: string
+        default: '1 2 3 4 5 6 7 8'
+      thinking-modes:
+        description: "Space-separated thinking modes to collect"
+        required: false
+        type: string
+        default: 'off on'
+      category:
+        description: "SPEED-Bench category"
+        required: false
+        type: string
+        default: 'coding'
+      output-len:
+        description: "Per-request output length"
+        required: false
+        type: string
+        default: '4096'
+      thinking-kwargs:
+        description: "chat_template_kwargs JSON for thinking-on cells (match golden config)"
+        required: false
+        type: string
+        default: '{"thinking": true, "reasoning_effort": "high"}'
+      salloc-time:
+        description: "Slurm allocation minutes (16 server starts ~ several hours)"
+        required: false
+        type: string
+        default: '480'
+      open-pr:
+        description: "Open a PR updating benchmarks/speedbench-reference-al.yaml (default off: artifact-only, paste values in manually)"
+        required: false
+        type: boolean
+        default: false
+      ref:
+        description: "Git ref (branch/sha) to checkout"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
+  HF_HUB_CACHE: '/mnt/hf_hub_cache/'
+  # Drive the single-node path in runners/launch_b300-nv.sh. MODEL is the HF id;
+  # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so
+  # the launcher resolves MODEL_PATH to the pre-staged local weights and mounts
+  # them. The collector serves from MODEL_PATH (see SERVE_MODEL), so no download.
+  MODEL: ${{ inputs.model }}
+  MODEL_PREFIX: ${{ inputs.model-prefix }}
+  PRECISION: fp4
+  FRAMEWORK: vllm
+  EXP_NAME: ${{ inputs.model-prefix }}_speedbench
+  IMAGE: ${{ inputs.image }}
+  TP: '8'
+  EP_SIZE: '1'
+  DP_ATTENTION: 'false'
+  SPEC_DECODING: mtp
+  # Run the AL-matrix collector instead of the auto-selected throughput script.
+  BENCH_SCRIPT_OVERRIDE: benchmarks/single_node/speedbench/${{ inputs.model-prefix }}_fp4_b300_vllm.sh
+  SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
+  # Matrix-collector tunables (propagated into the container via srun --export=ALL).
+  MTP_LIST: ${{ inputs.mtp-list }}
+  THINKING_MODES: ${{ inputs.thinking-modes }}
+  CATEGORY: ${{ inputs.category }}
+  SPEEDBENCH_OUTPUT_LEN: ${{ inputs.output-len }}
+  CHAT_TEMPLATE_KWARGS_ON: ${{ inputs.thinking-kwargs }}
+  OUT_YAML: /workspace/speedbench-reference-al.yaml
+  PYTHONDONTWRITEBYTECODE: '1'
+  PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+
+jobs:
+  collect-al:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 600
+    name: "SpeedBench AL matrix | ${{ inputs.category }} | mtp=[${{ inputs.mtp-list }}] | thinking=[${{ inputs.thinking-modes }}]"
+    steps:
+      - name: Resource cleanup (pre-run)
+        run: &resource-cleanup |
+          # Cleanup Docker resources
+          if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
+            echo "[Docker] Cleaning up resources ..."
+            docker ps -aq | xargs -r docker rm -f
+            docker network prune -f
+            while [ -n "$(docker ps -aq)" ]; do
+              docker ps -a
+              sleep 5
+            done
+          fi
+
+          # Cleanup SLURM resources
+          if command -v squeue >/dev/null 2>&1; then
+            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            scancel --name="${{ runner.name }}" || true
+            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
+          fi
+
+          # Cleanup AL-matrix outputs from a prior job on this runner so a stale
+          # matrix from a previous run is never picked up as this job's output.
+          rm -rf "${{ github.workspace }}/speedbench_results" 2>/dev/null || true
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.sha }}
+          clean: true
+          submodules: true
+
+      - name: Cleanup stale outputs (pre-run)
+        run: |
+          rm -f speedbench-reference-al.yaml || true
+          rm -f gpu_metrics.csv || true
+          rm -rf speed_bench_data || true
+
+      - name: Collect AL matrix
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: |
+          set -euo pipefail
+          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+
+          if [ ! -f "speedbench-reference-al.yaml" ]; then
+            echo "AL collection failed: speedbench-reference-al.yaml not produced." >&2
+            exit 1
+          fi
+          echo "### SpeedBench AL matrix" >> "$GITHUB_STEP_SUMMARY"
+          echo '```yaml' >> "$GITHUB_STEP_SUMMARY"
+          cat speedbench-reference-al.yaml >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload AL matrix artifact
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: speedbench-reference-al-${{ inputs.model-prefix }}
+          path: speedbench-reference-al.yaml
+          if-no-files-found: warn
+
+      - name: Open PR updating reference yaml
+        if: ${{ inputs.open-pr && success() }}
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT }}
+        run: |
+          set -euo pipefail
+          # NOTE: the reference yaml is keyed by model at the top level. This
+          # overwrites it with the current model's matrix; when more than one
+          # model is collected, replace this cp with a per-model-key YAML merge.
+          cp speedbench-reference-al.yaml benchmarks/speedbench-reference-al.yaml
+
+          BRANCH="speedbench-al/${{ inputs.model-prefix }}-auto-${{ github.run_id }}"
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git checkout -b "$BRANCH"
+          git add benchmarks/speedbench-reference-al.yaml
+          if git diff --cached --quiet; then
+            echo "No change in reference yaml; skipping PR."
+            exit 0
+          fi
+          git commit -m "Update SpeedBench AL reference matrix for ${{ inputs.model }} (auto, run ${{ github.run_id }})"
+          git push -u origin "$BRANCH"
+          gh pr create \
+            --title "Update SpeedBench AL reference matrix for ${{ inputs.model-prefix }} (auto)" \
+            --body "Auto-generated by the SpeedBench AL Collection workflow (run ${{ github.run_id }}). Model: \`${{ inputs.model }}\`, category: \`${{ inputs.category }}\`, MTP: \`${{ inputs.mtp-list }}\`, thinking: \`${{ inputs.thinking-modes }}\`, output_len: \`${{ inputs.output-len }}\`. Please review the measured values before merging." \
+            --base main \
+            --head "$BRANCH"
+
+      - name: Upload server logs
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: speedbench_server_logs-${{ inputs.model-prefix }}
+          path: speedbench_results/server_*.log
+          if-no-files-found: ignore
+
+      - name: Resource cleanup (post-run)
+        if: always()
+        run: *resource-cleanup
