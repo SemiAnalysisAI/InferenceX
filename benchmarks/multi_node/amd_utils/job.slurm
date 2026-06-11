@@ -468,8 +468,9 @@ _detect_nic_type() {
 }
 
 _find_host_ibverbs() {
-    for c in /usr/lib64/libibverbs.so.1 /lib/x86_64-linux-gnu/libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so.1; do
+    for c in /usr/lib64/libibverbs.so.1 /lib/x86_64-linux-gnu/libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so.1.14.39.0 /usr/lib/x86_64-linux-gnu/libibverbs.so.1; do
         local r; r=\$(readlink -f \"\$c\" 2>/dev/null || true)
+        [[ \"\$r\" == *libibverbs.so.1.14.57.0 ]] && continue
         if [[ -f \"\$r\" ]]; then echo \"\$r\"; return; fi
     done
 }
