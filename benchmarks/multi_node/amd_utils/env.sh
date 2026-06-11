@@ -150,58 +150,38 @@ else
     fi
 
     # DeepSeek-V4-Pro (FP4 experts): the DSv4 SGLANG_* env block, copied verbatim
-    # from the single-node recipe (benchmarks/single_node/dsv4_fp4_mi355x_sglang*.sh),
-    # which tracks python/run_dsv4.sh on the amd/deepseek_v4 branch with the two
-    # FP4 overrides (SGLANG_DSV4_FP4_EXPERTS=True, SGLANG_FORCE_TRITON_MOE_FP8=0).
-    # Routes experts through the FP4 kernels + aiter MoE / MHC, tilelang indexer,
-    # triton SWA-prepare and FlashMLA. The deep_gemm-absence fallback at the end
-    # mirrors the single-node MTP recipe so this also runs on a mainline ROCm
-    # nightly (which omits deep_gemm). All gated on MODEL_NAME so other models are
-    # unaffected.
+    # from the validated 0610 single-node recipe (PR #1701, benchmarks/single_node/
+    # fixed_seq_len/dsv4_fp4_mi355x_sglang.sh). That PR realigned DSv4 to the
+    # mainline ...mi35x-20260610 image (now that DSv4 support is on sglang main):
+    # the dsv4 attention backend, unified_kv_triton FlashMLA, the aiter indexer
+    # (not tilelang), and the mainline fp8 wo_a / topk-v2 fallbacks hardcoded
+    # (SGLANG_OPT_FP8_WO_A_GEMM=false, SGLANG_OPT_USE_TOPK_V2=false) instead of a
+    # deep_gemm-presence detect. Branch-only FP4 MoE flags (SGLANG_DSV4_FP4_EXPERTS,
+    # SGLANG_FORCE_TRITON_MOE_FP8) are dropped — DSv4 main no longer needs them.
+    # Gated on MODEL_NAME so other models are unaffected.
     if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
-        export SGLANG_REASONING_EFFORT=max
-        export SGLANG_OPT_USE_FUSED_COMPRESS=true
-        export SGLANG_OPT_USE_OLD_COMPRESSOR=false
-        export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
-        export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
-        export SGLANG_OPT_USE_FUSED_HASH_TOPK=true
+        export SGLANG_DEFAULT_THINKING=1
+        export SGLANG_DSV4_REASONING_EFFORT=max
         export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+        export SGLANG_USE_AITER=1
+        export SGLANG_USE_ROCM700A=0
+        export SGLANG_OPT_USE_FUSED_COMPRESS=true
+        export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
+        export SGLANG_OPT_FP8_WO_A_GEMM=false
+        export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
+        export SGLANG_OPT_USE_TOPK_V2=false
+        export SGLANG_OPT_USE_AITER_INDEXER=true
+        export SGLANG_OPT_USE_TILELANG_INDEXER=false
         export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
         export SGLANG_OPT_USE_TILELANG_MHC_POST=false
-        export SGLANG_OPT_USE_AITER_MHC_PRE=true
-        export SGLANG_OPT_USE_AITER_MHC_POST=true
-        export SGLANG_ENABLE_THINKING=1
-        export SGLANG_USE_AITER=1
-        export SGLANG_USE_ROCM700A=1
-        export SGLANG_TOPK_TRANSFORM_512_TORCH=0
         export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-        export SGLANG_DSV4_FP4_EXPERTS=True
-        export SGLANG_OPT_DPSK_V4_RADIX=1
-        export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
-        export SGLANG_OPT_USE_FUSED_STORE_CACHE=true
-        export SGLANG_FORCE_TRITON_MOE_FP8=0
-        export SGLANG_HACK_FLASHMLA_BACKEND=triton
-        export SGLANG_OPT_USE_TILELANG_INDEXER=true
-        export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
+        export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
         export AITER_BF16_FP8_MOE_BOUND=0
-        export SGLANG_OPT_FUSE_WQA_WKV=true
-        export SGLANG_OPT_USE_FUSED_PAGED_COMPRESS=true
-        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=0
+        export SGLANG_EAGER_INPUT_NO_COPY=true
 
-        # Mainline ROCm nightlies carry DSv4 support but omit deep_gemm (only
-        # rocm/sgl-dev:*-DSv4 builds bundle it). DSv4-Pro's default fp8 wo_a path
-        # imports deep_gemm at weight load; detect its absence and route the
-        # deep_gemm-touching paths to their torch fallbacks. No-op on a
-        # deep_gemm-bearing image, so this works on both image lines.
-        if python3 -c "import deep_gemm" >/dev/null 2>&1; then
-            echo "[env.sh] deep_gemm present -> DSv4 fp8 wo_a / deep_gemm perf path"
-        else
-            echo "[env.sh] deep_gemm absent -> routing DSv4 fp8 wo_a / topk around it"
-            export SGLANG_OPT_FP8_WO_A_GEMM=0
-            export SGLANG_TOPK_TRANSFORM_512_TORCH=1
-            export SGLANG_OPT_USE_TOPK_V2=0
-            export SGLANG_ENABLE_JIT_DEEPGEMM=0
-        fi
+        # multi-stream
+        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+        export SGLANG_ROCM_USE_MULTI_STREAM=false
     fi
 
     # Disable allocating memory in one pass
