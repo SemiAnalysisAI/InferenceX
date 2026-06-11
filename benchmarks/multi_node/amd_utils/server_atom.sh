@@ -158,7 +158,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRACTION} \
         --max-num-seqs ${MAX_NUM_SEQS} \
-        --no-enable-prefix-caching \
+        --no-enable_prefix_caching \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -372,7 +372,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRACTION} \
         --max-num-seqs ${MAX_NUM_SEQS} \
-        --no-enable-prefix-caching \
+        --no-enable_prefix_caching \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -448,7 +448,7 @@ else
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRACTION} \
         --max-num-seqs ${_MAX_CONC} \
-        --no-enable-prefix-caching \
+        --no-enable_prefix_caching \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"
