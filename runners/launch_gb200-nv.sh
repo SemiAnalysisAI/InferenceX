@@ -415,6 +415,18 @@ while ! ls "$LOG_FILE" &>/dev/null; do
     if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
         echo "ERROR: Job $JOB_ID failed before creating log file"
         scontrol show job "$JOB_ID"
+        BOOTSTRAP_LOG="outputs/sweep_${JOB_ID}.bootstrap.log"
+        if [ -f "$BOOTSTRAP_LOG" ]; then
+            echo "Bootstrap log from $BOOTSTRAP_LOG:"
+            cat "$BOOTSTRAP_LOG"
+            if [ -n "${GITHUB_WORKSPACE:-}" ]; then
+                mkdir -p "$GITHUB_WORKSPACE/LOGS"
+                cp "$BOOTSTRAP_LOG" "$GITHUB_WORKSPACE/LOGS/" || true
+                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$GITHUB_WORKSPACE/LOGS" . || true
+            fi
+        else
+            echo "Bootstrap log not found at $BOOTSTRAP_LOG"
+        fi
         exit 1
     fi
     echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
