@@ -14,7 +14,11 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR EP_SIZE DP_ATTENTION
+
+PORT=${PORT:-8888}
+DURATION=${DURATION:-1800}
+EP_SIZE=${EP_SIZE:-1}
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -36,8 +40,17 @@ else
     hf download "$MODEL"
     export MODEL_PATH="$MODEL"
 fi
+
 rocm-smi || true
 amd-smi || true
+
+# ---- Resolve traces and install deps ----------------------------------------
+# Cap the replay corpus at 256k (470 traces, max in+out <= 256k) instead of the
+# unfiltered 052726 corpus whose ~1M-token traces get rejected and add no perf
+# signal at high concurrency.
+#export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
+#060226
+export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
@@ -583,6 +596,8 @@ mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
+
+# ---- Lmcache config ----------------------------------------------------------
 LMCACHE_PID=""
 
 cleanup_lmcache_server() {
@@ -637,6 +652,12 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
+        # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
+        # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
+        # worker RSS / page cache / slurm cgroup).
+        #TODO: fix
+        TOTAL_CPU_DRAM_GB=3000
+        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
         # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
@@ -647,7 +668,7 @@ case "$OFFLOADING" in
         # (vllm/config/vllm.py:662).
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
             --disable-hybrid-kv-cache-manager
         )
         ;;
@@ -655,72 +676,20 @@ case "$OFFLOADING" in
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        agentic_pip_install --quiet --no-cache-dir lmcache
-        # LMCache's current dependency chain can install NVIDIA/CUDA NIXL and
-        # CuPy packages on ROCm. vLLM 0.21.0 treats ROCm as "cuda-like", and
-        # during Kimi fused-MoE model inspection it imports nixl_ep whenever
-        # that module is importable, even when this run is not using EP/NIXL
-        # kernels. The CUDA extension then fails immediately on AMD nodes with
-        # "ImportError: libcuda.so.1".
-        #
-        # LMCache MP also uses CuPy stream APIs while registering vLLM's KV
-        # caches. The CUDA CuPy wheel imports on ROCm, but it fails at runtime
-        # with cudaErrorInsufficientDriver when LMCache touches the stream. Use
-        # the ROCm 7 CuPy wheel so the same API dispatches through HIP.
-        python3 -m pip uninstall -y \
-            nixl nixl-cu12 nixl-cu13 nixl_ep \
-            >/dev/null 2>&1 || true
-        python3 -m pip uninstall -y \
-            cupy cupy-cuda11x cupy-cuda12x cupy-cuda13x \
-            >/dev/null 2>&1 || true
-        agentic_pip_install --quiet --no-cache-dir cupy-rocm-7-0
-        python3 - <<'PY'
-import importlib.util
-import sys
+        git clone https://github.com/LMCache/LMCache.git
+        cd LMCache
+        pip install -r requirements/build.txt 
+        CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
+        cd ..
 
-spec = importlib.util.find_spec("nixl_ep")
-if spec is not None:
-    locations = ", ".join(spec.submodule_search_locations or [spec.origin or "unknown"])
-    print(
-        "Error: nixl_ep is still importable after LMCache install; "
-        "this ROCm Kimi run would import a CUDA-only nixl_ep module. "
-        f"location={locations}",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-
-try:
-    from cupy_backends.cuda.api import runtime as cupy_runtime
-except Exception as exc:
-    print(f"Error: failed to import CuPy runtime after ROCm CuPy install: {exc}", file=sys.stderr)
-    sys.exit(1)
-
-if not getattr(cupy_runtime, "is_hip", False):
-    print(
-        "Error: CuPy is still using the CUDA backend after installing "
-        "cupy-rocm-7-0; LMCache MP would fail during KV-cache registration.",
-        file=sys.stderr,
-    )
-    sys.exit(1)
-PY
-        LMCACHE_ROCM_PATCH_DIR="$RESULT_DIR/lmcache_rocm_patch"
-        write_lmcache_rocm_mp_patch "$LMCACHE_ROCM_PATCH_DIR"
-        write_chunked_connector_patch "$LMCACHE_ROCM_PATCH_DIR"
-        write_scheduler_assertion_patch "$LMCACHE_ROCM_PATCH_DIR"
-        export LMCACHE_ROCM_MP_BLOCK_FALLBACK=1
-        export LMCACHE_ROCM_MP_BLOCK_FALLBACK_DTYPE=bfloat16
-        export LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR=1
-        # Cap external KV tokens loaded per scheduling step to prevent GPU
-        # block exhaustion deadlock at high concurrency (c>=32).  Default
-        # 32768 keeps peak block demand within the GPU KV pool.  Set to 0 to
-        # disable chunking (only safe at low concurrency).
-        export CHUNKED_LMCACHE_MAX_TOKENS_PER_LOAD="${CHUNKED_LMCACHE_MAX_TOKENS_PER_LOAD:-32768}"
-        export PYTHONPATH="$LMCACHE_ROCM_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        # Match the B200 Kimi LMCache setup: let the external MP server own the
-        # configured CPU pool so vLLM does not split --kv-offloading-size
-        # across TP ranks through the integrated LMCache backend.
+        # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
+        # pool, but let the external MP server own that pool so vLLM does not
+        # split --kv-offloading-size across TP ranks through the integrated
+        # LMCache backend.
+        #TODO: fix
+        TOTAL_CPU_DRAM_GB=3000
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -738,12 +707,13 @@ PY
         # vLLM can retrieve. The default 300s TTL is too short for this
         # long-context agentic queue: TP8/conc32 can spend >300s between
         # lookup and retrieve while GPU KV is saturated, which leaves the
-        # object present in L1 but no longer readable. Keep the pool size
-        # unchanged and only extend the lookup-to-retrieve lease.
-        LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-3600}"
+        # object present in L1 but no longer readable. Keep the 2.5 TB pool
+        # size unchanged and only extend the lookup-to-retrieve lease.
+        LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
         LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
+        export LMCACHE_BLOCKING_TIMEOUT_SECS=120
 
         echo "Starting LMCache MP server..."
         LMCACHE_CMD=(
@@ -776,6 +746,7 @@ PY
     *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
 esac
 
+# ---- LLM server config ----------------------------------------------------------
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
@@ -783,6 +754,23 @@ fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
+
+# Install amd-quark for MXFP4 (manual install due to ROCm vLLM bug)
+pip install amd-quark
+
+# Disable AITER RMSNorm for TP < 8 due to accuracy issues
+if [ "${TP}" -lt 8 ]; then
+  export VLLM_ROCM_USE_AITER_RMSNORM=0
+fi
+
+# Workaround for MEC FW <177 RCCL memory reclaim issue
+version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
+if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
+    export HSA_NO_SCRATCH_RECLAIM=1
+fi
+
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -792,6 +780,7 @@ VLLM_CMD=(
     --tensor-parallel-size="$TP"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.90
+    --kv-cache-dtype fp8 \
     --block-size=1
     --trust-remote-code
     --max-num-seqs "$CONC"
