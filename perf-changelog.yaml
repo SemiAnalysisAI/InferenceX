@@ -3554,6 +3554,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
   
 - config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Move both the 1k1k and 8k1k scenarios of the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/{1k1k,8k1k}/disagg/mtp/), rather than referencing recipes from the srt-slurm repo"
+    - "1k1k: 4 MTP variants, behavior unchanged from the previous srt-slurm 1k1k recipe — 2 low-latency (dep4-1p prefill / tep8 decode at 5 and 6 decode nodes, conc up to 512) + 2 max-throughput (dep4-1p prefill / dep8 decode at 1 and 2 decode nodes, conc up to 1024)"
+    - "8k1k: 6-variant sweep — 3 low-latency (1p5d / 1p3d / 1p1d, TP4 prefill / TP8 decode, conc up to 512) + 3 MTP2 high-throughput (2p1d / 3p1d / 5p1d, DEP4 prefill / DEP8 decode, single concurrency 768 / 1024 / 2048); MTP2 recipes use scheduler-recv-interval=1, enable-dp-lm-head, spec 2 steps / 3 draft tokens, and UCX_TLS in the prefill/decode environments"
+    - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130); the 1k1k recipes keep the dynamo-sglang container alias and follow the config image"
+    - "Clone srt-slurm at NVIDIA/srt-slurm@main for the srtctl/dynamo tooling and copy the local b200-fp4 recipes into the checkout"
+    - "Pin the 1k1k MTP recipes to the same dynamo source hash as the 8k1k recipes (dynamo.hash=5b4bc1dd70965017a737c71b19db5a0aeaa88727, install: true), so both scenarios build dynamo from an identical revision instead of relying on whatever is baked into the dynamo-sglang container alias"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1688
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Switch back to the main branch on InferenceX benchmarking. Since the AMD v4 model code has been merged into main, we now use the main branch instead of the previously used amd/deepseek_v4 branch. The image is bumped to the main branch image rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260610."

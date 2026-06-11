@@ -24,28 +24,6 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 # from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
 # bump the image tag in .github/configs/amd-master.yaml.
 
-# Transformers in the container doesn't recognize the `deepseek_v4` model_type.
-# PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
-# by writing a patched config to /tmp, but in practice isn't catching the error
-# in this image. Patch the cached config.json directly instead: set model_type
-# to `deepseek_v3` so AutoConfig.from_pretrained succeeds, and keep
-# architectures=['DeepseekV4ForCausalLM'] so SGLang dispatches to its native
-# DSv4 model class (python/sglang/srt/models/deepseek_v4.py).
-python3 << PYEOF
-import json
-from huggingface_hub import hf_hub_download
-path = hf_hub_download(repo_id="$MODEL", filename="config.json")
-with open(path) as f:
-    config = json.load(f)
-if config.get("model_type") == "deepseek_v4":
-    config["model_type"] = "deepseek_v3"
-    with open(path, "w") as f:
-        json.dump(config, f, indent=2)
-    print(f"Patched {path}: model_type deepseek_v4 -> deepseek_v3")
-else:
-    print(f"No patch needed: model_type is {config.get('model_type')!r}")
-PYEOF
-
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=max
 export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
