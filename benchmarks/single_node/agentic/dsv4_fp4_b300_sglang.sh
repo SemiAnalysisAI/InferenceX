@@ -187,12 +187,7 @@ MODEL_ARGS=(
     --disable-shared-experts-fusion
 )
 
-if [ "$DP_ATTENTION" = "true" ]; then
-    PER_ENGINE_MAX_RUNNING=$(( (CONC + TP - 1) / TP ))
-else
-    PER_ENGINE_MAX_RUNNING=$CONC
-fi
-[ "$PER_ENGINE_MAX_RUNNING" -lt 1 ] && PER_ENGINE_MAX_RUNNING=1
+MAX_RUNNING_REQUESTS=$CONC
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
@@ -225,7 +220,7 @@ SGLANG_CMD=(
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.1
-    --max-running-requests "$PER_ENGINE_MAX_RUNNING"
+    --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --context-length "$MAX_MODEL_LEN"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
