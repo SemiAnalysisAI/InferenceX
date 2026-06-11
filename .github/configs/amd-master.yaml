@@ -2153,9 +2153,11 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 # unverified). Mainline omits deep_gemm; env.sh hardcodes the #1701 fp8 wo_a /
 # topk-v2 fallbacks (matching that validated run) rather than a runtime detect.
 # The v0.5.12.post1 tag also auto-applies the MoRI conn.py overlay (job.slurm)
-# that fixes the wire format for hybrid/sparse-attention models. setup_deps.sh
-# additionally monkey-patches the unmerged sglang#27855 (MoRI-EP FP4 swiglu
-# crash fix) into the image's aiter.py.
+# that fixes the wire format for hybrid/sparse-attention models.
+#
+# This smoke test is TP-only (EP1), so the DSv4 + MoRI-EP FP4 swiglu crash that
+# sglang#27855 fixes is not on the path; that monkey-patch is intentionally not
+# carried here and would be needed only when EP/DEP decode is enabled.
 #
 # Topology 1P1D, TP8/EP1, dp-attn false — the same conservative starting point the
 # qwen3.5 / glm5 sglang-disagg recipes launched with. Starts at a single ISL/OSL
