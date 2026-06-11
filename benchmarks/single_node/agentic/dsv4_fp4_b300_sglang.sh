@@ -59,45 +59,6 @@ if [[ "$INFMAX_CONTAINER_WORKSPACE" != /workspace ]]; then
 fi
 install_agentic_deps
 
-# The 2026-06-09 image creates every local DP scheduler from the same HTTP
-# port, so PortArgs derives the same RPC/metrics TCP range for every rank and
-# rank 1 collides with rank 0 before startup completes. Give each scheduler a
-# private derivation port until the upstream image includes the fix.
-if [ "$DP_ATTENTION" = "true" ]; then
-    "$SGLANG_PYTHON" - <<'PY'
-from pathlib import Path
-
-controller_path = Path("/sgl-workspace/sglang/python/sglang/srt/managers/data_parallel_controller.py")
-source = controller_path.read_text()
-old = "            tmp_port_args = PortArgs.init_new(server_args)\n"
-new = (
-    "            rank_server_args = dataclasses.replace(\n"
-    "                server_args, port=server_args.port + (dp_rank + 1) * 100\n"
-    "            )\n"
-    "            tmp_port_args = PortArgs.init_new(rank_server_args)\n"
-)
-if old in source:
-    source = source.replace("import faulthandler\n", "import dataclasses\nimport faulthandler\n", 1)
-    source = source.replace(old, new, 1)
-    controller_path.write_text(source)
-elif new not in source:
-    raise RuntimeError(f"Unexpected SGLang DP controller source: {controller_path}")
-if new not in controller_path.read_text():
-    raise RuntimeError(f"Failed to patch SGLang DP controller: {controller_path}")
-server_args_path = Path("/sgl-workspace/sglang/python/sglang/srt/server_args.py")
-source = server_args_path.read_text()
-old = (
-    '                    wait_port_available(rpc_port, "rpc_port")\n'
-    '                    wait_port_available(metrics_port, "metrics_port")\n'
-)
-if old in source:
-    source = source.replace(old, "", 1)
-    server_args_path.write_text(source)
-elif old in server_args_path.read_text():
-    raise RuntimeError(f"Failed to patch SGLang DP port checks: {server_args_path}")
-PY
-fi
-
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
