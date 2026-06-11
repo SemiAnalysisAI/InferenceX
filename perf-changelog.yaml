@@ -3446,6 +3446,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1641
 
 - config-keys:
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Switch B300 DSv4 TRT (non-MTP + MTP) to official rc15.post1 image with TRTLLM_DSV4_ENABLE_SWA_SCRATCH_REUSE=0 to test whether DPA crash is same SWA-scratch bug"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
+
+- config-keys:
     - dsv4-fp4-b200-vllm
   description:
     - "Enable EPLB for DEP configs"
@@ -3501,6 +3508,13 @@
   description:
     - "Update GPT-OSS model for MI355X vLLM from amd/gpt-oss-120b-w-mxfp4-a-fp8 to openai/gpt-oss-120b"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1670
+
+- config-keys:
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Switch B300 DSv4 TRT (non-MTP + MTP) image from rc15.post1 to nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1636
 
 - config-keys:
     - kimik2.5-fp4-b300-vllm
