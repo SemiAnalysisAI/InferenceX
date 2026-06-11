@@ -783,6 +783,114 @@ PYEOF
     _SETUP_INSTALLED+=("dsv4-config-model-type")
 }
 
+# ---------------------------------------------------------------------------
+# SGLang: DeepSeek-V4-Pro + MoRI-EP AITER MoE FP4 dispatch crash fix.
+#
+# Monkey-patches sgl-project/sglang#27855 ("[AMD] fix moriep quant kernel not
+# implemented issue"), which is not yet merged upstream and so is absent from
+# the pinned mainline image. Without it, DSv4 + MoRI expert-parallel aborts at
+# warmup with:
+#     dynamic_per_group_scaled_quant_kernel not implemented for dtype fp4x2
+# on the clamped-SwiGLU / INTERLEAVE path. The fix, in
+# moe_runner/aiter.py:_pre_permute_deepep_to_aiter, adds a W4A4 + FP4-dispatch
+# branch that dequantizes the FP4 activation to BF16 (upscale_mxfp4) and lets
+# fused_moe re-quantize internally, mirroring the existing W4A4+FP8 and
+# FP8-weight+FP4 dequant branches.
+#
+# Only the MoRI-EP decode path triggers it, so this is gated on
+# MODEL_NAME == DeepSeek-V4-Pro. Idempotent (skips once swiglu_interleave is
+# present), atomic write, and warn+skip if the image's aiter.py predates the
+# anchored structure (then an image bump carrying #27855 is needed). Drop this
+# patch once a pinned image already includes #27855.
+# ---------------------------------------------------------------------------
+patch_aiter_dsv4_fp4_swiglu() {
+    if [[ "$MODEL_NAME" != "DeepSeek-V4-Pro" ]]; then
+        return 0
+    fi
+    local target
+    target=$(python3 -c "import sglang.srt.layers.moe.moe_runner.aiter as m; print(m.__file__)" 2>/dev/null)
+    if [[ -z "$target" || ! -f "$target" ]]; then
+        echo "[SETUP] WARN: aiter.py not found; skipping DSv4 FP4 swiglu patch (#27855)"
+        return 0
+    fi
+    python3 - "$target" <<'PYEOF'
+import os, sys, tempfile
+target = sys.argv[1]
+src = open(target).read()
+
+if "swiglu_interleave" in src:
+    print("[SETUP] DSv4 aiter FP4 swiglu patch (#27855) already applied")
+    sys.exit(0)
+
+# Edit A: import get_bool_env_var alongside get_int_env_var.
+import_anchor = "from sglang.srt.utils import get_int_env_var\n"
+if "get_bool_env_var" not in src:
+    if import_anchor not in src:
+        print("[SETUP] WARN: #27855 import anchor not found; skipping (image aiter.py differs)")
+        sys.exit(0)
+    src = src.replace(
+        import_anchor,
+        "from sglang.srt.utils import get_bool_env_var, get_int_env_var\n",
+        1,
+    )
+
+# Edit B: compute swiglu_interleave right after is_fp4_dispatch.
+b_anchor = (
+    "        is_fp4_dispatch = hidden_states.dtype == torch.float4_e2m1fn_x2\n"
+    "\n"
+    "        if is_w4a4 and a1_scale is not None and not is_fp4_dispatch:\n"
+)
+b_new = (
+    "        is_fp4_dispatch = hidden_states.dtype == torch.float4_e2m1fn_x2\n"
+    "\n"
+    "        # AITER fused_moe Clamped-SwiGLU is dispatched with\n"
+    "        # gate_mode=INTERLEAVE, for which AITER picks a bf16/fp8 `q_dtype_a`\n"
+    "        # Refer to https://github.com/ROCm/aiter/blob/a2617c366dc7271a1662ecda2023d19f6ccefcec/aiter/fused_moe.py#L406-L412\n"
+    "        swiglu_interleave = quant_info.swiglu_limit > 0 and get_bool_env_var(\n"
+    '            "SGLANG_USE_AITER_MOE_GU_ITLV", "true"\n'
+    "        )\n"
+    "\n"
+    "        if is_w4a4 and a1_scale is not None and not is_fp4_dispatch:\n"
+)
+
+# Edit C: insert the W4A4 + FP4-dispatch + INTERLEAVE dequant branch.
+c_anchor = (
+    "            a1_scale = None\n"
+    "        elif is_fp8_quant and is_fp4_dispatch and a1_scale is not None:\n"
+)
+c_new = (
+    "            a1_scale = None\n"
+    "        elif is_w4a4 and is_fp4_dispatch and a1_scale is not None and swiglu_interleave:\n"
+    "            # W4A4 weights + FP4 dispatch on the clamped-SwiGLU/INTERLEAVE\n"
+    "            # path: AITER expects a bf16/fp8 activation here, not fp4x2.\n"
+    "            # Dequant FP4->BF16 and let fused_moe re-quantize internally.\n"
+    "            hidden_states = upscale_mxfp4(\n"
+    "                hidden_states, a1_scale, num_local_tokens, output_dtype\n"
+    "            )\n"
+    "            a1_scale = None\n"
+    "        elif is_fp8_quant and is_fp4_dispatch and a1_scale is not None:\n"
+)
+
+if b_anchor not in src or c_anchor not in src:
+    print("[SETUP] WARN: #27855 body anchors not found; skipping (image aiter.py predates the W4A4 branch)")
+    sys.exit(0)
+
+src = src.replace(b_anchor, b_new, 1).replace(c_anchor, c_new, 1)
+
+d = os.path.dirname(target)
+fd, tmp = tempfile.mkstemp(dir=d, prefix=".aiter.py.", suffix=".tmp")
+try:
+    with os.fdopen(fd, "w") as f:
+        f.write(src)
+    os.replace(tmp, target)
+    print(f"[SETUP] Patched {target}: DSv4 W4A4+FP4 swiglu-interleave dequant (#27855)")
+except Exception:
+    os.path.exists(tmp) and os.remove(tmp)
+    raise
+PYEOF
+    _SETUP_INSTALLED+=("dsv4-aiter-fp4-swiglu-27855")
+}
+
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
@@ -808,6 +916,7 @@ else
     patch_gluon_pa_mqa_logits_instr_shape
     install_transformers_glm5
     patch_dsv4_config
+    patch_aiter_dsv4_fp4_swiglu
 fi
 
 _SETUP_END=$(date +%s)
