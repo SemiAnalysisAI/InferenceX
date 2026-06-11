@@ -167,8 +167,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-dp-attention
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
-        --moe-a2a-backend deepep
-        --deepep-config '{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+        --moe-runner-backend flashinfer_mxfp4
+        --disable-flashinfer-autotune
         --enable-prefill-delayer
     )
     METRICS_ARGS=()
@@ -206,12 +206,6 @@ export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
 export SGLANG_OPT_USE_TOPK_V2=1
 export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
-if [ "$DP_ATTENTION" = "true" ]; then
-    export NVSHMEM_DISABLE_IB=1
-    export NVSHMEM_IB_ENABLE_IBGDA=0
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=256
-fi
-
 SGLANG_CMD=(
     "$SGLANG_PYTHON" -m sglang.launch_server
     --model-path "$MODEL_PATH"
