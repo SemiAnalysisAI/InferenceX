@@ -157,7 +157,7 @@ export TORCH_CUDA_ARCH_LIST=10.0
 # six-hour request timeout unchanged, but allow up to 15 minutes for TCP
 # progress before declaring the connection dead.
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
+export SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1
 export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
 export SGLANG_OPT_USE_JIT_NORM=1
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
