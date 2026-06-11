@@ -209,6 +209,31 @@ def test_dynamo_log_parser_aggregates_decode_workers(tmp_path: Path) -> None:
     ]
 
 
+def test_dynamo_log_parser_reads_sglang_accept_length_samples(tmp_path: Path) -> None:
+    (tmp_path / "node-a_decode_w0.out").write_text(
+        "\n".join(
+            [
+                "Decode batch, #running-req: 1, accept len: 2.10, accept rate: 0.37,",
+                "Decode batch, #running-req: 1, accept len: 2.30, accept rate: 0.43,",
+            ]
+        )
+    )
+    (tmp_path / "node-b_decode_w1.out").write_text(
+        "Decode batch, #running-req: 1, accept len: 2.50, accept rate: 0.50,"
+    )
+
+    metrics = aggregate_log_metrics(tmp_path, mtp=4)
+
+    assert metrics is not None
+    assert metrics.workers == 2
+    assert metrics.samples == 3
+    assert round(metrics.acceptance_length, 4) == 2.3
+    assert metrics.has_counter_metrics is False
+    assert metrics.accepted_tokens is None
+    assert metrics.verify_steps is None
+    assert metrics.proposed_draft_tokens is None
+
+
 def test_trtllm_log_parser_reads_generation_tokens_after_offset(tmp_path: Path) -> None:
     log_path = tmp_path / "server.log"
     prefix = "previous eval traffic\n"
