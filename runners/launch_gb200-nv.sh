@@ -414,8 +414,24 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 while ! ls "$LOG_FILE" &>/dev/null; do
     if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
         echo "ERROR: Job $JOB_ID failed before creating log file"
-        scontrol show job "$JOB_ID"
-        BOOTSTRAP_LOG="outputs/sweep_${JOB_ID}.bootstrap.log"
+        JOB_INFO=$(scontrol show job "$JOB_ID" 2>&1 || true)
+        echo "$JOB_INFO"
+        BOOTSTRAP_LOG=""
+        BOOTSTRAP_CANDIDATES=("outputs/sweep_${JOB_ID}.bootstrap.log")
+        SCONTROL_STDERR=$(printf '%s\n' "$JOB_INFO" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^StdErr=/) { sub(/^StdErr=/, "", $i); print $i; exit } }')
+        if [ -n "$SCONTROL_STDERR" ]; then
+            BOOTSTRAP_CANDIDATES+=("$SCONTROL_STDERR")
+        fi
+        for candidate in "${BOOTSTRAP_CANDIDATES[@]}"; do
+            [ -n "$candidate" ] || continue
+            for _ in 1 2 3; do
+                if [ -f "$candidate" ]; then
+                    BOOTSTRAP_LOG="$candidate"
+                    break 2
+                fi
+                sleep 2
+            done
+        done
         if [ -f "$BOOTSTRAP_LOG" ]; then
             echo "Bootstrap log from $BOOTSTRAP_LOG:"
             cat "$BOOTSTRAP_LOG"
@@ -425,7 +441,7 @@ while ! ls "$LOG_FILE" &>/dev/null; do
                 tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$GITHUB_WORKSPACE/LOGS" . || true
             fi
         else
-            echo "Bootstrap log not found at $BOOTSTRAP_LOG"
+            echo "Bootstrap log not found. Tried: ${BOOTSTRAP_CANDIDATES[*]}"
         fi
         exit 1
     fi
