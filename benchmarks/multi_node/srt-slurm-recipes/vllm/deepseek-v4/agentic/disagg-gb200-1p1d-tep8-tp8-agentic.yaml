@@ -14,6 +14,16 @@ name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 # gb300 TEP/TP recipes (disagg-gb300-1p17d-tep4-tp4.yaml and the 1p6d
 # agentic decode): no data-parallel, no deep_gemm_mega_moe.
 #
+# Container is v0.21.0-ubuntu2404 (the gb300-validated agentic stack), NOT
+# the v0.20.0 the gb200 fixed-seq family pins: v0.20.0's NIXL connector
+# breaks on TP8<->TP8 transfers — the decode worker's first get_finished()
+# poll dies with KeyError on the remote (prefill) engine_id in
+# transfer_topo.get_engine_info() because the prefill engine never
+# registers in the decode's engine map (R6, both shards, identical
+# tracebacks). The fixed-seq DEP8/DEP8 family never hits this path
+# (per-rank TP=1 transfer topology). v0.21.0 + the same ai-dynamo wheel
+# ran green NIXL transfers on gb300 agentic (R30 + manual 8137).
+#
 # Standard agentic deltas (see the gb300 agentic recipes):
 #   - benchmark.type custom -> agentic_srt.sh
 #   - prefix caching ON (no no-enable-prefix-caching)
@@ -24,7 +34,7 @@ name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+  container: "vllm/vllm-openai:v0.21.0-ubuntu2404"
   precision: "fp4"
 
 dynamo:

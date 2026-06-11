@@ -9794,11 +9794,12 @@ dsv4-fp4-gb300-cw-dynamo-vllm-agentic:
 # No high-throughput conc-4096 tier yet: a single TP8 decode worker caps at
 # max-num-seqs 512, and DEP decode (which scales seqs) hits the KV wall
 # above; revisit with fp4 indexer cache or multi-worker TP8 decode.
-# Image matches the recipes' `model.container` (v0.20.0-ubuntu2404, the
-# validated gb200 stack); the two must stay in lockstep — see
+# Image matches the recipes' `model.container` (v0.21.0-ubuntu2404 — the
+# gb300-validated agentic stack; v0.20.0's NIXL connector breaks TP8<->TP8
+# transfers, see the recipe header); the two must stay in lockstep — see
 # dsv4-fp4-gb300-dynamo-vllm-agentic.
 dsv4-fp4-gb200-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
