@@ -84,6 +84,18 @@ elif new not in source:
     raise RuntimeError(f"Unexpected SGLang DP controller source: {controller_path}")
 if new not in controller_path.read_text():
     raise RuntimeError(f"Failed to patch SGLang DP controller: {controller_path}")
+
+server_args_path = Path("/sgl-workspace/sglang/python/sglang/srt/server_args.py")
+source = server_args_path.read_text()
+old = (
+    '                    wait_port_available(rpc_port, "rpc_port")\n'
+    '                    wait_port_available(metrics_port, "metrics_port")\n'
+)
+if old in source:
+    source = source.replace(old, "", 1)
+    server_args_path.write_text(source)
+elif old in server_args_path.read_text():
+    raise RuntimeError(f"Failed to patch SGLang DP port checks: {server_args_path}")
 PY
 fi
 
