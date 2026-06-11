@@ -176,6 +176,7 @@ SGLANG_CMD=(
     --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --context-length "$MAX_MODEL_LEN"
+    --allow-auto-truncate
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4
     --reasoning-parser deepseek-v4
