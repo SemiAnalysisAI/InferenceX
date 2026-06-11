@@ -1,6 +1,6 @@
 #!/usr/bin/bash
 
-# System-specific configuration for B300 NV Slurm cluster
+# System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
 
@@ -339,7 +339,7 @@ else
         export MODEL_PATH="${WRITABLE_MODELS_DIR%/}/${MODEL_BASENAME}"
     fi
 
-    SQUASH_FILE="/data/home/sa-shared/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
