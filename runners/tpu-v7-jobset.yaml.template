@@ -1,0 +1,95 @@
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: ${JOB_NAME}
+spec:
+  successPolicy:
+    operator: All
+    targetReplicatedJobs:
+      - tpu-worker
+  replicatedJobs:
+    - name: tpu-worker
+      replicas: 1
+      template:
+        spec:
+          template:
+            spec:
+              containers:
+              - name: vllm-server
+                image: ${IMAGE}
+                imagePullPolicy: Always
+                command: ["/bin/bash", "-c"]
+                args:
+                - |
+                  set -x
+                  # Calculation for model length
+                  model_len=$(( ${ISL} + ${OSL} + 20 ))
+                  
+                  # Start vLLM server
+                  vllm serve \
+                    ${MODEL_WEIGHTS_PATH} \
+                    --served-model-name ${MODEL_NAME} \
+                    --max-model-len=${model_len} \
+                    --tensor-parallel-size=8 \
+                    --kv-cache-dtype=fp8 \
+                    --enable-chunked-prefill \
+                    --enable-expert-parallel \
+                    --language-model-only \
+                    &
+                  
+                  vllm_pid=$$!
+                  while [ ! -f /tmp/signal/done ]; do sleep 5; done
+                  kill -9 $$vllm_pid
+                  exit 0
+                env:
+                - name: JAX_PLATFORMS
+                  value: "tpu,cpu"
+                resources:
+                  limits:
+                    google.com/tpu: "4"
+                  requests:
+                    google.com/tpu: "4"
+                volumeMounts:
+                - mountPath: /tmp/signal
+                  name: shared-signal
+
+              - name: sidecar-bench
+                image: ${IMAGE}
+                command: ["/bin/bash", "-c"]
+                args:
+                - |
+                    set -e
+                    OUTPUT_DIR=/tmp/bench_results
+                    mkdir -p $$OUTPUT_DIR
+                    
+                    # Wait for server
+                    until curl -s http://localhost:8000/health > /dev/null; do sleep 5; done
+                    
+                    # Run Ix standard benchmark script
+                    python3 /workspace/utils/bench_serving/benchmark_serving.py \
+                      --model "${MODEL_NAME}" \
+                      --port "8000" \
+                      --dataset-name random \
+                      --random-input-len "${ISL}" \
+                      --random-output-len "${OSL}" \
+                      --num-prompts "$$(( ${CONC} * 10 ))" \
+                      --max-concurrency "${CONC}" \
+                      --save-result \
+                      --result-dir "$$OUTPUT_DIR" \
+                      --result-filename "result.json"
+
+                    touch /tmp/signal/done
+                    echo "Benchmark complete."
+                    # Keep alive for kubectl cp
+                    sleep 60
+                volumeMounts:
+                - mountPath: /tmp/signal
+                  name: shared-signal
+              
+              nodeSelector:
+                cloud.google.com/gke-tpu-accelerator: "tpu7x"
+                cloud.google.com/gke-tpu-topology: "2x2x1"
+              restartPolicy: Never
+              volumes:
+              - emptyDir: {}
+                name: shared-signal
