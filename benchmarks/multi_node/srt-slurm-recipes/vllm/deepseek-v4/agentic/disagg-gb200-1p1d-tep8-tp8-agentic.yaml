@@ -105,7 +105,15 @@ backend:
 
   vllm_config:
     prefill:
-      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      # Static engine_id (one per worker, distinct between prefill/decode):
+      # the TP8 workers span 2 GB200 nodes, which srtctl launches as two
+      # processes (--node-rank 0 + --node-rank 1 --headless). Without a
+      # pinned engine_id each process generates its own random NIXL UUID, so
+      # ranks 0-3 and ranks 4-7 of the SAME worker register under different
+      # engine ids and the consumer's handshake dies with "Remote NIXL agent
+      # engine ID mismatch" on the first transfer (R7, both shards).
+      # Single-node-per-worker topologies (all gb300 recipes) never hit this.
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "11111111-1111-4111-8111-111111111111"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
@@ -133,7 +141,9 @@ backend:
       numa-bind: true
       tokenizer-mode: deepseek_v4
     decode:
-      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      # See prefill: static engine_id shared by both node processes of this
+      # 2-node TP8 worker (distinct from the prefill worker's id).
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "22222222-2222-4222-8222-222222222222"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
