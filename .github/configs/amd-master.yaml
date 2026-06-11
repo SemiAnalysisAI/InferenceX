@@ -1628,6 +1628,65 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+# DeepSeek-V4-Pro disaggregated prefill/decode on MI355X via vLLM + MoRI-IO.
+# Combines the validated single-node DSv4 vLLM serving recipe
+# (dsv4-fp4-mi355x-vllm, vllm-project/recipes#433) with the vLLM-disagg framework
+# (the kimi / minimax vllm-disagg recipes above). Routes to
+# benchmarks/multi_node/dsv4_fp4_mi355x_vllm-disagg.sh; per-node serving flags +
+# env live in the DeepSeek-V4-Pro entry of amd_utils/models_vllm.yaml.
+#
+# DeepSeek-V4-Pro is FP4+FP8 mixed (FP4 MoE expert weights, FP8 for the rest);
+# InferenceX classifies this as fp4 — same as the dsv4-fp4-mi355x-{sglang,vllm,atom}
+# entries below.
+#
+# Image: vllm/vllm-openai-rocm:v0.22.0 — the same release the single-node
+# dsv4-fp4-mi355x-vllm entry pins. v0.22.0 (released 2026-05-29) postdates both
+# the DSv4 model class (vllm#40871, 2026-05-05) and the MoRIIO P/D connector
+# (vllm#29304 + hardening through 2026-04-28), so it carries both. A pinned
+# release tag is used rather than a digest-suffixed `:nightly` because those
+# nightly tags are garbage-collected from Docker Hub and would fail enroot import
+# on a fresh runner; v0.22.0 stays pullable.
+#
+# Topology 1P1D: each prefill/decode worker is a full TP=8 node (EP=1), matching
+# the aggregated recipe which runs DSv4 on TP=8 without expert parallelism. DEP
+# decode + multi-node 1P2D are follow-ups once the base disagg path validates.
+dsv4-fp4-mi355x-vllm-disagg:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # Smoke test: a single ISL/OSL (1k/1k) at a single concurrency (conc=1) to
+    # validate the DSv4 vLLM-disagg path (image, MoRIIO transport, serving flags,
+    # model staging) end-to-end before expanding to the full 1k1k + 8k1k,
+    # conc 8-512 sweep that the kimi / minimax vllm-disagg recipes run.
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1P1D: 1 prefill node (co-located with proxy) + 1 decode node = 2 nodes total
+      - spec-decoding: "none"
+        conc-list: [ 1 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
