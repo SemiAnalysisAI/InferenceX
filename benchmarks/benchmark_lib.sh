@@ -1086,6 +1086,19 @@ print(f"{acceptance_length:.4f}\t{used_endpoints}")
 PY
 }
 
+_speedbench_trtllm_server_log_metrics() {
+    local mtp="$1"
+    local start_offset="${2:-0}"
+    local log_path="${SPEEDBENCH_TRTLLM_SERVER_LOG:-${SERVER_LOG:-}}"
+
+    [[ -n "$log_path" && -f "$log_path" ]] || return 1
+
+    python3 "$(pwd)/utils/evals/trtllm_speedbench_al_from_log.py" \
+        --log "$log_path" \
+        --num-speculative-tokens "$mtp" \
+        --start-offset "$start_offset"
+}
+
 _speedbench_metric_delta() {
     local before="$1"
     local after="$2"
@@ -1447,6 +1460,16 @@ run_speedbench_al_eval() {
     proposed_before="${proposed_before:-0}"
     verify_before="${verify_before:-0}"
 
+    local trt_server_log_offset="0"
+    if [[ "$metrics_framework" == "trtllm" ]]; then
+        local trt_server_log="${SPEEDBENCH_TRTLLM_SERVER_LOG:-${SERVER_LOG:-}}"
+        if [[ -n "$trt_server_log" && -f "$trt_server_log" ]]; then
+            trt_server_log_offset=$(wc -c < "$trt_server_log" 2>/dev/null || true)
+            trt_server_log_offset="${trt_server_log_offset//[!0-9]/}"
+            trt_server_log_offset="${trt_server_log_offset:-0}"
+        fi
+    fi
+
     local bench_rc=0
     local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
     echo "SpeedBench AL eval: running mode=${mode} mtp=${mtp}"
@@ -1538,6 +1561,14 @@ run_speedbench_al_eval() {
             if [[ -n "$trt_json_metrics" ]]; then
                 IFS=$'\t' read -r al delta_acc delta_verify delta_proposed trt_json_endpoints <<< "$trt_json_metrics"
                 metric_source="trtllm-json-iteration-stats-endpoints${trt_json_endpoints}"
+            fi
+            if [[ -z "$al" ]]; then
+                local trt_log_metrics="" trt_log_samples=""
+                trt_log_metrics=$(_speedbench_trtllm_server_log_metrics "$mtp" "$trt_server_log_offset" || true)
+                if [[ -n "$trt_log_metrics" ]]; then
+                    IFS=$'\t' read -r al delta_acc delta_verify delta_proposed trt_log_samples <<< "$trt_log_metrics"
+                    metric_source="trtllm-server-log-generation-tokens-samples${trt_log_samples}"
+                fi
             fi
             if [[ -z "$al" ]]; then
                 al=$(_speedbench_trtllm_avg_decoded_al "$port" || true)

@@ -19,6 +19,7 @@ from speedbench_client import (
     _completion_payload,
     _load_speedbench_requests,
 )
+from trtllm_speedbench_al_from_log import parse_trtllm_iteration_log
 from validate_scores import validate_speedbench_al
 
 
@@ -206,6 +207,56 @@ def test_dynamo_log_parser_aggregates_decode_workers(tmp_path: Path) -> None:
         "node-b_decode_w0.out",
         "node-c_decode_w1.out",
     ]
+
+
+def test_trtllm_log_parser_reads_generation_tokens_after_offset(tmp_path: Path) -> None:
+    log_path = tmp_path / "server.log"
+    prefix = "previous eval traffic\n"
+    body = "\n".join(
+        [
+            "[TRT-LLM] [I] iter = 1, num_scheduled_requests: 1, "
+            "states = {'num_ctx_requests': 1, 'num_ctx_tokens': 1024, 'num_generation_tokens': 0}",
+            "[TRT-LLM] [I] iter = 2, num_scheduled_requests: 1, "
+            "states = {'num_ctx_requests': 0, 'num_ctx_tokens': 0, 'num_generation_tokens': 3}",
+            "[TRT-LLM] [I] iter = 3, num_scheduled_requests: 1, "
+            "states = {'num_ctx_requests': 0, 'num_ctx_tokens': 0, 'num_generation_tokens': 2}",
+            'INFO:     127.0.0.1:1 - "GET /prometheus/metrics HTTP/1.1" 200 OK',
+            "[TRT-LLM] [I] iter = 4, num_scheduled_requests: 32, "
+            "states = {'num_ctx_requests': 0, 'num_ctx_tokens': 0, 'num_generation_tokens': 96}",
+        ]
+    )
+    log_path.write_text(prefix + body)
+
+    metrics = parse_trtllm_iteration_log(log_path, mtp=2, start_offset=len(prefix))
+
+    assert metrics is not None
+    assert metrics.samples == 2
+    assert metrics.generated_tokens == 5
+    assert metrics.accepted_tokens == 3
+    assert metrics.verify_steps == 2
+    assert metrics.proposed_draft_tokens == 4
+    assert metrics.acceptance_length == 2.5
+
+
+def test_trtllm_log_parser_can_infer_batched_steps(tmp_path: Path) -> None:
+    log_path = tmp_path / "server.log"
+    log_path.write_text(
+        "[TRT-LLM] [I] iter = 10, num_scheduled_requests: 28, "
+        "states = {'num_ctx_requests': 9, 'num_ctx_tokens': 9345, 'num_generation_tokens': 57}"
+    )
+
+    metrics = parse_trtllm_iteration_log(
+        log_path,
+        mtp=2,
+        stop_at_metrics_get=False,
+    )
+
+    assert metrics is not None
+    assert metrics.samples == 1
+    assert metrics.verify_steps == 19
+    assert metrics.accepted_tokens == 38
+    assert metrics.proposed_draft_tokens == 38
+    assert metrics.acceptance_length == 3.0
 
 
 def test_speedbench_client_loads_coding_and_builds_dsv4_payloads(tmp_path: Path) -> None:
