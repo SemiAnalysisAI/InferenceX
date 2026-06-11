@@ -168,7 +168,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --enable-prefill-delayer
     )
     METRICS_ARGS=()
-    MEM_FRACTION_STATIC=0.82
+    MEM_FRACTION_STATIC=0.84
     CHUNKED_PREFILL_SIZE=16384
 else
     PARALLEL_ARGS+=(
