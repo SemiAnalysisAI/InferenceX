@@ -3539,3 +3539,11 @@
   pr-link: 
     https://github.com/SemiAnalysisAI/InferenceX/pull/1701
 
+- config-keys:
+    - dsv4-fp4-b300-sglang-mtp
+  description:
+    - "Align MTP env vars to GB300: replace PRECOMPILE=0 with FAST_WARMUP=1, add RADIX_FORCE_MISS, DEFAULT_THINKING, DSV4_REASONING_EFFORT=max"
+    - "Replace DP-attn env vars with shared GB300 block: MEGA_MOE_USE_FP4_ACTS, USE_MXF4_KIND, NUM_MAX_TOKENS_PER_RANK=8192"
+    - "Unify EAGLE spec-decoding to (3,1,4) for both DP-attn and TP-only paths, add --enable-deepseek-v4-fp4-indexer"
+    - "Bump image to nightly-dev-cu13-20260610-f332e526"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1700
