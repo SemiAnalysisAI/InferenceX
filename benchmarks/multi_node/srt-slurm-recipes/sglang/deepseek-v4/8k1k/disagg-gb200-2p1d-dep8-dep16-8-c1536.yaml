@@ -1,4 +1,4 @@
-name: "disagg-gb200-2p1d-dep8-dep16-8-c2048"
+name: "disagg-gb200-2p1d-dep8-dep16-8-c1536"
 
 
 model:
@@ -151,6 +151,6 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "2048"
+  concurrencies: "1536"
   req_rate: "inf"
   use_chat_template: false
