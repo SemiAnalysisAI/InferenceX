@@ -68,6 +68,21 @@ CAPTURE_SIZE=4
 while (( CAPTURE_SIZE < CONC )); do CAPTURE_SIZE=$((CAPTURE_SIZE * 2)); done
 (( CAPTURE_SIZE > 2048 )) && CAPTURE_SIZE=2048
 
+# H100 DEP is weights-bound: every DP rank replicates the ~20 GB
+# BF16-dequantized attention/dense/embedding weights next to its ~52 GB
+# expert shard, and at gmu 0.90 KV-cache init fails outright at high conc
+# (sweep 27441767143, conc 256: "No available memory for the cache blocks").
+# Claw back headroom: higher gpu-memory-utilization, and decode graphs
+# capped at 2x the per-rank batch share instead of the full CONC bound.
+GMU=0.90
+if [ "${DP_ATTENTION}" = "true" ]; then
+  GMU=0.94
+  PER_RANK_BOUND=$(( 2 * ((CONC + TP - 1) / TP) ))
+  CAPTURE_SIZE=4
+  while (( CAPTURE_SIZE < PER_RANK_BOUND )); do CAPTURE_SIZE=$((CAPTURE_SIZE * 2)); done
+  (( CAPTURE_SIZE > 2048 )) && CAPTURE_SIZE=2048
+fi
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
@@ -78,7 +93,7 @@ start_gpu_monitor
 set -x
 "${SERVE_OFFLINE[@]}" vllm serve $MODEL --port $PORT \
 $PARALLEL_ARGS \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization $GMU \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --language-model-only \
