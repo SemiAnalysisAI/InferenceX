@@ -2798,12 +2798,7 @@ minimaxm3-fp8-mi355x-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 512 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }

@@ -31,36 +31,19 @@ fi
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-if [ "${DP_ATTENTION}" = "true" ]; then
-  PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
-elif [ "$EP_SIZE" -gt 1 ]; then
-  PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
-else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP"
-fi
-
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 start_gpu_monitor
 
 set -x
 vllm serve "$MODEL" --port "$PORT" \
-    $PARALLEL_ARGS \
-    --gpu-memory-utilization 0.92 \
-    --max-model-len "$MAX_MODEL_LEN" \
+    --tensor-parallel-size 8 \
     --block-size 128 \
-    --language-model-only \
-    --attention-backend TRITON_ATTN \
-    --enforce-eager \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
-    --enable-auto-tool-choice \
-    --max-num-batched-tokens "$((ISL * 2))" \
-    --no-enable-prefix-caching \
-    --trust-remote-code > "$SERVER_LOG" 2>&1 &
+    --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
