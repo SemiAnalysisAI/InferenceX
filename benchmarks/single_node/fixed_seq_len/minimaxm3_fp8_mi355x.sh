@@ -35,11 +35,22 @@ if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
 fi
 
+PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS=(
+        --tensor-parallel-size 1
+        --data-parallel-size "$TP"
+        --enable-expert-parallel
+    )
+elif [ "$EP_SIZE" -gt 1 ]; then
+    PARALLEL_ARGS+=(--enable-expert-parallel)
+fi
+
 start_gpu_monitor
 
 set -x
 vllm serve "$MODEL" --port "$PORT" \
-    --tensor-parallel-size 8 \
+    "${PARALLEL_ARGS[@]}" \
     --block-size 128 \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
