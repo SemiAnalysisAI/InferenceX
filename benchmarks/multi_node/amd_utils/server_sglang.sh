@@ -49,6 +49,16 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 source $SGLANG_WS_PATH/setup_deps.sh
 source $SGLANG_WS_PATH/env.sh
 
+# Root-cause fix for low-concurrency MoRI dispatch-buffer corruption: surgically
+# floor num_max_dispatch_tokens_per_rank to >=256 in the installed (vendor-patched)
+# sglang moriep.py, in place, before any sglang.launch_server starts. A full-file
+# overlay can't be used here because the lmsysorg image ships a downstream-patched
+# moriep.py (class MoriEPDispatcher / expert_mask_gpu) that diverges from upstream.
+# See patches/apply_moriep_dispatch_floor.py and patches/README.md.
+echo "[server_sglang] applying MoRI dispatch-floor patch to installed sglang moriep.py"
+python3 "$SGLANG_WS_PATH/patches/apply_moriep_dispatch_floor.py" \
+    || echo "[server_sglang] WARN: moriep dispatch-floor patch returned non-zero"
+
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
 
@@ -213,7 +223,9 @@ fi
 if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; then
     decode_max_running_requests=$BENCH_MAX_CONC_VALUE
     decode_dp_ranks=$DECODE_TP_SIZE
-    MORI_MAX_DISPATCH_TOKENS_DECODE=$((BENCH_MAX_CONC_VALUE / decode_dp_ranks))
+    # --max-running-requests is PER DP RANK (not global); each rank can hold
+    # up to BENCH_MAX_CONC_VALUE requests, so dispatch tokens = that capacity.
+    MORI_MAX_DISPATCH_TOKENS_DECODE=$BENCH_MAX_CONC_VALUE
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
     # Update derived variable
     SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
@@ -247,6 +259,12 @@ if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
+
+# NOTE: the low-concurrency MoRI dispatch-buffer corruption (small
+# SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK -> silent OOB -> gsm8k=0) is fixed
+# at the root cause by the moriep.py overlay (patches/moriep.py, auto-mounted by
+# job.slurm), which floors num_max_dispatch_tokens_per_rank to 256 inside sglang.
+# The earlier harness-level env clamp here has been removed in favor of that.
 
 # =============================================================================
 # Cluster Topology Configuration

@@ -3459,6 +3459,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1647
 
 - config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "Root-cause fix for MoRI dispatch-buffer corruption at low concurrency: replace the harness env clamp (bandaid) with an in-place patch (patches/apply_moriep_dispatch_floor.py, run by server_sglang.sh) that floors num_max_dispatch_tokens_per_rank to 256 inside the installed sglang moriep.py. NOTE a full-file overlay was tried first and crashed the scheduler (AttributeError: MoriEPDispatcher has no attribute expert_mask_gpu) because the lmsysorg image ships a downstream-patched moriep.py that diverges from the upstream v0.5.12.post1 tag; the surgical in-place patch preserves the vendor fork. The per-rank All2All receive buffer is sized worldSize*maxNumInpTokenPerRank; at conc-64/TP8/MTP3 the value collapses to 32, overrunning the dispatch kernel's receive slots (only guard is an assert compiled out under -DNDEBUG) -> silent corruption (decodes fine, gsm8k=0). Confirmed on MI355X: dispatch=32->0.00, 64->0.00 (one wavefront insufficient), >=256->0.94. Throughput unchanged. Upstream: sgl-project/sglang#27194, ROCm/mori#356. Also fixes the root-cause harness formula (BENCH_MAX_CONC_VALUE/dp_ranks was wrong: --max-running-requests is per-DP-rank, not global) and patcher path resolution for vendor image layout."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1659
+
+- config-keys:
     - minimaxm2.5-fp8-gb200-dynamo-vllm
   description:
     - "Add MiniMax-M2.5 FP8 GB200 disaggregated multinode vLLM benchmarks via Dynamo"
