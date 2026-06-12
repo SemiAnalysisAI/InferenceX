@@ -300,6 +300,10 @@ if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
     M3_HF_HOME="/mnt/vast/hf-home"
     mkdir -p "$M3_HF_HOME"
     sed -i "s|__M3_HF_HOME__|${M3_HF_HOME}|g" "$CONFIG_FILE"
+    # Killed downloads leave .lock files that make dynamo's rust hub
+    # fetch_model die with "Lock acquisition failed"; srtctl only cleans
+    # locks older than 30 min. See launch_gb200-nv.sh.
+    find "$M3_HF_HOME" -name '*.lock' -mmin +10 -delete 2>/dev/null || true
 fi
 
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
