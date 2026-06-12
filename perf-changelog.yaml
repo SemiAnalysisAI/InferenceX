@@ -3544,6 +3544,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
 
 - config-keys:
+    - dsv4-fp4-b200-trt
+    - dsv4-fp4-b200-trt-mtp
+  description:
+    - "Update the B200 TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066"
+    - "Sync the dsv4-fp4-b200-trt and dsv4-fp4-b200-trt-mtp recipes with the B200 aggregated frontier config (worker GC off, NCCL graph mixing off, mimalloc/PyTorch alloc tweaks, higher KV cache fractions by DP path, stream_interval 100, use_low_precision_moe_combine, DP batching_wait_iters 30, max_num_tokens drops the OSL term)"
+    - "MTP recipe uses max_draft_len with a variable default draft length, enable_lm_head_tp_in_adp on the DP-attn path, and removes timeout_iters from the DP config"
+    - "Raise dsv4-fp4-b200-trt-mtp DP-attn conc-end (1k ISL: 512->1024; 8k ISL: 128->256) to cover the new high-concurrency regime"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1699
+
+- config-keys:
     - dsv4-fp4-mi355x-atom-disagg
   description:
     - "Add multi-node ATOM disaggregated prefill/decode support for DeepSeek-V4-Pro on MI355X"
@@ -3600,12 +3610,6 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
-
-- config-keys:
-    - gptoss-fp4-h100-vllm
-  description:
-    - "Test entry for the full-sweep-fail-fast label (PR #1718): exercises the new fail-fast sweep mode on a basic vLLM H100 config; will be reverted before merge"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1718
   
 - config-keys:
     - dsv4-fp4-gb200-dynamo-sglang
@@ -3615,3 +3619,19 @@
     - "8 topologies sweeping low-latency (1p1d-tp8-tp8) through max throughput (6p1d-dep8-dep12)."
     - "Updated 1p1d and 2p1d configs to match https://github.com/shyeh25/srt-slurm/commit/ede724d7cc9a780be5b84659f599733bf9fd0097"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1675
+
+- config-keys:
+    - glm5-fp4-b200-sglang
+    - glm5-fp4-b200-sglang-mtp
+    - glm5-fp8-b200-sglang
+    - glm5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from v0.5.12-cu130 to nightly-dev-cu13-20260605-7dc73766"
+    - "glm5-fp4-b200-sglang-mtp: override --mem-fraction-static from 0.85 to 0.8 when ISL=8192, OSL=1024, and CONC>128 (default 0.85 elsewhere)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1567
+
+- config-keys:
+    - gptoss-fp4-h100-vllm
+  description:
+    - "Test entry for the full-sweep-fail-fast label (PR #1718): exercises the new fail-fast sweep mode on a basic vLLM H100 config; will be reverted before merge"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1718
