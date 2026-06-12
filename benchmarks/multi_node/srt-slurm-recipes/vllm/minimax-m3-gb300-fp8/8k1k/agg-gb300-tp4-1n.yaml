@@ -64,7 +64,6 @@ backend:
       block-size: 128
       language-model-only: true
       gpu-memory-utilization: 0.9
-      safetensors-load-strategy: "prefetch"
       trust-remote-code: true
       no-enable-prefix-caching: true
       stream-interval: 32
