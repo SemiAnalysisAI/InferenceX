@@ -1,0 +1,97 @@
+name: "minimax-m3-vllm-disagg-gb300-1p1d-tp4ep4-8k1k"
+
+# MiniMax-M3 disaggregated 1P+1D recipe for GB300, collocated on 1 node.
+# 8 GPUs per GB300 node: 4 for prefill, 4 for decode.
+# Prefill (TP4+EP4) → NixlConnector → Decode (TP4+EP4).
+# --block-size 128 is mandatory (MSA sparse/index cache alignment).
+
+model:
+  path: "hf:MiniMaxAI/MiniMax-M3-MXFP8"
+  container: "vllm/vllm-openai:minimax-m3"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260526"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+extra_mount:
+  - "__M3_HF_HOME__:__M3_HF_HOME__"
+
+resources:
+  gpu_type: "gb300"
+  gpus_per_node: 8
+  prefill_nodes: 1
+  decode_nodes: 1
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 4
+  gpus_per_decode: 4
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+  allow_prefill_decode_colocation: true
+
+  prefill_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    HF_HOME: "__M3_HF_HOME__"
+
+  decode_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    HF_HOME: "__M3_HF_HOME__"
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 4
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      enforce-eager: true
+      max-model-len: 9472
+      max-num-seqs: 16
+      max-num-batched-tokens: 16384
+      block-size: 128
+      language-model-only: true
+      gpu-memory-utilization: 0.9
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      stream-interval: 32
+
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 4
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      max-model-len: 9472
+      max-num-seqs: 256
+      max-num-batched-tokens: 256
+      max-cudagraph-capture-size: 512
+      block-size: 128
+      language-model-only: true
+      gpu-memory-utilization: 0.9
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      stream-interval: 32
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "64x128x256"
