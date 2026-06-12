@@ -53,8 +53,8 @@ vllm serve "$MODEL" --port "$PORT" \
     --max-model-len "$MAX_MODEL_LEN" \
     --block-size 128 \
     --language-model-only \
-    --tool-call-parser minimax \
-    --reasoning-parser minimax \
+    --tool-call-parser minimax_m3 \
+    --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
     --max-num-batched-tokens "$((ISL * 2))" \
     --no-enable-prefix-caching \
