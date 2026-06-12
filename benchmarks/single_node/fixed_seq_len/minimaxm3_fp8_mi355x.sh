@@ -56,10 +56,17 @@ fi
 
 # 2) Build + load the fused _C op if the installed wheel lacks the symbol.
 if ! python3 -c "import torch,sys; sys.exit(0 if hasattr(torch.ops._C,'fused_minimax_m3_qknorm_rope_kv_insert') else 1)" 2>/dev/null; then
-    M3_BUILD_DIR="${HF_HUB_CACHE%/}/m3build"
+    M3_BUILD_DIR="${HF_HUB_CACHE%/}/m3build-wave32"
     M3_SO="$M3_BUILD_DIR/ext/minimax_m3_fused_op.so"
     mkdir -p "$M3_BUILD_DIR/ext"
     [ -d "$M3_SRC" ] || git clone --depth 1 --branch "$M3_BRANCH" https://github.com/vllm-project/vllm.git "$M3_SRC"
+
+    # The kernel operates on 32-lane logical warps (`width=32`) on every
+    # platform. Upstream currently uses a 64-lane active mask under USE_ROCM,
+    # which faults on gfx950 at the first shuffle. Keep the mask aligned with
+    # the explicit shuffle width until the upstream HIP fix lands.
+    sed -i 's/#define FINAL_MASK 0xffffffffffffffffULL/#define FINAL_MASK 0xffffffffULL/' \
+        "$M3_SRC/csrc/libtorch_stable/fused_minimax_m3_qknorm_rope_kv_insert_kernel.cu"
 
     # Minimal stable-ABI registration for the single op, mirroring
     # csrc/libtorch_stable/torch_bindings.cpp (def schema + CUDA impl).
