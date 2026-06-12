@@ -355,7 +355,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
         run: |
-          curl -sS -X POST \
+          curl -fsS -X POST \
             -H "Authorization: Bearer ${GH_TOKEN}" \
             -H "Accept: application/vnd.github+json" \
             "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows/fail-fast-cancel.yml/dispatches" \
