@@ -9281,7 +9281,7 @@ dsv4-fp4-b200-sglang-agentic-hicache:
   image: lmsysorg/sglang:v0.5.12.post1-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: b200-dgxc
+  runner: b200
   precision: fp4
   framework: sglang
   multinode: false
