@@ -4574,14 +4574,16 @@ minimaxm3-fp8-h100-vllm:
     - isl: 1024
       osl: 1024
       search-space:
+      # DEP (dp-attn) omitted on H100: each DP rank replicates the ~20 GB
+      # BF16-dequantized attention/dense/embedding weights next to its
+      # ~52 GB expert shard, and KV-cache init fails at high conc (sweep
+      # 27441767143, conc 256/512: "No available memory for the cache
+      # blocks"). TEP8 covers the high-concurrency regime instead.
       - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      # DEP omitted at 8k1k: attention weights are replicated per DP rank,
-      # leaving ~10 GB/GPU for KV — not enough for 8k prefills at high conc.
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
 
