@@ -349,3 +349,38 @@ DeepSeek-R1-0528-MXFP4-v2:
       max_running_requests: 128
       chunked_prefill_size: 262144
       cuda_graph_bs_range: "1-128"
+
+# DeepSeek-V4-Pro PD-disaggregation recipe (MI355X, SGLang + MoRI).
+# KV transfer = mori for both topologies (pure-TP and DEP); the DP path additionally
+# routes the MoE all-to-all through mori (--moe-a2a-backend mori) with dp-attention.
+# DSv4-specific kernel routing (unified_kv_triton, AITER indexer, fp8 wo_a fallback,
+# thinking/reasoning-effort, dispatch dtypes, per-role PER_RANK dispatch tokens) is set
+# in env.sh's DeepSeek-V4-Pro block. The bench client uses --dsv4 framing (bench.sh).
+# prefill.disable_cuda_graph routes prefill to --disable-cuda-graph; decode keeps
+# --cuda-graph-bs. See dsv4_mi355x_sglang_disagg_plan.md.
+DeepSeek-V4-Pro:
+  base_flags: "--decode-log-interval 100 --watchdog-timeout 3600 --load-balance-method round_robin --kv-cache-dtype fp8_e4m3 --attention-backend dsv4 --page-size 256 --swa-full-tokens-ratio 0.1 --disable-shared-experts-fusion --tool-call-parser deepseekv4 --reasoning-parser deepseek-v4 --disaggregation-transfer-backend mori"
+  dp_flags: "--moe-a2a-backend mori --deepep-mode normal --enable-dp-attention --moe-dense-tp-size 1 --enable-dp-lm-head"
+  prefill:
+    mem_fraction_static: 0.8
+    disable_radix_cache: true
+    disable_cuda_graph: true
+    dp:
+      max_running_requests: 1024
+      chunked_prefill_size: 131072
+      context_length: 9217
+      max_total_tokens: 262144
+    no_dp:
+      max_running_requests: 128
+      chunked_prefill_size: 131072
+      context_length: 9217
+      max_total_tokens: 262144
+  decode:
+    mem_fraction_static: 0.85
+    prefill_round_robin_balance: true
+    dp:
+      max_running_requests: 1024
+      cuda_graph_bs_range: "1-128"
+    no_dp:
+      max_running_requests: 128
+      cuda_graph_bs_range: "1-128"
