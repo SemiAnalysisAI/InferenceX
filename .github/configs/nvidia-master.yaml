@@ -9441,7 +9441,7 @@ dsv4-fp4-b300-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
 
 dsv4-fp4-b300-sglang-agentic-hicache:
-  image: lmsysorg/sglang:v0.5.13-cu130
+  image: lmsysorg/sglang:nightly-dev-cu13-20260609-317fc6a9
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
