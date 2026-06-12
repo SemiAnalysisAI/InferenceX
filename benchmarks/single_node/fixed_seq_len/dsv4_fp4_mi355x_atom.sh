@@ -53,6 +53,7 @@ python3 -m atom.entrypoints.openai_server \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
     --gpu-memory-utilization 0.85 \
+    --no-enable_prefix_caching \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
