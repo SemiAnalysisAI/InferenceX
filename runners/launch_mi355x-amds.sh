@@ -241,6 +241,12 @@ else
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
+    # MiniMax-M3 weights are not staged on the node-local /var/lib NVMe cache;
+    # they are pre-downloaded once to the NFS share instead.
+    if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
     SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
