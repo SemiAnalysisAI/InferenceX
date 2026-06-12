@@ -42,9 +42,10 @@ HAS_FULL_SWEEP="$(jq -r '
     [.labels[].name] as $names
     | if (($names | index("full-sweep-enabled")) != null)
          or (($names | index("non-canary-full-sweep-enabled")) != null)
+         or (($names | index("full-sweep-fail-fast")) != null)
       then "1" else "" end
 ' <<<"$PR_INFO")"
-[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing 'full-sweep-enabled' or 'non-canary-full-sweep-enabled' label"
+[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing 'full-sweep-enabled', 'non-canary-full-sweep-enabled', or 'full-sweep-fail-fast' label"
 
 # Warn early if no successful run exists on any current PR commit.
 PR_SHAS="$(gh api "repos/${REPO}/pulls/${PR}/commits" --paginate --jq '.[].sha')"
