@@ -14,6 +14,9 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
+srun_options:
+  container-mount-home: ""
+
 slurm:
   time_limit: "8:00:00"
 
