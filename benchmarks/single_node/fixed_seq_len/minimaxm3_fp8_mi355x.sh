@@ -133,10 +133,10 @@ PYEOF
 
     # Have _custom_ops load the prebuilt op into _C in every (worker) process.
     VLLM_PKG_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))")
-    if ! grep -q "MiniMax-M3 day-zero" "$VLLM_PKG_DIR/_custom_ops.py"; then
+    if ! grep -q "MiniMax-M3 day-zero wave32-v2" "$VLLM_PKG_DIR/_custom_ops.py"; then
         cat >> "$VLLM_PKG_DIR/_custom_ops.py" <<PYEOF2
 
-# --- MiniMax-M3 day-zero overlay: load prebuilt fused _C op if missing ---
+# --- MiniMax-M3 day-zero wave32-v2: load prebuilt fused _C op if missing ---
 import os as _m3_os
 _m3_so = _m3_os.environ.get("M3_FUSED_OP_SO", "$M3_SO")
 if _m3_so and _m3_os.path.exists(_m3_so) and not hasattr(torch.ops._C, "fused_minimax_m3_qknorm_rope_kv_insert"):
