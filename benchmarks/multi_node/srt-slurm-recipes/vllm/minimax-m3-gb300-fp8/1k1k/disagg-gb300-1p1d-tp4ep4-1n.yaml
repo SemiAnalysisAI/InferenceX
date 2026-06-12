@@ -14,6 +14,8 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
+setup_script: disable-flashinfer.sh
+
 slurm:
   time_limit: "8:00:00"
 
@@ -45,12 +47,10 @@ backend:
 
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     HF_HOME: "__M3_HF_HOME__"
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
-    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     HF_HOME: "__M3_HF_HOME__"
 
   vllm_config:

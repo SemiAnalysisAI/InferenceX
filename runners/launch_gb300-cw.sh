@@ -323,6 +323,17 @@ if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
         sleep 5
     done
     find "$M3_HF_HOME" -name '*.lock' -delete 2>/dev/null || true
+
+    # flashinfer's CudaRTLibrary reads /proc/self/maps at import time.
+    # On CW enroot, multiprocessing-spawned children can't access it,
+    # crashing every vLLM worker subprocess. Uninstalling flashinfer
+    # makes has_flashinfer() return False, skipping the broken path.
+    mkdir -p configs
+    cat > configs/disable-flashinfer.sh <<'SETUP_SCRIPT'
+#!/bin/bash
+pip uninstall -y flashinfer 2>/dev/null || true
+SETUP_SCRIPT
+    chmod +x configs/disable-flashinfer.sh
 fi
 
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
