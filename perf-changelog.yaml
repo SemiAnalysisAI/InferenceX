@@ -3525,12 +3525,65 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1586
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604."
+    - "Update script for aiter attention backend from triton."
+    - "Enable aiter unfied attention."
+    - "Enable aiter allreduce fusion."
+    - "Remove sweep config mtp+cc256+tp2, which may OOM."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1680
+
+- config-keys:
     - minimaxm2.5-fp4-mi355x-vllm
   description:
     - "Enable vLLM Rust request frontend by exporting VLLM_USE_RUST_FRONTEND=1 in benchmarks/single_node/minimaxm2.5_fp4_mi355x.sh (v0.22.0 ROCm image ships the vllm-rs binary, so the flag engages it). Environment-only change; serve flags, TP/EP, attention/kernel settings unchanged"
     - "The Rust frontend replaces only the Python serving/API layer (HTTP, tokenization, scheduling glue, detokenization) and spawns the same Python EngineCore, so GPU kernels/attention/MoE GEMM/KV cache are untouched"
     - "A/B sweep (28 single-node points, 1k1k + 8k1k, TP 1/2/4) vs the Python-frontend baseline (run 26696260751): throughput Pareto-neutral (peak tok/s/GPU within <1.5%, frontiers coincident) and TPOT flat (+-0.5%); TTFT improves ~8% at 1k1k and ~22% at 8k1k (every point), the expected signature of lower frontend CPU latency before first token, scaling with input length"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Add multi-node ATOM disaggregated prefill/decode support for DeepSeek-V4-Pro on MI355X"
+    - "Add server_atom.sh: multi-node launcher using atom.entrypoints.openai_server with mooncake RDMA KV transfer and atomesh router"
+    - "Add env_atom.sh: ATOM/mooncake-specific environment (mooncake LD_LIBRARY_PATH, ATOM_MOE_GU_ITLV=1, AITER_BF16_FP8_MOE_BOUND=0)"
+    - "Add models_atom.yaml: per-model configs for ATOM engine"
+    - "Add atom-disagg sweep: 2P1D DPA+TP8 (conc 256-2048) and 1P1D TP8 (conc 4-256) at isl=8192/osl=1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
+  
+- config-keys:
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Update the B300 TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066"
+    - "B300 analog of PR #1699 (B200): sync the dsv4-fp4-b300-trt and dsv4-fp4-b300-trt-mtp recipes with the agg frontier config (worker GC off, NCCL graph mixing off, mimalloc/PyTorch alloc tweaks, higher KV cache fractions by DP path, stream_interval 100, use_low_precision_moe_combine, DP batching_wait_iters 30, max_num_tokens drops the OSL term)"
+    - "MTP recipe uses max_draft_len with a variable default draft length, enable_lm_head_tp_in_adp on the DP-attn path, and removes timeout_iters from the DP config"
+    - "Cap cuda_graph_config.max_batch_size at 1024 on both recipes: TRTLLM_MLA_EXTRA_OVERLAP hands MLA prologue tensors across streams without record_stream(), so CUDA-graph warmup at decode batch >1024 (repros at 1088, e.g. tp8/ep8 dp-attn conc-2048 on B300) use-after-frees into CUDA_ERROR_ILLEGAL_ADDRESS; workaround until NVIDIA/TensorRT-LLM#15265 ships in the image. Runtime --max_batch_size stays = CONC, so batches >1024 run eager"
+    - "B300-specific bits preserved (MODEL_PATH download block, TRTLLM_MHC_ENABLE_FUSED_HC=1, trtllm-serve MODEL_PATH); drop the 1k1k conc-2048 point on the tp8/ep8 DP-attn row (both recipes), the batch regime that triggers the MLA-overlap crash above; rest of the search space unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1703
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Move both the 1k1k and 8k1k scenarios of the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/{1k1k,8k1k}/disagg/mtp/), rather than referencing recipes from the srt-slurm repo"
+    - "1k1k: 4 MTP variants, behavior unchanged from the previous srt-slurm 1k1k recipe — 2 low-latency (dep4-1p prefill / tep8 decode at 5 and 6 decode nodes, conc up to 512) + 2 max-throughput (dep4-1p prefill / dep8 decode at 1 and 2 decode nodes, conc up to 1024)"
+    - "8k1k: 6-variant sweep — 3 low-latency (1p5d / 1p3d / 1p1d, TP4 prefill / TP8 decode, conc up to 512) + 3 MTP2 high-throughput (2p1d / 3p1d / 5p1d, DEP4 prefill / DEP8 decode, single concurrency 768 / 1024 / 2048); MTP2 recipes use scheduler-recv-interval=1, enable-dp-lm-head, spec 2 steps / 3 draft tokens, and UCX_TLS in the prefill/decode environments"
+    - "Bump container image to lmsysorg/sglang:v0.5.12.post1 (from v0.5.8.post1-cu130); the 1k1k recipes keep the dynamo-sglang container alias and follow the config image"
+    - "Clone srt-slurm at NVIDIA/srt-slurm@main for the srtctl/dynamo tooling and copy the local b200-fp4 recipes into the checkout"
+    - "Pin the 1k1k MTP recipes to the same dynamo source hash as the 8k1k recipes (dynamo.hash=5b4bc1dd70965017a737c71b19db5a0aeaa88727, install: true), so both scenarios build dynamo from an identical revision instead of relying on whatever is baked into the dynamo-sglang container alias"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1688
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch back to the main branch on InferenceX benchmarking. Since the AMD v4 model code has been merged into main, we now use the main branch instead of the previously used amd/deepseek_v4 branch. The image is bumped to the main branch image rocm/sgl-dev:v0.5.12.post1-rocm720-mi35x-20260610."
+    - "Refresh the script's env vars. The main branch introduced several env var renames and new default settings, so we refreshed the env vars in the script accordingly."
+    - "Enable the unified KV attention kernel. Set export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton for better performance."
+    - "Specify the prefill delay explicitly. Set --prefill-delayer-max-delay-ms 5000 to define a concrete prefill delay, allowing DP to batch more requests together per execution."
+  pr-link: 
+    https://github.com/SemiAnalysisAI/InferenceX/pull/1701
 
 - config-keys:
     - dsv4-fp4-b300-sglang-mtp
