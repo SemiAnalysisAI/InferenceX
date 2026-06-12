@@ -3641,4 +3641,4 @@
     - gptoss-fp4-h100-vllm
   description:
     - "Test entry for canary-gated full-sweep-fail-fast (follow-up to PR #1718): exercises the canary gate + per-matrix fail-fast on a basic vLLM H100 config; will be reverted before merge"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1726
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1727
