@@ -3600,3 +3600,9 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+
+- config-keys:
+    - gptoss-fp4-h100-vllm
+  description:
+    - "Test entry for the full-sweep-fail-fast label (PR #1718): exercises the new fail-fast sweep mode on a basic vLLM H100 config; will be reverted before merge"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1718
