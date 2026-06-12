@@ -3629,3 +3629,12 @@
     - "Update SGLang image from v0.5.12-cu130 to nightly-dev-cu13-20260605-7dc73766"
     - "glm5-fp4-b200-sglang-mtp: override --mem-fraction-static from 0.85 to 0.8 when ISL=8192, OSL=1024, and CONC>128 (default 0.85 elsewhere)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1567
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm
+    - minimaxm3-fp8-h100-vllm
+  description:
+    - "Day-zero MiniMax-M3 MXFP8 single-node recipes for H200 and H100 (vLLM)."
+    - "Image: vllm/vllm-openai:minimax-m3 (dedicated day-zero image; M3 not in a stable release yet)."
+    - "Sweeps TP4/TP8, TP+EP (TEP), and DP-attention+EP (DEP) per https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3; H100 is TP8-only (MXFP8 weights ~427 GB)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
