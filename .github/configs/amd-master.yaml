@@ -2147,7 +2147,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 # client uses --dsv4 framing (amd_utils/bench.sh). STP only for now (reference recipe has
 # no spec decoding); MTP is a follow-up.
 dsv4-fp4-mi355x-sglang-disagg:
-  image: rocm/sgl-dev:sglang-0.5.12.post1-rocm720-mi35x-mori-0610-dsv4
+  image: rocm/sgl-dev:sglang-0.5.12.post1-rocm720-mi35x-mori-0610-dsv4-ep
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x-disagg
