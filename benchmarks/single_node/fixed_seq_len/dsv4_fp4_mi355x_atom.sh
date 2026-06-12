@@ -25,8 +25,15 @@ PARALLEL_ARGS=(-tp "$TP") #TP
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
-    else #DP+TP
-        PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+    else #DPA+TP
+        #DPA+TP+TBO
+        if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+        elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+        else
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+        fi
     fi
 fi 
 
