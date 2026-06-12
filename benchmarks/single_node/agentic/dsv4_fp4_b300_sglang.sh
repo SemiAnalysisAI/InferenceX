@@ -128,7 +128,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --disable-flashinfer-autotune
         --enable-prefill-delayer
     )
-    METRICS_ARGS=()
     MEM_FRACTION_STATIC=0.88
     CHUNKED_PREFILL_SIZE=16384
 else
@@ -238,4 +237,7 @@ if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
 fi
 
 build_replay_cmd "$RESULT_DIR"
+if [ "$DP_ATTENTION" = "true" ]; then
+    REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
+fi
 run_agentic_replay_and_write_outputs "$RESULT_DIR"
