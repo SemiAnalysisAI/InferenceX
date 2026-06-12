@@ -59,8 +59,24 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
         echo "Unsupported framework on gb300-cw for glm5/fp8: $FRAMEWORK. Currently supported: dynamo-sglang"
         exit 1
     fi
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    # Day-zero: MiniMax-M3-MXFP8 is not staged on this cluster. The recipes
+    # carry an hf: model id directly, so srtctl pre-downloads the snapshot
+    # into the shared HF_HOME sed-injected below; MODEL_PATH only feeds the
+    # (unreferenced) model_paths aliases in srtslurm.yaml.
+    export MODEL_PATH="hf:MiniMaxAI/MiniMax-M3-MXFP8"
+
+    if [[ $FRAMEWORK == "dynamo-vllm" ]]; then
+        SRT_SLURM_RECIPES_REPO="https://github.com/NVIDIA/srt-slurm.git"
+        SRT_SLURM_RECIPES_REF="main"
+        SRT_RECIPE_SRC="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8"
+        SRT_RECIPE_DST="recipes/vllm/minimax-m3-gb300-fp8"
+    else
+        echo "Unsupported framework on gb300-cw for minimaxm3/fp8: $FRAMEWORK. Currently supported: dynamo-vllm"
+        exit 1
+    fi
 else
-    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8"
+    echo "Unsupported model prefix/precision combination on gb300-cw: $MODEL_PREFIX/$PRECISION. Currently supported: dsv4/fp4, glm5/fp8, minimaxm3/fp8"
     exit 1
 fi
 
@@ -274,6 +290,16 @@ else
     TMP_CONFIG_FILE="$(mktemp)"
     awk -v runner_name="${RUNNER_NAME}" 'BEGIN { print "name: \"" runner_name "\"" } { print }' "$CONFIG_FILE" > "$TMP_CONFIG_FILE"
     mv "$TMP_CONFIG_FILE" "$CONFIG_FILE"
+fi
+
+# MiniMax-M3 day-zero: the recipes use an hf: model id and need a shared-FS
+# HF_HOME visible (and writable) on compute nodes for srtctl's one-time
+# pre-download of the 444 GB snapshot. /mnt/vast is the shared NFS that
+# already hosts models and squash files on this cluster.
+if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
+    M3_HF_HOME="/mnt/vast/hf-home"
+    mkdir -p "$M3_HF_HOME"
+    sed -i "s|__M3_HF_HOME__|${M3_HF_HOME}|g" "$CONFIG_FILE"
 fi
 
 SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)

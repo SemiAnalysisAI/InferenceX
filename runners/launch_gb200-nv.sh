@@ -136,8 +136,32 @@ fi
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-enroot import -o $SQUASH_FILE docker://$IMAGE
-enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
+# Concurrent matrix jobs (three gb200-nv runners) all import to the same
+# shared-FS squash path. An unsynchronized `enroot import -o` onto an
+# existing file APPENDS to it (mksquashfs default), corrupting the image
+# while other jobs' pyxis extractions are reading it — observed on the
+# minimaxm3 day-zero sweep (R1: an eval job appended to the live squash
+# mid-run). Serialize with a lock, skip when the existing file is valid,
+# and build to a temp path + atomic mv so readers never see a half-written
+# file. Mirrors the import_squash pattern in launch_gb300-nv.sh.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    (
+        exec 9>"$lock"
+        flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+        if unsquashfs -l "$squash" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import: $squash"
+        else
+            rm -f "$squash" "$squash".tmp.*
+            enroot import -o "${squash}.tmp.$$" "docker://$image"
+            mv -f "${squash}.tmp.$$" "$squash"
+        fi
+    ) || exit 1
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 

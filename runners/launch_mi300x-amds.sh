@@ -11,7 +11,10 @@ set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
 #   chi-mi300x-049: drained (persistent /nvme_home disk-full)
-JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+#   chi-mi300x-054: /nvme_home disk-full (pyxis "No space left on device"
+#     extracting the container; black-holed the entire minimaxm3 day-zero
+#     sweep on 2026-06-12 — fails in ~3 s, frees up, and gets the next job)
+JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049.ord.vultr.cpe.ice.amd.com,chi-mi300x-054.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
