@@ -169,6 +169,7 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+# ROCm graph capture raises HSA_STATUS_ERROR_EXCEPTION during the first batch.
 set -x
 vllm serve $MODEL --port $PORT \
 $PARALLEL_ARGS \
@@ -177,7 +178,6 @@ $PARALLEL_ARGS \
 --block-size 128 \
 --language-model-only \
 --attention-backend TRITON_ATTN \
-# ROCm graph capture raises HSA_STATUS_ERROR_EXCEPTION during the first batch.
 --enforce-eager \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --no-enable-prefix-caching \
