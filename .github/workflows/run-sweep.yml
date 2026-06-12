@@ -102,7 +102,7 @@ jobs:
                     (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast'))
                   )
               run: |
-                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), 'non-canary-full-sweep-enabled' (full sweep, no canary gate), or 'full-sweep-fail-fast' (full sweep, no canary gate, first failure in a matrix cancels that matrix's remaining jobs)."
+                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), 'non-canary-full-sweep-enabled' (full sweep, no canary gate), or 'full-sweep-fail-fast' (full sweep behind the canary gate, first failure in a matrix cancels that matrix's remaining jobs)."
                   exit 1
 
             - name: Checkout code
@@ -154,7 +154,10 @@ jobs:
         if: >-
             needs.setup.outputs.reuse-enabled != 'true' &&
             github.event_name == 'pull_request' &&
-            contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')
+            (
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
+            )
         runs-on: ubuntu-latest
         outputs:
             canary-config: ${{ steps.pick.outputs.canary-config }}
