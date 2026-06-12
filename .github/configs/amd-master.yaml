@@ -2174,6 +2174,22 @@ dsv4-fp4-mi355x-atom-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1024, spec-decoding: mtp }
 
+# target
+dsv4-fp4-mi355x-atom-agentic-lmcache:
+  image: rocm/atom-dev:nightly_202606101557
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list:    [44, 48, 52, 56, 60] }
+      #- { tp: 8, ep: 1, offloading: lmcache, conc-list:    [44, 48, 52, 56, 60] }
+
 qwen3.5-bf16-mi325x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm720-mi30x
   model: Qwen/Qwen3.5-397B-A17B
