@@ -3638,7 +3638,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1712
 
 - config-keys:
-    - gptoss-fp4-h100-vllm
+    - gptoss-fp4-mi300x-vllm
   description:
-    - "Test entry for canary-gated full-sweep-fail-fast (follow-up to PR #1718): exercises the canary gate + per-matrix fail-fast on a basic vLLM H100 config; will be reverted before merge"
+    - "Test entry for the fail-fast label variants (follow-up to PR #1718): exercises the canary gate + per-matrix fail-fast on a basic vLLM MI300X config; will be reverted before merge"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1727
