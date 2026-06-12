@@ -14,6 +14,10 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
+srun_options:
+  mem: "0"
+
+
 slurm:
   time_limit: "8:00:00"
 
