@@ -34,12 +34,96 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
 fi
 
 # Overlay the m3_release python tree if this vllm build doesn't know M3 yet.
+# The M3 AMD path is Python + Triton (vllm/models/minimax_m3/{amd,common}/ops
+# are all @triton.jit), with ONE exception: the horizontally-fused QK-norm +
+# partial-NeoX-RoPE (+ bf16 KV/index-cache scatter) helper is a compiled csrc
+# kernel (fused_minimax_m3_qknorm_rope_kv_insert) that no public ROCm wheel
+# ships yet. We overlay the python tree and then register a pure-torch fallback
+# for that single op (bit-parity vs the PR's reference, verified on gfx950).
 if ! python3 -c "import vllm.models.minimax_m3" 2>/dev/null; then
     echo "Overlaying vLLM m3_release python tree onto installed package"
+    rm -rf /tmp/vllm-m3
     git clone --depth 1 --branch m3_release https://github.com/vllm-project/vllm.git /tmp/vllm-m3
     VLLM_PKG_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))")
     cp -r /tmp/vllm-m3/vllm/* "$VLLM_PKG_DIR/"
     python3 -c "import vllm.models.minimax_m3; print('m3 overlay OK')"
+
+    # Day-zero ROCm shim: the m3_release fused_minimax_m3_qknorm_rope_kv_insert
+    # csrc kernel is absent from the nightly ROCm wheel (torch.ops._C has no
+    # such symbol), so vllm/_custom_ops.py's python wrapper would dispatch into
+    # a non-existent op. Append a torch fallback that takes over when the
+    # compiled symbol is missing (a no-op once an M3-aware ROCm image lands).
+    # Semantics mirror tests/kernels/test_fused_minimax_m3_qknorm_rope_kv_insert.py.
+    cat >> "$VLLM_PKG_DIR/_custom_ops.py" <<'M3_SHIM_EOF'
+
+
+# ─── Day-zero MiniMax-M3 ROCm fallback (auto-removed once csrc lands) ─────────
+if not hasattr(torch.ops._C, "fused_minimax_m3_qknorm_rope_kv_insert"):
+
+    def fused_minimax_m3_qknorm_rope_kv_insert(  # type: ignore[no-redef]
+        qkv, q_norm_weight, k_norm_weight, cos_sin_cache, positions,
+        num_heads, num_kv_heads, rotary_dim, eps,
+        index_q_norm_weight=None, index_k_norm_weight=None, num_index_heads=0,
+        slot_mapping=None, index_slot_mapping=None, kv_cache=None,
+        index_cache=None, block_size=0, q_out=None, index_q_out=None,
+    ):
+        HEAD_DIM = 128
+        half = rotary_dim // 2
+        cs = cos_sin_cache[positions].float()
+        cos = cs[..., :half].unsqueeze(1)
+        sin = cs[..., half:].unsqueeze(1)
+
+        def _norm_rope(x, w):  # x: [nt, nh, 128]
+            xf = x.float()
+            var = xf.pow(2).mean(-1, keepdim=True)
+            normed = xf * torch.rsqrt(var + eps) * (1.0 + w.float())
+            rot = normed[..., :rotary_dim]
+            x1 = rot[..., :half]
+            x2 = rot[..., half:]
+            out = normed.clone()
+            out[..., :half] = x1 * cos - x2 * sin
+            out[..., half:rotary_dim] = x2 * cos + x1 * sin
+            return out.to(x.dtype)
+
+        nt = qkv.shape[0]
+        qsz = num_heads * HEAD_DIM
+        kvsz = num_kv_heads * HEAD_DIM
+        has_index = bool(num_index_heads and num_index_heads > 0)
+        if has_index:
+            iqsz = num_index_heads * HEAD_DIM
+            q_in, k_in, v_in, iq_in, ik_in = qkv.split(
+                [qsz, kvsz, kvsz, iqsz, HEAD_DIM], dim=-1)
+        else:
+            q_in, k_in, v_in = qkv.split([qsz, kvsz, kvsz], dim=-1)
+
+        q_r = _norm_rope(q_in.view(nt, num_heads, HEAD_DIM),
+                         q_norm_weight).view(nt, qsz)
+        k_r = _norm_rope(k_in.view(nt, num_kv_heads, HEAD_DIM),
+                         k_norm_weight).view(nt, kvsz)
+        (q_out if q_out is not None else q_in).copy_(q_r)
+        k_in.copy_(k_r)
+
+        if has_index:
+            iq_r = _norm_rope(iq_in.view(nt, num_index_heads, HEAD_DIM),
+                              index_q_norm_weight).view(nt, iqsz)
+            ik_r = _norm_rope(ik_in.view(nt, 1, HEAD_DIM),
+                              index_k_norm_weight).view(nt, HEAD_DIM)
+            (index_q_out if index_q_out is not None else iq_in).copy_(iq_r)
+            ik_in.copy_(ik_r)
+
+        if kv_cache is not None and slot_mapping is not None:
+            blk = slot_mapping // block_size
+            pos = slot_mapping % block_size
+            kv_cache[blk, 0, pos] = k_r.view(
+                nt, num_kv_heads, HEAD_DIM).to(kv_cache.dtype)
+            kv_cache[blk, 1, pos] = v_in.reshape(
+                nt, num_kv_heads, HEAD_DIM).to(kv_cache.dtype)
+        if has_index and index_cache is not None:
+            ism = (index_slot_mapping
+                   if index_slot_mapping is not None else slot_mapping)
+            index_cache.view(-1, HEAD_DIM)[ism] = ik_r.to(index_cache.dtype)
+M3_SHIM_EOF
+    python3 -c "from vllm import _custom_ops as ops; assert callable(ops.fused_minimax_m3_qknorm_rope_kv_insert); print('m3 fused-op fallback registered')"
 fi
 
 # Weights live on the NFS hub cache (/it-share/hf-hub-cache mounted as
