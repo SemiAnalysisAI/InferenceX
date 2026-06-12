@@ -8701,7 +8701,7 @@ dsv4-fp4-gb200-dynamo-sglang:
           ep: 16
           dp-attn: true
       # WideEP TP=16 decode: 2p1d-dep8-dep16. 8 nodes.
-      - conc-list: [2048]
+      - conc-list: [1536]
         prefill:
           num-worker: 2
           tp: 8
