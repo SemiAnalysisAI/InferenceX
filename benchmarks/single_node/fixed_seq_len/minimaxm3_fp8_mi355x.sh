@@ -56,7 +56,7 @@ fi
 
 # 2) Build + load the fused _C op if the installed wheel lacks the symbol.
 if ! python3 -c "import torch,sys; sys.exit(0 if hasattr(torch.ops._C,'fused_minimax_m3_qknorm_rope_kv_insert') else 1)" 2>/dev/null; then
-    M3_BUILD_DIR="${HF_HUB_CACHE%/}/m3build-wave32"
+    M3_BUILD_DIR="${HF_HUB_CACHE%/}/m3build-wave32-v2"
     M3_SO="$M3_BUILD_DIR/ext/minimax_m3_fused_op.so"
     mkdir -p "$M3_BUILD_DIR/ext"
     [ -d "$M3_SRC" ] || git clone --depth 1 --branch "$M3_BRANCH" https://github.com/vllm-project/vllm.git "$M3_SRC"
@@ -66,6 +66,8 @@ if ! python3 -c "import torch,sys; sys.exit(0 if hasattr(torch.ops._C,'fused_min
     # which faults on gfx950 at the first shuffle. Keep the mask aligned with
     # the explicit shuffle width until the upstream HIP fix lands.
     sed -i 's/#define FINAL_MASK 0xffffffffffffffffULL/#define FINAL_MASK 0xffffffffULL/' \
+        "$M3_SRC/csrc/libtorch_stable/fused_minimax_m3_qknorm_rope_kv_insert_kernel.cu"
+    ! grep -q 'FINAL_MASK 0xffffffffffffffffULL' \
         "$M3_SRC/csrc/libtorch_stable/fused_minimax_m3_qknorm_rope_kv_insert_kernel.cu"
 
     # Minimal stable-ABI registration for the single op, mirroring
@@ -110,13 +112,14 @@ from torch.utils.cpp_extension import load
 src = os.environ["M3_KERNEL_SRC"]
 stable = src + "/libtorch_stable"
 flags = ["-DUSE_ROCM=1", "-O3", "-std=c++17"]
+hip_flags = flags + ["-mwavefrontsize32"]
 load(
     name="minimax_m3_fused_op",
     sources=[stable + "/fused_minimax_m3_qknorm_rope_kv_insert_kernel.cu",
              os.environ["M3_BIND"]],
     extra_include_paths=[stable, src],   # libtorch_stable first: stable ops.h wins
     extra_cflags=flags,
-    extra_cuda_cflags=flags,
+    extra_cuda_cflags=hip_flags,
     build_directory=os.environ["M3_OUT"],
     with_cuda=True,
     is_python_module=False,
