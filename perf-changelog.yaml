@@ -3544,6 +3544,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
 
 - config-keys:
+    - dsv4-fp4-b300-trt
+    - dsv4-fp4-b300-trt-mtp
+  description:
+    - "Update the B300 TensorRT-LLM DeepSeek-V4-Pro image to ghcr.io/semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066"
+    - "B300 analog of PR #1699 (B200): sync the dsv4-fp4-b300-trt and dsv4-fp4-b300-trt-mtp recipes with the agg frontier config (worker GC off, NCCL graph mixing off, mimalloc/PyTorch alloc tweaks, higher KV cache fractions by DP path, stream_interval 100, use_low_precision_moe_combine, DP batching_wait_iters 30, max_num_tokens drops the OSL term)"
+    - "MTP recipe uses max_draft_len with a variable default draft length, enable_lm_head_tp_in_adp on the DP-attn path, and removes timeout_iters from the DP config"
+    - "Cap cuda_graph_config.max_batch_size at 1024 on both recipes: TRTLLM_MLA_EXTRA_OVERLAP hands MLA prologue tensors across streams without record_stream(), so CUDA-graph warmup at decode batch >1024 (repros at 1088, e.g. tp8/ep8 dp-attn conc-2048 on B300) use-after-frees into CUDA_ERROR_ILLEGAL_ADDRESS; workaround until NVIDIA/TensorRT-LLM#15265 ships in the image. Runtime --max_batch_size stays = CONC, so batches >1024 run eager"
+    - "B300-specific bits preserved (MODEL_PATH download block, TRTLLM_MHC_ENABLE_FUSED_HC=1, trtllm-serve MODEL_PATH); drop the 1k1k conc-2048 point on the tp8/ep8 DP-attn row (both recipes), the batch regime that triggers the MLA-overlap crash above; rest of the search space unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1703
+
+- config-keys:
     - dsr1-fp4-b200-dynamo-sglang-mtp
   description:
     - "Move both the 1k1k and 8k1k scenarios of the DeepSeek-R1 FP4 B200 dynamo-sglang MTP disagg sweep to local split recipes (one flat recipe YAML per topology under benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4/{1k1k,8k1k}/disagg/mtp/), rather than referencing recipes from the srt-slurm repo"

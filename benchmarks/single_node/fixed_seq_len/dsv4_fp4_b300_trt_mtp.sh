@@ -58,24 +58,52 @@ sanitize_slurm_mpi_env_for_trtllm
 export NCCL_NVLS_ENABLE="${NCCL_NVLS_ENABLE:-0}"
 echo "NCCL_NVLS_ENABLE: $NCCL_NVLS_ENABLE"
 
+export TRTLLM_SERVER_DISABLE_GC="${TRTLLM_SERVER_DISABLE_GC:-1}"
+export TRTLLM_WORKER_DISABLE_GC="${TRTLLM_WORKER_DISABLE_GC:-1}"
+export NCCL_GRAPH_MIXING_SUPPORT="${NCCL_GRAPH_MIXING_SUPPORT:-0}"
+export MIMALLOC_PURGE_DELAY="${MIMALLOC_PURGE_DELAY:-0}"
+export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
+
 nvidia-smi
 
 SERVER_LOG="$PWD/server.log"
 EXTRA_CONFIG_FILE="dsv4-fp4-trt-mtp.yml"
 
-MOE_BACKEND="TRTLLM"
-MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-2}"
+# MoE backend: TRTLLM at low/mid concurrency; switch to MEGAMOE_DEEPGEMM at high
+# concurrency for short ISL (1k).
+if [[ "$ISL" -le 1024 && "$CONC" -ge 512 ]]; then
+    MOE_BACKEND="${MOE_BACKEND:-MEGAMOE_DEEPGEMM}"
+else
+    MOE_BACKEND="${MOE_BACKEND:-TRTLLM}"
+fi
+# MTP draft length: 3 at low/mid concurrency; steps down to 2 at high concurrency
+# for long ISL (8k).
+if [[ "$ISL" -ge 4096 && "$CONC" -ge 128 ]]; then
+    MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-2}"
+else
+    MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
+fi
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
-CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
-KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.50}"
+# Cap CUDA-graph capture at batch 1024. TRTLLM_MLA_EXTRA_OVERLAP hands MLA
+# prologue tensors across streams without record_stream(), so graph warmup at
+# decode batch >1024 (repros at 1088, e.g. tp8/ep8 dp-attn conc-2048 on B300)
+# hits a use-after-free -> CUDA_ERROR_ILLEGAL_ADDRESS. Fixed upstream in
+# NVIDIA/TensorRT-LLM#15265; cap until that fix ships in the image. Runtime
+# --max_batch_size stays = CONC, so batches >1024 just run eager.
+CUDA_GRAPH_MAX_BATCH_SIZE=$(( MAX_BATCH_SIZE < 1024 ? MAX_BATCH_SIZE : 1024 ))
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.6}"
+else
+    KV_CACHE_FREE_MEM_FRACTION="${KV_CACHE_FREE_MEM_FRACTION:-0.9}"
+fi
 
 ATTENTION_DP_CONFIG=""
 if [[ "$DP_ATTENTION" == "true" ]]; then
     ATTENTION_DP_CONFIG="
 attention_dp_config:
-    batching_wait_iters: 0
+    batching_wait_iters: 30
     enable_balance: true
-    timeout_iters: 60"
+enable_lm_head_tp_in_adp: true"
 fi
 
 cat > "$EXTRA_CONFIG_FILE" << EOF
@@ -89,20 +117,21 @@ kv_cache_config:
     dtype: fp8
     free_gpu_memory_fraction: $KV_CACHE_FREE_MEM_FRACTION
     enable_block_reuse: false
-stream_interval: 10
+stream_interval: 100
 num_postprocess_workers: 4
 moe_config:
     backend: $MOE_BACKEND
+    use_low_precision_moe_combine: true
 speculative_config:
     decoding_type: MTP
-    num_nextn_predict_layers: $MTP
+    max_draft_len: $MTP
 EOF
 
 echo "Generated config file contents:"
 cat "$EXTRA_CONFIG_FILE"
 
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
-MAX_NUM_TOKENS=$(( ISL + OSL + (MTP + 1) * MAX_BATCH_SIZE + 256 ))
+MAX_NUM_TOKENS=$(( ISL + (MTP + 1) * MAX_BATCH_SIZE + 256 ))
 MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
 
 if [ "${EVAL_ONLY}" = "true" ]; then

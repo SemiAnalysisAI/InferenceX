@@ -3049,7 +3049,7 @@ dsv4-fp4-b300-vllm-agentic:
       - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,  conc-list: [128, 256, 512] }
 
 dsv4-fp4-b300-trt:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -3063,7 +3063,7 @@ dsv4-fp4-b300-trt:
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 64 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -3072,7 +3072,7 @@ dsv4-fp4-b300-trt:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
 
 dsv4-fp4-b300-trt-mtp:
-  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
@@ -3086,7 +3086,7 @@ dsv4-fp4-b300-trt-mtp:
       search-space:
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 2048, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 512, conc-end: 1024, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
