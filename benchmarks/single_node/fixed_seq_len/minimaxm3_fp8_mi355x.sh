@@ -7,13 +7,21 @@
 # mandatory (MSA sparse_block_size; default 16 fails with "No common block
 # size for 16" on AMD).
 #
-# Day-zero caveat: no public ROCm image carries M3 support yet
+# Day-zero enablement: no public ROCm image carries M3 support yet
 # (vllm-project/vllm#45381 unmerged; the recipe's AMD image is a placeholder).
-# The M3 AMD path is pure Python/Triton (vllm/models/minimax_m3/{amd,common}),
-# so we overlay the m3_release python tree onto the installed nightly wheel —
-# the image's base commit (6fbfdd18) is ~6 commits behind the PR merge-base
-# (0cd9b7af), keeping drift minimal. Compiled .so artifacts from the wheel are
-# preserved; the new csrc kernels in the PR are NVIDIA-only.
+# Two pieces are missing from the installed nightly wheel and we add them at
+# job start:
+#   1) The M3 python tree (vllm/models/minimax_m3/{amd,common,nvidia}) — overlaid
+#      from the PR's m3_release branch onto the installed package.
+#   2) The fused attention pre-processing kernel
+#      (fused_minimax_m3_qknorm_rope_kv_insert) — the AMD model path calls this
+#      compiled op on EVERY forward (Gemma QK-norm + partial-NeoX RoPE +
+#      bf16 KV/index-cache scatter). It is NOT NVIDIA-only; it lives in
+#      csrc/libtorch_stable/ and the kernel author guards the ROCm path with
+#      USE_ROCM. The wheel's _C extension (base commit 6fbfdd18) predates it,
+#      so we compile just that one .cu as a supplemental libtorch-stable .so for
+#      gfx950 and load it into the _C namespace. Cached on the shared HF mount so
+#      only the first job per image pays the (~1-2 min) build cost.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -33,97 +41,100 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# Overlay the m3_release python tree if this vllm build doesn't know M3 yet.
-# The M3 AMD path is Python + Triton (vllm/models/minimax_m3/{amd,common}/ops
-# are all @triton.jit), with ONE exception: the horizontally-fused QK-norm +
-# partial-NeoX-RoPE (+ bf16 KV/index-cache scatter) helper is a compiled csrc
-# kernel (fused_minimax_m3_qknorm_rope_kv_insert) that no public ROCm wheel
-# ships yet. We overlay the python tree and then register a pure-torch fallback
-# for that single op (bit-parity vs the PR's reference, verified on gfx950).
+M3_BRANCH=m3_release
+M3_SRC=/tmp/vllm-m3
+
+# 1) Overlay the m3_release python tree if this vllm build doesn't know M3 yet.
 if ! python3 -c "import vllm.models.minimax_m3" 2>/dev/null; then
-    echo "Overlaying vLLM m3_release python tree onto installed package"
-    rm -rf /tmp/vllm-m3
-    git clone --depth 1 --branch m3_release https://github.com/vllm-project/vllm.git /tmp/vllm-m3
+    echo "Overlaying vLLM ${M3_BRANCH} python tree onto installed package"
+    rm -rf "$M3_SRC"
+    git clone --depth 1 --branch "$M3_BRANCH" https://github.com/vllm-project/vllm.git "$M3_SRC"
     VLLM_PKG_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))")
-    cp -r /tmp/vllm-m3/vllm/* "$VLLM_PKG_DIR/"
+    cp -r "$M3_SRC"/vllm/* "$VLLM_PKG_DIR/"
     python3 -c "import vllm.models.minimax_m3; print('m3 overlay OK')"
+fi
 
-    # Day-zero ROCm shim: the m3_release fused_minimax_m3_qknorm_rope_kv_insert
-    # csrc kernel is absent from the nightly ROCm wheel (torch.ops._C has no
-    # such symbol), so vllm/_custom_ops.py's python wrapper would dispatch into
-    # a non-existent op. Append a torch fallback that takes over when the
-    # compiled symbol is missing (a no-op once an M3-aware ROCm image lands).
-    # Semantics mirror tests/kernels/test_fused_minimax_m3_qknorm_rope_kv_insert.py.
-    cat >> "$VLLM_PKG_DIR/_custom_ops.py" <<'M3_SHIM_EOF'
+# 2) Build + load the fused _C op if the installed wheel lacks the symbol.
+if ! python3 -c "import torch,sys; sys.exit(0 if hasattr(torch.ops._C,'fused_minimax_m3_qknorm_rope_kv_insert') else 1)" 2>/dev/null; then
+    M3_BUILD_DIR="${HF_HUB_CACHE%/}/m3build"
+    M3_SO="$M3_BUILD_DIR/ext/minimax_m3_fused_op.so"
+    mkdir -p "$M3_BUILD_DIR/ext"
+    [ -d "$M3_SRC" ] || git clone --depth 1 --branch "$M3_BRANCH" https://github.com/vllm-project/vllm.git "$M3_SRC"
 
+    # Minimal stable-ABI registration for the single op, mirroring
+    # csrc/libtorch_stable/torch_bindings.cpp (def schema + CUDA impl).
+    cat > "$M3_BUILD_DIR/binding.cpp" <<'CPPEOF'
+// Day-zero: register fused_minimax_m3_qknorm_rope_kv_insert into the _C
+// namespace from a supplemental .so (the nightly wheel's _C predates it).
+#include "ops.h"
+#include "core/registration.h"
+#include <torch/csrc/stable/library.h>
 
-# ─── Day-zero MiniMax-M3 ROCm fallback (auto-removed once csrc lands) ─────────
-if not hasattr(torch.ops._C, "fused_minimax_m3_qknorm_rope_kv_insert"):
+STABLE_TORCH_LIBRARY_FRAGMENT(_C, ops) {
+  ops.def(
+      "fused_minimax_m3_qknorm_rope_kv_insert("
+      "Tensor! qkv, Tensor q_norm_weight, Tensor k_norm_weight, "
+      "Tensor cos_sin_cache, Tensor positions, int num_heads, "
+      "int num_kv_heads, int rotary_dim, float eps, "
+      "Tensor? index_q_norm_weight, Tensor? index_k_norm_weight, "
+      "int num_index_heads, "
+      "Tensor? slot_mapping, Tensor? index_slot_mapping, "
+      "Tensor!? kv_cache, Tensor!? index_cache, "
+      "int block_size, Tensor!? q_out, Tensor!? index_q_out) -> ()");
+}
 
-    def fused_minimax_m3_qknorm_rope_kv_insert(  # type: ignore[no-redef]
-        qkv, q_norm_weight, k_norm_weight, cos_sin_cache, positions,
-        num_heads, num_kv_heads, rotary_dim, eps,
-        index_q_norm_weight=None, index_k_norm_weight=None, num_index_heads=0,
-        slot_mapping=None, index_slot_mapping=None, kv_cache=None,
-        index_cache=None, block_size=0, q_out=None, index_q_out=None,
-    ):
-        HEAD_DIM = 128
-        half = rotary_dim // 2
-        cs = cos_sin_cache[positions].float()
-        cos = cs[..., :half].unsqueeze(1)
-        sin = cs[..., half:].unsqueeze(1)
+STABLE_TORCH_LIBRARY_IMPL(_C, CUDA, ops) {
+  ops.impl("fused_minimax_m3_qknorm_rope_kv_insert",
+           TORCH_BOX(&fused_minimax_m3_qknorm_rope_kv_insert));
+}
+CPPEOF
 
-        def _norm_rope(x, w):  # x: [nt, nh, 128]
-            xf = x.float()
-            var = xf.pow(2).mean(-1, keepdim=True)
-            normed = xf * torch.rsqrt(var + eps) * (1.0 + w.float())
-            rot = normed[..., :rotary_dim]
-            x1 = rot[..., :half]
-            x2 = rot[..., half:]
-            out = normed.clone()
-            out[..., :half] = x1 * cos - x2 * sin
-            out[..., half:rotary_dim] = x2 * cos + x1 * sin
-            return out.to(x.dtype)
+    # Use the cached .so if it loads on this image; otherwise build it. The
+    # launcher gives one job per node (--exclusive), so node-local /tmp is a
+    # safe build scratch dir; the result is published to the shared mount via an
+    # atomic rename so concurrent jobs on other nodes reuse it.
+    if ! python3 -c "import torch; torch.ops.load_library('$M3_SO')" 2>/dev/null; then
+        echo "Building MiniMax-M3 fused op for ROCm (gfx950)"
+        LOCAL_EXT=/tmp/m3ext
+        rm -rf "$LOCAL_EXT"; mkdir -p "$LOCAL_EXT"
+        M3_KERNEL_SRC="$M3_SRC/csrc" M3_BIND="$M3_BUILD_DIR/binding.cpp" M3_OUT="$LOCAL_EXT" python3 <<'PYEOF'
+import os, torch
+from torch.utils.cpp_extension import load
+src = os.environ["M3_KERNEL_SRC"]
+stable = src + "/libtorch_stable"
+flags = ["-DUSE_ROCM=1", "-O3", "-std=c++17"]
+load(
+    name="minimax_m3_fused_op",
+    sources=[stable + "/fused_minimax_m3_qknorm_rope_kv_insert_kernel.cu",
+             os.environ["M3_BIND"]],
+    extra_include_paths=[stable, src],   # libtorch_stable first: stable ops.h wins
+    extra_cflags=flags,
+    extra_cuda_cflags=flags,
+    build_directory=os.environ["M3_OUT"],
+    with_cuda=True,
+    is_python_module=False,
+    verbose=True,
+)
+assert hasattr(torch.ops._C, "fused_minimax_m3_qknorm_rope_kv_insert"), "op did not register"
+print("m3 fused op build OK")
+PYEOF
+        cp -f "$LOCAL_EXT/minimax_m3_fused_op.so" "$M3_SO.tmp.$$" && mv -f "$M3_SO.tmp.$$" "$M3_SO"
+    fi
 
-        nt = qkv.shape[0]
-        qsz = num_heads * HEAD_DIM
-        kvsz = num_kv_heads * HEAD_DIM
-        has_index = bool(num_index_heads and num_index_heads > 0)
-        if has_index:
-            iqsz = num_index_heads * HEAD_DIM
-            q_in, k_in, v_in, iq_in, ik_in = qkv.split(
-                [qsz, kvsz, kvsz, iqsz, HEAD_DIM], dim=-1)
-        else:
-            q_in, k_in, v_in = qkv.split([qsz, kvsz, kvsz], dim=-1)
+    # Have _custom_ops load the prebuilt op into _C in every (worker) process.
+    VLLM_PKG_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))")
+    if ! grep -q "MiniMax-M3 day-zero" "$VLLM_PKG_DIR/_custom_ops.py"; then
+        cat >> "$VLLM_PKG_DIR/_custom_ops.py" <<PYEOF2
 
-        q_r = _norm_rope(q_in.view(nt, num_heads, HEAD_DIM),
-                         q_norm_weight).view(nt, qsz)
-        k_r = _norm_rope(k_in.view(nt, num_kv_heads, HEAD_DIM),
-                         k_norm_weight).view(nt, kvsz)
-        (q_out if q_out is not None else q_in).copy_(q_r)
-        k_in.copy_(k_r)
-
-        if has_index:
-            iq_r = _norm_rope(iq_in.view(nt, num_index_heads, HEAD_DIM),
-                              index_q_norm_weight).view(nt, iqsz)
-            ik_r = _norm_rope(ik_in.view(nt, 1, HEAD_DIM),
-                              index_k_norm_weight).view(nt, HEAD_DIM)
-            (index_q_out if index_q_out is not None else iq_in).copy_(iq_r)
-            ik_in.copy_(ik_r)
-
-        if kv_cache is not None and slot_mapping is not None:
-            blk = slot_mapping // block_size
-            pos = slot_mapping % block_size
-            kv_cache[blk, 0, pos] = k_r.view(
-                nt, num_kv_heads, HEAD_DIM).to(kv_cache.dtype)
-            kv_cache[blk, 1, pos] = v_in.reshape(
-                nt, num_kv_heads, HEAD_DIM).to(kv_cache.dtype)
-        if has_index and index_cache is not None:
-            ism = (index_slot_mapping
-                   if index_slot_mapping is not None else slot_mapping)
-            index_cache.view(-1, HEAD_DIM)[ism] = ik_r.to(index_cache.dtype)
-M3_SHIM_EOF
-    python3 -c "from vllm import _custom_ops as ops; assert callable(ops.fused_minimax_m3_qknorm_rope_kv_insert); print('m3 fused-op fallback registered')"
+# --- MiniMax-M3 day-zero overlay: load prebuilt fused _C op if missing ---
+import os as _m3_os
+_m3_so = _m3_os.environ.get("M3_FUSED_OP_SO", "$M3_SO")
+if _m3_so and _m3_os.path.exists(_m3_so) and not hasattr(torch.ops._C, "fused_minimax_m3_qknorm_rope_kv_insert"):
+    torch.ops.load_library(_m3_so)
+PYEOF2
+    fi
+    export M3_FUSED_OP_SO="$M3_SO"
+    python3 -c "import vllm._custom_ops, torch; assert hasattr(torch.ops._C,'fused_minimax_m3_qknorm_rope_kv_insert'); print('m3 fused op load OK')"
 fi
 
 # Weights live on the NFS hub cache (/it-share/hf-hub-cache mounted as
