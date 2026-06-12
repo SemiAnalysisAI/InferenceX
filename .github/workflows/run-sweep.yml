@@ -10,6 +10,7 @@ concurrency:
           github.event.label.name != 'full-sweep-enabled' &&
           github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.event.label.name != 'full-sweep-fail-fast' &&
+          github.event.label.name != 'priority' &&
           github.run_id ||
           'active'
         }}
@@ -43,7 +44,8 @@ jobs:
               github.event.label.name == 'sweep-enabled' ||
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
-              github.event.label.name == 'full-sweep-fail-fast'
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'priority'
             )
         steps:
             - name: Checkout code
@@ -74,7 +76,8 @@ jobs:
                 github.event.label.name == 'sweep-enabled' ||
                 github.event.label.name == 'full-sweep-enabled' ||
                 github.event.label.name == 'non-canary-full-sweep-enabled' ||
-                github.event.label.name == 'full-sweep-fail-fast'
+                github.event.label.name == 'full-sweep-fail-fast' ||
+                github.event.label.name == 'priority'
               )
             ) ||
             (
@@ -148,6 +151,56 @@ jobs:
                     --event-name "${{ github.event_name }}" \
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
+
+            - name: Authorize priority label
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'priority')
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+              run: |
+                  adder=$(gh api "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/timeline" \
+                      --paginate --jq '[.[] | select(.event == "labeled" and .label.name == "priority")] | last | .actor.login')
+                  if [ -z "$adder" ] || [ "$adder" = "null" ]; then
+                      echo "::error::Could not determine who added the 'priority' label"
+                      exit 1
+                  fi
+                  state=$(gh api "orgs/${{ github.repository_owner }}/memberships/${adder}" --jq .state 2>/dev/null || echo "none")
+                  if [ "$state" != "active" ]; then
+                      gh api -X DELETE "repos/${{ github.repository }}/issues/${{ github.event.pull_request.number }}/labels/priority" || true
+                      echo "::error::'priority' may only be used by ${{ github.repository_owner }} org members; label (added by ${adder}) has been removed"
+                      exit 1
+                  fi
+                  echo "'priority' label authorized: added by ${adder} (${{ github.repository_owner }} org member)"
+
+            - name: Preempt runners (priority)
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'priority')
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+                  SEARCH_SPACE: ${{ steps.setup.outputs.search-space-config }}
+              run: |
+                  TARGET_LABELS=$(jq -r '[.. | objects | .runner? // empty] | unique | join(",")' <<<"$SEARCH_SPACE")
+                  if [ -z "$TARGET_LABELS" ]; then
+                      echo "Search space names no runners; nothing to preempt."
+                      echo "[]" > preempted_runs.json
+                      exit 0
+                  fi
+                  python3 "${GITHUB_WORKSPACE}/utils/preempt_runners.py" \
+                      --repo "${{ github.repository }}" \
+                      --self-run-id "${{ github.run_id }}" \
+                      --target-labels "$TARGET_LABELS" \
+                      --output preempted_runs.json
+
+            - name: Upload preempted runs artifact
+              if: >-
+                  github.event_name == 'pull_request' &&
+                  contains(github.event.pull_request.labels.*.name, 'priority')
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: preempted-runs
+                  path: preempted_runs.json
 
     canary-select:
         needs: setup
@@ -748,7 +801,8 @@ jobs:
               github.event.label.name == 'sweep-enabled' ||
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
-              github.event.label.name == 'full-sweep-fail-fast'
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'priority'
             )
         runs-on: ubuntu-latest
         permissions:
@@ -771,3 +825,31 @@ jobs:
                           issue_number: context.issue.number,
                           body,
                       });
+
+    restore-preempted:
+        needs: [setup, collect-results, collect-evals]
+        if: >-
+            always() &&
+            github.event_name == 'pull_request' &&
+            contains(github.event.pull_request.labels.*.name, 'priority') &&
+            needs.setup.result == 'success'
+        runs-on: ubuntu-latest
+        steps:
+            - name: Download preempted runs artifact
+              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+              with:
+                  name: preempted-runs
+
+            - name: Re-run failed jobs of preempted runs
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+              run: |
+                  count=$(jq 'length' preempted_runs.json)
+                  echo "Restoring ${count} preempted run(s)"
+                  jq -r '.[].run_id' preempted_runs.json | while read -r id; do
+                      if gh run rerun "$id" --failed --repo "${{ github.repository }}"; then
+                          echo "Re-ran failed jobs of run ${id}"
+                      else
+                          echo "::warning::Could not re-run failed jobs of run ${id}; restore manually with: gh run rerun ${id} --failed --repo ${{ github.repository }}"
+                      fi
+                  done
