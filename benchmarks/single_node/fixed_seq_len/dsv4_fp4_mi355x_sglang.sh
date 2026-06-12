@@ -60,7 +60,9 @@ start_gpu_monitor
 PARALLEL_ARGS=(
     --tensor-parallel-size "$TP"
 )
+CHUNKED_PREFILL_SIZE=8192
 if [ "${DP_ATTENTION}" = "true" ]; then
+    CHUNKED_PREFILL_SIZE=$((8192 * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
@@ -85,7 +87,7 @@ sglang serve \
     --swa-full-tokens-ratio 0.15 \
     --page-size 256 \
     --context-length $MAX_MODEL_LEN \
-    --chunked-prefill-size 8192 \
+    --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \
     --reasoning-parser deepseek-v4 \
