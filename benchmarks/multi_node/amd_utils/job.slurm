@@ -27,6 +27,8 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_vllm.yaml"
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_atom.yaml"
+else
+    MODELS_YAML="$(pwd)/models.yaml"
 fi
 
 if [[ ! -f "$MODELS_YAML" ]]; then
