@@ -46,6 +46,10 @@ rocm-smi || true
 amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
+# https://huggingface.co/datasets/semianalysisai/cc-traces-weka-with-subagents-060826
+export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060826
+
+# ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
