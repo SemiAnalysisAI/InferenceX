@@ -3605,6 +3605,6 @@
     - dsv4-fp4-mi355x-atom
   description:
     - "Update image to rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_20260612"
-    - "Enable --enable-tbo (Token-Bucket Overlap) on top of DPA+TP8 at high concurrency: ISL=1024/OSL=1024 at CONC>=1024, ISL=8192/OSL=1024 at CONC>=256"
+    - "Enable --enable-tbo (Two Batch Overlap) on top of DPA+TP8 at high concurrency: ISL=1024/OSL=1024 at CONC>=1024, ISL=8192/OSL=1024 at CONC>=256"
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
-  pr-link: 
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
