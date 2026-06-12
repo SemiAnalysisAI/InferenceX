@@ -915,8 +915,6 @@ def main(args: argparse.Namespace):
         if not args.save_detailed:
             # Remove fields with too many data points
             for field in [
-                "input_lens",
-                "output_lens",
                 "ttfts",
                 "itls",
                 "generated_texts",
