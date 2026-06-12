@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
-# Day-zero MiniMax-M3 MXFP8 H100 recipe
-# (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3). --block-size 128 is
-# mandatory: MSA sparse attention's block size is 128 and the KV cache
-# block size must match. TP mode (dp-attn=false) optionally enables expert
-# parallel; DP mode (dp-attn=true) is the recipe's "DP + Expert Parallel"
-# serve mode (--data-parallel-size $TP --enable-expert-parallel).
+# MiniMax-M3 MXFP8 H100 single-node vLLM recipe
+# (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3). 427B/26B-active MoE with MSA
+# sparse attention. --block-size 128 is mandatory (MSA sparse_block_size is
+# 128; the default 16 misaligns sparse indexing). The benchmark is text-only,
+# so --language-model-only skips the vision encoder and frees VRAM for KV.
+# dp-attn=true maps to DP×EP (DEP) per the recipe's "DP8 + Expert Parallel"
+# layout; ep>1 maps to TP+EP (TEP). Hopper has no native MX tensor cores, so
+# the MXFP8 MoE runs through vLLM's Hopper-compatible backends (Marlin /
+# DeepGEMM) selected by the mxfp8 oracle in the minimax-m3 image.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -32,58 +35,43 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 SERVER_LOG=/workspace/server.log
 
 export PYTHONNOUSERSITE=1
-export SAFETENSORS_FAST_GPU=1
-# ~427 GB of MXFP8 weights; engine startup can exceed the default 600s.
+# ~444 GB of MXFP8 weights off shared FS; engine startup can exceed the
+# default 600s readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 if [ "${DP_ATTENTION}" = "true" ]; then
-  PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP" --enable-expert-parallel)
+  PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
 elif [ "$EP_SIZE" -gt 1 ]; then
-  PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-expert-parallel)
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
 else
-  PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+  PARALLEL_ARGS="--tensor-parallel-size=$TP"
 fi
+
+# Fixed-seq-len runs don't need graphs past the request concurrency: capture
+# up to the next power of two >= CONC (per-DP-rank batch is CONC/DP but ragged
+# arrival makes the full CONC bound safer), capped at vLLM's 2048 ceiling.
+CAPTURE_SIZE=4
+while (( CAPTURE_SIZE < CONC )); do CAPTURE_SIZE=$((CAPTURE_SIZE * 2)); done
+(( CAPTURE_SIZE > 2048 )) && CAPTURE_SIZE=2048
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
     MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
-
-# Size the running batch and graph capture to the benchmark concurrency
-# rather than the engine defaults. Under DP each rank only sees its share
-# of the requests; 2x slack covers uneven load balancing.
-if [ "${DP_ATTENTION}" = "true" ]; then
-  MAX_NUM_SEQS=$(( ((CONC + TP - 1) / TP) * 2 ))
-  if [ "$MAX_NUM_SEQS" -gt "$CONC" ]; then MAX_NUM_SEQS=$CONC; fi
-else
-  MAX_NUM_SEQS=$CONC
-fi
-CUDAGRAPH_CAPTURE_SIZE=$(( MAX_NUM_SEQS < 512 ? MAX_NUM_SEQS : 512 ))
-
-if [ "$ISL" = "8192" ]; then
-  MAX_NUM_BATCHED_TOKENS=16384
-else
-  MAX_NUM_BATCHED_TOKENS=8192
-fi
-
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
 set -x
-vllm serve "$MODEL" --host 0.0.0.0 --port "$PORT" \
---block-size 128 \
-"${PARALLEL_ARGS[@]}" \
+vllm serve $MODEL --port $PORT \
+$PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
---max-model-len "$MAX_MODEL_LEN" \
---max-num-seqs "$MAX_NUM_SEQS" \
---max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
---max-cudagraph-capture-size "$CUDAGRAPH_CAPTURE_SIZE" \
+--max-model-len $MAX_MODEL_LEN \
+--block-size 128 \
 --language-model-only \
---tool-call-parser minimax_m3 \
---reasoning-parser minimax_m3 \
---enable-auto-tool-choice \
---no-enable-prefix-caching \
---trust-remote-code > "$SERVER_LOG" 2>&1 &
+--max-cudagraph-capture-size $CAPTURE_SIZE \
+--max-num-batched-tokens "$((ISL * 2 ))" \
+--stream-interval 20 --no-enable-prefix-caching \
+--trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
