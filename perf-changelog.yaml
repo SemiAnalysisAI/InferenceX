@@ -3629,9 +3629,3 @@
     - "Update SGLang image from v0.5.12-cu130 to nightly-dev-cu13-20260605-7dc73766"
     - "glm5-fp4-b200-sglang-mtp: override --mem-fraction-static from 0.85 to 0.8 when ISL=8192, OSL=1024, and CONC>128 (default 0.85 elsewhere)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1567
-
-- config-keys:
-    - gptoss-fp4-h100-vllm
-  description:
-    - "Test entry for the full-sweep-fail-fast label (PR #1718): exercises the new fail-fast sweep mode on a basic vLLM H100 config; will be reverted before merge"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1718
