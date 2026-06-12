@@ -2022,7 +2022,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
       # 1P2D TP8
       - spec-decoding: "mtp"
-        conc-list: [ 32 ]
+        conc-list: [ 32, 64 ]
         prefill:
           num-worker: 1
           tp: 8
