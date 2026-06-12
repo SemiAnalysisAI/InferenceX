@@ -41,6 +41,9 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     --tensor-parallel-size 8 \
     --block-size 128 \
+    --language-model-only \
+    --max-model-len "$MAX_MODEL_LEN" \
+    --enforce-eager \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
