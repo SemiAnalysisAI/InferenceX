@@ -30,7 +30,21 @@ fi
 
 nvidia-smi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
+# The shared HF cache lives on a network FS; concurrent day-zero downloads of
+# the same ~444 GB checkpoint from sibling nodes hit huggingface_hub's
+# WeakFileLock "[Errno 116] Stale file handle" race. Retry the download (it
+# resumes), then serve with HF_HUB_OFFLINE=1 so vllm's snapshot_download does
+# a lock-free local-cache read instead of re-contending the lock files.
+SERVE_OFFLINE=()
+if [[ "$MODEL" != /* ]]; then
+  for attempt in 1 2 3 4 5; do
+    hf download "$MODEL" && break
+    if [ "$attempt" = 5 ]; then echo "hf download failed after $attempt attempts" >&2; exit 1; fi
+    echo "hf download attempt $attempt failed; retrying in 60s" >&2
+    sleep 60
+  done
+  SERVE_OFFLINE=(env HF_HUB_OFFLINE=1)
+fi
 
 SERVER_LOG=/workspace/server.log
 
@@ -62,7 +76,7 @@ fi
 start_gpu_monitor
 
 set -x
-vllm serve $MODEL --port $PORT \
+"${SERVE_OFFLINE[@]}" vllm serve $MODEL --port $PORT \
 $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
