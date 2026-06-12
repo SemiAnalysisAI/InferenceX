@@ -3600,3 +3600,9 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+
+- config-keys:
+    - dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp
+  description:
+    - "Remove conc128,64 for dep8 case"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1714
