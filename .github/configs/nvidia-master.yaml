@@ -9477,6 +9477,26 @@ gptoss-fp4-b200-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
+# Smoke-test config for the new CoreWeave B300 runner (b300-cw). Mirrors the
+# b200 agentic-coding sibling above but targets runner b300-cw with a single
+# minimal search-space point (tp=8, no offloading, conc=1) at the agentx-mvp
+# 900s floor, so one run validates the launcher end-to-end without a full
+# sweep. gpt-oss agentic was removed from this branch (commit 746ba4ca);
+# benchmarks/single_node/agentic/gptoss_fp4_b300.sh is restored alongside this.
+gptoss-fp4-b300-vllm-agentic:
+  image: vllm/vllm-openai:v0.22.0
+  model: openai/gpt-oss-120b
+  model-prefix: gptoss
+  runner: b300-cw
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [1] }
+
 minimaxm2.5-fp8-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.1
   model: MiniMaxAI/MiniMax-M2.5
