@@ -87,6 +87,11 @@ on:
         required: false
         type: string
         default: '1800'
+      fail-fast:
+        description: "Cancel the entire workflow run if this job fails"
+        required: false
+        type: boolean
+        default: false
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -316,3 +321,14 @@ jobs:
       - name: Resource cleanup (post-run)
         if: always()
         run: *resource-cleanup
+
+      - name: Cancel entire run on failure (fail-fast)
+        if: ${{ failure() && inputs.fail-fast }}
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+        run: |
+          echo "::error::fail-fast is enabled and this job failed; cancelling run ${{ github.run_id }}"
+          curl -sSf -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"

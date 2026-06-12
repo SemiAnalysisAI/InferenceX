@@ -9,6 +9,7 @@ concurrency:
           github.event.label.name != 'sweep-enabled' &&
           github.event.label.name != 'full-sweep-enabled' &&
           github.event.label.name != 'non-canary-full-sweep-enabled' &&
+          github.event.label.name != 'full-sweep-fail-fast' &&
           github.run_id ||
           'active'
         }}
@@ -41,7 +42,8 @@ jobs:
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'sweep-enabled' ||
               github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled'
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast'
             )
         steps:
             - name: Checkout code
@@ -64,13 +66,15 @@ jobs:
               (
                 contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
                 contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-                contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')
+                contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+                contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
               ) &&
               (
                 (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
                 github.event.label.name == 'sweep-enabled' ||
                 github.event.label.name == 'full-sweep-enabled' ||
-                github.event.label.name == 'non-canary-full-sweep-enabled'
+                github.event.label.name == 'non-canary-full-sweep-enabled' ||
+                github.event.label.name == 'full-sweep-fail-fast'
               )
             ) ||
             (
@@ -92,10 +96,13 @@ jobs:
                   (
                     (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')) ||
                     (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled'))
+                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
+                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
+                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
+                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast'))
                   )
               run: |
-                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), or 'non-canary-full-sweep-enabled' (full sweep, no canary gate)."
+                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), 'non-canary-full-sweep-enabled' (full sweep, no canary gate), or 'full-sweep-fail-fast' (full sweep, no canary gate, first failure cancels the whole run)."
                   exit 1
 
             - name: Checkout code
@@ -190,7 +197,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: canary /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets: inherit
@@ -226,11 +233,12 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 1k1k /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['1k1k'] }}
         secrets: inherit
         with: &multi-node-inputs
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
             max-model-len: ${{ matrix.config.max-model-len }}
@@ -271,7 +279,7 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node 8k1k /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['8k1k'] }}
         secrets: inherit
@@ -291,11 +299,12 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 1k1k /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['1k1k'] }}
         secrets: inherit
         with: &single-node-inputs
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             exp-name: ${{ matrix.config.exp-name }}
             isl: ${{ matrix.config.isl }}
             osl: ${{ matrix.config.osl }}
@@ -328,7 +337,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: single-node 8k1k /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson((needs.canary-sweep.result == 'success' && needs.canary-select.outputs.remaining-search-space-config) || needs.setup.outputs.search-space-config).single_node['8k1k'] }}
         secrets: inherit
@@ -347,7 +356,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: agentic /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).single_node['agentic'] }}
         secrets: inherit
@@ -372,6 +381,7 @@ jobs:
             disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
 
     sweep-multi-node-agentic:
         needs: [setup, canary-select, canary-sweep]
@@ -386,7 +396,7 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node agentic /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multi_node['agentic'] }}
         secrets: inherit
@@ -418,6 +428,7 @@ jobs:
             duration: ${{ matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
 
     sweep-evals:
         needs: [setup, canary-select, canary-sweep]
@@ -433,7 +444,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).evals }}
         secrets: inherit
@@ -456,6 +467,7 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
 
     sweep-multi-node-evals:
         needs: [setup, canary-select, canary-sweep]
@@ -471,7 +483,7 @@ jobs:
         uses: ./.github/workflows/benchmark-multinode-tmpl.yml
         name: multi-node eval /
         strategy:
-            fail-fast: false
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
             matrix:
                 config: ${{ fromJson(needs.setup.outputs.search-space-config).multinode_evals }}
         secrets: inherit
@@ -502,6 +514,7 @@ jobs:
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config.eval-conc }}
+            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
 
     collect-results:
         needs:
@@ -733,13 +746,15 @@ jobs:
             (
               contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')
+              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')
             ) &&
             (
               (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
               github.event.label.name == 'sweep-enabled' ||
               github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled'
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast'
             )
         runs-on: ubuntu-latest
         permissions:

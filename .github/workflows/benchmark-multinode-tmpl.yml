@@ -120,6 +120,11 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      fail-fast:
+        description: "Cancel the entire workflow run if this job fails"
+        required: false
+        type: boolean
+        default: false
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -320,3 +325,14 @@ jobs:
       - name: Slurm cleanup (post-run)
         if: always()
         run: *slurm-cleanup
+
+      - name: Cancel entire run on failure (fail-fast)
+        if: ${{ failure() && inputs.fail-fast }}
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+        run: |
+          echo "::error::fail-fast is enabled and this job failed; cancelling run ${{ github.run_id }}"
+          curl -sSf -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs/${{ github.run_id }}/cancel"
