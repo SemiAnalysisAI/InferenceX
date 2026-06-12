@@ -3636,4 +3636,3 @@
     - "Add MiniMax-M2.5 FP4 (NVFP4) B300 TensorRT-LLM benchmark (model: nvidia/MiniMax-M2.5-NVFP4)"
     - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1712
-   
