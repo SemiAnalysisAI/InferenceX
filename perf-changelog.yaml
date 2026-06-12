@@ -3637,4 +3637,4 @@
     - "Day-zero MiniMax-M3 MXFP8 single-node recipes for H200 and H100 (vLLM)."
     - "Image: vllm/vllm-openai:minimax-m3 (dedicated day-zero image; M3 not in a stable release yet)."
     - "Sweeps TP4/TP8, TP+EP (TEP), and DP-attention+EP (DEP) per https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3; H100 is TP8-only (MXFP8 weights ~427 GB)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1731
