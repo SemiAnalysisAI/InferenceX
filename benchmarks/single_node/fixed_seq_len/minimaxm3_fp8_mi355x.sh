@@ -177,6 +177,8 @@ $PARALLEL_ARGS \
 --block-size 128 \
 --language-model-only \
 --attention-backend TRITON_ATTN \
+# ROCm graph capture raises HSA_STATUS_ERROR_EXCEPTION during the first batch.
+--enforce-eager \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
