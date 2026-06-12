@@ -37,6 +37,15 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi 
 
+BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
+
+if [ "${EVAL_ONLY}" = "true" ]; then
+    EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
+    export EVAL_MAX_MODEL_LEN
+    SERVE_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+else
+    SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
+fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
@@ -44,8 +53,6 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
-# TODO: add --no-enable_chunked_prefill, when dsv4 prefix caching is supported 
-#https://github.com/ROCm/ATOM/commit/7df93a181da4d3c3250c2441c7d5e2745a03d0cd#diff-61b1ba0b8b74523530d2d5cdc739d4f3a23a43bedf69015a5235844d46e9373bL1127
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -54,6 +61,7 @@ python3 -m atom.entrypoints.openai_server \
     --trust-remote-code \
     --gpu-memory-utilization 0.85 \
     --no-enable_prefix_caching \
+    --max-model-len "$SERVE_MAX_MODEL_LEN" \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
