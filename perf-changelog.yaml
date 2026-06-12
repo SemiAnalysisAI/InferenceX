@@ -3544,6 +3544,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1634
 
 - config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Add multi-node ATOM disaggregated prefill/decode support for DeepSeek-V4-Pro on MI355X"
+    - "Add server_atom.sh: multi-node launcher using atom.entrypoints.openai_server with mooncake RDMA KV transfer and atomesh router"
+    - "Add env_atom.sh: ATOM/mooncake-specific environment (mooncake LD_LIBRARY_PATH, ATOM_MOE_GU_ITLV=1, AITER_BF16_FP8_MOE_BOUND=0)"
+    - "Add models_atom.yaml: per-model configs for ATOM engine"
+    - "Add atom-disagg sweep: 2P1D DPA+TP8 (conc 256-2048) and 1P1D TP8 (conc 4-256) at isl=8192/osl=1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
+  
+- config-keys:
     - dsv4-fp4-b300-trt
     - dsv4-fp4-b300-trt-mtp
   description:

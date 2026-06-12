@@ -1,0 +1,46 @@
+# Model-specific SGLang server configurations for disaggregated inference.
+#
+# Each top-level key is a MODEL_NAME value (must match the directory name under MODEL_DIR).
+#
+# To add a new model: add a new top-level entry following the same schema.
+# No script changes are required.
+#
+# Schema:
+#   <model-name>:
+#     base_flags: str          # Common flags for both prefill and decode
+#     mtp_flags: str           # Appended to decode when DECODE_MTP_SIZE > 0
+#     dp_flags: str            # Appended when DP is enabled (prefill or decode)
+#     prefill:
+#       mem_fraction_static: float
+#       disable_radix_cache: bool
+#       dp:                              # Config when data-parallel attention is enabled
+#         max_running_requests: int
+#         chunked_prefill_size: str      # Can be integer or bash arithmetic expression
+#         cuda_graph_bs: str             # Space-separated values
+#       no_dp:                           # Config when data-parallel attention is disabled
+#         max_running_requests: int
+#         chunked_prefill_size: int
+#         cuda_graph_bs_range: str       # "start-end" expanded via seq
+#     decode:
+#       mem_fraction_static: float
+#       prefill_round_robin_balance: bool
+#       dp:
+#         max_running_requests: int
+#         chunked_prefill_size: str
+#         cuda_graph_bs_range: str
+#       ep_only:                         # Config when EP is enabled but DP is disabled
+#         max_running_requests: int
+#         chunked_prefill_size: int
+#         cuda_graph_bs_range: str
+#       no_dp:
+#         max_running_requests: int
+#         chunked_prefill_size: int
+#         cuda_graph_bs_range: str
+
+DeepSeek-V4-Pro:
+  # ATOM engine (atom-disagg): server_atom.sh uses MEM_FRACTION/KV_CACHE_DTYPE/BLOCK_SIZE/MAX_NUM_SEQS
+  # directly from env vars (defaulting to 0.85/fp8/16/256). base_flags/dp_flags are not used by
+  # server_atom.sh; they are kept here for documentation and potential future use.
+  base_flags: ""
+  mtp_flags: ""
+  dp_flags: ""

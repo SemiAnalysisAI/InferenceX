@@ -77,7 +77,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
