@@ -245,8 +245,8 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         # Per-role MoRI dispatch sizing (used by the harness chunked/MoE math)
         export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
         export MORI_MAX_DISPATCH_TOKENS_DECODE=64
-        export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=2048
-        export MORI_MOE_MAX_INPUT_TOKENS_DECODE=332
+        # export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=2048
+        # export MORI_MOE_MAX_INPUT_TOKENS_DECODE=332
 
         # PER_RANK dispatch tokens are pinned independently of the sizing above
         # (16384 prefill / 128 decode in the reference recipe). server_sglang.sh
