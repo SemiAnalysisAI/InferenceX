@@ -56,7 +56,6 @@ backend:
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      kv-cache-dtype: "fp8"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
       enable-expert-parallel: true
@@ -73,7 +72,6 @@ backend:
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      kv-cache-dtype: "fp8"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
       enable-expert-parallel: true
