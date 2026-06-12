@@ -120,11 +120,6 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
-      fail-fast:
-        description: "Cancel the entire workflow run if this job fails"
-        required: false
-        type: boolean
-        default: false
 
 env:
   RANDOM_RANGE_RATIO: 0.8
@@ -325,38 +320,3 @@ jobs:
       - name: Slurm cleanup (post-run)
         if: always()
         run: *slurm-cleanup
-
-      # Separate step from the cancel call below: the summary file is only
-      # uploaded when the step completes, and the cancel can kill this job
-      # before that happens.
-      - name: Report fail-fast failure (annotation + summary)
-        if: ${{ failure() && inputs.fail-fast }}
-        run: |
-          echo "::error title=Fail-fast: this job cancelled the run::${EXP_NAME} (runner=${{ inputs.runner }}, isl/osl=${ISL}/${OSL}, conc=${CONC:-${CONC_LIST}}) failed; all other cancelled jobs in this run were killed by this failure"
-          {
-            echo "## :x: Fail-fast: this job's failure cancelled the entire run"
-            echo ""
-            echo "| field | value |"
-            echo "| --- | --- |"
-            echo "| exp-name | \`${EXP_NAME}\` |"
-            echo "| runner | \`${{ inputs.runner }}\` |"
-            echo "| isl/osl | ${ISL}/${OSL} |"
-            echo "| conc | ${CONC:-${CONC_LIST}} |"
-            echo ""
-            echo "All jobs showing *cancelled* were killed as a result of this failure."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      # Cancelling the run from inside this job would flip this job's own
-      # conclusion from 'failure' to 'cancelled'. Instead, dispatch the
-      # fail-fast-cancel workflow, which waits for this job to conclude
-      # (keeping its red failure status) before cancelling the run.
-      - name: Cancel entire run on failure (fail-fast)
-        if: ${{ failure() && inputs.fail-fast }}
-        env:
-          GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
-        run: |
-          curl -fsS -X POST \
-            -H "Authorization: Bearer ${GH_TOKEN}" \
-            -H "Accept: application/vnd.github+json" \
-            "${{ github.api_url }}/repos/${{ github.repository }}/actions/workflows/fail-fast-cancel.yml/dispatches" \
-            -d '{"ref":"${{ github.head_ref || github.ref_name }}","inputs":{"run-id":"${{ github.run_id }}"}}'

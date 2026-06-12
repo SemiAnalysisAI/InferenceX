@@ -182,7 +182,7 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 
 If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
 sequential canary, `non-canary-full-sweep-enabled` without one, or
-`full-sweep-fail-fast` with whole-run fail-fast cancellation), a
+`full-sweep-fail-fast` with per-matrix fail-fast cancellation), a
 maintainer can avoid running the same sweep again after merge by leaving a PR
 comment before merging:
 
