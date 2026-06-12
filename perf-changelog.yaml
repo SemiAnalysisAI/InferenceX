@@ -3600,3 +3600,12 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+  
+- config-keys:
+    - dsv4-fp4-gb200-dynamo-sglang
+  description:
+    - "Initial submission: DSv4-Pro FP4 disagg on GB200 with SGLang (8k/1k)."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85"
+    - "8 topologies sweeping low-latency (1p1d-tp8-tp8) through max throughput (6p1d-dep8-dep12)."
+    - "Updated 1p1d and 2p1d configs to match https://github.com/shyeh25/srt-slurm/commit/ede724d7cc9a780be5b84659f599733bf9fd0097"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1675
