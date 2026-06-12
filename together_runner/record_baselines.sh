@@ -45,7 +45,11 @@ fi
 
 step "START CONTAINER"; bash "$HERE/run_1_start_container.sh"
 
-step "LAUNCH SERVER (ENABLE_TUNING=1, autotune ON — this is slow, ~20min cold)"
+if [[ "$ENGINE" == "vllm" ]]; then
+    step "LAUNCH SERVER (vLLM; ~5min cold)"
+else
+    step "LAUNCH SERVER (sglang, ENABLE_TUNING=1 autotune ON — slow, ~15-20min cold)"
+fi
 CONC="$LAUNCH_CONC" bash "$HERE/run_2_launch_server.sh"
 
 # 3) Sweep concurrency against the one warm server.

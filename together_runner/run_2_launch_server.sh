@@ -71,8 +71,14 @@ case "$ENGINE" in
     ;;
 
   vllm)
-    [[ "$ENABLE_TUNING" == "1" ]] && trlog "note: vLLM has no separable fp4 autotune — ENABLE_TUNING is a label only"
-    STAGE_PLAN="engine-init weight-load graph-capture"
+    [[ "$ENABLE_TUNING" == "1" ]] && trlog "note: ENABLE_TUNING is a label only for vLLM (no --disable flag); FlashInfer MoE still autotunes"
+    # gptoss-fp4 autotunes the FlashInfer MoE at startup (VLLM_USE_FLASHINFER_MOE_*);
+    # smoke (small dense model) has no MoE autotune. Include it for gptoss only.
+    if [[ "$PROFILE" == "gptoss-fp4" ]]; then
+        STAGE_PLAN="engine-init weight-load autotune graph-capture"
+    else
+        STAGE_PLAN="engine-init weight-load graph-capture"
+    fi
     VENV="VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1 TORCH_CUDA_ARCH_LIST=10.0 PYTHONNOUSERSITE=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
     # OOM guard (KLAUD_DEBUG §2): VLLM_OOM_GUARD=1 disables the cudagraph mem profiler.
     [[ "${VLLM_OOM_GUARD:-0}" == "1" ]] && VENV="$VENV VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0"

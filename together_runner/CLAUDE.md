@@ -66,7 +66,7 @@ Each step also runs standalone (`bash run_2_launch_server.sh`).
 - Reference baselines on THIS node (`gpu-dp-96sjj-gkwph`), 1k1k, unified client
   (`benchmark_serving.py`), total tok/s:
   - **sglang dsr1-fp4 tuned**: conc16=2288 · 64=5684 · 128=9672 · 256=14749
-  - **vllm gpt-oss-120b (TP4, untuned)**: conc16=13952 · 64=37333 · 128=49232
+  - **vllm gpt-oss-120b (TP4, untuned)**: conc16=13952 · 64=37333 · 128=49232 · 256=61760 · 512=75788
   (different models — not a head-to-head; gpt-oss-120b is far lighter than DSR1's MoE.)
 
 ## Startup stages

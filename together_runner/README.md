@@ -125,6 +125,8 @@ Golden numbers measured here with the unified client. Regenerate this section wi
 | 16 | 13,952 | 3,416 | 3.7 | 26 | 1,503 |
 | 64 | 37,333 | 8,296 | 6.2 | 41 | 3,273 |
 | 128 | 49,232 | 13,227 | 8.1 | 102 | 4,942 |
+| 256 | 61,760 | 15,650 | 14.6 | 369 | 5,790 |
+| 512 | 75,788 | 18,708 | 22.5 | 687 | 6,595 |
 <!-- END baselines -->
 
 > sglang dsr1-fp4 and vllm gpt-oss-120b are **different models** — not a head-to-head;

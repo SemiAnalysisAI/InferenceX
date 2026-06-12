@@ -179,9 +179,11 @@ monitor_server_until_ready() {
 
         # Detect the furthest stage reached (order matters: latest wins).
         # autotune is sglang-only.
+        # autotune applies to both engines: sglang fp4_gemm, and vLLM's FlashInfer
+        # MoE autotune (triggered by VLLM_USE_FLASHINFER_MOE_MXFP4_MXFP8=1).
         local newstage="$stage"
         if   _log_has "$container" "$logpath" "$m_capture"; then newstage="graph-capture"
-        elif [[ "$engine" != "vllm" ]] && _log_has "$container" "$logpath" "Tuning fp4_gemm|AutoTuner"; then newstage="autotune"
+        elif _log_has "$container" "$logpath" "AutoTuner|Tuning fp4_gemm|Tuning flashinfer"; then newstage="autotune"
         elif _log_has "$container" "$logpath" "$m_weight"; then newstage="weight-load"
         elif _log_has "$container" "$logpath" "."; then        newstage="${newstage:-engine-init}"
         fi
@@ -205,7 +207,8 @@ monitor_server_until_ready() {
                 # Surface the live tqdm percentage so progress is visible.
                 local p; p=$(docker exec "$container" bash -c \
                     "tr '\r' '\n' < '$logpath' 2>/dev/null | grep -oE 'Tuning [^:]+:[^]]*\]' | tail -1" 2>/dev/null)
-                _emit_detail "autotune: ${p:-profiling kernels...} (ENABLE_TUNING=0 to skip)"
+                local hint; hint=$([[ "$engine" == "vllm" ]] && echo "FlashInfer MoE" || echo "ENABLE_TUNING=0 to skip")
+                _emit_detail "autotune: ${p:-profiling kernels...} (${hint})"
                 ;;
         esac
 
