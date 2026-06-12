@@ -426,13 +426,25 @@ if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
     M3_HF_HOME="$(dirname "$SHARED_BASE")/hf-home"
     mkdir -p "$M3_HF_HOME" || exit 1
     sed -i "s|__M3_HF_HOME__|${M3_HF_HOME}|g" "$CONFIG_PATH"
-    # Killed downloads (scancel mid-snapshot) leave .lock files that make
-    # dynamo's rust hub fetch_model die instantly with "Lock acquisition
-    # failed". srtctl only cleans locks older than 30 min; sweep anything
-    # older than 10 min here so back-to-back retries aren't blocked by the
-    # previous run's corpses (an active shard download holds its lock for
-    # ~2-4 min, so 10 min is comfortably stale).
-    find "$M3_HF_HOME" -name '*.lock' -mmin +10 -delete 2>/dev/null || true
+    # Dynamo's rust fetch_model dies instantly on ANY held .lock file.
+    # Concurrent GHA jobs race on the 444 GB download; nuke ALL locks
+    # (safe — HF uses atomic rename from .incomplete), then force-download
+    # with the Python client so srtctl's pre-download is a no-op.
+    find "$M3_HF_HOME" -name '*.lock' -delete 2>/dev/null || true
+    export HF_HOME="$M3_HF_HOME"
+    DL_CMD="huggingface-cli download"
+    command -v huggingface-cli >/dev/null 2>&1 || DL_CMD="hf download"
+    for _attempt in 1 2 3; do
+        if HF_HUB_OFFLINE=1 $DL_CMD MiniMaxAI/MiniMax-M3-MXFP8 --quiet 2>/dev/null; then
+            echo "MiniMax-M3-MXFP8 fully cached (verified offline)"
+            break
+        fi
+        echo "MiniMax-M3 cache incomplete, downloading (attempt $_attempt)..."
+        find "$M3_HF_HOME" -name '*.lock' -delete 2>/dev/null || true
+        $DL_CMD MiniMaxAI/MiniMax-M3-MXFP8 --quiet 2>&1 | tail -5 || true
+        sleep 5
+    done
+    find "$M3_HF_HOME" -name '*.lock' -delete 2>/dev/null || true
 fi
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
