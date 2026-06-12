@@ -278,7 +278,7 @@ def main() -> int:
     parser.add_argument("--workflow-id", default="run-sweep.yml")
     parser.add_argument(
         "--full-sweep-label",
-        default="full-sweep-enabled,non-canary-full-sweep-enabled,full-sweep-fail-fast",
+        default="full-sweep-enabled,non-canary-full-sweep-enabled,full-sweep-fail-fast,full-sweep-fail-fast-no-canary",
         help="Comma-separated PR labels treated as 'full sweep'; reuse requires at least one.",
     )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")

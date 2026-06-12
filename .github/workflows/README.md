@@ -181,8 +181,8 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 ## Reusing an Approved PR Full Sweep
 
 If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
-sequential canary, `non-canary-full-sweep-enabled` without one, or
-`full-sweep-fail-fast` with per-matrix fail-fast cancellation), a
+sequential canary, `non-canary-full-sweep-enabled` without one, or a
+fail-fast variant — `full-sweep-fail-fast` / `full-sweep-fail-fast-no-canary`), a
 maintainer can avoid running the same sweep again after merge by leaving a PR
 comment before merging:
 
@@ -211,8 +211,8 @@ The most recent matching comment wins, so a maintainer can supersede an earlier
 pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
 
 Reuse fails closed: if the comment is present but no full-sweep label
-(`full-sweep-enabled`, `non-canary-full-sweep-enabled`, or
-`full-sweep-fail-fast`) is present, or if
+(`full-sweep-enabled`, `non-canary-full-sweep-enabled`,
+`full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`) is present, or if
 the source PR run or artifacts cannot be validated, the push-to-main workflow
 fails instead of falling back to a cluster sweep. Without the comment, the
 push-to-main workflow runs the normal full sweep.
