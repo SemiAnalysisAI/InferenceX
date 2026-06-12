@@ -3600,8 +3600,8 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
-  
-  - config-keys:
+
+- config-keys:
     - dsv4-fp4-gb200-dynamo-sglang-mtp
   description:
     - "Initial submission: DSv4-Pro FP4 disagg on GB200 with SGLang + MTP speculative decoding (8k/1k)."
