@@ -126,6 +126,50 @@ if not hasattr(torch.ops._C, "fused_minimax_m3_qknorm_rope_kv_insert"):
             index_cache.view(-1, HEAD_DIM)[ism] = ik_r.to(index_cache.dtype)
 M3_SHIM_EOF
     python3 -c "from vllm import _custom_ops as ops; assert callable(ops.fused_minimax_m3_qknorm_rope_kv_insert); print('m3 fused-op fallback registered')"
+
+    # Day-zero ROCm shim #2: the m3_release overlay extends the
+    # silu_and_mul_with_clamp _C op from 3 args (result, input, limit) to
+    # 5 args (..., alpha, beta) for the SwiGLU-OAI activation.  The nightly
+    # wheel's compiled _C still has only the 3-arg signature, so MoE expert
+    # kernels crash at fused_moe/activation.py:apply_moe_activation().
+    #
+    # Fix: patch the two 5-arg call sites —
+    #   • alpha=1.0/beta=0.0 (SILU + clamp_limit): semantically identical to
+    #     the 3-arg kernel → just drop the trailing args.
+    #   • general alpha/beta (SWIGLUOAI_UNINTERLEAVE): dispatch to the fp32
+    #     Triton swiglu_oai_split kernel from the M3 AMD ops overlay.
+    #
+    # Guard: skip if the _C op already accepts ≥5 params (future ROCm image).
+    if python3 -c "
+import torch
+s = str(torch.ops._C.silu_and_mul_with_clamp.default._schema)
+assert 'alpha' in s, f'3-arg schema: {s}'
+" 2>/dev/null; then
+        echo "silu_and_mul_with_clamp already 5-arg, skipping shim"
+    else
+        echo "Patching fused_moe/activation.py for 3-arg silu_and_mul_with_clamp"
+        MOE_ACT="$VLLM_PKG_DIR/model_executor/layers/fused_moe/activation.py"
+        # (a) alpha=1.0, beta=0.0 → strip to 3-arg (exact literal match)
+        sed -i 's/torch\.ops\._C\.silu_and_mul_with_clamp(output, input, clamp_limit, 1\.0, 0\.0)/torch.ops._C.silu_and_mul_with_clamp(output, input, clamp_limit)/g' "$MOE_ACT"
+        # (b) general alpha/beta → compat helper (defined below)
+        sed -i 's/torch\.ops\._C\.silu_and_mul_with_clamp(output, input, clamp_limit, alpha, beta)/_m3_swiglu_compat(output, input, clamp_limit, alpha, beta)/g' "$MOE_ACT"
+        # (c) Append compat function to the module
+        cat >> "$MOE_ACT" <<'SWIGLU_COMPAT_EOF'
+
+
+def _m3_swiglu_compat(output, input, clamp_limit, alpha, beta):
+    """Day-zero M3 ROCm: route to 3-arg _C kernel or Triton fallback."""
+    import torch
+    if alpha == 1.0 and beta == 0.0:
+        torch.ops._C.silu_and_mul_with_clamp(output, input, clamp_limit)
+    else:
+        from vllm.models.minimax_m3.amd.ops.swiglu_oai import swiglu_oai_split
+        out = swiglu_oai_split(input, alpha, beta, clamp_limit,
+                               out_dtype=output.dtype)
+        output.copy_(out)
+SWIGLU_COMPAT_EOF
+        python3 -c "from vllm.model_executor.layers.fused_moe.activation import _m3_swiglu_compat; print('silu_and_mul_with_clamp compat shim OK')"
+    fi
 fi
 
 # Weights land in the node-local raid hub cache (/raid/hf-hub-cache mounted
