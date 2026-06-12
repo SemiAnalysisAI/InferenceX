@@ -60,8 +60,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+        # Day-zero: MiniMax-M3-MXFP8 is not staged on this cluster. The
+        # recipes carry an hf: model id directly, so srtctl pre-downloads
+        # the snapshot into the shared-FS HF_HOME sed-injected below;
+        # MODEL_PATH only feeds the (unreferenced) model_paths alias in
+        # srtslurm.yaml.
+        export MODEL_PATH="hf:MiniMaxAI/MiniMax-M3-MXFP8"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -81,7 +89,7 @@ NGINX_IMAGE="nginx:1.27.4"
 # squash dir on a path that's also visible to compute nodes. Falls
 # back to the legacy sa-shared path so other configs are untouched.
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     echo "=== cluster diagnostic (minimax sweep) ==="
     echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
     echo "HOME=$HOME"
@@ -202,7 +210,7 @@ SRT_REPO_DIR="srt-slurm"
 # cross-mounted to compute nodes. Put the srt-slurm workspace and staged
 # InferenceX checkout on a writable shared-FS path that compute can see.
 # Per-run-unique paths avoid races between parallel sweep jobs.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     SHARED_BASE=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared/gha-runs \
@@ -269,6 +277,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
         echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
         exit 1
     fi
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout main || exit 1
+    mkdir -p recipes/vllm/minimax-m3-gb200-fp8 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb200-fp8" recipes/vllm/minimax-m3-gb200-fp8 || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -292,7 +306,7 @@ source $HOME/.local/bin/env
 # under a head-node-only path, .venv/bin/python3 becomes a broken
 # symlink on compute. Pin the venv to /usr/bin/python3 — a system
 # path that exists at the same location on both head and compute.
-if [[ $MODEL_PREFIX == "minimaxm2.5" && -x /usr/bin/python3 ]]; then
+if [[ ( $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ) && -x /usr/bin/python3 ]]; then
     uv venv --seed --python /usr/bin/python3
 else
     uv venv --seed
@@ -312,7 +326,7 @@ SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 # Minimax on watchtower: SRT_REPO_DIR was moved to a shared-FS path
 # above so srtctl's outputs/ directory (which lives under
 # SRTCTL_ROOT) is visible to compute nodes.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 echo "Creating srtslurm.yaml configuration..."
@@ -354,7 +368,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # can't see. Stage the relevant subset to shared FS and repoint
 # INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
 # on shared FS) and .git (not needed in container) for speed.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
     mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \
@@ -378,6 +392,17 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+
+# MiniMax-M3 day-zero: the recipes use an hf: model id and need a shared-FS
+# HF_HOME visible (and writable) on compute nodes for srtctl's one-time
+# pre-download of the 444 GB snapshot. Derive it from the probed
+# SHARED_BASE (…/gha-runs sibling, so the cache persists across runs while
+# the per-run gha-runs dirs stay disposable) and sed it into the recipe.
+if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
+    M3_HF_HOME="$(dirname "$SHARED_BASE")/hf-home"
+    mkdir -p "$M3_HF_HOME" || exit 1
+    sed -i "s|__M3_HF_HOME__|${M3_HF_HOME}|g" "$CONFIG_PATH"
+fi
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)

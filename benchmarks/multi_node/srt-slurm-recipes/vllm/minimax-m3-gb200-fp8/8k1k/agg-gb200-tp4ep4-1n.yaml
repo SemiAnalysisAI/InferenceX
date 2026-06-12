@@ -1,0 +1,77 @@
+name: "minimax-m3-vllm-agg-gb200-tp4ep4-1n-8k1k"
+
+# MiniMax-M3 day-zero aggregated recipe
+# (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3). Aggregated-only on
+# day zero: NixlConnector KV transfer has never been exercised against
+# M3's MSA index cache, so disagg shapes are deferred until agg
+# baselines exist. model.path uses the hf: prefix — srtctl pre-downloads
+# the 444 GB MXFP8 snapshot once, on a compute node, into the shared
+# HF_HOME below (launcher seds __M3_HF_HOME__ to a cluster-writable
+# shared-FS path and bind-mounts it via extra_mount).
+# --block-size 128 is mandatory (MSA sparse/index cache alignment); the
+# benchmark is text-only, so language-model-only skips the vision
+# encoder. max-model-len / cudagraph capture / batched tokens are
+# trimmed to the fixed-seq-len scenario instead of the 1M default.
+
+model:
+  path: "hf:MiniMaxAI/MiniMax-M3-MXFP8"
+  container: "vllm/vllm-openai:minimax-m3"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260526"
+
+slurm:
+  time_limit: "8:00:00"
+
+# 444 GB of weights off shared FS (cold HF cache on the first run):
+# allow up to 2 h for engine readiness.
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+extra_mount:
+  - "__M3_HF_HOME__:__M3_HF_HOME__"
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 1
+  agg_workers: 1
+  gpus_per_agg: 4
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+
+  aggregated_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    HF_HOME: "__M3_HF_HOME__"
+
+  vllm_config:
+    aggregated:
+      tensor-parallel-size: 4
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      max-model-len: 9472
+      max-num-batched-tokens: 16384
+      max-cudagraph-capture-size: 256
+      block-size: 128
+      language-model-only: true
+      gpu-memory-utilization: 0.9
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      stream-interval: 32
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "128x256"

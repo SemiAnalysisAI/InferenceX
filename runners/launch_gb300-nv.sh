@@ -51,8 +51,15 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    # Day-zero: MiniMax-M3-MXFP8 is not staged on this cluster. The recipes
+    # carry an hf: model id directly, so srtctl pre-downloads the snapshot
+    # into the shared-FS HF_HOME sed-injected below; MODEL_PATH only feeds
+    # the (unreferenced) model_paths alias in srtslurm.yaml.
+    export MODEL_PATH="hf:MiniMaxAI/MiniMax-M3-MXFP8"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, minimaxm3-fp8"
     exit 1
 fi
 
@@ -155,6 +162,12 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECIS
     git checkout main
     mkdir -p recipes/vllm/minimax-m2.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5" recipes/vllm/minimax-m2.5
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
+    mkdir -p recipes/vllm/minimax-m3-gb300-fp8
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -238,6 +251,17 @@ fi
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+
+# MiniMax-M3 day-zero: the recipes use an hf: model id and need a shared-FS
+# HF_HOME visible (and writable) on compute nodes for srtctl's one-time
+# pre-download of the 444 GB snapshot. Use the gharunners tree on the Vast
+# NFS /data mount (same base as the squash dir; the /home/sa-shared mount
+# of the same storage has the chronic ELOOP bug — see SQUASH_FILE comment).
+if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
+    M3_HF_HOME="/data/home/sa-shared/gharunners/hf-home"
+    mkdir -p "$M3_HF_HOME"
+    sed -i "s|__M3_HF_HOME__|${M3_HF_HOME}|g" "$CONFIG_FILE"
+fi
 
 # --no-preflight is only safe on the agentic path, where the recipe
 # resolves model.path to /scratch (compute-node-only NVMe) and the
