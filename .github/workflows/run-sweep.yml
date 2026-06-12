@@ -197,7 +197,7 @@ jobs:
         uses: ./.github/workflows/benchmark-tmpl.yml
         name: canary /
         strategy:
-            fail-fast: ${{ contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') }}
+            fail-fast: false
             matrix:
                 config: ${{ fromJson(needs.canary-select.outputs.canary-config) }}
         secrets: inherit
