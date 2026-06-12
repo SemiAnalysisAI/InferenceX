@@ -2781,16 +2781,9 @@ dsv4-fp4-mi355x-atom-disagg:
           additional-settings:
           - "DECODE_NODES=1"
 
-# MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# 427B/26B-active MoE, MSA sparse attention; MXFP8 variant has native MXFP8
-# matrix cores on gfx950 (MI355X) and runs from TP=4 per the recipe.
-# --block-size 128 is mandatory; AMD main-model attention runs on TRITON_ATTN.
-# No public ROCm image carries M3 yet (vllm-project/vllm#45381 is unmerged;
-# the recipe's AMD image is a placeholder) — the bench script overlays the
-# m3_release python tree (AMD path is pure Python/Triton) onto the nightly,
-# whose base commit (6fbfdd18, Jun 12) is ~6 commits behind the PR merge-base.
-# Weights pre-downloaded to NFS /it-share/hf-hub-cache (not on node-local
-# /var/lib NVMe; see launch_mi355x-amds.sh override).
+# MiniMax-M3 MXFP8 MI355X recipe:
+# https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3?hardware=mi355x
+# MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:nightly-6fbfdd183145443274df49c09c46cd13ea27af5f
   model: MiniMaxAI/MiniMax-M3-MXFP8
