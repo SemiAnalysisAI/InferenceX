@@ -34,9 +34,8 @@ fi
 nvidia-smi
 
 
-pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
 
-export SGL_ENABLE_JIT_DEEPGEMM=1
+export SGLANG_ENABLE_JIT_DEEPGEMM=1
 export SGLANG_ENABLE_SPEC_V2=1
 
 SERVER_LOG=/workspace/server.log

@@ -19,9 +19,7 @@ nvidia-smi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-pip install --no-deps "transformers==5.2.0" "huggingface-hub==1.4.1"
-
-export SGL_ENABLE_JIT_DEEPGEMM=1
+export SGLANG_ENABLE_JIT_DEEPGEMM=1
 export SGLANG_ENABLE_SPEC_V2=1
 
 SERVER_LOG=/workspace/server.log
@@ -45,7 +43,6 @@ PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path=$MODEL --host=0.
 --tool-call-parser glm47 \
 --reasoning-parser glm45 \
 --kv-cache-dtype fp8_e4m3 --quantization fp8 \
---fp8-gemm-backend cutlass \
 --attention-backend nsa \
 --nsa-decode-backend trtllm --nsa-prefill-backend trtllm \
 --moe-runner-backend flashinfer_trtllm \
