@@ -66,6 +66,10 @@ backend:
     # co-fetching workers (e.g. both nodes of a TP8-2n job) collide and the
     # loser dies with "Lock acquisition failed" (no retry like Python hf_hub).
     HF_HUB_OFFLINE: "1"
+    # Multi-node-NVLink KV transfer: keep cross-node prefill->decode KV on the
+    # NVL fabric (5-6x vs RDMA/TCP fallback, +17-49% tok/s/gpu). Needs VMM-
+    # registered KV (enable-cumem-allocator below).
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -77,6 +81,10 @@ backend:
     # co-fetching workers (e.g. both nodes of a TP8-2n job) collide and the
     # loser dies with "Lock acquisition failed" (no retry like Python hf_hub).
     HF_HUB_OFFLINE: "1"
+    # Multi-node-NVLink KV transfer: keep cross-node prefill->decode KV on the
+    # NVL fabric (5-6x vs RDMA/TCP fallback, +17-49% tok/s/gpu). Needs VMM-
+    # registered KV (enable-cumem-allocator below).
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
 
   vllm_config:
     prefill:
@@ -84,6 +92,7 @@ backend:
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
       enable-expert-parallel: true
+      enable-cumem-allocator: true
       enforce-eager: true
       max-model-len: 2304
       max-num-seqs: 16
@@ -100,6 +109,7 @@ backend:
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
       enable-expert-parallel: true
+      enable-cumem-allocator: true
       max-model-len: 2304
       max-num-seqs: 256
       max-num-batched-tokens: 256

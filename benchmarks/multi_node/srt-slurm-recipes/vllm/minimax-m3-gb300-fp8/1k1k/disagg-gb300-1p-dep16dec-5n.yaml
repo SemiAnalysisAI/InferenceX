@@ -1,9 +1,14 @@
-name: "minimax-m3-vllm-disagg-gb300-1p1d-tp4ep4-2n-1k1k"
+name: "minimax-m3-vllm-disagg-gb300-1p-dep16dec-5n-1k1k"
 
-# MiniMax-M3 disaggregated 1P+1D recipe for GB300, 2 nodes.
-# 1 node prefill (4 GPUs, TP4+EP4) → NixlConnector → 1 node decode (4 GPUs, TP4+EP4).
-# --block-size 128 is mandatory (MSA sparse/index cache alignment).
-# safetensors-load-strategy omitted — prefetch OOMs on CW GB300 host memory.
+# Combined fix + scale-up: MNNVL KV transfer ON + wide-EP decode.
+# Iter 2 showed DP16 decode starved because cross-node KV ran on RDMA/TCP
+# (~40-120 MB/s, decode idle). Iter 3 showed UCX_CUDA_IPC_ENABLE_MNNVL=y +
+# --enable-cumem-allocator lifts 1P1D KV transfer 5-6x (+17-23% tok/s/gpu).
+# This recipe puts both together: 1 compact TP4 prefill -> NixlConnector
+# over multi-node NVLink -> wide DP16+EP decode (16 GPUs / 4 nodes). Tests
+# whether fast MNNVL KV transfer makes the wide decode pool (which B300
+# cannot build on one NVLink island) actually pay off.
+# --block-size 128 mandatory (MSA cache); text-only -> language-model-only.
 
 model:
   path: "hf:MiniMaxAI/MiniMax-M3-MXFP8"
@@ -14,17 +19,12 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
-# CW gb300 has no per-GPU Slurm defaults: without sbatch-level mem=0 the
-# job allocation is ntasks x DefMemPerCPU = 4 GB/node and worker cgroups
-# OOM-kill during engine init; srun_options.mem=0 alone only grants a
-# step what the job already holds. cpus-per-task=72 (one NUMA socket)
-# keeps the gpu-less infra step (etcd/nats) off the 1-CPU default.
-# Full rationale: vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml.
 sbatch_directives:
   mem: "0"
   cpus-per-task: "72"
 srun_options:
   mem: "0"
+
 
 slurm:
   time_limit: "8:00:00"
@@ -40,11 +40,11 @@ resources:
   gpu_type: "gb300"
   gpus_per_node: 4
   prefill_nodes: 1
-  decode_nodes: 1
+  decode_nodes: 4
   prefill_workers: 1
   decode_workers: 1
   gpus_per_prefill: 4
-  gpus_per_decode: 4
+  gpus_per_decode: 16
 
 frontend:
   type: dynamo
@@ -58,30 +58,14 @@ backend:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     HF_HOME: "__M3_HF_HOME__"
-    # Cache-only at runtime: the launcher pre-stages the full snapshot and
-    # verifies it offline before submit, so workers must NOT re-fetch. Without
-    # this, dynamo fetch_model takes a per-blob .lock on the shared NFS cache;
-    # co-fetching workers (e.g. both nodes of a TP8-2n job) collide and the
-    # loser dies with "Lock acquisition failed" (no retry like Python hf_hub).
     HF_HUB_OFFLINE: "1"
-    # Multi-node-NVLink KV transfer: keep cross-node prefill->decode KV on the
-    # NVL fabric (5-6x vs RDMA/TCP fallback, +17-49% tok/s/gpu). Needs VMM-
-    # registered KV (enable-cumem-allocator below).
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     HF_HOME: "__M3_HF_HOME__"
-    # Cache-only at runtime: the launcher pre-stages the full snapshot and
-    # verifies it offline before submit, so workers must NOT re-fetch. Without
-    # this, dynamo fetch_model takes a per-blob .lock on the shared NFS cache;
-    # co-fetching workers (e.g. both nodes of a TP8-2n job) collide and the
-    # loser dies with "Lock acquisition failed" (no retry like Python hf_hub).
     HF_HUB_OFFLINE: "1"
-    # Multi-node-NVLink KV transfer: keep cross-node prefill->decode KV on the
-    # NVL fabric (5-6x vs RDMA/TCP fallback, +17-49% tok/s/gpu). Needs VMM-
-    # registered KV (enable-cumem-allocator below).
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
 
   vllm_config:
@@ -104,8 +88,10 @@ backend:
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 4
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 16
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-cumem-allocator: true
       max-model-len: 2304
@@ -123,4 +109,4 @@ benchmark:
   type: "sa-bench"
   isl: 1024
   osl: 1024
-  concurrencies: "64x128x256x512"
+  concurrencies: "512x1024x2048"
