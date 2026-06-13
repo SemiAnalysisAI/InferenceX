@@ -25,6 +25,15 @@ INFINITEBENCH_SUFFIX = (
     "Now you have read it. Please summarize it for me. First, tell me the "
     "title and the author, and then tell the story in 256 words.\n\n "
 )
+BOUNDARY_ADJUSTMENTS = (
+    ("space", " "),
+    ("double-space", "  "),
+    ("newline", "\n"),
+    ("space-newline", " \n"),
+    ("newline-space", "\n "),
+    ("double-newline", "\n\n"),
+    ("tab", "\t"),
+)
 
 
 def sha256_file(path: Path) -> str:
@@ -81,17 +90,12 @@ def _encode(tokenizer: Any, text: str) -> list[int]:
     return _token_ids(tokenizer.encode(text, add_special_tokens=False))
 
 
-def _render_prompt_ids(
+def _render_prompt_text_ids(
     tokenizer: Any,
-    context_ids: list[int],
-    context_tokens: int,
+    context: str,
     prefix: str,
     suffix: str,
 ) -> list[int]:
-    context = tokenizer.decode(
-        context_ids[:context_tokens],
-        skip_special_tokens=True,
-    )
     raw_prompt = prefix + context + suffix
     return _token_ids(
         tokenizer.apply_chat_template(
@@ -103,13 +107,48 @@ def _render_prompt_ids(
     )
 
 
+def _render_prompt_ids(
+    tokenizer: Any,
+    context_ids: list[int],
+    context_tokens: int,
+    prefix: str,
+    suffix: str,
+) -> list[int]:
+    context = tokenizer.decode(
+        context_ids[:context_tokens],
+        skip_special_tokens=True,
+    )
+    return _render_prompt_text_ids(tokenizer, context, prefix, suffix)
+
+
+def _prompt_metadata(
+    *,
+    wrapper_tokens: int,
+    source_context_tokens: int,
+    used_context_tokens: int,
+    estimate: int,
+    boundary_adjustment: str = "none",
+    boundary_adjustment_characters: int = 0,
+    context_tail_trimmed_characters: int = 0,
+) -> dict[str, Any]:
+    return {
+        "wrapper_tokens": wrapper_tokens,
+        "source_context_tokens": source_context_tokens,
+        "used_context_tokens": used_context_tokens,
+        "adjustment_from_initial_estimate": used_context_tokens - estimate,
+        "boundary_adjustment": boundary_adjustment,
+        "boundary_adjustment_characters": boundary_adjustment_characters,
+        "context_tail_trimmed_characters": context_tail_trimmed_characters,
+    }
+
+
 def build_exact_prompt_ids(
     context: str,
     tokenizer: Any,
     target_tokens: int = INPUT_TOKENS,
     prefix: str = INFINITEBENCH_PREFIX,
     suffix: str = INFINITEBENCH_SUFFIX,
-) -> tuple[list[int], dict[str, int]]:
+) -> tuple[list[int], dict[str, Any]]:
     """Render one prompt with exactly ``target_tokens`` real token IDs."""
     wrapper_ids = _token_ids(
         tokenizer.apply_chat_template(
@@ -142,12 +181,12 @@ def build_exact_prompt_ids(
         )
         delta = target_tokens - len(prompt_ids)
         if delta == 0:
-            return prompt_ids, {
-                "wrapper_tokens": len(wrapper_ids),
-                "source_context_tokens": len(context_ids),
-                "used_context_tokens": current,
-                "adjustment_from_initial_estimate": current - estimate,
-            }
+            return prompt_ids, _prompt_metadata(
+                wrapper_tokens=len(wrapper_ids),
+                source_context_tokens=len(context_ids),
+                used_context_tokens=current,
+                estimate=estimate,
+            )
         current = max(0, min(len(context_ids), current + delta))
 
     lower = max(0, min(attempted, default=estimate) - 256)
@@ -163,12 +202,75 @@ def build_exact_prompt_ids(
             suffix,
         )
         if len(prompt_ids) == target_tokens:
-            return prompt_ids, {
-                "wrapper_tokens": len(wrapper_ids),
-                "source_context_tokens": len(context_ids),
-                "used_context_tokens": current,
-                "adjustment_from_initial_estimate": current - estimate,
-            }
+            return prompt_ids, _prompt_metadata(
+                wrapper_tokens=len(wrapper_ids),
+                source_context_tokens=len(context_ids),
+                used_context_tokens=current,
+                estimate=estimate,
+            )
+
+    boundary_counts = {
+        max(0, min(len(context_ids), base + offset))
+        for base in attempted
+        for offset in range(-16, 17)
+    }
+    over_target_contexts: list[tuple[int, int, str]] = []
+    for current in sorted(
+        boundary_counts,
+        key=lambda value: (abs(value - estimate), -value),
+    ):
+        context_text = tokenizer.decode(
+            context_ids[:current],
+            skip_special_tokens=True,
+        )
+        plain_ids = _render_prompt_text_ids(
+            tokenizer,
+            context_text,
+            prefix,
+            suffix,
+        )
+        plain_delta = len(plain_ids) - target_tokens
+        if 0 < plain_delta <= 8:
+            over_target_contexts.append(
+                (plain_delta, current, context_text)
+            )
+        for adjustment_name, adjustment_text in BOUNDARY_ADJUSTMENTS:
+            prompt_ids = _render_prompt_text_ids(
+                tokenizer,
+                context_text + adjustment_text,
+                prefix,
+                suffix,
+            )
+            if len(prompt_ids) == target_tokens:
+                return prompt_ids, _prompt_metadata(
+                    wrapper_tokens=len(wrapper_ids),
+                    source_context_tokens=len(context_ids),
+                    used_context_tokens=current,
+                    estimate=estimate,
+                    boundary_adjustment=adjustment_name,
+                    boundary_adjustment_characters=len(adjustment_text),
+                )
+
+    for _, current, context_text in sorted(over_target_contexts)[:8]:
+        max_trim = min(128, len(context_text))
+        for trimmed_characters in range(1, max_trim + 1):
+            adjusted_context = context_text[:-trimmed_characters]
+            prompt_ids = _render_prompt_text_ids(
+                tokenizer,
+                adjusted_context,
+                prefix,
+                suffix,
+            )
+            if len(prompt_ids) == target_tokens:
+                return prompt_ids, _prompt_metadata(
+                    wrapper_tokens=len(wrapper_ids),
+                    source_context_tokens=len(context_ids),
+                    used_context_tokens=len(
+                        _encode(tokenizer, adjusted_context)
+                    ),
+                    estimate=estimate,
+                    context_tail_trimmed_characters=trimmed_characters,
+                )
 
     observed = sorted(
         {
@@ -222,9 +324,9 @@ def prepare_corpus(
         trust_remote_code=True,
     )
     contexts = load_contexts(dataset_path, concurrency)
-    cache: dict[str, tuple[list[int], dict[str, int]]] = {}
+    cache: dict[str, tuple[list[int], dict[str, Any]]] = {}
     prompt_ids: list[list[int]] = []
-    prompt_metadata: list[dict[str, int]] = []
+    prompt_metadata: list[dict[str, Any]] = []
     for context in contexts:
         built = cache.get(context)
         if built is None:

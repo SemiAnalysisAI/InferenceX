@@ -21,6 +21,9 @@ benchmark.
 - Every tuning and final measurement must use a fresh `LLM` instance.
 - Do not silently pad prompts, reduce MTP depth, enable LM-head TP, change the
   MoE backend, or switch to HTTP serving to make a run pass.
+- Exact prompt construction may use the recorded context/suffix whitespace
+  adjustment or context-tail trim. It must never insert pad or synthetic
+  token IDs.
 - A high-concurrency capacity failure is a valid result row. Unexpected
   low-concurrency failures remain job failures.
 - On runtime errors, retain the result JSON, worker JSON/log, candidate config,

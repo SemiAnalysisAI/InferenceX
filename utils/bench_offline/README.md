@@ -94,8 +94,12 @@ For each context it:
    `<｜Assistant｜></think>`.
 3. Adjusts the number of context tokens until the rendered prompt contains
    exactly 8192 token IDs.
-4. Fails instead of padding if no exact length can be constructed.
-5. Writes prompts to a little-endian `uint32` binary corpus.
+4. If BPE boundary merges skip directly from 8191 to 8193, tries a
+   deterministic whitespace separator between the context and suffix. As a
+   final fallback it trims a small number of decoded context-tail characters.
+5. Records any boundary or tail adjustment in the corpus manifest.
+6. Fails instead of padding if no exact length can be constructed.
+7. Writes prompts to a little-endian `uint32` binary corpus.
 
 `corpus_manifest.json` records the dataset checksum, corpus checksum, prompt
 checksums, token counts, and context-trimming adjustments. The large

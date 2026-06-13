@@ -230,3 +230,19 @@ performance measurements.
   validated.
 - This run passes the c8 gate. Broader c32/c64/c128/c256 measurements may
   proceed.
+
+### Run 27466148578
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27466148578`
+- Dispatched `2026-06-13T11:59:41Z`.
+- Branch commit: `35b71eed55694a9e5bd87babc39d9f9851c5eaf7`.
+- Concurrencies: `32,64,128,256`.
+- Purpose: collect tuned low/mid-concurrency B300 results after the c8
+  three-pass gate passed.
+- Status at dispatch: queued.
+- c128 and c256 failed during corpus construction before TRT initialization:
+  some later InfiniteBench contexts rendered to 8191 or 8193 tokens but not
+  8192 when truncating only at source-token boundaries. c32 and c64 continued.
+- Bounded fix: when token-boundary truncation skips 8192, search recorded
+  whitespace adjustments at the context/suffix boundary, then a small
+  decoded context-tail trim. Never insert pad or synthetic token IDs.
