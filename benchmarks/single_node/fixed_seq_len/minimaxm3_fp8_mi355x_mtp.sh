@@ -14,13 +14,16 @@
 # Here the whole server runs on TRITON_ATTN (set globally below), which serves
 # the MHA draft fine.
 #
-# --trust-remote-code is added on serve (the non-MTP recipe omits it): the
-# proven CUDA EAGLE3 recipes all serve with it, and it is the one serve
-# difference left after the first MI355X sweep failed engine init with
-# "Model does not support EAGLE3 interface but aux_hidden_state_outputs was
-# requested" — i.e. the target's EAGLE3 aux-hidden-state hook was not picked
-# up. If this still fails identically the ROCm minimax-m3 image simply lacks
-# MiniMax-M3 EAGLE3 target support (it trails the CUDA build).
+# KNOWN BLOCKER (2026-06-13): this recipe does NOT yet run on the current
+# vllm/vllm-openai-rocm:minimax-m3 image. Engine init fails with
+# "RuntimeError: Model does not support EAGLE3 interface but
+# aux_hidden_state_outputs was requested" — the ROCm build's
+# MiniMaxM3SparseForConditionalGeneration class does not implement vLLM's
+# SupportsEagle3 aux-hidden-state hook. The CUDA minimax-m3 image (a newer
+# vLLM commit) does, which is why the B300/B200/H100/H200 EAGLE3 recipes pass.
+# Confirmed independent of --trust-remote-code (sweeps 27472217773 /
+# 27472704212). The recipe is otherwise correct and should pass once the ROCm
+# image is rebuilt with MiniMax-M3 EAGLE3 target support.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -87,7 +90,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --attention-backend TRITON_ATTN \
     --enforce-eager \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
-    --trust-remote-code \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
