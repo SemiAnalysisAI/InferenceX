@@ -11682,12 +11682,14 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
 # MiniMax-M3 (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
 # (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX
-# tensor cores on Blackwell. M3 has not shipped in a stable vLLM release;
-# vllm/vllm-openai:minimax-m3 is the dedicated multi-arch (arm64+amd64)
-# image built from the m3_release branch (vllm-project/vllm#45381).
+# tensor cores on Blackwell. Image is the NVIDIA Dynamo vLLM runtime
+# (nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1) with
+# dynamo 1.3.0 pre-installed, so recipes set dynamo.install=false.
+# Engine args mirror the canonical recipe (ai-dynamo/dynamo
+# recipes/minimax-m3/vllm/disagg/MXFP8): block-size 128 + FLASH_ATTN.
 # GB200 full sweep: TP/TP8 (low conc), TEP (mid), disagg (mid), DEP (high).
 minimaxm3-fp8-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3
+  image: nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: gb200
