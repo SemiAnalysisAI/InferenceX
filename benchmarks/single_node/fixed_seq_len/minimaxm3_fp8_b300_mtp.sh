@@ -7,6 +7,12 @@
 # speculative tokens. Everything else keeps the non-MTP serve shape:
 # --block-size 128 is mandatory (MSA sparse/index cache); the benchmark is
 # text-only, so --language-model-only frees the vision encoder's VRAM.
+#
+# The drafter is pinned to FLASH_ATTN: the EAGLE3 head is MHA, and FlashInfer
+# only supports page size 128 through its trtllm-gen kernel, which requires
+# GQA/MQA — engine init dies in FlashInferMetadataBuilder otherwise. The
+# target keeps its default (FlashInfer) backend; FLASH_ATTN takes any
+# multiple-of-16 block size, so the mandatory 128 is fine for the draft.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -92,7 +98,7 @@ $PARALLEL_ARGS \
 --language-model-only \
 --max-cudagraph-capture-size $CAPTURE_SIZE \
 --max-num-batched-tokens "$((ISL * 2 ))" \
---speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
+--speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
 --stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
