@@ -17,9 +17,11 @@ from io_utils import read_json, write_json
 from metrics import aggregate_passes, summarize_pass
 from prompts import load_corpus
 from trt_config import (
-    BASE_SEED,
     MTP_DRAFT_TOKENS,
     OUTPUT_TOKENS,
+    SAMPLING_TEMPERATURE,
+    SAMPLING_TOP_K,
+    SAMPLING_TOP_P,
     WORLD_SIZE,
     CandidateConfig,
     build_llm_kwargs,
@@ -89,17 +91,16 @@ def sampling_params(concurrency: int) -> list[Any]:
 
     return [
         SamplingParams(
-            seed=BASE_SEED + request_index,
-            temperature=1.0,
-            top_p=1.0,
-            top_k=0,
+            temperature=SAMPLING_TEMPERATURE,
+            top_p=SAMPLING_TOP_P,
+            top_k=SAMPLING_TOP_K,
             max_tokens=OUTPUT_TOKENS,
             ignore_eos=True,
             return_perf_metrics=True,
             detokenize=False,
             add_special_tokens=False,
         )
-        for request_index in range(concurrency)
+        for _ in range(concurrency)
     ]
 
 

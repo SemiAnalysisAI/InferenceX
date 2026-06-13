@@ -11,8 +11,13 @@ INPUT_TOKENS = 8192
 OUTPUT_TOKENS = 625
 MTP_DRAFT_TOKENS = 3
 MAX_SEQ_LEN = 9216
-BASE_SEED = 20260613
-MIN_WINNER_IMPROVEMENT = 0.01
+SAMPLING_TEMPERATURE = 1.0
+SAMPLING_TOP_P = 1.0
+SAMPLING_TOP_K = 0
+PINNED_TRT_GLOBAL_SEED = 42
+TUNING_MEASURED_PASSES = 3
+FINAL_MEASURED_PASSES = 3
+MIN_WINNER_IMPROVEMENT = 0.03
 
 
 @dataclass(frozen=True)
@@ -146,7 +151,7 @@ def choose_winner(
     results: Iterable[dict[str, Any]],
     minimum_improvement: float = MIN_WINNER_IMPROVEMENT,
 ) -> Optional[dict[str, Any]]:
-    """Choose the earliest result unless a later one is at least 1% faster."""
+    """Choose the earliest result unless a later one is at least 3% faster."""
     winner: Optional[dict[str, Any]] = None
     winner_value: Optional[float] = None
     for result in results:

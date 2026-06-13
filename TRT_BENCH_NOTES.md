@@ -38,6 +38,12 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
 - `trt_mpi_entry.worker_main` is installed into the pinned IPC proxy before
   `LLM` construction. It recreates `ENABLE_PERFECT_ROUTER` and marks every
   rank before importing TRT's real worker entry.
+- The pinned PyTorch sampler does not apply request-level
+  `SamplingParams.seed`. It creates one engine-global CUDA generator with
+  seed `42` and advances it across requests and passes. CANN also globally
+  seeds to `42`, but uses a different temperature-1 sampling implementation.
+- Tune candidates with three measured passes and require a 3% improvement.
+  A single pass was too sensitive to output-dependent MTP acceptance.
 
 Do not assume a newer TRT release has the same field names. If the image
 changes, inspect the exact source first.
@@ -149,3 +155,27 @@ performance measurements.
 - All prompts were 8192 tokens and all outputs were 625 tokens.
 - The run exposed two bounded reporting bugs: raw zero draft counters were
   shown as 0% instead of unavailable, and `provenance.git_revision` was null.
+
+### Run 27462769691
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27462769691`
+- Dispatched `2026-06-13T09:21:31Z`; completed
+  `2026-06-13T10:09:23Z`.
+- Ran commit `51c894535d8e780ac9561cf53872fb52ea8037ef`.
+- Concurrency 8 completed successfully on `b300-015`, Slurm job `20781`.
+- Winner: `wait60`, balance on, overlap on, CUDA graph on.
+- Final mean token TPOT: `8.857 ms`.
+- Final derived output throughput: `112.904 tok/s/GPU`.
+- Final wall output throughput: `84.634 tok/s/GPU`.
+- Final observed token yield: `3.459 tokens/step`.
+- Effective MTP3 acceptance: `82.0%`.
+- Commit provenance, null raw speculative counters, DEP8/MTP3 shape,
+  eight-rank perfect-router propagation, 8192-token prompts, 625-token
+  outputs, and three final passes all validated.
+- The winner differed from run `27461421427`, and derived throughput differed
+  by about 10%. Per-pass output digests also differed. Exact TRT source review
+  showed that the pinned PyTorch sampler ignores request-level seeds and
+  advances one engine-global seed-42 generator. The original one-pass tuning
+  was therefore not strong enough to call the scheduler choice verified.
+- Follow-up correction: pool three passes for every tuning candidate and
+  require a 3% improvement before replacing the earlier candidate.

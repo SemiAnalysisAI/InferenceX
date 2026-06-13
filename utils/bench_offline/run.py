@@ -18,11 +18,17 @@ from io_utils import read_json, tail_text, write_json
 from metrics import huawei_comparison
 from prompts import INFINITEBENCH_REVISION, prepare_corpus, sha256_file
 from trt_config import (
+    FINAL_MEASURED_PASSES,
     INPUT_TOKENS,
     MAX_SEQ_LEN,
     MIN_WINNER_IMPROVEMENT,
     MTP_DRAFT_TOKENS,
     OUTPUT_TOKENS,
+    PINNED_TRT_GLOBAL_SEED,
+    SAMPLING_TEMPERATURE,
+    SAMPLING_TOP_K,
+    SAMPLING_TOP_P,
+    TUNING_MEASURED_PASSES,
     WORLD_SIZE,
     CandidateConfig,
     balance_candidate,
@@ -307,7 +313,19 @@ def main() -> int:
             "max_seq_len": MAX_SEQ_LEN,
             "concurrency": args.concurrency,
             "warmup_batches": 1,
-            "final_measured_passes": 3,
+            "tuning_measured_passes": TUNING_MEASURED_PASSES,
+            "final_measured_passes": FINAL_MEASURED_PASSES,
+            "sampling": {
+                "temperature": SAMPLING_TEMPERATURE,
+                "top_p": SAMPLING_TOP_P,
+                "top_k": SAMPLING_TOP_K,
+                "engine_global_seed": PINNED_TRT_GLOBAL_SEED,
+                "seed_semantics": (
+                    "Pinned TRT PyTorch sampler advances one engine-global "
+                    "seed-42 generator and does not apply request-level "
+                    "SamplingParams.seed"
+                ),
+            },
             "headline_tpot": (
                 "arithmetic mean of each request's "
                 "(last_token-first_token)/(output_tokens-1)"
@@ -398,7 +416,7 @@ def main() -> int:
                 candidate=candidate,
                 attempt=len(full_attempts) + 1,
                 mode="tune",
-                passes=1,
+                passes=TUNING_MEASURED_PASSES,
                 timeout_seconds=args.worker_timeout,
             )
             full_attempts.append(result)
@@ -421,7 +439,7 @@ def main() -> int:
                     candidate=candidate.without_cuda_graph(),
                     attempt=len(full_attempts) + 1,
                     mode="tune",
-                    passes=1,
+                    passes=TUNING_MEASURED_PASSES,
                     timeout_seconds=args.worker_timeout,
                 )
                 full_attempts.append(fallback)
@@ -535,7 +553,7 @@ def main() -> int:
             candidate=winner_candidate,
             attempt=1,
             mode="final",
-            passes=3,
+            passes=FINAL_MEASURED_PASSES,
             timeout_seconds=args.worker_timeout,
         )
         if final_result.get("status") != "success":

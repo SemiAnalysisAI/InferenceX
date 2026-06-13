@@ -16,10 +16,10 @@ def result(value: float, name: str) -> dict:
     }
 
 
-def test_later_candidate_requires_one_percent_improvement():
+def test_later_candidate_requires_three_percent_improvement():
     baseline = result(100.0, "baseline")
-    too_small = result(100.99, "too-small")
-    enough = result(101.0, "enough")
+    too_small = result(102.99, "too-small")
+    enough = result(103.0, "enough")
     assert choose_winner([baseline, too_small]) is baseline
     assert choose_winner([baseline, too_small, enough]) is enough
 

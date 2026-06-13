@@ -15,7 +15,7 @@ On `trt-bench`, that workflow is replaced with this offline-only chain:
 3. Allocate one exclusive B300 Slurm node with eight GPUs.
 4. Run the pinned TRT image with `/scratch/models/DeepSeek-V4-Pro`.
 5. Build an exact 8192-token InfiniteBench corpus.
-6. Tune at most six fresh TRT engines.
+6. Tune at most six fresh TRT engines with three measured passes each.
 7. Start another fresh engine with the winner, warm it up, and measure three
    passes.
 8. Upload one result and debug bundle per concurrency.
@@ -40,11 +40,21 @@ path. `LLM.generate()` receives one fixed batch of token-ID prompts directly.
 - Prompt length: exactly 8192 real token IDs, with no padded IDs.
 - Generated output: exactly 625 tokens per request with EOS ignored.
 - Speculation: fixed MTP3.
-- Sampling seed: `20260613 + request_index`.
+- Sampling: temperature `1.0`, top-p `1.0`, top-k `0`.
+- Pinned TRT PyTorch sampler seed: one engine-global generator seeded to
+  `42`.
 
 The prompt retains the CANN recipe's literal instruction to summarize the
 story in `256 words`. That prompt text is independent of the 625-token
 generation budget.
+
+The pinned TRT PyTorch sampler does not apply request-level
+`SamplingParams.seed`; it advances one global generator for the lifetime of
+an engine. CANN also globally seeds its temperature-1 sampler to `42`, but
+the two implementations use different sampling algorithms. Output sequences
+can therefore change between passes and scheduler candidates. Digests expose
+that variation; they are not an assertion that every pass must emit the same
+tokens.
 
 ## Parallelism
 
@@ -107,8 +117,8 @@ The headline `mean_token_tpot_ms` is the arithmetic mean of per-request
 `token_tpot` values pooled across the three final measured passes.
 
 Each request also records a SHA-256 digest of its 625 generated token IDs.
-Per-pass sequence digests make fresh-engine tuning nondeterminism visible
-without uploading generated text or full token arrays.
+Per-pass sequence digests make fresh-engine tuning variation visible without
+uploading generated text or full token arrays.
 
 `derived_output_tput_per_gpu` is:
 
@@ -169,9 +179,11 @@ Huawei references are attached only to matching rows:
 
 ## Tuning
 
-Every tuning attempt creates and destroys a fresh TRT engine. A later
-candidate replaces the current winner only when it is at least 1% faster in
-derived output-token throughput per GPU.
+Every tuning attempt creates and destroys a fresh TRT engine, performs one
+full-shape warmup, and pools three measured passes. A later candidate replaces
+the current winner only when it is at least 3% faster in derived output-token
+throughput per GPU. The wider threshold prevents one sampled MTP trajectory
+from selecting a scheduler setting on a marginal difference.
 
 The intended six-attempt order is:
 
