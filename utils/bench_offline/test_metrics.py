@@ -49,14 +49,40 @@ def test_token_tpot_and_derived_throughput():
         wall_seconds=20.0,
         expected_output_tokens=625,
         num_gpus=8,
+        max_draft_tokens=3,
     )
     aggregate = measured["aggregate"]
     assert aggregate["mean_token_tpot_ms"] == pytest.approx(20.0)
     assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)
     assert aggregate["wall_output_tput_per_gpu"] == pytest.approx(31.25)
     assert aggregate["acceptance_rate"] == pytest.approx(0.5)
+    assert aggregate["raw_speculative_metrics_available"] is True
     assert aggregate["observed_tokens_per_step"] == pytest.approx(
         624 / 256
+    )
+    assert aggregate["effective_accepted_drafts_per_step"] == pytest.approx(
+        624 / 256 - 1
+    )
+    assert aggregate["effective_acceptance_rate"] == pytest.approx(
+        (624 / 256 - 1) / 3
+    )
+    assert len(aggregate["output_sequence_sha256"]) == 64
+
+
+def test_zero_trt_speculative_counters_are_unavailable():
+    measured = summarize_pass(
+        [request_output(accepted=0, drafted=0)],
+        wall_seconds=10.0,
+        expected_output_tokens=625,
+        num_gpus=8,
+        max_draft_tokens=3,
+    )
+    aggregate = measured["aggregate"]
+    assert aggregate["raw_speculative_metrics_available"] is False
+    assert aggregate["acceptance_rate"] is None
+    assert aggregate["accepted_drafts_per_step"] is None
+    assert aggregate["effective_acceptance_rate"] == pytest.approx(
+        (624 / 256 - 1) / 3
     )
 
 
@@ -67,6 +93,7 @@ def test_pooling_passes_does_not_multiply_active_concurrency():
             wall_seconds=20.0,
             expected_output_tokens=625,
             num_gpus=8,
+            max_draft_tokens=3,
         )
         for _ in range(3)
     ]
@@ -76,6 +103,7 @@ def test_pooling_passes_does_not_multiply_active_concurrency():
     assert aggregate["pass_count"] == 3
     assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)
     assert aggregate["wall_output_tput_per_gpu"] == pytest.approx(31.25)
+    assert len(set(aggregate["per_pass_output_sequence_sha256"])) == 1
 
 
 def test_huawei_conversion_uses_observed_tokens_per_step():
@@ -88,6 +116,10 @@ def test_huawei_conversion_uses_observed_tokens_per_step():
     assert comparison["estimated_token_tput_per_chip"] == pytest.approx(
         56.70 * 2.5
     )
+    assert comparison["published_dataset_token_tput_per_chip"] == (
+        pytest.approx(56.70 * 2.44)
+    )
+    assert comparison["published_acceptance_rate"] == pytest.approx(0.48)
     assert comparison["conversion"].endswith(
         "trt_observed_tokens_per_step"
     )

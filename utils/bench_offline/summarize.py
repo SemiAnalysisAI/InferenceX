@@ -75,9 +75,21 @@ def _row(
         "observed_tokens_per_step": aggregate.get(
             "observed_tokens_per_step"
         ),
+        "effective_accepted_drafts_per_step": aggregate.get(
+            "effective_accepted_drafts_per_step"
+        ),
+        "effective_acceptance_rate": aggregate.get(
+            "effective_acceptance_rate"
+        ),
+        "raw_speculative_metrics_available": aggregate.get(
+            "raw_speculative_metrics_available"
+        ),
         "acceptance_rate": aggregate.get("acceptance_rate"),
         "mean_ttft_ms": aggregate.get("mean_ttft_ms"),
         "p99_ttft_ms": aggregate.get("p99_ttft_ms"),
+        "huawei_published_dataset_token_tput_per_chip": huawei.get(
+            "published_dataset_token_tput_per_chip"
+        ),
         "huawei_estimated_token_tput_per_chip": huawei.get(
             "estimated_token_tput_per_chip"
         ),
@@ -92,15 +104,16 @@ def markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
         "# DeepSeek-V4 B300 TRT Offline Benchmark",
         "",
-        "| Conc | Status | Winner | Token TPOT ms | Derived out tok/s/GPU | Wall out tok/s/GPU | Tok/step | Accept | Mean TTFT ms | Huawei est tok/s/chip | B300/Huawei |",
-        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Conc | Status | Winner | Token TPOT ms | Derived out tok/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei pub tok/s/chip | Huawei norm tok/s/chip | B300/Huawei norm |",
+        "|---:|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
-        acceptance = row.get("acceptance_rate")
+        acceptance = row.get("effective_acceptance_rate")
         lines.append(
             "| {concurrency} | {status} | {candidate} | {tpot} | "
             "{derived} | {wall} | {tokens_per_step} | {acceptance} | "
-            "{ttft} | {huawei} | {ratio} |".format(
+            "{ttft} | {huawei_published} | {huawei_normalized} | "
+            "{ratio} |".format(
                 concurrency=row["concurrency"],
                 status=row["status"],
                 candidate=row.get("candidate") or "-",
@@ -116,7 +129,12 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                     else "-"
                 ),
                 ttft=_fmt(row.get("mean_ttft_ms")),
-                huawei=_fmt(
+                huawei_published=_fmt(
+                    row.get(
+                        "huawei_published_dataset_token_tput_per_chip"
+                    )
+                ),
+                huawei_normalized=_fmt(
                     row.get("huawei_estimated_token_tput_per_chip")
                 ),
                 ratio=_fmt(row.get("b300_to_huawei_ratio"), digits=3),
@@ -131,8 +149,9 @@ def markdown(rows: list[dict[str, Any]]) -> str:
             "- `Derived out tok/s/GPU`: `concurrency / mean token TPOT seconds / 8`. This is the latency-derived headline requested for the comparison.",
             "- `Wall out tok/s/GPU`: all 625 generated tokens per request divided by measured batch wall time and eight GPUs.",
             "- `Tok/step`: total 624-token decode outputs divided by TRT's total `last_iter - first_iter`. This is the observed MTP token multiplier.",
-            "- `Accept`: total accepted draft tokens divided by total proposed draft tokens. Raw draft acceptance is reported directly but is not used as the Huawei multiplier.",
-            "- `Huawei est tok/s/chip`: published Huawei step throughput per chip multiplied by TRT's observed `Tok/step`. It is available only for concurrencies 8, 32, and 64.",
+            "- `Eff accept`: `(Tok/step - 1) / 3`, the effective MTP3 acceptance implied by emitted tokens. The pinned TRT PyTorch path leaves raw accepted/proposed counters at zero, so raw acceptance is recorded as unavailable instead of `0%`.",
+            "- `Huawei pub tok/s/chip`: Huawei step throughput multiplied by its published `1 + 1.44 = 2.44` tokens/step.",
+            "- `Huawei norm tok/s/chip`: Huawei step throughput multiplied by TRT's observed `Tok/step`; this normalizes both platforms to the same token yield. It is available only for concurrencies 8, 32, and 64.",
             "",
         ]
     )

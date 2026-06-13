@@ -9,6 +9,11 @@ benchmark.
   MTP3, DEP8, exact seeds, one full-shape warmup, and three final passes.
 - Preserve the token-based headline metric. Huawei conversion uses observed
   output tokens per TRT decode iteration, not raw draft acceptance.
+- The pinned TRT PyTorch MTP path may return zero proposed/accepted draft
+  counters. Record raw acceptance as unavailable and use
+  `(tokens_per_step - 1) / 3` for effective MTP3 acceptance.
+- Preserve output-sequence digests; they are the check that fresh-engine
+  tuning candidates sampled the same token streams.
 - Keep tuning limited to six attempts and preserve scheduler-first order.
 - Every tuning and final measurement must use a fresh `LLM` instance.
 - Do not silently pad prompts, reduce MTP depth, enable LM-head TP, change the

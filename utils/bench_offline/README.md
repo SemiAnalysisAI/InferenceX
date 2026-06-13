@@ -106,6 +106,10 @@ token_tpot = decode_window / decode_tokens
 The headline `mean_token_tpot_ms` is the arithmetic mean of per-request
 `token_tpot` values pooled across the three final measured passes.
 
+Each request also records a SHA-256 digest of its 625 generated token IDs.
+Per-pass sequence digests make fresh-engine tuning nondeterminism visible
+without uploading generated text or full token arrays.
+
 `derived_output_tput_per_gpu` is:
 
 ```text
@@ -118,10 +122,21 @@ concurrency / mean_token_tpot_seconds / 8
 all generated output tokens / total measured batch wall time / 8
 ```
 
-`acceptance_rate` is weighted:
+When TRT populates its speculative counters, raw `acceptance_rate` is
+weighted:
 
 ```text
 total accepted draft tokens / total proposed draft tokens
+```
+
+The pinned TRT PyTorch MTP path currently returns zero for both counters even
+while iteration telemetry proves MTP is active. In that case
+`raw_speculative_metrics_available=false`, `acceptance_rate=null`, and the
+benchmark reports:
+
+```text
+effective_accepted_drafts_per_step = observed_tokens_per_step - 1
+effective_acceptance_rate = effective_accepted_drafts_per_step / 3
 ```
 
 `observed_tokens_per_step` is:
@@ -139,6 +154,10 @@ Huawei published step throughput/chip * TRT observed tokens/step
 
 Do not multiply Huawei throughput by raw acceptance rate. Acceptance omits the
 mandatory target token; `observed_tokens_per_step` includes it.
+
+The Huawei guide also publishes 1.44 accepted drafts per MTP3 step, or 2.44
+tokens/step. Results retain both the corresponding published-dataset token
+throughput and the Huawei value normalized to TRT's observed token yield.
 
 Huawei references are attached only to matching rows:
 
@@ -226,9 +245,13 @@ The collected row fields mean:
 - `derived_output_tput_per_gpu`: concurrency/TPOT calculation
 - `wall_output_tput_per_gpu`: measured whole-batch output throughput
 - `observed_tokens_per_step`: TRT token output per decode iteration
-- `acceptance_rate`: accepted/proposed draft tokens
+- `effective_acceptance_rate`: `(observed_tokens_per_step - 1) / 3`
+- `acceptance_rate`: accepted/proposed TRT counters, or null when unavailable
 - `mean_ttft_ms`, `p99_ttft_ms`: first-token latency
-- `huawei_estimated_token_tput_per_chip`: converted Huawei reference
+- `huawei_published_dataset_token_tput_per_chip`: Huawei reference at its
+  published 2.44 tokens/step
+- `huawei_estimated_token_tput_per_chip`: Huawei reference normalized to TRT's
+  observed tokens/step
 - `b300_to_huawei_ratio`: B300 derived throughput divided by converted Huawei
 
 This is not `agg_bmk.json`; generic InferenceX result fields such as

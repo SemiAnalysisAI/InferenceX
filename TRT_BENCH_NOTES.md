@@ -25,6 +25,10 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
 - Iteration fields: `first_iter`, `last_iter`
 - Spec fields:
   `total_accepted_draft_tokens`, `total_draft_tokens`, `acceptance_rate`
+- In run `27461421427`, the pinned PyTorch MTP path left all three raw spec
+  values at zero while `last_iter - first_iter` showed 3.143 tokens/step.
+  Treat zero proposed drafts as unavailable telemetry, not 0% acceptance.
+- Effective MTP3 acceptance is derived as `(tokens_per_step - 1) / 3`.
 - MTP config:
   `{"decoding_type": "MTP", "max_draft_len": 3}`
 - Perfect router is read from unprefixed `ENABLE_PERFECT_ROUTER` in
@@ -120,8 +124,28 @@ Do not call a row valid unless:
 - perfect-router propagation validation passes
 - final result contains three measured passes from one fresh final engine
 - derived and wall throughput are both present
-- token/step and weighted acceptance are present
+- token/step and effective acceptance are present
+- raw TRT acceptance is either populated or explicitly marked unavailable
 - Huawei conversion, when applicable, uses token/step
 
 Capacity failures at 512/1024 remain useful rows. They are not successful
 performance measurements.
+
+## Run History
+
+### Run 27461421427
+
+- Dispatched `2026-06-13T08:17:24Z` from commit
+  `3c74b5048ffb4cdf3ad4867ae65d87171196452f`.
+- Concurrency 8 completed successfully on `b300-015`, Slurm job `20771`.
+- Six tuning attempts and one fresh three-pass final run completed.
+- Winner: `wait10`, balance on, overlap on, CUDA graph on.
+- Final mean token TPOT: `9.741 ms`.
+- Final derived output throughput: `102.658 tok/s/GPU`.
+- Final wall output throughput: `60.350 tok/s/GPU`.
+- Final observed token yield: `3.143 tokens/step`.
+- Effective MTP3 acceptance: `(3.143 - 1) / 3 = 71.4%`.
+- Perfect-router proof contained eight `trt_mpi_entry` rank processes.
+- All prompts were 8192 tokens and all outputs were 625 tokens.
+- The run exposed two bounded reporting bugs: raw zero draft counters were
+  shown as 0% instead of unavailable, and `provenance.git_revision` was null.

@@ -45,6 +45,11 @@ def utc_now() -> str:
 
 
 def git_revision() -> str | None:
+    explicit_revision = (
+        os.getenv("TRT_BENCH_GIT_REVISION") or os.getenv("GITHUB_SHA")
+    )
+    if explicit_revision:
+        return explicit_revision
     completed = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         check=False,
@@ -317,6 +322,14 @@ def main() -> int:
                 "published step throughput/chip multiplied by TRT observed "
                 "output tokens/decode iteration; raw acceptance rate is not "
                 "the multiplier"
+            ),
+            "effective_acceptance_rate": (
+                "(observed output tokens/decode iteration - 1) / "
+                "mtp_max_draft_len"
+            ),
+            "raw_acceptance_rate": (
+                "TRT accepted/proposed draft counters when populated; null "
+                "when the pinned PyTorch MTP path reports zero proposals"
             ),
         },
         "provenance": {

@@ -18,6 +18,7 @@ from metrics import aggregate_passes, summarize_pass
 from prompts import load_corpus
 from trt_config import (
     BASE_SEED,
+    MTP_DRAFT_TOKENS,
     OUTPUT_TOKENS,
     WORLD_SIZE,
     CandidateConfig,
@@ -121,6 +122,7 @@ def generate_pass(llm: Any, inputs: list[dict[str, list[int]]]) -> dict[str, Any
         wall_seconds=wall_seconds,
         expected_output_tokens=OUTPUT_TOKENS,
         num_gpus=WORLD_SIZE,
+        max_draft_tokens=MTP_DRAFT_TOKENS,
     )
 
 
