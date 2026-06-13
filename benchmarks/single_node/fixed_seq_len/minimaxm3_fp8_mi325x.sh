@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 
 # MiniMax-M3 MXFP8 MI325X (gfx942) single-node vLLM recipe.
-# Reuses the dedicated ROCm image and serving flags validated on MI355X.
-# Block size 128 is mandatory for MSA sparse attention.
+# https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3?hardware=mi325x&variant=mxfp8
+# MXFP8 runs from TP=4 on gfx942; block size 128 is mandatory for MSA.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -56,7 +56,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --max-model-len "$MAX_MODEL_LEN" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
-    --enforce-eager \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
