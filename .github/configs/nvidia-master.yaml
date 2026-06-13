@@ -11678,3 +11678,40 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
           tp: 4
           ep: 4
           dp-attn: true
+
+# MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
+# (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
+# cores on Blackwell. M3 support has not shipped in a stable vLLM release;
+# the dedicated vllm/vllm-openai:minimax-m3 image is built from the m3_release
+# branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
+# sparse/index cache alignment). Weights are NOT SRE-staged; b300 falls back
+# to writable /data/models (see launch_b300-nv.sh MODEL_PATH split).
+minimaxm3-fp8-b300-vllm:
+  image: vllm/vllm-openai:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: b300
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
+      # tp2 fits MXFP8 weights (~222 GB/GPU of 288) but KV headroom is thin;
+      # 1k1k only, drop if it OOMs at the high end.
+      - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }

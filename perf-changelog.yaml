@@ -3638,11 +3638,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1712
 
 - config-keys:
+    - minimaxm3-fp8-b300-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on B300 (model: MiniMaxAI/MiniMax-M3-MXFP8, 427B total / 26B active MoE with MSA sparse attention)"
+    - "Image: vllm/vllm-openai:minimax-m3 (already the cu130 build; M3 support is unmerged upstream — vllm-project/vllm#45381)"
+    - "--block-size 128 is mandatory (MSA sparse/index cache alignment); --language-model-only skips the vision encoder for text-only throughput; conc-scaled --max-cudagraph-capture-size"
+    - "Layouts: TP8 and TP4 (latency), TP4+EP4 / TP8+EP8 (TEP throughput), tp2-ep2, TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
+    - "Serves from the launch_b300-nv.sh MODEL/MODEL_PATH split (model not in the SRE-staged /scratch/models list -> writable /data/models)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1724
+
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm
   description:
     - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI355X / gfx950 (model: MiniMaxAI/MiniMax-M3-MXFP8, 427B total / 26B active MoE with MSA sparse attention)"
-    - "Image: vllm/vllm-openai-rocm:nightly-6fbfdd183145443274df49c09c46cd13ea27af5f. No public ROCm image carries M3 yet (vllm-project/vllm#45381 unmerged); the bench script overlays the m3_release python tree and compiles the missing fused qknorm/rope/kv-insert _C op for gfx950 (cached on the shared mount)"
-    - "--block-size 128 is mandatory (MSA sparse/index cache; default 16 fails on AMD with 'No common block size for 16'); --attention-backend TRITON_ATTN; --language-model-only for text-only throughput"
-    - "Layouts: TP8 and TP4+EP4 (latency), TP8+EP8 (TEP throughput), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
-    - "launch_mi355x-amds.sh routes M3 weights to NFS /it-share/hf-hub-cache (not node-local /var/lib NVMe)"
+    - "Image: rocm/vllm-dev:v0.22.1rc-0612"
+    - "Matches the published MI355X recipe with --block-size 128, --attention-backend TRITON_ATTN, MiniMax-M3 tool/reasoning parsers, and automatic tool choice"
+    - "MI355X deviations required for fixed-sequence text benchmarking: --language-model-only, scenario-specific --max-model-len, and --enforce-eager to bypass the M3 decode CUDA-graph assertion"
+    - "B300-parity layouts and concurrency ranges: TP8, TP8+EP8, TP4, TP4+EP4, TP2+EP2, and TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
+    - "launch_mi355x-amds.sh routes M3 weights to NFS /it-share/hf-hub-cache instead of node-local /var/lib NVMe"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1725
