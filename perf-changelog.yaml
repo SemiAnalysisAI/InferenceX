@@ -3654,8 +3654,8 @@
   description:
     - "Initial submission: MiniMax-M3 MXFP8 fully-disaggregated vLLM sweep for GB200 via Dynamo"
     - "Model: MiniMaxAI/MiniMax-M3-MXFP8 (427B total / 26B active MoE, MSA sparse attention, ~444 GB MXFP8 checkpoint)"
-    - "Image: nvcr.io#nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1 (Dynamo 1.3.0 pre-installed; dynamo.install=false)"
-    - "Disaggregated prefill/decode over NixlConnector; every worker = one 4-GPU node (444 GB checkpoint can't fit in fewer)"
+    - "Image: vllm/vllm-openai:minimax-m3 (multi-arch m3_release build, vllm-project/vllm#45381); dynamo.install=true + wheel 1.2.0.dev20260526 layers in the dynamo runtime + NIXL"
+    - "Disaggregated prefill/decode over NixlConnector on the NVL72 NVLink fabric (UCX_CUDA_IPC_ENABLE_MNNVL=y + NCCL_CUMEM_ENABLE=1, cuda_ipc UCX_TLS); every worker = one 4-GPU node (444 GB checkpoint can't fit in fewer)"
     - "5 disagg topologies: 1P1D TP4 (2n), 1P1D TP4+EP4 (2n), 1P2D TP4+EP4 (3n), 2P1D TP4+EP4 (3n), 1P1D DEP4 (2n)"
     - "Concurrency sweep: TP4 4-64, TP4EP4 64-512, 1P2D/2P1D 256-1024, DEP4 512-2048"
     - "--block-size 128 mandatory everywhere (MSA sparse/index cache alignment); --language-model-only for text-only benchmarks"

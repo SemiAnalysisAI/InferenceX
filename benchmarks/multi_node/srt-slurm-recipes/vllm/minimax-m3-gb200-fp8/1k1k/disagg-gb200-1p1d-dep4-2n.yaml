@@ -9,11 +9,12 @@ name: "minimax-m3-vllm-disagg-gb200-1p1d-dep4-1k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "nvcr.io#nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1"
+  container: "vllm/vllm-openai:minimax-m3"
   precision: "fp8"
 
 dynamo:
-  install: false
+  install: true
+  wheel: "1.2.0.dev20260526"
 
 slurm:
   time_limit: "8:00:00"
@@ -44,10 +45,26 @@ backend:
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    # NIXL/UCX KV transfer over the NVL72 NVLink fabric (cuda_ipc) instead
+    # of TCP: UCX_CUDA_IPC_ENABLE_MNNVL=y enables cross-node NVLink IPC and
+    # NCCL_CUMEM_ENABLE=1 cuMem-allocates buffers so they are IPC-exportable.
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_CUMEM_ENABLE: "1"
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+    # NIXL/UCX KV transfer over the NVL72 NVLink fabric (cuda_ipc) instead
+    # of TCP: UCX_CUDA_IPC_ENABLE_MNNVL=y enables cross-node NVLink IPC and
+    # NCCL_CUMEM_ENABLE=1 cuMem-allocates buffers so they are IPC-exportable.
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NCCL_CUMEM_ENABLE: "1"
 
   vllm_config:
     prefill:
