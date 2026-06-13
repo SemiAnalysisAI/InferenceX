@@ -3717,3 +3717,10 @@
     - "B300-parity layouts and concurrency ranges: TP8, TP8+EP8, TP4, TP4+EP4, TP2+EP2, and TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
     - "launch_mi355x-amds.sh routes M3 weights to NFS /it-share/hf-hub-cache instead of node-local /var/lib NVMe"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1725
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-mtp
+    - minimaxm3-fp8-h100-vllm-mtp
+  description:
+    - "Start the TP-only latency rows of the MiniMax-M3 EAGLE3 MTP sweeps (H200, H100) at concurrency 1 instead of 4, matching the conc-1 start used on the non-MTP day-zero recipes — captures the single-request latency point. TEP/DEP rows keep their higher concurrency starts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1743
