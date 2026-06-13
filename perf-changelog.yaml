@@ -3563,6 +3563,7 @@
     - "Add atom-disagg sweep: 2P1D DPA+TP8 (conc 256-2048) and 1P1D TP8 (conc 4-256) at isl=8192/osl=1024"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
   
+
 - config-keys:
     - dsv4-fp4-b300-trt
     - dsv4-fp4-b300-trt-mtp
@@ -3611,6 +3612,7 @@
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
   
+
 - config-keys:
     - dsv4-fp4-gb200-dynamo-sglang
   description:
@@ -3679,3 +3681,31 @@
     - "Drafter pinned to FLASH_ATTN via speculative-config attention_backend: the EAGLE3 head is MHA and FlashInfer only supports the mandatory page size 128 through its GQA-only trtllm-gen kernel"
     - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped (draft weights + draft KV headroom)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1733
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm
+    - minimaxm3-fp8-h100-vllm
+  description:
+    - "Day-zero MiniMax-M3 MXFP8 single-node recipes for H200 and H100 (vLLM)."
+    - "Image: vllm/vllm-openai:minimax-m3 (dedicated day-zero image; M3 not in a stable release yet)."
+    - "Sweeps TP4/TP8, TP+EP (TEP), and DP-attention+EP (DEP) per https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3; H100 is TP8-only (MXFP8 weights ~427 GB)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1731
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-trt
+  description:
+    - "Add MiniMax-M2.5 NVFP4 B200 TensorRT-LLM single-node benchmark (1k1k and 8k1k)"
+    - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18"
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/1722
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-mtp
+    - minimaxm3-fp8-h100-vllm-mtp
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 H200 + H100 vLLM benchmarks with EAGLE3 speculative decoding (target: MiniMaxAI/MiniMax-M3-MXFP8, draft: Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens) — spec-decoding=mtp variants of the day-zero H200/H100 recipes (PR #1731)"
+    - "Image: vllm/vllm-openai:minimax-m3 (same m3_release-branch build as the non-MTP entries)"
+    - "Serve shape follows the non-MTP H200/H100 scripts (--block-size 128, --language-model-only, HF_HUB_OFFLINE serve to dodge the shared-FS download-lock race); cudagraph capture scaled to CONC * (1 + spec tokens); prompts routed through the chat template for realistic acceptance"
+    - "Drafter pinned to FLASH_ATTN via speculative-config attention_backend: the EAGLE3 head is MHA and FlashInfer only supports the mandatory page size 128 through its GQA-only trtllm-gen kernel"
+    - "H200 layouts: TP4 / TP8 (latency), TP4+EP4 / TP8+EP8 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end. H100 is TP8-only (no room below TP8 at ~56 GB weights/GPU); DEP omitted (KV-cache init fails at high conc, draft only tightens it)"
+    - "Adds SPEC_SUFFIX to the three H100 launchers (cw, cr, dgxc-slurm) so spec-decoding=mtp routes to the _mtp script — they hardcoded _h100.sh and never gained the _mtp routing the H200 launchers have had since #392"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1739
