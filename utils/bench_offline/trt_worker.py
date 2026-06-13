@@ -216,7 +216,11 @@ def main() -> int:
             f"mtp={candidate.mtp_draft_tokens} "
             f"adp_batch_mode={candidate.attention_dp_batch_mode} "
             "lm_head_tp="
-            f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'}"
+            f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
+            "cute_dsl_mqa="
+            f"{'on' if candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+            f"max_seq_len={candidate.max_seq_len} "
+            f"trt_iter_log={'on' if candidate.print_iter_log else 'off'}"
         )
 
         phase = "perfect_router_source"
@@ -247,9 +251,13 @@ def main() -> int:
         log_progress(
             f"engine initialization start "
             f"max_batch_size={llm_kwargs['max_batch_size']} "
+            f"max_seq_len={llm_kwargs['max_seq_len']} "
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
             f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
             f"cuda_graph_batch_size={graph_batch_size} "
+            "cute_dsl_mqa="
+            f"{'on' if candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+            f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
             f"wait_iters={candidate.batching_wait_iters} "
             f"timeout_iters={candidate.attention_dp_timeout_iters}"
         )
@@ -266,8 +274,11 @@ def main() -> int:
                 f"engine initialization complete elapsed={init_seconds:.1f}s "
                 f"parallelism={resolved['effective_parallelism']} "
                 f"max_batch_size={resolved['max_batch_size']} "
+                f"max_seq_len={resolved['max_seq_len']} "
                 "cuda_graph_batch_sizes="
-                f"{resolved.get('cuda_graph_batch_sizes')}"
+                f"{resolved.get('cuda_graph_batch_sizes')} "
+                "cute_dsl_mqa="
+                f"{'on' if resolved['use_cute_dsl_paged_mqa_logits'] else 'off'}"
             )
 
             phase = "warmup"

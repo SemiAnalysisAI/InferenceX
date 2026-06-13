@@ -574,3 +574,43 @@ that mismatch before exploring non-comparable TP4 or alternate-MTP shapes.
   the benchmark method or making a much larger operational change.
 - Stop c1024 here. It is `unmeasured_runtime_limit`, not
   `capacity_failure`, and must not be reported as a performance row.
+
+## Stage-Four Kernel Matrix
+
+`utils/bench_offline/b300_stage4_kernel_experiments.json` is the next bounded
+ten-job offline matrix. Every job creates one engine, runs one full-shape
+warmup, and records one measured pass.
+
+The source-backed candidates are:
+
+- CuTE DSL FP4 paged-MQA logits. TRT commit `c185066` contains the tuned
+  implementation from TensorRT-LLM changes `#13929` and `#14133`.
+- Tight `max_seq_len=8832`. The fixed workload needs 8817 committed sequence
+  tokens, and 8832 is the next 128-token KV-block boundary.
+- `print_iter_log=false`. This removes native TRT iteration printing only;
+  benchmark phase logs and 60-second heartbeats remain enabled.
+- DEP4 local-rank sizing. At global c64, engine and graph batch capacity is
+  16 per active attention-DP rank instead of the legacy global 64.
+
+Pinned TRT's DeepSeek-V4 config loader preserves checkpoint-derived sparse
+attention values when the CuTE DSL flag is supplied. It uses explicit-field
+checks for checkpoint `index_topk` and `window_size`, keeps the checkpoint's
+full compression-ratio list, and rebuilds
+`DeepSeekV4SparseAttentionConfig` with the requested DSL flag.
+
+Dispatch only after run `27476767599` releases all ten B300 slots:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage4_kernel_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline kernel optimization' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```

@@ -1,0 +1,202 @@
+[
+  {
+    "id": "c8-local-lmtp-control-r2",
+    "concurrency": 8,
+    "candidate": {
+      "name": "dep8-lmtp-w0-local-control-r2",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "kernel-control"
+    }
+  },
+  {
+    "id": "c8-local-lmtp-dsl",
+    "concurrency": 8,
+    "candidate": {
+      "name": "dep8-lmtp-w0-local-dsl",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": true,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "cute-dsl-paged-mqa"
+    }
+  },
+  {
+    "id": "c32-local-lmtp-control-r2",
+    "concurrency": 32,
+    "candidate": {
+      "name": "dep8-lmtp-w30-balance-off-local-control-r2",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": false,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "kernel-control"
+    }
+  },
+  {
+    "id": "c32-local-lmtp-dsl",
+    "concurrency": 32,
+    "candidate": {
+      "name": "dep8-lmtp-w30-balance-off-local-dsl",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": false,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": true,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "cute-dsl-paged-mqa"
+    }
+  },
+  {
+    "id": "c64-local-lmtp-control-r2",
+    "concurrency": 64,
+    "candidate": {
+      "name": "dep8-lmtp-w0-local-control-r2",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "kernel-control"
+    }
+  },
+  {
+    "id": "c64-local-lmtp-dsl",
+    "concurrency": 64,
+    "candidate": {
+      "name": "dep8-lmtp-w0-local-dsl",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": true,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "cute-dsl-paged-mqa"
+    }
+  },
+  {
+    "id": "c64-local-lmtp-tightseq",
+    "concurrency": 64,
+    "candidate": {
+      "name": "dep8-lmtp-w0-local-tightseq",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": true,
+      "max_seq_len": 8832,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "sequence-capacity"
+    }
+  },
+  {
+    "id": "c64-local-lmtp-quiet",
+    "concurrency": 64,
+    "candidate": {
+      "name": "dep8-lmtp-w0-local-quiet",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": false,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep8",
+      "kind": "iteration-log"
+    }
+  },
+  {
+    "id": "c64-dep4-local-w0",
+    "concurrency": 64,
+    "candidate": {
+      "name": "dep4-lmtp-w0-local",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": null,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep4",
+      "kind": "dep4-local-batch"
+    }
+  },
+  {
+    "id": "c64-dep4-local-balance-off",
+    "concurrency": 64,
+    "candidate": {
+      "name": "dep4-lmtp-w30-balance-off-local",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": false,
+      "attention_dp_timeout_iters": null,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "attention_dp_batch_mode": "local-rank",
+      "use_cute_dsl_paged_mqa_logits": false,
+      "print_iter_log": true,
+      "max_seq_len": 9216,
+      "mtp_draft_tokens": 3,
+      "parallelism": "dep4",
+      "kind": "dep4-local-batch"
+    }
+  }
+]

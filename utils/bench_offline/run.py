@@ -315,6 +315,10 @@ def run_worker(
         f"adp_batch_mode={candidate.attention_dp_batch_mode} "
         "lm_head_tp="
         f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
+        "cute_dsl_mqa="
+        f"{'on' if candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+        f"max_seq_len={candidate.max_seq_len} "
+        f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
         f"mtp={candidate.mtp_draft_tokens} "
         f"parallelism={candidate.effective_parallelism} "
         f"active_gpus={candidate.active_gpu_count}"
@@ -581,6 +585,11 @@ def main() -> int:
                 f"{'on' if experiment_candidate.enable_lm_head_tp_in_adp else 'off'} "
                 "adp_batch_mode="
                 f"{experiment_candidate.attention_dp_batch_mode} "
+                "cute_dsl_mqa="
+                f"{'on' if experiment_candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+                f"max_seq_len={experiment_candidate.max_seq_len} "
+                "trt_iter_log="
+                f"{'on' if experiment_candidate.print_iter_log else 'off'} "
                 f"mtp={experiment_candidate.mtp_draft_tokens}"
             )
 

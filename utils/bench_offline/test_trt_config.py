@@ -48,6 +48,36 @@ def test_llm_kwargs_are_fixed_dep8_mtp3():
     assert kwargs["enable_lm_head_tp_in_adp"] is False
     assert kwargs["speculative_config"]["max_draft_len"] == 3
     assert kwargs["cuda_graph_config"]["batch_sizes"] == [64]
+    assert kwargs["max_seq_len"] == 9216
+    assert kwargs["print_iter_log"] is True
+    assert "sparse_attention_config" not in kwargs
+
+
+def test_candidate_can_enable_cute_dsl_mqa_and_tighten_capacity():
+    candidate = CandidateConfig(
+        name="dsl-tight",
+        batching_wait_iters=0,
+        use_cute_dsl_paged_mqa_logits=True,
+        print_iter_log=False,
+        max_seq_len=8832,
+    )
+    kwargs = build_llm_kwargs("/model", 64, candidate)
+    assert kwargs["sparse_attention_config"] == {
+        "algorithm": "deepseek_v4",
+        "use_cute_dsl_paged_mqa_logits": True,
+    }
+    assert kwargs["print_iter_log"] is False
+    assert kwargs["max_seq_len"] == 8832
+
+
+@pytest.mark.parametrize("max_seq_len", (8819, True, 8832.0))
+def test_candidate_rejects_invalid_max_seq_len(max_seq_len):
+    with pytest.raises(ValueError, match="max_seq_len"):
+        CandidateConfig(
+            name="invalid-seq",
+            batching_wait_iters=0,
+            max_seq_len=max_seq_len,
+        )
 
 
 def test_global_batch_mode_preserves_legacy_c8_capacity():
@@ -195,6 +225,9 @@ def test_resolved_parallelism_rejects_no_expected_values():
             enable_lm_head_tp_in_adp=False,
         ),
         speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=None,
     )
     assert resolved_parallelism(llm_args)["effective_parallelism"] == "DEP8"
 
@@ -215,6 +248,9 @@ def test_resolved_parallelism_accepts_candidate_lm_head_tp():
             enable_lm_head_tp_in_adp=True,
         ),
         speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=None,
     )
     resolved = resolved_parallelism(llm_args, candidate)
     assert resolved["enable_lm_head_tp_in_adp"] is True
@@ -236,6 +272,9 @@ def test_resolved_parallelism_validates_local_rank_runtime_capacity():
             enable_lm_head_tp_in_adp=False,
         ),
         speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=None,
         max_batch_size=4,
         max_num_tokens=8464,
         cuda_graph_config=SimpleNamespace(
@@ -268,6 +307,9 @@ def test_resolved_parallelism_rejects_wrong_local_graph_capacity():
             enable_lm_head_tp_in_adp=False,
         ),
         speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=None,
         max_batch_size=4,
         max_num_tokens=8464,
         cuda_graph_config=SimpleNamespace(
@@ -298,9 +340,42 @@ def test_resolved_parallelism_accepts_tp4():
             enable_lm_head_tp_in_adp=False,
         ),
         speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=None,
     )
     resolved = resolved_parallelism(llm_args, candidate)
     assert resolved["effective_parallelism"] == "TP4"
+
+
+def test_resolved_parallelism_validates_runtime_tuning_switches():
+    candidate = CandidateConfig(
+        name="runtime-switches",
+        batching_wait_iters=0,
+        use_cute_dsl_paged_mqa_logits=True,
+        print_iter_log=False,
+        max_seq_len=8832,
+    )
+    llm_args = SimpleNamespace(
+        parallel_config=SimpleNamespace(
+            world_size=8,
+            tp_size=8,
+            moe_ep_size=8,
+            moe_tp_size=1,
+            enable_attention_dp=True,
+            enable_lm_head_tp_in_adp=False,
+        ),
+        speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=8832,
+        print_iter_log=False,
+        sparse_attention_config=SimpleNamespace(
+            use_cute_dsl_paged_mqa_logits=True,
+        ),
+    )
+    resolved = resolved_parallelism(llm_args, candidate)
+    assert resolved["max_seq_len"] == 8832
+    assert resolved["print_iter_log"] is False
+    assert resolved["use_cute_dsl_paged_mqa_logits"] is True
 
 
 @pytest.mark.parametrize(
@@ -309,6 +384,7 @@ def test_resolved_parallelism_accepts_tp4():
         "b300_huawei_experiments.json",
         "b300_stage2_experiments.json",
         "b300_stage3_local_batch_experiments.json",
+        "b300_stage4_kernel_experiments.json",
     ),
 )
 def test_checked_in_experiment_matrices_are_valid(filename):

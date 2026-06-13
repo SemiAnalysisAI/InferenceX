@@ -74,6 +74,9 @@ class CandidateConfig:
     cuda_graph: bool = True
     enable_lm_head_tp_in_adp: bool = False
     attention_dp_batch_mode: str = "global"
+    use_cute_dsl_paged_mqa_logits: bool = False
+    print_iter_log: bool = True
+    max_seq_len: int = MAX_SEQ_LEN
     mtp_draft_tokens: int = MTP_DRAFT_TOKENS
     parallelism: str = "dep8"
     kind: str = "scheduler"
@@ -112,9 +115,20 @@ class CandidateConfig:
             "overlap_scheduler",
             "cuda_graph",
             "enable_lm_head_tp_in_adp",
+            "use_cute_dsl_paged_mqa_logits",
+            "print_iter_log",
         ):
             if not isinstance(getattr(self, field_name), bool):
                 raise ValueError(f"{field_name} must be boolean")
+        minimum_seq_len = INPUT_TOKENS + OUTPUT_TOKENS + MTP_DRAFT_TOKENS
+        if (
+            not isinstance(self.max_seq_len, int)
+            or isinstance(self.max_seq_len, bool)
+            or self.max_seq_len < minimum_seq_len
+        ):
+            raise ValueError(
+                f"max_seq_len must be an integer >= {minimum_seq_len}"
+            )
         if not isinstance(self.kind, str):
             raise ValueError("kind must be a string")
         if (
@@ -266,7 +280,7 @@ def build_llm_kwargs(
             else False
         ),
         "max_batch_size": max_batch_size(concurrency, candidate),
-        "max_seq_len": MAX_SEQ_LEN,
+        "max_seq_len": candidate.max_seq_len,
         "max_num_tokens": max_num_tokens(
             concurrency,
             candidate.mtp_draft_tokens,
@@ -274,7 +288,7 @@ def build_llm_kwargs(
         ),
         "custom_tokenizer": "deepseek_v4",
         "return_perf_metrics": True,
-        "print_iter_log": True,
+        "print_iter_log": candidate.print_iter_log,
         "stream_interval": 100,
         "num_postprocess_workers": 4,
         "disable_overlap_scheduler": not candidate.overlap_scheduler,
@@ -295,6 +309,11 @@ def build_llm_kwargs(
             "max_draft_len": candidate.mtp_draft_tokens,
         },
     }
+    if candidate.use_cute_dsl_paged_mqa_logits:
+        kwargs["sparse_attention_config"] = {
+            "algorithm": "deepseek_v4",
+            "use_cute_dsl_paged_mqa_logits": True,
+        }
     if parallelism.enable_attention_dp:
         kwargs["attention_dp_config"] = {
             "batching_wait_iters": candidate.batching_wait_iters,
@@ -406,6 +425,36 @@ def resolved_parallelism(
     resolved["attention_dp_batch_mode"] = (
         candidate.attention_dp_batch_mode
     )
+    resolved["max_seq_len"] = int(llm_args.max_seq_len)
+    if resolved["max_seq_len"] != candidate.max_seq_len:
+        raise RuntimeError(
+            "Resolved TRT max_seq_len mismatch: "
+            f"{resolved['max_seq_len']} != {candidate.max_seq_len}"
+        )
+    resolved["print_iter_log"] = bool(llm_args.print_iter_log)
+    if resolved["print_iter_log"] != candidate.print_iter_log:
+        raise RuntimeError(
+            "Resolved TRT print_iter_log mismatch: "
+            f"{resolved['print_iter_log']} != {candidate.print_iter_log}"
+        )
+    sparse_config = getattr(llm_args, "sparse_attention_config", None)
+    resolved["use_cute_dsl_paged_mqa_logits"] = bool(
+        sparse_config is not None
+        and getattr(
+            sparse_config,
+            "use_cute_dsl_paged_mqa_logits",
+            False,
+        )
+    )
+    if (
+        resolved["use_cute_dsl_paged_mqa_logits"]
+        != candidate.use_cute_dsl_paged_mqa_logits
+    ):
+        raise RuntimeError(
+            "Resolved TRT use_cute_dsl_paged_mqa_logits mismatch: "
+            f"{resolved['use_cute_dsl_paged_mqa_logits']} != "
+            f"{candidate.use_cute_dsl_paged_mqa_logits}"
+        )
 
     if concurrency is not None:
         resolved["global_concurrency"] = concurrency

@@ -76,6 +76,9 @@ jobs:
                   "cuda_graph",
                   "enable_lm_head_tp_in_adp",
                   "attention_dp_batch_mode",
+                  "use_cute_dsl_paged_mqa_logits",
+                  "print_iter_log",
+                  "max_seq_len",
                   "mtp_draft_tokens",
                   "parallelism",
                   "kind",
@@ -164,6 +167,8 @@ jobs:
                       "overlap_scheduler",
                       "cuda_graph",
                       "enable_lm_head_tp_in_adp",
+                      "use_cute_dsl_paged_mqa_logits",
+                      "print_iter_log",
                   ):
                       if bool_key in candidate and not isinstance(
                           candidate[bool_key],
@@ -173,6 +178,16 @@ jobs:
                               f"experiment {experiment_id} candidate."
                               f"{bool_key} must be boolean"
                           )
+                  max_seq_len = candidate.get("max_seq_len", 9216)
+                  if (
+                      not isinstance(max_seq_len, int)
+                      or isinstance(max_seq_len, bool)
+                      or max_seq_len < 8820
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "max_seq_len must be an integer >= 8820"
+                      )
                   mtp = candidate.get("mtp_draft_tokens", 3)
                   if (
                       not isinstance(mtp, int)

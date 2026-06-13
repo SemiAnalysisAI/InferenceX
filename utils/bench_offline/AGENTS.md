@@ -31,6 +31,13 @@ benchmark.
   engine and CUDA graph capacity to
   `ceil(global_concurrency / attention_dp_ranks)` and record the resolved
   values in the result.
+- The pinned TRT source preserves checkpoint-derived DeepSeek-V4 sparse
+  settings when `use_cute_dsl_paged_mqa_logits` is explicitly enabled.
+  Treat it as an isolated kernel experiment and validate the resolved flag.
+- `max_seq_len=8832` is the block-aligned tight capacity for the fixed
+  8192-input/625-output/MTP3 shape. Keep `9216` as the control.
+- `print_iter_log=false` only disables native TRT iteration output. Preserve
+  all launcher/controller/worker phase and heartbeat logs.
 - Do not silently pad prompts, reduce MTP depth, change the MoE backend, or
   switch to HTTP serving to make a run pass. LM-head TP is an explicit
   candidate field and must be recorded in the result.

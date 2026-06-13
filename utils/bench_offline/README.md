@@ -259,6 +259,21 @@ old global sizing, while `attention_dp_batch_mode=local-rank` uses
 capacity. At c8/c32/c64 on DEP8, that captures graph batches 1/4/8 instead of
 8/32/64 and avoids padding each local decode batch to global concurrency.
 
+The checked-in fourth-stage matrix is
+`utils/bench_offline/b300_stage4_kernel_experiments.json`. It keeps matched
+one-pass controls while testing:
+
+- TRT's CuTE DSL FP4 paged-MQA-logits kernel at c8/c32/c64
+- a block-aligned `max_seq_len=8832` control at c64
+- native TRT iteration logging disabled at c64 while harness progress remains
+- DEP4 local-rank batch/graph sizing at c64
+
+The CuTE DSL override supplies only
+`algorithm=deepseek_v4` and `use_cute_dsl_paged_mqa_logits=true`. Pinned TRT
+then reconstructs checkpoint-derived compression ratios, window size,
+indexer dimensions, and top-k. The worker validates that the flag,
+`max_seq_len`, and `print_iter_log` resolve exactly as requested.
+
 The legacy concurrency-only mode remains available for reproducing the older
 serial tuner:
 
@@ -341,6 +356,24 @@ gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --exit-status
 The workflow enforces a maximum of ten parallel jobs. Every experiment still
 uses direct in-process `LLM.generate()`; no serving process or HTTP client is
 introduced.
+
+Dispatch the fourth-stage matrix after the third-stage jobs release the ten
+B300 runner slots:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage4_kernel_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline kernel optimization' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
 
 ## Artifacts And Collected Values
 
