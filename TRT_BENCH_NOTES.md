@@ -199,3 +199,34 @@ performance measurements.
   passed `--passes 3`.
 - This is a bounded harness bug. Fix the worker pass-count branch and rerun c8
   before launching any broader concurrency points.
+
+### Run 27464928729
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27464928729`
+- Dispatched `2026-06-13T11:03:13Z`.
+- Branch commit: `404d87e69024eb0aac808bacaf8e498bf78a75dc`.
+- Concurrency: `8`.
+- Purpose: final c8 gate after fixing tune mode to honor `--passes 3`.
+- Required artifact proof: every successful tuning attempt must report
+  `pass_count=3` and `request_samples=24`.
+- Completed `2026-06-13T11:58:34Z` on `b300-016`, Slurm job `20800`.
+- All six tuning attempts reported `pass_count=3`,
+  `request_samples=24`, and three-element derived-throughput, wall-throughput,
+  and output-digest arrays.
+- Winner: `wait30`, balance on, overlap on, CUDA graph on.
+- Three-pass tuning result: `114.063 tok/s/GPU` derived throughput.
+- `wait10` reached `116.178 tok/s/GPU`, only `1.85%` above `wait30`;
+  balance-off reached `115.723 tok/s/GPU`, only `1.46%` above. Neither met
+  the 3% replacement threshold. Overlap-off was slower at
+  `105.151 tok/s/GPU`.
+- Fresh final result: `8.614 ms` token TPOT,
+  `116.091 tok/s/GPU` derived throughput,
+  `85.343 tok/s/GPU` wall throughput, and `3.486 tokens/step`.
+- The fresh final derived result was `1.78%` above its tuning result, within
+  the 3% stability threshold.
+- Commit provenance, temperature-1/global-seed-42 sampling metadata, null raw
+  counters, effective acceptance, DEP8/MTP3 shape, eight-rank perfect-router
+  propagation, exact 8192-token prompts, and exact 625-token outputs all
+  validated.
+- This run passes the c8 gate. Broader c32/c64/c128/c256 measurements may
+  proceed.
