@@ -128,6 +128,8 @@ Do not call a row valid unless:
 - every request emits exactly 625 tokens
 - resolved shape is DEP8 with LM-head TP off and MTP3
 - perfect-router propagation validation passes
+- every successful tuning attempt contains three measured passes and
+  `3 * concurrency` request samples
 - final result contains three measured passes from one fresh final engine
 - derived and wall throughput are both present
 - token/step and effective acceptance are present
@@ -179,3 +181,21 @@ performance measurements.
   was therefore not strong enough to call the scheduler choice verified.
 - Follow-up correction: pool three passes for every tuning candidate and
   require a 3% improvement before replacing the earlier candidate.
+
+### Run 27463874862
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27463874862`
+- Dispatched `2026-06-13T10:13:58Z`.
+- Branch commit: `6c196d6b7f7cd10080c6f396bd9d43fcb4f7407b`.
+- Concurrency: `8`.
+- Purpose: verify three-pass candidate tuning and the 3% winner threshold
+  before dispatching broader B300 concurrency points.
+- Completed `2026-06-13T11:01:31Z` on `b300-015`, Slurm job `20789`.
+- The final measurement itself succeeded with `wait30`, `9.163 ms` token
+  TPOT, `109.130 tok/s/GPU` derived throughput, and `3.342 tokens/step`.
+- Tuning verification failed: metadata requested three tuning passes, but
+  every candidate artifact contained `pass_count=1` and `request_samples=8`.
+  `trt_worker.py` still forced tune mode to one pass after the controller
+  passed `--passes 3`.
+- This is a bounded harness bug. Fix the worker pass-count branch and rerun c8
+  before launching any broader concurrency points.

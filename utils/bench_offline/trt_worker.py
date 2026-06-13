@@ -127,6 +127,12 @@ def generate_pass(llm: Any, inputs: list[dict[str, list[int]]]) -> dict[str, Any
     )
 
 
+def measured_pass_count(requested_passes: int) -> int:
+    if requested_passes <= 0:
+        raise ValueError("--passes must be positive")
+    return requested_passes
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-path", required=True)
@@ -187,9 +193,7 @@ def main() -> int:
             time.sleep(2.0)
 
             phase = "measured_generation"
-            pass_count = args.passes if args.mode == "final" else 1
-            if pass_count <= 0:
-                raise ValueError("--passes must be positive")
+            pass_count = measured_pass_count(args.passes)
             for pass_index in range(pass_count):
                 measured = generate_pass(llm, inputs)
                 measured["pass_index"] = pass_index + 1

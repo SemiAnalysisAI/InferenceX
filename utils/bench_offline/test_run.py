@@ -4,6 +4,7 @@ from types import ModuleType
 
 from run import classify_failure, git_revision
 from trt_mpi_entry import worker_main
+from trt_worker import measured_pass_count
 
 
 def test_classify_graph_failure_before_generic_runtime():
@@ -27,6 +28,10 @@ def test_git_revision_prefers_explicit_benchmark_revision(monkeypatch):
     revision = "a" * 40
     monkeypatch.setenv("TRT_BENCH_GIT_REVISION", revision)
     assert git_revision() == revision
+
+
+def test_worker_honors_requested_tuning_pass_count():
+    assert measured_pass_count(3) == 3
 
 
 def test_mpi_entry_sets_router_before_real_worker(
