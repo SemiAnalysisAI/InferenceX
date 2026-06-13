@@ -301,11 +301,12 @@ Progress logging does not alter measured intervals or benchmark settings.
 Push `trt-bench`, then dispatch the ten single-candidate experiments:
 
 ```bash
+BENCH_REF="$(git rev-parse HEAD)"
 EXPERIMENTS="$(jq -c . utils/bench_offline/b300_huawei_experiments.json)"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
-  -f 'inputs[ref]=trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
   -f 'inputs[test-name]=DSV4 B300 TRT offline optimization' \
   -f "inputs[experiments]=$EXPERIMENTS" \
   -f 'inputs[salloc-time]=90' \
@@ -313,7 +314,9 @@ gh api -X POST \
 ```
 
 The top-level `ref=trt-bench` selects this branch's workflow implementation.
-`inputs[ref]=trt-bench` selects the code checkout used by every job.
+`inputs[ref]=$BENCH_REF` pins every matrix checkout to the same commit. The
+launcher records the actual checked-out `git rev-parse HEAD` in result
+provenance.
 
 Find and monitor the run:
 

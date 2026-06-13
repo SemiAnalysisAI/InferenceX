@@ -88,10 +88,11 @@ stricter boundaries:
 Dispatch only concurrency 8:
 
 ```bash
+BENCH_REF="$(git rev-parse HEAD)"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
-  -f 'inputs[ref]=trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
   -f 'inputs[test-name]=DSV4 B300 TRT offline bring-up c8' \
   -f 'inputs[concurrencies]=8'
 ```
@@ -99,19 +100,20 @@ gh api -X POST \
 Dispatch an explicit set of rows:
 
 ```bash
+BENCH_REF="$(git rev-parse HEAD)"
 CONCURRENCIES=32,64,128,256
 TEST_NAME='DSV4 B300 TRT offline tuned c32-c256'
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
-  -f 'inputs[ref]=trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
   -f "inputs[test-name]=$TEST_NAME" \
   -f "inputs[concurrencies]=$CONCURRENCIES"
 ```
 
 The top-level `ref` selects the branch's workflow definition. `inputs[ref]`
-selects the branch checkout inside each benchmark job. Keep both on
-`trt-bench`.
+pins the checkout inside each benchmark job. Keep the top-level ref on
+`trt-bench` and set `inputs[ref]` to the pushed commit SHA.
 
 First bring-up dispatched with this command:
 
@@ -212,11 +214,12 @@ the seven-engine serial multiplier that made c512 take 4h19.
 Exact dispatch:
 
 ```bash
+BENCH_REF="$(git rev-parse HEAD)"
 EXPERIMENTS="$(jq -c . utils/bench_offline/b300_huawei_experiments.json)"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
-  -f 'inputs[ref]=trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
   -f 'inputs[test-name]=DSV4 B300 TRT offline optimization' \
   -f "inputs[experiments]=$EXPERIMENTS" \
   -f 'inputs[salloc-time]=90' \
@@ -230,11 +233,12 @@ The checked-in second-stage matrix repeats the c32 DEP8 control and LM-head-TP
 candidate, then tests the production TP4 and DEP4 shapes:
 
 ```bash
+BENCH_REF="$(git rev-parse HEAD)"
 EXPERIMENTS="$(jq -c . utils/bench_offline/b300_stage2_experiments.json)"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
-  -f 'inputs[ref]=trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
   -f 'inputs[test-name]=DSV4 B300 TRT offline stage2 one-pass' \
   -f "inputs[experiments]=$EXPERIMENTS" \
   -f 'inputs[salloc-time]=90' \

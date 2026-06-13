@@ -19,10 +19,9 @@ EXPERIMENT_CONFIG_B64="${EXPERIMENT_CONFIG_B64:-}"
 TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
-BENCH_GIT_REVISION="${GITHUB_SHA:-}"
-if [[ -z "$BENCH_GIT_REVISION" ]]; then
-    BENCH_GIT_REVISION="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
-fi
+BENCH_GIT_REVISION="$(
+    git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+)"
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
     echo "Invalid BENCH_ID: $BENCH_ID" >&2
     exit 1
