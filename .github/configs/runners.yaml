@@ -79,6 +79,17 @@ b200:
 - 'b200-dgxc_07'
 - 'b200-dgxc_08'
 - 'b200-dgxc_09'
+b200-dgxc:
+- 'b200-dgxc_00'
+- 'b200-dgxc_01'
+- 'b200-dgxc_02'
+- 'b200-dgxc_03'
+- 'b200-dgxc_04'
+- 'b200-dgxc_05'
+- 'b200-dgxc_06'
+- 'b200-dgxc_07'
+- 'b200-dgxc_08'
+- 'b200-dgxc_09'
 b200-multinode:
 - 'b200-dgxc-slurm_7'
 - 'b200-dgxc-slurm_8'
