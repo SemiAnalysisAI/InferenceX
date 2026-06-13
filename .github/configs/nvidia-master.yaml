@@ -11686,7 +11686,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: gb300
+  runner: gb300-cw
   precision: fp8
   framework: dynamo-vllm
   multinode: true
