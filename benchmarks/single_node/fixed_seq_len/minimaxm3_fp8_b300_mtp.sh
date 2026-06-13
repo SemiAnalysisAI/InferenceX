@@ -3,9 +3,8 @@
 # MiniMax-M3 MXFP8 B300 single-node vLLM recipe with EAGLE3 speculative
 # decoding — the repo's spec-decoding=mtp variant of minimaxm3_fp8_b300.sh
 # (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3). Adds the
-# Inferact/MiniMax-M3-EAGLE3 draft head via --speculative-config with 2
-# speculative tokens (house default for vLLM spec decoding, see
-# dsv4_fp4_b300_vllm_mtp.sh). Everything else keeps the non-MTP serve shape:
+# Inferact/MiniMax-M3-EAGLE3 draft head via --speculative-config with 3
+# speculative tokens. Everything else keeps the non-MTP serve shape:
 # --block-size 128 is mandatory (MSA sparse/index cache); the benchmark is
 # text-only, so --language-model-only frees the vision encoder's VRAM.
 
@@ -66,8 +65,8 @@ else
   PARALLEL_ARGS="--tensor-parallel-size=$TP"
 fi
 
-# use 2 speculative tokens for all configs for now
-NUM_SPEC_TOKENS=2
+# use 3 speculative tokens for all configs for now
+NUM_SPEC_TOKENS=3
 
 # Fixed-seq-len runs don't need graphs past the decode step's token count:
 # with spec decoding every running request contributes 1 + NUM_SPEC_TOKENS

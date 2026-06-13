@@ -11718,8 +11718,8 @@ minimaxm3-fp8-b300-vllm:
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-b300-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
-# Inferact/MiniMax-M3-EAGLE3 draft head (2 speculative tokens, house default
-# for vLLM spec decoding). Search space mirrors the non-MTP entry trimmed at
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens).
+# Search space mirrors the non-MTP entry trimmed at
 # the extreme-concurrency end, per the dsv4-fp4-b300-vllm-mtp precedent:
 # spec decode pays off at low/mid concurrency while acceptance dilutes in
 # big batches, and the draft weights + draft KV shave headroom — tp2-ep2 is
