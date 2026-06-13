@@ -3735,3 +3735,12 @@
     - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped, mirroring the minimaxm3-fp8-b300-vllm-mtp search space"
     - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, ported from nvidia/model.py) before serving — validates EAGLE3 on MI355X ahead of an image rebuild"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1745
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI325X / gfx942"
+    - "Image and serving flags reuse the MI355X recipe: vllm/vllm-openai-rocm:minimax-m3, block size 128, TRITON_ATTN, FP8 KV cache, language-model-only, and eager execution"
+    - "H200-aligned layouts and concurrency ranges: TP4 and TP8 latency, TP4/TP8 expert parallelism, and TP8 data-parallel attention across 1k1k and 8k1k"
+    - "Route the MI325X Hugging Face cache to node-local /local_nvme/hf-hub-cache and mount ROCm GPU devices explicitly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1748
