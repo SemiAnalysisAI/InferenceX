@@ -3724,3 +3724,14 @@
   description:
     - "Start the TP-only latency rows of the MiniMax-M3 EAGLE3 MTP sweeps (H200, H100) at concurrency 1 instead of 4, matching the conc-1 start used on the non-MTP day-zero recipes — captures the single-request latency point. TEP/DEP rows keep their higher concurrency starts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1743
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 MI355X (gfx950) vLLM benchmark with EAGLE3 speculative decoding (target: MiniMaxAI/MiniMax-M3-MXFP8, draft: Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens) — spec-decoding=mtp variant of the MI355X day-zero recipe"
+    - "Image: vllm/vllm-openai-rocm:minimax-m3 (same day-zero ROCm build as the non-MTP entry)"
+    - "Serve shape follows minimaxm3-fp8-mi355x-vllm (--block-size 128, --language-model-only, --kv-cache-dtype fp8, --attention-backend TRITON_ATTN, --enforce-eager, minimax_m3 parsers); prompts routed through the chat template for realistic acceptance"
+    - "No attention_backend override on the drafter: the server runs on TRITON_ATTN, so the FlashInfer page-128/MHA limitation that forced FLASH_ATTN on the CUDA recipes does not apply on ROCm"
+    - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped, mirroring the minimaxm3-fp8-b300-vllm-mtp search space"
+    - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, ported from nvidia/model.py) before serving — validates EAGLE3 on MI355X ahead of an image rebuild"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1745
