@@ -649,3 +649,46 @@ gh api -X POST \
   `69.9%`, and `52.7%` of Huawei's published decode-step rate at c8/c32/c64.
   B300's higher observed MTP yield makes the emitted-output ratios better:
   `128.7%`, `93.2%`, and `67.4%`.
+
+## Run 27477088665
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27477088665`
+- Completed `2026-06-13T19:54:49Z` in about 12.5 minutes.
+- Branch commit: `980614e56ee7a97c9c3b9ffacdc8139135049287`.
+- Seven candidates succeeded with one warmup and one measured pass. The
+  workflow conclusion is failure only because all three CuTE DSL rows failed.
+- Repeated DEP8 control decode-step rates were `52.35`, `146.70`, and
+  `204.53` steps/s/GPU at c8/c32/c64. They differ from run `27476767599` by
+  `+0.34%`, `-0.11%`, and `-0.02%`, respectively.
+- The c32 emitted-output rate moved by `-4.5%` because observed yield changed
+  from `3.243` to `3.086` tokens/step. This is the expected one-pass
+  output-dependent MTP variance; the decode-step rate remained stable.
+- `max_seq_len=8832` changed c64 step throughput by `-0.01%`. Disabling
+  native iteration logging changed it by `-1.02%`. Neither is an
+  optimization.
+- DEP4 local-rank sizing improved per-active-GPU step throughput by
+  `16.9-17.5%` over the stage-two global-sized DEP4 rows. It reached
+  `288.89` steps/s per active GPU, but only four GPUs participate; DEP8 still
+  produced about `41.6%` more total node decode-step throughput.
+- Every CuTE DSL row failed during TRT engine warmup with:
+
+  ```text
+  FP8 Paged MQA Logits dtype errors:
+    q must be float8_e4m3fn, got torch.int8
+  ```
+
+  The kernel exists and was selected, but it is incompatible with this FP4
+  checkpoint's query representation. Do not rerun it without a checkpoint or
+  TRT dtype-path change.
+- Successful DEP8 timing:
+
+  | Conc | Engine init | Warmup | Measured pass | Estimated saving vs 3 passes |
+  |---:|---:|---:|---:|---:|
+  | 8 | 482.6 s | 4.9 s | 4.9 s | 13.7 s |
+  | 32 | 502.4 s | 19.7 s | 10.4 s | 24.7 s |
+  | 64 | 492.3 s | 34.6 s | 14.8 s | 33.7 s |
+
+  The estimate includes the two removed measured passes and their two
+  inter-pass sleeps. One pass is now the right default, but fresh TRT engine
+  initialization remains the dominant runtime. Keep the warmup so TPOT is
+  not contaminated by cold CUDA graph/JIT work.

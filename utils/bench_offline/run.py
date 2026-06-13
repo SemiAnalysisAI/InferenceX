@@ -178,6 +178,12 @@ def classify_failure(
             log_text,
         ]
     ).lower()
+    kernel_dtype_signatures = (
+        "paged mqa logits dtype errors",
+        "q must be float8_e4m3fn",
+    )
+    if any(signature in text for signature in kernel_dtype_signatures):
+        return "kernel_dtype"
     graph_signatures = (
         "cuda graph",
         "cudagraph",
@@ -659,8 +665,13 @@ def main() -> int:
                             "capacity_failure" if is_capacity else "failed"
                         ),
                         "finished_at": utc_now(),
+                        "failure_kind": failure_kind,
+                        "phase": experiment_result.get("phase"),
                         "error": (
-                            "Single-candidate experiment did not complete"
+                            "Single-candidate experiment failed "
+                            f"({failure_kind or 'unknown'}) during "
+                            f"{experiment_result.get('phase') or 'unknown'}: "
+                            f"{experiment_result.get('error') or 'unknown'}"
                         ),
                         "final": compact_attempt(experiment_result),
                     }

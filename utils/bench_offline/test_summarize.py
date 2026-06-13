@@ -56,3 +56,18 @@ def test_results_are_keyed_by_experiment_not_concurrency(tmp_path):
         )
     discovered = discover_results(tmp_path)
     assert set(discovered) == {"c32-control", "c32-lmtp"}
+
+
+def test_failed_row_includes_specific_failure_kind():
+    rendered = markdown(
+        [
+            {
+                "experiment_id": "c8-dsl",
+                "concurrency": 8,
+                "status": "failed",
+                "failure_kind": "kernel_dtype",
+                "error": "Executor worker returned error",
+            }
+        ]
+    )
+    assert "kernel_dtype: Executor worker returned error" in rendered

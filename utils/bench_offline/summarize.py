@@ -66,6 +66,7 @@ def _row(
     aggregate = result.get("aggregate") or {}
     winner = result.get("winner") or {}
     huawei = result.get("huawei") or {}
+    final = result.get("final") or {}
     return {
         "experiment_id": experiment_id,
         "concurrency": int(concurrency) if concurrency is not None else None,
@@ -114,6 +115,9 @@ def _row(
         ),
         "b300_to_huawei_step_rate_ratio": huawei.get(
             "b300_to_huawei_step_rate_ratio"
+        ),
+        "failure_kind": (
+            result.get("failure_kind") or final.get("failure_kind")
         ),
         "failure_kinds": result.get("failure_kinds"),
         "error": result.get("error"),
@@ -200,6 +204,9 @@ def markdown(rows: list[dict[str, Any]]) -> str:
         lines.extend(["## Missing Or Failed Rows", ""])
         for row in failures:
             detail = row.get("error") or row.get("failure_kinds") or ""
+            failure_kind = row.get("failure_kind")
+            if failure_kind and failure_kind not in str(detail):
+                detail = f"{failure_kind}: {detail}".rstrip()
             lines.append(
                 f"- `{row['experiment_id']}`: "
                 f"{row['status']} {detail}".rstrip()

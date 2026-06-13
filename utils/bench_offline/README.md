@@ -283,6 +283,28 @@ indexer dimensions, and top-k. The worker validates that the flag,
 also fails before engine initialization unless the image reports
 `IS_CUTLASS_DSL_AVAILABLE=true`; TRT's silent fallback is not accepted.
 
+Run `27477088665` completed the fourth-stage matrix with one measured pass per
+job. The repeated c8/c32/c64 controls reproduced decode-step throughput within
+`0.4%` of run `27476767599`, which supports one-pass use for the step-rate
+comparison. Output-token throughput varied more at c32 because the sampled MTP
+yield changed, so one-pass output throughput should still be read with its
+recorded `Tok/step`.
+
+Neither `max_seq_len=8832` nor disabled iteration logging improved c64
+decode-step throughput. Local-rank DEP4 sizing improved per-active-GPU step
+throughput by roughly `17%` over the earlier global-sized DEP4 controls, but
+DEP8 still delivered about `42%` more total node decode-step throughput.
+
+All three CuTE DSL paged-MQA rows failed during engine warmup. The current FP4
+checkpoint supplies an `int8` query tensor, while
+`cute_dsl_fp8_paged_mqa_logits` requires `float8_e4m3fn`. Do not rerun that
+kernel against this checkpoint without a TRT or checkpoint dtype change.
+
+One-pass runtime remains dominated by fresh-engine setup. Successful DEP8
+jobs spent `483-510` seconds initializing, `5-35` seconds warming up, and only
+`5-16` seconds in the measured pass. Keeping one warmup avoids reporting cold
+CUDA graph/JIT work as TPOT.
+
 The legacy concurrency-only mode remains available for reproducing the older
 serial tuner:
 

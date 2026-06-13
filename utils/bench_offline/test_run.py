@@ -42,6 +42,17 @@ def test_classify_capacity_failure():
     assert classify_failure(result, "") == "capacity"
 
 
+def test_classify_kernel_dtype_before_perfect_router():
+    result = {
+        "phase": "engine_init",
+        "traceback": (
+            "FP8 Paged MQA Logits dtype errors: "
+            "q must be float8_e4m3fn, got torch.int8"
+        ),
+    }
+    assert classify_failure(result, "perfect_router enabled") == "kernel_dtype"
+
+
 def test_classify_timeout():
     assert classify_failure({}, "", timed_out=True) == "timeout"
 

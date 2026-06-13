@@ -34,7 +34,11 @@ benchmark.
 - The pinned TRT source preserves checkpoint-derived DeepSeek-V4 sparse
   settings when `use_cute_dsl_paged_mqa_logits` is explicitly enabled.
   Treat it as an isolated kernel experiment, validate the resolved flag, and
-  fail unless `IS_CUTLASS_DSL_AVAILABLE` is true.
+  fail unless `IS_CUTLASS_DSL_AVAILABLE` is true. Run `27477088665` proved
+  the current FP4 checkpoint is incompatible with this kernel: its query is
+  `torch.int8`, while `cute_dsl_fp8_paged_mqa_logits` requires
+  `float8_e4m3fn`. Do not rerun that path unless the checkpoint or TRT dtype
+  handling changes.
 - `max_seq_len=8832` is the block-aligned tight capacity for the fixed
   8192-input/625-output/MTP3 shape. Keep `9216` as the control.
 - `print_iter_log=false` only disables native TRT iteration output. Preserve
