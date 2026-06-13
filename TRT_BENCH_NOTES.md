@@ -1100,7 +1100,12 @@ and Huawei ratios.
   throughput `158.66 steps/s/GPU`, and wall output throughput
   `269.02 tok/s/GPU`.
 - InferenceX App PR 257 at commit
-  `1127bd242f32f83727565ae6d6accf9b753038a8` fetched the real GitHub run
+  `7b4dc87b128ee237582bb0255c16c719570dc024` fetched the real GitHub run
   through `/api/unofficial-run?runId=27482213487`. It normalized one row and
   built one E2E plus one interactivity chart point under
   `DeepSeek-V4-Pro_8k/625`.
+- The PR still prefers `8K / 256` for runs that provide it, but falls back to
+  the loaded run's actual sequence. Therefore a bare
+  `?unofficialrun=27482213487` URL selects `8K / 625` and shows this point.
+- Current PR preview:
+  `https://inferencemax-app-git-claude-huawei-950dt-0f2683-semianalysisai.vercel.app/inference?unofficialrun=27482213487`
