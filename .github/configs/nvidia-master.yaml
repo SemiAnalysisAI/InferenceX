@@ -11750,3 +11750,31 @@ minimaxm3-fp8-b200-vllm:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
       - { tp: 4, conc-start: 1, conc-end: 64 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+
+# MiniMax-M3 MXFP8 B300 MTP (EAGLE3 spec decoding) — recipe spec_decoding
+# feature: Inferact/MiniMax-M3-EAGLE3 draft head, num_speculative_tokens=3,
+# attention_backend=FLASH_ATTN (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# Latency-end focus (low/mid concurrency). No tp2 here: the EAGLE3 draft head
+# on top of ~222 GB/GPU MXFP8 weights leaves too little KV headroom at TP2.
+# Draft head served from the b300 /data/models tree (see launch_b300-nv.sh).
+minimaxm3-fp8-b300-vllm-mtp:
+  image: vllm/vllm-openai:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: b300
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
