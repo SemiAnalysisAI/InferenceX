@@ -1,378 +1,195 @@
-name: End-to-End Tests
-run-name: e2e Test - ${{ inputs.test-name || inputs.generate-cli-command || github.event.inputs.generate-cli-command }}
+name: B300 TRT Offline Benchmark
+run-name: ${{ inputs.test-name || 'DeepSeek-V4 B300 TRT offline' }}
 
 on:
-    workflow_dispatch:
-        inputs:
-            generate-cli-command:
-                description: "Command passed to generate matrix script"
-                required: true
-                type: string
-            test-name:
-                description: "Name for this test run"
-                required: false
-                type: string
-            ref:
-                description: "Ref (branch/sha) to checkout for generating configs"
-                required: false
-                type: string
-            duration-override:
-                description: "Override matrix.config.duration (seconds). Empty = use matrix value."
-                required: false
-                type: string
-                default: ""
-    workflow_call:
-        inputs:
-            generate-cli-command:
-                description: "Command passed to generate matrix script"
-                required: true
-                type: string
-            test-name:
-                description: "Name for this test run"
-                required: false
-                type: string
-            ref:
-                description: "Ref (branch/sha) to checkout for generating configs"
-                required: false
-                type: string
-            duration-override:
-                description: "Override matrix.config.duration (seconds). Empty = use matrix value."
-                required: false
-                type: string
-                default: ""
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or SHA containing the offline benchmark
+        required: false
+        type: string
+        default: trt-bench
+      test-name:
+        description: Display name for this benchmark run
+        required: false
+        type: string
+        default: DeepSeek-V4 B300 TRT offline
+      concurrencies:
+        description: Comma-separated fixed offline batch sizes
+        required: false
+        type: string
+        default: 8,32,64,128,256,512,1024
+      salloc-time:
+        description: Slurm allocation time limit in minutes
+        required: false
+        type: string
+        default: "500"
+      worker-timeout:
+        description: Timeout in seconds for each fresh TRT engine attempt
+        required: false
+        type: string
+        default: "3600"
+
+permissions:
+  contents: read
 
 jobs:
-    get-jobs:
-        runs-on: ubuntu-latest
-        outputs:
-            single-node-config: ${{ steps.get-jobs.outputs.single-node-config }}
-            multi-node-config: ${{ steps.get-jobs.outputs.multi-node-config }}
-            eval-config: ${{ steps.get-jobs.outputs.eval-config }}
-            multi-node-eval-config: ${{ steps.get-jobs.outputs.multi-node-eval-config }}
-            agentic-config: ${{ steps.get-jobs.outputs.agentic-config }}
-            multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
-        steps:
-            - name: Checkout code (ref)
-              if: ${{ inputs.ref && inputs.ref != '' }}
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                ref: ${{ inputs.ref }}
-
-            - name: Checkout code (default)
-              if: ${{ !inputs.ref || inputs.ref == '' }}
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                ref: ${{ github.sha }}
-
-            - id: get-jobs
-              run: |
-                  pip install pydantic
-                  CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
-                    ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))")
-                  MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))")
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
-                  MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
-                  EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))")
-                  MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))")
-                  echo "agentic-config=$AGENTIC" >> $GITHUB_OUTPUT
-                  echo "multi-node-agentic-config=$MULTI_AGENTIC" >> $GITHUB_OUTPUT
-                  echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
-                  echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
-                  echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
-                  echo "multi-node-eval-config=$MULTI_EVAL" >> $GITHUB_OUTPUT
-
-    test-sweep-multi-node:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-config != '[]' }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-config) }}
-        secrets: inherit
-        with:
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            exp-name: ${{ matrix.config.exp-name }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            run-eval: false
-            ref: ${{ inputs.ref }}
-
-    test-sweep-multi-node-evals:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-eval-config != '[]' }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node eval /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-eval-config) }}
-        secrets: inherit
-        with:
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            exp-name: ${{ matrix.config.exp-name }}
-            conc-list: ${{ toJson(matrix.config.conc) }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            run-eval: true
-            eval-only: true
-            eval-conc: ${{ matrix.config.eval-conc }}
-            ref: ${{ inputs.ref }}
-
-    test-sweep-agentic:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.agentic-config != '[]' }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
-        name: agentic /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.agentic-config) }}
-        secrets: inherit
-        with:
-            exp-name: ${{ matrix.config.exp-name }}
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            tp: ${{ matrix.config.tp }}
-            ep: ${{ matrix.config.ep }}
-            dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            offloading: ${{ matrix.config.offloading }}
-            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
-            spec-decoding: 'none'
-            disagg: 'false'
-            run-eval: false
-            scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
-
-    test-sweep-multi-node-agentic:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.multi-node-agentic-config != '[]' }}
-        uses: ./.github/workflows/benchmark-multinode-tmpl.yml
-        name: multi-node agentic /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.multi-node-agentic-config) }}
-        secrets: inherit
-        with:
-            exp-name: ${{ matrix.config.exp-name }}
-            isl: '0'
-            osl: '0'
-            max-model-len: '0'
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            conc-list: '[${{ matrix.config.conc }}]'
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
-            prefill-tp: ${{ matrix.config.prefill.tp }}
-            prefill-ep: ${{ matrix.config.prefill.ep }}
-            prefill-dp-attn: ${{ matrix.config.prefill.dp-attn }}
-            prefill-additional-settings: ${{ toJson(matrix.config.prefill.additional-settings) }}
-            decode-num-worker: ${{ matrix.config.decode.num-worker }}
-            decode-tp: ${{ matrix.config.decode.tp }}
-            decode-ep: ${{ matrix.config.decode.ep }}
-            decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
-            decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            conc: ${{ matrix.config.conc }}
-            duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
-            run-eval: false
-            scenario-type: agentic-coding
-            ref: ${{ inputs.ref }}
-
-    test-sweep-single-node:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.single-node-config != '[]' }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
-        name: single-node /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.single-node-config) }}
-        secrets: inherit
-        with:
-            exp-name: ${{ matrix.config.exp-name }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            tp: ${{ matrix.config.tp }}
-            ep: ${{ matrix.config.ep }}
-            dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            run-eval: false
-            ref: ${{ inputs.ref }}
-
-    test-sweep-evals:
-        needs: get-jobs
-        if: ${{ needs.get-jobs.outputs.eval-config != '[]' }}
-        uses: ./.github/workflows/benchmark-tmpl.yml
-        name: eval /
-        strategy:
-            fail-fast: false
-            matrix:
-                config: ${{ fromJson(needs.get-jobs.outputs.eval-config) }}
-        secrets: inherit
-        with:
-            exp-name: ${{ matrix.config.exp-name }}
-            isl: ${{ matrix.config.isl }}
-            osl: ${{ matrix.config.osl }}
-            max-model-len: ${{ matrix.config.max-model-len }}
-            runner: ${{ matrix.config.runner }}
-            image: ${{ matrix.config.image }}
-            model: ${{ matrix.config.model }}
-            model-prefix: ${{ matrix.config.model-prefix }}
-            framework: ${{ matrix.config.framework }}
-            precision: ${{ matrix.config.precision }}
-            tp: ${{ matrix.config.tp }}
-            ep: ${{ matrix.config.ep }}
-            dp-attn: ${{ matrix.config.dp-attn }}
-            conc: ${{ matrix.config.conc }}
-            spec-decoding: ${{ matrix.config.spec-decoding }}
-            disagg: ${{ matrix.config.disagg }}
-            run-eval: true
-            eval-only: true
-            ref: ${{ inputs.ref }}
-
-    collect-results:
-        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
-        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
-        uses: ./.github/workflows/collect-results.yml
-        secrets: inherit
-        with:
-            result-prefix: "bmk"
-
-    collect-evals:
-        needs: [test-sweep-evals, test-sweep-multi-node-evals]
-        if: ${{ always() && (needs.test-sweep-evals.result != 'skipped' || needs.test-sweep-multi-node-evals.result != 'skipped') }}
-        uses: ./.github/workflows/collect-evals.yml
-        secrets: inherit
-
-    collect-agentic-results:
-        needs: [test-sweep-agentic, test-sweep-multi-node-agentic]
-        if: ${{ always() && (needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                  submodules: true
-
-            - uses: actions/setup-python@v6
-              with:
-                  python-version: '3.11'
-
-            - name: Install dependencies
-              run: pip install pandas matplotlib numpy
-
-            - name: Download agentic artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-              with:
-                  pattern: 'agentic_*'
-                  path: results/
-
-            - name: Run aggregation
-              env:
-                  PYTHONPATH: utils/agentic-benchmark/scripts:utils/agentic-benchmark/analysis
-              run: |
-                  python utils/agentic-benchmark/scripts/collect_sweep_results.py results/ aggregated/
-
-            - name: Upload aggregated results
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: agentic_aggregated
-                  path: aggregated/
-
-    calc-success-rate:
-        needs: [collect-results, collect-evals, collect-agentic-results]
-        if: ${{ always() }}
-        runs-on: ubuntu-latest
-
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      expected: ${{ steps.matrix.outputs.expected }}
+    steps:
+      - name: Validate concurrency matrix
+        id: matrix
         env:
-            RESULTS_DIR: "results/"
-            STATS_FILENAME: "run_stats"
-            GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
+          CONCURRENCIES: ${{ inputs.concurrencies }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
 
-        steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                  token: ${{ secrets.REPO_PAT }}
-                  fetch-depth: 0
+          allowed = {8, 32, 64, 128, 256, 512, 1024}
+          values = [
+              int(item.strip())
+              for item in os.environ["CONCURRENCIES"].split(",")
+              if item.strip()
+          ]
+          if not values:
+              raise SystemExit("At least one concurrency is required")
+          if len(values) != len(set(values)):
+              raise SystemExit(f"Duplicate concurrencies: {values}")
+          invalid = sorted(set(values) - allowed)
+          if invalid:
+              raise SystemExit(
+                  f"Unsupported concurrencies {invalid}; allowed={sorted(allowed)}"
+              )
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"matrix={json.dumps(values)}\n")
+              output.write("expected=" + ",".join(map(str, values)) + "\n")
+          PY
 
-            - name: Download results artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-              with:
-                  path: ${{ env.RESULTS_DIR }}
-                  pattern: results_*
+  benchmark:
+    needs: prepare
+    runs-on: [self-hosted, b300]
+    timeout-minutes: 510
+    name: B300 TRT offline / conc ${{ matrix.concurrency }}
+    strategy:
+      fail-fast: false
+      matrix:
+        concurrency: ${{ fromJson(needs.prepare.outputs.matrix) }}
+    env:
+      CONC: ${{ matrix.concurrency }}
+      IMAGE: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
+      MODEL_PATH: /scratch/models/DeepSeek-V4-Pro
+      DATASET_REVISION: 90f0394333616266d9fe85824ceaf505093cbaa5
+      SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
+      WORKER_TIMEOUT: ${{ inputs.worker-timeout }}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPYCACHEPREFIX: /tmp/inferencex-offline-pycache
+    steps:
+      - name: Resource cleanup
+        run: |
+          if command -v scancel >/dev/null 2>&1; then
+            scancel --name="${{ runner.name }}" || true
+            while squeue --name="${{ runner.name }}" --noheader --format="%i" \
+                | grep -q .; do
+              squeue --name="${{ runner.name }}"
+              sleep 5
+            done
+          fi
+          rm -f "${{ github.workspace }}"/offline_*_conc*.json
+          rm -f "${{ github.workspace }}"/offline_*_conc*.log
+          rm -f "${{ github.workspace }}"/offline_*_conc*.csv
+          rm -f "${{ github.workspace }}"/offline_*_conc*.tar.gz
 
-            - name: Install python dependencies
-              run: pip install PyGithub
+      - name: Checkout benchmark branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          token: ${{ secrets.REPO_PAT }}
+          fetch-depth: 0
+          ref: ${{ inputs.ref || github.ref_name }}
+          clean: true
 
-            - name: Calculate success rate
-              run: python3 utils/calc_success_rate.py $STATS_FILENAME
+      - name: Run offline benchmark
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: |
+          bash benchmarks/single_node/offline/dsv4_fp4_b300_trt.sh
 
-            - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: "run-stats"
-                  path: ${{ env.STATS_FILENAME }}.json
+      - name: Show result headline
+        if: always()
+        run: |
+          result="offline_result_conc${CONC}.json"
+          if [[ -f "$result" ]]; then
+            jq '{
+              status,
+              concurrency: .benchmark.concurrency,
+              winner,
+              aggregate,
+              huawei,
+              error
+            }' "$result"
+          fi
+
+      - name: Upload concurrency result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: offline-trt-conc-${{ matrix.concurrency }}
+          path: |
+            offline_result_conc${{ matrix.concurrency }}.json
+            offline_controller_conc${{ matrix.concurrency }}.log
+            offline_gpu_metrics_conc${{ matrix.concurrency }}.csv
+            offline_debug_conc${{ matrix.concurrency }}.tar.gz
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Release Slurm allocation
+        if: always()
+        run: |
+          if command -v scancel >/dev/null 2>&1; then
+            scancel --name="${{ runner.name }}" || true
+          fi
+
+  collect-results:
+    needs: [prepare, benchmark]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout benchmark branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.ref || github.ref_name }}
+          clean: true
+
+      - name: Download per-concurrency results
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: offline-trt-conc-*
+          path: downloaded-offline-results
+          merge-multiple: true
+
+      - name: Build offline summary
+        env:
+          EXPECTED: ${{ needs.prepare.outputs.expected || inputs.concurrencies }}
+        run: |
+          mkdir -p downloaded-offline-results
+          python3 utils/bench_offline/summarize.py \
+            --results-dir downloaded-offline-results \
+            --expected "$EXPECTED" \
+            --json-out offline_aggregate.json \
+            --markdown-out offline_summary.md
+          cat offline_summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload aggregate result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: offline-trt-summary
+          path: |
+            offline_aggregate.json
+            offline_summary.md
+          if-no-files-found: warn
+          retention-days: 30
