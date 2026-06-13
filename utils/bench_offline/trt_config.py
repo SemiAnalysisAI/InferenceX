@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Iterable, Optional
 
@@ -15,8 +16,8 @@ SAMPLING_TEMPERATURE = 1.0
 SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
 PINNED_TRT_GLOBAL_SEED = 42
-TUNING_MEASURED_PASSES = 3
-FINAL_MEASURED_PASSES = 3
+TUNING_MEASURED_PASSES = 1
+FINAL_MEASURED_PASSES = 1
 MIN_WINNER_IMPROVEMENT = 0.03
 
 
@@ -25,9 +26,52 @@ class CandidateConfig:
     name: str
     batching_wait_iters: int
     attention_dp_balance: bool = True
+    attention_dp_timeout_iters: int | None = 60
     overlap_scheduler: bool = True
     cuda_graph: bool = True
+    enable_lm_head_tp_in_adp: bool = False
+    mtp_draft_tokens: int = MTP_DRAFT_TOKENS
     kind: str = "scheduler"
+
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.name):
+            raise ValueError(f"Invalid candidate name: {self.name!r}")
+        if (
+            not isinstance(self.batching_wait_iters, int)
+            or isinstance(self.batching_wait_iters, bool)
+            or self.batching_wait_iters < 0
+        ):
+            raise ValueError("batching_wait_iters must be non-negative")
+        if (
+            self.attention_dp_timeout_iters is not None
+            and (
+                not isinstance(self.attention_dp_timeout_iters, int)
+                or isinstance(self.attention_dp_timeout_iters, bool)
+                or self.attention_dp_timeout_iters < 0
+            )
+        ):
+            raise ValueError(
+                "attention_dp_timeout_iters must be non-negative"
+            )
+        if (
+            not isinstance(self.mtp_draft_tokens, int)
+            or isinstance(self.mtp_draft_tokens, bool)
+            or not 1 <= self.mtp_draft_tokens <= MTP_DRAFT_TOKENS
+        ):
+            raise ValueError(
+                "mtp_draft_tokens must be between 1 and "
+                f"{MTP_DRAFT_TOKENS}"
+            )
+        for field_name in (
+            "attention_dp_balance",
+            "overlap_scheduler",
+            "cuda_graph",
+            "enable_lm_head_tp_in_adp",
+        ):
+            if not isinstance(getattr(self, field_name), bool):
+                raise ValueError(f"{field_name} must be boolean")
+        if not isinstance(self.kind, str):
+            raise ValueError("kind must be a string")
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -73,10 +117,15 @@ def max_batch_size(concurrency: int) -> int:
     return max(16, concurrency)
 
 
-def max_num_tokens(concurrency: int) -> int:
+def max_num_tokens(
+    concurrency: int,
+    mtp_draft_tokens: int = MTP_DRAFT_TOKENS,
+) -> int:
     # Mirrors the working B300 DeepSeek-V4 TRT MTP recipe.
     return max(
-        INPUT_TOKENS + (MTP_DRAFT_TOKENS + 1) * max_batch_size(concurrency) + 256,
+        INPUT_TOKENS
+        + (mtp_draft_tokens + 1) * max_batch_size(concurrency)
+        + 256,
         INPUT_TOKENS,
     )
 
@@ -96,10 +145,13 @@ def build_llm_kwargs(
         "moe_expert_parallel_size": WORLD_SIZE,
         "moe_tensor_parallel_size": 1,
         "enable_attention_dp": True,
-        "enable_lm_head_tp_in_adp": False,
+        "enable_lm_head_tp_in_adp": candidate.enable_lm_head_tp_in_adp,
         "max_batch_size": max_batch_size(concurrency),
         "max_seq_len": MAX_SEQ_LEN,
-        "max_num_tokens": max_num_tokens(concurrency),
+        "max_num_tokens": max_num_tokens(
+            concurrency,
+            candidate.mtp_draft_tokens,
+        ),
         "custom_tokenizer": "deepseek_v4",
         "return_perf_metrics": True,
         "print_iter_log": True,
@@ -109,7 +161,6 @@ def build_llm_kwargs(
         "attention_dp_config": {
             "batching_wait_iters": candidate.batching_wait_iters,
             "enable_balance": candidate.attention_dp_balance,
-            "timeout_iters": 60,
         },
         "kv_cache_config": {
             "tokens_per_block": 128,
@@ -123,9 +174,13 @@ def build_llm_kwargs(
         },
         "speculative_config": {
             "decoding_type": "MTP",
-            "max_draft_len": MTP_DRAFT_TOKENS,
+            "max_draft_len": candidate.mtp_draft_tokens,
         },
     }
+    if candidate.attention_dp_timeout_iters is not None:
+        kwargs["attention_dp_config"]["timeout_iters"] = (
+            candidate.attention_dp_timeout_iters
+        )
     if candidate.cuda_graph:
         kwargs["cuda_graph_config"] = {
             "batch_sizes": [concurrency],
@@ -169,7 +224,12 @@ def choose_winner(
     return winner
 
 
-def resolved_parallelism(llm_args: Any) -> dict[str, Any]:
+def resolved_parallelism(
+    llm_args: Any,
+    candidate: CandidateConfig | None = None,
+) -> dict[str, Any]:
+    if candidate is None:
+        candidate = CandidateConfig(name="default", batching_wait_iters=30)
     parallel = llm_args.parallel_config
     resolved = {
         "world_size": int(parallel.world_size),
@@ -188,7 +248,7 @@ def resolved_parallelism(llm_args: Any) -> dict[str, Any]:
         "moe_expert_parallel_size": WORLD_SIZE,
         "moe_tensor_parallel_size": 1,
         "enable_attention_dp": True,
-        "enable_lm_head_tp_in_adp": False,
+        "enable_lm_head_tp_in_adp": candidate.enable_lm_head_tp_in_adp,
     }
     for key, expected_value in expected.items():
         if resolved[key] != expected_value:
@@ -199,9 +259,10 @@ def resolved_parallelism(llm_args: Any) -> dict[str, Any]:
 
     speculative = llm_args.speculative_config
     draft_len = int(speculative.max_draft_len)
-    if draft_len != MTP_DRAFT_TOKENS:
+    if draft_len != candidate.mtp_draft_tokens:
         raise RuntimeError(
-            f"Resolved MTP draft length {draft_len} != {MTP_DRAFT_TOKENS}"
+            f"Resolved MTP draft length {draft_len} != "
+            f"{candidate.mtp_draft_tokens}"
         )
     resolved["mtp_max_draft_len"] = draft_len
     return resolved

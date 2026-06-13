@@ -17,7 +17,6 @@ from io_utils import read_json, write_json
 from metrics import aggregate_passes, summarize_pass
 from prompts import load_corpus
 from trt_config import (
-    MTP_DRAFT_TOKENS,
     OUTPUT_TOKENS,
     SAMPLING_TEMPERATURE,
     SAMPLING_TOP_K,
@@ -114,6 +113,7 @@ def generate_pass(
     inputs: list[dict[str, list[int]]],
     *,
     label: str,
+    candidate: CandidateConfig,
 ) -> dict[str, Any]:
     log_progress(f"{label}: generation start requests={len(inputs)}")
     started = time.perf_counter()
@@ -134,7 +134,7 @@ def generate_pass(
         wall_seconds=wall_seconds,
         expected_output_tokens=OUTPUT_TOKENS,
         num_gpus=WORLD_SIZE,
-        max_draft_tokens=MTP_DRAFT_TOKENS,
+        max_draft_tokens=candidate.mtp_draft_tokens,
     )
     aggregate = summary["aggregate"]
     log_progress(
@@ -142,6 +142,8 @@ def generate_pass(
         f"mean_tpot={float(aggregate['mean_token_tpot_ms']):.3f}ms "
         "derived_output_tput_per_gpu="
         f"{float(aggregate['derived_output_tput_per_gpu']):.2f} "
+        f"derived_step_tput_per_gpu="
+        f"{float(aggregate['derived_step_tput_per_gpu']):.2f} "
         f"wall_output_tput_per_gpu="
         f"{float(aggregate['wall_output_tput_per_gpu']):.2f} "
         f"tokens_per_step="
@@ -163,7 +165,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--mode", choices=("tune", "final"), required=True)
+    parser.add_argument(
+        "--mode",
+        choices=("tune", "final", "experiment"),
+        required=True,
+    )
     parser.add_argument("--passes", type=int, default=1)
     return parser.parse_args()
 
@@ -190,7 +196,10 @@ def main() -> int:
         pass_count = measured_pass_count(args.passes)
         log_progress(
             f"worker start mode={args.mode} candidate={candidate.name} "
-            f"concurrency={concurrency} measured_passes={pass_count}"
+            f"concurrency={concurrency} measured_passes={pass_count} "
+            f"mtp={candidate.mtp_draft_tokens} "
+            "lm_head_tp="
+            f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'}"
         )
 
         phase = "perfect_router_source"
@@ -217,20 +226,27 @@ def main() -> int:
             f"engine initialization start "
             f"max_batch_size={llm_kwargs['max_batch_size']} "
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
-            f"cuda_graph={'on' if candidate.cuda_graph else 'off'}"
+            f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
+            f"wait_iters={candidate.batching_wait_iters} "
+            f"timeout_iters={candidate.attention_dp_timeout_iters}"
         )
         init_started = time.perf_counter()
         measured_passes: list[dict[str, Any]] = []
         with LLM(**llm_kwargs) as llm:
             init_seconds = time.perf_counter() - init_started
-            resolved = resolved_parallelism(llm.args)
+            resolved = resolved_parallelism(llm.args, candidate)
             log_progress(
                 f"engine initialization complete elapsed={init_seconds:.1f}s "
                 f"parallelism={resolved['effective_parallelism']}"
             )
 
             phase = "warmup"
-            warmup = generate_pass(llm, inputs, label="warmup")
+            warmup = generate_pass(
+                llm,
+                inputs,
+                label="warmup",
+                candidate=candidate,
+            )
             time.sleep(2.0)
 
             phase = "measured_generation"
@@ -239,6 +255,7 @@ def main() -> int:
                     llm,
                     inputs,
                     label=f"measured pass {pass_index + 1}/{pass_count}",
+                    candidate=candidate,
                 )
                 measured["pass_index"] = pass_index + 1
                 measured_passes.append(measured)
@@ -294,7 +311,9 @@ def main() -> int:
             f"{time.perf_counter() - worker_started:.1f}s "
             f"mean_tpot={float(aggregate['mean_token_tpot_ms']):.3f}ms "
             "derived_output_tput_per_gpu="
-            f"{float(aggregate['derived_output_tput_per_gpu']):.2f}"
+            f"{float(aggregate['derived_output_tput_per_gpu']):.2f} "
+            "derived_step_tput_per_gpu="
+            f"{float(aggregate['derived_step_tput_per_gpu']):.2f}"
         )
         return 0
     except BaseException as error:

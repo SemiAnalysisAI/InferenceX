@@ -10,13 +10,23 @@ source /workspace/benchmarks/benchmark_lib.sh
 : "${DATASET_REVISION:?DATASET_REVISION is required}"
 
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-3600}"
+BENCH_ID="${BENCH_ID:-conc${CONC}}"
+EXPERIMENT_CONFIG_B64="${EXPERIMENT_CONFIG_B64:-}"
+EXECUTION_MODE="serial-tuning"
+if [[ -n "$EXPERIMENT_CONFIG_B64" ]]; then
+    EXECUTION_MODE="single-candidate"
+fi
+if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+    echo "Invalid BENCH_ID: $BENCH_ID" >&2
+    exit 1
+fi
 ALLOCATION_JOB_ID="${SLURM_JOB_ID:-unknown}"
 ALLOCATION_NODE="${SLURMD_NODENAME:-unknown}"
-WORK_DIR="/tmp/inferencex-trt-offline-conc${CONC}-${ALLOCATION_JOB_ID}-$$"
-RESULT_FILE="/workspace/offline_result_conc${CONC}.json"
-CONTROLLER_LOG="/workspace/offline_controller_conc${CONC}.log"
-DEBUG_ARCHIVE="/workspace/offline_debug_conc${CONC}.tar.gz"
-GPU_METRICS="/workspace/offline_gpu_metrics_conc${CONC}.csv"
+WORK_DIR="/tmp/inferencex-trt-offline-${BENCH_ID}-${ALLOCATION_JOB_ID}-$$"
+RESULT_FILE="/workspace/offline_result_${BENCH_ID}.json"
+CONTROLLER_LOG="/workspace/offline_controller_${BENCH_ID}.log"
+DEBUG_ARCHIVE="/workspace/offline_debug_${BENCH_ID}.tar.gz"
+GPU_METRICS="/workspace/offline_gpu_metrics_${BENCH_ID}.csv"
 
 log() {
     printf '[offline-trt-launcher %s] %s\n' \
@@ -37,17 +47,20 @@ finalize() {
         if [[ "$rc" -eq 0 ]]; then
             rc=1
         fi
-        python3 - "$RESULT_FILE" "$CONC" "$rc" <<'PY'
+        python3 - "$RESULT_FILE" "$CONC" "$rc" "$BENCH_ID" <<'PY'
 import json
 import sys
 
-path, concurrency, return_code = sys.argv[1:]
+path, concurrency, return_code, experiment_id = sys.argv[1:]
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
             "schema_version": 1,
             "status": "failed",
-            "benchmark": {"concurrency": int(concurrency)},
+            "benchmark": {
+                "concurrency": int(concurrency),
+                "experiment_id": experiment_id,
+            },
             "error": "Container benchmark exited before result.json was written",
             "return_code": int(return_code),
         },
@@ -101,6 +114,7 @@ export PYTHONPYCACHEPREFIX=/tmp/inferencex-offline-pycache
 export PYTHONPATH="/workspace/utils/bench_offline:${PYTHONPATH:-}"
 
 log "benchmark start concurrency=$CONC model=$MODEL_PATH"
+log "benchmark id=$BENCH_ID execution=$EXECUTION_MODE"
 log "dataset revision=$DATASET_REVISION path=$DATASET_PATH"
 log "allocation job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE"
 log "worker timeout=${WORKER_TIMEOUT}s work_dir=$WORK_DIR"
@@ -110,12 +124,23 @@ log "starting one-second GPU telemetry"
 start_gpu_monitor --output "$GPU_METRICS"
 
 log "starting offline benchmark controller"
+CONTROLLER_ARGS=(
+    --model-path "$MODEL_PATH"
+    --dataset "$DATASET_PATH"
+    --dataset-revision "$DATASET_REVISION"
+    --concurrency "$CONC"
+    --output-dir "$WORK_DIR"
+    --worker-timeout "$WORKER_TIMEOUT"
+    --tuning-attempts 6
+    --experiment-id "$BENCH_ID"
+)
+if [[ -n "$EXPERIMENT_CONFIG_B64" ]]; then
+    EXPERIMENT_CONFIG_PATH="$WORK_DIR/experiment_config.json"
+    printf '%s' "$EXPERIMENT_CONFIG_B64" \
+        | base64 --decode > "$EXPERIMENT_CONFIG_PATH"
+    CONTROLLER_ARGS+=(--experiment-config "$EXPERIMENT_CONFIG_PATH")
+    log "decoded single-candidate config path=$EXPERIMENT_CONFIG_PATH"
+fi
 python3 -u /workspace/utils/bench_offline/run.py \
-    --model-path "$MODEL_PATH" \
-    --dataset "$DATASET_PATH" \
-    --dataset-revision "$DATASET_REVISION" \
-    --concurrency "$CONC" \
-    --output-dir "$WORK_DIR" \
-    --worker-timeout "$WORKER_TIMEOUT" \
-    --tuning-attempts 6 \
+    "${CONTROLLER_ARGS[@]}" \
     2>&1 | tee "$CONTROLLER_LOG"

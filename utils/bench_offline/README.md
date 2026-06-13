@@ -10,16 +10,16 @@ The benchmark is dispatched through the existing
 `workflow_dispatch` for workflow files that also exist on the default branch.
 On `trt-bench`, that workflow is replaced with this offline-only chain:
 
-1. Validate the requested concurrency list.
-2. Fan out one `b300` runner job for each concurrency.
+1. Validate either a concurrency list or up to ten JSON experiment entries.
+2. Fan out at most ten `b300` runner jobs in parallel.
 3. Allocate one exclusive B300 Slurm node with eight GPUs.
 4. Run the pinned TRT image with `/scratch/models/DeepSeek-V4-Pro`.
 5. Build an exact 8192-token InfiniteBench corpus.
-6. Tune at most six fresh TRT engines with three measured passes each.
-7. Start another fresh engine with the winner, warm it up, and measure three
-   passes.
-8. Upload one result and debug bundle per concurrency.
-9. Collect the rows with `utils/bench_offline/summarize.py`.
+6. For an experiment entry, start one fresh engine, warm it up once, and
+   measure one pass. The legacy mode still tunes at most six fresh engines
+   and repeats the winner on another fresh engine.
+7. Upload one result and debug bundle per experiment.
+8. Collect the rows with `utils/bench_offline/summarize.py`.
 
 There is no server, HTTP client, request-rate generator, matrix config,
 `process_result.py`, `summarize.py`, or generic `collect-results` stage in this
@@ -40,6 +40,8 @@ path. `LLM.generate()` receives one fixed batch of token-ID prompts directly.
 - Prompt length: exactly 8192 real token IDs, with no padded IDs.
 - Generated output: exactly 625 tokens per request with EOS ignored.
 - Speculation: fixed MTP3.
+- Parallelism for Huawei comparison: fixed DEP8; LM-head TP is an explicit
+  candidate toggle.
 - Sampling: temperature `1.0`, top-p `1.0`, top-k `0`.
 - Pinned TRT PyTorch sampler seed: one engine-global generator seeded to
   `42`.
@@ -64,7 +66,7 @@ effective model execution is labeled `DEP8`:
 - attention data parallel: enabled
 - expert parallel size: 8
 - MoE tensor parallel size: 1
-- LM-head TP in attention DP: disabled
+- LM-head TP in attention DP: recorded per candidate
 - MTP max draft length: 3
 
 The worker validates these resolved TRT arguments after every engine starts.
@@ -118,7 +120,7 @@ token_tpot = decode_window / decode_tokens
 ```
 
 The headline `mean_token_tpot_ms` is the arithmetic mean of per-request
-`token_tpot` values pooled across the three final measured passes.
+`token_tpot` values in the measured pass.
 
 Each request also records a SHA-256 digest of its 625 generated token IDs.
 Per-pass sequence digests make fresh-engine tuning variation visible without
@@ -128,6 +130,18 @@ uploading generated text or full token arrays.
 
 ```text
 concurrency / mean_token_tpot_seconds / 8
+```
+
+`mean_step_tpot_ms` is the arithmetic mean of:
+
+```text
+decode_window / decode_iterations
+```
+
+`derived_step_tput_per_gpu` is:
+
+```text
+concurrency / mean_step_tpot_seconds / 8
 ```
 
 `wall_output_tput_per_gpu` is:
@@ -159,19 +173,27 @@ effective_acceptance_rate = effective_accepted_drafts_per_step / 3
 total decode tokens / total decode iterations
 ```
 
-This benchmark times emitted decode tokens, not CANN decode steps. Therefore,
-the Huawei step-throughput references are converted with:
+The Huawei table's throughput values are decode-step throughput: each value is
+exactly `global batch size / step TPOT / chips`. Results therefore report
+three distinct comparisons instead of treating acceptance as a hardware
+multiplier:
 
 ```text
-Huawei published step throughput/chip * TRT observed tokens/step
+step-rate ratio =
+    B300 derived step throughput/GPU / Huawei step throughput/chip
+
+actual output ratio =
+    B300 derived output throughput/GPU
+    / (Huawei step throughput/chip * Huawei published 2.44 tokens/step)
+
+same-yield diagnostic =
+    B300 derived output throughput/GPU
+    / (Huawei step throughput/chip * TRT observed tokens/step)
 ```
 
-Do not multiply Huawei throughput by raw acceptance rate. Acceptance omits the
-mandatory target token; `observed_tokens_per_step` includes it.
-
-The Huawei guide also publishes 1.44 accepted drafts per MTP3 step, or 2.44
-tokens/step. Results retain both the corresponding published-dataset token
-throughput and the Huawei value normalized to TRT's observed token yield.
+Do not multiply Huawei throughput by raw acceptance rate. Huawei publishes
+1.44 accepted drafts per MTP3 step, so its output yield is `1 + 1.44 = 2.44`
+tokens/step. Raw acceptance omits the mandatory target token.
 
 Huawei references are attached only to matching rows:
 
@@ -183,8 +205,27 @@ Huawei references are attached only to matching rows:
 
 ## Tuning
 
+The recommended optimization path is
+`utils/bench_offline/b300_huawei_experiments.json`. Each entry runs one fresh
+engine with one full-shape warmup and one measured pass. This avoids the
+old seven-engine serial runtime and lets independent B300 nodes evaluate up to
+ten configurations concurrently.
+
+The checked-in first matrix remains DEP8/MTP3 and covers only c8, c32, and c64,
+the batch-per-chip matches for Huawei. It tests:
+
+- controls reproducing the prior selected scheduler settings
+- LM-head TP in attention DP
+- wait 0 versus wait 30
+- attention-DP balance on versus off
+- the production attention-DP knobs projected onto DEP8, including omitted
+  `timeout_iters`; this is not the normal recipe's TP4 parallelism
+
+The legacy concurrency-only mode remains available for reproducing the older
+serial tuner:
+
 Every tuning attempt creates and destroys a fresh TRT engine, performs one
-full-shape warmup, and pools three measured passes. A later candidate replaces
+full-shape warmup, and records one measured pass. A later candidate replaces
 the current winner only when it is at least 3% faster in derived output-token
 throughput per GPU. The wider threshold prevents one sampled MTP trajectory
 from selecting a scheduler setting on a marginal difference.
@@ -212,7 +253,7 @@ state cannot be assumed reusable for another fresh-engine attempt.
 
 ## Runtime Logging
 
-The live Actions log and `offline_controller_concN.log` now show:
+The live Actions log and `offline_controller_EXPERIMENT_ID.log` show:
 
 - launcher and benchmark start details
 - corpus preparation start/completion
@@ -229,16 +270,17 @@ Progress logging does not alter measured intervals or benchmark settings.
 
 ## Dispatch
 
-Push `trt-bench`, then dispatch the branch version of the existing workflow:
+Push `trt-bench`, then dispatch the ten single-candidate experiments:
 
 ```bash
+EXPERIMENTS="$(jq -c . utils/bench_offline/b300_huawei_experiments.json)"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f 'inputs[ref]=trt-bench' \
-  -f 'inputs[test-name]=DSV4 B300 TRT offline' \
-  -f 'inputs[concurrencies]=8,32,64,128,256,512,1024' \
-  -f 'inputs[salloc-time]=500' \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline optimization' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
   -f 'inputs[worker-timeout]=3600'
 ```
 
@@ -254,18 +296,19 @@ RUN_ID=$(gh run list --repo SemiAnalysisAI/InferenceX \
 gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --exit-status
 ```
 
-For a first bring-up, dispatch only `8`. After it succeeds, dispatch the full
-matrix.
+The workflow enforces a maximum of ten parallel jobs. Every experiment still
+uses direct in-process `LLM.generate()`; no serving process or HTTP client is
+introduced.
 
 ## Artifacts And Collected Values
 
-Each matrix job uploads `offline-trt-conc-N`:
+Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
 
-- `offline_result_concN.json`: authoritative result row
-- `offline_controller_concN.log`: controller and tokenizer output
-- `offline_gpu_metrics_concN.csv`: one-second GPU telemetry
-- `offline_debug_concN.tar.gz`: candidate configs, worker JSON, worker logs,
-  corpus manifest, and perfect-router markers
+- `offline_result_EXPERIMENT_ID.json`: authoritative result row
+- `offline_controller_EXPERIMENT_ID.log`: controller and tokenizer output
+- `offline_gpu_metrics_EXPERIMENT_ID.csv`: one-second GPU telemetry
+- `offline_debug_EXPERIMENT_ID.tar.gz`: candidate configs, worker JSON,
+  worker logs, corpus manifest, and perfect-router markers
 
 The collector uploads `offline-trt-summary`:
 
@@ -275,7 +318,9 @@ The collector uploads `offline-trt-summary`:
 The collected row fields mean:
 
 - `mean_token_tpot_ms`: mean per-request output-token TPOT
+- `mean_step_tpot_ms`: mean per-request TRT decode-step TPOT
 - `derived_output_tput_per_gpu`: concurrency/TPOT calculation
+- `derived_step_tput_per_gpu`: concurrency/step-TPOT calculation
 - `wall_output_tput_per_gpu`: measured whole-batch output throughput
 - `observed_tokens_per_step`: TRT token output per decode iteration
 - `effective_acceptance_rate`: `(observed_tokens_per_step - 1) / 3`
@@ -283,9 +328,10 @@ The collected row fields mean:
 - `mean_ttft_ms`, `p99_ttft_ms`: first-token latency
 - `huawei_published_dataset_token_tput_per_chip`: Huawei reference at its
   published 2.44 tokens/step
-- `huawei_estimated_token_tput_per_chip`: Huawei reference normalized to TRT's
-  observed tokens/step
-- `b300_to_huawei_ratio`: B300 derived throughput divided by converted Huawei
+- `b300_to_huawei_published_output_ratio`: emitted-output comparison using
+  Huawei's own published 2.44-token yield
+- `b300_to_huawei_step_rate_ratio`: direct decode-step-rate comparison
+- `b300_to_huawei_trt_yield_normalized_ratio`: same-yield diagnostic
 
 This is not `agg_bmk.json`; generic InferenceX result fields such as
 `tput_per_gpu` are intentionally not synthesized.
@@ -301,8 +347,8 @@ jq '.rows' ./offline-summary/offline_aggregate.json
 ## Debugging Order
 
 1. Inspect the failed matrix job's `Show result headline` output.
-2. Read `offline_controller_concN.log`.
-3. Extract `offline_debug_concN.tar.gz`.
+2. Read `offline_controller_EXPERIMENT_ID.log`.
+3. Extract `offline_debug_EXPERIMENT_ID.tar.gz`.
 4. Find the last `*_worker.json`; its `phase`, `failure_kind`, `error`, and
    traceback identify whether failure occurred in engine init, warmup,
    generation, metrics, or shutdown.

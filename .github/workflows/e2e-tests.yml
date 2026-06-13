@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: 8,32,64,128,256,512,1024
+      experiments:
+        description: Optional JSON list of up to 10 single-candidate jobs
+        required: false
+        type: string
+        default: ""
       salloc-time:
         description: Slurm allocation time limit in minutes
         required: false
@@ -44,42 +49,213 @@ jobs:
         id: matrix
         env:
           CONCURRENCIES: ${{ inputs.concurrencies }}
+          EXPERIMENTS: ${{ inputs.experiments }}
         run: |
           python3 - <<'PY'
+          import base64
           import json
           import os
+          import re
 
           allowed = {8, 32, 64, 128, 256, 512, 1024}
-          values = [
-              int(item.strip())
-              for item in os.environ["CONCURRENCIES"].split(",")
-              if item.strip()
-          ]
-          if not values:
-              raise SystemExit("At least one concurrency is required")
-          if len(values) != len(set(values)):
-              raise SystemExit(f"Duplicate concurrencies: {values}")
-          invalid = sorted(set(values) - allowed)
-          if invalid:
-              raise SystemExit(
-                  f"Unsupported concurrencies {invalid}; allowed={sorted(allowed)}"
-              )
+          raw_experiments = os.environ.get("EXPERIMENTS", "").strip()
+          matrix = []
+          if raw_experiments:
+              experiments = json.loads(raw_experiments)
+              if not isinstance(experiments, list) or not experiments:
+                  raise SystemExit("experiments must be a non-empty JSON list")
+              if len(experiments) > 10:
+                  raise SystemExit("experiments is limited to 10 jobs")
+              ids = set()
+              allowed_candidate_keys = {
+                  "name",
+                  "batching_wait_iters",
+                  "attention_dp_balance",
+                  "attention_dp_timeout_iters",
+                  "overlap_scheduler",
+                  "cuda_graph",
+                  "enable_lm_head_tp_in_adp",
+                  "mtp_draft_tokens",
+                  "kind",
+              }
+              for index, experiment in enumerate(experiments, start=1):
+                  if not isinstance(experiment, dict):
+                      raise SystemExit(
+                          f"experiment {index} must be a JSON object"
+                      )
+                  unknown = set(experiment) - {
+                      "id",
+                      "concurrency",
+                      "candidate",
+                  }
+                  if unknown:
+                      raise SystemExit(
+                          f"experiment {index} has unknown keys {sorted(unknown)}"
+                      )
+                  experiment_id = experiment.get("id")
+                  if not isinstance(experiment_id, str) or not re.fullmatch(
+                      r"[A-Za-z0-9][A-Za-z0-9._-]*", experiment_id
+                  ):
+                      raise SystemExit(
+                          f"experiment {index} has invalid id {experiment_id!r}"
+                      )
+                  if experiment_id in ids:
+                      raise SystemExit(
+                          f"duplicate experiment id {experiment_id!r}"
+                      )
+                  ids.add(experiment_id)
+                  concurrency = experiment.get("concurrency")
+                  if concurrency not in allowed:
+                      raise SystemExit(
+                          f"experiment {experiment_id} has unsupported "
+                          f"concurrency {concurrency}; allowed={sorted(allowed)}"
+                      )
+                  candidate = experiment.get("candidate")
+                  if not isinstance(candidate, dict):
+                      raise SystemExit(
+                          f"experiment {experiment_id} needs candidate object"
+                      )
+                  candidate_unknown = (
+                      set(candidate) - allowed_candidate_keys
+                  )
+                  if candidate_unknown:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate has unknown "
+                          f"keys {sorted(candidate_unknown)}"
+                      )
+                  candidate_name = candidate.get("name")
+                  if not isinstance(candidate_name, str) or not re.fullmatch(
+                      r"[A-Za-z0-9][A-Za-z0-9._-]*", candidate_name
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} has invalid "
+                          f"candidate.name {candidate_name!r}"
+                      )
+                  wait_iters = candidate.get("batching_wait_iters")
+                  if (
+                      not isinstance(wait_iters, int)
+                      or isinstance(wait_iters, bool)
+                      or wait_iters < 0
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} needs non-negative "
+                          "candidate.batching_wait_iters"
+                      )
+                  timeout_iters = candidate.get(
+                      "attention_dp_timeout_iters",
+                      60,
+                  )
+                  if (
+                      timeout_iters is not None
+                      and (
+                          not isinstance(timeout_iters, int)
+                          or isinstance(timeout_iters, bool)
+                          or timeout_iters < 0
+                      )
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} has invalid "
+                          "candidate.attention_dp_timeout_iters"
+                      )
+                  for bool_key in (
+                      "attention_dp_balance",
+                      "overlap_scheduler",
+                      "cuda_graph",
+                      "enable_lm_head_tp_in_adp",
+                  ):
+                      if bool_key in candidate and not isinstance(
+                          candidate[bool_key],
+                          bool,
+                      ):
+                          raise SystemExit(
+                              f"experiment {experiment_id} candidate."
+                              f"{bool_key} must be boolean"
+                          )
+                  mtp = candidate.get("mtp_draft_tokens", 3)
+                  if (
+                      not isinstance(mtp, int)
+                      or isinstance(mtp, bool)
+                      or not 1 <= mtp <= 3
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "mtp_draft_tokens must be 1, 2, or 3"
+                      )
+                  if "kind" in candidate and not isinstance(
+                      candidate["kind"],
+                      str,
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate.kind "
+                          "must be a string"
+                      )
+                  config = json.dumps(
+                      candidate,
+                      sort_keys=True,
+                      separators=(",", ":"),
+                  ).encode()
+                  matrix.append(
+                      {
+                          "id": experiment_id,
+                          "concurrency": concurrency,
+                          "experiment_config_b64": base64.b64encode(
+                              config
+                          ).decode(),
+                      }
+                  )
+          else:
+              values = [
+                  int(item.strip())
+                  for item in os.environ["CONCURRENCIES"].split(",")
+                  if item.strip()
+              ]
+              if not values:
+                  raise SystemExit("At least one concurrency is required")
+              if len(values) != len(set(values)):
+                  raise SystemExit(f"Duplicate concurrencies: {values}")
+              invalid = sorted(set(values) - allowed)
+              if invalid:
+                  raise SystemExit(
+                      f"Unsupported concurrencies {invalid}; "
+                      f"allowed={sorted(allowed)}"
+                  )
+              if len(values) > 10:
+                  raise SystemExit("concurrency matrix is limited to 10 jobs")
+              matrix = [
+                  {
+                      "id": f"conc{value}",
+                      "concurrency": value,
+                      "experiment_config_b64": "",
+                  }
+                  for value in values
+              ]
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"matrix={json.dumps(values)}\n")
-              output.write("expected=" + ",".join(map(str, values)) + "\n")
+              output.write(
+                  "matrix="
+                  + json.dumps(matrix, separators=(",", ":"))
+                  + "\n"
+              )
+              output.write(
+                  "expected="
+                  + ",".join(item["id"] for item in matrix)
+                  + "\n"
+              )
           PY
 
   benchmark:
     needs: prepare
     runs-on: [self-hosted, b300]
     timeout-minutes: 510
-    name: B300 TRT offline / conc ${{ matrix.concurrency }}
+    name: B300 TRT offline / ${{ matrix.id }} / conc ${{ matrix.concurrency }}
     strategy:
       fail-fast: false
+      max-parallel: 10
       matrix:
-        concurrency: ${{ fromJson(needs.prepare.outputs.matrix) }}
+        include: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       CONC: ${{ matrix.concurrency }}
+      BENCH_ID: ${{ matrix.id }}
+      EXPERIMENT_CONFIG_B64: ${{ matrix.experiment_config_b64 }}
       IMAGE: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
       MODEL_PATH: /scratch/models/DeepSeek-V4-Pro
       DATASET_REVISION: 90f0394333616266d9fe85824ceaf505093cbaa5
@@ -98,10 +274,10 @@ jobs:
               sleep 5
             done
           fi
-          rm -f "${{ github.workspace }}"/offline_*_conc*.json
-          rm -f "${{ github.workspace }}"/offline_*_conc*.log
-          rm -f "${{ github.workspace }}"/offline_*_conc*.csv
-          rm -f "${{ github.workspace }}"/offline_*_conc*.tar.gz
+          rm -f "${{ github.workspace }}"/offline_result_*.json
+          rm -f "${{ github.workspace }}"/offline_controller_*.log
+          rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
+          rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -120,7 +296,7 @@ jobs:
       - name: Show result headline
         if: always()
         run: |
-          result="offline_result_conc${CONC}.json"
+          result="offline_result_${BENCH_ID}.json"
           if [[ -f "$result" ]]; then
             jq '{
               status,
@@ -136,12 +312,12 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: offline-trt-conc-${{ matrix.concurrency }}
+          name: offline-trt-job-${{ matrix.id }}
           path: |
-            offline_result_conc${{ matrix.concurrency }}.json
-            offline_controller_conc${{ matrix.concurrency }}.log
-            offline_gpu_metrics_conc${{ matrix.concurrency }}.csv
-            offline_debug_conc${{ matrix.concurrency }}.tar.gz
+            offline_result_${{ matrix.id }}.json
+            offline_controller_${{ matrix.id }}.log
+            offline_gpu_metrics_${{ matrix.id }}.csv
+            offline_debug_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14
 
@@ -167,7 +343,7 @@ jobs:
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: offline-trt-conc-*
+          pattern: offline-trt-job-*
           path: downloaded-offline-results
           merge-multiple: true
 

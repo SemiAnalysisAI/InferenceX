@@ -14,13 +14,19 @@ DATASET_ROOT="${DATASET_ROOT:-/data/datasets/inferencex/InfiniteBench/${DATASET_
 DATASET_PATH="${DATASET_ROOT}/${DATASET_FILE}"
 SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-500}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-3600}"
+BENCH_ID="${BENCH_ID:-conc${CONC}}"
+EXPERIMENT_CONFIG_B64="${EXPERIMENT_CONFIG_B64:-}"
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 BENCH_GIT_REVISION="${GITHUB_SHA:-}"
 if [[ -z "$BENCH_GIT_REVISION" ]]; then
     BENCH_GIT_REVISION="$(git -C "$GITHUB_WORKSPACE" rev-parse HEAD)"
 fi
-RESULT_FILE="${GITHUB_WORKSPACE}/offline_result_conc${CONC}.json"
+if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
+    echo "Invalid BENCH_ID: $BENCH_ID" >&2
+    exit 1
+fi
+RESULT_FILE="${GITHUB_WORKSPACE}/offline_result_${BENCH_ID}.json"
 JOB_ID=""
 rm -f "$RESULT_FILE"
 
@@ -34,17 +40,20 @@ cleanup() {
         if [[ "$rc" -eq 0 ]]; then
             rc=1
         fi
-        python3 - "$RESULT_FILE" "$CONC" "$rc" <<'PY'
+        python3 - "$RESULT_FILE" "$CONC" "$rc" "$BENCH_ID" <<'PY'
 import json
 import sys
 
-path, concurrency, return_code = sys.argv[1:]
+path, concurrency, return_code, experiment_id = sys.argv[1:]
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
             "schema_version": 1,
             "status": "failed",
-            "benchmark": {"concurrency": int(concurrency)},
+            "benchmark": {
+                "concurrency": int(concurrency),
+                "experiment_id": experiment_id,
+            },
             "error": "Host launcher exited before the container wrote a result",
             "return_code": int(return_code),
         },
@@ -134,5 +143,5 @@ srun \
     --no-container-mount-home \
     --container-workdir=/workspace \
     --no-container-entrypoint \
-    --export="ALL,GITHUB_WORKSPACE=/workspace,CONC=$CONC,MODEL_PATH=$MODEL_PATH,DATASET_PATH=$DATASET_PATH,DATASET_REVISION=$DATASET_REVISION,WORKER_TIMEOUT=$WORKER_TIMEOUT,IMAGE=$IMAGE,TRT_BENCH_GIT_REVISION=$BENCH_GIT_REVISION" \
+    --export="ALL,GITHUB_WORKSPACE=/workspace,CONC=$CONC,BENCH_ID=$BENCH_ID,EXPERIMENT_CONFIG_B64=$EXPERIMENT_CONFIG_B64,MODEL_PATH=$MODEL_PATH,DATASET_PATH=$DATASET_PATH,DATASET_REVISION=$DATASET_REVISION,WORKER_TIMEOUT=$WORKER_TIMEOUT,IMAGE=$IMAGE,TRT_BENCH_GIT_REVISION=$BENCH_GIT_REVISION" \
     bash benchmarks/single_node/offline/run_dsv4_trt_container.sh

@@ -5,9 +5,10 @@ benchmark.
 
 - This branch is disposable and must remain isolated from the normal serving
   sweep. Do not add entries to `nvidia-master.yaml` or `perf-changelog.yaml`.
-- Preserve the fixed workload: 8192 prompt tokens, 625 generated tokens,
-  MTP3, DEP8, temperature 1, one full-shape warmup, three tuning passes, and
-  three final passes.
+- Preserve the Huawei-comparable workload: 8192 prompt tokens, 625 generated
+  tokens, MTP3, DEP8, temperature 1, one full-shape warmup, and one measured
+  pass. A single-candidate experiment uses one fresh engine; legacy serial
+  tuning also uses one pass per candidate plus a fresh one-pass final engine.
 - The pinned TRT PyTorch sampler ignores request-level seeds and advances one
   engine-global seed-42 generator. Do not claim per-request determinism.
 - Preserve the token-based headline metric. Huawei conversion uses observed
@@ -17,10 +18,15 @@ benchmark.
   `(tokens_per_step - 1) / 3` for effective MTP3 acceptance.
 - Preserve output-sequence digests; they expose output-dependent MTP
   variation between tuning candidates and measured passes.
-- Keep tuning limited to six attempts and preserve scheduler-first order.
+- Keep legacy tuning limited to six attempts and preserve scheduler-first
+  order. Prefer the single-candidate experiment mode for optimization sweeps.
 - Every tuning and final measurement must use a fresh `LLM` instance.
-- Do not silently pad prompts, reduce MTP depth, enable LM-head TP, change the
-  MoE backend, or switch to HTTP serving to make a run pass.
+- Do not silently pad prompts, reduce MTP depth, change the MoE backend, or
+  switch to HTTP serving to make a run pass. LM-head TP is an explicit
+  candidate field and must be recorded in the result.
+- Huawei comparison claims require DEP8, MTP3, and matching batch per chip.
+  Non-matching parallelism or MTP-depth experiments may be useful
+  optimizations, but their Huawei ratios must remain unavailable.
 - Exact prompt construction may use the recorded context/suffix whitespace
   adjustment or context-tail trim. It must never insert pad or synthetic
   token IDs.

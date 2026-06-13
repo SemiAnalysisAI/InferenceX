@@ -1,0 +1,152 @@
+[
+  {
+    "id": "c8-base-w30",
+    "concurrency": 8,
+    "candidate": {
+      "name": "base-w30",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": false,
+      "mtp_draft_tokens": 3,
+      "kind": "control"
+    }
+  },
+  {
+    "id": "c8-lmtp-w30",
+    "concurrency": 8,
+    "candidate": {
+      "name": "lmtp-w30",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "lm-head-tp"
+    }
+  },
+  {
+    "id": "c8-lmtp-w0",
+    "concurrency": 8,
+    "candidate": {
+      "name": "lmtp-w0",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "lm-head-tp"
+    }
+  },
+  {
+    "id": "c32-base-w30-boff",
+    "concurrency": 32,
+    "candidate": {
+      "name": "base-w30-balance-off",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": false,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": false,
+      "mtp_draft_tokens": 3,
+      "kind": "control"
+    }
+  },
+  {
+    "id": "c32-lmtp-w30-boff",
+    "concurrency": 32,
+    "candidate": {
+      "name": "lmtp-w30-balance-off",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": false,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "lm-head-tp"
+    }
+  },
+  {
+    "id": "c32-recipe-dpa-w30",
+    "concurrency": 32,
+    "candidate": {
+      "name": "recipe-dpa-w30",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": null,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "b300-recipe-dpa-knobs"
+    }
+  },
+  {
+    "id": "c64-base-w0",
+    "concurrency": 64,
+    "candidate": {
+      "name": "base-w0",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": false,
+      "mtp_draft_tokens": 3,
+      "kind": "control"
+    }
+  },
+  {
+    "id": "c64-lmtp-w0",
+    "concurrency": 64,
+    "candidate": {
+      "name": "lmtp-w0",
+      "batching_wait_iters": 0,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "lm-head-tp"
+    }
+  },
+  {
+    "id": "c64-recipe-dpa-w30",
+    "concurrency": 64,
+    "candidate": {
+      "name": "recipe-dpa-w30",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": true,
+      "attention_dp_timeout_iters": null,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "b300-recipe-dpa-knobs"
+    }
+  },
+  {
+    "id": "c64-lmtp-w30-boff",
+    "concurrency": 64,
+    "candidate": {
+      "name": "lmtp-w30-balance-off",
+      "batching_wait_iters": 30,
+      "attention_dp_balance": false,
+      "attention_dp_timeout_iters": 60,
+      "overlap_scheduler": true,
+      "cuda_graph": true,
+      "enable_lm_head_tp_in_adp": true,
+      "mtp_draft_tokens": 3,
+      "kind": "lm-head-tp"
+    }
+  }
+]

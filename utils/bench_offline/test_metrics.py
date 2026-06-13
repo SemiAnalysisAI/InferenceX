@@ -53,7 +53,11 @@ def test_token_tpot_and_derived_throughput():
     )
     aggregate = measured["aggregate"]
     assert aggregate["mean_token_tpot_ms"] == pytest.approx(20.0)
+    assert aggregate["mean_step_tpot_ms"] == pytest.approx(48.75)
     assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)
+    assert aggregate["derived_step_tput_per_gpu"] == pytest.approx(
+        1 / 0.04875
+    )
     assert aggregate["wall_output_tput_per_gpu"] == pytest.approx(31.25)
     assert aggregate["acceptance_rate"] == pytest.approx(0.5)
     assert aggregate["raw_speculative_metrics_available"] is True
@@ -110,7 +114,9 @@ def test_huawei_conversion_uses_observed_tokens_per_step():
     comparison = huawei_comparison(
         concurrency=8,
         b300_output_tput_per_gpu=200.0,
+        b300_step_tput_per_gpu=80.0,
         observed_tokens_per_step=2.5,
+        mtp_draft_tokens=3,
     )
     assert comparison is not None
     assert comparison["estimated_token_tput_per_chip"] == pytest.approx(
@@ -123,3 +129,23 @@ def test_huawei_conversion_uses_observed_tokens_per_step():
     assert comparison["conversion"].endswith(
         "trt_observed_tokens_per_step"
     )
+    assert comparison["b300_to_huawei_published_output_ratio"] == (
+        pytest.approx(200.0 / (56.70 * 2.44))
+    )
+    assert comparison["b300_to_huawei_step_rate_ratio"] == pytest.approx(
+        80.0 / 56.70
+    )
+
+
+def test_huawei_ratio_is_not_claimed_for_different_mtp_depth():
+    comparison = huawei_comparison(
+        concurrency=8,
+        b300_output_tput_per_gpu=200.0,
+        b300_step_tput_per_gpu=80.0,
+        observed_tokens_per_step=1.8,
+        mtp_draft_tokens=2,
+    )
+    assert comparison is not None
+    assert comparison["comparable"] is False
+    assert comparison["b300_to_huawei_published_output_ratio"] is None
+    assert comparison["b300_to_huawei_step_rate_ratio"] is None

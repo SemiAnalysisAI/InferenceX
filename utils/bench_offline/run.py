@@ -67,6 +67,12 @@ def aggregate_progress(aggregate: dict[str, Any]) -> str:
             ".2f",
             "",
         ),
+        (
+            "derived_step_tput_per_gpu",
+            "derived_step_tput_per_gpu",
+            ".2f",
+            "",
+        ),
         ("observed_tokens_per_step", "tokens_per_step", ".3f", ""),
     )
     for key, label, format_spec, suffix in metrics:
@@ -302,9 +308,13 @@ def run_worker(
     log_progress(
         f"{label}: worker start passes={passes} "
         f"wait_iters={candidate.batching_wait_iters} "
+        f"timeout_iters={candidate.attention_dp_timeout_iters} "
         f"balance={'on' if candidate.attention_dp_balance else 'off'} "
         f"overlap={'on' if candidate.overlap_scheduler else 'off'} "
-        f"cuda_graph={'on' if candidate.cuda_graph else 'off'}"
+        f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
+        "lm_head_tp="
+        f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
+        f"mtp={candidate.mtp_draft_tokens}"
     )
     started = time.perf_counter()
     timed_out = False
@@ -387,6 +397,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--worker-timeout", type=int, default=3600)
     parser.add_argument("--tuning-attempts", type=int, default=6)
+    parser.add_argument("--experiment-config", type=Path)
+    parser.add_argument("--experiment-id")
     return parser.parse_args()
 
 
@@ -400,7 +412,14 @@ def main() -> int:
         "started_at": utc_now(),
         "benchmark": {
             "mode": "offline_in_process",
+            "execution": (
+                "single_candidate"
+                if args.experiment_config is not None
+                else "serial_tuning"
+            ),
+            "experiment_id": args.experiment_id,
             "engine": "TensorRT-LLM PyTorch backend",
+            "request_path": "direct LLM.generate; no server or HTTP",
             "hardware": "B300",
             "world_size": WORLD_SIZE,
             "effective_parallelism": "DEP8",
@@ -431,13 +450,16 @@ def main() -> int:
             "derived_output_tput_per_gpu": (
                 "concurrency / mean_token_tpot_seconds / 8"
             ),
+            "derived_step_tput_per_gpu": (
+                "concurrency / mean_step_tpot_seconds / 8"
+            ),
             "wall_output_tput_per_gpu": (
                 "all generated output tokens / measured wall seconds / 8"
             ),
             "huawei_conversion": (
-                "published step throughput/chip multiplied by TRT observed "
-                "output tokens/decode iteration; raw acceptance rate is not "
-                "the multiplier"
+                "report Huawei's published decode-step rate directly, its "
+                "output rate at published 2.44 tokens/step, and a separate "
+                "TRT-yield-normalized output rate"
             ),
             "effective_acceptance_rate": (
                 "(observed output tokens/decode iteration - 1) / "
@@ -456,28 +478,42 @@ def main() -> int:
             "slurm_job_id": os.getenv("TRT_BENCH_SLURM_JOB_ID"),
             "slurm_node": os.getenv("TRT_BENCH_SLURM_NODE"),
         },
-        "tuning": {
+    }
+    if args.experiment_config is None:
+        base_result["tuning"] = {
             "attempt_limit": args.tuning_attempts,
             "minimum_winner_improvement": MIN_WINNER_IMPROVEMENT,
             "attempts": [],
-        },
-    }
+        }
+    else:
+        base_result["experiment"] = {
+            "id": args.experiment_id,
+            "config_path": str(args.experiment_config),
+            "status": "pending",
+        }
     write_json(result_path, base_result)
     log_progress(
         f"benchmark start concurrency={args.concurrency} "
+        f"execution={base_result['benchmark']['execution']} "
+        f"experiment_id={args.experiment_id or 'none'} "
         f"input_tokens={INPUT_TOKENS} output_tokens={OUTPUT_TOKENS} "
-        f"tuning_attempts={args.tuning_attempts} "
+        f"tuning_attempts="
+        f"{args.tuning_attempts if args.experiment_config is None else 0} "
         f"worker_timeout={args.worker_timeout}s "
         f"output_dir={args.output_dir}"
     )
 
+    experiment_candidate: CandidateConfig | None = None
     try:
         if args.concurrency not in ALLOWED_CONCURRENCIES:
             raise ValueError(
                 f"Concurrency must be one of {ALLOWED_CONCURRENCIES}, "
                 f"got {args.concurrency}"
             )
-        if not 1 <= args.tuning_attempts <= 6:
+        if (
+            args.experiment_config is None
+            and not 1 <= args.tuning_attempts <= 6
+        ):
             raise ValueError("--tuning-attempts must be between 1 and 6")
         if not args.model_path.is_dir():
             raise FileNotFoundError(
@@ -485,6 +521,41 @@ def main() -> int:
             )
         if not args.dataset.is_file():
             raise FileNotFoundError(f"Dataset does not exist: {args.dataset}")
+        if args.experiment_config is not None:
+            if not args.experiment_config.is_file():
+                raise FileNotFoundError(
+                    f"Experiment config does not exist: "
+                    f"{args.experiment_config}"
+                )
+            experiment_candidate = CandidateConfig.from_dict(
+                read_json(args.experiment_config)
+            )
+            experiment_id = args.experiment_id or experiment_candidate.name
+            base_result["benchmark"].update(
+                {
+                    "experiment_id": experiment_id,
+                    "mtp_max_draft_len": (
+                        experiment_candidate.mtp_draft_tokens
+                    ),
+                }
+            )
+            base_result["experiment"] = {
+                "id": experiment_id,
+                "config_path": str(args.experiment_config),
+                "status": "configured",
+                "candidate": experiment_candidate.to_dict(),
+            }
+            write_json(result_path, base_result)
+            log_progress(
+                "single-candidate experiment configured "
+                f"id={experiment_id} candidate={experiment_candidate.name} "
+                f"wait_iters={experiment_candidate.batching_wait_iters} "
+                "balance="
+                f"{'on' if experiment_candidate.attention_dp_balance else 'off'} "
+                "lm_head_tp="
+                f"{'on' if experiment_candidate.enable_lm_head_tp_in_adp else 'off'} "
+                f"mtp={experiment_candidate.mtp_draft_tokens}"
+            )
 
         log_progress(
             f"corpus preparation start dataset={args.dataset.name} "
@@ -515,6 +586,83 @@ def main() -> int:
 
         corpus_path = args.output_dir / "corpus.bin"
         manifest_path = args.output_dir / "corpus_manifest.json"
+        if experiment_candidate is not None:
+            log_progress(
+                "single-candidate measurement start "
+                f"candidate={experiment_candidate.name} "
+                f"measured_passes={FINAL_MEASURED_PASSES}"
+            )
+            experiment_result = run_worker(
+                output_dir=args.output_dir,
+                model_path=args.model_path,
+                corpus_path=corpus_path,
+                manifest_path=manifest_path,
+                candidate=experiment_candidate,
+                attempt=1,
+                mode="experiment",
+                passes=FINAL_MEASURED_PASSES,
+                timeout_seconds=args.worker_timeout,
+            )
+            base_result["experiment"].update(
+                {
+                    "status": experiment_result.get("status", "unknown"),
+                    "result": compact_attempt(experiment_result),
+                }
+            )
+            if experiment_result.get("status") != "success":
+                failure_kind = experiment_result.get("failure_kind")
+                is_capacity = (
+                    args.concurrency >= 512
+                    and failure_kind in {"oom", "capacity"}
+                    and experiment_result.get("phase")
+                    in {"engine_init", "warmup"}
+                )
+                base_result.update(
+                    {
+                        "status": (
+                            "capacity_failure" if is_capacity else "failed"
+                        ),
+                        "finished_at": utc_now(),
+                        "error": (
+                            "Single-candidate experiment did not complete"
+                        ),
+                        "final": compact_attempt(experiment_result),
+                    }
+                )
+                write_json(result_path, base_result)
+                log_progress(
+                    f"benchmark finished status={base_result['status']} "
+                    f"failure_kind={failure_kind or 'unknown'}"
+                )
+                return 0 if is_capacity else 1
+
+            aggregate = experiment_result["aggregate"]
+            base_result.update(
+                {
+                    "status": "success",
+                    "finished_at": utc_now(),
+                    "winner": experiment_candidate.to_dict(),
+                    "final": experiment_result,
+                    "aggregate": aggregate,
+                    "huawei": huawei_comparison(
+                        args.concurrency,
+                        float(
+                            aggregate["derived_output_tput_per_gpu"]
+                        ),
+                        float(aggregate["derived_step_tput_per_gpu"]),
+                        float(aggregate["observed_tokens_per_step"]),
+                        experiment_candidate.mtp_draft_tokens,
+                    ),
+                }
+            )
+            base_result["experiment"]["status"] = "success"
+            write_json(result_path, base_result)
+            log_progress(
+                "benchmark complete status=success execution=single_candidate "
+                f"{aggregate_progress(aggregate)}"
+            )
+            return 0
+
         full_attempts: list[dict[str, Any]] = []
         scheduler_results: list[dict[str, Any]] = []
         force_graph_off = False
@@ -741,7 +889,9 @@ def main() -> int:
                 "huawei": huawei_comparison(
                     args.concurrency,
                     float(aggregate["derived_output_tput_per_gpu"]),
+                    float(aggregate["derived_step_tput_per_gpu"]),
                     float(aggregate["observed_tokens_per_step"]),
+                    winner_candidate.mtp_draft_tokens,
                 ),
             }
         )

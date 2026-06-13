@@ -155,6 +155,7 @@ def extract_request_metrics(
         "decode_window_s": decode_window,
         "e2e_s": last_token - arrival,
         "token_tpot_s": decode_window / decode_tokens,
+        "step_tpot_s": decode_window / decode_iterations,
         "mtp_max_draft_tokens": max_draft_tokens,
         "observed_tokens_per_step": observed_tokens_per_step,
         "effective_accepted_drafts_per_step": effective_accepted_drafts,
@@ -182,9 +183,11 @@ def aggregate_requests(
         raise ValueError(f"Invalid measured wall time: {wall_seconds}")
 
     token_tpots = [float(item["token_tpot_s"]) for item in request_metrics]
+    step_tpots = [float(item["step_tpot_s"]) for item in request_metrics]
     ttfts = [float(item["ttft_s"]) for item in request_metrics]
     e2els = [float(item["e2e_s"]) for item in request_metrics]
     mean_tpot = fmean(token_tpots)
+    mean_step_tpot = fmean(step_tpots)
     total_output_tokens = sum(
         int(item["output_tokens"]) for item in request_metrics
     )
@@ -227,12 +230,19 @@ def aggregate_requests(
         "median_token_tpot_ms": _percentile(token_tpots, 50) * 1000.0,
         "p90_token_tpot_ms": _percentile(token_tpots, 90) * 1000.0,
         "p99_token_tpot_ms": _percentile(token_tpots, 99) * 1000.0,
+        "mean_step_tpot_ms": mean_step_tpot * 1000.0,
+        "median_step_tpot_ms": _percentile(step_tpots, 50) * 1000.0,
+        "p90_step_tpot_ms": _percentile(step_tpots, 90) * 1000.0,
+        "p99_step_tpot_ms": _percentile(step_tpots, 99) * 1000.0,
         "mean_ttft_ms": fmean(ttfts) * 1000.0,
         "p99_ttft_ms": _percentile(ttfts, 99) * 1000.0,
         "mean_e2e_ms": fmean(e2els) * 1000.0,
         "p99_e2e_ms": _percentile(e2els, 99) * 1000.0,
         "derived_output_tput_per_gpu": (
             active_concurrency / mean_tpot / num_gpus
+        ),
+        "derived_step_tput_per_gpu": (
+            active_concurrency / mean_step_tpot / num_gpus
         ),
         "wall_output_tput_per_gpu": (
             total_output_tokens / wall_seconds / num_gpus
@@ -307,6 +317,9 @@ def aggregate_passes(
     aggregate["per_pass_derived_output_tput_per_gpu"] = [
         item["aggregate"]["derived_output_tput_per_gpu"] for item in passes
     ]
+    aggregate["per_pass_derived_step_tput_per_gpu"] = [
+        item["aggregate"]["derived_step_tput_per_gpu"] for item in passes
+    ]
     aggregate["per_pass_wall_output_tput_per_gpu"] = [
         item["aggregate"]["wall_output_tput_per_gpu"] for item in passes
     ]
@@ -319,7 +332,9 @@ def aggregate_passes(
 def huawei_comparison(
     concurrency: int,
     b300_output_tput_per_gpu: float,
+    b300_step_tput_per_gpu: float,
     observed_tokens_per_step: float,
+    mtp_draft_tokens: int,
 ) -> dict[str, Any] | None:
     reference = HUAWEI_REFERENCE.get(concurrency)
     if reference is None:
@@ -335,8 +350,17 @@ def huawei_comparison(
     converted = (
         float(reference["step_tput_per_chip"]) * observed_tokens_per_step
     )
+    comparable = mtp_draft_tokens == published_draft_tokens
+    step_tput = float(reference["step_tput_per_chip"])
     return {
         **reference,
+        "mode": "offline_decode",
+        "comparable": comparable,
+        "comparison_reason": (
+            "matching batch-per-chip and MTP depth"
+            if comparable
+            else "MTP depth differs from the Huawei reference"
+        ),
         "published_acceptance_rate": (
             published_accepted / published_draft_tokens
         ),
@@ -348,8 +372,27 @@ def huawei_comparison(
         ),
         "estimated_token_tput_per_chip": converted,
         "trt_normalized_token_tput_per_chip": converted,
+        "b300_derived_output_tput_per_gpu": b300_output_tput_per_gpu,
+        "b300_derived_step_tput_per_gpu": b300_step_tput_per_gpu,
+        "b300_to_huawei_published_output_ratio": (
+            b300_output_tput_per_gpu / published_token_tput
+            if comparable and published_token_tput
+            else None
+        ),
+        "b300_to_huawei_step_rate_ratio": (
+            b300_step_tput_per_gpu / step_tput
+            if comparable and step_tput
+            else None
+        ),
+        "b300_to_huawei_trt_yield_normalized_ratio": (
+            b300_output_tput_per_gpu / converted
+            if comparable and converted
+            else None
+        ),
         "b300_to_huawei_ratio": (
-            b300_output_tput_per_gpu / converted if converted else None
+            b300_output_tput_per_gpu / converted
+            if comparable and converted
+            else None
         ),
         "normalized_estimate": True,
     }

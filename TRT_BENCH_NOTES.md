@@ -8,7 +8,8 @@ These notes are for the next agent running and debugging `trt-bench`.
 - B300, one node, eight GPUs.
 - TensorRT-LLM only.
 - Offline `LLM.generate()`, no server or generic InferenceX processing.
-- Start with concurrency 8 before spending GPUs on the full matrix.
+- Optimization workflows may use up to ten parallel single-node B300 jobs.
+- Huawei-comparable rows remain DEP8/MTP3 at c8, c32, and c64.
 
 ## Pinned TRT Facts
 
@@ -42,21 +43,27 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
   `SamplingParams.seed`. It creates one engine-global CUDA generator with
   seed `42` and advances it across requests and passes. CANN also globally
   seeds to `42`, but uses a different temperature-1 sampling implementation.
-- Tune candidates with three measured passes and require a 3% improvement.
-  A single pass was too sensitive to output-dependent MTP acceptance.
+- Current optimization runs use one measured pass to reduce GPU time. Earlier
+  runs used three passes after one-pass tuning showed output-dependent MTP
+  variation; confirm any winner with a separate repeat before treating a
+  marginal difference as stable.
 
 Do not assume a newer TRT release has the same field names. If the image
 changes, inspect the exact source first.
 
-## Existing B300 Choices Intentionally Rejected
+## B300 Optimization Boundaries
 
-The normal B300 recipe is a useful environment reference, but this benchmark
-does not inherit all of its behavior:
+The normal B300 recipe is an optimization source, but comparison claims have
+stricter boundaries:
 
 - It must not reduce MTP3 to MTP2 at high concurrency.
-- It must not enable LM-head TP in attention DP.
-- It must not change to MegaMoe for this 8K workload.
+- LM-head TP in attention DP is now an explicit candidate because both the
+  Huawei guide and the checked-in B300 production recipe enable it.
+- It must not change to MegaMoe for this 8K matching workload unless that is
+  a separately labeled non-comparable experiment.
 - It must not substitute continuous batching or HTTP request timing.
+- TP4 and alternate MTP-depth tests can be useful second-stage optimization
+  work, but they do not have the same batch-per-chip/MTP3 Huawei match.
 
 ## First-Run Risks
 
@@ -143,15 +150,18 @@ Do not call a row valid unless:
 - status is `success`
 - all prompts are exactly 8192 tokens
 - every request emits exactly 625 tokens
-- resolved shape is DEP8 with LM-head TP off and MTP3
+- resolved shape is DEP8/MTP3 and LM-head TP matches the candidate
 - perfect-router propagation validation passes
-- every successful tuning attempt contains three measured passes and
-  `3 * concurrency` request samples
-- final result contains three measured passes from one fresh final engine
+- a single-candidate experiment contains one warmup and one measured pass
+  from one fresh engine, with `concurrency` request samples
+- legacy tuning also contains one pass per successful candidate and a fresh
+  one-pass final engine
 - derived and wall throughput are both present
+- derived step throughput and step TPOT are present
 - token/step and effective acceptance are present
 - raw TRT acceptance is either populated or explicitly marked unavailable
-- Huawei conversion, when applicable, uses token/step
+- Huawei output and step-rate ratios are present only for matching DEP8/MTP3
+  c8/c32/c64 rows
 
 Capacity failures at 512/1024 remain useful rows. They are not successful
 performance measurements.
@@ -171,6 +181,91 @@ performance measurements.
 - Each pass has one flushed line before its timer starts and one after metrics
   extraction; neither line is included in the measured `LLM.generate()` wall
   interval.
+
+## Parallel Optimization Matrix
+
+The first optimization matrix is checked in at
+`utils/bench_offline/b300_huawei_experiments.json`. It contains ten
+single-candidate jobs and is deliberately all DEP8/MTP3:
+
+- c8: prior wait30 control, wait30 plus LM-head TP, wait0 plus LM-head TP
+- c32: prior wait30/balance-off control, the same with LM-head TP, and the
+  production attention-DP wait30/balance-on/default-timeout knobs projected
+  onto DEP8
+- c64: prior wait0 control, wait0 plus LM-head TP, the production
+  attention-DP wait30/balance-on/default-timeout knobs projected onto DEP8,
+  and wait30/balance-off plus LM-head TP
+
+Each job creates one fresh engine, performs one full-shape warmup, and records
+one measured pass. The workflow fans out at most ten jobs, so it removes
+the seven-engine serial multiplier that made c512 take 4h19.
+
+Exact dispatch:
+
+```bash
+EXPERIMENTS="$(jq -c . utils/bench_offline/b300_huawei_experiments.json)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f 'inputs[ref]=trt-bench' \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline optimization' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
+The collector keys rows by experiment ID, so repeated concurrencies are
+valid. Artifacts are named `offline-trt-job-EXPERIMENT_ID`.
+
+## Huawei Comparison Audit
+
+Huawei's c8/c32/c64-matched table is explicitly offline decode. Its published
+throughput is step throughput because every row equals
+`global_batch_size / step_tpot / chips`. Huawei also publishes 1.44 accepted
+drafts for MTP3, or 2.44 emitted tokens per step.
+
+Use two primary ratios:
+
+1. Step-rate ratio: B300 derived decode steps/GPU divided by Huawei's
+   published decode steps/chip. This isolates execution rate.
+2. Actual output ratio: B300 emitted output tokens/GPU divided by Huawei step
+   throughput times Huawei's own 2.44-token yield.
+
+The prior artifacts contain enough request telemetry to reconstruct direct
+step TPOT. The baseline was:
+
+| Conc | B300 step TPOT ms | B300 step/s/GPU | Huawei step TPOT ms | Huawei step/s/chip | B300/Huawei step |
+|---:|---:|---:|---:|---:|---:|
+| 8 | 30.026 | 33.305 | 17.64 | 56.70 | 0.587 |
+| 32 | 44.268 | 90.358 | 19.03 | 210.16 | 0.430 |
+| 64 | 66.065 | 121.094 | 20.61 | 388.23 | 0.312 |
+
+Based on the same prior final output-token results, B300/Huawei actual-output
+ratios were:
+
+- c8: `116.091 / (56.70 * 2.44) = 0.839`
+- c32: `286.253 / (210.16 * 2.44) = 0.558`
+- c64: `369.071 / (388.23 * 2.44) = 0.390`
+
+The old TRT-yield-normalized ratios were `0.587`, `0.431`, and `0.313`, close
+to the reconstructed direct step ratios because request-level token yield was
+fairly uniform within each run. New results record direct step TPOT and step
+throughput without relying on that approximation.
+
+The current B300 baseline is plausibly behind for two independent reasons:
+
+- Its decode-step rate is lower, increasingly so at the larger matched
+  batches.
+- Its observed MTP yield at c32/c64 is about 3.16/3.04 tokens per step, while
+  Huawei reports 2.44. B300's higher yield helps output throughput, but not
+  enough to overcome its slower step execution.
+
+The Huawei guide also describes LM-head TP during decode, forced EPLB,
+specialized fused SAS/LI/compressor/mHC kernels, and multiple streams
+overlapping attention, compressor, routed/shared experts, and scheduler
+metadata. The prior offline B300 baseline already used perfect routing and
+fused mHC, but incorrectly left LM-head TP disabled. The first matrix isolates
+that mismatch before exploring non-comparable TP4 or alternate-MTP shapes.
 
 ## Run History
 
