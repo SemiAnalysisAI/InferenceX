@@ -49,10 +49,17 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
   variation; confirm any winner with a separate repeat before treating a
   marginal difference as stable.
 - Fresh engine startup is dominated by model initialization plus CuTe DSL
-  compilation. The branch now mounts the image-keyed persistent cache
-  `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl`. The direct
-  `CUTE_DSL_CACHE_DIR` variable and its `TRTLLM_*` forwarding alias must reach
-  every active MPI rank marker.
+  compilation. The branch mounts the image-keyed path
+  `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl`, and the direct
+  `CUTE_DSL_CACHE_DIR` variable plus its `TRTLLM_*` forwarding alias must
+  reach every active MPI rank marker. Cache-prime run `27475868179` created
+  zero files there, so propagation is proven but caching is not.
+- TRT's exact DeepSeek-V4 README defines ADP `max_batch_size` as per local
+  rank. `LLM.generate()` enqueues global requests individually, and
+  PyExecutor allows `tp_size * max_num_active_requests` total ADP requests.
+  The CUDA graph runner pads each local rank to a configured graph batch.
+  Therefore the legacy global graph sizes 8/32/64 can pad true local batches
+  1/4/8 by 8x.
 
 Do not assume a newer TRT release has the same field names. If the image
 changes, inspect the exact source first.
@@ -75,7 +82,7 @@ stricter boundaries:
 
 1. Perfect-router alias propagation into all active MPI ranks. DEP8 must show
    exactly ranks `0..7`; TP4/DEP4 must show exactly ranks `0..3`. Every rank
-   must record the same persistent CuTe cache path.
+   must record the same CuTe cache path, without assuming files are persisted.
 2. Exact 8192-token prompt construction with the staged model tokenizer.
 3. TRT argument names accepted by the pinned image.
 4. Exact-concurrency CUDA graph memory at 512/1024.
@@ -244,6 +251,32 @@ gh api -X POST \
   -f 'inputs[salloc-time]=90' \
   -f 'inputs[worker-timeout]=3600'
 ```
+
+Run `27476355772` dispatched that exact stage-two matrix on
+`2026-06-13T19:11:30Z`, pinned to commit
+`781065563a87740a094e4d5e70f19b4786f87fe1`.
+
+The third-stage matrix tests TRT's documented per-local-rank ADP capacity
+against legacy global controls. It remains DEP8/MTP3 and Huawei-comparable:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage3_local_batch_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline local-rank batch' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
+For DEP8 c8/c32/c64, `attention_dp_batch_mode=local-rank` resolves engine and
+CUDA graph capacity to 1/4/8. Results are rejected if TRT resolves different
+`max_batch_size`, `max_num_tokens`, or CUDA graph batch sizes.
 
 ## Huawei Comparison Audit
 

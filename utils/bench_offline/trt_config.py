@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Iterable, Optional
@@ -72,6 +73,7 @@ class CandidateConfig:
     overlap_scheduler: bool = True
     cuda_graph: bool = True
     enable_lm_head_tp_in_adp: bool = False
+    attention_dp_batch_mode: str = "global"
     mtp_draft_tokens: int = MTP_DRAFT_TOKENS
     parallelism: str = "dep8"
     kind: str = "scheduler"
@@ -116,6 +118,13 @@ class CandidateConfig:
         if not isinstance(self.kind, str):
             raise ValueError("kind must be a string")
         if (
+            not isinstance(self.attention_dp_batch_mode, str)
+            or self.attention_dp_batch_mode not in {"global", "local-rank"}
+        ):
+            raise ValueError(
+                "attention_dp_batch_mode must be global or local-rank"
+            )
+        if (
             not isinstance(self.parallelism, str)
             or self.parallelism not in PARALLELISM_CONFIGS
         ):
@@ -129,6 +138,13 @@ class CandidateConfig:
         ):
             raise ValueError(
                 "enable_lm_head_tp_in_adp requires attention DP"
+            )
+        if (
+            self.attention_dp_batch_mode == "local-rank"
+            and not self.parallelism_config.enable_attention_dp
+        ):
+            raise ValueError(
+                "attention_dp_batch_mode=local-rank requires attention DP"
             )
 
     @property
@@ -183,18 +199,45 @@ def overlap_candidate(base: CandidateConfig) -> CandidateConfig:
     )
 
 
-def max_batch_size(concurrency: int) -> int:
+def local_attention_dp_batch_size(
+    concurrency: int,
+    candidate: CandidateConfig,
+) -> int:
+    return math.ceil(
+        concurrency / candidate.parallelism_config.tensor_parallel_size
+    )
+
+
+def max_batch_size(
+    concurrency: int,
+    candidate: CandidateConfig | None = None,
+) -> int:
+    if (
+        candidate is not None
+        and candidate.attention_dp_batch_mode == "local-rank"
+    ):
+        return local_attention_dp_batch_size(concurrency, candidate)
     return max(16, concurrency)
+
+
+def cuda_graph_batch_size(
+    concurrency: int,
+    candidate: CandidateConfig,
+) -> int:
+    if candidate.attention_dp_batch_mode == "local-rank":
+        return local_attention_dp_batch_size(concurrency, candidate)
+    return concurrency
 
 
 def max_num_tokens(
     concurrency: int,
     mtp_draft_tokens: int = MTP_DRAFT_TOKENS,
+    candidate: CandidateConfig | None = None,
 ) -> int:
     # Mirrors the working B300 DeepSeek-V4 TRT MTP recipe.
     return max(
         INPUT_TOKENS
-        + (mtp_draft_tokens + 1) * max_batch_size(concurrency)
+        + (mtp_draft_tokens + 1) * max_batch_size(concurrency, candidate)
         + 256,
         INPUT_TOKENS,
     )
@@ -206,6 +249,7 @@ def build_llm_kwargs(
     candidate: CandidateConfig,
 ) -> dict[str, Any]:
     parallelism = candidate.parallelism_config
+    graph_batch_size = cuda_graph_batch_size(concurrency, candidate)
     kwargs: dict[str, Any] = {
         "model": model_path,
         "backend": "pytorch",
@@ -221,11 +265,12 @@ def build_llm_kwargs(
             if parallelism.enable_attention_dp
             else False
         ),
-        "max_batch_size": max_batch_size(concurrency),
+        "max_batch_size": max_batch_size(concurrency, candidate),
         "max_seq_len": MAX_SEQ_LEN,
         "max_num_tokens": max_num_tokens(
             concurrency,
             candidate.mtp_draft_tokens,
+            candidate,
         ),
         "custom_tokenizer": "deepseek_v4",
         "return_perf_metrics": True,
@@ -264,8 +309,8 @@ def build_llm_kwargs(
         )
     if candidate.cuda_graph:
         kwargs["cuda_graph_config"] = {
-            "batch_sizes": [concurrency],
-            "max_batch_size": concurrency,
+            "batch_sizes": [graph_batch_size],
+            "max_batch_size": graph_batch_size,
             "enable_padding": True,
         }
     else:
@@ -308,6 +353,7 @@ def choose_winner(
 def resolved_parallelism(
     llm_args: Any,
     candidate: CandidateConfig | None = None,
+    concurrency: int | None = None,
 ) -> dict[str, Any]:
     if candidate is None:
         candidate = CandidateConfig(name="default", batching_wait_iters=30)
@@ -357,4 +403,74 @@ def resolved_parallelism(
             f"{candidate.mtp_draft_tokens}"
         )
     resolved["mtp_max_draft_len"] = draft_len
+    resolved["attention_dp_batch_mode"] = (
+        candidate.attention_dp_batch_mode
+    )
+
+    if concurrency is not None:
+        resolved["global_concurrency"] = concurrency
+        resolved["max_batch_size"] = int(llm_args.max_batch_size)
+        resolved["max_num_tokens"] = int(llm_args.max_num_tokens)
+        expected_max_batch_size = max_batch_size(concurrency, candidate)
+        expected_max_num_tokens = max_num_tokens(
+            concurrency,
+            candidate.mtp_draft_tokens,
+            candidate,
+        )
+        if resolved["max_batch_size"] != expected_max_batch_size:
+            raise RuntimeError(
+                "Resolved TRT max_batch_size mismatch: "
+                f"{resolved['max_batch_size']} != "
+                f"{expected_max_batch_size}"
+            )
+        if resolved["max_num_tokens"] != expected_max_num_tokens:
+            raise RuntimeError(
+                "Resolved TRT max_num_tokens mismatch: "
+                f"{resolved['max_num_tokens']} != "
+                f"{expected_max_num_tokens}"
+            )
+
+        graph_config = llm_args.cuda_graph_config
+        if candidate.cuda_graph:
+            if graph_config is None:
+                raise RuntimeError(
+                    "Resolved TRT cuda_graph_config is unexpectedly disabled"
+                )
+            if isinstance(graph_config, dict):
+                graph_batch_sizes = graph_config["batch_sizes"]
+                graph_max_batch_size = graph_config["max_batch_size"]
+            else:
+                graph_batch_sizes = graph_config.batch_sizes
+                graph_max_batch_size = graph_config.max_batch_size
+            resolved["cuda_graph_batch_sizes"] = [
+                int(value) for value in graph_batch_sizes
+            ]
+            resolved["cuda_graph_max_batch_size"] = int(
+                graph_max_batch_size
+            )
+            expected_graph_batch_size = cuda_graph_batch_size(
+                concurrency,
+                candidate,
+            )
+            if resolved["cuda_graph_batch_sizes"] != [
+                expected_graph_batch_size
+            ]:
+                raise RuntimeError(
+                    "Resolved TRT CUDA graph batch sizes mismatch: "
+                    f"{resolved['cuda_graph_batch_sizes']} != "
+                    f"{[expected_graph_batch_size]}"
+                )
+            if (
+                resolved["cuda_graph_max_batch_size"]
+                != expected_graph_batch_size
+            ):
+                raise RuntimeError(
+                    "Resolved TRT CUDA graph max batch size mismatch: "
+                    f"{resolved['cuda_graph_max_batch_size']} != "
+                    f"{expected_graph_batch_size}"
+                )
+        elif graph_config is not None:
+            raise RuntimeError(
+                "Resolved TRT cuda_graph_config is unexpectedly enabled"
+            )
     return resolved

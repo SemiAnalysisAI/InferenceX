@@ -75,6 +75,7 @@ jobs:
                   "overlap_scheduler",
                   "cuda_graph",
                   "enable_lm_head_tp_in_adp",
+                  "attention_dp_batch_mode",
                   "mtp_draft_tokens",
                   "parallelism",
                   "kind",
@@ -195,6 +196,21 @@ jobs:
                       raise SystemExit(
                           f"experiment {experiment_id} cannot enable "
                           "LM-head TP without attention DP"
+                      )
+                  batch_mode = candidate.get(
+                      "attention_dp_batch_mode",
+                      "global",
+                  )
+                  if batch_mode not in {"global", "local-rank"}:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "attention_dp_batch_mode must be global or "
+                          "local-rank"
+                      )
+                  if parallelism == "tp4" and batch_mode == "local-rank":
+                      raise SystemExit(
+                          f"experiment {experiment_id} cannot use "
+                          "local-rank batch sizing without attention DP"
                       )
                   if "kind" in candidate and not isinstance(
                       candidate["kind"],

@@ -312,6 +312,7 @@ def run_worker(
         f"balance={'on' if candidate.attention_dp_balance else 'off'} "
         f"overlap={'on' if candidate.overlap_scheduler else 'off'} "
         f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
+        f"adp_batch_mode={candidate.attention_dp_batch_mode} "
         "lm_head_tp="
         f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
         f"mtp={candidate.mtp_draft_tokens} "
@@ -578,6 +579,8 @@ def main() -> int:
                 f"{'on' if experiment_candidate.attention_dp_balance else 'off'} "
                 "lm_head_tp="
                 f"{'on' if experiment_candidate.enable_lm_head_tp_in_adp else 'off'} "
+                "adp_batch_mode="
+                f"{experiment_candidate.attention_dp_batch_mode} "
                 f"mtp={experiment_candidate.mtp_draft_tokens}"
             )
 

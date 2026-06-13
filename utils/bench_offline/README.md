@@ -76,9 +76,10 @@ The candidate records one of three checked-in B300 recipe shapes:
 LM-head TP is recorded per attention-DP candidate. MTP max draft length stays
 at three unless a separately labeled non-comparable experiment changes it.
 
-The worker validates these resolved TRT arguments after every engine starts.
-It also requires exactly ranks `0..N-1` for the selected active-GPU count;
-an eight-rank launch cannot be mislabeled as TP4 or DEP4.
+The worker validates these resolved TRT arguments after every engine starts,
+including engine `max_batch_size`, `max_num_tokens`, and CUDA graph batch
+sizes. It also requires exactly ranks `0..N-1` for the selected active-GPU
+count; an eight-rank launch cannot be mislabeled as TP4 or DEP4.
 
 Perfect routing is enabled with `ENABLE_PERFECT_ROUTER=1`. TRT's MPI pool only
 explicitly forwards `TRTLLM_*` and `TLLM_*` variables, so
@@ -89,15 +90,16 @@ writes a marker before each rank imports TRT's real model worker. The benchmark
 requires one marked entrypoint per active rank. `sitecustomize.py` provides an
 additional early-process alias but is not the primary proof.
 
-Fresh TRT engines spend most startup time compiling Blackwell CuTe DSL
-kernels, not running the measured pass. The workflow mounts the image-keyed
-shared cache
+Fresh TRT engines spend most startup time in model initialization and
+Blackwell CuTe DSL compilation, not in the measured pass. The workflow mounts
+the image-keyed shared path
 `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl` and sets
 `CUTE_DSL_CACHE_DIR`. Because TRT's MPI pool filters unprefixed variables,
 `TRTLLM_BENCH_CUTE_DSL_CACHE_DIR` carries the path into
 `trt_mpi_entry.worker_main`, which restores it before importing TRT on every
-rank. Result markers must prove all active ranks used the same cache path.
-Changing the TRT image requires a new cache-key directory.
+rank. Result markers prove propagation only. Cache-prime run `27475868179`
+left zero files in that directory, so this variable is not currently proven
+to cache CuTe compilation and must not be credited with reducing startup.
 
 Perfect routing intentionally changes expert selection, so generated text is
 not an accuracy result. This harness is performance-only, matching the
@@ -249,6 +251,14 @@ The checked-in second-stage matrix is
 control and LM-head-TP candidate on fresh engines, then tests TP4 at c8/c32
 and DEP4 scheduler variants at c64.
 
+The checked-in third-stage matrix is
+`utils/bench_offline/b300_stage3_local_batch_experiments.json`. TRT documents
+ADP `max_batch_size` as a per-local-rank capacity. Legacy controls retain the
+old global sizing, while `attention_dp_batch_mode=local-rank` uses
+`ceil(global_concurrency / attention_dp_ranks)` for engine and CUDA graph
+capacity. At c8/c32/c64 on DEP8, that captures graph batches 1/4/8 instead of
+8/32/64 and avoids padding each local decode batch to global concurrency.
+
 The legacy concurrency-only mode remains available for reproducing the older
 serial tuner:
 
@@ -267,10 +277,11 @@ The intended six-attempt order is:
 5. best scheduler candidate with balance off
 6. best prior candidate with overlap off
 
-CUDA graphs capture the exact requested concurrency with padding. If graph
-initialization or execution fails, the same candidate is immediately retried
-with graphs disabled. That retry consumes an attempt, all later candidates
-remain graph-off, and the lowest-priority candidate may be omitted.
+CUDA graphs capture either the legacy global concurrency or the configured
+local-rank ADP batch size, with padding. If graph initialization or execution
+fails, the same candidate is immediately retried with graphs disabled. That
+retry consumes an attempt, all later candidates remain graph-off, and the
+lowest-priority candidate may be omitted.
 
 An engine-init or full-shape-warmup OOM/capacity failure stops pointless
 scheduler retries. Concurrencies 512 and 1024 emit `capacity_failure` result

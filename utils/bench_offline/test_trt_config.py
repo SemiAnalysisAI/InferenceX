@@ -50,6 +50,47 @@ def test_llm_kwargs_are_fixed_dep8_mtp3():
     assert kwargs["cuda_graph_config"]["batch_sizes"] == [64]
 
 
+def test_global_batch_mode_preserves_legacy_c8_capacity():
+    kwargs = build_llm_kwargs(
+        "/model",
+        8,
+        CandidateConfig(name="global", batching_wait_iters=30),
+    )
+    assert kwargs["max_batch_size"] == 16
+    assert kwargs["max_num_tokens"] == 8512
+    assert kwargs["cuda_graph_config"]["batch_sizes"] == [8]
+    assert kwargs["cuda_graph_config"]["max_batch_size"] == 8
+
+
+@pytest.mark.parametrize(
+    ("concurrency", "expected_batch_size", "expected_max_num_tokens"),
+    (
+        (8, 1, 8452),
+        (32, 4, 8464),
+        (64, 8, 8480),
+    ),
+)
+def test_local_rank_batch_mode_sizes_dep8_per_rank(
+    concurrency,
+    expected_batch_size,
+    expected_max_num_tokens,
+):
+    candidate = CandidateConfig(
+        name=f"local-{concurrency}",
+        batching_wait_iters=30,
+        attention_dp_batch_mode="local-rank",
+    )
+    kwargs = build_llm_kwargs("/model", concurrency, candidate)
+    assert kwargs["max_batch_size"] == expected_batch_size
+    assert kwargs["max_num_tokens"] == expected_max_num_tokens
+    assert kwargs["cuda_graph_config"]["batch_sizes"] == [
+        expected_batch_size
+    ]
+    assert kwargs["cuda_graph_config"]["max_batch_size"] == (
+        expected_batch_size
+    )
+
+
 def test_candidate_can_enable_production_lm_head_tp():
     candidate = CandidateConfig(
         name="wait30-lmtp",
@@ -119,6 +160,25 @@ def test_lm_head_tp_requires_attention_dp():
         )
 
 
+def test_local_rank_batch_mode_requires_attention_dp():
+    with pytest.raises(ValueError, match="requires attention DP"):
+        CandidateConfig(
+            name="invalid-local",
+            batching_wait_iters=0,
+            attention_dp_batch_mode="local-rank",
+            parallelism="tp4",
+        )
+
+
+def test_attention_dp_batch_mode_is_validated():
+    with pytest.raises(ValueError, match="must be global or local-rank"):
+        CandidateConfig(
+            name="invalid-mode",
+            batching_wait_iters=0,
+            attention_dp_batch_mode="rank",
+        )
+
+
 def test_candidate_name_must_be_filename_safe():
     with pytest.raises(ValueError, match="Invalid candidate name"):
         CandidateConfig(name="../escape", batching_wait_iters=30)
@@ -160,6 +220,68 @@ def test_resolved_parallelism_accepts_candidate_lm_head_tp():
     assert resolved["enable_lm_head_tp_in_adp"] is True
 
 
+def test_resolved_parallelism_validates_local_rank_runtime_capacity():
+    candidate = CandidateConfig(
+        name="local",
+        batching_wait_iters=30,
+        attention_dp_batch_mode="local-rank",
+    )
+    llm_args = SimpleNamespace(
+        parallel_config=SimpleNamespace(
+            world_size=8,
+            tp_size=8,
+            moe_ep_size=8,
+            moe_tp_size=1,
+            enable_attention_dp=True,
+            enable_lm_head_tp_in_adp=False,
+        ),
+        speculative_config=SimpleNamespace(max_draft_len=3),
+        max_batch_size=4,
+        max_num_tokens=8464,
+        cuda_graph_config=SimpleNamespace(
+            batch_sizes=[4],
+            max_batch_size=4,
+        ),
+    )
+    resolved = resolved_parallelism(llm_args, candidate, concurrency=32)
+    assert resolved["attention_dp_batch_mode"] == "local-rank"
+    assert resolved["global_concurrency"] == 32
+    assert resolved["max_batch_size"] == 4
+    assert resolved["max_num_tokens"] == 8464
+    assert resolved["cuda_graph_batch_sizes"] == [4]
+    assert resolved["cuda_graph_max_batch_size"] == 4
+
+
+def test_resolved_parallelism_rejects_wrong_local_graph_capacity():
+    candidate = CandidateConfig(
+        name="local",
+        batching_wait_iters=30,
+        attention_dp_batch_mode="local-rank",
+    )
+    llm_args = SimpleNamespace(
+        parallel_config=SimpleNamespace(
+            world_size=8,
+            tp_size=8,
+            moe_ep_size=8,
+            moe_tp_size=1,
+            enable_attention_dp=True,
+            enable_lm_head_tp_in_adp=False,
+        ),
+        speculative_config=SimpleNamespace(max_draft_len=3),
+        max_batch_size=4,
+        max_num_tokens=8464,
+        cuda_graph_config=SimpleNamespace(
+            batch_sizes=[32],
+            max_batch_size=32,
+        ),
+    )
+    with pytest.raises(
+        RuntimeError,
+        match="CUDA graph batch sizes mismatch",
+    ):
+        resolved_parallelism(llm_args, candidate, concurrency=32)
+
+
 def test_resolved_parallelism_accepts_tp4():
     candidate = CandidateConfig(
         name="tp4",
@@ -186,6 +308,7 @@ def test_resolved_parallelism_accepts_tp4():
     (
         "b300_huawei_experiments.json",
         "b300_stage2_experiments.json",
+        "b300_stage3_local_batch_experiments.json",
     ),
 )
 def test_checked_in_experiment_matrices_are_valid(filename):

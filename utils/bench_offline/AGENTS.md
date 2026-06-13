@@ -22,10 +22,15 @@ benchmark.
 - Keep legacy tuning limited to six attempts and preserve scheduler-first
   order. Prefer the single-candidate experiment mode for optimization sweeps.
 - Every tuning and final measurement must use a fresh `LLM` instance.
-- Preserve the image-keyed persistent CuTe DSL cache. It may reduce fresh
-  engine startup time, but it must not reuse an `LLM` instance or measured
-  outputs. Verify that every active MPI marker row records the same cache
-  path and that the exact active rank set is `0..N-1`.
+- Preserve the image-keyed CuTe DSL cache-path propagation while debugging,
+  but do not claim it reduces startup: cache-prime run `27475868179` created
+  zero files there. Verify every active MPI marker records the same path and
+  that the exact active rank set is `0..N-1`.
+- For attention DP, TRT defines `max_batch_size` as per local rank. Keep the
+  legacy global mode only as an A/B control. Local-rank experiments must set
+  engine and CUDA graph capacity to
+  `ceil(global_concurrency / attention_dp_ranks)` and record the resolved
+  values in the result.
 - Do not silently pad prompts, reduce MTP depth, change the MoE backend, or
   switch to HTTP serving to make a run pass. LM-head TP is an explicit
   candidate field and must be recorded in the result.

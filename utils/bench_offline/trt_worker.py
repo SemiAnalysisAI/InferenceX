@@ -214,6 +214,7 @@ def main() -> int:
             f"concurrency={concurrency} measured_passes={pass_count} "
             f"parallelism={candidate.effective_parallelism} "
             f"mtp={candidate.mtp_draft_tokens} "
+            f"adp_batch_mode={candidate.attention_dp_batch_mode} "
             "lm_head_tp="
             f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'}"
         )
@@ -238,11 +239,17 @@ def main() -> int:
             candidate,
         )
         phase = "engine_init"
+        graph_batch_size = (
+            llm_kwargs["cuda_graph_config"]["max_batch_size"]
+            if llm_kwargs["cuda_graph_config"] is not None
+            else None
+        )
         log_progress(
             f"engine initialization start "
             f"max_batch_size={llm_kwargs['max_batch_size']} "
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
             f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
+            f"cuda_graph_batch_size={graph_batch_size} "
             f"wait_iters={candidate.batching_wait_iters} "
             f"timeout_iters={candidate.attention_dp_timeout_iters}"
         )
@@ -250,10 +257,17 @@ def main() -> int:
         measured_passes: list[dict[str, Any]] = []
         with LLM(**llm_kwargs) as llm:
             init_seconds = time.perf_counter() - init_started
-            resolved = resolved_parallelism(llm.args, candidate)
+            resolved = resolved_parallelism(
+                llm.args,
+                candidate,
+                concurrency,
+            )
             log_progress(
                 f"engine initialization complete elapsed={init_seconds:.1f}s "
-                f"parallelism={resolved['effective_parallelism']}"
+                f"parallelism={resolved['effective_parallelism']} "
+                f"max_batch_size={resolved['max_batch_size']} "
+                "cuda_graph_batch_sizes="
+                f"{resolved.get('cuda_graph_batch_sizes')}"
             )
 
             phase = "warmup"
