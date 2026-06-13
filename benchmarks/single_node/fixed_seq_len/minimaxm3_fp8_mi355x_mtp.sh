@@ -13,6 +13,15 @@
 # FLASH_ATTN for the EAGLE3 MHA head on Blackwell is FlashInfer/CUDA-specific.
 # Here the whole server runs on TRITON_ATTN (set globally below), which serves
 # the MHA draft fine.
+#
+# [AI generated draft test] The shipped vllm/vllm-openai-rocm:minimax-m3 image
+# does NOT implement SupportsEagle3 on the AMD MiniMax-M3 model, so EAGLE3
+# engine init fails with "Model does not support EAGLE3 interface but
+# aux_hidden_state_outputs was requested". This recipe applies that fix
+# (functionstackx/vllm#1 — ported from nvidia/model.py) in-place to the
+# installed vllm before serving, so we can validate EAGLE3 on real MI355X
+# hardware ahead of an image rebuild. The patch is idempotent and fails the
+# job loudly if the installed amd/model.py has drifted from the expected base.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -66,6 +75,92 @@ fi
 
 # use 3 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=3
+
+# [AI generated draft test] Patch the installed AMD MiniMax-M3 model to add the
+# SupportsEagle3 interface (functionstackx/vllm#1). Mirrors nvidia/model.py:
+# adds EagleModelMixin to the inner model + aux-hidden-state emission, and
+# SupportsEagle3 to the two outer classes. Idempotent; hard-fails if the
+# installed file has drifted from the expected base (so we never silently run
+# unpatched and mislabel the result).
+python3 - <<'PYEOF' || { echo "EAGLE3 in-place patch failed" >&2; exit 1; }
+import ast, importlib.util, pathlib, sys
+
+spec = importlib.util.find_spec("vllm")
+root = pathlib.Path(spec.submodule_search_locations[0])
+target = root / "models" / "minimax_m3" / "amd" / "model.py"
+src = target.read_text()
+
+if "EagleModelMixin" in src and "class MiniMaxM3Model(nn.Module, EagleModelMixin):" in src:
+    print(f"[eagle3-patch] already applied: {target}")
+    sys.exit(0)
+
+edits = [
+    (
+        "from vllm.model_executor.models.interfaces import (\n"
+        "    MultiModalEmbeddings,\n"
+        "    SupportsMultiModal,\n"
+        ")",
+        "from vllm.model_executor.models.interfaces import (\n"
+        "    EagleModelMixin,\n"
+        "    MultiModalEmbeddings,\n"
+        "    SupportsEagle3,\n"
+        "    SupportsMultiModal,\n"
+        ")",
+    ),
+    (
+        "class MiniMaxM3Model(nn.Module):",
+        "class MiniMaxM3Model(nn.Module, EagleModelMixin):",
+    ),
+    (
+        "        inputs_embeds: torch.Tensor | None = None,\n"
+        "    ) -> torch.Tensor:\n"
+        "        if inputs_embeds is not None:",
+        "        inputs_embeds: torch.Tensor | None = None,\n"
+        "    ) -> torch.Tensor | tuple[torch.Tensor, list[torch.Tensor]]:\n"
+        "        if inputs_embeds is not None:",
+    ),
+    (
+        "        residual = None\n\n"
+        "        for layer in self.layers[self.start_layer : self.end_layer]:\n"
+        "            hidden_states, residual = layer(positions, hidden_states, residual)\n\n"
+        "        hidden_states, _ = self.norm(hidden_states, residual)\n"
+        "        return hidden_states",
+        "        residual = None\n\n"
+        "        # EAGLE3 is not yet compatible with pipeline parallel\n"
+        "        aux_hidden_states = self._maybe_add_hidden_state([], 0, hidden_states, residual)\n"
+        "        for idx, layer in enumerate(self.layers[self.start_layer : self.end_layer]):\n"
+        "            hidden_states, residual = layer(positions, hidden_states, residual)\n"
+        "            self._maybe_add_hidden_state(\n"
+        "                aux_hidden_states, idx + 1, hidden_states, residual\n"
+        "            )\n\n"
+        "        hidden_states, _ = self.norm(hidden_states, residual)\n\n"
+        "        if len(aux_hidden_states) > 0:\n"
+        "            return hidden_states, aux_hidden_states\n"
+        "        return hidden_states",
+    ),
+    (
+        "class MiniMaxM3SparseForCausalLM(nn.Module):",
+        "class MiniMaxM3SparseForCausalLM(nn.Module, SupportsEagle3):",
+    ),
+    (
+        "class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal):",
+        "class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsEagle3):",
+    ),
+]
+
+for old, new in edits:
+    count = src.count(old)
+    if count != 1:
+        sys.exit(
+            f"[eagle3-patch] anchor matched {count} times (expected 1); "
+            f"installed {target} has drifted from the expected base — aborting"
+        )
+    src = src.replace(old, new)
+
+ast.parse(src)
+target.write_text(src)
+print(f"[eagle3-patch] applied EAGLE3 support to {target}")
+PYEOF
 
 start_gpu_monitor
 
