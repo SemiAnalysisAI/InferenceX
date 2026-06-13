@@ -272,7 +272,9 @@ The CuTE DSL override supplies only
 `algorithm=deepseek_v4` and `use_cute_dsl_paged_mqa_logits=true`. Pinned TRT
 then reconstructs checkpoint-derived compression ratios, window size,
 indexer dimensions, and top-k. The worker validates that the flag,
-`max_seq_len`, and `print_iter_log` resolve exactly as requested.
+`max_seq_len`, and `print_iter_log` resolve exactly as requested. A DSL row
+also fails before engine initialization unless the image reports
+`IS_CUTLASS_DSL_AVAILABLE=true`; TRT's silent fallback is not accepted.
 
 The legacy concurrency-only mode remains available for reproducing the older
 serial tuner:

@@ -596,7 +596,9 @@ Pinned TRT's DeepSeek-V4 config loader preserves checkpoint-derived sparse
 attention values when the CuTE DSL flag is supplied. It uses explicit-field
 checks for checkpoint `index_topk` and `window_size`, keeps the checkpoint's
 full compression-ratio list, and rebuilds
-`DeepSeekV4SparseAttentionConfig` with the requested DSL flag.
+`DeepSeekV4SparseAttentionConfig` with the requested DSL flag. The worker also
+requires `IS_CUTLASS_DSL_AVAILABLE=true` so a labeled DSL row cannot silently
+run the fallback kernel.
 
 Dispatch only after run `27476767599` releases all ten B300 slots:
 

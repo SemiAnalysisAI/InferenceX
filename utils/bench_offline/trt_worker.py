@@ -237,6 +237,24 @@ def main() -> int:
         mpi_worker_entry = install_mpi_worker_entry()
         from tensorrt_llm import LLM
 
+        cute_dsl_available: bool | None = None
+        if candidate.use_cute_dsl_paged_mqa_logits:
+            phase = "cute_dsl_capability"
+            from tensorrt_llm._torch.cute_dsl_utils import (
+                IS_CUTLASS_DSL_AVAILABLE,
+            )
+
+            cute_dsl_available = bool(IS_CUTLASS_DSL_AVAILABLE)
+            log_progress(
+                "CuTE DSL capability "
+                f"available={'yes' if cute_dsl_available else 'no'}"
+            )
+            if not cute_dsl_available:
+                raise RuntimeError(
+                    "CuTE DSL paged-MQA was requested, but the pinned TRT "
+                    "image reports IS_CUTLASS_DSL_AVAILABLE=False"
+                )
+
         llm_kwargs = build_llm_kwargs(
             args.model_path,
             concurrency,
@@ -380,6 +398,9 @@ def main() -> int:
                 "runtime_cache": {
                     "cute_dsl_cache_dir": expected_cute_cache,
                     "persistent": bool(expected_cute_cache),
+                },
+                "runtime_capabilities": {
+                    "cutlass_dsl_available": cute_dsl_available,
                 },
                 "corpus": corpus_manifest,
             }

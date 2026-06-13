@@ -33,7 +33,8 @@ benchmark.
   values in the result.
 - The pinned TRT source preserves checkpoint-derived DeepSeek-V4 sparse
   settings when `use_cute_dsl_paged_mqa_logits` is explicitly enabled.
-  Treat it as an isolated kernel experiment and validate the resolved flag.
+  Treat it as an isolated kernel experiment, validate the resolved flag, and
+  fail unless `IS_CUTLASS_DSL_AVAILABLE` is true.
 - `max_seq_len=8832` is the block-aligned tight capacity for the fixed
   8192-input/625-output/MTP3 shape. Keep `9216` as the control.
 - `print_iter_log=false` only disables native TRT iteration output. Preserve
