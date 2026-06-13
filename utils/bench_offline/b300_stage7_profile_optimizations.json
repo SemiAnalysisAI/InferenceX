@@ -122,10 +122,10 @@
     }
   },
   {
-    "id": "c128-tp4-allreduce-base-r1-profile",
-    "concurrency": 128,
+    "id": "c32-tp4-allreduce-base-profile",
+    "concurrency": 32,
     "candidate": {
-      "name": "tp4-c128-allreduce-base-r1-profile",
+      "name": "tp4-c32-allreduce-base-profile",
       "batching_wait_iters": 0,
       "attention_dp_balance": true,
       "attention_dp_timeout_iters": null,
@@ -147,34 +147,10 @@
     }
   },
   {
-    "id": "c128-tp4-allreduce-base-r2",
-    "concurrency": 128,
+    "id": "c32-tp4-skip-allreduce-profile",
+    "concurrency": 32,
     "candidate": {
-      "name": "tp4-c128-allreduce-base-r2",
-      "batching_wait_iters": 0,
-      "attention_dp_balance": true,
-      "attention_dp_timeout_iters": null,
-      "overlap_scheduler": true,
-      "cuda_graph": true,
-      "enable_lm_head_tp_in_adp": false,
-      "enable_heuristic_topk": true,
-      "moe_backend": "TRTLLM",
-      "use_low_precision_moe_combine": true,
-      "enable_configurable_moe": true,
-      "moe_autotune_dummy_distribution": "balanced",
-      "dsv4_skip_premoe_allreduce": false,
-      "print_iter_log": true,
-      "max_seq_len": 9216,
-      "mtp_draft_tokens": 3,
-      "parallelism": "tp4",
-      "kind": "tp4-allreduce-backport-control"
-    }
-  },
-  {
-    "id": "c128-tp4-skip-allreduce-r1-profile",
-    "concurrency": 128,
-    "candidate": {
-      "name": "tp4-c128-skip-allreduce-r1-profile",
+      "name": "tp4-c32-skip-allreduce-profile",
       "batching_wait_iters": 0,
       "attention_dp_balance": true,
       "attention_dp_timeout_iters": null,
@@ -188,54 +164,6 @@
       "moe_autotune_dummy_distribution": "balanced",
       "dsv4_skip_premoe_allreduce": true,
       "profile_iterations": "50-51",
-      "print_iter_log": true,
-      "max_seq_len": 9216,
-      "mtp_draft_tokens": 3,
-      "parallelism": "tp4",
-      "kind": "tp4-skip-redundant-allreduce"
-    }
-  },
-  {
-    "id": "c128-tp4-skip-allreduce-r2",
-    "concurrency": 128,
-    "candidate": {
-      "name": "tp4-c128-skip-allreduce-r2",
-      "batching_wait_iters": 0,
-      "attention_dp_balance": true,
-      "attention_dp_timeout_iters": null,
-      "overlap_scheduler": true,
-      "cuda_graph": true,
-      "enable_lm_head_tp_in_adp": false,
-      "enable_heuristic_topk": true,
-      "moe_backend": "TRTLLM",
-      "use_low_precision_moe_combine": true,
-      "enable_configurable_moe": true,
-      "moe_autotune_dummy_distribution": "balanced",
-      "dsv4_skip_premoe_allreduce": true,
-      "print_iter_log": true,
-      "max_seq_len": 9216,
-      "mtp_draft_tokens": 3,
-      "parallelism": "tp4",
-      "kind": "tp4-skip-redundant-allreduce"
-    }
-  },
-  {
-    "id": "c128-tp4-skip-allreduce-r3",
-    "concurrency": 128,
-    "candidate": {
-      "name": "tp4-c128-skip-allreduce-r3",
-      "batching_wait_iters": 0,
-      "attention_dp_balance": true,
-      "attention_dp_timeout_iters": null,
-      "overlap_scheduler": true,
-      "cuda_graph": true,
-      "enable_lm_head_tp_in_adp": false,
-      "enable_heuristic_topk": true,
-      "moe_backend": "TRTLLM",
-      "use_low_precision_moe_combine": true,
-      "enable_configurable_moe": true,
-      "moe_autotune_dummy_distribution": "balanced",
-      "dsv4_skip_premoe_allreduce": true,
       "print_iter_log": true,
       "max_seq_len": 9216,
       "mtp_draft_tokens": 3,

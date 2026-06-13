@@ -12,6 +12,7 @@ from trt_config import (
     candidate_environment,
     choose_winner,
     resolved_parallelism,
+    validate_candidate_concurrency,
 )
 
 
@@ -313,6 +314,24 @@ def test_tp4_uses_four_active_gpus_without_attention_dp():
     assert kwargs["enable_lm_head_tp_in_adp"] is False
     assert "attention_dp_config" not in kwargs
     assert kwargs["kv_cache_config"]["free_gpu_memory_fraction"] == 0.90
+
+
+def test_tp4_rejects_concurrency_above_production_8k_limit():
+    candidate = CandidateConfig(
+        name="tp4",
+        batching_wait_iters=0,
+        parallelism="tp4",
+    )
+    validate_candidate_concurrency(32, candidate)
+    with pytest.raises(ValueError, match="limited to concurrency 32"):
+        validate_candidate_concurrency(64, candidate)
+
+    dep4 = CandidateConfig(
+        name="dep4",
+        batching_wait_iters=0,
+        parallelism="dep4",
+    )
+    validate_candidate_concurrency(128, dep4)
 
 
 def test_dep4_uses_four_active_attention_dp_ranks():
@@ -633,4 +652,8 @@ def test_checked_in_experiment_matrices_are_valid(filename):
             512,
             1024,
         }
-        CandidateConfig.from_dict(experiment["candidate"])
+        candidate = CandidateConfig.from_dict(experiment["candidate"])
+        validate_candidate_concurrency(
+            experiment["concurrency"],
+            candidate,
+        )

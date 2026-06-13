@@ -573,27 +573,44 @@ the installed module. Both TP4 groups use the patched source, with
 `TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE=0` for controls and `1` for optimized
 rows. Every active MPI rank records the patched source hash.
 
-The ten jobs each use one fresh engine, one full-shape warmup, and exactly
-one measured pass:
+The seven checked-in jobs each use one fresh engine, one full-shape warmup,
+and exactly one measured pass:
 
 - two DEP4 random-autotuner controls
 - three DEP4 balanced-autotuner rows
-- two TP4 backport-disabled controls
-- three TP4 backport-enabled rows
+- one c32 TP4 backport-disabled profile
+- one c32 TP4 backport-enabled profile
+
+Run `27480420625` tested the original c128 TP4 rows and established two
+things:
+
+- DEP4 balanced autotuning was neutral: group mean step rate was
+  `381.27 steps/s/GPU` versus `381.86` for explicit random, a `0.16%`
+  regression within one-pass variation.
+- All five c128 TP4 rows failed late in warmup with CUDA OOM after about
+  `35` minutes. Engine initialization alone took about `498` seconds. The
+  checked-in B300 8K/MTP3 production recipe supports TP4 only through c32,
+  so the harness now rejects larger TP4 rows before allocating a GPU.
+
+The failed profile window was still useful. With the backport enabled,
+rank-mean collective time fell from `144.54 ms` to `89.95 ms`, and
+overlap-aware GPU busy time fell from `392.37 ms` to `340.21 ms`. The c32
+retry measures whether that kernel-level reduction improves end-to-end TPOT.
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
 EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_stage7_profile_optimizations.json
+  jq -c 'map(select(.candidate.parallelism == "tp4"))' \
+    utils/bench_offline/b300_stage7_profile_optimizations.json
 )"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT c128 profile optimizations' \
+  -f 'inputs[test-name]=DSV4 B300 TRT c32 allreduce one-pass' \
   -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
+  -f 'inputs[salloc-time]=40' \
+  -f 'inputs[worker-timeout]=1800'
 ```
 
 ## Artifacts And Collected Values

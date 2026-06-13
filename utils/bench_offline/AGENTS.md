@@ -72,6 +72,10 @@ benchmark.
 - The DeepSeek-V4 redundant-allreduce backport is TP4-only. Check pinned and
   patched source hashes before TRT import, run control and optimized rows
   from the same patched source, and validate that hash on every active rank.
+- The checked-in B300 production recipe caps the fixed 8K/MTP3 TP4 shape at
+  concurrency 32. Do not schedule TP4 above c32; use DEP4 at c64/c128.
+  Run `27480420625` proved c128 TP4 spends about 8.3 minutes initializing,
+  then OOMs late in warmup after about 35 minutes total.
 - `ENABLE_CONFIGURABLE_MOE` is an explicit branch-only candidate. Propagate
   it through `TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE`, restore it in
   `trt_mpi_entry.py`, and validate both names in every active-rank marker.

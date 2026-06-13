@@ -20,6 +20,7 @@ SAMPLING_TOP_K = 0
 PINNED_TRT_GLOBAL_SEED = 42
 TUNING_MEASURED_PASSES = 1
 FINAL_MEASURED_PASSES = 1
+MAX_TP4_8K_CONCURRENCY = 32
 MIN_WINNER_IMPROVEMENT = 0.03
 MOE_BACKENDS = {"CUTLASS", "TRTLLM", "MEGAMOE_DEEPGEMM"}
 MOE_COMM_METHODS = {
@@ -357,6 +358,21 @@ def max_num_tokens(
         + 256,
         INPUT_TOKENS,
     )
+
+
+def validate_candidate_concurrency(
+    concurrency: int,
+    candidate: CandidateConfig,
+) -> None:
+    if (
+        candidate.parallelism == "tp4"
+        and concurrency > MAX_TP4_8K_CONCURRENCY
+    ):
+        raise ValueError(
+            "TP4 is limited to concurrency 32 for the fixed 8K/MTP3 "
+            "workload by the checked-in B300 production recipe; use DEP4 "
+            f"for concurrency {concurrency}"
+        )
 
 
 def build_llm_kwargs(

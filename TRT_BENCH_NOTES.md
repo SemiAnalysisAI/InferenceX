@@ -980,30 +980,45 @@ Matrix:
 
 - DEP4 has two explicit random-autotuner controls and three
   balanced-autotuner rows.
-- TP4 has two redundant-allreduce backport controls with the knob disabled
-  and three rows with it enabled.
-- One row in each comparison group profiles warmup iteration `50-51`.
+- TP4 has one c32 redundant-allreduce control and one c32 optimized row.
+- Both TP4 rows and one row in each DEP4 group profile warmup iteration
+  `50-51`.
 - Every row still uses exactly one measured pass.
 
 The backport is TP4-only. In pinned DeepSeek-V4 source, attention DP forces
 eager fusion off, so DEP4 cannot activate `PRE_MOE_FUSION` and would not
 exercise the removed allreduce.
 
-Dispatch:
+Run `27480420625` completed all five DEP4 rows and failed all five original
+c128 TP4 rows:
+
+- DEP4 random and balanced group means were `381.86` and
+  `381.27 steps/s/GPU`; balanced autotuning did not improve throughput.
+- TP4 engine initialization took about `498` seconds, then c128 exhausted
+  GPU memory during warmup after about `35` minutes total. The failure
+  occurred before the sole measured pass.
+- The failed profile traces nevertheless show the backport reducing
+  rank-mean collective time from `144.54 ms` to `89.95 ms` and GPU busy
+  union from `392.37 ms` to `340.21 ms`.
+
+The production B300 8K/MTP3 matrix caps TP4 at c32. `run.py` now rejects
+larger TP4 rows before corpus preparation or GPU-heavy engine work. Retry
+only the two c32 TP4 rows:
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
 EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_stage7_profile_optimizations.json
+  jq -c 'map(select(.candidate.parallelism == "tp4"))' \
+    utils/bench_offline/b300_stage7_profile_optimizations.json
 )"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT c128 profile optimizations' \
+  -f 'inputs[test-name]=DSV4 B300 TRT c32 allreduce one-pass' \
   -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
+  -f 'inputs[salloc-time]=40' \
+  -f 'inputs[worker-timeout]=1800'
 ```
 
 Debug rules:
@@ -1015,5 +1030,6 @@ Debug rules:
   `TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE` value.
 - Balanced-autotuner rows are invalid unless every rank marker records
   `TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION=balanced`.
-- Compare group means first. A single one-pass row can move with MTP output
-  yield and is not enough to accept a marginal win.
+- The c32 retry intentionally uses one row per setting for turnaround time.
+  Treat a marginal TPOT difference as inconclusive; the profile-level
+  collective reduction is the supporting signal.

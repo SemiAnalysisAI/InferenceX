@@ -39,6 +39,7 @@ from trt_config import (
     choose_winner,
     overlap_candidate,
     scheduler_candidates,
+    validate_candidate_concurrency,
 )
 
 
@@ -673,6 +674,10 @@ def main() -> int:
                 )
             experiment_candidate = CandidateConfig.from_dict(
                 read_json(args.experiment_config)
+            )
+            validate_candidate_concurrency(
+                args.concurrency,
+                experiment_candidate,
             )
             experiment_id = args.experiment_id or experiment_candidate.name
             base_result["benchmark"].update(
