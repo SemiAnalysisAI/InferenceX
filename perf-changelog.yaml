@@ -3665,4 +3665,4 @@
     - "Image: vllm/vllm-openai:minimax-m3; --block-size 128, --language-model-only; benchmark uses --use-chat-template (EAGLE acceptance collapses on raw random prompts)"
     - "Latency-end sweep (TP8, TP4, TP8+EP8) at low/mid concurrency; no tp2 (EAGLE3 draft head + ~222 GB/GPU weights leaves too little KV headroom at TP2)"
     - "EAGLE3 draft head served from the b300 /data/models tree (launch_b300-nv.sh)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/REPLACE_B300_MTP
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1737
