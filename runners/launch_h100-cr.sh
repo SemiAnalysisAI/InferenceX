@@ -5,6 +5,10 @@ PORT=8888
 
 server_name="bmk-server"
 
+# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
+# the h200 launchers, which have carried SPEC_SUFFIX since #392).
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+
 set -x
 docker run --rm --network=host --name=$server_name \
 --runtime=nvidia --gpus=all --ipc=host --privileged --shm-size=16g --ulimit memlock=-1 --ulimit stack=67108864 \
@@ -15,4 +19,4 @@ docker run --rm --network=host --name=$server_name \
 -e PYTHONPYCACHEPREFIX=/tmp/pycache/ -e TORCH_CUDA_ARCH_LIST="9.0" -e CUDA_DEVICE_ORDER=PCI_BUS_ID -e CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" \
 --entrypoint=/bin/bash \
 $IMAGE \
-benchmarks/single_node/${SCENARIO_SUBDIR}"${EXP_NAME%%_*}_${PRECISION}_h100.sh"
+benchmarks/single_node/${SCENARIO_SUBDIR}"${EXP_NAME%%_*}_${PRECISION}_h100${SPEC_SUFFIX}.sh"

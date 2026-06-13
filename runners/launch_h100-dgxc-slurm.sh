@@ -5,6 +5,10 @@ SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
 SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
 
+# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
+# the h200 launchers, which have carried SPEC_SUFFIX since #392).
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+
 set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
@@ -311,7 +315,7 @@ else
         --no-container-mount-home \
         --container-workdir=/workspace/ \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \
-        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100.sh
+        bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h100${SPEC_SUFFIX}.sh
 
     scancel $JOB_ID
 
