@@ -1081,3 +1081,26 @@ The collector now writes a flat `agg_bmk.json` and uploads it as
 and TPOT-derived output throughput. Keep `offline_aggregate.json` as the
 authoritative source for wall throughput, decode-step throughput, MTP yield,
 and Huawei ratios.
+
+## Renderer Validation Run 27482213487
+
+- URL:
+  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27482213487`
+- Completed successfully on commit
+  `8b55b2cd8a86cdbcb610984f021358e7ed8f299a`.
+- Dispatch `inputs[ref]` must be a branch, tag, or full 40-character commit
+  SHA. Run `27482130882` used the short SHA `8b55b2cd` and failed at checkout
+  before allocating benchmark work.
+- The successful run uploaded both the diagnostic `offline-trt-summary`
+  artifact and the renderer contract artifact `results_bmk`. Their
+  `agg_bmk.json` files are byte-identical.
+- The canonical row is B300 / DeepSeek-V4-Pro / TRT / FP4 / MTP,
+  `8192/625`, TP4, concurrency 32. Headline values are token TPOT
+  `16.366 ms`, TPOT-derived output throughput `488.83 tok/s/GPU`, decode-step
+  throughput `158.66 steps/s/GPU`, and wall output throughput
+  `269.02 tok/s/GPU`.
+- InferenceX App PR 257 at commit
+  `1127bd242f32f83727565ae6d6accf9b753038a8` fetched the real GitHub run
+  through `/api/unofficial-run?runId=27482213487`. It normalized one row and
+  built one E2E plus one interactivity chart point under
+  `DeepSeek-V4-Pro_8k/625`.
