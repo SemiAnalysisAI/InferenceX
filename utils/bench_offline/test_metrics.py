@@ -56,6 +56,10 @@ def test_token_tpot_and_derived_throughput():
     assert request["first_iter"] == 10
     assert request["last_iter"] == 266
     assert aggregate["mean_token_tpot_ms"] == pytest.approx(20.0)
+    assert aggregate["median_ttft_ms"] == pytest.approx(5000.0)
+    assert aggregate["median_e2e_ms"] == pytest.approx(17480.0)
+    assert aggregate["mean_intvty"] == pytest.approx(50.0)
+    assert aggregate["median_intvty"] == pytest.approx(50.0)
     assert aggregate["mean_step_tpot_ms"] == pytest.approx(48.75)
     assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)
     assert aggregate["derived_step_tput_per_gpu"] == pytest.approx(

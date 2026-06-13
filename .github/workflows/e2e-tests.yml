@@ -524,7 +524,8 @@ jobs:
             --results-dir downloaded-offline-results \
             --expected "$EXPECTED" \
             --json-out offline_aggregate.json \
-            --markdown-out offline_summary.md
+            --markdown-out offline_summary.md \
+            --renderer-json-out agg_bmk.json
           cat offline_summary.md >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload aggregate result
@@ -535,5 +536,15 @@ jobs:
           path: |
             offline_aggregate.json
             offline_summary.md
+            agg_bmk.json
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload renderer-compatible result
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: results_bmk
+          path: agg_bmk.json
           if-no-files-found: warn
           retention-days: 30

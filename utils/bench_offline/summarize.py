@@ -5,10 +5,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 from pathlib import Path
 from typing import Any
 
 from io_utils import read_json, write_json
+
+RENDERER_MODEL = "deepseek-ai/DeepSeek-V4-Pro"
+RENDERER_MODEL_PREFIX = "dsv4"
+RENDERER_FRAMEWORK = "trt"
+RENDERER_PRECISION = "fp4"
 
 
 def parse_expected(value: str) -> list[str]:
@@ -47,6 +53,120 @@ def _fmt(value: Any, digits: int = 2) -> str:
     if value is None:
         return "-"
     return f"{float(value):.{digits}f}"
+
+
+def _seconds(
+    aggregate: dict[str, Any],
+    key: str,
+) -> float | None:
+    value = aggregate.get(key)
+    return float(value) / 1000.0 if value is not None else None
+
+
+def _interactivity(
+    aggregate: dict[str, Any],
+    key: str,
+) -> float | None:
+    value = aggregate.get(key)
+    return float(value) if value is not None else None
+
+
+def _parallelism_fields(result: dict[str, Any]) -> dict[str, Any] | None:
+    benchmark = result.get("benchmark") or {}
+    label = str(benchmark.get("effective_parallelism") or "")
+    match = re.fullmatch(r"(TP|DEP)(\d+)", label)
+    if not match:
+        return None
+    active_gpus = int(benchmark.get("active_gpu_count") or match.group(2))
+    width = int(match.group(2))
+    if active_gpus != width:
+        return None
+    dp_attention = match.group(1) == "DEP"
+    ep = width if dp_attention else 1
+    return {
+        "prefill_tp": width,
+        "prefill_ep": ep,
+        "prefill_dp_attention": dp_attention,
+        "prefill_num_workers": 0,
+        "decode_tp": width,
+        "decode_ep": ep,
+        "decode_dp_attention": dp_attention,
+        "decode_num_workers": 0,
+        "num_prefill_gpu": active_gpus,
+        "num_decode_gpu": active_gpus,
+    }
+
+
+def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
+    if result.get("status") != "success":
+        return None
+    benchmark = result.get("benchmark") or {}
+    aggregate = result.get("aggregate") or {}
+    parallelism = _parallelism_fields(result)
+    concurrency = benchmark.get("concurrency")
+    output_tput = aggregate.get("derived_output_tput_per_gpu")
+    if parallelism is None or concurrency is None or output_tput is None:
+        return None
+
+    row: dict[str, Any] = {
+        "hw": "b300",
+        "model": RENDERER_MODEL,
+        "infmax_model_prefix": RENDERER_MODEL_PREFIX,
+        "framework": RENDERER_FRAMEWORK,
+        "precision": RENDERER_PRECISION,
+        "isl": int(benchmark.get("input_tokens") or 8192),
+        "osl": int(benchmark.get("generated_output_tokens") or 625),
+        "conc": int(concurrency),
+        "image": (result.get("provenance") or {}).get("image"),
+        "disagg": False,
+        "is_multinode": False,
+        "spec_decoding": "mtp",
+        # The offline comparison defines throughput from mean per-request TPOT.
+        # Whole-batch throughput remains available in offline_aggregate.json.
+        "tput_per_gpu": float(output_tput),
+        "output_tput_per_gpu": float(output_tput),
+        **parallelism,
+    }
+    metric_values = {
+        "mean_ttft": _seconds(aggregate, "mean_ttft_ms"),
+        "median_ttft": _seconds(aggregate, "median_ttft_ms"),
+        "p90_ttft": _seconds(aggregate, "p90_ttft_ms"),
+        "p99_ttft": _seconds(aggregate, "p99_ttft_ms"),
+        "mean_tpot": _seconds(aggregate, "mean_token_tpot_ms"),
+        "median_tpot": _seconds(aggregate, "median_token_tpot_ms"),
+        "p90_tpot": _seconds(aggregate, "p90_token_tpot_ms"),
+        "p99_tpot": _seconds(aggregate, "p99_token_tpot_ms"),
+        "mean_intvty": _interactivity(aggregate, "mean_intvty"),
+        "median_intvty": _interactivity(aggregate, "median_intvty"),
+        "p90_intvty": _interactivity(aggregate, "p90_intvty"),
+        "p99_intvty": _interactivity(aggregate, "p99_intvty"),
+        "mean_e2el": _seconds(aggregate, "mean_e2e_ms"),
+        "median_e2el": _seconds(aggregate, "median_e2e_ms"),
+        "p90_e2el": _seconds(aggregate, "p90_e2e_ms"),
+        "p99_e2el": _seconds(aggregate, "p99_e2e_ms"),
+    }
+    row.update(
+        {
+            key: value
+            for key, value in metric_values.items()
+            if value is not None
+        }
+    )
+    return row
+
+
+def renderer_rows(
+    discovered: dict[str, tuple[Path, dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    rows = []
+    for _, result in sorted(
+        discovered.values(),
+        key=lambda item: str(item[0]),
+    ):
+        row = renderer_row(result)
+        if row is not None:
+            rows.append(row)
+    return rows
 
 
 def _row(
@@ -256,6 +376,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--expected", required=True)
     parser.add_argument("--json-out", type=Path, required=True)
     parser.add_argument("--markdown-out", type=Path, required=True)
+    parser.add_argument("--renderer-json-out", type=Path)
     parser.add_argument("--strict", action="store_true")
     return parser.parse_args()
 
@@ -282,6 +403,8 @@ def main() -> int:
         },
     }
     write_json(args.json_out, aggregate)
+    if args.renderer_json_out is not None:
+        write_json(args.renderer_json_out, renderer_rows(discovered))
     summary = markdown(rows)
     args.markdown_out.write_text(summary, encoding="utf-8")
     print(summary)

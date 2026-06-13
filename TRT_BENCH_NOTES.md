@@ -1061,3 +1061,23 @@ Debug rules:
   `494-507 s`, warmup was `270-272 s`, and the measured pass was only
   `18.7-19.5 s`. One measured pass is already the practical minimum; further
   runtime work must target engine startup or lazy warmup.
+
+## Unofficial Renderer Contract
+
+Run `27481295672` cannot render through InferenceX App PR 257 for three
+independent reasons:
+
+1. It has only `offline-trt-summary` and `offline-trt-job-*` artifacts. The
+   app endpoint selects `results_bmk`, then falls back to `bmk_*`.
+2. `offline_aggregate.json` is a custom wrapper object. Renaming that artifact
+   would still fail because the endpoint expects flat canonical benchmark
+   rows.
+3. The workload is exactly `8192/625`, while PR 257 originally recognized
+   only `1k/1k`, `1k/8k`, `8k/1k`, and `8k/256`.
+
+The collector now writes a flat `agg_bmk.json` and uploads it as
+`results_bmk`. Successful rows use `b300`, `dsv4`, `trt`, `fp4`, `mtp`, exact
+`8192/625`, explicit TP/EP/attention-DP topology, second-based latency fields,
+and TPOT-derived output throughput. Keep `offline_aggregate.json` as the
+authoritative source for wall throughput, decode-step throughput, MTP yield,
+and Huawei ratios.

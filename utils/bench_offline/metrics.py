@@ -188,6 +188,7 @@ def aggregate_requests(
     step_tpots = [float(item["step_tpot_s"]) for item in request_metrics]
     ttfts = [float(item["ttft_s"]) for item in request_metrics]
     e2els = [float(item["e2e_s"]) for item in request_metrics]
+    interactivities = [1.0 / value for value in token_tpots]
     mean_tpot = fmean(token_tpots)
     mean_step_tpot = fmean(step_tpots)
     total_output_tokens = sum(
@@ -238,9 +239,17 @@ def aggregate_requests(
         "p90_step_tpot_ms": _percentile(step_tpots, 90) * 1000.0,
         "p99_step_tpot_ms": _percentile(step_tpots, 99) * 1000.0,
         "mean_ttft_ms": fmean(ttfts) * 1000.0,
+        "median_ttft_ms": _percentile(ttfts, 50) * 1000.0,
+        "p90_ttft_ms": _percentile(ttfts, 90) * 1000.0,
         "p99_ttft_ms": _percentile(ttfts, 99) * 1000.0,
         "mean_e2e_ms": fmean(e2els) * 1000.0,
+        "median_e2e_ms": _percentile(e2els, 50) * 1000.0,
+        "p90_e2e_ms": _percentile(e2els, 90) * 1000.0,
         "p99_e2e_ms": _percentile(e2els, 99) * 1000.0,
+        "mean_intvty": fmean(interactivities),
+        "median_intvty": _percentile(interactivities, 50),
+        "p90_intvty": _percentile(interactivities, 90),
+        "p99_intvty": _percentile(interactivities, 99),
         "derived_output_tput_per_gpu": (
             active_concurrency / mean_tpot / num_gpus
         ),

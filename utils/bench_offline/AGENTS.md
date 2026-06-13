@@ -89,6 +89,13 @@ benchmark.
   `trt_mpi_entry.py`, and validate both names in every active-rank marker.
 - On runtime errors, retain the result JSON, worker JSON/log, candidate config,
   corpus manifest, perfect-router marker, and GPU metrics.
+- Preserve the collector's two output contracts. `offline_aggregate.json` is
+  authoritative for offline/Huawei analysis. `results_bmk/agg_bmk.json` is a
+  flat renderer projection: successful rows only, exact `8192/625`, standard
+  latency units in seconds, and TPOT-derived output throughput in both
+  `tput_per_gpu` and `output_tput_per_gpu`. Do not put the custom aggregate
+  wrapper inside `results_bmk`; the unofficial-run API parses every JSON file
+  in that artifact as benchmark rows.
 - Verify changes with `python -m pytest utils/bench_offline -v`,
   `python -m compileall utils/bench_offline`, `bash -n` on both launcher
   scripts, and YAML parsing of `.github/workflows/e2e-tests.yml`.

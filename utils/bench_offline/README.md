@@ -654,8 +654,17 @@ The collector uploads `offline-trt-summary`:
 
 - `offline_aggregate.json`: all discovered full results plus concise `rows`
 - `offline_summary.md`: the table shown in the Actions step summary
+- `agg_bmk.json`: renderer-compatible successful rows in the standard flat
+  benchmark schema
 
-The collected row fields mean:
+It also uploads `agg_bmk.json` separately as the canonical `results_bmk`
+artifact consumed by the InferenceX App unofficial-run endpoint. Its
+`output_tput_per_gpu` and `tput_per_gpu` fields both carry this benchmark's
+TPOT-derived output throughput. Latencies are converted from milliseconds to
+the standard schema's seconds. The exact workload is labeled `8192/625`; do
+not relabel it as `8k/1k`.
+
+The custom `offline_aggregate.json` row fields mean:
 
 - `measured_passes`: number of measured generations aggregated into the row;
   this branch requires exactly `1`, excluding the warmup
@@ -672,7 +681,8 @@ The collected row fields mean:
 - `observed_tokens_per_step`: TRT token output per decode iteration
 - `effective_acceptance_rate`: `(observed_tokens_per_step - 1) / 3`
 - `acceptance_rate`: accepted/proposed TRT counters, or null when unavailable
-- `mean_ttft_ms`, `p99_ttft_ms`: first-token latency
+- `mean_ttft_ms`, `median_ttft_ms`, `p90_ttft_ms`, `p99_ttft_ms`:
+  first-token latency
 - `huawei_published_dataset_token_tput_per_chip`: Huawei reference at its
   published 2.44 tokens/step
 - `b300_to_huawei_published_output_ratio`: emitted-output comparison using
@@ -686,8 +696,10 @@ The collected row fields mean:
 - `device_count_match`: whether the active B300 GPU count equals Huawei's
   published chip count; false for the current matrix
 
-This is not `agg_bmk.json`; generic InferenceX result fields such as
-`tput_per_gpu` are intentionally not synthesized.
+`offline_aggregate.json` remains authoritative for offline-only metrics,
+including wall throughput, decode-step throughput, observed MTP yield, and
+Huawei comparison fields. The compatibility `agg_bmk.json` is only the
+projection needed by the dashboard.
 
 Download a finished summary:
 
@@ -695,6 +707,7 @@ Download a finished summary:
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   -n offline-trt-summary -D ./offline-summary
 jq '.rows' ./offline-summary/offline_aggregate.json
+jq '.' ./offline-summary/agg_bmk.json
 ```
 
 Download and summarize a completed profile without printing raw trace JSON:

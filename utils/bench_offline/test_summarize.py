@@ -1,6 +1,12 @@
 import json
 
-from bench_offline.summarize import _row, discover_results, markdown
+from bench_offline.summarize import (
+    _row,
+    discover_results,
+    markdown,
+    renderer_row,
+    renderer_rows,
+)
 
 
 def test_summary_explains_offline_units():
@@ -107,3 +113,105 @@ def test_failed_row_includes_specific_failure_kind():
         ]
     )
     assert "kernel_dtype: Executor worker returned error" in rendered
+
+
+def test_renderer_row_uses_canonical_schema_and_seconds():
+    row = renderer_row(
+        {
+            "status": "success",
+            "benchmark": {
+                "active_gpu_count": 4,
+                "concurrency": 32,
+                "effective_parallelism": "TP4",
+                "input_tokens": 8192,
+                "generated_output_tokens": 625,
+            },
+            "provenance": {
+                "image": "ghcr.io#semianalysisai/trtllm-dsv4:test",
+            },
+            "aggregate": {
+                "derived_output_tput_per_gpu": 489.17,
+                "mean_ttft_ms": 5263.0,
+                "median_ttft_ms": 5000.0,
+                "p90_ttft_ms": 9000.0,
+                "p99_ttft_ms": 9600.0,
+                "mean_token_tpot_ms": 16.35,
+                "median_token_tpot_ms": 16.8,
+                "p90_token_tpot_ms": 21.98,
+                "p99_token_tpot_ms": 23.35,
+                "mean_intvty": 61.2,
+                "median_intvty": 59.5,
+                "p90_intvty": 70.0,
+                "p99_intvty": 75.0,
+                "mean_e2e_ms": 15468.0,
+                "median_e2e_ms": 15000.0,
+                "p90_e2e_ms": 17500.0,
+                "p99_e2e_ms": 18124.0,
+            },
+        }
+    )
+    assert row is not None
+    assert row["hw"] == "b300"
+    assert row["infmax_model_prefix"] == "dsv4"
+    assert row["framework"] == "trt"
+    assert row["precision"] == "fp4"
+    assert row["isl"] == 8192
+    assert row["osl"] == 625
+    assert row["conc"] == 32
+    assert row["decode_tp"] == 4
+    assert row["decode_ep"] == 1
+    assert row["decode_dp_attention"] is False
+    assert row["num_decode_gpu"] == 4
+    assert row["output_tput_per_gpu"] == 489.17
+    assert row["mean_tpot"] == 0.01635
+    assert row["median_e2el"] == 15.0
+    assert row["p99_ttft"] == 9.6
+    assert row["median_intvty"] == 59.5
+
+
+def test_renderer_row_records_attention_dp_topology():
+    row = renderer_row(
+        {
+            "status": "success",
+            "benchmark": {
+                "active_gpu_count": 8,
+                "concurrency": 128,
+                "effective_parallelism": "DEP8",
+            },
+            "aggregate": {
+                "derived_output_tput_per_gpu": 1000.0,
+            },
+        }
+    )
+    assert row is not None
+    assert row["decode_tp"] == 8
+    assert row["decode_ep"] == 8
+    assert row["decode_dp_attention"] is True
+    assert row["num_decode_gpu"] == 8
+
+
+def test_renderer_rows_skip_failed_results(tmp_path):
+    successful = {
+        "status": "success",
+        "benchmark": {
+            "active_gpu_count": 4,
+            "concurrency": 32,
+            "effective_parallelism": "TP4",
+        },
+        "aggregate": {"derived_output_tput_per_gpu": 100.0},
+    }
+    failed = {
+        "status": "failed",
+        "benchmark": {
+            "active_gpu_count": 4,
+            "concurrency": 64,
+            "effective_parallelism": "TP4",
+        },
+    }
+    rows = renderer_rows(
+        {
+            "success": (tmp_path / "success.json", successful),
+            "failed": (tmp_path / "failed.json", failed),
+        }
+    )
+    assert [row["conc"] for row in rows] == [32]
