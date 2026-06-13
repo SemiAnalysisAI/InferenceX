@@ -3651,7 +3651,7 @@
     - minimaxm3-fp8-mi355x-vllm
   description:
     - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI355X / gfx950 (model: MiniMaxAI/MiniMax-M3-MXFP8, 427B total / 26B active MoE with MSA sparse attention)"
-    - "Image: rocm/vllm-dev:v0.22.1rc-0612"
+    - "Image: vllm/vllm-openai-rocm:minimax-m3"
     - "Matches the published MI355X recipe with --block-size 128, --attention-backend TRITON_ATTN, MiniMax-M3 tool/reasoning parsers, and automatic tool choice"
     - "MI355X deviations required for fixed-sequence text benchmarking: --language-model-only, scenario-specific --max-model-len, and --enforce-eager to bypass the M3 decode CUDA-graph assertion"
     - "B300-parity layouts and concurrency ranges: TP8, TP8+EP8, TP4, TP4+EP4, TP2+EP2, and TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"

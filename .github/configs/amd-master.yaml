@@ -2785,7 +2785,7 @@ dsv4-fp4-mi355x-atom-disagg:
 # https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3?hardware=mi355x
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
-  image: rocm/vllm-dev:v0.22.1rc-0612
+  image: vllm/vllm-openai-rocm:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
