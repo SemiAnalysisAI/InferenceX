@@ -22,6 +22,7 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 SERVER_LOG=/workspace/server.log
 
 PARALLEL_ARGS=(-tp "$TP") #TP
+CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256]'
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
@@ -29,6 +30,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         #DPA+TP+TBO
         if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
             PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+            CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024]'
         elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
             PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
         else
@@ -61,6 +63,8 @@ python3 -m atom.entrypoints.openai_server \
     --trust-remote-code \
     --gpu-memory-utilization 0.85 \
     --no-enable_prefix_caching \
+    --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
+    --max-num-seqs ${CONC} \
     > $SERVER_LOG 2>&1 &
     #--max-model-len "$SERVE_MAX_MODEL_LEN" \
 
