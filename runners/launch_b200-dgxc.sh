@@ -68,6 +68,13 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+    # EAGLE3 draft head for the MTP variant; pre-staged beside the main weights.
+    # Bind-mounted via EXTRA_MOUNTS below so the *_mtp.sh script sees it as the
+    # sibling of MODEL_PATH. Harmless for the non-MTP script (which ignores it).
+    if [[ -d "/lustre/fsw/gharunners/models/MiniMax-M3-EAGLE3" ]]; then
+        export DRAFT_MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-EAGLE3"
+        EXTRA_MOUNTS="${EXTRA_MOUNTS:+$EXTRA_MOUNTS,}$DRAFT_MODEL_PATH:$DRAFT_MODEL_PATH"
+    fi
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"
@@ -448,7 +455,7 @@ else
 
     srun --jobid=$JOB_ID \
         --container-image=$SQUASH_FILE \
-        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
+        --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$MODEL_PATH:$MODEL_PATH,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache${EXTRA_MOUNTS:+,$EXTRA_MOUNTS} \
         --no-container-mount-home \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888,AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache \

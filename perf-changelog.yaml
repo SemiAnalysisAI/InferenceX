@@ -3656,3 +3656,13 @@
     - "Layouts: TP8 and TP4 (latency), TP4+EP4 / TP8+EP8 (TEP throughput), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
     - "Weights are not SRE-staged: launch_b200-dgxc.sh adds a MODEL_PATH case for /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8; runners.yaml adds a b200-dgxc runner-type group"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1723
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm-mtp
+  description:
+    - "MiniMax-M3 MXFP8 B200 MTP (EAGLE3 speculative decoding) variant of minimaxm3-fp8-b200-vllm"
+    - "Spec config (recipe spec_decoding feature): method eagle3, draft head Inferact/MiniMax-M3-EAGLE3, num_speculative_tokens=3, attention_backend FLASH_ATTN"
+    - "Image: vllm/vllm-openai:minimax-m3; --block-size 128, --language-model-only; benchmark uses --use-chat-template (EAGLE acceptance collapses on raw random prompts)"
+    - "Latency-end sweep (TP8, TP4, TP8+EP8) at low/mid concurrency where spec decoding has compute headroom to help"
+    - "EAGLE3 draft head pre-staged beside the main weights and bind-mounted on b200-dgxc (launch_b200-dgxc.sh)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/REPLACE_B200_MTP
