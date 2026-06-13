@@ -1033,3 +1033,31 @@ Debug rules:
 - The c32 retry intentionally uses one row per setting for turnaround time.
   Treat a marginal TPOT difference as inconclusive; the profile-level
   collective reduction is the supporting signal.
+
+## Run 27481295672
+
+- URL:
+  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27481295672`
+- Completed successfully on commit
+  `b60b1f3f56fa559c2dc679886efa88bb3151b1b8`.
+- Both rows used one full-shape warmup and exactly one measured pass.
+- Results:
+
+  | c32 TP4 row | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Wall output/GPU | Tok/step |
+  |---|---:|---:|---:|---:|---:|---:|
+  | allreduce control | 17.22 ms | 53.02 ms | 464.68 | 150.89 | 256.48 | 2.992 |
+  | skip redundant allreduce | 16.35 ms | 50.84 ms | 489.17 | 157.34 | 267.67 | 3.050 |
+
+- Backport deltas: token TPOT `-5.01%`, step TPOT `-4.10%`, derived step
+  throughput `+4.28%`, wall output throughput `+4.36%`, and derived output
+  throughput `+5.27%`.
+- The output-throughput delta includes a `1.94%` increase in observed
+  tokens/step. Step rate and wall throughput are the cleaner evidence.
+- The optimized trace removes all 64 Pattern-6 allreduce launches per rank.
+  In that one profiled iteration, ranks 0 and 1 wait longer in the remaining
+  Pattern-0 allreduce, so do not use aggregate collective milliseconds alone
+  as the result.
+- Job duration was `14m42s-15m02s`. Engine initialization was
+  `494-507 s`, warmup was `270-272 s`, and the measured pass was only
+  `18.7-19.5 s`. One measured pass is already the practical minimum; further
+  runtime work must target engine startup or lazy warmup.

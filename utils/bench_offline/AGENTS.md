@@ -76,6 +76,14 @@ benchmark.
   concurrency 32. Do not schedule TP4 above c32; use DEP4 at c64/c128.
   Run `27480420625` proved c128 TP4 spends about 8.3 minutes initializing,
   then OOMs late in warmup after about 35 minutes total.
+- Run `27481295672` completed the two c32 TP4 rows in about 15 minutes each.
+  Engine initialization took `494-507 s`, warmup took `270-272 s`, and the
+  only measured pass took `18.7-19.5 s`. Further pass-count reduction cannot
+  materially shorten this path; startup and lazy warmup dominate.
+- For the allreduce backport, compare end-to-end metrics and exact kernel
+  launch counts. The c32 optimized trace removes all 64 Pattern-6 allreduce
+  launches per rank, but a single profiled iteration can move rank skew into
+  the remaining Pattern-0 collective and distort aggregate collective time.
 - `ENABLE_CONFIGURABLE_MOE` is an explicit branch-only candidate. Propagate
   it through `TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE`, restore it in
   `trt_mpi_entry.py`, and validate both names in every active-rank marker.

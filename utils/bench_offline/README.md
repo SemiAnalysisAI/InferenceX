@@ -592,10 +592,9 @@ things:
   checked-in B300 8K/MTP3 production recipe supports TP4 only through c32,
   so the harness now rejects larger TP4 rows before allocating a GPU.
 
-The failed profile window was still useful. With the backport enabled,
+The failed c128 profile window was still useful. With the backport enabled,
 rank-mean collective time fell from `144.54 ms` to `89.95 ms`, and
-overlap-aware GPU busy time fell from `392.37 ms` to `340.21 ms`. The c32
-retry measures whether that kernel-level reduction improves end-to-end TPOT.
+overlap-aware GPU busy time fell from `392.37 ms` to `340.21 ms`.
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
@@ -612,6 +611,29 @@ gh api -X POST \
   -f 'inputs[salloc-time]=40' \
   -f 'inputs[worker-timeout]=1800'
 ```
+
+Run `27481295672` completed that two-row retry successfully:
+
+| c32 TP4 row | Passes | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Wall output/GPU |
+|---|---:|---:|---:|---:|---:|---:|
+| allreduce control | 1 | 17.22 ms | 53.02 ms | 464.68 | 150.89 | 256.48 |
+| skip redundant allreduce | 1 | 16.35 ms | 50.84 ms | 489.17 | 157.34 | 267.67 |
+
+The backport improved token TPOT by `5.01%`, step TPOT by `4.10%`, derived
+step throughput by `4.28%`, and measured wall output throughput by `4.36%`.
+Observed tokens per step also rose from `2.992` to `3.050`, so the larger
+`5.27%` derived output-throughput gain is partly MTP-yield variation.
+
+The optimized trace removes all 64 Pattern-6 allreduce launches per rank.
+Its single profiled iteration shifts more waiting into the remaining
+Pattern-0 collective on ranks 0 and 1, so aggregate collective milliseconds
+from that one iteration are not a reliable end-to-end predictor. The measured
+TPOT and wall metrics are the acceptance signal.
+
+Job time was `14m42s-15m02s`. Per worker, engine initialization took
+`494-507 s`, the full-shape lazy warmup took `270-272 s`, and the only
+measured pass took `18.7-19.5 s`. The benchmark is already at one measured
+pass; startup and warmup now dominate its runtime.
 
 ## Artifacts And Collected Values
 
