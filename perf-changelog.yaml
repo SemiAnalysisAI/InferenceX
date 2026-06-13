@@ -3724,3 +3724,12 @@
   description:
     - "Start the TP-only latency rows of the MiniMax-M3 EAGLE3 MTP sweeps (H200, H100) at concurrency 1 instead of 4, matching the conc-1 start used on the non-MTP day-zero recipes — captures the single-request latency point. TEP/DEP rows keep their higher concurrency starts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1743
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI300X / gfx942"
+    - "Image and serving flags reuse the MI355X recipe: vllm/vllm-openai-rocm:minimax-m3, block size 128, TRITON_ATTN, FP8 KV cache, language-model-only, and eager execution"
+    - "H100-aligned layouts and concurrency ranges: TP8 and TP8+EP8 across 1k1k and 8k1k"
+    - "Fix launch_mi300x-amds.sh node exclusion to use the current short Slurm node name"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
