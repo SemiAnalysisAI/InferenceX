@@ -2782,7 +2782,7 @@ dsv4-fp4-mi355x-atom-disagg:
           - "DECODE_NODES=1"
 
 # MiniMax-M3 MXFP8 MI355X recipe:
-# https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3?hardware=mi355x
+# https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
   image: vllm/vllm-openai-rocm:minimax-m3

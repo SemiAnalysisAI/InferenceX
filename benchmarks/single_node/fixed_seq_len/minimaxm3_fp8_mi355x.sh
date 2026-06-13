@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # MiniMax-M3 MXFP8 MI355X (gfx950) single-node vLLM recipe.
-# https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3?hardware=mi355x
+# https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # The recipe recommends MXFP8 from TP=4 on gfx950 and requires block size 128.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -54,6 +54,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --block-size 128 \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
+    --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --enforce-eager \
     --tool-call-parser minimax_m3 \
