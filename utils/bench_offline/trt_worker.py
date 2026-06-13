@@ -16,6 +16,7 @@ from typing import Any
 from io_utils import read_json, write_json
 from metrics import aggregate_passes, summarize_pass
 from prompts import load_corpus
+from trt_backports import apply_dsv4_skip_premoe_allreduce_backport
 from trt_config import (
     OUTPUT_TOKENS,
     SAMPLING_TEMPERATURE,
@@ -225,6 +226,7 @@ def main() -> int:
         "mode": args.mode,
         "started_at": started_at,
     }
+    runtime_backports: dict[str, Any] = {}
     try:
         phase = "load_candidate"
         candidate = CandidateConfig.from_dict(read_json(args.candidate))
@@ -261,10 +263,37 @@ def main() -> int:
             f"{'on' if candidate.use_low_precision_moe_combine else 'off'} "
             f"configurable_moe={configurable_moe_label} "
             f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
+            "moe_autotune_distribution="
+            f"{candidate.moe_autotune_dummy_distribution or 'default-random'} "
+            "skip_premoe_allreduce="
+            f"{candidate.dsv4_skip_premoe_allreduce} "
             f"profile_iterations={candidate.profile_iterations or 'off'} "
             f"max_seq_len={candidate.max_seq_len} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'}"
         )
+
+        if candidate.dsv4_skip_premoe_allreduce is not None:
+            phase = "trt_backport"
+            log_progress(
+                "applying DeepSeek-V4 redundant-allreduce backport "
+                f"enabled={candidate.dsv4_skip_premoe_allreduce}"
+            )
+            backport = apply_dsv4_skip_premoe_allreduce_backport()
+            runtime_backports["dsv4_skip_premoe_allreduce"] = backport
+            patched_sha256 = str(backport["after_sha256"])
+            os.environ["TRTLLM_BENCH_DSV4_PATCHED_SHA256"] = patched_sha256
+            rank_environment["TRTLLM_BENCH_DSV4_PATCHED_SHA256"] = (
+                patched_sha256
+            )
+            os.environ["TRTLLM_BENCH_EXPECTED_RANK_ENV"] = json.dumps(
+                rank_environment,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            log_progress(
+                "DeepSeek-V4 backport ready "
+                f"status={backport['status']} sha256={patched_sha256}"
+            )
 
         phase = "perfect_router_source"
         log_progress("validating perfect-router support")
@@ -329,6 +358,10 @@ def main() -> int:
             f"moe_backend={candidate.moe_backend} "
             f"configurable_moe={configurable_moe_label} "
             f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
+            "moe_autotune_distribution="
+            f"{candidate.moe_autotune_dummy_distribution or 'default-random'} "
+            "skip_premoe_allreduce="
+            f"{candidate.dsv4_skip_premoe_allreduce} "
             f"profile_iterations={candidate.profile_iterations or 'off'} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
             f"wait_iters={candidate.batching_wait_iters} "
@@ -422,6 +455,28 @@ def main() -> int:
                     "Benchmark environment did not reach every TRT rank: "
                     f"{environment_mismatches}"
                 )
+            if runtime_backports:
+                expected_source_sha = rank_environment[
+                    "TRTLLM_BENCH_DSV4_PATCHED_SHA256"
+                ]
+                source_mismatches = {}
+                for row in marker["processes"]:
+                    if row.get("source") != "trt_mpi_entry":
+                        continue
+                    source = row.get("dsv4_source") or {}
+                    if (
+                        source.get("sha256") != expected_source_sha
+                        or not source.get(
+                            "skip_premoe_allreduce_backport",
+                            False,
+                        )
+                    ):
+                        source_mismatches[str(row.get("rank"))] = source
+                if source_mismatches:
+                    raise RuntimeError(
+                        "DeepSeek-V4 backport did not reach every TRT rank: "
+                        f"{source_mismatches}"
+                    )
             expected_cute_cache = os.getenv("CUTE_DSL_CACHE_DIR")
             if not expected_cute_cache:
                 raise RuntimeError(
@@ -488,6 +543,7 @@ def main() -> int:
                     "candidate": configured_environment,
                     "rank_expected": rank_environment,
                 },
+                "runtime_backports": runtime_backports,
                 "corpus": corpus_manifest,
             }
         )
@@ -523,6 +579,7 @@ def main() -> int:
                 "error": str(error),
                 "traceback": traceback.format_exc(),
                 "perfect_router_marker": marker,
+                "runtime_backports": runtime_backports,
             }
         )
         write_json(args.output, result)

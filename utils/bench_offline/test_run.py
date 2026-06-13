@@ -185,6 +185,55 @@ def test_mpi_entry_sets_router_before_real_worker(
     assert row["source"] == "trt_mpi_entry"
 
 
+def test_mpi_entry_records_dsv4_backport_source(
+    tmp_path,
+    monkeypatch,
+):
+    calls = []
+    worker_module = ModuleType("tensorrt_llm.executor.worker")
+
+    def fake_worker(*args, **kwargs):
+        calls.append((args, kwargs))
+        return "done"
+
+    worker_module.worker_main = fake_worker
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm.executor.worker",
+        worker_module,
+    )
+    import trt_backports
+
+    monkeypatch.setattr(
+        trt_backports,
+        "inspect_dsv4_source",
+        lambda: {
+            "path": "/site-packages/modeling_deepseekv4.py",
+            "sha256": "patched-sha",
+            "skip_premoe_allreduce_backport": True,
+        },
+    )
+    marker = tmp_path / "marker.jsonl"
+    expected = {
+        "TRTLLM_BENCH_DSV4_PATCHED_SHA256": "patched-sha",
+        "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE": "1",
+    }
+    monkeypatch.setenv("TRTLLM_PERFECT_ROUTER_MARKER", str(marker))
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_EXPECTED_RANK_ENV",
+        json.dumps(expected),
+    )
+    for name, value in expected.items():
+        monkeypatch.setenv(name, value)
+
+    assert worker_main() == "done"
+    assert calls == [((), {})]
+    row = json.loads(marker.read_text(encoding="utf-8"))
+    assert row["benchmark_environment"] == expected
+    assert row["dsv4_source"]["sha256"] == "patched-sha"
+    assert row["dsv4_source"]["skip_premoe_allreduce_backport"] is True
+
+
 def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
     marker = tmp_path / "marker.jsonl"
     rows = [

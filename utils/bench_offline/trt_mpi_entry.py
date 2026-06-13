@@ -22,11 +22,17 @@ def _write_marker() -> None:
         expected_environment = {}
     if not isinstance(expected_environment, dict):
         expected_environment = {}
+    dsv4_source = None
+    if os.getenv("TRTLLM_BENCH_DSV4_PATCHED_SHA256"):
+        from trt_backports import inspect_dsv4_source
+
+        dsv4_source = inspect_dsv4_source()
     payload = {
         "pid": os.getpid(),
         "rank": os.getenv("OMPI_COMM_WORLD_RANK"),
         "perfect_router": os.getenv("ENABLE_PERFECT_ROUTER"),
         "cute_dsl_cache_dir": os.getenv("CUTE_DSL_CACHE_DIR"),
+        "dsv4_source": dsv4_source,
         "benchmark_environment": {
             str(name): os.getenv(str(name))
             for name in expected_environment

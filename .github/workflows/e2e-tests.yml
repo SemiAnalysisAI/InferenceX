@@ -87,6 +87,8 @@ jobs:
                   "moe_post_quant_alltoall",
                   "enable_pdl",
                   "megamoe_fused_prepare",
+                  "moe_autotune_dummy_distribution",
+                  "dsv4_skip_premoe_allreduce",
                   "profile_iterations",
                   "print_iter_log",
                   "max_seq_len",
@@ -197,6 +199,7 @@ jobs:
                       "moe_post_quant_alltoall",
                       "enable_pdl",
                       "megamoe_fused_prepare",
+                      "dsv4_skip_premoe_allreduce",
                   ):
                       value = candidate.get(optional_bool_key)
                       if value is not None and not isinstance(value, bool):
@@ -209,6 +212,19 @@ jobs:
                       raise SystemExit(
                           f"experiment {experiment_id} candidate."
                           "indexer_k_dtype must be fp4, fp8, or null"
+                      )
+                  moe_autotune_distribution = candidate.get(
+                      "moe_autotune_dummy_distribution"
+                  )
+                  if moe_autotune_distribution not in {
+                      None,
+                      "balanced",
+                      "random",
+                  }:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "moe_autotune_dummy_distribution must be "
+                          "balanced, random, or null"
                       )
                   moe_backend = candidate.get("moe_backend", "TRTLLM")
                   if moe_backend not in {
@@ -302,6 +318,14 @@ jobs:
                       raise SystemExit(
                           f"experiment {experiment_id} cannot enable "
                           "LM-head TP without attention DP"
+                      )
+                  if (
+                      candidate.get("dsv4_skip_premoe_allreduce") is not None
+                      and parallelism != "tp4"
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "dsv4_skip_premoe_allreduce requires tp4"
                       )
                   batch_mode = candidate.get(
                       "attention_dp_batch_mode",
@@ -417,6 +441,7 @@ jobs:
           rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
           rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
           rm -f "${{ github.workspace }}"/offline_profiles_*.tar.gz
+          rm -f "${{ github.workspace }}"/offline_profile_summary_*.json
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -444,6 +469,7 @@ jobs:
               aggregate,
               huawei,
               profile: .final.profile,
+              runtime_backports: .final.runtime_backports,
               error
             }' "$result"
           fi
@@ -459,6 +485,7 @@ jobs:
             offline_gpu_metrics_${{ matrix.id }}.csv
             offline_debug_${{ matrix.id }}.tar.gz
             offline_profiles_${{ matrix.id }}.tar.gz
+            offline_profile_summary_${{ matrix.id }}.json
           if-no-files-found: warn
           retention-days: 14
 

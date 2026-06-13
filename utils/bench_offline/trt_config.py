@@ -31,8 +31,11 @@ MOE_COMM_METHODS = {
 CANDIDATE_ENVIRONMENT_VARIABLES = {
     "ENABLE_CONFIGURABLE_MOE",
     "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
+    "TRTLLM_BENCH_DSV4_PATCHED_SHA256",
+    "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
     "TRTLLM_ENABLE_PDL",
     "TRTLLM_FORCE_COMM_METHOD",
+    "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION",
     "TRTLLM_MEGAMOE_FUSED_PREPARE",
     "TRTLLM_MOE_POST_QUANT_ALLTOALLV",
 }
@@ -101,6 +104,8 @@ class CandidateConfig:
     moe_post_quant_alltoall: bool | None = None
     enable_pdl: bool | None = None
     megamoe_fused_prepare: bool | None = None
+    moe_autotune_dummy_distribution: str | None = None
+    dsv4_skip_premoe_allreduce: bool | None = None
     profile_iterations: str | None = None
     print_iter_log: bool = True
     max_seq_len: int = MAX_SEQ_LEN
@@ -155,12 +160,22 @@ class CandidateConfig:
             "moe_post_quant_alltoall",
             "enable_pdl",
             "megamoe_fused_prepare",
+            "dsv4_skip_premoe_allreduce",
         ):
             value = getattr(self, field_name)
             if value is not None and not isinstance(value, bool):
                 raise ValueError(f"{field_name} must be boolean or null")
         if self.indexer_k_dtype not in {None, "fp4", "fp8"}:
             raise ValueError("indexer_k_dtype must be fp4, fp8, or null")
+        if self.moe_autotune_dummy_distribution not in {
+            None,
+            "balanced",
+            "random",
+        }:
+            raise ValueError(
+                "moe_autotune_dummy_distribution must be balanced, "
+                "random, or null"
+            )
         if self.moe_backend not in MOE_BACKENDS:
             raise ValueError(
                 f"moe_backend must be one of {sorted(MOE_BACKENDS)}"
@@ -188,6 +203,13 @@ class CandidateConfig:
             raise ValueError(
                 "megamoe_fused_prepare requires "
                 "moe_backend=MEGAMOE_DEEPGEMM"
+            )
+        if (
+            self.dsv4_skip_premoe_allreduce is not None
+            and self.parallelism != "tp4"
+        ):
+            raise ValueError(
+                "dsv4_skip_premoe_allreduce requires parallelism=tp4"
             )
         if self.profile_iterations is not None:
             match = re.fullmatch(r"(\d+)-(\d+)", self.profile_iterations)
@@ -450,6 +472,14 @@ def candidate_environment(candidate: CandidateConfig) -> dict[str, str]:
     if candidate.megamoe_fused_prepare is not None:
         environment["TRTLLM_MEGAMOE_FUSED_PREPARE"] = (
             "1" if candidate.megamoe_fused_prepare else "0"
+        )
+    if candidate.moe_autotune_dummy_distribution is not None:
+        environment["TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION"] = (
+            candidate.moe_autotune_dummy_distribution
+        )
+    if candidate.dsv4_skip_premoe_allreduce is not None:
+        environment["TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE"] = (
+            "1" if candidate.dsv4_skip_premoe_allreduce else "0"
         )
     return environment
 

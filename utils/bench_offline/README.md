@@ -526,6 +526,76 @@ Using one measured pass instead of three removes about `67.9 s` per fresh
 c128 engine, including the two removed inter-pass sleeps. Initialization and
 the required full-shape warmup still dominate total runtime.
 
+## Stage-Seven Profile-Led Optimizations
+
+The c128 DEP4 trace identifies the device as `NVIDIA B300 SXM6 AC`, compute
+capability `10.3`, with `148` SMs. Kernel names containing `sm100f` are
+Blackwell-family cubin names, not evidence of a B200 fallback; the same trace
+selects explicit `sm103` kernels.
+
+The overlap-aware four-rank means are `46.01 ms` summed GPU events,
+`38.24 ms` GPU busy union, `48.41 ms` first-to-last GPU event window,
+`10.17 ms` idle inside that window, and `1.203x` overlap. MoE GEMM1 and
+GEMM2 total about `18.02 ms/rank`, the largest actionable family. Dense
+DeepGEMM projections are about `6.90 ms/rank`.
+
+Huawei's c128 headline is not emitted-token throughput:
+
+```text
+128 requests / 20.61 ms / 16 chips = 388.2 request-steps/s/chip
+```
+
+The four-B300 c128 control is about `385 request-steps/s/GPU`, but each B300
+handles about `32` requests while each Huawei chip handles `8`. B300's
+roughly `83 ms` request-step TPOT is correspondingly about four times
+Huawei's `20.61 ms`. Similar per-device step rate therefore does not imply
+equal topology or equal per-request latency.
+
+For emitted output, multiply step rate by tokens per step, not by draft
+acceptance rate alone. Huawei reports `1.44` accepted drafts, so its yield is
+`1 + 1.44 = 2.44 tokens/step`. The B300 control observes about
+`3.19 tokens/step`; its TPOT-derived emitted output is about `1.32x`
+Huawei's published-yield output per device. Whole-pass wall throughput also
+includes prefill and scheduling, so it is not the same decode-only quantity.
+
+Stage seven targets two source-backed paths:
+
+- The pinned TRT MoE autotuner defaults to a random dummy expert
+  distribution. This benchmark forces balanced routing, so DEP4 compares
+  explicit `random` controls with `balanced` autotuning.
+- NVIDIA commit `f04f90e8b48641fc82f4e5db5bd608b7debbff55`, landed after
+  image commit `c185066`, removes a redundant DeepSeek-V4 pre-MoE allreduce.
+  It applies only to TP4 because the pinned model disables
+  `PRE_MOE_FUSION` under attention DP.
+
+The runtime backport checks the exact pinned source SHA256 before changing
+the installed module. Both TP4 groups use the patched source, with
+`TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE=0` for controls and `1` for optimized
+rows. Every active MPI rank records the patched source hash.
+
+The ten jobs each use one fresh engine, one full-shape warmup, and exactly
+one measured pass:
+
+- two DEP4 random-autotuner controls
+- three DEP4 balanced-autotuner rows
+- two TP4 backport-disabled controls
+- three TP4 backport-enabled rows
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage7_profile_optimizations.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT c128 profile optimizations' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
 ## Artifacts And Collected Values
 
 Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
@@ -537,6 +607,9 @@ Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
   worker logs, corpus manifest, and perfect-router markers
 - `offline_profiles_EXPERIMENT_ID.tar.gz`: per-rank PyTorch/CUDA Chrome
   traces and their checksum manifest, present only for profile rows
+- `offline_profile_summary_EXPERIMENT_ID.json`: compact device,
+  overlap/idle, kernel-family, stream, and architecture-tag attribution for
+  profile rows
 
 The collector uploads `offline-trt-summary`:
 
@@ -547,6 +620,11 @@ The collected row fields mean:
 
 - `measured_passes`: number of measured generations aggregated into the row;
   this branch requires exactly `1`, excluding the warmup
+- `moe_autotune_dummy_distribution`: explicit `random` or `balanced` TRT MoE
+  tuning distribution for stage-seven rows
+- `dsv4_skip_premoe_allreduce`: TP4 runtime ablation value
+- `dsv4_backport_status` / `dsv4_backport_sha256`: proof that the guarded
+  source backport was applied before TRT import
 - `mean_token_tpot_ms`: mean per-request output-token TPOT
 - `mean_step_tpot_ms`: mean per-request TRT decode-step TPOT
 - `derived_output_tput_per_gpu`: concurrency/TPOT calculation

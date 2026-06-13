@@ -1,6 +1,6 @@
 import json
 
-from bench_offline.summarize import discover_results, markdown
+from bench_offline.summarize import _row, discover_results, markdown
 
 
 def test_summary_explains_offline_units():
@@ -62,6 +62,36 @@ def test_results_are_keyed_by_experiment_not_concurrency(tmp_path):
         )
     discovered = discover_results(tmp_path)
     assert set(discovered) == {"c32-control", "c32-lmtp"}
+
+
+def test_row_exposes_profile_optimization_identity():
+    row = _row(
+        "c128-tp4",
+        None,
+        {
+            "benchmark": {"concurrency": 128},
+            "status": "success",
+            "winner": {
+                "name": "tp4-skip",
+                "kind": "tp4-skip-redundant-allreduce",
+                "moe_autotune_dummy_distribution": "balanced",
+                "dsv4_skip_premoe_allreduce": True,
+            },
+            "final": {
+                "runtime_backports": {
+                    "dsv4_skip_premoe_allreduce": {
+                        "status": "applied",
+                        "after_sha256": "patched-sha",
+                    }
+                }
+            },
+        },
+    )
+    assert row["candidate_kind"] == "tp4-skip-redundant-allreduce"
+    assert row["moe_autotune_dummy_distribution"] == "balanced"
+    assert row["dsv4_skip_premoe_allreduce"] is True
+    assert row["dsv4_backport_status"] == "applied"
+    assert row["dsv4_backport_sha256"] == "patched-sha"
 
 
 def test_failed_row_includes_specific_failure_kind():

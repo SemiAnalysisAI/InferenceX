@@ -67,11 +67,26 @@ def _row(
     winner = result.get("winner") or {}
     huawei = result.get("huawei") or {}
     final = result.get("final") or {}
+    dsv4_backport = (
+        (final.get("runtime_backports") or {}).get(
+            "dsv4_skip_premoe_allreduce"
+        )
+        or {}
+    )
     return {
         "experiment_id": experiment_id,
         "concurrency": int(concurrency) if concurrency is not None else None,
         "status": result.get("status", "unknown"),
         "candidate": winner.get("name"),
+        "candidate_kind": winner.get("kind"),
+        "moe_autotune_dummy_distribution": winner.get(
+            "moe_autotune_dummy_distribution"
+        ),
+        "dsv4_skip_premoe_allreduce": winner.get(
+            "dsv4_skip_premoe_allreduce"
+        ),
+        "dsv4_backport_status": dsv4_backport.get("status"),
+        "dsv4_backport_sha256": dsv4_backport.get("after_sha256"),
         "active_gpu_count": benchmark.get("active_gpu_count", 8),
         "effective_parallelism": benchmark.get(
             "effective_parallelism",

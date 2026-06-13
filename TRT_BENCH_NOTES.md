@@ -48,6 +48,24 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
   runs used three passes after one-pass tuning showed output-dependent MTP
   variation; confirm any winner with a separate repeat before treating a
   marginal difference as stable.
+- The c128 DEP4 profile reports `NVIDIA B300 SXM6 AC`, compute capability
+  `10.3`, and 148 SMs. `sm100f` kernel names are Blackwell-family names, not
+  proof of a B200 fallback; the same trace selects explicit `sm103` kernels.
+- Four-rank overlap-aware c128 DEP4 means are `46.01 ms` summed GPU events,
+  `38.24 ms` busy union, `48.41 ms` GPU window, `10.17 ms` idle in-window,
+  and `1.203x` overlap. MoE GEMM1+GEMM2 total about `18.02 ms/rank`.
+- The pinned TRT MoE autotuner defaults
+  `TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION` to `random`. Perfect routing
+  makes this workload balanced, so stage seven compares `random` and
+  `balanced` explicitly.
+- NVIDIA commit `f04f90e8b48641fc82f4e5db5bd608b7debbff55` landed after the
+  pinned image and removes a redundant DeepSeek-V4 pre-MoE allreduce. The
+  branch applies it only for explicit TP4 candidates after checking source
+  SHA256
+  `4f65eaefdb1cbdb20456415c55d041493d7e4f984cee74f5f91ebecb0e9d33f8`.
+  Patched SHA256 is
+  `09986ecbc71467325e668c59e61d790e120036e102eefe7c6eae9e671e0af18f`.
+  Every active rank marker must report that patched hash.
 - Fresh engine startup is dominated by model initialization plus CuTe DSL
   compilation. The branch mounts the image-keyed path
   `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl`, and the direct
@@ -199,6 +217,9 @@ performance measurements.
 - Each pass has one flushed line before its timer starts and one after metrics
   extraction; neither line is included in the measured `LLM.generate()` wall
   interval.
+- Profile rows also upload `offline_profile_summary_EXPERIMENT_ID.json` with
+  device properties, overlap-aware GPU busy/window/idle values,
+  kernel-family totals, stream totals, and architecture tags.
 
 ## Parallel Optimization Matrix
 
@@ -951,3 +972,48 @@ gh api -X POST \
   removes about `67.9 s` per c128 engine, including two inter-pass sleeps.
   Do not remove the warmup: it protects the only measured pass from lazy
   graph and kernel compilation.
+
+## Stage-Seven Profile Optimizations
+
+Matrix:
+`utils/bench_offline/b300_stage7_profile_optimizations.json`.
+
+- DEP4 has two explicit random-autotuner controls and three
+  balanced-autotuner rows.
+- TP4 has two redundant-allreduce backport controls with the knob disabled
+  and three rows with it enabled.
+- One row in each comparison group profiles warmup iteration `50-51`.
+- Every row still uses exactly one measured pass.
+
+The backport is TP4-only. In pinned DeepSeek-V4 source, attention DP forces
+eager fusion off, so DEP4 cannot activate `PRE_MOE_FUSION` and would not
+exercise the removed allreduce.
+
+Dispatch:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage7_profile_optimizations.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT c128 profile optimizations' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
+Debug rules:
+
+- `phase=trt_backport` means the installed source did not match the pinned
+  hash or could not be atomically replaced.
+- TP4 rows are invalid unless every `trt_mpi_entry` marker contains the same
+  patched source hash and requested
+  `TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE` value.
+- Balanced-autotuner rows are invalid unless every rank marker records
+  `TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION=balanced`.
+- Compare group means first. A single one-pass row can move with MTP output
+  yield and is not enough to accept a marginal win.

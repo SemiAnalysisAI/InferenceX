@@ -130,6 +130,39 @@ def test_candidate_can_force_moe_communication_and_runtime_flags():
     }
 
 
+def test_candidate_can_select_balanced_moe_tuning_and_dsv4_backport():
+    candidate = CandidateConfig(
+        name="tp4-balanced-backport",
+        batching_wait_iters=0,
+        parallelism="tp4",
+        moe_autotune_dummy_distribution="balanced",
+        dsv4_skip_premoe_allreduce=True,
+    )
+    assert candidate_environment(candidate) == {
+        "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": "balanced",
+        "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE": "1",
+    }
+
+
+def test_dsv4_backport_requires_tp4():
+    with pytest.raises(ValueError, match="requires parallelism=tp4"):
+        CandidateConfig(
+            name="invalid-dep-backport",
+            batching_wait_iters=0,
+            parallelism="dep4",
+            dsv4_skip_premoe_allreduce=True,
+        )
+
+
+def test_candidate_rejects_invalid_moe_autotune_distribution():
+    with pytest.raises(ValueError, match="moe_autotune_dummy_distribution"):
+        CandidateConfig(
+            name="invalid-autotune-distribution",
+            batching_wait_iters=0,
+            moe_autotune_dummy_distribution="skewed",
+        )
+
+
 def test_candidate_rejects_low_latency_deepep_for_8k_offline_workload():
     with pytest.raises(ValueError, match="force_moe_comm_method"):
         CandidateConfig(
@@ -579,6 +612,7 @@ def test_resolved_parallelism_validates_sparse_indexer_switches():
         "b300_stage4_kernel_experiments.json",
         "b300_stage5_moe_profile_experiments.json",
         "b300_stage6_moe_path_experiments.json",
+        "b300_stage7_profile_optimizations.json",
         "b300_huawei_global_batch_experiments.json",
     ),
 )

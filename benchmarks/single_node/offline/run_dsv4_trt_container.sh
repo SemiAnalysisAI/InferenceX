@@ -28,6 +28,7 @@ RESULT_FILE="/workspace/offline_result_${BENCH_ID}.json"
 CONTROLLER_LOG="/workspace/offline_controller_${BENCH_ID}.log"
 DEBUG_ARCHIVE="/workspace/offline_debug_${BENCH_ID}.tar.gz"
 PROFILE_ARCHIVE="/workspace/offline_profiles_${BENCH_ID}.tar.gz"
+PROFILE_SUMMARY="/workspace/offline_profile_summary_${BENCH_ID}.json"
 GPU_METRICS="/workspace/offline_gpu_metrics_${BENCH_ID}.csv"
 
 log() {
@@ -79,6 +80,22 @@ with open(path, "w", encoding="utf-8") as stream:
     stream.write("\n")
 PY
     fi
+    if find "$WORK_DIR" \
+        -maxdepth 1 \
+        -type f \
+        -name '*_torch_profile-rank-*.json' \
+        -print -quit \
+        | grep -q .; then
+        if python3 /workspace/utils/bench_offline/summarize_profile.py \
+            "$WORK_DIR" \
+            --json-out "$WORK_DIR/profile_summary.json" \
+            >/dev/null; then
+            cp "$WORK_DIR/profile_summary.json" "$PROFILE_SUMMARY"
+            log "profile summary finalized path=$PROFILE_SUMMARY"
+        else
+            log "profile summary failed; raw traces remain available"
+        fi
+    fi
     profile_file_list="$WORK_DIR/profile_files.txt"
     find "$WORK_DIR" \
         -maxdepth 1 \
@@ -86,6 +103,7 @@ PY
         \( \
             -name '*_torch_profile-rank-*.json' \
             -o -name '*_profile_manifest.json' \
+            -o -name 'profile_summary.json' \
         \) \
         -printf '%f\n' \
         | sort > "$profile_file_list"

@@ -66,6 +66,12 @@ benchmark.
 - Candidate-controlled `TRTLLM_*` and `TLLM_*` settings must be present in
   every MPI rank marker. Do not accept a labeled backend or communication
   result if rank propagation validation fails.
+- `moe_autotune_dummy_distribution` is a source-backed candidate. The pinned
+  default is `random`; use `balanced` only as a labeled comparison against
+  the forced balanced router and validate it in every rank marker.
+- The DeepSeek-V4 redundant-allreduce backport is TP4-only. Check pinned and
+  patched source hashes before TRT import, run control and optimized rows
+  from the same patched source, and validate that hash on every active rank.
 - `ENABLE_CONFIGURABLE_MOE` is an explicit branch-only candidate. Propagate
   it through `TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE`, restore it in
   `trt_mpi_entry.py`, and validate both names in every active-rank marker.
