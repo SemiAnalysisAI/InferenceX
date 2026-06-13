@@ -13,6 +13,14 @@
 # FLASH_ATTN for the EAGLE3 MHA head on Blackwell is FlashInfer/CUDA-specific.
 # Here the whole server runs on TRITON_ATTN (set globally below), which serves
 # the MHA draft fine.
+#
+# --trust-remote-code is added on serve (the non-MTP recipe omits it): the
+# proven CUDA EAGLE3 recipes all serve with it, and it is the one serve
+# difference left after the first MI355X sweep failed engine init with
+# "Model does not support EAGLE3 interface but aux_hidden_state_outputs was
+# requested" — i.e. the target's EAGLE3 aux-hidden-state hook was not picked
+# up. If this still fails identically the ROCm minimax-m3 image simply lacks
+# MiniMax-M3 EAGLE3 target support (it trails the CUDA build).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -79,6 +87,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --attention-backend TRITON_ATTN \
     --enforce-eager \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
+    --trust-remote-code \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
