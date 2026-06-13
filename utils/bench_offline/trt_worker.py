@@ -33,6 +33,11 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def log_progress(message: str) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    print(f"[offline-trt-worker {timestamp}] {message}", flush=True)
+
+
 def perfect_router_source() -> dict[str, Any]:
     from tensorrt_llm._torch.modules.fused_moe import interface
 
@@ -104,7 +109,13 @@ def sampling_params(concurrency: int) -> list[Any]:
     ]
 
 
-def generate_pass(llm: Any, inputs: list[dict[str, list[int]]]) -> dict[str, Any]:
+def generate_pass(
+    llm: Any,
+    inputs: list[dict[str, list[int]]],
+    *,
+    label: str,
+) -> dict[str, Any]:
+    log_progress(f"{label}: generation start requests={len(inputs)}")
     started = time.perf_counter()
     outputs = llm.generate(
         inputs,
@@ -118,13 +129,25 @@ def generate_pass(llm: Any, inputs: list[dict[str, list[int]]]) -> dict[str, Any
         raise RuntimeError(
             f"TRT returned {len(outputs)} requests for {len(inputs)} prompts"
         )
-    return summarize_pass(
+    summary = summarize_pass(
         outputs,
         wall_seconds=wall_seconds,
         expected_output_tokens=OUTPUT_TOKENS,
         num_gpus=WORLD_SIZE,
         max_draft_tokens=MTP_DRAFT_TOKENS,
     )
+    aggregate = summary["aggregate"]
+    log_progress(
+        f"{label}: generation complete wall={wall_seconds:.1f}s "
+        f"mean_tpot={float(aggregate['mean_token_tpot_ms']):.3f}ms "
+        "derived_output_tput_per_gpu="
+        f"{float(aggregate['derived_output_tput_per_gpu']):.2f} "
+        f"wall_output_tput_per_gpu="
+        f"{float(aggregate['wall_output_tput_per_gpu']):.2f} "
+        f"tokens_per_step="
+        f"{float(aggregate['observed_tokens_per_step']):.3f}"
+    )
+    return summary
 
 
 def measured_pass_count(requested_passes: int) -> int:
@@ -148,6 +171,7 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     started_at = utc_now()
+    worker_started = time.perf_counter()
     phase = "startup"
     result: dict[str, Any] = {
         "schema_version": 1,
@@ -163,8 +187,14 @@ def main() -> int:
         if concurrency != int(corpus_manifest["concurrency"]):
             raise RuntimeError("Corpus concurrency does not match its manifest")
         inputs = [{"prompt_token_ids": prompt} for prompt in prompts]
+        pass_count = measured_pass_count(args.passes)
+        log_progress(
+            f"worker start mode={args.mode} candidate={candidate.name} "
+            f"concurrency={concurrency} measured_passes={pass_count}"
+        )
 
         phase = "perfect_router_source"
+        log_progress("validating perfect-router support")
         router_source = perfect_router_source()
         if not router_source["supported"]:
             raise RuntimeError(
@@ -173,6 +203,7 @@ def main() -> int:
         if os.getenv("ENABLE_PERFECT_ROUTER") != "1":
             raise RuntimeError("ENABLE_PERFECT_ROUTER is not set in worker")
 
+        log_progress("installing perfect-router MPI worker entry")
         mpi_worker_entry = install_mpi_worker_entry()
         from tensorrt_llm import LLM
 
@@ -182,26 +213,40 @@ def main() -> int:
             candidate,
         )
         phase = "engine_init"
+        log_progress(
+            f"engine initialization start "
+            f"max_batch_size={llm_kwargs['max_batch_size']} "
+            f"max_num_tokens={llm_kwargs['max_num_tokens']} "
+            f"cuda_graph={'on' if candidate.cuda_graph else 'off'}"
+        )
         init_started = time.perf_counter()
         measured_passes: list[dict[str, Any]] = []
         with LLM(**llm_kwargs) as llm:
             init_seconds = time.perf_counter() - init_started
             resolved = resolved_parallelism(llm.args)
+            log_progress(
+                f"engine initialization complete elapsed={init_seconds:.1f}s "
+                f"parallelism={resolved['effective_parallelism']}"
+            )
 
             phase = "warmup"
-            warmup = generate_pass(llm, inputs)
+            warmup = generate_pass(llm, inputs, label="warmup")
             time.sleep(2.0)
 
             phase = "measured_generation"
-            pass_count = measured_pass_count(args.passes)
             for pass_index in range(pass_count):
-                measured = generate_pass(llm, inputs)
+                measured = generate_pass(
+                    llm,
+                    inputs,
+                    label=f"measured pass {pass_index + 1}/{pass_count}",
+                )
                 measured["pass_index"] = pass_index + 1
                 measured_passes.append(measured)
                 if pass_index + 1 < pass_count:
                     time.sleep(2.0)
 
             phase = "perfect_router_validation"
+            log_progress("validating perfect-router rank propagation")
             marker_path = Path(
                 os.environ["TRTLLM_PERFECT_ROUTER_MARKER"]
             )
@@ -212,7 +257,16 @@ def main() -> int:
                     "TRT rank entrypoints: "
                     f"{marker['mpi_entry_processes']} rank processes"
                 )
+            log_progress(
+                "perfect-router validation complete "
+                f"rank_processes={marker['mpi_entry_processes']}"
+            )
+            phase = "engine_shutdown"
+            log_progress("engine shutdown start")
 
+        log_progress("engine shutdown complete")
+        phase = "aggregation"
+        log_progress(f"aggregating {len(measured_passes)} measured passes")
         aggregate = aggregate_passes(measured_passes, WORLD_SIZE)
         result.update(
             {
@@ -235,8 +289,20 @@ def main() -> int:
             }
         )
         write_json(args.output, result)
+        log_progress(
+            f"worker complete elapsed="
+            f"{time.perf_counter() - worker_started:.1f}s "
+            f"mean_tpot={float(aggregate['mean_token_tpot_ms']):.3f}ms "
+            "derived_output_tput_per_gpu="
+            f"{float(aggregate['derived_output_tput_per_gpu']):.2f}"
+        )
         return 0
     except BaseException as error:
+        log_progress(
+            f"worker failed phase={phase} "
+            f"error_type={type(error).__name__} error={error}"
+        )
+        traceback.print_exc()
         marker_path_value = os.getenv("TRTLLM_PERFECT_ROUTER_MARKER")
         marker = (
             read_perfect_router_marker(Path(marker_path_value))

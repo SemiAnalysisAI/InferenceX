@@ -18,12 +18,18 @@ CONTROLLER_LOG="/workspace/offline_controller_conc${CONC}.log"
 DEBUG_ARCHIVE="/workspace/offline_debug_conc${CONC}.tar.gz"
 GPU_METRICS="/workspace/offline_gpu_metrics_conc${CONC}.csv"
 
+log() {
+    printf '[offline-trt-launcher %s] %s\n' \
+        "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
+}
+
 mkdir -p "$WORK_DIR"
 
 finalize() {
     local rc=$?
     trap - EXIT
     set +e
+    log "finalizing benchmark concurrency=$CONC return_code=$rc"
     stop_gpu_monitor
     if [[ -f "$WORK_DIR/result.json" ]]; then
         cp "$WORK_DIR/result.json" "$RESULT_FILE"
@@ -57,6 +63,7 @@ PY
         -C "$WORK_DIR" \
         -czf "$DEBUG_ARCHIVE" \
         . 2>/dev/null || true
+    log "artifacts finalized result=$RESULT_FILE debug=$DEBUG_ARCHIVE"
     exit "$rc"
 }
 trap finalize EXIT
@@ -93,13 +100,16 @@ export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX=/tmp/inferencex-offline-pycache
 export PYTHONPATH="/workspace/utils/bench_offline:${PYTHONPATH:-}"
 
-echo "Offline TRT benchmark: conc=$CONC model=$MODEL_PATH"
-echo "Pinned dataset revision: $DATASET_REVISION"
-echo "Allocation: job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE"
+log "benchmark start concurrency=$CONC model=$MODEL_PATH"
+log "dataset revision=$DATASET_REVISION path=$DATASET_PATH"
+log "allocation job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE"
+log "worker timeout=${WORKER_TIMEOUT}s work_dir=$WORK_DIR"
 nvidia-smi
 
+log "starting one-second GPU telemetry"
 start_gpu_monitor --output "$GPU_METRICS"
 
+log "starting offline benchmark controller"
 python3 -u /workspace/utils/bench_offline/run.py \
     --model-path "$MODEL_PATH" \
     --dataset "$DATASET_PATH" \

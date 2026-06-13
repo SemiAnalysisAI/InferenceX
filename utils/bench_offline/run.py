@@ -44,10 +44,83 @@ DEFAULT_IMAGE = (
     "ghcr.io#semianalysisai/"
     "trtllm-deepseek-v4:feat-deepseek_v4-c185066"
 )
+PROGRESS_INTERVAL_SECONDS = 60.0
+WORKER_PROGRESS_PREFIX = "[offline-trt-worker "
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def log_progress(message: str) -> None:
+    timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    print(f"[offline-trt-controller {timestamp}] {message}", flush=True)
+
+
+def aggregate_progress(aggregate: dict[str, Any]) -> str:
+    fields: list[str] = []
+    metrics = (
+        ("mean_token_tpot_ms", "mean_tpot", ".3f", "ms"),
+        (
+            "derived_output_tput_per_gpu",
+            "derived_output_tput_per_gpu",
+            ".2f",
+            "",
+        ),
+        ("observed_tokens_per_step", "tokens_per_step", ".3f", ""),
+    )
+    for key, label, format_spec, suffix in metrics:
+        value = aggregate.get(key)
+        if value is not None:
+            fields.append(f"{label}={format(float(value), format_spec)}{suffix}")
+    return " ".join(fields) or "metrics=unavailable"
+
+
+def latest_worker_progress(worker_log: Path) -> str | None:
+    for line in reversed(tail_text(worker_log, max_bytes=64_000).splitlines()):
+        if line.startswith(WORKER_PROGRESS_PREFIX):
+            _, separator, message = line.partition("] ")
+            return message if separator else line
+    return None
+
+
+def wait_for_worker_process(
+    process: subprocess.Popen[Any],
+    *,
+    label: str,
+    worker_log: Path,
+    started: float,
+    timeout_seconds: int,
+    heartbeat_seconds: float = PROGRESS_INTERVAL_SECONDS,
+) -> int:
+    while True:
+        elapsed = time.perf_counter() - started
+        remaining = timeout_seconds - elapsed
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(
+                getattr(process, "args", label),
+                timeout_seconds,
+            )
+        try:
+            return process.wait(timeout=min(heartbeat_seconds, remaining))
+        except subprocess.TimeoutExpired:
+            elapsed = time.perf_counter() - started
+            if elapsed >= timeout_seconds:
+                raise subprocess.TimeoutExpired(
+                    getattr(process, "args", label),
+                    timeout_seconds,
+                ) from None
+            latest = latest_worker_progress(worker_log)
+            detail = (
+                f"; last_worker_progress={latest}"
+                if latest is not None
+                else ""
+            )
+            log_progress(
+                f"{label}: still running elapsed={elapsed:.0f}s "
+                f"timeout={timeout_seconds}s{detail}; "
+                f"worker_log={worker_log.name}"
+            )
 
 
 def git_revision() -> str | None:
@@ -226,6 +299,13 @@ def run_worker(
     environment["TRTLLM_ENABLE_PERFECT_ROUTER"] = "1"
     environment["TRTLLM_PERFECT_ROUTER_MARKER"] = str(marker_path)
 
+    log_progress(
+        f"{label}: worker start passes={passes} "
+        f"wait_iters={candidate.batching_wait_iters} "
+        f"balance={'on' if candidate.attention_dp_balance else 'off'} "
+        f"overlap={'on' if candidate.overlap_scheduler else 'off'} "
+        f"cuda_graph={'on' if candidate.cuda_graph else 'off'}"
+    )
     started = time.perf_counter()
     timed_out = False
     with worker_log.open("w", encoding="utf-8") as log_stream:
@@ -237,7 +317,13 @@ def run_worker(
             start_new_session=True,
         )
         try:
-            return_code = process.wait(timeout=timeout_seconds)
+            return_code = wait_for_worker_process(
+                process,
+                label=label,
+                worker_log=worker_log,
+                started=started,
+                timeout_seconds=timeout_seconds,
+            )
         except subprocess.TimeoutExpired:
             timed_out = True
             terminate_process_group(process)
@@ -276,6 +362,18 @@ def run_worker(
             result,
             tail_text(worker_log),
             timed_out=timed_out,
+        )
+        log_progress(
+            f"{label}: worker failed elapsed={elapsed:.1f}s "
+            f"failure_kind={result['failure_kind']} "
+            f"phase={result.get('phase', 'unknown')} "
+            f"error={result.get('error', 'unknown')}"
+        )
+    else:
+        aggregate = result.get("aggregate") or {}
+        log_progress(
+            f"{label}: worker complete elapsed={elapsed:.1f}s "
+            f"{aggregate_progress(aggregate)}"
         )
     return result
 
@@ -365,6 +463,13 @@ def main() -> int:
         },
     }
     write_json(result_path, base_result)
+    log_progress(
+        f"benchmark start concurrency={args.concurrency} "
+        f"input_tokens={INPUT_TOKENS} output_tokens={OUTPUT_TOKENS} "
+        f"tuning_attempts={args.tuning_attempts} "
+        f"worker_timeout={args.worker_timeout}s "
+        f"output_dir={args.output_dir}"
+    )
 
     try:
         if args.concurrency not in ALLOWED_CONCURRENCIES:
@@ -381,6 +486,10 @@ def main() -> int:
         if not args.dataset.is_file():
             raise FileNotFoundError(f"Dataset does not exist: {args.dataset}")
 
+        log_progress(
+            f"corpus preparation start dataset={args.dataset.name} "
+            f"target_prompts={args.concurrency}"
+        )
         corpus_manifest = prepare_corpus(
             args.dataset,
             str(args.model_path),
@@ -390,6 +499,19 @@ def main() -> int:
         )
         base_result["corpus"] = corpus_manifest
         write_json(result_path, base_result)
+        adjusted_prompts = sum(
+            1
+            for item in corpus_manifest["context_tokenization"]
+            if item.get("boundary_adjustment", "none") != "none"
+            or int(item.get("context_tail_trimmed_characters", 0)) > 0
+        )
+        log_progress(
+            f"corpus preparation complete "
+            f"prompts={corpus_manifest['prompt_count']} "
+            f"unique_contexts={corpus_manifest['unique_contexts']} "
+            f"prompt_tokens={corpus_manifest['prompt_tokens']} "
+            f"adjusted_prompts={adjusted_prompts}"
+        )
 
         corpus_path = args.output_dir / "corpus.bin"
         manifest_path = args.output_dir / "corpus_manifest.json"
@@ -431,6 +553,10 @@ def main() -> int:
                 and len(full_attempts) < args.tuning_attempts
             ):
                 force_graph_off = True
+                log_progress(
+                    f"{candidate.name}: retrying with CUDA graphs disabled "
+                    f"after {result.get('failure_kind')} failure"
+                )
                 fallback = run_worker(
                     output_dir=args.output_dir,
                     model_path=args.model_path,
@@ -455,10 +581,19 @@ def main() -> int:
                 and result.get("phase") in {"engine_init", "warmup"}
             ):
                 stop_for_capacity = True
+                log_progress(
+                    "stopping tuning after full-shape capacity failure "
+                    f"phase={result.get('phase')} "
+                    f"failure_kind={result.get('failure_kind')}"
+                )
             if result.get("failure_kind") == "timeout":
                 fatal_failure = result
             return result
 
+        log_progress(
+            f"scheduler tuning start "
+            f"measured_passes={TUNING_MEASURED_PASSES}"
+        )
         for candidate in scheduler_candidates():
             if (
                 stop_for_capacity
@@ -471,6 +606,12 @@ def main() -> int:
                 scheduler_results.append(scheduler_result)
 
         scheduler_winner = choose_winner(scheduler_results)
+        if scheduler_winner is not None:
+            log_progress(
+                "scheduler tuning winner "
+                f"candidate={scheduler_winner['candidate']['name']} "
+                f"{aggregate_progress(scheduler_winner['aggregate'])}"
+            )
         if (
             scheduler_winner is not None
             and not stop_for_capacity
@@ -501,6 +642,10 @@ def main() -> int:
             compact_attempt(item) for item in full_attempts
         ]
         if fatal_failure is not None:
+            log_progress(
+                "benchmark failed because a worker timed out; "
+                "node state is not reusable"
+            )
             base_result.update(
                 {
                     "status": "failed",
@@ -534,9 +679,18 @@ def main() -> int:
                 }
             )
             write_json(result_path, base_result)
+            log_progress(
+                f"benchmark finished status={base_result['status']} "
+                f"failure_kinds={','.join(failure_kinds) or 'none'}"
+            )
             return 0 if is_capacity else 1
 
         winner_candidate = CandidateConfig.from_dict(winner["candidate"])
+        log_progress(
+            f"tuning complete winner={winner_candidate.name} "
+            f"attempt={winner['attempt']} "
+            f"{aggregate_progress(winner['aggregate'])}"
+        )
         base_result["tuning"]["winner"] = {
             "candidate": winner_candidate.to_dict(),
             "aggregate": winner["aggregate"],
@@ -545,6 +699,10 @@ def main() -> int:
         base_result["status"] = "final_measurement"
         write_json(result_path, base_result)
 
+        log_progress(
+            f"final measurement start candidate={winner_candidate.name} "
+            f"measured_passes={FINAL_MEASURED_PASSES}"
+        )
         final_result = run_worker(
             output_dir=args.output_dir,
             model_path=args.model_path,
@@ -557,6 +715,10 @@ def main() -> int:
             timeout_seconds=args.worker_timeout,
         )
         if final_result.get("status") != "success":
+            log_progress(
+                "benchmark failed because the fresh final measurement "
+                f"failed phase={final_result.get('phase', 'unknown')}"
+            )
             base_result.update(
                 {
                     "status": "failed",
@@ -584,8 +746,16 @@ def main() -> int:
             }
         )
         write_json(result_path, base_result)
+        log_progress(
+            "benchmark complete status=success "
+            f"{aggregate_progress(aggregate)}"
+        )
         return 0
     except BaseException as error:
+        log_progress(
+            f"benchmark failed error_type={type(error).__name__} "
+            f"error={error}"
+        )
         base_result.update(
             {
                 "status": "failed",

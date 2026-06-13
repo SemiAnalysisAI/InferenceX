@@ -210,6 +210,23 @@ rows instead of disappearing from the collection.
 A worker timeout is terminal for that concurrency because orphaned MPI or CUDA
 state cannot be assumed reusable for another fresh-engine attempt.
 
+## Runtime Logging
+
+The live Actions log and `offline_controller_concN.log` now show:
+
+- launcher and benchmark start details
+- corpus preparation start/completion
+- each tuning and final worker start
+- a 60-second heartbeat while a worker remains active
+- the latest explicit worker phase seen at each heartbeat
+- candidate completion/failure and headline metrics
+- final benchmark status
+
+Detailed TRT output remains in each `*_worker.log` inside the debug archive.
+Those logs include engine initialization, warmup, every measured pass,
+perfect-router validation, aggregation, shutdown, and failure tracebacks.
+Progress logging does not alter measured intervals or benchmark settings.
+
 ## Dispatch
 
 Push `trt-bench`, then dispatch the branch version of the existing workflow:

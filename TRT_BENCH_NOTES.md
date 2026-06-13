@@ -156,6 +156,22 @@ Do not call a row valid unless:
 Capacity failures at 512/1024 remain useful rows. They are not successful
 performance measurements.
 
+## Runtime Logging
+
+- The launcher records allocation, timeout, telemetry start, controller start,
+  and artifact finalization.
+- The controller records corpus and tuning phases. While a worker is active,
+  it emits one heartbeat every 60 seconds with the latest explicit worker
+  phase and the worker-log filename.
+- Each worker records engine initialization, warmup, all measured passes,
+  perfect-router validation, aggregation, shutdown, and failure tracebacks.
+- Native TRT output remains in the per-worker log and is not streamed into the
+  controller log. This keeps Actions readable while preserving full debug
+  detail in `offline_debug_concN.tar.gz`.
+- Each pass has one flushed line before its timer starts and one after metrics
+  extraction; neither line is included in the measured `LLM.generate()` wall
+  interval.
+
 ## Run History
 
 ### Run 27461421427
@@ -354,7 +370,22 @@ performance measurements.
 - c1024 prompt construction itself passed: 90 of 1024 prompts used one
   recorded `space` boundary adjustment, none used context-tail trimming, and
   every prompt encoded to exactly 8192 tokens.
-- c512 remains in progress.
+- c512 completed successfully on `b300-016`, Slurm job `20821`.
+- All six c512 tune workers and the fresh final worker completed three
+  measured passes, with 1536 request samples and eight marked perfect-router
+  rank processes each.
+- Winner: `wait60`, balance on, overlap on, CUDA graph on.
+- Final c512 mean token TPOT: `56.142 ms`.
+- Final c512 derived output throughput: `1139.957 tok/s/GPU`.
+- Final c512 wall output throughput: `54.373 tok/s/GPU`.
+- Final c512 observed token yield: `3.196 tokens/step`.
+- Final c512 effective MTP3 acceptance: `73.2%`.
+- Final c512 mean TTFT: `346826.413 ms`.
+- The final c512 shape resolved to DEP8, LM-head TP off, and MTP3. All 512
+  prompts were exactly 8192 tokens; 55 used a recorded whitespace boundary
+  adjustment and none used synthetic padding.
+- `collect-results` completed and published both rows. The workflow conclusion
+  is failure only because c1024 timed out; the c512 performance row is valid.
 
 ### Run 27469092334
 
@@ -377,4 +408,13 @@ performance measurements.
 - Purpose: retry c1024 on a fresh allocation after the `b300-019` RoCE/UCX
   failure. The longer guard avoids confusing a legitimate slow full-shape
   pass with the previous network-induced hang.
-- Status at dispatch: queued.
+- The retry ran on `b300-015`, Slurm job `20831`. It had no UCX, NCCL, OOM,
+  GPU, or capacity error. GPU telemetry showed all eight GPUs still near
+  100% utilization when the 5400-second guard terminated the first
+  `wait30` tune worker.
+- One required warmup-plus-three-pass candidate did not complete in 90
+  minutes. Six tuning candidates plus a fresh final engine therefore cannot
+  fit the current 500-minute workflow and Slurm allocation without changing
+  the benchmark method or making a much larger operational change.
+- Stop c1024 here. It is `unmeasured_runtime_limit`, not
+  `capacity_failure`, and must not be reported as a performance row.

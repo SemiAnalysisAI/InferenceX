@@ -26,6 +26,9 @@ benchmark.
   token IDs.
 - A high-concurrency capacity failure is a valid result row. Unexpected
   low-concurrency failures remain job failures.
+- Preserve the timestamped launcher/controller/worker progress logs. The
+  controller heartbeat should remain low-frequency and must not stream or
+  parse native TRT iteration logs into the Actions log.
 - On runtime errors, retain the result JSON, worker JSON/log, candidate config,
   corpus manifest, perfect-router marker, and GPU metrics.
 - Verify changes with `python -m pytest utils/bench_offline -v`,
