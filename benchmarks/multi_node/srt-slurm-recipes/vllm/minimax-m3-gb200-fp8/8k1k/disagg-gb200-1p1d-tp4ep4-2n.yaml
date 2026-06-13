@@ -6,7 +6,7 @@ name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4ep4-8k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1"
+  container: "nvcr.io#nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1"
   precision: "fp8"
 
 dynamo:

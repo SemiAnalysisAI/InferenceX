@@ -13,7 +13,7 @@ name: "minimax-m3-vllm-agg-gb200-tp8-2n-1k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "nvcr.io/nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1"
+  container: "nvcr.io#nvidia/ai-dynamo/vllm-runtime:1.3.0-minimax-m3-dev.1"
   precision: "fp8"
 
 dynamo:
