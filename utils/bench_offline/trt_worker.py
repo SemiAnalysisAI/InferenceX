@@ -86,6 +86,13 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
         "unique_processes": len(processes),
         "enabled_processes": len(enabled),
         "mpi_entry_processes": len(mpi_entries),
+        "mpi_entry_cute_cache_paths": sorted(
+            {
+                str(row["cute_dsl_cache_dir"])
+                for row in mpi_entries
+                if row.get("cute_dsl_cache_dir")
+            }
+        ),
         "processes": sorted(processes.values(), key=lambda row: row["pid"]),
     }
 
@@ -274,9 +281,21 @@ def main() -> int:
                     "TRT rank entrypoints: "
                     f"{marker['mpi_entry_processes']} rank processes"
                 )
+            expected_cute_cache = os.getenv("CUTE_DSL_CACHE_DIR")
+            if not expected_cute_cache:
+                raise RuntimeError(
+                    "CUTE_DSL_CACHE_DIR is required for fresh TRT engines"
+                )
+            if marker["mpi_entry_cute_cache_paths"] != [expected_cute_cache]:
+                raise RuntimeError(
+                    "Persistent CuTe cache was not installed in every TRT "
+                    "rank entrypoint: "
+                    f"{marker['mpi_entry_cute_cache_paths']!r}"
+                )
             log_progress(
                 "perfect-router validation complete "
-                f"rank_processes={marker['mpi_entry_processes']}"
+                f"rank_processes={marker['mpi_entry_processes']} "
+                f"cute_cache={expected_cute_cache}"
             )
             phase = "engine_shutdown"
             log_progress("engine shutdown start")
@@ -301,6 +320,10 @@ def main() -> int:
                     "source": router_source,
                     "mpi_worker_entry": mpi_worker_entry,
                     "propagation": marker,
+                },
+                "runtime_cache": {
+                    "cute_dsl_cache_dir": expected_cute_cache,
+                    "persistent": bool(expected_cute_cache),
                 },
                 "corpus": corpus_manifest,
             }

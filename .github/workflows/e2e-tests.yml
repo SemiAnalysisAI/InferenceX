@@ -259,6 +259,7 @@ jobs:
       IMAGE: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
       MODEL_PATH: /scratch/models/DeepSeek-V4-Pro
       DATASET_REVISION: 90f0394333616266d9fe85824ceaf505093cbaa5
+      TRT_BENCH_CACHE_ROOT: /data/trtllm-cache/dsv4-c185066-sm100a
       SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
       WORKER_TIMEOUT: ${{ inputs.worker-timeout }}
       PYTHONDONTWRITEBYTECODE: "1"

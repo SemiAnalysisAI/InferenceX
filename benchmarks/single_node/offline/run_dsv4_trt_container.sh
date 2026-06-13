@@ -12,6 +12,7 @@ source /workspace/benchmarks/benchmark_lib.sh
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-3600}"
 BENCH_ID="${BENCH_ID:-conc${CONC}}"
 EXPERIMENT_CONFIG_B64="${EXPERIMENT_CONFIG_B64:-}"
+TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
 EXECUTION_MODE="serial-tuning"
 if [[ -n "$EXPERIMENT_CONFIG_B64" ]]; then
     EXECUTION_MODE="single-candidate"
@@ -41,6 +42,12 @@ finalize() {
     set +e
     log "finalizing benchmark concurrency=$CONC return_code=$rc"
     stop_gpu_monitor
+    if [[ -d "${CUTE_DSL_CACHE_DIR:-}" ]]; then
+        cache_files="$(
+            find "$CUTE_DSL_CACHE_DIR" -type f 2>/dev/null | wc -l
+        )"
+        log "persistent CuTe cache files=$cache_files path=$CUTE_DSL_CACHE_DIR"
+    fi
     if [[ -f "$WORK_DIR/result.json" ]]; then
         cp "$WORK_DIR/result.json" "$RESULT_FILE"
     else
@@ -112,12 +119,18 @@ export TRTLLM_ENABLE_PERFECT_ROUTER=1
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX=/tmp/inferencex-offline-pycache
 export PYTHONPATH="/workspace/utils/bench_offline:${PYTHONPATH:-}"
+export CUTE_DSL_CACHE_DIR="$TRT_BENCH_CACHE_ROOT/cute-dsl"
+# TRT's MPI pool forwards TRTLLM_* variables, so the rank-entry shim restores
+# the unprefixed CuTe variable before importing TRT's worker implementation.
+export TRTLLM_BENCH_CUTE_DSL_CACHE_DIR="$CUTE_DSL_CACHE_DIR"
+mkdir -p "$CUTE_DSL_CACHE_DIR"
 
 log "benchmark start concurrency=$CONC model=$MODEL_PATH"
 log "benchmark id=$BENCH_ID execution=$EXECUTION_MODE"
 log "dataset revision=$DATASET_REVISION path=$DATASET_PATH"
 log "allocation job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE"
 log "worker timeout=${WORKER_TIMEOUT}s work_dir=$WORK_DIR"
+log "persistent CuTe cache path=$CUTE_DSL_CACHE_DIR"
 nvidia-smi
 
 log "starting one-second GPU telemetry"

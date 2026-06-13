@@ -21,6 +21,9 @@ benchmark.
 - Keep legacy tuning limited to six attempts and preserve scheduler-first
   order. Prefer the single-candidate experiment mode for optimization sweeps.
 - Every tuning and final measurement must use a fresh `LLM` instance.
+- Preserve the image-keyed persistent CuTe DSL cache. It may reduce fresh
+  engine startup time, but it must not reuse an `LLM` instance or measured
+  outputs. Verify that all eight MPI marker rows record the same cache path.
 - Do not silently pad prompts, reduce MTP depth, change the MoE backend, or
   switch to HTTP serving to make a run pass. LM-head TP is an explicit
   candidate field and must be recorded in the result.

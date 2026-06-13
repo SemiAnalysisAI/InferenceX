@@ -16,6 +16,7 @@ SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-500}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-3600}"
 BENCH_ID="${BENCH_ID:-conc${CONC}}"
 EXPERIMENT_CONFIG_B64="${EXPERIMENT_CONFIG_B64:-}"
+TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 BENCH_GIT_REVISION="${GITHUB_SHA:-}"
@@ -82,6 +83,9 @@ mkdir -p "$DATASET_ROOT"
     fi
 )
 
+mkdir -p "$TRT_BENCH_CACHE_ROOT/cute-dsl"
+echo "Using persistent TRT cache root: $TRT_BENCH_CACHE_ROOT"
+
 SQUASH_FILE="/data/squash/$(printf '%s' "$IMAGE" | sed 's|[/:@#]|_|g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 (
@@ -134,14 +138,27 @@ if [[ -z "$JOB_ID" ]]; then
     exit 1
 fi
 
+CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/workspace"
+CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"
+CONTAINER_MOUNTS+=",/data/datasets:/data/datasets"
+CONTAINER_MOUNTS+=",$TRT_BENCH_CACHE_ROOT:$TRT_BENCH_CACHE_ROOT"
+SRUN_EXPORTS="ALL,GITHUB_WORKSPACE=/workspace,CONC=$CONC"
+SRUN_EXPORTS+=",BENCH_ID=$BENCH_ID"
+SRUN_EXPORTS+=",EXPERIMENT_CONFIG_B64=$EXPERIMENT_CONFIG_B64"
+SRUN_EXPORTS+=",MODEL_PATH=$MODEL_PATH,DATASET_PATH=$DATASET_PATH"
+SRUN_EXPORTS+=",DATASET_REVISION=$DATASET_REVISION"
+SRUN_EXPORTS+=",WORKER_TIMEOUT=$WORKER_TIMEOUT,IMAGE=$IMAGE"
+SRUN_EXPORTS+=",TRT_BENCH_GIT_REVISION=$BENCH_GIT_REVISION"
+SRUN_EXPORTS+=",TRT_BENCH_CACHE_ROOT=$TRT_BENCH_CACHE_ROOT"
+
 srun \
     --jobid="$JOB_ID" \
     --mpi=none \
     --kill-on-bad-exit=1 \
     --container-image="$SQUASH_FILE" \
-    --container-mounts="$GITHUB_WORKSPACE:/workspace,/scratch/models:/scratch/models,/data/datasets:/data/datasets" \
+    --container-mounts="$CONTAINER_MOUNTS" \
     --no-container-mount-home \
     --container-workdir=/workspace \
     --no-container-entrypoint \
-    --export="ALL,GITHUB_WORKSPACE=/workspace,CONC=$CONC,BENCH_ID=$BENCH_ID,EXPERIMENT_CONFIG_B64=$EXPERIMENT_CONFIG_B64,MODEL_PATH=$MODEL_PATH,DATASET_PATH=$DATASET_PATH,DATASET_REVISION=$DATASET_REVISION,WORKER_TIMEOUT=$WORKER_TIMEOUT,IMAGE=$IMAGE,TRT_BENCH_GIT_REVISION=$BENCH_GIT_REVISION" \
+    --export="$SRUN_EXPORTS" \
     bash benchmarks/single_node/offline/run_dsv4_trt_container.sh

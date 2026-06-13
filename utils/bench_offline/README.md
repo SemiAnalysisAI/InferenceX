@@ -14,12 +14,13 @@ On `trt-bench`, that workflow is replaced with this offline-only chain:
 2. Fan out at most ten `b300` runner jobs in parallel.
 3. Allocate one exclusive B300 Slurm node with eight GPUs.
 4. Run the pinned TRT image with `/scratch/models/DeepSeek-V4-Pro`.
-5. Build an exact 8192-token InfiniteBench corpus.
-6. For an experiment entry, start one fresh engine, warm it up once, and
+5. Reuse an image-keyed CuTe DSL compile cache from shared `/data`.
+6. Build an exact 8192-token InfiniteBench corpus.
+7. For an experiment entry, start one fresh engine, warm it up once, and
    measure one pass. The legacy mode still tunes at most six fresh engines
    and repeats the winner on another fresh engine.
-7. Upload one result and debug bundle per experiment.
-8. Collect the rows with `utils/bench_offline/summarize.py`.
+8. Upload one result and debug bundle per experiment.
+9. Collect the rows with `utils/bench_offline/summarize.py`.
 
 There is no server, HTTP client, request-rate generator, matrix config,
 `process_result.py`, `summarize.py`, or generic `collect-results` stage in this
@@ -79,6 +80,16 @@ replaces TRT's pinned `GenerationExecutorProxy.worker_main` reference with
 writes a marker before each rank imports TRT's real model worker. The benchmark
 requires eight marked rank entrypoints. `sitecustomize.py` provides an
 additional early-process alias but is not the primary proof.
+
+Fresh TRT engines spend most startup time compiling Blackwell CuTe DSL
+kernels, not running the measured pass. The workflow mounts the image-keyed
+shared cache
+`/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl` and sets
+`CUTE_DSL_CACHE_DIR`. Because TRT's MPI pool filters unprefixed variables,
+`TRTLLM_BENCH_CUTE_DSL_CACHE_DIR` carries the path into
+`trt_mpi_entry.worker_main`, which restores it before importing TRT on every
+rank. Result markers must prove all eight ranks used the same cache path.
+Changing the TRT image requires a new cache-key directory.
 
 Perfect routing intentionally changes expert selection, so generated text is
 not an accuracy result. This harness is performance-only, matching the

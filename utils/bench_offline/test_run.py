@@ -115,12 +115,19 @@ def test_mpi_entry_sets_router_before_real_worker(
         worker_module,
     )
     marker = tmp_path / "marker.jsonl"
+    cache_dir = tmp_path / "cute-cache"
     monkeypatch.setenv("TRTLLM_ENABLE_PERFECT_ROUTER", "1")
     monkeypatch.setenv("TRTLLM_PERFECT_ROUTER_MARKER", str(marker))
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_CUTE_DSL_CACHE_DIR",
+        str(cache_dir),
+    )
     monkeypatch.delenv("ENABLE_PERFECT_ROUTER", raising=False)
+    monkeypatch.delenv("CUTE_DSL_CACHE_DIR", raising=False)
 
     assert worker_main(1, value=2) == "done"
     assert calls == [((1,), {"value": 2})]
     row = json.loads(marker.read_text(encoding="utf-8"))
     assert row["perfect_router"] == "1"
+    assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["source"] == "trt_mpi_entry"

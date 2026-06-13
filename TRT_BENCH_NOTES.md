@@ -47,6 +47,11 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
   runs used three passes after one-pass tuning showed output-dependent MTP
   variation; confirm any winner with a separate repeat before treating a
   marginal difference as stable.
+- Fresh engine startup is dominated by model initialization plus CuTe DSL
+  compilation. The branch now mounts the image-keyed persistent cache
+  `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl`. The direct
+  `CUTE_DSL_CACHE_DIR` variable and its `TRTLLM_*` forwarding alias must reach
+  all eight MPI rank markers.
 
 Do not assume a newer TRT release has the same field names. If the image
 changes, inspect the exact source first.
@@ -72,7 +77,7 @@ stricter boundaries:
 2. Exact 8192-token prompt construction with the staged model tokenizer.
 3. TRT argument names accepted by the pinned image.
 4. Exact-concurrency CUDA graph memory at 512/1024.
-5. Three-pass final run fitting the per-worker timeout.
+5. One full-shape warmup plus one measured pass fitting the worker timeout.
 6. `/scratch/models/DeepSeek-V4-Pro` being staged on the selected node.
 7. Shared `/data/datasets` and `/data/squash` permissions.
 
@@ -175,6 +180,7 @@ performance measurements.
   phase and the worker-log filename.
 - Each worker records engine initialization, warmup, all measured passes,
   perfect-router validation, aggregation, shutdown, and failure tracebacks.
+- Launcher finalization reports the persistent CuTe cache path and file count.
 - Native TRT output remains in the per-worker log and is not streamed into the
   controller log. This keeps Actions readable while preserving full debug
   detail in `offline_debug_concN.tar.gz`.
