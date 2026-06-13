@@ -3659,3 +3659,13 @@
     - "GB300 recipes require srun_options mem=0 (CW DefMemPerCPU=4096 causes host-RAM OOM) and omit safetensors-load-strategy prefetch (~600 GB host-memory limit)"
     - "--block-size 128 mandatory everywhere (MSA sparse/index cache alignment); --language-model-only for text-only benchmarks"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1735
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on B200 (model: MiniMaxAI/MiniMax-M3-MXFP8, 427B total / 26B active MoE with MSA sparse attention)"
+    - "Image: vllm/vllm-openai:minimax-m3 (M3 support is unmerged upstream; the dedicated image is built from the m3_release branch, vllm-project/vllm#45381)"
+    - "--block-size 128 is mandatory (MSA sparse/index cache alignment); --language-model-only skips the vision encoder for text-only throughput; conc-scaled --max-cudagraph-capture-size"
+    - "Layouts: TP8 and TP4 (latency), TP4+EP4 / TP8+EP8 (TEP throughput), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
+    - "Weights are not SRE-staged: launch_b200-dgxc.sh adds a MODEL_PATH case for /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8; runners.yaml adds a b200-dgxc runner-type group"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1723
