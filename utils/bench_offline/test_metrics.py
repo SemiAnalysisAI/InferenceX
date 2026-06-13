@@ -149,3 +149,15 @@ def test_huawei_ratio_is_not_claimed_for_different_mtp_depth():
     assert comparison["comparable"] is False
     assert comparison["b300_to_huawei_published_output_ratio"] is None
     assert comparison["b300_to_huawei_step_rate_ratio"] is None
+
+
+def test_huawei_ratio_is_not_claimed_for_tp4():
+    comparison = huawei_comparison(
+        concurrency=32,
+        b300_output_tput_per_gpu=400.0,
+        b300_step_tput_per_gpu=120.0,
+        observed_tokens_per_step=3.0,
+        mtp_draft_tokens=3,
+        effective_parallelism="TP4",
+    )
+    assert comparison is None

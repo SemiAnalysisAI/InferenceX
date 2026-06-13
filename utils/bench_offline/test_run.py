@@ -5,13 +5,28 @@ import time
 from types import ModuleType
 
 from run import (
+    ALLOWED_CONCURRENCIES,
     classify_failure,
     git_revision,
     latest_worker_progress,
     wait_for_worker_process,
 )
 from trt_mpi_entry import worker_main
-from trt_worker import measured_pass_count
+from trt_worker import measured_pass_count, read_perfect_router_marker
+
+
+def test_controller_accepts_workflow_concurrencies():
+    assert ALLOWED_CONCURRENCIES == (
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        1024,
+    )
 
 
 def test_classify_graph_failure_before_generic_runtime():
@@ -131,3 +146,27 @@ def test_mpi_entry_sets_router_before_real_worker(
     assert row["perfect_router"] == "1"
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["source"] == "trt_mpi_entry"
+
+
+def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
+    marker = tmp_path / "marker.jsonl"
+    rows = [
+        {
+            "pid": 100 + rank,
+            "rank": str(rank),
+            "perfect_router": "1",
+            "cute_dsl_cache_dir": "/cache",
+            "source": "trt_mpi_entry",
+        }
+        for rank in range(4)
+    ]
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+
+    parsed = read_perfect_router_marker(marker)
+    assert parsed["mpi_entry_processes"] == 4
+    assert parsed["mpi_entry_ranks"] == [0, 1, 2, 3]
+    assert parsed["mpi_entry_cute_cache_processes"] == 4
+    assert parsed["mpi_entry_cute_cache_paths"] == ["/cache"]

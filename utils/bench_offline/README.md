@@ -28,7 +28,8 @@ path. `LLM.generate()` receives one fixed batch of token-ID prompts directly.
 
 ## Pinned Inputs
 
-- Hardware: one B300 node, eight GPUs.
+- Hardware: one B300 node, eight GPUs allocated; four or eight are active
+  depending on the explicit recipe shape.
 - Image:
   `ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066`
 - TRT source identity: `c185066`.
@@ -37,12 +38,14 @@ path. `LLM.generate()` receives one fixed batch of token-ID prompts directly.
   `longbook_qa_eng.jsonl`.
 - Dataset revision:
   `90f0394333616266d9fe85824ceaf505093cbaa5`.
-- Concurrencies: `8,32,64,128,256,512,1024`.
+- Concurrencies: `4,8,16,32,64,128,256,512,1024`.
 - Prompt length: exactly 8192 real token IDs, with no padded IDs.
 - Generated output: exactly 625 tokens per request with EOS ignored.
 - Speculation: fixed MTP3.
-- Parallelism for Huawei comparison: fixed DEP8; LM-head TP is an explicit
-  candidate toggle.
+- Huawei-primary parallelism: DEP8; LM-head TP is an explicit candidate
+  toggle.
+- Secondary production-recipe shapes: TP4 and DEP4. They remain offline but
+  do not receive Huawei comparison ratios.
 - Sampling: temperature `1.0`, top-p `1.0`, top-k `0`.
 - Pinned TRT PyTorch sampler seed: one engine-global generator seeded to
   `42`.
@@ -61,16 +64,21 @@ tokens.
 
 ## Parallelism
 
-TRT uses `tensor_parallel_size=8` to create its eight-rank world, but the
-effective model execution is labeled `DEP8`:
+The candidate records one of three checked-in B300 recipe shapes:
 
-- attention data parallel: enabled
-- expert parallel size: 8
-- MoE tensor parallel size: 1
-- LM-head TP in attention DP: recorded per candidate
-- MTP max draft length: 3
+- `DEP8`: eight active GPUs, attention DP on, expert parallel 8, MoE TP 1.
+  This is the Huawei-primary shape.
+- `TP4`: four active GPUs, attention DP off, expert parallel 1, MoE TP 4.
+  This is the low/mid-concurrency production recipe.
+- `DEP4`: four active GPUs, attention DP on, expert parallel 4, MoE TP 1.
+  This is the production attention-DP recipe.
+
+LM-head TP is recorded per attention-DP candidate. MTP max draft length stays
+at three unless a separately labeled non-comparable experiment changes it.
 
 The worker validates these resolved TRT arguments after every engine starts.
+It also requires exactly ranks `0..N-1` for the selected active-GPU count;
+an eight-rank launch cannot be mislabeled as TP4 or DEP4.
 
 Perfect routing is enabled with `ENABLE_PERFECT_ROUTER=1`. TRT's MPI pool only
 explicitly forwards `TRTLLM_*` and `TLLM_*` variables, so
@@ -78,7 +86,7 @@ explicitly forwards `TRTLLM_*` and `TLLM_*` variables, so
 replaces TRT's pinned `GenerationExecutorProxy.worker_main` reference with
 `trt_mpi_entry.worker_main`. That shim recreates the unprefixed variable and
 writes a marker before each rank imports TRT's real model worker. The benchmark
-requires eight marked rank entrypoints. `sitecustomize.py` provides an
+requires one marked entrypoint per active rank. `sitecustomize.py` provides an
 additional early-process alias but is not the primary proof.
 
 Fresh TRT engines spend most startup time compiling Blackwell CuTe DSL
@@ -88,7 +96,7 @@ shared cache
 `CUTE_DSL_CACHE_DIR`. Because TRT's MPI pool filters unprefixed variables,
 `TRTLLM_BENCH_CUTE_DSL_CACHE_DIR` carries the path into
 `trt_mpi_entry.worker_main`, which restores it before importing TRT on every
-rank. Result markers must prove all eight ranks used the same cache path.
+rank. Result markers must prove all active ranks used the same cache path.
 Changing the TRT image requires a new cache-key directory.
 
 Perfect routing intentionally changes expert selection, so generated text is
@@ -140,7 +148,7 @@ uploading generated text or full token arrays.
 `derived_output_tput_per_gpu` is:
 
 ```text
-concurrency / mean_token_tpot_seconds / 8
+concurrency / mean_token_tpot_seconds / active_gpu_count
 ```
 
 `mean_step_tpot_ms` is the arithmetic mean of:
@@ -152,13 +160,13 @@ decode_window / decode_iterations
 `derived_step_tput_per_gpu` is:
 
 ```text
-concurrency / mean_step_tpot_seconds / 8
+concurrency / mean_step_tpot_seconds / active_gpu_count
 ```
 
 `wall_output_tput_per_gpu` is:
 
 ```text
-all generated output tokens / total measured batch wall time / 8
+all generated output tokens / total measured batch wall time / active_gpu_count
 ```
 
 When TRT populates its speculative counters, raw `acceptance_rate` is
@@ -231,6 +239,15 @@ the batch-per-chip matches for Huawei. It tests:
 - attention-DP balance on versus off
 - the production attention-DP knobs projected onto DEP8, including omitted
   `timeout_iters`; this is not the normal recipe's TP4 parallelism
+
+After validating a DEP8 candidate, use separate experiment IDs for TP4/DEP4
+recipe tests. Their result rows record active GPU count and parallelism, and
+their Huawei ratios remain null by construction.
+
+The checked-in second-stage matrix is
+`utils/bench_offline/b300_stage2_experiments.json`. It repeats the c32 DEP8
+control and LM-head-TP candidate on fresh engines, then tests TP4 at c8/c32
+and DEP4 scheduler variants at c64.
 
 The legacy concurrency-only mode remains available for reproducing the older
 serial tuner:
@@ -364,8 +381,8 @@ jq '.rows' ./offline-summary/offline_aggregate.json
    traceback identify whether failure occurred in engine init, warmup,
    generation, metrics, or shutdown.
 5. Match it to the adjacent worker log and candidate JSON.
-6. Confirm the perfect-router marker contains eight
-   `source=trt_mpi_entry` PIDs.
+6. Confirm the perfect-router marker contains one
+   `source=trt_mpi_entry` PID per active GPU.
 7. Check `gpu_metrics` and Slurm logs for node-level OOM or GPU faults.
 
 Known interpretations:
@@ -373,8 +390,8 @@ Known interpretations:
 - `cuda_graph`: controller retries the same candidate graph-off.
 - `oom` or `capacity` during init/warmup at 512/1024: expected row-level
   capacity result.
-- fewer than eight `trt_mpi_entry` perfect-router PIDs: MPI entry patch or
-  environment propagation failed.
+- fewer `trt_mpi_entry` perfect-router PIDs than active GPUs: MPI entry patch
+  or environment propagation failed.
 - resolved parallelism mismatch: TRT changed or ignored an argument; do not
   accept the numbers.
 - output token count other than 625: `ignore_eos` or sampling behavior changed;

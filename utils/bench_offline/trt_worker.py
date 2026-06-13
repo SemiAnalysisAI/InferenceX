@@ -21,7 +21,6 @@ from trt_config import (
     SAMPLING_TEMPERATURE,
     SAMPLING_TOP_K,
     SAMPLING_TOP_P,
-    WORLD_SIZE,
     CandidateConfig,
     build_llm_kwargs,
     resolved_parallelism,
@@ -81,16 +80,25 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
     mpi_entries = [
         row for row in enabled if row.get("source") == "trt_mpi_entry"
     ]
+    mpi_entry_ranks = sorted(
+        int(row["rank"])
+        for row in mpi_entries
+        if row.get("rank") is not None
+    )
+    mpi_entries_with_cache = [
+        row for row in mpi_entries if row.get("cute_dsl_cache_dir")
+    ]
     return {
         "marker_path": str(path),
         "unique_processes": len(processes),
         "enabled_processes": len(enabled),
         "mpi_entry_processes": len(mpi_entries),
+        "mpi_entry_ranks": mpi_entry_ranks,
+        "mpi_entry_cute_cache_processes": len(mpi_entries_with_cache),
         "mpi_entry_cute_cache_paths": sorted(
             {
                 str(row["cute_dsl_cache_dir"])
-                for row in mpi_entries
-                if row.get("cute_dsl_cache_dir")
+                for row in mpi_entries_with_cache
             }
         ),
         "processes": sorted(processes.values(), key=lambda row: row["pid"]),
@@ -140,7 +148,7 @@ def generate_pass(
         outputs,
         wall_seconds=wall_seconds,
         expected_output_tokens=OUTPUT_TOKENS,
-        num_gpus=WORLD_SIZE,
+        num_gpus=candidate.active_gpu_count,
         max_draft_tokens=candidate.mtp_draft_tokens,
     )
     aggregate = summary["aggregate"]
@@ -204,6 +212,7 @@ def main() -> int:
         log_progress(
             f"worker start mode={args.mode} candidate={candidate.name} "
             f"concurrency={concurrency} measured_passes={pass_count} "
+            f"parallelism={candidate.effective_parallelism} "
             f"mtp={candidate.mtp_draft_tokens} "
             "lm_head_tp="
             f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'}"
@@ -275,16 +284,34 @@ def main() -> int:
                 os.environ["TRTLLM_PERFECT_ROUTER_MARKER"]
             )
             marker = read_perfect_router_marker(marker_path)
-            if marker["mpi_entry_processes"] < WORLD_SIZE:
+            expected_ranks = list(range(candidate.active_gpu_count))
+            if marker["mpi_entry_processes"] != candidate.active_gpu_count:
                 raise RuntimeError(
-                    "Perfect-router alias was not installed before all eight "
-                    "TRT rank entrypoints: "
-                    f"{marker['mpi_entry_processes']} rank processes"
+                    "TRT spawned an unexpected number of active rank "
+                    "entrypoints: "
+                    f"{marker['mpi_entry_processes']} != "
+                    f"{candidate.active_gpu_count}"
+                )
+            if marker["mpi_entry_ranks"] != expected_ranks:
+                raise RuntimeError(
+                    "TRT active rank IDs do not match the requested "
+                    f"topology: {marker['mpi_entry_ranks']!r} != "
+                    f"{expected_ranks!r}"
                 )
             expected_cute_cache = os.getenv("CUTE_DSL_CACHE_DIR")
             if not expected_cute_cache:
                 raise RuntimeError(
                     "CUTE_DSL_CACHE_DIR is required for fresh TRT engines"
+                )
+            if (
+                marker["mpi_entry_cute_cache_processes"]
+                != candidate.active_gpu_count
+            ):
+                raise RuntimeError(
+                    "Persistent CuTe cache was not installed in every TRT "
+                    "rank entrypoint: "
+                    f"{marker['mpi_entry_cute_cache_processes']} != "
+                    f"{candidate.active_gpu_count}"
                 )
             if marker["mpi_entry_cute_cache_paths"] != [expected_cute_cache]:
                 raise RuntimeError(
@@ -295,6 +322,7 @@ def main() -> int:
             log_progress(
                 "perfect-router validation complete "
                 f"rank_processes={marker['mpi_entry_processes']} "
+                f"ranks={marker['mpi_entry_ranks']} "
                 f"cute_cache={expected_cute_cache}"
             )
             phase = "engine_shutdown"
@@ -303,7 +331,10 @@ def main() -> int:
         log_progress("engine shutdown complete")
         phase = "aggregation"
         log_progress(f"aggregating {len(measured_passes)} measured passes")
-        aggregate = aggregate_passes(measured_passes, WORLD_SIZE)
+        aggregate = aggregate_passes(
+            measured_passes,
+            candidate.active_gpu_count,
+        )
         result.update(
             {
                 "status": "success",

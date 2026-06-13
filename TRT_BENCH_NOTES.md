@@ -5,7 +5,8 @@ These notes are for the next agent running and debugging `trt-bench`.
 ## Scope
 
 - Branch-only, never merge to `main`.
-- B300, one node, eight GPUs.
+- B300, one node, eight GPUs allocated. DEP8 uses all eight; TP4/DEP4
+  production-recipe experiments use four active GPUs.
 - TensorRT-LLM only.
 - Offline `LLM.generate()`, no server or generic InferenceX processing.
 - Optimization workflows may use up to ten parallel single-node B300 jobs.
@@ -51,7 +52,7 @@ The image tag identifies TensorRT-LLM source commit `c185066`.
   compilation. The branch now mounts the image-keyed persistent cache
   `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl`. The direct
   `CUTE_DSL_CACHE_DIR` variable and its `TRTLLM_*` forwarding alias must reach
-  all eight MPI rank markers.
+  every active MPI rank marker.
 
 Do not assume a newer TRT release has the same field names. If the image
 changes, inspect the exact source first.
@@ -72,8 +73,9 @@ stricter boundaries:
 
 ## First-Run Risks
 
-1. Perfect-router alias propagation into all MPI ranks. The marker must show
-   eight enabled `source=trt_mpi_entry` PIDs.
+1. Perfect-router alias propagation into all active MPI ranks. DEP8 must show
+   exactly ranks `0..7`; TP4/DEP4 must show exactly ranks `0..3`. Every rank
+   must record the same persistent CuTe cache path.
 2. Exact 8192-token prompt construction with the staged model tokenizer.
 3. TRT argument names accepted by the pinned image.
 4. Exact-concurrency CUDA graph memory at 512/1024.
@@ -155,8 +157,9 @@ Do not call a row valid unless:
 - status is `success`
 - all prompts are exactly 8192 tokens
 - every request emits exactly 625 tokens
-- resolved shape is DEP8/MTP3 and LM-head TP matches the candidate
-- perfect-router propagation validation passes
+- resolved shape matches the candidate and MTP3; LM-head TP matches the
+  candidate
+- perfect-router propagation validation passes for every active rank
 - a single-candidate experiment contains one warmup and one measured pass
   from one fresh engine, with `concurrency` request samples
 - legacy tuning also contains one pass per successful candidate and a fresh
@@ -166,7 +169,7 @@ Do not call a row valid unless:
 - token/step and effective acceptance are present
 - raw TRT acceptance is either populated or explicitly marked unavailable
 - Huawei output and step-rate ratios are present only for matching DEP8/MTP3
-  c8/c32/c64 rows
+  c8/c32/c64 rows; TP4/DEP4 rows must keep them null
 
 Capacity failures at 512/1024 remain useful rows. They are not successful
 performance measurements.
@@ -222,6 +225,21 @@ gh api -X POST \
 
 The collector keys rows by experiment ID, so repeated concurrencies are
 valid. Artifacts are named `offline-trt-job-EXPERIMENT_ID`.
+
+The checked-in second-stage matrix repeats the c32 DEP8 control and LM-head-TP
+candidate, then tests the production TP4 and DEP4 shapes:
+
+```bash
+EXPERIMENTS="$(jq -c . utils/bench_offline/b300_stage2_experiments.json)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f 'inputs[ref]=trt-bench' \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline stage2 one-pass' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
 
 ## Huawei Comparison Audit
 

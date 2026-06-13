@@ -224,6 +224,7 @@ def aggregate_requests(
     return {
         "request_samples": len(request_metrics),
         "concurrency": active_concurrency,
+        "active_gpu_count": num_gpus,
         "output_sequence_sha256": _sequence_sha256(request_metrics),
         "wall_seconds": wall_seconds,
         "mean_token_tpot_ms": mean_tpot * 1000.0,
@@ -335,7 +336,10 @@ def huawei_comparison(
     b300_step_tput_per_gpu: float,
     observed_tokens_per_step: float,
     mtp_draft_tokens: int,
+    effective_parallelism: str = "DEP8",
 ) -> dict[str, Any] | None:
+    if effective_parallelism != "DEP8":
+        return None
     reference = HUAWEI_REFERENCE.get(concurrency)
     if reference is None:
         return None
@@ -361,6 +365,7 @@ def huawei_comparison(
             if comparable
             else "MTP depth differs from the Huawei reference"
         ),
+        "b300_effective_parallelism": effective_parallelism,
         "published_acceptance_rate": (
             published_accepted / published_draft_tokens
         ),

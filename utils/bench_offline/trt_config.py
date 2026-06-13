@@ -22,6 +22,48 @@ MIN_WINNER_IMPROVEMENT = 0.03
 
 
 @dataclass(frozen=True)
+class ParallelismConfig:
+    name: str
+    label: str
+    world_size: int
+    tensor_parallel_size: int
+    moe_expert_parallel_size: int
+    moe_tensor_parallel_size: int
+    enable_attention_dp: bool
+
+
+PARALLELISM_CONFIGS = {
+    "dep8": ParallelismConfig(
+        name="dep8",
+        label="DEP8",
+        world_size=8,
+        tensor_parallel_size=8,
+        moe_expert_parallel_size=8,
+        moe_tensor_parallel_size=1,
+        enable_attention_dp=True,
+    ),
+    "tp4": ParallelismConfig(
+        name="tp4",
+        label="TP4",
+        world_size=4,
+        tensor_parallel_size=4,
+        moe_expert_parallel_size=1,
+        moe_tensor_parallel_size=4,
+        enable_attention_dp=False,
+    ),
+    "dep4": ParallelismConfig(
+        name="dep4",
+        label="DEP4",
+        world_size=4,
+        tensor_parallel_size=4,
+        moe_expert_parallel_size=4,
+        moe_tensor_parallel_size=1,
+        enable_attention_dp=True,
+    ),
+}
+
+
+@dataclass(frozen=True)
 class CandidateConfig:
     name: str
     batching_wait_iters: int
@@ -31,6 +73,7 @@ class CandidateConfig:
     cuda_graph: bool = True
     enable_lm_head_tp_in_adp: bool = False
     mtp_draft_tokens: int = MTP_DRAFT_TOKENS
+    parallelism: str = "dep8"
     kind: str = "scheduler"
 
     def __post_init__(self) -> None:
@@ -72,6 +115,33 @@ class CandidateConfig:
                 raise ValueError(f"{field_name} must be boolean")
         if not isinstance(self.kind, str):
             raise ValueError("kind must be a string")
+        if (
+            not isinstance(self.parallelism, str)
+            or self.parallelism not in PARALLELISM_CONFIGS
+        ):
+            raise ValueError(
+                "parallelism must be one of "
+                f"{sorted(PARALLELISM_CONFIGS)}"
+            )
+        if (
+            self.enable_lm_head_tp_in_adp
+            and not self.parallelism_config.enable_attention_dp
+        ):
+            raise ValueError(
+                "enable_lm_head_tp_in_adp requires attention DP"
+            )
+
+    @property
+    def parallelism_config(self) -> ParallelismConfig:
+        return PARALLELISM_CONFIGS[self.parallelism]
+
+    @property
+    def active_gpu_count(self) -> int:
+        return self.parallelism_config.world_size
+
+    @property
+    def effective_parallelism(self) -> str:
+        return self.parallelism_config.label
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -135,17 +205,22 @@ def build_llm_kwargs(
     concurrency: int,
     candidate: CandidateConfig,
 ) -> dict[str, Any]:
+    parallelism = candidate.parallelism_config
     kwargs: dict[str, Any] = {
         "model": model_path,
         "backend": "pytorch",
         "trust_remote_code": True,
-        # TRT uses TP size to establish the eight-rank world. Attention and
-        # expert execution are data/expert parallel below.
-        "tensor_parallel_size": WORLD_SIZE,
-        "moe_expert_parallel_size": WORLD_SIZE,
-        "moe_tensor_parallel_size": 1,
-        "enable_attention_dp": True,
-        "enable_lm_head_tp_in_adp": candidate.enable_lm_head_tp_in_adp,
+        "tensor_parallel_size": parallelism.tensor_parallel_size,
+        "moe_expert_parallel_size": (
+            parallelism.moe_expert_parallel_size
+        ),
+        "moe_tensor_parallel_size": parallelism.moe_tensor_parallel_size,
+        "enable_attention_dp": parallelism.enable_attention_dp,
+        "enable_lm_head_tp_in_adp": (
+            candidate.enable_lm_head_tp_in_adp
+            if parallelism.enable_attention_dp
+            else False
+        ),
         "max_batch_size": max_batch_size(concurrency),
         "max_seq_len": MAX_SEQ_LEN,
         "max_num_tokens": max_num_tokens(
@@ -158,14 +233,12 @@ def build_llm_kwargs(
         "stream_interval": 100,
         "num_postprocess_workers": 4,
         "disable_overlap_scheduler": not candidate.overlap_scheduler,
-        "attention_dp_config": {
-            "batching_wait_iters": candidate.batching_wait_iters,
-            "enable_balance": candidate.attention_dp_balance,
-        },
         "kv_cache_config": {
             "tokens_per_block": 128,
             "dtype": "fp8",
-            "free_gpu_memory_fraction": 0.60,
+            "free_gpu_memory_fraction": (
+                0.60 if parallelism.enable_attention_dp else 0.90
+            ),
             "enable_block_reuse": False,
         },
         "moe_config": {
@@ -177,7 +250,15 @@ def build_llm_kwargs(
             "max_draft_len": candidate.mtp_draft_tokens,
         },
     }
-    if candidate.attention_dp_timeout_iters is not None:
+    if parallelism.enable_attention_dp:
+        kwargs["attention_dp_config"] = {
+            "batching_wait_iters": candidate.batching_wait_iters,
+            "enable_balance": candidate.attention_dp_balance,
+        }
+    if (
+        parallelism.enable_attention_dp
+        and candidate.attention_dp_timeout_iters is not None
+    ):
         kwargs["attention_dp_config"]["timeout_iters"] = (
             candidate.attention_dp_timeout_iters
         )
@@ -230,6 +311,7 @@ def resolved_parallelism(
 ) -> dict[str, Any]:
     if candidate is None:
         candidate = CandidateConfig(name="default", batching_wait_iters=30)
+    expected_parallelism = candidate.parallelism_config
     parallel = llm_args.parallel_config
     resolved = {
         "world_size": int(parallel.world_size),
@@ -238,17 +320,27 @@ def resolved_parallelism(
         "moe_tensor_parallel_size": int(parallel.moe_tp_size),
         "enable_attention_dp": bool(parallel.enable_attention_dp),
         "enable_lm_head_tp_in_adp": bool(
-            parallel.enable_lm_head_tp_in_adp
+            getattr(parallel, "enable_lm_head_tp_in_adp", False)
         ),
-        "effective_parallelism": "DEP8",
+        "effective_parallelism": expected_parallelism.label,
     }
     expected = {
-        "world_size": WORLD_SIZE,
-        "tensor_parallel_size": WORLD_SIZE,
-        "moe_expert_parallel_size": WORLD_SIZE,
-        "moe_tensor_parallel_size": 1,
-        "enable_attention_dp": True,
-        "enable_lm_head_tp_in_adp": candidate.enable_lm_head_tp_in_adp,
+        "world_size": expected_parallelism.world_size,
+        "tensor_parallel_size": (
+            expected_parallelism.tensor_parallel_size
+        ),
+        "moe_expert_parallel_size": (
+            expected_parallelism.moe_expert_parallel_size
+        ),
+        "moe_tensor_parallel_size": (
+            expected_parallelism.moe_tensor_parallel_size
+        ),
+        "enable_attention_dp": expected_parallelism.enable_attention_dp,
+        "enable_lm_head_tp_in_adp": (
+            candidate.enable_lm_head_tp_in_adp
+            if expected_parallelism.enable_attention_dp
+            else False
+        ),
     }
     for key, expected_value in expected.items():
         if resolved[key] != expected_value:

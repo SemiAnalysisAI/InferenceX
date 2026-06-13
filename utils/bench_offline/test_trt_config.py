@@ -1,3 +1,5 @@
+import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -72,6 +74,51 @@ def test_candidate_can_use_trt_default_attention_dp_timeout():
     assert "timeout_iters" not in kwargs["attention_dp_config"]
 
 
+def test_tp4_uses_four_active_gpus_without_attention_dp():
+    candidate = CandidateConfig(
+        name="tp4",
+        batching_wait_iters=0,
+        parallelism="tp4",
+    )
+    kwargs = build_llm_kwargs("/model", 32, candidate)
+    assert candidate.active_gpu_count == 4
+    assert candidate.effective_parallelism == "TP4"
+    assert kwargs["tensor_parallel_size"] == 4
+    assert kwargs["moe_expert_parallel_size"] == 1
+    assert kwargs["moe_tensor_parallel_size"] == 4
+    assert kwargs["enable_attention_dp"] is False
+    assert kwargs["enable_lm_head_tp_in_adp"] is False
+    assert "attention_dp_config" not in kwargs
+    assert kwargs["kv_cache_config"]["free_gpu_memory_fraction"] == 0.90
+
+
+def test_dep4_uses_four_active_attention_dp_ranks():
+    candidate = CandidateConfig(
+        name="dep4",
+        batching_wait_iters=30,
+        enable_lm_head_tp_in_adp=True,
+        parallelism="dep4",
+    )
+    kwargs = build_llm_kwargs("/model", 64, candidate)
+    assert candidate.active_gpu_count == 4
+    assert candidate.effective_parallelism == "DEP4"
+    assert kwargs["tensor_parallel_size"] == 4
+    assert kwargs["moe_expert_parallel_size"] == 4
+    assert kwargs["moe_tensor_parallel_size"] == 1
+    assert kwargs["enable_attention_dp"] is True
+    assert kwargs["enable_lm_head_tp_in_adp"] is True
+
+
+def test_lm_head_tp_requires_attention_dp():
+    with pytest.raises(ValueError, match="requires attention DP"):
+        CandidateConfig(
+            name="invalid",
+            batching_wait_iters=0,
+            enable_lm_head_tp_in_adp=True,
+            parallelism="tp4",
+        )
+
+
 def test_candidate_name_must_be_filename_safe():
     with pytest.raises(ValueError, match="Invalid candidate name"):
         CandidateConfig(name="../escape", batching_wait_iters=30)
@@ -111,3 +158,51 @@ def test_resolved_parallelism_accepts_candidate_lm_head_tp():
     )
     resolved = resolved_parallelism(llm_args, candidate)
     assert resolved["enable_lm_head_tp_in_adp"] is True
+
+
+def test_resolved_parallelism_accepts_tp4():
+    candidate = CandidateConfig(
+        name="tp4",
+        batching_wait_iters=0,
+        parallelism="tp4",
+    )
+    llm_args = SimpleNamespace(
+        parallel_config=SimpleNamespace(
+            world_size=4,
+            tp_size=4,
+            moe_ep_size=1,
+            moe_tp_size=4,
+            enable_attention_dp=False,
+            enable_lm_head_tp_in_adp=False,
+        ),
+        speculative_config=SimpleNamespace(max_draft_len=3),
+    )
+    resolved = resolved_parallelism(llm_args, candidate)
+    assert resolved["effective_parallelism"] == "TP4"
+
+
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "b300_huawei_experiments.json",
+        "b300_stage2_experiments.json",
+    ),
+)
+def test_checked_in_experiment_matrices_are_valid(filename):
+    path = Path(__file__).with_name(filename)
+    experiments = json.loads(path.read_text(encoding="utf-8"))
+    assert 1 <= len(experiments) <= 10
+    assert len({item["id"] for item in experiments}) == len(experiments)
+    for experiment in experiments:
+        assert experiment["concurrency"] in {
+            4,
+            8,
+            16,
+            32,
+            64,
+            128,
+            256,
+            512,
+            1024,
+        }
+        CandidateConfig.from_dict(experiment["candidate"])

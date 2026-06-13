@@ -9,6 +9,8 @@ def test_summary_explains_offline_units():
             {
                 "experiment_id": "c8-lmtp",
                 "concurrency": 8,
+                "active_gpu_count": 8,
+                "effective_parallelism": "DEP8",
                 "status": "success",
                 "candidate": "wait30",
                 "mean_token_tpot_ms": 10.0,
@@ -34,6 +36,7 @@ def test_summary_explains_offline_units():
     assert "raw accepted/proposed counters" in rendered.lower()
     assert "Huawei output tok/s/chip" in rendered
     assert "B300/Huawei step" in rendered
+    assert "| 8 | DEP8 |" in rendered
 
 
 def test_results_are_keyed_by_experiment_not_concurrency(tmp_path):

@@ -57,7 +57,7 @@ jobs:
           import os
           import re
 
-          allowed = {8, 32, 64, 128, 256, 512, 1024}
+          allowed = {4, 8, 16, 32, 64, 128, 256, 512, 1024}
           raw_experiments = os.environ.get("EXPERIMENTS", "").strip()
           matrix = []
           if raw_experiments:
@@ -76,6 +76,7 @@ jobs:
                   "cuda_graph",
                   "enable_lm_head_tp_in_adp",
                   "mtp_draft_tokens",
+                  "parallelism",
                   "kind",
               }
               for index, experiment in enumerate(experiments, start=1):
@@ -180,6 +181,20 @@ jobs:
                       raise SystemExit(
                           f"experiment {experiment_id} candidate."
                           "mtp_draft_tokens must be 1, 2, or 3"
+                      )
+                  parallelism = candidate.get("parallelism", "dep8")
+                  if parallelism not in {"dep8", "tp4", "dep4"}:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "parallelism must be dep8, tp4, or dep4"
+                      )
+                  if (
+                      parallelism == "tp4"
+                      and candidate.get("enable_lm_head_tp_in_adp", False)
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} cannot enable "
+                          "LM-head TP without attention DP"
                       )
                   if "kind" in candidate and not isinstance(
                       candidate["kind"],

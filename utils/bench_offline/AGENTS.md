@@ -7,7 +7,8 @@ benchmark.
   sweep. Do not add entries to `nvidia-master.yaml` or `perf-changelog.yaml`.
 - Preserve the Huawei-comparable workload: 8192 prompt tokens, 625 generated
   tokens, MTP3, DEP8, temperature 1, one full-shape warmup, and one measured
-  pass. A single-candidate experiment uses one fresh engine; legacy serial
+  pass. TP4/DEP4 tests must be separately labeled and must not receive Huawei
+  ratios. A single-candidate experiment uses one fresh engine; legacy serial
   tuning also uses one pass per candidate plus a fresh one-pass final engine.
 - The pinned TRT PyTorch sampler ignores request-level seeds and advances one
   engine-global seed-42 generator. Do not claim per-request determinism.
@@ -23,7 +24,8 @@ benchmark.
 - Every tuning and final measurement must use a fresh `LLM` instance.
 - Preserve the image-keyed persistent CuTe DSL cache. It may reduce fresh
   engine startup time, but it must not reuse an `LLM` instance or measured
-  outputs. Verify that all eight MPI marker rows record the same cache path.
+  outputs. Verify that every active MPI marker row records the same cache
+  path and that the exact active rank set is `0..N-1`.
 - Do not silently pad prompts, reduce MTP depth, change the MoE backend, or
   switch to HTTP serving to make a run pass. LM-head TP is an explicit
   candidate field and must be recorded in the result.

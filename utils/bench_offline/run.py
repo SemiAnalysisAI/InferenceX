@@ -38,7 +38,7 @@ from trt_config import (
 )
 
 
-ALLOWED_CONCURRENCIES = (8, 32, 64, 128, 256, 512, 1024)
+ALLOWED_CONCURRENCIES = (4, 8, 16, 32, 64, 128, 256, 512, 1024)
 TRT_SOURCE_COMMIT = "c185066"
 DEFAULT_IMAGE = (
     "ghcr.io#semianalysisai/"
@@ -314,7 +314,9 @@ def run_worker(
         f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
         "lm_head_tp="
         f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
-        f"mtp={candidate.mtp_draft_tokens}"
+        f"mtp={candidate.mtp_draft_tokens} "
+        f"parallelism={candidate.effective_parallelism} "
+        f"active_gpus={candidate.active_gpu_count}"
     )
     started = time.perf_counter()
     timed_out = False
@@ -422,6 +424,7 @@ def main() -> int:
             "request_path": "direct LLM.generate; no server or HTTP",
             "hardware": "B300",
             "world_size": WORLD_SIZE,
+            "active_gpu_count": WORLD_SIZE,
             "effective_parallelism": "DEP8",
             "input_tokens": INPUT_TOKENS,
             "generated_output_tokens": OUTPUT_TOKENS,
@@ -534,8 +537,28 @@ def main() -> int:
             base_result["benchmark"].update(
                 {
                     "experiment_id": experiment_id,
+                    "world_size": experiment_candidate.active_gpu_count,
+                    "active_gpu_count": (
+                        experiment_candidate.active_gpu_count
+                    ),
+                    "effective_parallelism": (
+                        experiment_candidate.effective_parallelism
+                    ),
                     "mtp_max_draft_len": (
                         experiment_candidate.mtp_draft_tokens
+                    ),
+                    "derived_output_tput_per_gpu": (
+                        "concurrency / mean_token_tpot_seconds / "
+                        f"{experiment_candidate.active_gpu_count}"
+                    ),
+                    "derived_step_tput_per_gpu": (
+                        "concurrency / mean_step_tpot_seconds / "
+                        f"{experiment_candidate.active_gpu_count}"
+                    ),
+                    "wall_output_tput_per_gpu": (
+                        "all generated output tokens / measured wall "
+                        "seconds / "
+                        f"{experiment_candidate.active_gpu_count}"
                     ),
                 }
             )
@@ -549,6 +572,7 @@ def main() -> int:
             log_progress(
                 "single-candidate experiment configured "
                 f"id={experiment_id} candidate={experiment_candidate.name} "
+                f"parallelism={experiment_candidate.effective_parallelism} "
                 f"wait_iters={experiment_candidate.batching_wait_iters} "
                 "balance="
                 f"{'on' if experiment_candidate.attention_dp_balance else 'off'} "
@@ -652,6 +676,7 @@ def main() -> int:
                         float(aggregate["derived_step_tput_per_gpu"]),
                         float(aggregate["observed_tokens_per_step"]),
                         experiment_candidate.mtp_draft_tokens,
+                        experiment_candidate.effective_parallelism,
                     ),
                 }
             )
@@ -892,6 +917,7 @@ def main() -> int:
                     float(aggregate["derived_step_tput_per_gpu"]),
                     float(aggregate["observed_tokens_per_step"]),
                     winner_candidate.mtp_draft_tokens,
+                    winner_candidate.effective_parallelism,
                 ),
             }
         )
