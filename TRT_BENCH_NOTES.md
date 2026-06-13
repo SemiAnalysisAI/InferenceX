@@ -795,8 +795,14 @@ Source-backed candidates:
 - `MEGAMOE_DEEPGEMM`: commit `c185066` includes a fused
   dispatch+MXFP4/MXFP8 GEMM+combine backend for SM100/SM103 and pure DEP.
   It is labeled experimental and is not the production 8K recipe backend.
-- Force `NVLINK_TWO_SIDED`, `DEEPEP`, or `DEEPEPLOWLATENCY` instead of the
-  default one-sided NVLink communication selected by `ConfigurableMoE`.
+- Force `NVLINK_TWO_SIDED` or `DEEPEP` instead of the default one-sided
+  NVLink communication selected by `ConfigurableMoE`.
+- The original dispatch also tested `DEEPEPLOWLATENCY`. It is now rejected
+  by this branch and removed from the checked-in matrix: the pinned source
+  describes it as a small-token path, recommends fewer than 256 dispatch
+  tokens per rank, and permanently falls back after an infeasible workload.
+  An 8192-token prefill therefore cannot reach a valid low-latency decode
+  comparison without either a huge buffer/hang or switching to AllGather.
 - Disable low-precision combine, disable post-quant dispatch, and disable
   LM-head TP as bounded controls.
 
@@ -838,6 +844,50 @@ tar -xzf /tmp/c128-gvr-profile/offline_profiles_c128-gvr-profile.tar.gz \
 python utils/bench_offline/summarize_profile.py /tmp/c128-gvr-profile \
   --json-out /tmp/c128-gvr-profile/profile_summary.json
 ```
+
+## Run 27478541655
+
+- URL:
+  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27478541655`
+- Completed `2026-06-13T21:44:23Z` on commit
+  `fb67c4d95f896a04448643b37d7bdde533509774`.
+- Nine rows succeeded with exactly one measured pass. The workflow failed
+  only because the original `c128-deepep-lowlatency` row timed out.
+- The non-profile GVR control reached `375.84 steps/s/GPU`; the profile GVR
+  row reached `388.72`, just above Huawei's `388.23`. Together with the prior
+  exact run's `382.24`, the same-config mean is `382.27 steps/s/GPU`.
+  Whole-batch output stayed much tighter at `622.53-625.41 tok/s/GPU`; the
+  step-rate spread is primarily one-pass MTP token-yield variation, so the
+  isolated profile-row crossing is not a stable win.
+- No candidate improved the current path:
+
+  | Candidate | Step/s/GPU | Wall output/GPU |
+  |---|---:|---:|
+  | GVR profile | 388.72 | 622.53 |
+  | Low-precision combine off | 383.32 | 628.21 |
+  | Pre-quant all-to-all | 380.48 | 626.76 |
+  | LM-head TP off | 378.00 | 626.92 |
+  | MegaMoE | 371.26 | 622.46 |
+  | NVLink two-sided | 356.71 | 593.40 |
+  | DeepEP | 310.05 | 506.75 |
+
+- Both completed profile artifacts contain four rank traces. They were
+  downloaded and summarized locally. Mean per-rank trace categories:
+
+  | Path | Trace span | GPU kernels | CUDA runtime | CPU ops |
+  |---|---:|---:|---:|---:|
+  | One-sided control | 71.99 ms | 45.96 ms | 43.98 ms | 3.89 ms |
+  | Two-sided NVLink | 79.87 ms | 49.49 ms | 45.48 ms | 3.18 ms |
+
+- One-sided MoE communication kernels total `3.834 ms/rank`; two-sided
+  communication totals `6.858 ms/rank`. MoE GEMM1/GEMM2 are nearly
+  unchanged (`11.66/5.95 ms` versus `11.34/5.83 ms`). The extra
+  communication cost explains the two-sided regression.
+- `c128-deepep-lowlatency` never completed engine initialization. All four
+  ranks entered NVSHMEM `3.2.5`, segfaulted in
+  `ibv_dealloc_pd`/`nvshmemt_init`, and remained at `0%` GPU utilization
+  until the controller emitted a `timeout` result after `3600 s`.
+  The checked-in matrix and validators now reject this path.
 
 ## Stage-Six MoE Path Repeats
 

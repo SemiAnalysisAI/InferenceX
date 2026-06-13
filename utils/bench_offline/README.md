@@ -455,6 +455,12 @@ Two rows set `profile_iterations=50-51`, which captures one steady decode
 iteration during the required warmup. Profiling does not add another
 benchmark pass.
 
+`DEEPEPLOWLATENCY` is deliberately excluded. The pinned TRT implementation
+is a small-token path and recommends fewer than 256 dispatch tokens per rank.
+This benchmark's 8192-token prefill either drives an oversized low-latency
+buffer/hang or makes TRT permanently fall back to AllGather before decode,
+so it cannot produce the intended 8K offline comparison.
+
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
 EXPERIMENTS="$(
@@ -469,6 +475,14 @@ gh api -X POST \
   -f 'inputs[salloc-time]=90' \
   -f 'inputs[worker-timeout]=3600'
 ```
+
+Run `27478541655` completed nine one-pass rows and captured four rank traces
+for both the default one-sided path and forced two-sided NVLink. One-sided
+communication consumed `3.834 ms/rank`; two-sided consumed `6.858 ms/rank`
+while MoE GEMM time stayed nearly unchanged, explaining the regression. The
+original low-latency DeepEP row never completed engine initialization:
+NVSHMEM `3.2.5` segfaulted in `ibv_dealloc_pd`/`nvshmemt_init`, GPU
+utilization remained `0%`, and the worker timed out after `3600 s`.
 
 The sixth-stage matrix keeps the same c128 GVR workload and still uses one
 warmup plus exactly one measured pass per job. It repeats three explicit

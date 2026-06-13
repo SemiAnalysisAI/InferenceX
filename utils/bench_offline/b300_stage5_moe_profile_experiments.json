@@ -138,29 +138,6 @@
     }
   },
   {
-    "id": "c128-deepep-lowlatency",
-    "concurrency": 128,
-    "candidate": {
-      "name": "dep4-w0-local-gvr-deepep-lowlatency",
-      "batching_wait_iters": 0,
-      "attention_dp_balance": true,
-      "attention_dp_timeout_iters": null,
-      "overlap_scheduler": true,
-      "cuda_graph": true,
-      "enable_lm_head_tp_in_adp": true,
-      "attention_dp_batch_mode": "local-rank",
-      "enable_heuristic_topk": true,
-      "moe_backend": "TRTLLM",
-      "use_low_precision_moe_combine": true,
-      "force_moe_comm_method": "DEEPEPLOWLATENCY",
-      "print_iter_log": true,
-      "max_seq_len": 9216,
-      "mtp_draft_tokens": 3,
-      "parallelism": "dep4",
-      "kind": "moe-communication"
-    }
-  },
-  {
     "id": "c128-lowprec-combine-off",
     "concurrency": 128,
     "candidate": {

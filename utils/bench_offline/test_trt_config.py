@@ -130,6 +130,15 @@ def test_candidate_can_force_moe_communication_and_runtime_flags():
     }
 
 
+def test_candidate_rejects_low_latency_deepep_for_8k_offline_workload():
+    with pytest.raises(ValueError, match="force_moe_comm_method"):
+        CandidateConfig(
+            name="low-latency-deepep",
+            batching_wait_iters=0,
+            force_moe_comm_method="DEEPEPLOWLATENCY",
+        )
+
+
 def test_candidate_can_select_cutlass_and_legacy_moe_path():
     candidate = CandidateConfig(
         name="cutlass-legacy",

@@ -229,7 +229,6 @@ jobs:
                       "NVLINK_ONE_SIDED",
                       "NVLINK_TWO_SIDED",
                       "DEEPEP",
-                      "DEEPEPLOWLATENCY",
                       "ALLGATHER",
                   }:
                       raise SystemExit(
