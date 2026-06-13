@@ -3665,4 +3665,4 @@
     - "Image: vllm/vllm-openai:minimax-m3; --block-size 128, --language-model-only; benchmark uses --use-chat-template (EAGLE acceptance collapses on raw random prompts)"
     - "Latency-end sweep (TP8, TP4, TP8+EP8) at low/mid concurrency where spec decoding has compute headroom to help"
     - "EAGLE3 draft head pre-staged beside the main weights and bind-mounted on b200-dgxc (launch_b200-dgxc.sh)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/REPLACE_B200_MTP
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1736
