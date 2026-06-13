@@ -31,7 +31,7 @@ srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
 "
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
---container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+--container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri \
 --container-mount-home \
 --container-writable \
 --container-remap-root \
