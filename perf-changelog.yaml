@@ -3723,4 +3723,4 @@
     - minimaxm3-fp8-h100-vllm-mtp
   description:
     - "Start the TP-only latency rows of the MiniMax-M3 EAGLE3 MTP sweeps (H200, H100) at concurrency 1 instead of 4, matching the conc-1 start used on the non-MTP day-zero recipes — captures the single-request latency point. TEP/DEP rows keep their higher concurrency starts."
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1743
