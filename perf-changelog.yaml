@@ -3732,4 +3732,4 @@
     - "Image and serving flags reuse the MI355X recipe: vllm/vllm-openai-rocm:minimax-m3, block size 128, TRITON_ATTN, FP8 KV cache, language-model-only, and eager execution"
     - "H100-aligned layouts and concurrency ranges: TP8 and TP8+EP8 across 1k1k and 8k1k"
     - "Fix launch_mi300x-amds.sh node exclusion to use the current short Slurm node name"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1746
