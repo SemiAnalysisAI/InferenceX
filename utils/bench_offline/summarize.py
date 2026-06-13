@@ -131,7 +131,7 @@ def markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
         "# DeepSeek-V4 B300 TRT Offline Benchmark",
         "",
-        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | Huawei step/s/chip | B300/Huawei output | B300/Huawei step | Gate |",
+        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | Huawei step/s/chip | B300/Huawei output | B300/Huawei step | TPOT gate |",
         "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
@@ -207,7 +207,7 @@ def markdown(rows: list[dict[str, Any]]) -> str:
             "- `Huawei output tok/s/chip`: Huawei step throughput multiplied by its published `1 + 1.44 = 2.44` tokens/step.",
             "- `B300/Huawei output`: B300's observed emitted-token rate divided by Huawei's output rate at Huawei's own published token yield.",
             "- `B300/Huawei step`: B300's derived decode-step rate per active GPU divided by Huawei's published decode-step rate per chip.",
-            "- `Gate`: both the step-rate ratio and emitted-output ratio exceed `1.0`. The workload matches global batch, 8K sequence length, and MTP3, but B300 GPU count/topology can differ from Huawei's 16-chip deployment; this is not a total-system-throughput claim.",
+            "- `TPOT gate`: both ratios calculated from mean per-request decode TPOT exceed `1.0`. Attention-DP scheduling can stagger request decode windows, so this is not a whole-batch or total-system-throughput claim; inspect TTFT and wall throughput for that distinction.",
             "",
         ]
     )

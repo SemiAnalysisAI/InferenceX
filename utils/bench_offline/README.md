@@ -225,11 +225,17 @@ The live comparison attaches Huawei references at the same global batch:
 | 64 | 16 | 19.03 | 210.16 |
 | 128 | 16 | 20.61 | 388.23 |
 
-The gate requires both B300 step throughput per active GPU and B300 emitted
-output throughput per active GPU to exceed the corresponding Huawei per-chip
-values. Huawei output throughput uses its published `2.44 tokens/step`.
-Topology is not matched: Huawei uses 16 chips, while the current TP4/DEP4
-matrix uses four active B300 GPUs. The result records this difference and does
+The requested TPOT gate requires both B300 step throughput per active GPU and
+B300 emitted output throughput per active GPU, each calculated from mean
+per-request decode TPOT, to exceed the corresponding Huawei per-chip values.
+Huawei output throughput uses its published `2.44 tokens/step`. Topology is
+not matched: Huawei uses 16 chips, while the current TP4/DEP4 matrix uses four
+active B300 GPUs.
+
+Attention-DP scheduling can stagger request decode windows. In that case,
+`concurrency / mean per-request TPOT / GPUs` is intentionally the requested
+latency-derived calculation, but it is not whole-batch decode throughput.
+Read `mean_ttft_ms` and `wall_output_tput_per_gpu` beside the TPOT gate and do
 not claim higher total-system throughput.
 
 ## Tuning
@@ -253,6 +259,20 @@ engine/CUDA-graph batch size 32. TRT commit `c185066` supports
 The FP8 candidate is the only row that re-enables
 `use_cute_dsl_paged_mqa_logits`, because the prior FP4 path failed its dtype
 contract.
+
+Run `27477851766` completed all ten rows with one warmup and one measured
+pass. The best TPOT-gate rows were:
+
+| Conc | Recipe | Derived step/s/GPU | Huawei step/s/chip | Step ratio | Output ratio |
+|---:|---|---:|---:|---:|---:|
+| 16 | TP4 wait 0 | 104.00 | 56.70 | 1.834 | 2.394 |
+| 64 | DEP4 wait 30, balance off | 290.99 | 210.16 | 1.385 | 1.792 |
+| 128 | DEP4 wait 60 | 708.75 | 388.23 | 1.826 | 2.458 |
+
+At c128, wait 60 spreads request TTFT from about `0.6` to `89.3` seconds and
+reduces measured wall output to `207.33 tok/s/GPU`. The TPOT gate passes
+because each request's decode window is short after it starts, not because all
+128 requests decode concurrently. Wait 30 shows the same effect less strongly.
 
 The older matrix `utils/bench_offline/b300_huawei_experiments.json` is the
 historical DEP8/MTP3 equal-batch-per-chip experiment at c8/c32/c64. It tests:
@@ -459,8 +479,8 @@ The collected row fields mean:
   Huawei's own published 2.44-token yield
 - `b300_to_huawei_step_rate_ratio`: direct decode-step-rate comparison
 - `b300_to_huawei_trt_yield_normalized_ratio`: same-yield diagnostic
-- `huawei_gate_passed`: both direct step rate and Huawei-yield output rate
-  exceed `1.0`
+- `huawei_gate_passed`: both per-request-TPOT-derived step rate and
+  Huawei-yield output rate exceed `1.0`
 - `hardware_topology_match`: false for the current four-B300 versus
   sixteen-Huawei-chip comparison
 - `device_count_match`: whether the active B300 GPU count equals Huawei's

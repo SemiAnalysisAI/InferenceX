@@ -695,7 +695,7 @@ gh api -X POST \
 
 ## Exact-Global-Batch 16/64/128 Matrix
 
-The next run uses
+Run `27477851766` uses
 `utils/bench_offline/b300_huawei_global_batch_experiments.json`.
 Every job is hard-limited to one full-shape warmup plus exactly one measured
 pass; `trt_worker.py` rejects `--passes` values other than `1`.
@@ -742,3 +742,42 @@ gh api -X POST \
   -f 'inputs[salloc-time]=90' \
   -f 'inputs[worker-timeout]=3600'
 ```
+
+## Run 27477851766
+
+- URL:
+  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27477851766`
+- Completed successfully `2026-06-13T20:27:08Z` in about 13 minutes.
+- Branch commit: `5dcb554bf97f4b389853c270199d44adf2a98888`.
+- All ten jobs used one full-shape warmup and exactly one measured pass.
+- The requested per-request-TPOT gate passed at all three global batches:
+
+  | Conc | Candidate | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Huawei output ratio | Huawei step ratio |
+  |---:|---|---:|---:|---:|---:|---:|---:|
+  | 16 | TP4 wait 0 | 12.08 ms | 38.46 ms | 331.16 | 104.00 | 2.394 | 1.834 |
+  | 64 | DEP4 wait 30, balance off | 17.41 ms | 54.98 ms | 919.12 | 290.99 | 1.792 | 1.385 |
+  | 128 | DEP4 wait 60 | 13.74 ms | 45.15 ms | 2328.13 | 708.75 | 2.458 | 1.826 |
+
+- c128 wait 30 also passed: `597.83 steps/s/GPU`, Huawei step ratio
+  `1.540`, and Huawei-output ratio `2.033`.
+- All four sparse-indexer candidates initialized and completed. Runtime
+  validation recorded `index_topk=512`; the FP8 row resolved
+  `indexer_k_dtype=fp8` and enabled both CuTE DSL kernels. None improved the
+  wait-0 control's step rate enough to pass: they reached
+  `377.25-382.24 steps/s/GPU` versus Huawei's `388.23`.
+
+Important interpretation:
+
+- The c128 wait-30/60 gains are scheduler staggering. Wait 30 spreads TTFT
+  from about `0.6` to `55.5` seconds; wait 60 spreads it to `89.3` seconds.
+- Their measured wall output rates are only `308.10` and
+  `207.33 tok/s/GPU`, respectively, despite the much larger TPOT-derived
+  output rates.
+- A request-relative approximation of the full decode span gives about
+  `97.16` steps/s/GPU for wait 30 and `63.55` for wait 60. The wait-0 control
+  is about `204.83`.
+- Therefore the run satisfies the user's selected calculation,
+  `global concurrency / mean per-request decode TPOT / active GPUs`. It does
+  not prove higher whole-batch decode throughput or higher total-system
+  throughput than Huawei. Always present TTFT and wall throughput with the
+  TPOT gate.
