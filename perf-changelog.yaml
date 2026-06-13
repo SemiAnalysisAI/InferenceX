@@ -3563,6 +3563,7 @@
     - "Add atom-disagg sweep: 2P1D DPA+TP8 (conc 256-2048) and 1P1D TP8 (conc 4-256) at isl=8192/osl=1024"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1683
   
+
 - config-keys:
     - dsv4-fp4-b300-trt
     - dsv4-fp4-b300-trt-mtp
@@ -3611,6 +3612,7 @@
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
   
+
 - config-keys:
     - dsv4-fp4-gb200-dynamo-sglang
   description:
@@ -3668,3 +3670,29 @@
     - "Layouts: TP8 and TP4 (latency), TP4+EP4 / TP8+EP8 (TEP throughput), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
     - "Weights are not SRE-staged: launch_b200-dgxc.sh adds a MODEL_PATH case for /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8; runners.yaml adds a b200-dgxc runner-type group"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1723
+
+- config-keys:
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 B300 vLLM benchmark with EAGLE3 speculative decoding (target: MiniMaxAI/MiniMax-M3-MXFP8, draft: Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens)"
+    - "Image: vllm/vllm-openai:minimax-m3 (same m3_release-branch build as the non-MTP entry)"
+    - "Serve shape follows minimaxm3-fp8-b300-vllm (--block-size 128, --language-model-only); cudagraph capture scaled to CONC * (1 + spec tokens); prompts routed through the chat template for realistic acceptance"
+    - "Drafter pinned to FLASH_ATTN via speculative-config attention_backend: the EAGLE3 head is MHA and FlashInfer only supports the mandatory page size 128 through its GQA-only trtllm-gen kernel"
+    - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped (draft weights + draft KV headroom)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1733
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm
+    - minimaxm3-fp8-h100-vllm
+  description:
+    - "Day-zero MiniMax-M3 MXFP8 single-node recipes for H200 and H100 (vLLM)."
+    - "Image: vllm/vllm-openai:minimax-m3 (dedicated day-zero image; M3 not in a stable release yet)."
+    - "Sweeps TP4/TP8, TP+EP (TEP), and DP-attention+EP (DEP) per https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3; H100 is TP8-only (MXFP8 weights ~427 GB)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1731
+
+- config-keys:
+    - minimaxm2.5-fp4-b200-trt
+  description:
+    - "Add MiniMax-M2.5 NVFP4 B200 TensorRT-LLM single-node benchmark (1k1k and 8k1k)"
+    - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18"
+  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/1722
