@@ -61,8 +61,8 @@ python3 -m atom.entrypoints.openai_server \
     --trust-remote-code \
     --gpu-memory-utilization 0.85 \
     --no-enable_prefix_caching \
-    --max-model-len "$SERVE_MAX_MODEL_LEN" \
     > $SERVER_LOG 2>&1 &
+    #--max-model-len "$SERVE_MAX_MODEL_LEN" \
 
 SERVER_PID=$!
 
