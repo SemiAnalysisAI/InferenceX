@@ -3740,7 +3740,7 @@
     - minimaxm3-fp8-mi325x-vllm
   description:
     - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI325X / gfx942"
-    - "Follows the official MI325X MXFP8 recipe with vllm/vllm-openai-rocm:minimax-m3, block size 128, TRITON_ATTN, and MiniMax-M3 tool/reasoning parsers; fixed-sequence text benchmarking adds language-model-only, FP8 KV cache, and a scenario-specific max model length"
+    - "Follows the official MI325X MXFP8 recipe with vllm/vllm-openai-rocm:minimax-m3, block size 128, TRITON_ATTN, and MiniMax-M3 tool/reasoning parsers; fixed-sequence text benchmarking adds language-model-only, FP8 KV cache, disabled prefix caching, and a scenario-specific max model length"
     - "H200-aligned layouts and concurrency ranges: TP4 and TP8 latency, TP4/TP8 expert parallelism, and TP8 data-parallel attention across 1k1k and 8k1k"
-    - "Route the MI325X Hugging Face cache to node-local /local_nvme/hf-hub-cache and mount ROCm GPU devices explicitly"
+    - "Route the MI325X Hugging Face cache to node-local /local-nvme/hf-hub-cache and mount ROCm GPU devices explicitly"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1748

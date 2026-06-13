@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_HUB_CACHE_MOUNT="/local_nvme/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/local-nvme/hf-hub-cache/"
 
 PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
