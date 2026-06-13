@@ -3727,4 +3727,4 @@
     - "No attention_backend override on the drafter: the server runs on TRITON_ATTN, so the FlashInfer page-128/MHA limitation that forced FLASH_ATTN on the CUDA recipes does not apply on ROCm"
     - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped, mirroring the minimaxm3-fp8-b300-vllm-mtp search space"
     - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, ported from nvidia/model.py) before serving — validates EAGLE3 on MI355X ahead of an image rebuild"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1744
+  pr-link: TBD
