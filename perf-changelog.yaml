@@ -3719,6 +3719,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1725
 
 - config-keys:
+    - minimaxm3-fp8-h200-vllm-mtp
+    - minimaxm3-fp8-h100-vllm-mtp
+  description:
+    - "Start the TP-only latency rows of the MiniMax-M3 EAGLE3 MTP sweeps (H200, H100) at concurrency 1 instead of 4, matching the conc-1 start used on the non-MTP day-zero recipes — captures the single-request latency point. TEP/DEP rows keep their higher concurrency starts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1743
+
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
     - "Initial submission: MiniMax-M3 MXFP8 MI355X (gfx950) vLLM benchmark with EAGLE3 speculative decoding (target: MiniMaxAI/MiniMax-M3-MXFP8, draft: Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens) — spec-decoding=mtp variant of the MI355X day-zero recipe"
