@@ -82,6 +82,23 @@ gh api -X POST \
   -f 'inputs[concurrencies]=8'
 ```
 
+Dispatch an explicit set of rows:
+
+```bash
+CONCURRENCIES=32,64,128,256
+TEST_NAME='DSV4 B300 TRT offline tuned c32-c256'
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f 'inputs[ref]=trt-bench' \
+  -f "inputs[test-name]=$TEST_NAME" \
+  -f "inputs[concurrencies]=$CONCURRENCIES"
+```
+
+The top-level `ref` selects the branch's workflow definition. `inputs[ref]`
+selects the branch checkout inside each benchmark job. Keep both on
+`trt-bench`.
+
 First bring-up dispatched with this command:
 
 - Run: `27461421427`
@@ -239,10 +256,62 @@ performance measurements.
 - Concurrencies: `32,64,128,256`.
 - Purpose: collect tuned low/mid-concurrency B300 results after the c8
   three-pass gate passed.
-- Status at dispatch: queued.
+- Completed `2026-06-13T13:01:25Z`. The workflow conclusion is `failure`
+  only because c128 and c256 hit the corpus-construction bug below. The c32
+  and c64 jobs and their artifacts are valid.
+- c32 ran on `b300-017`, Slurm job `20807`. Winner:
+  `wait30-balance-off`. Three-pass tuning was `290.065 tok/s/GPU`; the fresh
+  final was `286.253 tok/s/GPU`, a `-1.31%` drift.
+- c32 final: `13.974 ms` token TPOT, `175.470 tok/s/GPU` wall throughput,
+  `3.162 tokens/step`, `72.1%` effective MTP3 acceptance, and
+  `1967.12 ms` mean TTFT. Huawei normalized token throughput was
+  `664.630 tok/s/chip`, giving a B300/Huawei ratio of `0.431`.
+- c64 ran on `b300-016`, Slurm job `20806`. Winner: `wait0`. Three-pass
+  tuning was `371.771 tok/s/GPU`; the fresh final was
+  `369.071 tok/s/GPU`, a `-0.73%` drift.
+- c64 final: `21.676 ms` token TPOT, `216.654 tok/s/GPU` wall throughput,
+  `3.036 tokens/step`, `67.9%` effective MTP3 acceptance, and
+  `3533.63 ms` mean TTFT. Huawei normalized token throughput was
+  `1178.769 tok/s/chip`, giving a B300/Huawei ratio of `0.313`.
+- For both successful rows, all six tune workers and the fresh final worker
+  completed three measured passes. Every measured and warmup request emitted
+  exactly 625 tokens; DEP8/MTP3, LM-head TP off, exact 8192-token corpora,
+  eight-rank perfect-router propagation, null raw speculative metrics, and
+  commit provenance all validated.
 - c128 and c256 failed during corpus construction before TRT initialization:
   some later InfiniteBench contexts rendered to 8191 or 8193 tokens but not
   8192 when truncating only at source-token boundaries. c32 and c64 continued.
 - Bounded fix: when token-boundary truncation skips 8192, search recorded
   whitespace adjustments at the context/suffix boundary, then a small
   decoded context-tail trim. Never insert pad or synthetic token IDs.
+
+### Run 27466362872
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27466362872`
+- Dispatched `2026-06-13T12:09:22Z`.
+- Branch commit: `e82c9902269e186214b09ce744b258d4c4940b99`.
+- Concurrencies: `128,256`.
+- Purpose: retry the two corpus-construction failures with recorded exact
+  boundary/tail adjustment fallback.
+- Status at dispatch: queued.
+
+### Run 27467637477
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27467637477`
+- Dispatched `2026-06-13T13:07:05Z`.
+- Branch commit: `e82c9902269e186214b09ce744b258d4c4940b99`.
+- Concurrencies: `512,1024`.
+- Exact trigger:
+
+  ```bash
+  gh api -X POST \
+    /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+    -f ref='trt-bench' \
+    -f 'inputs[ref]=trt-bench' \
+    -f 'inputs[test-name]=DSV4 B300 TRT offline c512-c1024 capacity' \
+    -f 'inputs[concurrencies]=512,1024'
+  ```
+
+- Purpose: determine whether each high-concurrency row is measurable or an
+  explicit `capacity_failure`.
+- Status at dispatch: in progress.
