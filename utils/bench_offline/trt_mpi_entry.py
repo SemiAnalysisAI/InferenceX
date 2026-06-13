@@ -43,6 +43,11 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     """Restore benchmark aliases before importing TRT's real worker entry."""
     if os.getenv("TRTLLM_ENABLE_PERFECT_ROUTER") == "1":
         os.environ["ENABLE_PERFECT_ROUTER"] = "1"
+    configurable_moe = os.getenv(
+        "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"
+    )
+    if configurable_moe is not None:
+        os.environ["ENABLE_CONFIGURABLE_MOE"] = configurable_moe
     cute_cache_dir = os.getenv("TRTLLM_BENCH_CUTE_DSL_CACHE_DIR")
     if cute_cache_dir:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir

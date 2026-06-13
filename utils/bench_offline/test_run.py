@@ -1,4 +1,5 @@
 import json
+import os
 import subprocess
 import sys
 import time
@@ -156,9 +157,17 @@ def test_mpi_entry_sets_router_before_real_worker(
     )
     monkeypatch.setenv(
         "TRTLLM_BENCH_EXPECTED_RANK_ENV",
-        json.dumps({"TRTLLM_ENABLE_PDL": "0"}),
+        json.dumps(
+            {
+                "ENABLE_CONFIGURABLE_MOE": "0",
+                "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "0",
+                "TRTLLM_ENABLE_PDL": "0",
+            }
+        ),
     )
+    monkeypatch.setenv("TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE", "0")
     monkeypatch.setenv("TRTLLM_ENABLE_PDL", "0")
+    monkeypatch.delenv("ENABLE_CONFIGURABLE_MOE", raising=False)
     monkeypatch.delenv("ENABLE_PERFECT_ROUTER", raising=False)
     monkeypatch.delenv("CUTE_DSL_CACHE_DIR", raising=False)
 
@@ -168,8 +177,11 @@ def test_mpi_entry_sets_router_before_real_worker(
     assert row["perfect_router"] == "1"
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["benchmark_environment"] == {
+        "ENABLE_CONFIGURABLE_MOE": "0",
+        "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "0",
         "TRTLLM_ENABLE_PDL": "0",
     }
+    assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "0"
     assert row["source"] == "trt_mpi_entry"
 
 

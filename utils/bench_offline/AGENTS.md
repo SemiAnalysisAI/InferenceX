@@ -66,6 +66,9 @@ benchmark.
 - Candidate-controlled `TRTLLM_*` and `TLLM_*` settings must be present in
   every MPI rank marker. Do not accept a labeled backend or communication
   result if rank propagation validation fails.
+- `ENABLE_CONFIGURABLE_MOE` is an explicit branch-only candidate. Propagate
+  it through `TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE`, restore it in
+  `trt_mpi_entry.py`, and validate both names in every active-rank marker.
 - On runtime errors, retain the result JSON, worker JSON/log, candidate config,
   corpus manifest, perfect-router marker, and GPU metrics.
 - Verify changes with `python -m pytest utils/bench_offline -v`,

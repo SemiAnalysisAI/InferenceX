@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import asdict, dataclass, replace
 from typing import Any, Iterable, Optional
@@ -20,7 +21,7 @@ PINNED_TRT_GLOBAL_SEED = 42
 TUNING_MEASURED_PASSES = 1
 FINAL_MEASURED_PASSES = 1
 MIN_WINNER_IMPROVEMENT = 0.03
-MOE_BACKENDS = {"TRTLLM", "MEGAMOE_DEEPGEMM"}
+MOE_BACKENDS = {"CUTLASS", "TRTLLM", "MEGAMOE_DEEPGEMM"}
 MOE_COMM_METHODS = {
     "NVLINK_ONE_SIDED",
     "NVLINK_TWO_SIDED",
@@ -29,6 +30,8 @@ MOE_COMM_METHODS = {
     "ALLGATHER",
 }
 CANDIDATE_ENVIRONMENT_VARIABLES = {
+    "ENABLE_CONFIGURABLE_MOE",
+    "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
     "TRTLLM_ENABLE_PDL",
     "TRTLLM_FORCE_COMM_METHOD",
     "TRTLLM_MEGAMOE_FUSED_PREPARE",
@@ -94,6 +97,7 @@ class CandidateConfig:
     indexer_k_dtype: str | None = None
     moe_backend: str = "TRTLLM"
     use_low_precision_moe_combine: bool = True
+    enable_configurable_moe: bool | None = None
     force_moe_comm_method: str | None = None
     moe_post_quant_alltoall: bool | None = None
     enable_pdl: bool | None = None
@@ -148,6 +152,7 @@ class CandidateConfig:
             if not isinstance(getattr(self, field_name), bool):
                 raise ValueError(f"{field_name} must be boolean")
         for field_name in (
+            "enable_configurable_moe",
             "moe_post_quant_alltoall",
             "enable_pdl",
             "megamoe_fused_prepare",
@@ -427,6 +432,10 @@ def build_llm_kwargs(
 
 def candidate_environment(candidate: CandidateConfig) -> dict[str, str]:
     environment: dict[str, str] = {}
+    if candidate.enable_configurable_moe is not None:
+        value = "1" if candidate.enable_configurable_moe else "0"
+        environment["ENABLE_CONFIGURABLE_MOE"] = value
+        environment["TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"] = value
     if candidate.force_moe_comm_method is not None:
         environment["TRTLLM_FORCE_COMM_METHOD"] = (
             candidate.force_moe_comm_method
@@ -536,6 +545,9 @@ def resolved_parallelism(
     resolved["use_low_precision_moe_combine"] = bool(
         moe_config.use_low_precision_moe_combine
     )
+    resolved["enable_configurable_moe"] = (
+        os.environ.get("ENABLE_CONFIGURABLE_MOE", "1") == "1"
+    )
     if resolved["moe_backend"] != candidate.moe_backend:
         raise RuntimeError(
             "Resolved TRT MoE backend mismatch: "
@@ -549,6 +561,16 @@ def resolved_parallelism(
             "Resolved TRT low-precision MoE combine mismatch: "
             f"{resolved['use_low_precision_moe_combine']} != "
             f"{candidate.use_low_precision_moe_combine}"
+        )
+    if (
+        candidate.enable_configurable_moe is not None
+        and resolved["enable_configurable_moe"]
+        != candidate.enable_configurable_moe
+    ):
+        raise RuntimeError(
+            "Resolved TRT configurable-MoE mismatch: "
+            f"{resolved['enable_configurable_moe']} != "
+            f"{candidate.enable_configurable_moe}"
         )
     resolved["attention_dp_batch_mode"] = (
         candidate.attention_dp_batch_mode

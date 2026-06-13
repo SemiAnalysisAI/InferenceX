@@ -82,6 +82,7 @@ jobs:
                   "indexer_k_dtype",
                   "moe_backend",
                   "use_low_precision_moe_combine",
+                  "enable_configurable_moe",
                   "force_moe_comm_method",
                   "moe_post_quant_alltoall",
                   "enable_pdl",
@@ -192,6 +193,7 @@ jobs:
                               f"{bool_key} must be boolean"
                           )
                   for optional_bool_key in (
+                      "enable_configurable_moe",
                       "moe_post_quant_alltoall",
                       "enable_pdl",
                       "megamoe_fused_prepare",
@@ -210,12 +212,13 @@ jobs:
                       )
                   moe_backend = candidate.get("moe_backend", "TRTLLM")
                   if moe_backend not in {
+                      "CUTLASS",
                       "TRTLLM",
                       "MEGAMOE_DEEPGEMM",
                   }:
                       raise SystemExit(
                           f"experiment {experiment_id} candidate."
-                          "moe_backend must be TRTLLM or "
+                          "moe_backend must be CUTLASS, TRTLLM, or "
                           "MEGAMOE_DEEPGEMM"
                       )
                   force_moe_comm_method = candidate.get(

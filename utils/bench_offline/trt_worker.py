@@ -236,6 +236,11 @@ def main() -> int:
             raise RuntimeError("Corpus concurrency does not match its manifest")
         inputs = [{"prompt_token_ids": prompt} for prompt in prompts]
         pass_count = measured_pass_count(args.passes)
+        configurable_moe_label = (
+            "default"
+            if candidate.enable_configurable_moe is None
+            else ("on" if candidate.enable_configurable_moe else "off")
+        )
         log_progress(
             f"worker start mode={args.mode} candidate={candidate.name} "
             f"concurrency={concurrency} measured_passes={pass_count} "
@@ -254,6 +259,7 @@ def main() -> int:
             f"moe_backend={candidate.moe_backend} "
             "low_precision_moe_combine="
             f"{'on' if candidate.use_low_precision_moe_combine else 'off'} "
+            f"configurable_moe={configurable_moe_label} "
             f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
             f"profile_iterations={candidate.profile_iterations or 'off'} "
             f"max_seq_len={candidate.max_seq_len} "
@@ -321,6 +327,7 @@ def main() -> int:
             f"{'on' if candidate.enable_heuristic_topk else 'off'} "
             f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
             f"moe_backend={candidate.moe_backend} "
+            f"configurable_moe={configurable_moe_label} "
             f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
             f"profile_iterations={candidate.profile_iterations or 'off'} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
@@ -353,7 +360,9 @@ def main() -> int:
                 f"index_topk={resolved['index_topk']} "
                 f"moe_backend={resolved['moe_backend']} "
                 "low_precision_moe_combine="
-                f"{'on' if resolved['use_low_precision_moe_combine'] else 'off'}"
+                f"{'on' if resolved['use_low_precision_moe_combine'] else 'off'} "
+                "configurable_moe="
+                f"{'on' if resolved['enable_configurable_moe'] else 'off'}"
             )
 
             phase = "warmup"

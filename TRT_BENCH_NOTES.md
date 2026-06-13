@@ -838,3 +838,36 @@ tar -xzf /tmp/c128-gvr-profile/offline_profiles_c128-gvr-profile.tar.gz \
 python utils/bench_offline/summarize_profile.py /tmp/c128-gvr-profile \
   --json-out /tmp/c128-gvr-profile/profile_summary.json
 ```
+
+## Stage-Six MoE Path Repeats
+
+`utils/bench_offline/b300_stage6_moe_path_experiments.json` tests the two
+remaining source-backed MoE execution choices at c128:
+
+- three current TRTLLM/ConfigurableMoE controls
+- four direct legacy TRTLLM rows with `ENABLE_CONFIGURABLE_MOE=0`
+- three CUTLASS rows, which are supported for the checkpoint's
+  W4A8-MXFP4-MXFP8 quantization on SM100/SM103
+
+Every job has one fresh engine, one full-shape warmup, and exactly one
+measured pass. The repeats are independent parallel jobs; do not change the
+worker back to three measured passes. `ENABLE_CONFIGURABLE_MOE` is unprefixed,
+so `TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE` carries it through TRT's MPI filter
+and the rank-entry shim restores and validates the real variable.
+
+Dispatch:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage6_moe_path_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT c128 MoE path repeats' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```

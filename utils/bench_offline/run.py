@@ -394,6 +394,11 @@ def run_worker(
         sort_keys=True,
         separators=(",", ":"),
     )
+    configurable_moe_label = (
+        "default"
+        if candidate.enable_configurable_moe is None
+        else ("on" if candidate.enable_configurable_moe else "off")
+    )
 
     log_progress(
         f"{label}: worker start passes={passes} "
@@ -415,6 +420,7 @@ def run_worker(
         f"moe_backend={candidate.moe_backend} "
         "low_precision_moe_combine="
         f"{'on' if candidate.use_low_precision_moe_combine else 'off'} "
+        f"configurable_moe={configurable_moe_label} "
         f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
         f"profile_iterations={candidate.profile_iterations or 'off'} "
         f"max_seq_len={candidate.max_seq_len} "
@@ -700,6 +706,15 @@ def main() -> int:
                 "candidate": experiment_candidate.to_dict(),
             }
             write_json(result_path, base_result)
+            configurable_moe_label = (
+                "default"
+                if experiment_candidate.enable_configurable_moe is None
+                else (
+                    "on"
+                    if experiment_candidate.enable_configurable_moe
+                    else "off"
+                )
+            )
             log_progress(
                 "single-candidate experiment configured "
                 f"id={experiment_id} candidate={experiment_candidate.name} "
@@ -722,6 +737,7 @@ def main() -> int:
                 f"moe_backend={experiment_candidate.moe_backend} "
                 "low_precision_moe_combine="
                 f"{'on' if experiment_candidate.use_low_precision_moe_combine else 'off'} "
+                f"configurable_moe={configurable_moe_label} "
                 "force_moe_comm="
                 f"{experiment_candidate.force_moe_comm_method or 'auto'} "
                 "profile_iterations="

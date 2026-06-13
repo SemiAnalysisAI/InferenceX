@@ -130,6 +130,24 @@ def test_candidate_can_force_moe_communication_and_runtime_flags():
     }
 
 
+def test_candidate_can_select_cutlass_and_legacy_moe_path():
+    candidate = CandidateConfig(
+        name="cutlass-legacy",
+        batching_wait_iters=0,
+        moe_backend="CUTLASS",
+        enable_configurable_moe=False,
+    )
+    kwargs = build_llm_kwargs("/model", 128, candidate)
+    assert kwargs["moe_config"] == {
+        "backend": "CUTLASS",
+        "use_low_precision_moe_combine": True,
+    }
+    assert candidate_environment(candidate) == {
+        "ENABLE_CONFIGURABLE_MOE": "0",
+        "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "0",
+    }
+
+
 @pytest.mark.parametrize(
     "profile_iterations",
     ("50", "51-50", "a-b", "50-51,60-61"),
@@ -353,6 +371,32 @@ def test_resolved_parallelism_accepts_candidate_lm_head_tp():
     assert resolved["enable_lm_head_tp_in_adp"] is True
 
 
+def test_resolved_parallelism_validates_legacy_moe_path(monkeypatch):
+    candidate = CandidateConfig(
+        name="legacy",
+        batching_wait_iters=0,
+        enable_configurable_moe=False,
+    )
+    monkeypatch.setenv("ENABLE_CONFIGURABLE_MOE", "0")
+    llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
+        parallel_config=SimpleNamespace(
+            world_size=8,
+            tp_size=8,
+            moe_ep_size=8,
+            moe_tp_size=1,
+            enable_attention_dp=True,
+            enable_lm_head_tp_in_adp=False,
+        ),
+        speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=None,
+    )
+    resolved = resolved_parallelism(llm_args, candidate)
+    assert resolved["enable_configurable_moe"] is False
+
+
 def test_resolved_parallelism_validates_local_rank_runtime_capacity():
     candidate = CandidateConfig(
         name="local",
@@ -525,6 +569,7 @@ def test_resolved_parallelism_validates_sparse_indexer_switches():
         "b300_stage3_local_batch_experiments.json",
         "b300_stage4_kernel_experiments.json",
         "b300_stage5_moe_profile_experiments.json",
+        "b300_stage6_moe_path_experiments.json",
         "b300_huawei_global_batch_experiments.json",
     ),
 )

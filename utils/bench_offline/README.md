@@ -470,6 +470,28 @@ gh api -X POST \
   -f 'inputs[worker-timeout]=3600'
 ```
 
+The sixth-stage matrix keeps the same c128 GVR workload and still uses one
+warmup plus exactly one measured pass per job. It repeats three explicit
+`ENABLE_CONFIGURABLE_MOE=1` controls, compares four
+`ENABLE_CONFIGURABLE_MOE=0` legacy-direct TRTLLM rows, and runs three
+supported CUTLASS-backend rows. Separate jobs provide replication without
+restoring three serial measured passes inside an engine.
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage6_moe_path_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT c128 MoE path repeats' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
 ## Artifacts And Collected Values
 
 Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
