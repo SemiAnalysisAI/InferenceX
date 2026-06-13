@@ -3646,3 +3646,12 @@
     - "Layouts: TP8 and TP4 (latency), TP4+EP4 / TP8+EP8 (TEP throughput), tp2-ep2, TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
     - "Serves from the launch_b300-nv.sh MODEL/MODEL_PATH split (model not in the SRE-staged /scratch/models list -> writable /data/models)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1724
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 single-node vLLM benchmark on MI325X (Vultr fleet) (model: MiniMaxAI/MiniMax-M3-MXFP8, 427B total / 26B active MoE with MSA sparse attention)"
+    - "Image: vllm/vllm-openai-rocm:minimax-m3"
+    - "New mi325x-vultr runner-type (launch_mi325x-vultr.sh); --block-size 128 mandatory (MSA sparse/index cache alignment), --attention-backend TRITON_ATTN, --language-model-only for text-only throughput, conc-scaled --max-cudagraph-capture-size"
+    - "Layouts: TP8 / TP4 (latency), TP4+EP4 / TP8+EP8 (TEP throughput), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1738

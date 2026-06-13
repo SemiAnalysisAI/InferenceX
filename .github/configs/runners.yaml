@@ -115,6 +115,13 @@ mi325x-disagg:
 - 'mi325x-amds_06'
 - 'mi325x-amds_07'
 - 'mi325x-amds_08'
+mi325x-vultr:
+- 'mi325x-vultr_00'
+- 'mi325x-vultr_01'
+- 'mi325x-vultr_02'
+- 'mi325x-vultr_03'
+- 'mi325x-vultr_04'
+- 'mi325x-vultr_05'
 mi355x:
 - 'mi355x-amds_00'
 - 'mi355x-amds_01'
