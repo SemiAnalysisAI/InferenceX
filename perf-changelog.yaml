@@ -3693,4 +3693,4 @@
     - "Serve shape follows minimaxm3-fp8-b200-vllm (--block-size 128, --language-model-only); cudagraph capture scaled to CONC * (1 + spec tokens); prompts routed through the chat template for realistic acceptance"
     - "Drafter pinned to FLASH_ATTN via speculative-config attention_backend: the EAGLE3 head is MHA and FlashInfer only supports the mandatory page size 128 through its GQA-only trtllm-gen kernel"
     - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, mirroring the minimaxm3-fp8-b300-vllm-mtp search space"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1741
