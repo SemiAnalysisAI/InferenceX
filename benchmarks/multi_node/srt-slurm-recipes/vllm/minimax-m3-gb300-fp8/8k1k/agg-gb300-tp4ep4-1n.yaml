@@ -22,6 +22,15 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
+# CW gb300 has no per-GPU Slurm defaults: without sbatch-level mem=0 the
+# job allocation is ntasks x DefMemPerCPU = 4 GB/node and worker cgroups
+# OOM-kill during engine init; srun_options.mem=0 alone only grants a
+# step what the job already holds. cpus-per-task=72 (one NUMA socket)
+# keeps the gpu-less infra step (etcd/nats) off the 1-CPU default.
+# Full rationale: vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml.
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
 srun_options:
   mem: "0"
 
