@@ -3657,4 +3657,4 @@
     - "6 topologies: TP4 (1n), TP8 (2n), TP4+EP4 (1n), 1P+1D disagg TP4+EP4 (2n), DEP4 (1n), DEP8 (2n)"
     - "Concurrency sweep: TP 4-64, TEP 128-512, disagg 64-512, DEP4 256-1024, DEP8 512-2048"
     - "--block-size 128 mandatory everywhere (MSA sparse/index cache alignment); --language-model-only for text-only benchmarks"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
