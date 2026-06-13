@@ -293,7 +293,39 @@ performance measurements.
 - Concurrencies: `128,256`.
 - Purpose: retry the two corpus-construction failures with recorded exact
   boundary/tail adjustment fallback.
-- Status at dispatch: queued.
+- c128 completed successfully `2026-06-13T13:28:27Z` on `b300-015`,
+  Slurm job `20811`.
+- Of 128 prompts, 20 required one recorded `space` boundary adjustment.
+  No prompt required context-tail trimming. All prompts encoded to exactly
+  8192 tokens.
+- c128 winner: `wait60`. Three-pass tuning was `634.922 tok/s/GPU`; the
+  fresh final was `629.687 tok/s/GPU`, a `-0.82%` drift.
+- c128 final: `25.409 ms` token TPOT, `105.283 tok/s/GPU` wall throughput,
+  `3.195 tokens/step`, `73.2%` effective MTP3 acceptance, and
+  `38404.93 ms` mean TTFT. The large TPOT/wall-throughput divergence is real:
+  this benchmark tunes decode-token TPOT, while `wait60` delays scheduling.
+- All six tune workers and the fresh final worker completed three measured
+  passes with 384 request samples each. Exact output counts, DEP8/MTP3,
+  LM-head TP off, eight-rank perfect-router propagation, null raw
+  speculative metrics, and commit provenance all validated.
+- c256 completed successfully `2026-06-13T14:15:22Z` on `b300-018`,
+  Slurm job `20812`.
+- Of 256 prompts, 25 required one recorded `space` boundary adjustment.
+  No prompt required context-tail trimming. All prompts encoded to exactly
+  8192 tokens.
+- c256 winner: `wait60`. Three-pass tuning was `949.853 tok/s/GPU`; the
+  fresh final was `926.062 tok/s/GPU`, a `-2.50%` drift and still within the
+  3% stability bound.
+- c256 final: `34.555 ms` token TPOT, `84.654 tok/s/GPU` wall throughput,
+  `3.191 tokens/step`, `73.0%` effective MTP3 acceptance, and
+  `105979.48 ms` mean TTFT. As at c128, the large decode-TPOT/wall divergence
+  is caused by the selected `wait60` scheduling delay.
+- All six c256 tune workers and the fresh final worker completed three
+  measured passes with 768 request samples each. Exact output counts,
+  DEP8/MTP3, LM-head TP off, eight-rank perfect-router propagation, null raw
+  speculative metrics, and commit provenance all validated.
+- The run and its collector completed successfully
+  `2026-06-13T14:15:36Z`.
 
 ### Run 27467637477
 
@@ -314,4 +346,35 @@ performance measurements.
 
 - Purpose: determine whether each high-concurrency row is measurable or an
   explicit `capacity_failure`.
-- Status at dispatch: in progress.
+- c1024 first attempt ran on `b300-019`, Slurm job `20820`, and is not a
+  capacity result. At `2026-06-13T13:45:05Z`, UCX reported RoCE GID-table
+  changes followed by `Transport retry count exceeded`; several MPI ranks
+  aborted. The parent did not exit cleanly, so the 3600-second worker guard
+  eventually recorded a timeout.
+- c1024 prompt construction itself passed: 90 of 1024 prompts used one
+  recorded `space` boundary adjustment, none used context-tail trimming, and
+  every prompt encoded to exactly 8192 tokens.
+- c512 remains in progress.
+
+### Run 27469092334
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27469092334`
+- Dispatched `2026-06-13T14:11:06Z`.
+- Branch commit: `2e837d99f11cfa6bf99f338d571e6aec7880b0ed`.
+- Concurrency: `1024`.
+- Exact trigger:
+
+  ```bash
+  gh api -X POST \
+    /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+    -f ref='trt-bench' \
+    -f 'inputs[ref]=trt-bench' \
+    -f 'inputs[test-name]=DSV4 B300 TRT offline c1024 infra retry' \
+    -f 'inputs[concurrencies]=1024' \
+    -f 'inputs[worker-timeout]=5400'
+  ```
+
+- Purpose: retry c1024 on a fresh allocation after the `b300-019` RoCE/UCX
+  failure. The longer guard avoids confusing a legitimate slow full-shape
+  pass with the previous network-induced hang.
+- Status at dispatch: queued.
