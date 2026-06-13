@@ -2795,7 +2795,7 @@ minimaxm3-fp8-mi325x-vllm:
   image: vllm/vllm-openai-rocm:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: mi325x-vultr
+  runner: mi325x
   precision: fp8
   framework: vllm
   multinode: false
