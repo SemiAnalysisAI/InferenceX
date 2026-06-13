@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import re
 import signal
 import subprocess
 import sys
@@ -30,8 +32,10 @@ from trt_config import (
     SAMPLING_TOP_P,
     TUNING_MEASURED_PASSES,
     WORLD_SIZE,
+    CANDIDATE_ENVIRONMENT_VARIABLES,
     CandidateConfig,
     balance_candidate,
+    candidate_environment,
     choose_winner,
     overlap_candidate,
     scheduler_candidates,
@@ -164,6 +168,57 @@ def model_manifest(model_path: Path) -> dict[str, Any]:
     }
 
 
+def profile_trace_base(output_dir: Path, label: str) -> Path:
+    return output_dir / f"{label}_torch_profile.json"
+
+
+def collect_profile_artifacts(
+    *,
+    output_dir: Path,
+    label: str,
+    candidate: CandidateConfig,
+) -> dict[str, Any] | None:
+    if candidate.profile_iterations is None:
+        return None
+    trace_base = profile_trace_base(output_dir, label)
+    traces = sorted(
+        output_dir.glob(
+            f"{trace_base.stem}-rank-*{trace_base.suffix}"
+        )
+    )
+    files = []
+    ranks = []
+    for path in traces:
+        match = re.search(r"-rank-(\d+)\.json$", path.name)
+        rank = int(match.group(1)) if match else None
+        if rank is not None:
+            ranks.append(rank)
+        files.append(
+            {
+                "path": path.name,
+                "rank": rank,
+                "bytes": path.stat().st_size,
+                "sha256": sha256_file(path),
+            }
+        )
+    expected_ranks = list(range(candidate.active_gpu_count))
+    manifest = {
+        "profile_iterations": candidate.profile_iterations,
+        "trace_base": trace_base.name,
+        "expected_ranks": expected_ranks,
+        "observed_ranks": sorted(ranks),
+        "complete": (
+            sorted(ranks) == expected_ranks
+            and all(item["bytes"] > 0 for item in files)
+        ),
+        "files": files,
+    }
+    manifest_path = output_dir / f"{label}_profile_manifest.json"
+    write_json(manifest_path, manifest)
+    manifest["manifest_path"] = manifest_path.name
+    return manifest
+
+
 def classify_failure(
     worker_result: dict[str, Any],
     log_text: str,
@@ -171,6 +226,8 @@ def classify_failure(
 ) -> str:
     if timed_out:
         return "timeout"
+    if worker_result.get("phase") == "profile_collection":
+        return "profile"
     text = "\n".join(
         [
             str(worker_result.get("error", "")),
@@ -254,6 +311,8 @@ def compact_attempt(result: dict[str, Any]) -> dict[str, Any]:
             "engine_init_seconds",
             "aggregate",
             "resolved_parallelism",
+            "runtime_environment",
+            "profile",
             "worker_output",
             "worker_log",
         )
@@ -310,6 +369,31 @@ def run_worker(
     environment["ENABLE_PERFECT_ROUTER"] = "1"
     environment["TRTLLM_ENABLE_PERFECT_ROUTER"] = "1"
     environment["TRTLLM_PERFECT_ROUTER_MARKER"] = str(marker_path)
+    for name in CANDIDATE_ENVIRONMENT_VARIABLES:
+        environment.pop(name, None)
+    for name in (
+        "TLLM_PROFILE_LOG_RANKS",
+        "TLLM_PROFILE_START_STOP",
+        "TLLM_TORCH_PROFILE_TRACE",
+    ):
+        environment.pop(name, None)
+    configured_environment = candidate_environment(candidate)
+    environment.update(configured_environment)
+    rank_environment = dict(configured_environment)
+    if candidate.profile_iterations is not None:
+        trace_base = profile_trace_base(output_dir, label)
+        profile_environment = {
+            "TLLM_PROFILE_LOG_RANKS": "0",
+            "TLLM_PROFILE_START_STOP": candidate.profile_iterations,
+            "TLLM_TORCH_PROFILE_TRACE": str(trace_base),
+        }
+        environment.update(profile_environment)
+        rank_environment.update(profile_environment)
+    environment["TRTLLM_BENCH_EXPECTED_RANK_ENV"] = json.dumps(
+        rank_environment,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
 
     log_progress(
         f"{label}: worker start passes={passes} "
@@ -328,6 +412,11 @@ def run_worker(
         "heuristic_topk="
         f"{'on' if candidate.enable_heuristic_topk else 'off'} "
         f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
+        f"moe_backend={candidate.moe_backend} "
+        "low_precision_moe_combine="
+        f"{'on' if candidate.use_low_precision_moe_combine else 'off'} "
+        f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
+        f"profile_iterations={candidate.profile_iterations or 'off'} "
         f"max_seq_len={candidate.max_seq_len} "
         f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
         f"mtp={candidate.mtp_draft_tokens} "
@@ -381,10 +470,34 @@ def run_worker(
             "return_code": return_code,
             "timed_out": timed_out,
             "elapsed_seconds": elapsed,
+            "runtime_environment": {
+                "candidate": configured_environment,
+                "rank_expected": rank_environment,
+            },
             "worker_output": worker_output.name,
             "worker_log": worker_log.name,
         }
     )
+    profile = collect_profile_artifacts(
+        output_dir=output_dir,
+        label=label,
+        candidate=candidate,
+    )
+    if profile is not None:
+        result["profile"] = profile
+        if result.get("status") == "success" and not profile["complete"]:
+            result.update(
+                {
+                    "status": "failed",
+                    "phase": "profile_collection",
+                    "error_type": "ProfileArtifactError",
+                    "error": (
+                        "Profile traces did not cover every active rank: "
+                        f"{profile['observed_ranks']} != "
+                        f"{profile['expected_ranks']}"
+                    ),
+                }
+            )
     if result.get("status") != "success":
         result["failure_kind"] = classify_failure(
             result,
@@ -401,8 +514,10 @@ def run_worker(
         aggregate = result.get("aggregate") or {}
         log_progress(
             f"{label}: worker complete elapsed={elapsed:.1f}s "
-            f"{aggregate_progress(aggregate)}"
+            f"{aggregate_progress(aggregate)} "
+            f"profile_files={len((profile or {}).get('files', []))}"
         )
+    write_json(worker_output, result)
     return result
 
 
@@ -604,6 +719,13 @@ def main() -> int:
                 f"{'on' if experiment_candidate.enable_heuristic_topk else 'off'} "
                 "indexer_k_dtype="
                 f"{experiment_candidate.indexer_k_dtype or 'checkpoint'} "
+                f"moe_backend={experiment_candidate.moe_backend} "
+                "low_precision_moe_combine="
+                f"{'on' if experiment_candidate.use_low_precision_moe_combine else 'off'} "
+                "force_moe_comm="
+                f"{experiment_candidate.force_moe_comm_method or 'auto'} "
+                "profile_iterations="
+                f"{experiment_candidate.profile_iterations or 'off'} "
                 f"max_seq_len={experiment_candidate.max_seq_len} "
                 "trt_iter_log="
                 f"{'on' if experiment_candidate.print_iter_log else 'off'} "

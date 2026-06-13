@@ -27,6 +27,7 @@ WORK_DIR="/tmp/inferencex-trt-offline-${BENCH_ID}-${ALLOCATION_JOB_ID}-$$"
 RESULT_FILE="/workspace/offline_result_${BENCH_ID}.json"
 CONTROLLER_LOG="/workspace/offline_controller_${BENCH_ID}.log"
 DEBUG_ARCHIVE="/workspace/offline_debug_${BENCH_ID}.tar.gz"
+PROFILE_ARCHIVE="/workspace/offline_profiles_${BENCH_ID}.tar.gz"
 GPU_METRICS="/workspace/offline_gpu_metrics_${BENCH_ID}.csv"
 
 log() {
@@ -78,8 +79,50 @@ with open(path, "w", encoding="utf-8") as stream:
     stream.write("\n")
 PY
     fi
+    profile_file_list="$WORK_DIR/profile_files.txt"
+    find "$WORK_DIR" \
+        -maxdepth 1 \
+        -type f \
+        \( \
+            -name '*_torch_profile-rank-*.json' \
+            -o -name '*_profile_manifest.json' \
+        \) \
+        -printf '%f\n' \
+        | sort > "$profile_file_list"
+    profile_tar_excludes=()
+    if [[ -s "$profile_file_list" ]]; then
+        if tar \
+            -C "$WORK_DIR" \
+            -czf "$PROFILE_ARCHIVE" \
+            -T "$profile_file_list" 2>/dev/null; then
+            profile_tar_excludes+=(--exclude='*_torch_profile-rank-*.json')
+            log "profile artifacts finalized archive=$PROFILE_ARCHIVE"
+        else
+            rc=1
+            log "profile archive failed; preserving traces in debug archive"
+            python3 - "$RESULT_FILE" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, encoding="utf-8") as stream:
+    result = json.load(stream)
+result.update(
+    {
+        "status": "failed",
+        "failure_kind": "profile_artifact",
+        "error": "Profile archive creation failed; traces are in the debug archive",
+    }
+)
+with open(path, "w", encoding="utf-8") as stream:
+    json.dump(result, stream, indent=2, sort_keys=True)
+    stream.write("\n")
+PY
+        fi
+    fi
     tar \
         --exclude=corpus.bin \
+        "${profile_tar_excludes[@]}" \
         -C "$WORK_DIR" \
         -czf "$DEBUG_ARCHIVE" \
         . 2>/dev/null || true

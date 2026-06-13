@@ -149,6 +149,8 @@ def extract_request_metrics(
         "output_tokens": output_tokens,
         "output_token_sha256": _token_sha256(token_ids),
         "decode_tokens": decode_tokens,
+        "first_iter": int(first_iter),
+        "last_iter": int(last_iter),
         "decode_iterations": decode_iterations,
         "ttft_s": first_token - arrival,
         "queue_s": first_scheduled - arrival,

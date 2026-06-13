@@ -781,3 +781,60 @@ Important interpretation:
   not prove higher whole-batch decode throughput or higher total-system
   throughput than Huawei. Always present TTFT and wall throughput with the
   TPOT gate.
+
+## Stage-Five MoE Profiling Matrix
+
+`utils/bench_offline/b300_stage5_moe_profile_experiments.json` targets the
+non-staggered c128 wait-0 result. The best genuine result from run
+`27477851766` was the GVR row at `382.24 steps/s/GPU`, about `1.54%` below
+Huawei's `388.23`.
+
+Source-backed candidates:
+
+- Repeat the GVR control to measure one-pass noise.
+- `MEGAMOE_DEEPGEMM`: commit `c185066` includes a fused
+  dispatch+MXFP4/MXFP8 GEMM+combine backend for SM100/SM103 and pure DEP.
+  It is labeled experimental and is not the production 8K recipe backend.
+- Force `NVLINK_TWO_SIDED`, `DEEPEP`, or `DEEPEPLOWLATENCY` instead of the
+  default one-sided NVLink communication selected by `ConfigurableMoE`.
+- Disable low-precision combine, disable post-quant dispatch, and disable
+  LM-head TP as bounded controls.
+
+The GVR control and forced two-sided-NVLink rows set
+`TLLM_PROFILE_START_STOP=50-51`. TRT starts the PyTorch/CUDA profiler before
+executor iteration 50 and stops it before iteration 51, so exactly one steady
+decode iteration from the required full-shape warmup is captured. It does not
+add a measured pass. The launcher stores per-rank traces separately in
+`offline_profiles_EXPERIMENT_ID.tar.gz`; raw traces are excluded from the
+normal debug archive.
+
+Candidate-controlled `TRTLLM_*` and `TLLM_*` settings are copied into every
+MPI rank marker and rejected if any rank sees a different value.
+
+Dispatch:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage5_moe_profile_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT c128 MoE profile' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
+After completion:
+
+```bash
+gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
+  -n offline-trt-job-c128-gvr-profile -D /tmp/c128-gvr-profile
+tar -xzf /tmp/c128-gvr-profile/offline_profiles_c128-gvr-profile.tar.gz \
+  -C /tmp/c128-gvr-profile
+python utils/bench_offline/summarize_profile.py /tmp/c128-gvr-profile \
+  --json-out /tmp/c128-gvr-profile/profile_summary.json
+```

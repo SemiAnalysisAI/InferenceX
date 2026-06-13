@@ -23,6 +23,7 @@ from trt_config import (
     SAMPLING_TOP_P,
     CandidateConfig,
     build_llm_kwargs,
+    candidate_environment,
     resolved_parallelism,
 )
 
@@ -63,6 +64,30 @@ def install_mpi_worker_entry() -> dict[str, str]:
         "proxy_module": str(Path(proxy.__file__).resolve()),
         "worker_entry": "trt_mpi_entry.worker_main",
     }
+
+
+def expected_rank_environment() -> dict[str, str]:
+    raw = os.getenv("TRTLLM_BENCH_EXPECTED_RANK_ENV", "{}")
+    value = json.loads(raw)
+    if not isinstance(value, dict):
+        raise RuntimeError(
+            "TRTLLM_BENCH_EXPECTED_RANK_ENV must contain a JSON object"
+        )
+    expected = {str(name): str(item) for name, item in value.items()}
+    mismatches = {
+        name: {
+            "expected": expected_value,
+            "actual": os.getenv(name),
+        }
+        for name, expected_value in expected.items()
+        if os.getenv(name) != expected_value
+    }
+    if mismatches:
+        raise RuntimeError(
+            "Benchmark environment mismatch in controller worker: "
+            f"{mismatches}"
+        )
+    return expected
 
 
 def read_perfect_router_marker(path: Path) -> dict[str, Any]:
@@ -203,6 +228,8 @@ def main() -> int:
     try:
         phase = "load_candidate"
         candidate = CandidateConfig.from_dict(read_json(args.candidate))
+        configured_environment = candidate_environment(candidate)
+        rank_environment = expected_rank_environment()
         prompts, corpus_manifest = load_corpus(args.corpus, args.manifest)
         concurrency = len(prompts)
         if concurrency != int(corpus_manifest["concurrency"]):
@@ -224,6 +251,11 @@ def main() -> int:
             "heuristic_topk="
             f"{'on' if candidate.enable_heuristic_topk else 'off'} "
             f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
+            f"moe_backend={candidate.moe_backend} "
+            "low_precision_moe_combine="
+            f"{'on' if candidate.use_low_precision_moe_combine else 'off'} "
+            f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
+            f"profile_iterations={candidate.profile_iterations or 'off'} "
             f"max_seq_len={candidate.max_seq_len} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'}"
         )
@@ -288,6 +320,9 @@ def main() -> int:
             "heuristic_topk="
             f"{'on' if candidate.enable_heuristic_topk else 'off'} "
             f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
+            f"moe_backend={candidate.moe_backend} "
+            f"force_moe_comm={candidate.force_moe_comm_method or 'auto'} "
+            f"profile_iterations={candidate.profile_iterations or 'off'} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
             f"wait_iters={candidate.batching_wait_iters} "
             f"timeout_iters={candidate.attention_dp_timeout_iters}"
@@ -315,7 +350,10 @@ def main() -> int:
                 "heuristic_topk="
                 f"{'on' if resolved['enable_heuristic_topk'] else 'off'} "
                 f"indexer_k_dtype={resolved['indexer_k_dtype']} "
-                f"index_topk={resolved['index_topk']}"
+                f"index_topk={resolved['index_topk']} "
+                f"moe_backend={resolved['moe_backend']} "
+                "low_precision_moe_combine="
+                f"{'on' if resolved['use_low_precision_moe_combine'] else 'off'}"
             )
 
             phase = "warmup"
@@ -360,6 +398,21 @@ def main() -> int:
                     f"topology: {marker['mpi_entry_ranks']!r} != "
                     f"{expected_ranks!r}"
                 )
+            environment_mismatches = {}
+            for row in marker["processes"]:
+                if row.get("source") != "trt_mpi_entry":
+                    continue
+                actual_environment = row.get("benchmark_environment")
+                if actual_environment != rank_environment:
+                    environment_mismatches[str(row.get("rank"))] = {
+                        "expected": rank_environment,
+                        "actual": actual_environment,
+                    }
+            if environment_mismatches:
+                raise RuntimeError(
+                    "Benchmark environment did not reach every TRT rank: "
+                    f"{environment_mismatches}"
+                )
             expected_cute_cache = os.getenv("CUTE_DSL_CACHE_DIR")
             if not expected_cute_cache:
                 raise RuntimeError(
@@ -385,7 +438,8 @@ def main() -> int:
                 "perfect-router validation complete "
                 f"rank_processes={marker['mpi_entry_processes']} "
                 f"ranks={marker['mpi_entry_ranks']} "
-                f"cute_cache={expected_cute_cache}"
+                f"cute_cache={expected_cute_cache} "
+                f"environment_keys={sorted(rank_environment)}"
             )
             phase = "engine_shutdown"
             log_progress("engine shutdown start")
@@ -420,6 +474,10 @@ def main() -> int:
                 },
                 "runtime_capabilities": {
                     "cutlass_dsl_available": cute_dsl_available,
+                },
+                "runtime_environment": {
+                    "candidate": configured_environment,
+                    "rank_expected": rank_environment,
                 },
                 "corpus": corpus_manifest,
             }

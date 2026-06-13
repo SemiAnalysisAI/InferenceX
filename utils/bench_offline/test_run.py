@@ -9,10 +9,12 @@ import pytest
 from run import (
     ALLOWED_CONCURRENCIES,
     classify_failure,
+    collect_profile_artifacts,
     git_revision,
     latest_worker_progress,
     wait_for_worker_process,
 )
+from trt_config import CandidateConfig
 from trt_mpi_entry import worker_main
 from trt_worker import measured_pass_count, read_perfect_router_marker
 
@@ -152,6 +154,11 @@ def test_mpi_entry_sets_router_before_real_worker(
         "TRTLLM_BENCH_CUTE_DSL_CACHE_DIR",
         str(cache_dir),
     )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_EXPECTED_RANK_ENV",
+        json.dumps({"TRTLLM_ENABLE_PDL": "0"}),
+    )
+    monkeypatch.setenv("TRTLLM_ENABLE_PDL", "0")
     monkeypatch.delenv("ENABLE_PERFECT_ROUTER", raising=False)
     monkeypatch.delenv("CUTE_DSL_CACHE_DIR", raising=False)
 
@@ -160,6 +167,9 @@ def test_mpi_entry_sets_router_before_real_worker(
     row = json.loads(marker.read_text(encoding="utf-8"))
     assert row["perfect_router"] == "1"
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
+    assert row["benchmark_environment"] == {
+        "TRTLLM_ENABLE_PDL": "0",
+    }
     assert row["source"] == "trt_mpi_entry"
 
 
@@ -185,3 +195,29 @@ def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
     assert parsed["mpi_entry_ranks"] == [0, 1, 2, 3]
     assert parsed["mpi_entry_cute_cache_processes"] == 4
     assert parsed["mpi_entry_cute_cache_paths"] == ["/cache"]
+
+
+def test_profile_artifacts_require_every_active_rank(tmp_path):
+    candidate = CandidateConfig(
+        name="profile",
+        batching_wait_iters=0,
+        parallelism="dep4",
+        profile_iterations="50-51",
+    )
+    label = "experiment_01_profile"
+    for rank in range(4):
+        (tmp_path / f"{label}_torch_profile-rank-{rank}.json").write_text(
+            '{"traceEvents":[]}\n',
+            encoding="utf-8",
+        )
+
+    manifest = collect_profile_artifacts(
+        output_dir=tmp_path,
+        label=label,
+        candidate=candidate,
+    )
+
+    assert manifest is not None
+    assert manifest["complete"] is True
+    assert manifest["observed_ranks"] == [0, 1, 2, 3]
+    assert (tmp_path / manifest["manifest_path"]).is_file()

@@ -20,6 +20,20 @@ PINNED_TRT_GLOBAL_SEED = 42
 TUNING_MEASURED_PASSES = 1
 FINAL_MEASURED_PASSES = 1
 MIN_WINNER_IMPROVEMENT = 0.03
+MOE_BACKENDS = {"TRTLLM", "MEGAMOE_DEEPGEMM"}
+MOE_COMM_METHODS = {
+    "NVLINK_ONE_SIDED",
+    "NVLINK_TWO_SIDED",
+    "DEEPEP",
+    "DEEPEPLOWLATENCY",
+    "ALLGATHER",
+}
+CANDIDATE_ENVIRONMENT_VARIABLES = {
+    "TRTLLM_ENABLE_PDL",
+    "TRTLLM_FORCE_COMM_METHOD",
+    "TRTLLM_MEGAMOE_FUSED_PREPARE",
+    "TRTLLM_MOE_POST_QUANT_ALLTOALLV",
+}
 
 
 @dataclass(frozen=True)
@@ -78,6 +92,13 @@ class CandidateConfig:
     use_cute_dsl_paged_mqa_logits: bool = False
     enable_heuristic_topk: bool = False
     indexer_k_dtype: str | None = None
+    moe_backend: str = "TRTLLM"
+    use_low_precision_moe_combine: bool = True
+    force_moe_comm_method: str | None = None
+    moe_post_quant_alltoall: bool | None = None
+    enable_pdl: bool | None = None
+    megamoe_fused_prepare: bool | None = None
+    profile_iterations: str | None = None
     print_iter_log: bool = True
     max_seq_len: int = MAX_SEQ_LEN
     mtp_draft_tokens: int = MTP_DRAFT_TOKENS
@@ -121,12 +142,60 @@ class CandidateConfig:
             "use_cute_dsl_topk",
             "use_cute_dsl_paged_mqa_logits",
             "enable_heuristic_topk",
+            "use_low_precision_moe_combine",
             "print_iter_log",
         ):
             if not isinstance(getattr(self, field_name), bool):
                 raise ValueError(f"{field_name} must be boolean")
+        for field_name in (
+            "moe_post_quant_alltoall",
+            "enable_pdl",
+            "megamoe_fused_prepare",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, bool):
+                raise ValueError(f"{field_name} must be boolean or null")
         if self.indexer_k_dtype not in {None, "fp4", "fp8"}:
             raise ValueError("indexer_k_dtype must be fp4, fp8, or null")
+        if self.moe_backend not in MOE_BACKENDS:
+            raise ValueError(
+                f"moe_backend must be one of {sorted(MOE_BACKENDS)}"
+            )
+        if (
+            self.force_moe_comm_method is not None
+            and self.force_moe_comm_method not in MOE_COMM_METHODS
+        ):
+            raise ValueError(
+                "force_moe_comm_method must be null or one of "
+                f"{sorted(MOE_COMM_METHODS)}"
+            )
+        if (
+            self.moe_backend == "MEGAMOE_DEEPGEMM"
+            and self.force_moe_comm_method is not None
+        ):
+            raise ValueError(
+                "force_moe_comm_method is invalid for fused-communication "
+                "MegaMoE"
+            )
+        if (
+            self.moe_backend != "MEGAMOE_DEEPGEMM"
+            and self.megamoe_fused_prepare is not None
+        ):
+            raise ValueError(
+                "megamoe_fused_prepare requires "
+                "moe_backend=MEGAMOE_DEEPGEMM"
+            )
+        if self.profile_iterations is not None:
+            match = re.fullmatch(r"(\d+)-(\d+)", self.profile_iterations)
+            if match is None:
+                raise ValueError(
+                    "profile_iterations must be one start-stop range"
+                )
+            start, stop = (int(value) for value in match.groups())
+            if start >= stop:
+                raise ValueError(
+                    "profile_iterations stop must be greater than start"
+                )
         minimum_seq_len = INPUT_TOKENS + OUTPUT_TOKENS + MTP_DRAFT_TOKENS
         if (
             not isinstance(self.max_seq_len, int)
@@ -308,8 +377,10 @@ def build_llm_kwargs(
             "enable_block_reuse": False,
         },
         "moe_config": {
-            "backend": "TRTLLM",
-            "use_low_precision_moe_combine": True,
+            "backend": candidate.moe_backend,
+            "use_low_precision_moe_combine": (
+                candidate.use_low_precision_moe_combine
+            ),
         },
         "speculative_config": {
             "decoding_type": "MTP",
@@ -352,6 +423,27 @@ def build_llm_kwargs(
     else:
         kwargs["cuda_graph_config"] = None
     return kwargs
+
+
+def candidate_environment(candidate: CandidateConfig) -> dict[str, str]:
+    environment: dict[str, str] = {}
+    if candidate.force_moe_comm_method is not None:
+        environment["TRTLLM_FORCE_COMM_METHOD"] = (
+            candidate.force_moe_comm_method
+        )
+    if candidate.moe_post_quant_alltoall is not None:
+        environment["TRTLLM_MOE_POST_QUANT_ALLTOALLV"] = (
+            "1" if candidate.moe_post_quant_alltoall else "0"
+        )
+    if candidate.enable_pdl is not None:
+        environment["TRTLLM_ENABLE_PDL"] = (
+            "1" if candidate.enable_pdl else "0"
+        )
+    if candidate.megamoe_fused_prepare is not None:
+        environment["TRTLLM_MEGAMOE_FUSED_PREPARE"] = (
+            "1" if candidate.megamoe_fused_prepare else "0"
+        )
+    return environment
 
 
 def objective(result: dict[str, Any]) -> Optional[float]:
@@ -439,6 +531,25 @@ def resolved_parallelism(
             f"{candidate.mtp_draft_tokens}"
         )
     resolved["mtp_max_draft_len"] = draft_len
+    moe_config = llm_args.moe_config
+    resolved["moe_backend"] = str(moe_config.backend)
+    resolved["use_low_precision_moe_combine"] = bool(
+        moe_config.use_low_precision_moe_combine
+    )
+    if resolved["moe_backend"] != candidate.moe_backend:
+        raise RuntimeError(
+            "Resolved TRT MoE backend mismatch: "
+            f"{resolved['moe_backend']!r} != {candidate.moe_backend!r}"
+        )
+    if (
+        resolved["use_low_precision_moe_combine"]
+        != candidate.use_low_precision_moe_combine
+    ):
+        raise RuntimeError(
+            "Resolved TRT low-precision MoE combine mismatch: "
+            f"{resolved['use_low_precision_moe_combine']} != "
+            f"{candidate.use_low_precision_moe_combine}"
+        )
     resolved["attention_dp_batch_mode"] = (
         candidate.attention_dp_batch_mode
     )

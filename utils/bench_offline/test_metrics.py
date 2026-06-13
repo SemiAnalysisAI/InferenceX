@@ -52,6 +52,9 @@ def test_token_tpot_and_derived_throughput():
         max_draft_tokens=3,
     )
     aggregate = measured["aggregate"]
+    request = measured["requests"][0]
+    assert request["first_iter"] == 10
+    assert request["last_iter"] == 266
     assert aggregate["mean_token_tpot_ms"] == pytest.approx(20.0)
     assert aggregate["mean_step_tpot_ms"] == pytest.approx(48.75)
     assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)

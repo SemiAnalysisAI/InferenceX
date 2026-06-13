@@ -9,6 +9,7 @@ from trt_config import (
     TUNING_MEASURED_PASSES,
     CandidateConfig,
     build_llm_kwargs,
+    candidate_environment,
     choose_winner,
     resolved_parallelism,
 )
@@ -25,6 +26,13 @@ def result(value: float, name: str) -> dict:
         "candidate": {"name": name},
         "aggregate": {"derived_output_tput_per_gpu": value},
     }
+
+
+def default_moe_config():
+    return SimpleNamespace(
+        backend="TRTLLM",
+        use_low_precision_moe_combine=True,
+    )
 
 
 def test_later_candidate_requires_three_percent_improvement():
@@ -87,6 +95,62 @@ def test_candidate_can_enable_sparse_indexer_optimizations():
         "enable_heuristic_topk": True,
         "indexer_k_dtype": "fp8",
     }
+
+
+def test_candidate_can_select_megamoe_and_profile_one_iteration():
+    candidate = CandidateConfig(
+        name="megamoe-profile",
+        batching_wait_iters=0,
+        moe_backend="MEGAMOE_DEEPGEMM",
+        megamoe_fused_prepare=True,
+        profile_iterations="50-51",
+    )
+    kwargs = build_llm_kwargs("/model", 128, candidate)
+    assert kwargs["moe_config"] == {
+        "backend": "MEGAMOE_DEEPGEMM",
+        "use_low_precision_moe_combine": True,
+    }
+    assert candidate_environment(candidate) == {
+        "TRTLLM_MEGAMOE_FUSED_PREPARE": "1",
+    }
+
+
+def test_candidate_can_force_moe_communication_and_runtime_flags():
+    candidate = CandidateConfig(
+        name="two-sided",
+        batching_wait_iters=0,
+        force_moe_comm_method="NVLINK_TWO_SIDED",
+        moe_post_quant_alltoall=False,
+        enable_pdl=False,
+    )
+    assert candidate_environment(candidate) == {
+        "TRTLLM_FORCE_COMM_METHOD": "NVLINK_TWO_SIDED",
+        "TRTLLM_MOE_POST_QUANT_ALLTOALLV": "0",
+        "TRTLLM_ENABLE_PDL": "0",
+    }
+
+
+@pytest.mark.parametrize(
+    "profile_iterations",
+    ("50", "51-50", "a-b", "50-51,60-61"),
+)
+def test_candidate_rejects_invalid_profile_iterations(profile_iterations):
+    with pytest.raises(ValueError, match="profile_iterations"):
+        CandidateConfig(
+            name="invalid-profile",
+            batching_wait_iters=0,
+            profile_iterations=profile_iterations,
+        )
+
+
+def test_megamoe_rejects_external_communication_override():
+    with pytest.raises(ValueError, match="fused-communication"):
+        CandidateConfig(
+            name="invalid-megamoe",
+            batching_wait_iters=0,
+            moe_backend="MEGAMOE_DEEPGEMM",
+            force_moe_comm_method="NVLINK_ONE_SIDED",
+        )
 
 
 def test_candidate_rejects_invalid_indexer_dtype():
@@ -244,6 +308,7 @@ def test_candidate_name_must_be_filename_safe():
 
 def test_resolved_parallelism_rejects_no_expected_values():
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=8,
             tp_size=8,
@@ -257,7 +322,10 @@ def test_resolved_parallelism_rejects_no_expected_values():
         print_iter_log=True,
         sparse_attention_config=None,
     )
-    assert resolved_parallelism(llm_args)["effective_parallelism"] == "DEP8"
+    resolved = resolved_parallelism(llm_args)
+    assert resolved["effective_parallelism"] == "DEP8"
+    assert resolved["moe_backend"] == "TRTLLM"
+    assert resolved["use_low_precision_moe_combine"] is True
 
 
 def test_resolved_parallelism_accepts_candidate_lm_head_tp():
@@ -267,6 +335,7 @@ def test_resolved_parallelism_accepts_candidate_lm_head_tp():
         enable_lm_head_tp_in_adp=True,
     )
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=8,
             tp_size=8,
@@ -291,6 +360,7 @@ def test_resolved_parallelism_validates_local_rank_runtime_capacity():
         attention_dp_batch_mode="local-rank",
     )
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=8,
             tp_size=8,
@@ -326,6 +396,7 @@ def test_resolved_parallelism_rejects_wrong_local_graph_capacity():
         attention_dp_batch_mode="local-rank",
     )
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=8,
             tp_size=8,
@@ -359,6 +430,7 @@ def test_resolved_parallelism_accepts_tp4():
         parallelism="tp4",
     )
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=4,
             tp_size=4,
@@ -385,6 +457,7 @@ def test_resolved_parallelism_validates_runtime_tuning_switches():
         max_seq_len=8832,
     )
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=8,
             tp_size=8,
@@ -416,6 +489,7 @@ def test_resolved_parallelism_validates_sparse_indexer_switches():
         indexer_k_dtype="fp8",
     )
     llm_args = SimpleNamespace(
+        moe_config=default_moe_config(),
         parallel_config=SimpleNamespace(
             world_size=8,
             tp_size=8,
@@ -450,6 +524,7 @@ def test_resolved_parallelism_validates_sparse_indexer_switches():
         "b300_stage2_experiments.json",
         "b300_stage3_local_batch_experiments.json",
         "b300_stage4_kernel_experiments.json",
+        "b300_stage5_moe_profile_experiments.json",
         "b300_huawei_global_batch_experiments.json",
     ),
 )

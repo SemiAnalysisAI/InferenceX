@@ -447,6 +447,29 @@ gh api -X POST \
   -f 'inputs[worker-timeout]=3600'
 ```
 
+The fifth-stage matrix focuses on the remaining exact-c128 DEP4 gap. It
+repeats the GVR control, tests the pinned source's fused
+`MEGAMOE_DEEPGEMM` backend, compares one-sided NVLink with two-sided NVLink
+and DeepEP communication, and checks combine/dispatch precision controls.
+Two rows set `profile_iterations=50-51`, which captures one steady decode
+iteration during the required warmup. Profiling does not add another
+benchmark pass.
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_stage5_moe_profile_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT c128 MoE profile' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```
+
 ## Artifacts And Collected Values
 
 Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
@@ -456,6 +479,8 @@ Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
 - `offline_gpu_metrics_EXPERIMENT_ID.csv`: one-second GPU telemetry
 - `offline_debug_EXPERIMENT_ID.tar.gz`: candidate configs, worker JSON,
   worker logs, corpus manifest, and perfect-router markers
+- `offline_profiles_EXPERIMENT_ID.tar.gz`: per-rank PyTorch/CUDA Chrome
+  traces and their checksum manifest, present only for profile rows
 
 The collector uploads `offline-trt-summary`:
 
@@ -495,6 +520,17 @@ Download a finished summary:
 gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
   -n offline-trt-summary -D ./offline-summary
 jq '.rows' ./offline-summary/offline_aggregate.json
+```
+
+Download and summarize a completed profile without printing raw trace JSON:
+
+```bash
+gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
+  -n offline-trt-job-c128-gvr-profile -D ./offline-profile
+tar -xzf ./offline-profile/offline_profiles_c128-gvr-profile.tar.gz \
+  -C ./offline-profile
+python utils/bench_offline/summarize_profile.py ./offline-profile \
+  --json-out ./offline-profile/profile_summary.json
 ```
 
 ## Debugging Order

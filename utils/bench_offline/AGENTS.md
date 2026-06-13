@@ -59,6 +59,13 @@ benchmark.
 - Preserve the timestamped launcher/controller/worker progress logs. The
   controller heartbeat should remain low-frequency and must not stream or
   parse native TRT iteration logs into the Actions log.
+- Profile candidates must use one increasing `profile_iterations` range.
+  `50-51` captures one decode iteration in the full-shape warmup without
+  adding a measured pass. Require one non-empty trace per active rank and
+  keep traces in `offline_profiles_*.tar.gz`, outside the debug archive.
+- Candidate-controlled `TRTLLM_*` and `TLLM_*` settings must be present in
+  every MPI rank marker. Do not accept a labeled backend or communication
+  result if rank propagation validation fails.
 - On runtime errors, retain the result JSON, worker JSON/log, candidate config,
   corpus manifest, perfect-router marker, and GPU metrics.
 - Verify changes with `python -m pytest utils/bench_offline -v`,

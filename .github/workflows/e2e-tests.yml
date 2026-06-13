@@ -80,6 +80,13 @@ jobs:
                   "use_cute_dsl_paged_mqa_logits",
                   "enable_heuristic_topk",
                   "indexer_k_dtype",
+                  "moe_backend",
+                  "use_low_precision_moe_combine",
+                  "force_moe_comm_method",
+                  "moe_post_quant_alltoall",
+                  "enable_pdl",
+                  "megamoe_fused_prepare",
+                  "profile_iterations",
                   "print_iter_log",
                   "max_seq_len",
                   "mtp_draft_tokens",
@@ -173,6 +180,7 @@ jobs:
                       "use_cute_dsl_topk",
                       "use_cute_dsl_paged_mqa_logits",
                       "enable_heuristic_topk",
+                      "use_low_precision_moe_combine",
                       "print_iter_log",
                   ):
                       if bool_key in candidate and not isinstance(
@@ -183,12 +191,82 @@ jobs:
                               f"experiment {experiment_id} candidate."
                               f"{bool_key} must be boolean"
                           )
+                  for optional_bool_key in (
+                      "moe_post_quant_alltoall",
+                      "enable_pdl",
+                      "megamoe_fused_prepare",
+                  ):
+                      value = candidate.get(optional_bool_key)
+                      if value is not None and not isinstance(value, bool):
+                          raise SystemExit(
+                              f"experiment {experiment_id} candidate."
+                              f"{optional_bool_key} must be boolean or null"
+                          )
                   indexer_k_dtype = candidate.get("indexer_k_dtype")
                   if indexer_k_dtype not in {None, "fp4", "fp8"}:
                       raise SystemExit(
                           f"experiment {experiment_id} candidate."
                           "indexer_k_dtype must be fp4, fp8, or null"
                       )
+                  moe_backend = candidate.get("moe_backend", "TRTLLM")
+                  if moe_backend not in {
+                      "TRTLLM",
+                      "MEGAMOE_DEEPGEMM",
+                  }:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "moe_backend must be TRTLLM or "
+                          "MEGAMOE_DEEPGEMM"
+                      )
+                  force_moe_comm_method = candidate.get(
+                      "force_moe_comm_method"
+                  )
+                  if force_moe_comm_method not in {
+                      None,
+                      "NVLINK_ONE_SIDED",
+                      "NVLINK_TWO_SIDED",
+                      "DEEPEP",
+                      "DEEPEPLOWLATENCY",
+                      "ALLGATHER",
+                  }:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "force_moe_comm_method is unsupported"
+                      )
+                  if (
+                      moe_backend == "MEGAMOE_DEEPGEMM"
+                      and force_moe_comm_method is not None
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} cannot force "
+                          "external MoE communication with MegaMoE"
+                      )
+                  if (
+                      moe_backend != "MEGAMOE_DEEPGEMM"
+                      and candidate.get("megamoe_fused_prepare") is not None
+                  ):
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "megamoe_fused_prepare requires MegaMoE"
+                      )
+                  profile_iterations = candidate.get(
+                      "profile_iterations"
+                  )
+                  if profile_iterations is not None:
+                      profile_match = re.fullmatch(
+                          r"(\d+)-(\d+)",
+                          profile_iterations,
+                      )
+                      if (
+                          profile_match is None
+                          or int(profile_match.group(1))
+                          >= int(profile_match.group(2))
+                      ):
+                          raise SystemExit(
+                              f"experiment {experiment_id} candidate."
+                              "profile_iterations must be an increasing "
+                              "start-stop range"
+                          )
                   max_seq_len = candidate.get("max_seq_len", 9216)
                   if (
                       not isinstance(max_seq_len, int)
@@ -336,6 +414,7 @@ jobs:
           rm -f "${{ github.workspace }}"/offline_controller_*.log
           rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
           rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
+          rm -f "${{ github.workspace }}"/offline_profiles_*.tar.gz
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -362,6 +441,7 @@ jobs:
               winner,
               aggregate,
               huawei,
+              profile: .final.profile,
               error
             }' "$result"
           fi
@@ -376,6 +456,7 @@ jobs:
             offline_controller_${{ matrix.id }}.log
             offline_gpu_metrics_${{ matrix.id }}.csv
             offline_debug_${{ matrix.id }}.tar.gz
+            offline_profiles_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14
 

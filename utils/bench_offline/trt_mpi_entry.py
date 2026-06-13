@@ -12,11 +12,25 @@ def _write_marker() -> None:
     marker = os.getenv("TRTLLM_PERFECT_ROUTER_MARKER")
     if not marker:
         return
+    expected_environment_raw = os.getenv(
+        "TRTLLM_BENCH_EXPECTED_RANK_ENV",
+        "{}",
+    )
+    try:
+        expected_environment = json.loads(expected_environment_raw)
+    except json.JSONDecodeError:
+        expected_environment = {}
+    if not isinstance(expected_environment, dict):
+        expected_environment = {}
     payload = {
         "pid": os.getpid(),
         "rank": os.getenv("OMPI_COMM_WORLD_RANK"),
         "perfect_router": os.getenv("ENABLE_PERFECT_ROUTER"),
         "cute_dsl_cache_dir": os.getenv("CUTE_DSL_CACHE_DIR"),
+        "benchmark_environment": {
+            str(name): os.getenv(str(name))
+            for name in expected_environment
+        },
         "source": "trt_mpi_entry",
     }
     path = Path(marker)
