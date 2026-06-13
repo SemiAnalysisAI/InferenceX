@@ -28,11 +28,15 @@ cleanup_stale_benchmark_logs
 
 set -x
 
-# Exclude known-broken mi325x node:
+# Exclude known-broken mi325x nodes:
 #   chi-mi325x-pod1-121: has a history of failing enroot container image import
 #                        (root-caused via #1467/#1468/#1469 sweep failures);
 #                        excluded for the same reason as the amds fleet.
-JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi325x-pod1-121.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+#   chi-mi325x-pod1-027: fails SLURM resume/boot — salloc grants an allocation then
+#                        relinquishes it with "Something is wrong with the boot of the
+#                        nodes" (run 27454108525), which gated the whole sweep at the
+#                        canary; excluded until the node is repaired.
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi325x-pod1-121.ord.vultr.cpe.ice.amd.com,chi-mi325x-pod1-027.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job" >&2
