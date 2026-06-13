@@ -3726,4 +3726,4 @@
     - "Serve shape follows minimaxm3-fp8-mi355x-vllm (--block-size 128, --language-model-only, --kv-cache-dtype fp8, --attention-backend TRITON_ATTN, --enforce-eager, minimax_m3 parsers); prompts routed through the chat template for realistic acceptance"
     - "No attention_backend override on the drafter: the server runs on TRITON_ATTN, so the FlashInfer page-128/MHA limitation that forced FLASH_ATTN on the CUDA recipes does not apply on ROCm"
     - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped, mirroring the minimaxm3-fp8-b300-vllm-mtp search space"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1742
