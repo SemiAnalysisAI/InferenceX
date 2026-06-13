@@ -6,10 +6,10 @@ benchmark.
 - This branch is disposable and must remain isolated from the normal serving
   sweep. Do not add entries to `nvidia-master.yaml` or `perf-changelog.yaml`.
 - Preserve the Huawei-comparable workload: 8192 prompt tokens, 625 generated
-  tokens, MTP3, DEP8, temperature 1, one full-shape warmup, and one measured
-  pass. TP4/DEP4 tests must be separately labeled and must not receive Huawei
-  ratios. A single-candidate experiment uses one fresh engine; legacy serial
+  tokens, MTP3, temperature 1, one full-shape warmup, and exactly one measured
+  pass. A single-candidate experiment uses one fresh engine; legacy serial
   tuning also uses one pass per candidate plus a fresh one-pass final engine.
+  TP4/DEP4 rows must record their four active GPUs and topology explicitly.
 - The pinned TRT PyTorch sampler ignores request-level seeds and advances one
   engine-global seed-42 generator. Do not claim per-request determinism.
 - Preserve the token-based headline metric. Huawei conversion uses observed
@@ -32,13 +32,14 @@ benchmark.
   `ceil(global_concurrency / attention_dp_ranks)` and record the resolved
   values in the result.
 - The pinned TRT source preserves checkpoint-derived DeepSeek-V4 sparse
-  settings when `use_cute_dsl_paged_mqa_logits` is explicitly enabled.
-  Treat it as an isolated kernel experiment, validate the resolved flag, and
-  fail unless `IS_CUTLASS_DSL_AVAILABLE` is true. Run `27477088665` proved
-  the current FP4 checkpoint is incompatible with this kernel: its query is
-  `torch.int8`, while `cute_dsl_fp8_paged_mqa_logits` requires
-  `float8_e4m3fn`. Do not rerun that path unless the checkpoint or TRT dtype
-  handling changes.
+  settings when a partial sparse-attention override is supplied. Validate
+  `use_cute_dsl_topk`, `use_cute_dsl_paged_mqa_logits`,
+  `enable_heuristic_topk`, and explicit `indexer_k_dtype` after engine start.
+  CuTE DSL requests must fail unless `IS_CUTLASS_DSL_AVAILABLE` is true.
+  Run `27477088665` proved FP4 indexer K is incompatible with the paged-MQA
+  DSL kernel: its query is `torch.int8`, while the kernel requires
+  `float8_e4m3fn`. Only exercise that kernel with explicit
+  `indexer_k_dtype=fp8`.
 - `max_seq_len=8832` is the block-aligned tight capacity for the fixed
   8192-input/625-output/MTP3 shape. Keep `9216` as the control.
 - `print_iter_log=false` only disables native TRT iteration output. Preserve
@@ -46,9 +47,10 @@ benchmark.
 - Do not silently pad prompts, reduce MTP depth, change the MoE backend, or
   switch to HTTP serving to make a run pass. LM-head TP is an explicit
   candidate field and must be recorded in the result.
-- Huawei comparison claims require DEP8, MTP3, and matching batch per chip.
-  Non-matching parallelism or MTP-depth experiments may be useful
-  optimizations, but their Huawei ratios must remain unavailable.
+- The current Huawei gate uses exact global batches 16, 64, and 128 with
+  MTP3. It compares B300 steps per active GPU with Huawei steps per chip and
+  records active GPU count/topology. Never describe this as equal topology or
+  total-system throughput; Huawei uses 16 chips while TP4/DEP4 use four B300s.
 - Exact prompt construction may use the recorded context/suffix whitespace
   adjustment or context-tail trim. It must never insert pad or synthetic
   token IDs.

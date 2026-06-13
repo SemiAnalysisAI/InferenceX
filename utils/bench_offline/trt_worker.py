@@ -168,9 +168,9 @@ def generate_pass(
 
 
 def measured_pass_count(requested_passes: int) -> int:
-    if requested_passes <= 0:
-        raise ValueError("--passes must be positive")
-    return requested_passes
+    if requested_passes != 1:
+        raise ValueError("--passes must be exactly 1 for this benchmark")
+    return 1
 
 
 def parse_args() -> argparse.Namespace:
@@ -217,8 +217,13 @@ def main() -> int:
             f"adp_batch_mode={candidate.attention_dp_batch_mode} "
             "lm_head_tp="
             f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
+            "cute_dsl_topk="
+            f"{'on' if candidate.use_cute_dsl_topk else 'off'} "
             "cute_dsl_mqa="
             f"{'on' if candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+            "heuristic_topk="
+            f"{'on' if candidate.enable_heuristic_topk else 'off'} "
+            f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
             f"max_seq_len={candidate.max_seq_len} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'}"
         )
@@ -238,7 +243,10 @@ def main() -> int:
         from tensorrt_llm import LLM
 
         cute_dsl_available: bool | None = None
-        if candidate.use_cute_dsl_paged_mqa_logits:
+        if (
+            candidate.use_cute_dsl_topk
+            or candidate.use_cute_dsl_paged_mqa_logits
+        ):
             phase = "cute_dsl_capability"
             from tensorrt_llm._torch.cute_dsl_utils import (
                 IS_CUTLASS_DSL_AVAILABLE,
@@ -251,7 +259,7 @@ def main() -> int:
             )
             if not cute_dsl_available:
                 raise RuntimeError(
-                    "CuTE DSL paged-MQA was requested, but the pinned TRT "
+                    "A CuTE DSL kernel was requested, but the pinned TRT "
                     "image reports IS_CUTLASS_DSL_AVAILABLE=False"
                 )
 
@@ -273,8 +281,13 @@ def main() -> int:
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
             f"cuda_graph={'on' if candidate.cuda_graph else 'off'} "
             f"cuda_graph_batch_size={graph_batch_size} "
+            "cute_dsl_topk="
+            f"{'on' if candidate.use_cute_dsl_topk else 'off'} "
             "cute_dsl_mqa="
             f"{'on' if candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+            "heuristic_topk="
+            f"{'on' if candidate.enable_heuristic_topk else 'off'} "
+            f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
             f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
             f"wait_iters={candidate.batching_wait_iters} "
             f"timeout_iters={candidate.attention_dp_timeout_iters}"
@@ -295,8 +308,14 @@ def main() -> int:
                 f"max_seq_len={resolved['max_seq_len']} "
                 "cuda_graph_batch_sizes="
                 f"{resolved.get('cuda_graph_batch_sizes')} "
+                "cute_dsl_topk="
+                f"{'on' if resolved['use_cute_dsl_topk'] else 'off'} "
                 "cute_dsl_mqa="
-                f"{'on' if resolved['use_cute_dsl_paged_mqa_logits'] else 'off'}"
+                f"{'on' if resolved['use_cute_dsl_paged_mqa_logits'] else 'off'} "
+                "heuristic_topk="
+                f"{'on' if resolved['enable_heuristic_topk'] else 'off'} "
+                f"indexer_k_dtype={resolved['indexer_k_dtype']} "
+                f"index_topk={resolved['index_topk']}"
             )
 
             phase = "warmup"

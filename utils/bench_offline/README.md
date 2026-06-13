@@ -17,8 +17,9 @@ On `trt-bench`, that workflow is replaced with this offline-only chain:
 5. Reuse an image-keyed CuTe DSL compile cache from shared `/data`.
 6. Build an exact 8192-token InfiniteBench corpus.
 7. For an experiment entry, start one fresh engine, warm it up once, and
-   measure one pass. The legacy mode still tunes at most six fresh engines
-   and repeats the winner on another fresh engine.
+   measure exactly one pass. The worker rejects any other pass count. The
+   legacy mode still tunes at most six fresh engines and repeats the winner
+   on another fresh engine.
 8. Upload one result and debug bundle per experiment.
 9. Collect the rows with `utils/bench_offline/summarize.py`.
 
@@ -42,10 +43,10 @@ path. `LLM.generate()` receives one fixed batch of token-ID prompts directly.
 - Prompt length: exactly 8192 real token IDs, with no padded IDs.
 - Generated output: exactly 625 tokens per request with EOS ignored.
 - Speculation: fixed MTP3.
-- Huawei-primary parallelism: DEP8; LM-head TP is an explicit candidate
-  toggle.
-- Secondary production-recipe shapes: TP4 and DEP4. They remain offline but
-  do not receive Huawei comparison ratios.
+- Parallelism is explicit per row: DEP8, TP4, or DEP4. LM-head TP is an
+  explicit attention-DP candidate toggle.
+- The current exact-global-batch gate uses production-recipe TP4/DEP4 shapes
+  and reports per-active-GPU results against Huawei per-chip results.
 - Sampling: temperature `1.0`, top-p `1.0`, top-k `0`.
 - Pinned TRT PyTorch sampler seed: one engine-global generator seeded to
   `42`.
@@ -67,7 +68,7 @@ tokens.
 The candidate records one of three checked-in B300 recipe shapes:
 
 - `DEP8`: eight active GPUs, attention DP on, expert parallel 8, MoE TP 1.
-  This is the Huawei-primary shape.
+  This is retained for the historical equal-batch-per-chip experiments.
 - `TP4`: four active GPUs, attention DP off, expert parallel 1, MoE TP 4.
   This is the low/mid-concurrency production recipe.
 - `DEP4`: four active GPUs, attention DP on, expert parallel 4, MoE TP 1.
@@ -216,24 +217,45 @@ Do not multiply Huawei throughput by raw acceptance rate. Huawei publishes
 1.44 accepted drafts per MTP3 step, so its output yield is `1 + 1.44 = 2.44`
 tokens/step. Raw acceptance omits the mandatory target token.
 
-Huawei references are attached only to matching rows:
+The live comparison attaches Huawei references at the same global batch:
 
-| TRT conc | Huawei GBS | Step TPOT ms | Step tput/chip |
+| TRT conc/GBS | Huawei chips | Step TPOT ms | Step tput/chip |
 |---:|---:|---:|---:|
-| 8 | 16 | 17.64 | 56.70 |
-| 32 | 64 | 19.03 | 210.16 |
-| 64 | 128 | 20.61 | 388.23 |
+| 16 | 16 | 17.64 | 56.70 |
+| 64 | 16 | 19.03 | 210.16 |
+| 128 | 16 | 20.61 | 388.23 |
+
+The gate requires both B300 step throughput per active GPU and B300 emitted
+output throughput per active GPU to exceed the corresponding Huawei per-chip
+values. Huawei output throughput uses its published `2.44 tokens/step`.
+Topology is not matched: Huawei uses 16 chips, while the current TP4/DEP4
+matrix uses four active B300 GPUs. The result records this difference and does
+not claim higher total-system throughput.
 
 ## Tuning
 
-The recommended optimization path is
-`utils/bench_offline/b300_huawei_experiments.json`. Each entry runs one fresh
-engine with one full-shape warmup and one measured pass. This avoids the
-old seven-engine serial runtime and lets independent B300 nodes evaluate up to
-ten configurations concurrently.
+The current optimization path is
+`utils/bench_offline/b300_huawei_global_batch_experiments.json`. It contains
+ten independent one-engine jobs:
 
-The checked-in first matrix remains DEP8/MTP3 and covers only c8, c32, and c64,
-the batch-per-chip matches for Huawei. It tests:
+- one c16 TP4 control
+- one already-proven c64 DEP4 local-rank control
+- four c128 DEP4 scheduler/balance controls
+- c128 CuTE DSL top-k
+- c128 Guess-Verify-Refine heuristic top-k
+- c128 CuTE DSL top-k plus GVR
+- c128 explicit FP8 indexer K with both DSL kernels and GVR
+
+All rows retain 8K input, 625 generated tokens, MTP3, perfect routing, one
+full-shape warmup, and one measured pass. The c128 controls use local-rank
+engine/CUDA-graph batch size 32. TRT commit `c185066` supports
+`use_cute_dsl_topk`, `enable_heuristic_topk`, and `indexer_k_dtype`.
+The FP8 candidate is the only row that re-enables
+`use_cute_dsl_paged_mqa_logits`, because the prior FP4 path failed its dtype
+contract.
+
+The older matrix `utils/bench_offline/b300_huawei_experiments.json` is the
+historical DEP8/MTP3 equal-batch-per-chip experiment at c8/c32/c64. It tests:
 
 - controls reproducing the prior selected scheduler settings
 - LM-head TP in attention DP
@@ -242,9 +264,8 @@ the batch-per-chip matches for Huawei. It tests:
 - the production attention-DP knobs projected onto DEP8, including omitted
   `timeout_iters`; this is not the normal recipe's TP4 parallelism
 
-After validating a DEP8 candidate, use separate experiment IDs for TP4/DEP4
-recipe tests. Their result rows record active GPU count and parallelism, and
-their Huawei ratios remain null by construction.
+Its previously published ratios remain historical artifacts. New runs use
+the exact-global-batch gate above.
 
 The checked-in second-stage matrix is
 `utils/bench_offline/b300_stage2_experiments.json`. It repeats the c32 DEP8
@@ -438,6 +459,12 @@ The collected row fields mean:
   Huawei's own published 2.44-token yield
 - `b300_to_huawei_step_rate_ratio`: direct decode-step-rate comparison
 - `b300_to_huawei_trt_yield_normalized_ratio`: same-yield diagnostic
+- `huawei_gate_passed`: both direct step rate and Huawei-yield output rate
+  exceed `1.0`
+- `hardware_topology_match`: false for the current four-B300 versus
+  sixteen-Huawei-chip comparison
+- `device_count_match`: whether the active B300 GPU count equals Huawei's
+  published chip count; false for the current matrix
 
 This is not `agg_bmk.json`; generic InferenceX result fields such as
 `tput_per_gpu` are intentionally not synthesized.

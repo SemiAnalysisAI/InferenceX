@@ -18,7 +18,7 @@ on:
         description: Comma-separated fixed offline batch sizes
         required: false
         type: string
-        default: 8,32,64,128,256,512,1024
+        default: 16,64,128
       experiments:
         description: Optional JSON list of up to 10 single-candidate jobs
         required: false
@@ -76,7 +76,10 @@ jobs:
                   "cuda_graph",
                   "enable_lm_head_tp_in_adp",
                   "attention_dp_batch_mode",
+                  "use_cute_dsl_topk",
                   "use_cute_dsl_paged_mqa_logits",
+                  "enable_heuristic_topk",
+                  "indexer_k_dtype",
                   "print_iter_log",
                   "max_seq_len",
                   "mtp_draft_tokens",
@@ -167,7 +170,9 @@ jobs:
                       "overlap_scheduler",
                       "cuda_graph",
                       "enable_lm_head_tp_in_adp",
+                      "use_cute_dsl_topk",
                       "use_cute_dsl_paged_mqa_logits",
+                      "enable_heuristic_topk",
                       "print_iter_log",
                   ):
                       if bool_key in candidate and not isinstance(
@@ -178,6 +183,12 @@ jobs:
                               f"experiment {experiment_id} candidate."
                               f"{bool_key} must be boolean"
                           )
+                  indexer_k_dtype = candidate.get("indexer_k_dtype")
+                  if indexer_k_dtype not in {None, "fp4", "fp8"}:
+                      raise SystemExit(
+                          f"experiment {experiment_id} candidate."
+                          "indexer_k_dtype must be fp4, fp8, or null"
+                      )
                   max_seq_len = candidate.get("max_seq_len", 9216)
                   if (
                       not isinstance(max_seq_len, int)

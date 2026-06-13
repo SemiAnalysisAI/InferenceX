@@ -323,6 +323,11 @@ def run_worker(
         f"{'on' if candidate.enable_lm_head_tp_in_adp else 'off'} "
         "cute_dsl_mqa="
         f"{'on' if candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+        "cute_dsl_topk="
+        f"{'on' if candidate.use_cute_dsl_topk else 'off'} "
+        "heuristic_topk="
+        f"{'on' if candidate.enable_heuristic_topk else 'off'} "
+        f"indexer_k_dtype={candidate.indexer_k_dtype or 'checkpoint'} "
         f"max_seq_len={candidate.max_seq_len} "
         f"trt_iter_log={'on' if candidate.print_iter_log else 'off'} "
         f"mtp={candidate.mtp_draft_tokens} "
@@ -471,9 +476,9 @@ def main() -> int:
                 "all generated output tokens / measured wall seconds / 8"
             ),
             "huawei_conversion": (
-                "report Huawei's published decode-step rate directly, its "
-                "output rate at published 2.44 tokens/step, and a separate "
-                "TRT-yield-normalized output rate"
+                "at exact global batch, compare B300 decode steps per active "
+                "GPU with Huawei decode steps per chip; also compare emitted "
+                "output using Huawei's published 2.44 tokens/step"
             ),
             "effective_acceptance_rate": (
                 "(observed output tokens/decode iteration - 1) / "
@@ -593,6 +598,12 @@ def main() -> int:
                 f"{experiment_candidate.attention_dp_batch_mode} "
                 "cute_dsl_mqa="
                 f"{'on' if experiment_candidate.use_cute_dsl_paged_mqa_logits else 'off'} "
+                "cute_dsl_topk="
+                f"{'on' if experiment_candidate.use_cute_dsl_topk else 'off'} "
+                "heuristic_topk="
+                f"{'on' if experiment_candidate.enable_heuristic_topk else 'off'} "
+                "indexer_k_dtype="
+                f"{experiment_candidate.indexer_k_dtype or 'checkpoint'} "
                 f"max_seq_len={experiment_candidate.max_seq_len} "
                 "trt_iter_log="
                 f"{'on' if experiment_candidate.print_iter_log else 'off'} "
@@ -700,6 +711,7 @@ def main() -> int:
                         float(aggregate["observed_tokens_per_step"]),
                         experiment_candidate.mtp_draft_tokens,
                         experiment_candidate.effective_parallelism,
+                        experiment_candidate.active_gpu_count,
                     ),
                 }
             )
@@ -941,6 +953,7 @@ def main() -> int:
                     float(aggregate["observed_tokens_per_step"]),
                     winner_candidate.mtp_draft_tokens,
                     winner_candidate.effective_parallelism,
+                    winner_candidate.active_gpu_count,
                 ),
             }
         )

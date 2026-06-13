@@ -24,10 +24,12 @@ def test_summary_explains_offline_units():
                 "acceptance_rate": None,
                 "mean_ttft_ms": 1000.0,
                 "huawei_published_dataset_token_tput_per_chip": 110.0,
+                "huawei_step_tput_per_chip": 45.0,
                 "huawei_estimated_token_tput_per_chip": 120.0,
                 "b300_to_huawei_ratio": 0.833,
                 "b300_to_huawei_published_output_ratio": 0.91,
                 "b300_to_huawei_step_rate_ratio": 0.73,
+                "huawei_gate_passed": False,
             }
         ]
     )
@@ -36,6 +38,7 @@ def test_summary_explains_offline_units():
     assert "raw accepted/proposed counters" in rendered.lower()
     assert "Huawei output tok/s/chip" in rendered
     assert "B300/Huawei step" in rendered
+    assert "| FAIL |" in rendered
     assert "| 8 | DEP8 |" in rendered
 
 

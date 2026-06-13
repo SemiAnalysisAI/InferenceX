@@ -70,6 +70,34 @@ def test_candidate_can_enable_cute_dsl_mqa_and_tighten_capacity():
     assert kwargs["max_seq_len"] == 8832
 
 
+def test_candidate_can_enable_sparse_indexer_optimizations():
+    candidate = CandidateConfig(
+        name="sparse-optimizations",
+        batching_wait_iters=0,
+        use_cute_dsl_topk=True,
+        use_cute_dsl_paged_mqa_logits=True,
+        enable_heuristic_topk=True,
+        indexer_k_dtype="fp8",
+    )
+    kwargs = build_llm_kwargs("/model", 128, candidate)
+    assert kwargs["sparse_attention_config"] == {
+        "algorithm": "deepseek_v4",
+        "use_cute_dsl_topk": True,
+        "use_cute_dsl_paged_mqa_logits": True,
+        "enable_heuristic_topk": True,
+        "indexer_k_dtype": "fp8",
+    }
+
+
+def test_candidate_rejects_invalid_indexer_dtype():
+    with pytest.raises(ValueError, match="indexer_k_dtype"):
+        CandidateConfig(
+            name="invalid-indexer-dtype",
+            batching_wait_iters=0,
+            indexer_k_dtype="bf16",
+        )
+
+
 @pytest.mark.parametrize("max_seq_len", (8819, True, 8832.0))
 def test_candidate_rejects_invalid_max_seq_len(max_seq_len):
     with pytest.raises(ValueError, match="max_seq_len"):
@@ -378,6 +406,43 @@ def test_resolved_parallelism_validates_runtime_tuning_switches():
     assert resolved["use_cute_dsl_paged_mqa_logits"] is True
 
 
+def test_resolved_parallelism_validates_sparse_indexer_switches():
+    candidate = CandidateConfig(
+        name="sparse-runtime-switches",
+        batching_wait_iters=0,
+        use_cute_dsl_topk=True,
+        use_cute_dsl_paged_mqa_logits=True,
+        enable_heuristic_topk=True,
+        indexer_k_dtype="fp8",
+    )
+    llm_args = SimpleNamespace(
+        parallel_config=SimpleNamespace(
+            world_size=8,
+            tp_size=8,
+            moe_ep_size=8,
+            moe_tp_size=1,
+            enable_attention_dp=True,
+            enable_lm_head_tp_in_adp=False,
+        ),
+        speculative_config=SimpleNamespace(max_draft_len=3),
+        max_seq_len=9216,
+        print_iter_log=True,
+        sparse_attention_config=SimpleNamespace(
+            use_cute_dsl_topk=True,
+            use_cute_dsl_paged_mqa_logits=True,
+            enable_heuristic_topk=True,
+            indexer_k_dtype="fp8",
+            index_topk=1024,
+        ),
+    )
+    resolved = resolved_parallelism(llm_args, candidate)
+    assert resolved["use_cute_dsl_topk"] is True
+    assert resolved["use_cute_dsl_paged_mqa_logits"] is True
+    assert resolved["enable_heuristic_topk"] is True
+    assert resolved["indexer_k_dtype"] == "fp8"
+    assert resolved["index_topk"] == 1024
+
+
 @pytest.mark.parametrize(
     "filename",
     (
@@ -385,6 +450,7 @@ def test_resolved_parallelism_validates_runtime_tuning_switches():
         "b300_stage2_experiments.json",
         "b300_stage3_local_batch_experiments.json",
         "b300_stage4_kernel_experiments.json",
+        "b300_huawei_global_batch_experiments.json",
     ),
 )
 def test_checked_in_experiment_matrices_are_valid(filename):

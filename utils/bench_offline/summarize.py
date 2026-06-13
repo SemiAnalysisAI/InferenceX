@@ -106,6 +106,7 @@ def _row(
         "huawei_published_dataset_token_tput_per_chip": huawei.get(
             "published_dataset_token_tput_per_chip"
         ),
+        "huawei_step_tput_per_chip": huawei.get("step_tput_per_chip"),
         "huawei_estimated_token_tput_per_chip": huawei.get(
             "estimated_token_tput_per_chip"
         ),
@@ -116,6 +117,7 @@ def _row(
         "b300_to_huawei_step_rate_ratio": huawei.get(
             "b300_to_huawei_step_rate_ratio"
         ),
+        "huawei_gate_passed": huawei.get("huawei_gate_passed"),
         "failure_kind": (
             result.get("failure_kind") or final.get("failure_kind")
         ),
@@ -129,8 +131,8 @@ def markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
         "# DeepSeek-V4 B300 TRT Offline Benchmark",
         "",
-        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | B300/Huawei output | B300/Huawei step |",
-        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | Huawei step/s/chip | B300/Huawei output | B300/Huawei step | Gate |",
+        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         acceptance = row.get("effective_acceptance_rate")
@@ -139,7 +141,8 @@ def markdown(rows: list[dict[str, Any]]) -> str:
             "{parallelism} | {status} | {candidate} | "
             "{tpot} | {step_tpot} | {derived} | {derived_step} | {wall} | "
             "{tokens_per_step} | {acceptance} | {ttft} | "
-            "{huawei_published} | {output_ratio} | {step_ratio} |".format(
+            "{huawei_published} | {huawei_step} | {output_ratio} | "
+            "{step_ratio} | {gate} |".format(
                 experiment_id=row["experiment_id"],
                 concurrency=row.get("concurrency") or "-",
                 active_gpus=row.get("active_gpu_count") or "-",
@@ -167,6 +170,9 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                         "huawei_published_dataset_token_tput_per_chip"
                     )
                 ),
+                huawei_step=_fmt(
+                    row.get("huawei_step_tput_per_chip")
+                ),
                 output_ratio=_fmt(
                     row.get("b300_to_huawei_published_output_ratio"),
                     digits=3,
@@ -174,6 +180,15 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                 step_ratio=_fmt(
                     row.get("b300_to_huawei_step_rate_ratio"),
                     digits=3,
+                ),
+                gate=(
+                    "PASS"
+                    if row.get("huawei_gate_passed") is True
+                    else (
+                        "FAIL"
+                        if row.get("huawei_gate_passed") is False
+                        else "-"
+                    )
                 ),
             )
         )
@@ -185,13 +200,14 @@ def markdown(rows: list[dict[str, Any]]) -> str:
             "- `Token TPOT ms`: arithmetic mean across requests in the measured pass of `(last token time - first token time) / 624`. It measures emitted decode tokens, not TRT decode iterations.",
             "- `Step TPOT ms`: arithmetic mean of `(last token time - first token time) / (last iteration - first iteration)`. This is the direct counterpart to Huawei's published decode-step TPOT.",
             "- `Derived out tok/s/GPU`: `concurrency / mean token TPOT seconds / active GPUs`. This is the latency-derived headline requested for the comparison.",
-            "- `Derived step/s/GPU`: `concurrency / mean step TPOT seconds / active GPUs`. Compare this with Huawei's published step throughput per chip only for DEP8 rows.",
+            "- `Derived step/s/GPU`: `concurrency / mean step TPOT seconds / active GPUs`. At exact global batches 16, 64, and 128, compare it with Huawei's published step throughput per chip.",
             "- `Wall out tok/s/GPU`: all 625 generated tokens per request divided by measured batch wall time and active GPUs.",
             "- `Tok/step`: total 624-token decode outputs divided by TRT's total `last_iter - first_iter`. This is the observed MTP token multiplier.",
             "- `Eff accept`: `(Tok/step - 1) / 3`, the effective MTP3 acceptance implied by emitted tokens. The pinned TRT PyTorch path leaves raw accepted/proposed counters at zero, so raw acceptance is recorded as unavailable instead of `0%`.",
             "- `Huawei output tok/s/chip`: Huawei step throughput multiplied by its published `1 + 1.44 = 2.44` tokens/step.",
             "- `B300/Huawei output`: B300's observed emitted-token rate divided by Huawei's output rate at Huawei's own published token yield.",
-            "- `B300/Huawei step`: B300's derived decode-step rate divided by Huawei's published decode-step rate. Both ratios are available only for matching DEP8/MTP3 concurrencies 8, 32, and 64.",
+            "- `B300/Huawei step`: B300's derived decode-step rate per active GPU divided by Huawei's published decode-step rate per chip.",
+            "- `Gate`: both the step-rate ratio and emitted-output ratio exceed `1.0`. The workload matches global batch, 8K sequence length, and MTP3, but B300 GPU count/topology can differ from Huawei's 16-chip deployment; this is not a total-system-throughput claim.",
             "",
         ]
     )

@@ -4,6 +4,8 @@ import sys
 import time
 from types import ModuleType
 
+import pytest
+
 from run import (
     ALLOWED_CONCURRENCIES,
     classify_failure,
@@ -63,8 +65,10 @@ def test_git_revision_prefers_explicit_benchmark_revision(monkeypatch):
     assert git_revision() == revision
 
 
-def test_worker_honors_requested_tuning_pass_count():
-    assert measured_pass_count(3) == 3
+def test_worker_enforces_one_measured_pass():
+    assert measured_pass_count(1) == 1
+    with pytest.raises(ValueError, match="exactly 1"):
+        measured_pass_count(3)
 
 
 def test_latest_worker_progress_ignores_native_trt_lines(tmp_path):
@@ -74,12 +78,12 @@ def test_latest_worker_progress_ignores_native_trt_lines(tmp_path):
         "[offline-trt-worker 2026-06-13T12:00:00+00:00] warmup start\n"
         "more native output\n"
         "[offline-trt-worker 2026-06-13T12:01:00+00:00] "
-        "measured pass 1/3: generation start requests=8\n",
+        "measured pass 1/1: generation start requests=8\n",
         encoding="utf-8",
     )
 
     assert latest_worker_progress(worker_log) == (
-        "measured pass 1/3: generation start requests=8"
+        "measured pass 1/1: generation start requests=8"
     )
 
 

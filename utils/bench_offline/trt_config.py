@@ -74,7 +74,10 @@ class CandidateConfig:
     cuda_graph: bool = True
     enable_lm_head_tp_in_adp: bool = False
     attention_dp_batch_mode: str = "global"
+    use_cute_dsl_topk: bool = False
     use_cute_dsl_paged_mqa_logits: bool = False
+    enable_heuristic_topk: bool = False
+    indexer_k_dtype: str | None = None
     print_iter_log: bool = True
     max_seq_len: int = MAX_SEQ_LEN
     mtp_draft_tokens: int = MTP_DRAFT_TOKENS
@@ -115,11 +118,15 @@ class CandidateConfig:
             "overlap_scheduler",
             "cuda_graph",
             "enable_lm_head_tp_in_adp",
+            "use_cute_dsl_topk",
             "use_cute_dsl_paged_mqa_logits",
+            "enable_heuristic_topk",
             "print_iter_log",
         ):
             if not isinstance(getattr(self, field_name), bool):
                 raise ValueError(f"{field_name} must be boolean")
+        if self.indexer_k_dtype not in {None, "fp4", "fp8"}:
+            raise ValueError("indexer_k_dtype must be fp4, fp8, or null")
         minimum_seq_len = INPUT_TOKENS + OUTPUT_TOKENS + MTP_DRAFT_TOKENS
         if (
             not isinstance(self.max_seq_len, int)
@@ -309,11 +316,21 @@ def build_llm_kwargs(
             "max_draft_len": candidate.mtp_draft_tokens,
         },
     }
+    sparse_attention_config: dict[str, Any] = {
+        "algorithm": "deepseek_v4",
+    }
+    if candidate.use_cute_dsl_topk:
+        sparse_attention_config["use_cute_dsl_topk"] = True
     if candidate.use_cute_dsl_paged_mqa_logits:
-        kwargs["sparse_attention_config"] = {
-            "algorithm": "deepseek_v4",
-            "use_cute_dsl_paged_mqa_logits": True,
-        }
+        sparse_attention_config["use_cute_dsl_paged_mqa_logits"] = True
+    if candidate.enable_heuristic_topk:
+        sparse_attention_config["enable_heuristic_topk"] = True
+    if candidate.indexer_k_dtype is not None:
+        sparse_attention_config["indexer_k_dtype"] = (
+            candidate.indexer_k_dtype
+        )
+    if len(sparse_attention_config) > 1:
+        kwargs["sparse_attention_config"] = sparse_attention_config
     if parallelism.enable_attention_dp:
         kwargs["attention_dp_config"] = {
             "batching_wait_iters": candidate.batching_wait_iters,
@@ -438,6 +455,10 @@ def resolved_parallelism(
             f"{resolved['print_iter_log']} != {candidate.print_iter_log}"
         )
     sparse_config = getattr(llm_args, "sparse_attention_config", None)
+    resolved["use_cute_dsl_topk"] = bool(
+        sparse_config is not None
+        and getattr(sparse_config, "use_cute_dsl_topk", False)
+    )
     resolved["use_cute_dsl_paged_mqa_logits"] = bool(
         sparse_config is not None
         and getattr(
@@ -446,14 +467,48 @@ def resolved_parallelism(
             False,
         )
     )
+    resolved["enable_heuristic_topk"] = bool(
+        sparse_config is not None
+        and getattr(sparse_config, "enable_heuristic_topk", False)
+    )
+    resolved["indexer_k_dtype"] = (
+        getattr(sparse_config, "indexer_k_dtype", None)
+        if sparse_config is not None
+        else None
+    )
+    resolved["index_topk"] = (
+        getattr(sparse_config, "index_topk", None)
+        if sparse_config is not None
+        else None
+    )
+    sparse_flags = (
+        "use_cute_dsl_topk",
+        "use_cute_dsl_paged_mqa_logits",
+        "enable_heuristic_topk",
+    )
+    for field_name in sparse_flags:
+        expected_value = getattr(candidate, field_name)
+        if resolved[field_name] != expected_value:
+            raise RuntimeError(
+                f"Resolved TRT {field_name} mismatch: "
+                f"{resolved[field_name]} != {expected_value}"
+            )
     if (
-        resolved["use_cute_dsl_paged_mqa_logits"]
-        != candidate.use_cute_dsl_paged_mqa_logits
+        candidate.indexer_k_dtype is not None
+        and resolved["indexer_k_dtype"] != candidate.indexer_k_dtype
     ):
         raise RuntimeError(
-            "Resolved TRT use_cute_dsl_paged_mqa_logits mismatch: "
-            f"{resolved['use_cute_dsl_paged_mqa_logits']} != "
-            f"{candidate.use_cute_dsl_paged_mqa_logits}"
+            "Resolved TRT indexer_k_dtype mismatch: "
+            f"{resolved['indexer_k_dtype']!r} != "
+            f"{candidate.indexer_k_dtype!r}"
+        )
+    if (
+        candidate.enable_heuristic_topk
+        and resolved["index_topk"] not in {512, 1024, 2048}
+    ):
+        raise RuntimeError(
+            "Resolved TRT heuristic top-k is unsupported: "
+            f"index_topk={resolved['index_topk']!r}"
         )
 
     if concurrency is not None:

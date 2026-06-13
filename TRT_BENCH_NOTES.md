@@ -692,3 +692,53 @@ gh api -X POST \
   inter-pass sleeps. One pass is now the right default, but fresh TRT engine
   initialization remains the dominant runtime. Keep the warmup so TPOT is
   not contaminated by cold CUDA graph/JIT work.
+
+## Exact-Global-Batch 16/64/128 Matrix
+
+The next run uses
+`utils/bench_offline/b300_huawei_global_batch_experiments.json`.
+Every job is hard-limited to one full-shape warmup plus exactly one measured
+pass; `trt_worker.py` rejects `--passes` values other than `1`.
+
+The gate now follows the Huawei table's literal global batches:
+
+| GBS | Huawei chips | Huawei step TPOT | Huawei step/s/chip | Huawei output tok/s/chip at 2.44 |
+|---:|---:|---:|---:|---:|
+| 16 | 16 | 17.64 ms | 56.70 | 138.35 |
+| 64 | 16 | 19.03 ms | 210.16 | 512.79 |
+| 128 | 16 | 20.61 ms | 388.23 | 947.28 |
+
+The B300 side uses TP4 at c16 and DEP4 at c64/c128. Ratios are per active
+B300 GPU versus per Huawei chip. This matches global batch, 8K sequence
+length, and MTP3, but not topology or total device count; do not claim total
+system throughput equivalence.
+
+Prior evidence:
+
+- c64 DEP4 local-rank already reached `286.82-288.89 steps/s/GPU`, above the
+  exact-c64 Huawei target `210.16`.
+- The old c128 DEP8/global-sized run reached only about `196.99 steps/s/GPU`.
+  The new c128 DEP4 local-rank graph batch is 32 and is the unresolved gate.
+
+The eight c128 jobs test wait 0/30/60, balance off, CuTE DSL top-k, GVR
+heuristic top-k, both top-k paths together, and one explicit FP8-indexer
+candidate. The FP8 row is the only candidate enabling CuTE DSL paged MQA:
+run `27477088665` proved the default FP4 indexer emits `torch.int8` query
+storage that violates that kernel's `float8_e4m3fn` contract.
+
+Dispatch:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(
+  jq -c . utils/bench_offline/b300_huawei_global_batch_experiments.json
+)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT exact GBS 16 64 128' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=90' \
+  -f 'inputs[worker-timeout]=3600'
+```

@@ -10,7 +10,7 @@ from typing import Any, Iterable
 
 
 HUAWEI_REFERENCE: dict[int, dict[str, float | int]] = {
-    8: {
+    16: {
         "global_batch_size": 16,
         "chips": 16,
         "step_tpot_ms": 17.64,
@@ -18,7 +18,7 @@ HUAWEI_REFERENCE: dict[int, dict[str, float | int]] = {
         "published_accepted_drafts_per_step": 1.44,
         "published_mtp_draft_tokens": 3,
     },
-    32: {
+    64: {
         "global_batch_size": 64,
         "chips": 16,
         "step_tpot_ms": 19.03,
@@ -26,7 +26,7 @@ HUAWEI_REFERENCE: dict[int, dict[str, float | int]] = {
         "published_accepted_drafts_per_step": 1.44,
         "published_mtp_draft_tokens": 3,
     },
-    64: {
+    128: {
         "global_batch_size": 128,
         "chips": 16,
         "step_tpot_ms": 20.61,
@@ -337,9 +337,8 @@ def huawei_comparison(
     observed_tokens_per_step: float,
     mtp_draft_tokens: int,
     effective_parallelism: str = "DEP8",
+    active_gpu_count: int = 8,
 ) -> dict[str, Any] | None:
-    if effective_parallelism != "DEP8":
-        return None
     reference = HUAWEI_REFERENCE.get(concurrency)
     if reference is None:
         return None
@@ -356,16 +355,31 @@ def huawei_comparison(
     )
     comparable = mtp_draft_tokens == published_draft_tokens
     step_tput = float(reference["step_tput_per_chip"])
+    output_ratio = (
+        b300_output_tput_per_gpu / published_token_tput
+        if comparable and published_token_tput
+        else None
+    )
+    step_ratio = (
+        b300_step_tput_per_gpu / step_tput
+        if comparable and step_tput
+        else None
+    )
     return {
         **reference,
         "mode": "offline_decode",
         "comparable": comparable,
         "comparison_reason": (
-            "matching batch-per-chip and MTP depth"
+            "matching global batch and MTP depth; per-active-GPU versus "
+            "per-chip comparison with different hardware topology"
             if comparable
             else "MTP depth differs from the Huawei reference"
         ),
+        "global_batch_match": True,
+        "device_count_match": active_gpu_count == int(reference["chips"]),
+        "hardware_topology_match": False,
         "b300_effective_parallelism": effective_parallelism,
+        "b300_active_gpu_count": active_gpu_count,
         "published_acceptance_rate": (
             published_accepted / published_draft_tokens
         ),
@@ -379,14 +393,17 @@ def huawei_comparison(
         "trt_normalized_token_tput_per_chip": converted,
         "b300_derived_output_tput_per_gpu": b300_output_tput_per_gpu,
         "b300_derived_step_tput_per_gpu": b300_step_tput_per_gpu,
-        "b300_to_huawei_published_output_ratio": (
-            b300_output_tput_per_gpu / published_token_tput
-            if comparable and published_token_tput
-            else None
+        "b300_to_huawei_published_output_ratio": output_ratio,
+        "b300_to_huawei_step_rate_ratio": step_ratio,
+        "beats_huawei_output_rate": (
+            output_ratio > 1.0 if output_ratio is not None else None
         ),
-        "b300_to_huawei_step_rate_ratio": (
-            b300_step_tput_per_gpu / step_tput
-            if comparable and step_tput
+        "beats_huawei_step_rate": (
+            step_ratio > 1.0 if step_ratio is not None else None
+        ),
+        "huawei_gate_passed": (
+            output_ratio > 1.0 and step_ratio > 1.0
+            if output_ratio is not None and step_ratio is not None
             else None
         ),
         "b300_to_huawei_trt_yield_normalized_ratio": (

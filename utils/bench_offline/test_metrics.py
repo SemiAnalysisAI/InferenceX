@@ -112,7 +112,7 @@ def test_pooling_passes_does_not_multiply_active_concurrency():
 
 def test_huawei_conversion_uses_observed_tokens_per_step():
     comparison = huawei_comparison(
-        concurrency=8,
+        concurrency=16,
         b300_output_tput_per_gpu=200.0,
         b300_step_tput_per_gpu=80.0,
         observed_tokens_per_step=2.5,
@@ -139,7 +139,7 @@ def test_huawei_conversion_uses_observed_tokens_per_step():
 
 def test_huawei_ratio_is_not_claimed_for_different_mtp_depth():
     comparison = huawei_comparison(
-        concurrency=8,
+        concurrency=16,
         b300_output_tput_per_gpu=200.0,
         b300_step_tput_per_gpu=80.0,
         observed_tokens_per_step=1.8,
@@ -151,13 +151,34 @@ def test_huawei_ratio_is_not_claimed_for_different_mtp_depth():
     assert comparison["b300_to_huawei_step_rate_ratio"] is None
 
 
-def test_huawei_ratio_is_not_claimed_for_tp4():
+def test_huawei_ratio_is_reported_for_exact_batch_tp4():
     comparison = huawei_comparison(
-        concurrency=32,
-        b300_output_tput_per_gpu=400.0,
-        b300_step_tput_per_gpu=120.0,
+        concurrency=16,
+        b300_output_tput_per_gpu=200.0,
+        b300_step_tput_per_gpu=80.0,
         observed_tokens_per_step=3.0,
         mtp_draft_tokens=3,
         effective_parallelism="TP4",
+        active_gpu_count=4,
     )
-    assert comparison is None
+    assert comparison is not None
+    assert comparison["global_batch_match"] is True
+    assert comparison["device_count_match"] is False
+    assert comparison["hardware_topology_match"] is False
+    assert comparison["b300_active_gpu_count"] == 4
+    assert comparison["huawei_gate_passed"] is True
+
+
+def test_huawei_ratio_is_not_reported_for_unpublished_global_batch():
+    assert (
+        huawei_comparison(
+            concurrency=32,
+            b300_output_tput_per_gpu=400.0,
+            b300_step_tput_per_gpu=120.0,
+            observed_tokens_per_step=3.0,
+            mtp_draft_tokens=3,
+            effective_parallelism="TP4",
+            active_gpu_count=4,
+        )
+        is None
+    )
