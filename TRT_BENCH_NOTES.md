@@ -68,9 +68,16 @@ gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f 'inputs[ref]=trt-bench' \
-  -f 'inputs[test-name]=DSV4 TRT offline bring-up c8' \
+  -f 'inputs[test-name]=DSV4 B300 TRT offline bring-up c8' \
   -f 'inputs[concurrencies]=8'
 ```
+
+First bring-up dispatched with this command:
+
+- Run: `27461421427`
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27461421427`
+- Branch commit: `3c74b5048ffb4cdf3ad4867ae65d87171196452f`
+- Dispatched: `2026-06-13T08:17:24Z`
 
 List artifacts:
 
