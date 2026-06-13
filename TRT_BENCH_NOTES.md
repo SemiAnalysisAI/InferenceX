@@ -871,3 +871,33 @@ gh api -X POST \
   -f 'inputs[salloc-time]=90' \
   -f 'inputs[worker-timeout]=3600'
 ```
+
+## Run 27479121984
+
+- URL:
+  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27479121984`
+- Completed successfully `2026-06-13T21:20:03Z`.
+- Branch commit: `c467df4a549933d81ad424fbef2e28527fbde3f4`.
+- All ten jobs used one fresh engine, one full-shape warmup, and exactly one
+  measured pass. Every authoritative result has
+  `benchmark.final_measured_passes=1` and
+  `final.aggregate.pass_count=1`.
+- Group means:
+
+  | MoE path | N | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Wall output/GPU |
+  |---|---:|---:|---:|---:|---:|---:|
+  | TRTLLM configurable control | 3 | 25.62 ms | 83.05 ms | 1249.25 | 385.38 | 627.60 |
+  | TRTLLM legacy direct | 4 | 25.73 ms | 84.11 ms | 1243.86 | 380.49 | 625.27 |
+  | CUTLASS | 3 | 27.44 ms | 88.34 ms | 1166.45 | 362.28 | 570.09 |
+
+- Legacy direct is not an optimization: versus the control means it changes
+  token TPOT by `+0.43%`, step TPOT by `+1.27%`, derived step throughput by
+  `-1.27%`, and wall output throughput by `-0.37%`.
+- CUTLASS is materially slower: token TPOT `+7.11%`, step TPOT `+6.37%`,
+  derived step throughput `-6.00%`, and wall output throughput `-9.16%`.
+- Keep TRTLLM ConfigurableMoE with the default one-sided NVLink path.
+- Mean current/legacy timing was `416.5 s` engine initialization, `117.3 s`
+  warmup, and `31.9 s` for the measured pass. One pass instead of three
+  removes about `67.9 s` per c128 engine, including two inter-pass sleeps.
+  Do not remove the warmup: it protects the only measured pass from lazy
+  graph and kernel compilation.

@@ -492,6 +492,26 @@ gh api -X POST \
   -f 'inputs[worker-timeout]=3600'
 ```
 
+Run `27479121984` completed this matrix successfully on commit `c467df4a`.
+All ten rows recorded `pass_count=1`.
+
+| MoE path | Repeats | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU |
+|---|---:|---:|---:|---:|---:|---:|
+| TRTLLM configurable control | 3 | 25.62 | 83.05 | 1249.25 | 385.38 | 627.60 |
+| TRTLLM legacy direct | 4 | 25.73 | 84.11 | 1243.86 | 380.49 | 625.27 |
+| CUTLASS | 3 | 27.44 | 88.34 | 1166.45 | 362.28 | 570.09 |
+
+The legacy-direct path is effectively tied but slightly slower: `+0.43%`
+token TPOT, `+1.27%` step TPOT, and `-0.37%` wall output throughput. CUTLASS
+is clearly slower: `+7.11%` token TPOT, `+6.37%` step TPOT, and `-9.16%`
+wall output throughput. Keep the current TRTLLM configurable path.
+
+For the seven current/legacy TRTLLM jobs, mean engine initialization was
+`416.5 s`, warmup was `117.3 s`, and the single measured pass was `31.9 s`.
+Using one measured pass instead of three removes about `67.9 s` per fresh
+c128 engine, including the two removed inter-pass sleeps. Initialization and
+the required full-shape warmup still dominate total runtime.
+
 ## Artifacts And Collected Values
 
 Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
@@ -511,6 +531,8 @@ The collector uploads `offline-trt-summary`:
 
 The collected row fields mean:
 
+- `measured_passes`: number of measured generations aggregated into the row;
+  this branch requires exactly `1`, excluding the warmup
 - `mean_token_tpot_ms`: mean per-request output-token TPOT
 - `mean_step_tpot_ms`: mean per-request TRT decode-step TPOT
 - `derived_output_tput_per_gpu`: concurrency/TPOT calculation

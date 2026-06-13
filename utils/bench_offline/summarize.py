@@ -77,6 +77,7 @@ def _row(
             "effective_parallelism",
             "DEP8",
         ),
+        "measured_passes": aggregate.get("pass_count"),
         "mean_token_tpot_ms": aggregate.get("mean_token_tpot_ms"),
         "mean_step_tpot_ms": aggregate.get("mean_step_tpot_ms"),
         "derived_output_tput_per_gpu": aggregate.get(
@@ -131,16 +132,17 @@ def markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
         "# DeepSeek-V4 B300 TRT Offline Benchmark",
         "",
-        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | Huawei step/s/chip | B300/Huawei output | B300/Huawei step | TPOT gate |",
-        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Passes | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | Huawei step/s/chip | B300/Huawei output | B300/Huawei step | TPOT gate |",
+        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
     ]
     for row in rows:
         acceptance = row.get("effective_acceptance_rate")
         lines.append(
             "| {experiment_id} | {concurrency} | {active_gpus} | "
             "{parallelism} | {status} | {candidate} | "
-            "{tpot} | {step_tpot} | {derived} | {derived_step} | {wall} | "
-            "{tokens_per_step} | {acceptance} | {ttft} | "
+            "{passes} | {tpot} | {step_tpot} | {derived} | "
+            "{derived_step} | {wall} | {tokens_per_step} | "
+            "{acceptance} | {ttft} | "
             "{huawei_published} | {huawei_step} | {output_ratio} | "
             "{step_ratio} | {gate} |".format(
                 experiment_id=row["experiment_id"],
@@ -149,6 +151,7 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                 parallelism=row.get("effective_parallelism") or "-",
                 status=row["status"],
                 candidate=row.get("candidate") or "-",
+                passes=row.get("measured_passes") or "-",
                 tpot=_fmt(row.get("mean_token_tpot_ms")),
                 step_tpot=_fmt(row.get("mean_step_tpot_ms")),
                 derived=_fmt(row.get("derived_output_tput_per_gpu")),
@@ -197,6 +200,7 @@ def markdown(rows: list[dict[str, Any]]) -> str:
             "",
             "## Offline metric meanings",
             "",
+            "- `Passes`: measured generation passes aggregated into the row. This branch requires exactly one; the full-shape warmup is separate and is not counted.",
             "- `Token TPOT ms`: arithmetic mean across requests in the measured pass of `(last token time - first token time) / 624`. It measures emitted decode tokens, not TRT decode iterations.",
             "- `Step TPOT ms`: arithmetic mean of `(last token time - first token time) / (last iteration - first iteration)`. This is the direct counterpart to Huawei's published decode-step TPOT.",
             "- `Derived out tok/s/GPU`: `concurrency / mean token TPOT seconds / active GPUs`. This is the latency-derived headline requested for the comparison.",

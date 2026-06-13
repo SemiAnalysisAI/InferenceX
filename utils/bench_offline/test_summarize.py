@@ -13,6 +13,7 @@ def test_summary_explains_offline_units():
                 "effective_parallelism": "DEP8",
                 "status": "success",
                 "candidate": "wait30",
+                "measured_passes": 1,
                 "mean_token_tpot_ms": 10.0,
                 "mean_step_tpot_ms": 24.0,
                 "derived_output_tput_per_gpu": 100.0,
@@ -38,6 +39,8 @@ def test_summary_explains_offline_units():
     assert "raw accepted/proposed counters" in rendered.lower()
     assert "Huawei output tok/s/chip" in rendered
     assert "B300/Huawei step" in rendered
+    assert "| wait30 | 1 |" in rendered
+    assert "full-shape warmup is separate" in rendered
     assert "| FAIL |" in rendered
     assert "| 8 | DEP8 |" in rendered
 
