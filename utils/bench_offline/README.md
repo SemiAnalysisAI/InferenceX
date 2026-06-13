@@ -259,6 +259,13 @@ old global sizing, while `attention_dp_batch_mode=local-rank` uses
 capacity. At c8/c32/c64 on DEP8, that captures graph batches 1/4/8 instead of
 8/32/64 and avoids padding each local decode batch to global concurrency.
 
+Run `27476767599` validated those exact capacities. Relative to matched legacy
+global controls, local-rank sizing improved derived output throughput by
+`56.3%` at c8, `63.9%` at c32, and `68.9%` at c64. The best local LM-head-TP
+rows reached `52.17`, `146.86`, and `204.57` decode steps/s/GPU, equal to
+`92.0%`, `69.9%`, and `52.7%` of Huawei's published step rate. LM-head TP
+itself adds only about `2-3%` after the graph capacity is corrected.
+
 The checked-in fourth-stage matrix is
 `utils/bench_offline/b300_stage4_kernel_experiments.json`. It keeps matched
 one-pass controls while testing:

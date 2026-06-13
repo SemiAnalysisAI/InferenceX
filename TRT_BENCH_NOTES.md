@@ -616,3 +616,36 @@ gh api -X POST \
   -f 'inputs[salloc-time]=90' \
   -f 'inputs[worker-timeout]=3600'
 ```
+
+## Run 27476767599
+
+- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27476767599`
+- Completed successfully `2026-06-13T19:41:30Z`.
+- Branch commit: `232c9dec42e16443c13e41926e4dc855e64686c9`.
+- All ten jobs used one warmup and one measured pass.
+- Runtime validation proved local DEP8 engine and CUDA graph batch capacities
+  `1`, `4`, and `8` at global concurrencies `8`, `32`, and `64`.
+- Local-rank sizing versus the matched legacy global control:
+
+  | Pair | Output tok/s/GPU | Step/s/GPU | Wall tok/s/GPU |
+  |---|---:|---:|---:|
+  | c8 base | +56.3% | +55.2% | +33.4% |
+  | c32 base | +63.9% | +56.3% | +45.7% |
+  | c32 LM-head TP | +62.9% | +60.0% | +68.2% |
+  | c64 base | +68.9% | +64.1% | +74.6% |
+
+- Best local rows:
+
+  | Conc | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Huawei output ratio | Huawei step ratio |
+  |---:|---:|---:|---:|---:|---:|---:|
+  | 8 | 5.62 ms | 19.17 ms | 178.08 | 52.17 | 1.287 | 0.920 |
+  | 32 | 8.37 ms | 27.24 ms | 477.76 | 146.86 | 0.932 | 0.699 |
+  | 64 | 12.54 ms | 39.11 ms | 638.12 | 204.57 | 0.674 | 0.527 |
+
+- Once local-rank sizing is correct, LM-head TP adds about `2-3%` derived
+  output and step throughput. The dominant issue was global CUDA graph
+  padding, not LM-head execution.
+- The remaining Huawei gap grows with per-chip batch: B300 reaches `92.0%`,
+  `69.9%`, and `52.7%` of Huawei's published decode-step rate at c8/c32/c64.
+  B300's higher observed MTP yield makes the emitted-output ratios better:
+  `128.7%`, `93.2%`, and `67.4%`.
