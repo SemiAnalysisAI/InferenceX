@@ -11781,12 +11781,16 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
 # dynamo.install=true + wheel 1.2.0.dev20260526 so the dynamo runtime AND
 # NIXL are layered in at job start (the ai-dynamo vllm-runtime dev image
 # shipped without NIXL, so disagg workers crashed at NixlConnector init).
-# Engine args mirror the canonical recipe (ai-dynamo/dynamo
-# recipes/minimax-m3/vllm/disagg/MXFP8): block-size 128 + FLASH_ATTN.
-# Fully disaggregated GB200 sweep (NixlConnector prefill/decode split over
-# the NVL72 NVLink fabric; every worker = one 4-GPU node since the 444 GB
-# checkpoint can't fit in fewer): 1P1D TP4 (low conc), 1P1D TP4+EP4 (mid),
-# 1P2D / 2P1D TP4+EP4 (decode- and prefill-scaled), 1P1D DEP4 (max tput).
+# block-size 128 mandatory (MSA index-cache alignment); FLASHINFER
+# (trtllm-gen) attention to exploit Blackwell — needs vllm#45381 @ 022448dd
+# (m3_release HEAD: gates page>=128 on trtllm-gen GQA), so rebuild the image
+# from m3_release before running. Fully disaggregated, rack-scale wide-EP
+# GB200 sweep (NixlConnector P/D split over the NVL72 NVLink fabric). Mirrors
+# the deepseek-v4 "megamoe" ladder: DEP unit = DP-attn + expert-parallel
+# (DEP8 = 8 GPU / 2 nodes, DEP16 = 16 GPU / 4 nodes), with prefill workers
+# scaled 1P->4P. EP8/EP16 vs B200's 8-GPU NVLink island is the GB200 edge.
+# 1P1D TP4 (low conc), 1P1D DEP8 (mid), 1P1D DEP8->DEP16 (wide decode),
+# 2P1D / 4P1D DEP8->DEP16 (prefill-scaled max throughput). M3 = 128 experts.
 minimaxm3-fp8-gb200-dynamo-vllm:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -11801,7 +11805,8 @@ minimaxm3-fp8-gb200-dynamo-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      # Low latency: 1P+1D disagg TP4 (pure TP, no EP), 2 nodes (4 GPU each).
+      # Low latency: 1P+1D TP4 (pure TP, no EP), 2 nodes (4 GPU each). Wide EP
+      # would idle DP ranks at small concurrencies, so stay narrow here.
       - conc-list: [4, 8, 16, 32, 64]
         prefill:
           num-worker: 1
@@ -11816,64 +11821,68 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 1
           dp-attn: false
 
-      # Mid curve: 1P+1D disagg TP4+EP4, 2 nodes (4 GPU each).
-      - conc-list: [64, 128, 256, 512]
+      # Mid curve: 1P+1D DEP8 (DP-attn + EP8), 2 nodes prefill + 2 nodes
+      # decode = 4 nodes. First rung of rack-scale EP (16 experts/rank).
+      - conc-list: [128, 256, 512]
         prefill:
           num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
+          tp: 8
+          ep: 8
+          dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p1d-tp4ep4-2n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p1d-dep8-4n.yaml"
         decode:
           num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
+          tp: 8
+          ep: 8
+          dp-attn: true
 
-      # Decode-scaled: 1P+2D disagg TP4+EP4, 3 nodes (4 GPU each).
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p2d-tp4ep4-3n.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: false
-
-      # Prefill-scaled: 2P+1D disagg TP4+EP4, 3 nodes (4 GPU each).
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-2p1d-tp4ep4-3n.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-
-      # Max throughput: 1P+1D disagg DEP4 (DP4+EP), 2 nodes (4 GPU each).
+      # Wide decode: 1P+1D DEP8 prefill -> DEP16 decode (EP16 across 16 GPU /
+      # 4 nodes) = 6 nodes. Rack-scale decode throughput over NVL72 NVLink.
       - conc-list: [512, 1024, 2048]
         prefill:
           num-worker: 1
-          tp: 1
-          ep: 4
+          tp: 8
+          ep: 8
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p1d-dep4-2n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p1d-dep8-dep16-6n.yaml"
         decode:
           num-worker: 1
-          tp: 1
-          ep: 4
+          tp: 16
+          ep: 16
+          dp-attn: true
+
+      # Prefill-scaled: 2P+1D, 2x DEP8 prefill (4 nodes) -> DEP16 decode
+      # (4 nodes) = 8 nodes.
+      - conc-list: [2048, 4096]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-2p1d-dep8-dep16-8n.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+
+      # Max throughput: 4P+1D, 4x DEP8 prefill (8 nodes) -> DEP16 decode
+      # (4 nodes) = 12 nodes within one NVL72 rack.
+      - conc-list: [4096, 8192]
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-4p1d-dep8-dep16-12n.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
           dp-attn: true
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
