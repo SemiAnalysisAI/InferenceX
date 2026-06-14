@@ -77,6 +77,16 @@ def _valid_cluster_uuids(rows: list[FabricGpu]) -> list[str]:
     )
 
 
+def _valid_clique_ids(rows: list[FabricGpu]) -> list[str]:
+    return sorted(
+        {
+            row.clique_id
+            for row in rows
+            if row.clique_id not in INVALID_FABRIC_VALUES
+        }
+    )
+
+
 def node_summary(
     host: str,
     gpu_count: int,
@@ -90,13 +100,7 @@ def node_summary(
         "completed": sum(row.state == "Completed" for row in rows),
         "success": sum(row.status == "Success" for row in rows),
         "cluster_uuids": _valid_cluster_uuids(rows),
-        "clique_ids": sorted(
-            {
-                row.clique_id
-                for row in rows
-                if row.clique_id not in INVALID_FABRIC_VALUES
-            }
-        ),
+        "clique_ids": _valid_clique_ids(rows),
     }
 
 
@@ -116,6 +120,12 @@ def validate_node_summary(
         problems.append(
             "expected one non-empty ClusterUUID, got "
             f"{cluster_uuids!r}"
+        )
+    clique_ids = list(summary["clique_ids"])
+    if len(clique_ids) != 1:
+        problems.append(
+            "expected one non-empty CliqueId, got "
+            f"{clique_ids!r}"
         )
     if problems:
         raise RuntimeError(
@@ -153,8 +163,21 @@ def validate_topology_summaries(
             "The allocated nodes are not in one NVLink Fabric domain: "
             f"{cluster_uuids!r}"
         )
+    clique_ids = sorted(
+        {
+            str(clique_id)
+            for summary in summaries
+            for clique_id in summary["clique_ids"]
+        }
+    )
+    if len(clique_ids) != 1:
+        raise RuntimeError(
+            "The allocated GPUs are not in one NVLink clique: "
+            f"{clique_ids!r}"
+        )
     return {
         "cluster_uuid": cluster_uuids[0],
+        "clique_id": clique_ids[0],
         "hosts": sorted(hosts),
         "physical_nodes": expected_nodes,
         "gpus_per_node": expected_gpus_per_node,

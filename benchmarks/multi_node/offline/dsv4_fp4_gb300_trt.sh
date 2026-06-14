@@ -304,7 +304,12 @@ FABRIC_CLUSTER_UUID="$(
         'import json, sys; print(json.load(sys.stdin)["cluster_uuid"])' \
         <<<"$fabric_validation"
 )"
-log "validated one 16-GPU NVLink fabric cluster_uuid=$FABRIC_CLUSTER_UUID"
+FABRIC_CLIQUE_ID="$(
+    python3 -c \
+        'import json, sys; print(json.load(sys.stdin)["clique_id"])' \
+        <<<"$fabric_validation"
+)"
+log "validated one 16-GPU NVLink fabric cluster_uuid=$FABRIC_CLUSTER_UUID clique_id=$FABRIC_CLIQUE_ID"
 
 export BENCH_ID
 export TRT_BENCH_TELEMETRY_DIR="$GITHUB_WORKSPACE"
@@ -345,6 +350,7 @@ TRT_BENCH_TOPOLOGY_ARTIFACT="$(basename "$TOPOLOGY_FILE")"
 export TRT_BENCH_RANK_MAP_ARTIFACT
 export TRT_BENCH_TOPOLOGY_ARTIFACT
 export TRT_BENCH_FABRIC_CLUSTER_UUID="$FABRIC_CLUSTER_UUID"
+export TRT_BENCH_FABRIC_CLIQUE_ID="$FABRIC_CLIQUE_ID"
 export UCX_TLS="cuda_ipc,cuda_copy,sm,self,tcp"
 export PYTHONUNBUFFERED=1
 export PYTHONDONTWRITEBYTECODE=1

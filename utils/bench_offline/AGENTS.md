@@ -34,9 +34,9 @@ benchmark.
 - Before engine launch, require four nodes with four ranks each and four
   `Completed`/`Success` NVLink Fabric records per node. Parse full
   `nvidia-smi -q` output, not the unsupported `-d FABRIC` selector, and
-  require one shared non-empty `ClusterUUID` across all 16 GPUs. Preserve
-  `offline_rank_map_gbsN.tsv`, `offline_topology_gbsN.log`, and per-node GPU
-  telemetry.
+  require one shared non-empty `ClusterUUID` and `CliqueId` across all 16
+  GPUs. Preserve `offline_rank_map_gbsN.tsv`,
+  `offline_topology_gbsN.log`, and per-node GPU telemetry.
 - The dispatchable workflow is `.github/workflows/e2e-tests.yml` with
   `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
   because every row consumes 16 GPUs.

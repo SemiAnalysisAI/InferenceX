@@ -61,7 +61,16 @@ def test_node_summary_requires_every_gpu_and_one_cluster_uuid():
         )
 
 
-def test_topology_validation_requires_one_cluster_across_four_nodes():
+def test_node_summary_requires_one_clique():
+    rows = parse_nvidia_smi_query(
+        fabric_block() * 3
+        + fabric_block(clique_id="3")
+    )
+    with pytest.raises(RuntimeError, match="one non-empty CliqueId"):
+        validate_node_summary(node_summary("node-1", 4, rows), 4)
+
+
+def test_topology_validation_requires_one_cluster_and_clique():
     summaries = [
         node_summary(
             f"node-{index}",
@@ -76,10 +85,20 @@ def test_topology_validation_requires_one_cluster_across_four_nodes():
         expected_gpus_per_node=4,
     )
     assert result["cluster_uuid"] == "cluster-a"
+    assert result["clique_id"] == "2"
     assert result["active_gpu_count"] == 16
 
     summaries[-1]["cluster_uuids"] = ["cluster-b"]
     with pytest.raises(RuntimeError, match="one NVLink Fabric domain"):
+        validate_topology_summaries(
+            summaries,
+            expected_nodes=4,
+            expected_gpus_per_node=4,
+        )
+
+    summaries[-1]["cluster_uuids"] = ["cluster-a"]
+    summaries[-1]["clique_ids"] = ["3"]
+    with pytest.raises(RuntimeError, match="one NVLink clique"):
         validate_topology_summaries(
             summaries,
             expected_nodes=4,

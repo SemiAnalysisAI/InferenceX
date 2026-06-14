@@ -365,6 +365,9 @@ def main() -> int:
             "fabric_cluster_uuid": os.getenv(
                 "TRT_BENCH_FABRIC_CLUSTER_UUID"
             ),
+            "fabric_clique_id": os.getenv(
+                "TRT_BENCH_FABRIC_CLIQUE_ID"
+            ),
         },
     }
     write_json(result_path, base_result)
