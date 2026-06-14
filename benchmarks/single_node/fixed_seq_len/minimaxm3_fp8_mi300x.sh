@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
 # MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe.
-# Reuses the dedicated ROCm image and the MI355X serving shape. Block size 128
-# is mandatory for MSA sparse attention. Keep the default BF16 KV cache on
-# gfx942: the checkpoint has no calibrated q/prob scales for ROCm FP8
-# attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
+# Reuses the dedicated ROCm image and the MI355X serving shape. This test branch
+# applies the vLLM MiniMax-M3 FNUZ fix before enabling FP8 KV cache on gfx942.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -29,6 +27,35 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
+
+VLLM_SITE_DIR=$(python3 -c \
+    'import pathlib, vllm; print(pathlib.Path(vllm.__file__).parent)')
+VLLM_PACKAGE_ROOT=$(dirname "$VLLM_SITE_DIR")
+VLLM_FNUZ_PATCH=/workspace/benchmarks/single_node/fixed_seq_len/minimaxm3_fp8_mi300x_fnuz.patch
+
+patch --dry-run --forward --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$VLLM_FNUZ_PATCH"
+patch --forward --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$VLLM_FNUZ_PATCH"
+
+python3 - <<'PY'
+from pathlib import Path
+
+import torch
+import vllm
+from vllm.platforms import current_platform
+
+root = Path(vllm.__file__).parent
+sparse_attention = (
+    root / "models/minimax_m3/common/sparse_attention.py"
+).read_text()
+sparse_ops = (
+    root / "models/minimax_m3/common/ops/sparse_attn.py"
+).read_text()
+
+assert "else current_platform.fp8_dtype()" in sparse_attention
+assert "torch.float8_e4m3fnuz" in sparse_ops
+assert current_platform.fp8_dtype() == torch.float8_e4m3fnuz
+print("VLLM_MINIMAX_M3_FNUZ_PATCH_VERIFIED", current_platform.fp8_dtype())
+PY
 
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
@@ -57,6 +84,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
+    --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --enforce-eager \
     --tool-call-parser minimax_m3 \
