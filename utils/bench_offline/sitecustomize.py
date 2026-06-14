@@ -8,9 +8,10 @@ process before TensorRT-LLM imports its model code.
 
 from __future__ import annotations
 
-import json
 import os
 from pathlib import Path
+
+from io_utils import append_json_line
 
 
 def apply_trtllm_env_aliases() -> None:
@@ -27,10 +28,7 @@ def apply_trtllm_env_aliases() -> None:
         "source": "sitecustomize",
     }
     try:
-        marker_path = Path(marker)
-        marker_path.parent.mkdir(parents=True, exist_ok=True)
-        with marker_path.open("a", encoding="utf-8") as stream:
-            stream.write(json.dumps(payload, sort_keys=True) + "\n")
+        append_json_line(Path(marker), payload)
     except OSError:
         # This module runs during interpreter startup. The benchmark validates
         # the marker later and reports a useful error there.

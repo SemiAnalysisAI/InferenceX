@@ -9,6 +9,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from io_utils import append_json_line
+
 
 def _rank() -> str:
     for name in (
@@ -782,10 +784,7 @@ def _write_marker(event: str = "entry_ready", **details: Any) -> None:
         "source": "trt_mpi_entry",
     }
     payload.update(details)
-    path = Path(marker)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as stream:
-        stream.write(json.dumps(payload, sort_keys=True) + "\n")
+    append_json_line(Path(marker), payload)
 
 
 def worker_main(*args: Any, **kwargs: Any) -> Any:

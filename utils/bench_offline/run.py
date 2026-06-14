@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from io_utils import read_json, tail_text, write_json
+from io_utils import read_json, read_locked_text, tail_text, write_json
 from metrics import huawei_comparison
 from prompts import INFINITEBENCH_REVISION, prepare_corpus, sha256_file
 from trt_config import (
@@ -99,7 +99,7 @@ def latest_rank_progress(marker_path: Path) -> str | None:
     if not marker_path.exists():
         return None
     latest_by_rank: dict[int, str] = {}
-    for line in marker_path.read_text(encoding="utf-8").splitlines():
+    for line in read_locked_text(marker_path).splitlines():
         try:
             row = json.loads(line)
             if row.get("source") != "trt_mpi_entry":
@@ -130,9 +130,8 @@ def latest_worker_fatal(worker_log: Path) -> str | None:
 def latest_rank_fatal(marker_path: Path) -> str | None:
     if not marker_path.exists():
         return None
-    for line in reversed(
-        tail_text(marker_path, max_bytes=256_000).splitlines()
-    ):
+    marker_tail = read_locked_text(marker_path)[-256_000:]
+    for line in reversed(marker_tail.splitlines()):
         try:
             row = json.loads(line)
         except json.JSONDecodeError:

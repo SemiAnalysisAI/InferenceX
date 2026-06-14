@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from io_utils import write_json
+from io_utils import read_locked_text, write_json
 from metrics import (
     select_full_batch_decode_rounds,
     summarize_decode_rounds,
@@ -128,15 +128,33 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
 
     processes: dict[int, dict[str, Any]] = {}
     events: dict[str, list[dict[str, Any]]] = {}
-    if path.exists():
-        for line in path.read_text(encoding="utf-8").splitlines():
+    invalid_lines: list[dict[str, Any]] = []
+    line_count = 0
+    marker_text = read_locked_text(path)
+    if marker_text:
+        for line_number, line in enumerate(
+            marker_text.splitlines(),
+            start=1,
+        ):
+            line_count += 1
             try:
                 row = json.loads(line)
                 processes[int(row["pid"])] = row
                 if row.get("source") == "trt_mpi_entry":
                     events.setdefault(str(row.get("event")), []).append(row)
-            except (KeyError, TypeError, ValueError, json.JSONDecodeError):
-                continue
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+                json.JSONDecodeError,
+            ) as error:
+                invalid_lines.append(
+                    {
+                        "line_number": line_number,
+                        "error": type(error).__name__,
+                        "preview": line[:240],
+                    }
+                )
     mpi_entries = [
         row
         for row in processes.values()
@@ -148,6 +166,10 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
     ]
     return {
         "marker_path": str(path),
+        "line_count": line_count,
+        "valid_line_count": line_count - len(invalid_lines),
+        "invalid_line_count": len(invalid_lines),
+        "invalid_lines": invalid_lines,
         "unique_processes": len(processes),
         "mpi_entry_processes": len(mpi_entries),
         "mpi_entry_ranks": sorted(
@@ -243,6 +265,11 @@ def validate_rank_propagation(
 ) -> dict[str, Any]:
     marker = read_perfect_router_marker(marker_path)
     expected_ranks = list(range(WORLD_SIZE))
+    if marker["invalid_line_count"]:
+        raise RuntimeError(
+            "TRT rank marker contains malformed JSONL records: "
+            f"{marker['invalid_lines']}"
+        )
     if marker["mpi_entry_processes"] != WORLD_SIZE:
         raise RuntimeError(
             "TRT spawned an unexpected number of active rank entrypoints: "

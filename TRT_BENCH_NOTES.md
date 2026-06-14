@@ -120,10 +120,10 @@ Fabric domain before the measured engine was started. The result itself
 records the Slurm node list, Fabric `ClusterUUID`, `CliqueId`, and artifact
 names.
 
-Status as of implementation: no GB300 row is considered validated until an
-Actions artifact proves the exact 16-rank set, fabric checks, fixed-batch
-schedule, 256-round window, and final flat renderer row. Record the canary and
-full-sweep run IDs in this file after they complete.
+GBS16 has completed end to end. The final 16/64/128 sweep remains pending.
+Every final row still needs an Actions artifact proving the exact 16-rank
+set, fabric checks, fixed-batch schedule, 256-round window, and flat renderer
+row.
 
 ### GB300 Canary History
 
@@ -183,6 +183,35 @@ status. The host watches it, logs one-minute world progress, verifies that the
 statuses agree, and cancels the Slurm allocation immediately. Benchmark
 success comes from the controller result rather than the transport's expected
 post-cancel exit code.
+
+Run `27511242827`, source
+`dc671ab6098f0b7176d65377f8b80fbb176d1f07`, completed GBS16 on Slurm
+allocation `8717`, nodes `im-gb300-r01-c012` through `c015`. It proved:
+
+- Exact global ranks `0..15`, four ranks per node, and local ranks `0..3`.
+- Fabric `ClusterUUID`
+  `8fe56262-d2bb-4602-b338-8898d34c4731` and `CliqueId` `32766`.
+- One context-only full-batch prefill, zero mixed context/decode iterations,
+  and 256 consecutive full-batch decode rounds.
+- Controller completion canceled the external MPI world immediately instead
+  of waiting for the Slurm time limit.
+- A renderer-compatible one-row `agg_bmk.json`.
+
+GBS16 measured `25.943764 ms` round TPOT, `38.544908` decode steps/s/GPU,
+`3.140625` output tokens/step, `121.055103` output tok/s/GPU, and
+`71.716572` wall output tok/s/GPU. The filter retained `247/255` candidate
+rounds. The raw step rate was `0.679804x` Huawei and the acceptance-adjusted
+output rate was `0.875004x` Huawei.
+
+The result is valid, but its diagnostic marker exposed a shared-filesystem
+write bug: `perfect_router.jsonl` contained 188 physical lines, of which 12
+were malformed by concurrent rank appends. Enough later records survived to
+prove all required ranks and schedule events, but the final sweep must not
+silently tolerate that. The follow-up serializes every JSONL append with
+`flock`, takes the same lock for parser snapshots, and fails rank propagation
+if any malformed record remains. It also makes the host heartbeat read the
+host-visible `${GITHUB_WORKSPACE}` marker path; the canary incorrectly logged
+`rank_events=0` while checking its `/workspace` container alias.
 
 ## Why The Old Result Was Too High
 
@@ -498,7 +527,9 @@ gh api -X POST \
 
 Normal launches stream `salloc` output, print one queue heartbeat per minute,
 and preserve `offline_allocation_gbsN.log`. A `PENDING` heartbeat means TRT
-has not started and the worker timeout has not begun.
+has not started and the worker timeout has not begun. The GBS matrix is
+sequential and fail-fast: a failed smaller row prevents later rack
+allocations.
 
 For an initialization hang, let the controller time out so the container
 finalizer preserves `worker.log`; do not cancel the Actions run externally.

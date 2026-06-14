@@ -53,7 +53,14 @@ benchmark.
   job until its Slurm time limit.
 - The dispatchable workflow is `.github/workflows/e2e-tests.yml` with
   `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
-  because every row consumes 16 GPUs.
+  because every row consumes 16 GPUs. It is fail-fast so a broken smaller
+  shape does not consume the later rack allocations.
+- `perfect_router.jsonl` is shared by all 16 ranks over the workspace
+  filesystem. Every writer must use `io_utils.append_json_line`, every strict
+  reader must take the matching lock, and malformed lines are a validation
+  failure. Do not restore plain text append: run `27511242827` produced 12
+  corrupted records from concurrent writes. Host-side progress must inspect
+  the `${GITHUB_WORKSPACE}` path, not the container-only `/workspace` alias.
 
 ## B300 Baseline Constraints
 
@@ -141,6 +148,11 @@ benchmark.
   `9796f5d17c96ab56136b8b9b1e196b6e6db84426`. Its GBS16/64/128 raw
   decode-step rates are `90.621203`, `248.910481`, and `434.410801`
   steps/s/GPU. Use it as the regression baseline when debugging later runs.
+- First successful GB300 canary is Actions run `27511242827` at
+  `dc671ab6098f0b7176d65377f8b80fbb176d1f07`. GBS16 measured
+  `38.544908` decode steps/s/GPU and `121.055103` output tok/s/GPU. Its
+  concurrent marker corruption is fixed after that SHA, so use the later
+  full sweep for the final GB300 renderer row.
 - `offline_aggregate.json` is authoritative. `results_bmk/agg_bmk.json` uses
   acceptance-adjusted output-token throughput and equivalent output-token
   TPOT for standard renderer fields, while retaining custom decode-round

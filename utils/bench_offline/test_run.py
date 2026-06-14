@@ -1146,6 +1146,20 @@ def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
     assert parsed["event_ranks"]["entry_ready"] == list(range(8))
 
 
+def test_rank_validation_rejects_malformed_marker_records(tmp_path):
+    marker = tmp_path / "marker.jsonl"
+    marker.write_text('{"pid": 100}\n}{\n', encoding="utf-8")
+
+    parsed = read_perfect_router_marker(marker)
+    assert parsed["line_count"] == 2
+    assert parsed["valid_line_count"] == 1
+    assert parsed["invalid_line_count"] == 1
+    assert parsed["invalid_lines"][0]["line_number"] == 2
+
+    with pytest.raises(RuntimeError, match="malformed JSONL records"):
+        validate_rank_propagation(marker, {})
+
+
 def test_rank_validation_requires_exact_attention_workspace_events(
     tmp_path,
     monkeypatch,

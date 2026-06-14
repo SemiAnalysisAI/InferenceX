@@ -423,9 +423,11 @@ export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
 export TRTLLM_EPLB_SHM_NAME="offline_${JOB_ID}_${BENCH_ID}"
 
+HOST_EXTERNAL_WORK_DIR="${GITHUB_WORKSPACE}/.offline_work_${BENCH_ID}_${JOB_ID}"
 EXTERNAL_WORK_DIR="/workspace/.offline_work_${BENCH_ID}_${JOB_ID}"
 FIXED_BATCH_ARM_FILE="${EXTERNAL_WORK_DIR}/fixed_batch_barrier.armed.json"
 PERFECT_ROUTER_MARKER="${EXTERNAL_WORK_DIR}/perfect_router.jsonl"
+HOST_PERFECT_ROUTER_MARKER="${HOST_EXTERNAL_WORK_DIR}/perfect_router.jsonl"
 CUTE_CACHE_DIR="${TRT_BENCH_CACHE_ROOT}/cute-dsl"
 RANK_ENV_RECORDS="$(mktemp /tmp/offline-trt-rank-env.XXXXXX)"
 python3 \
@@ -464,7 +466,7 @@ done < "$RANK_ENV_RECORDS"
 rm -f "$RANK_ENV_RECORDS"
 RANK_ENV_RECORDS=""
 log "preseeded external MPI rank environment exports=$rank_env_exports cleared=$rank_env_unsets"
-log "rank marker=$PERFECT_ROUTER_MARKER arm_file=$FIXED_BATCH_ARM_FILE"
+log "rank marker=$PERFECT_ROUTER_MARKER host_marker=$HOST_PERFECT_ROUTER_MARKER arm_file=$FIXED_BATCH_ARM_FILE"
 
 CONTAINER_MOUNTS="${GITHUB_WORKSPACE}:/workspace"
 CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"
@@ -513,8 +515,8 @@ while kill -0 "$WORLD_STEP_PID" >/dev/null 2>&1; do
     if (( world_elapsed / 60 > last_world_heartbeat )); then
         last_world_heartbeat=$((world_elapsed / 60))
         rank_events=0
-        if [[ -s "$PERFECT_ROUTER_MARKER" ]]; then
-            rank_events="$(wc -l < "$PERFECT_ROUTER_MARKER")"
+        if [[ -s "$HOST_PERFECT_ROUTER_MARKER" ]]; then
+            rank_events="$(wc -l < "$HOST_PERFECT_ROUTER_MARKER")"
         fi
         result_ready=no
         if [[ -s "$RESULT_FILE" ]]; then

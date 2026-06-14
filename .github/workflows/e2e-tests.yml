@@ -114,7 +114,7 @@ jobs:
     timeout-minutes: 240
     name: ${{ inputs.hardware-profile }} TRT offline / GBS ${{ matrix.global_batch_size }}
     strategy:
-      fail-fast: false
+      fail-fast: true
       max-parallel: 1
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
