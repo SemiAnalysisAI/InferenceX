@@ -9,18 +9,34 @@ from bench_offline.summarize import (
 )
 
 
-def successful_result(global_batch_size=64):
+def successful_result(global_batch_size=64, hardware_profile="b300"):
+    is_gb300 = hardware_profile == "gb300"
+    active_gpu_count = 16 if is_gb300 else 8
+    parallelism = "DEP16" if is_gb300 else "DEP8"
+    hardware = "GB300 NVL16" if is_gb300 else "B300"
     return {
         "status": "success",
         "benchmark": {
             "experiment_id": f"gbs{global_batch_size}",
             "global_batch_size": global_batch_size,
             "concurrency": global_batch_size,
-            "local_batch_size": global_batch_size // 8,
-            "active_gpu_count": 8,
-            "effective_parallelism": "DEP8",
+            "local_batch_size": global_batch_size // active_gpu_count,
+            "active_gpu_count": active_gpu_count,
+            "hardware": hardware,
+            "hardware_profile": hardware_profile,
+            "renderer_hw": (
+                "gb300-nv" if is_gb300 else hardware_profile
+            ),
+            "physical_nodes": 4 if is_gb300 else 1,
+            "is_multinode": is_gb300,
+            "effective_parallelism": parallelism,
             "input_tokens": 8192,
             "generated_output_tokens": 1025,
+        },
+        "config": {
+            "active_gpu_count": active_gpu_count,
+            "tensor_parallel_size": active_gpu_count,
+            "moe_expert_parallel_size": active_gpu_count,
         },
         "provenance": {
             "image": "ghcr.io#semianalysisai/trtllm-dsv4:test",
@@ -35,7 +51,7 @@ def successful_result(global_batch_size=64):
             "equivalent_output_tpot_ms": 8.0,
             "output_tput_per_gpu": 1000.0,
             "wall_output_tput_per_gpu": 700.0,
-            "local_batch_size": global_batch_size // 8,
+            "local_batch_size": global_batch_size // active_gpu_count,
             "measured_decode_rounds": 256,
             "effective_acceptance_rate": 0.5,
             "token_yield_source": "iteration_spec_decoding_stats",
@@ -53,10 +69,11 @@ def successful_result(global_batch_size=64):
             "p99_e2e_ms": 30000.0,
         },
         "huawei": {
+            "hardware_key": hardware_profile,
             "decode_round_tpot_ms": 19.03,
             "decode_step_tput_per_chip": 210.16,
-            "b300_to_huawei_decode_step_ratio": 400.0 / 210.16,
-            "b300_to_huawei_output_ratio": 1.9,
+            "hardware_to_huawei_decode_step_ratio": 400.0 / 210.16,
+            "hardware_to_huawei_output_ratio": 1.9,
         },
     }
 
@@ -67,7 +84,7 @@ def test_summary_explains_huawei_round_units():
     assert "Decode round TPOT ms" in rendered
     assert "256 consecutive full-local-batch decode iterations" in rendered
     assert "GBS / decode_round_TPOT / 8" in rendered
-    assert "eight B300 GPUs" in rendered
+    assert "8 B300 GPUs" in rendered
     assert "| 64 | 8 | 8 | success |" in rendered
 
 
@@ -125,3 +142,27 @@ def test_renderer_rows_skip_failed_results(tmp_path):
         }
     )
     assert [row["conc"] for row in rows] == [64]
+
+
+def test_gb300_renderer_row_is_multinode_dep16():
+    row = renderer_row(successful_result(hardware_profile="gb300"))
+    assert row is not None
+    assert row["hw"] == "gb300-nv"
+    assert row["is_multinode"] is True
+    assert row["decode_tp"] == 16
+    assert row["decode_ep"] == 16
+    assert row["num_decode_gpu"] == 16
+    assert row["local_batch_size"] == 4
+
+
+def test_gb300_summary_uses_sixteen_gpu_formula():
+    row = result_row(
+        "gbs64",
+        None,
+        successful_result(hardware_profile="gb300"),
+    )
+    rendered = markdown([row])
+    assert "GB300 NVL16 TRT Fixed-GBS" in rendered
+    assert "GBS / decode_round_TPOT / 16" in rendered
+    assert "16 GB300 NVL16 GPUs" in rendered
+    assert "GB300/Huawei step" in rendered

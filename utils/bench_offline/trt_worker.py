@@ -23,6 +23,7 @@ from prompts import load_corpus
 from trt_config import (
     FIXED_BENCHMARK_CONFIG,
     FIXED_BATCH_ARM_ENV,
+    HARDWARE_PROFILE,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
     INPUT_TOKENS,
@@ -249,7 +250,8 @@ def validate_rank_propagation(
         )
     if marker["mpi_entry_ranks"] != expected_ranks:
         raise RuntimeError(
-            "TRT active ranks do not match DEP8: "
+            "TRT active ranks do not match "
+            f"{FIXED_BENCHMARK_CONFIG.parallelism}: "
             f"{marker['mpi_entry_ranks']!r} != {expected_ranks!r}"
         )
     environment_mismatches = {}
@@ -351,7 +353,7 @@ def validate_rank_propagation(
         expected_prefill_rows = (
             global_batch_size // WORLD_SIZE
         ) * INPUT_TOKENS
-        if expected_prefill_rows > fp8_gemm_limit:
+        if fp8_gemm_limit > 0 and expected_prefill_rows > fp8_gemm_limit:
             event_name = "fp8_prefill_gemm_chunked"
             full_prefill_rows = [
                 row
@@ -465,7 +467,9 @@ def main() -> int:
         local_batch = local_batch_size(args.global_batch_size)
         log_progress(
             f"worker start global_batch={args.global_batch_size} "
-            f"local_batch={local_batch} topology=DEP8 "
+            f"local_batch={local_batch} "
+            f"hardware={HARDWARE_PROFILE.hardware} "
+            f"topology={FIXED_BENCHMARK_CONFIG.parallelism} "
             f"warmup_rounds={HUAWEI_WARMUP_DECODE_ROUNDS} "
             f"measured_rounds={HUAWEI_MEASURED_DECODE_ROUNDS}"
         )
@@ -494,7 +498,7 @@ def main() -> int:
             "kv_cache_fraction="
             f"{llm_kwargs['kv_cache_config']['free_gpu_memory_fraction']} "
             "moe_max_num_tokens="
-            f"{llm_kwargs['moe_config']['max_num_tokens']} "
+            f"{llm_kwargs['moe_config'].get('max_num_tokens')} "
             f"max_seq_len={llm_kwargs['max_seq_len']} "
             "overlap_scheduler=off iter_stats=on"
         )

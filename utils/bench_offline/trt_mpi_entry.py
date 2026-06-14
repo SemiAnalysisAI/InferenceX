@@ -10,8 +10,21 @@ from pathlib import Path
 from typing import Any
 
 
+def _rank() -> str:
+    for name in (
+        "OMPI_COMM_WORLD_RANK",
+        "SLURM_PROCID",
+        "PMI_RANK",
+        "PMIX_RANK",
+    ):
+        value = os.getenv(name)
+        if value is not None:
+            return value
+    return "unknown"
+
+
 def _emit_rank_event(event: str, **details: Any) -> None:
-    rank = os.getenv("OMPI_COMM_WORLD_RANK", "unknown")
+    rank = _rank()
     _write_marker(event=event, **details)
     detail_text = " ".join(
         f"{name}={value}" for name, value in details.items()
@@ -359,10 +372,14 @@ def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
     max_fused_rows = int(
         os.environ["TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"]
     )
-    if max_fused_rows <= 0:
-        raise RuntimeError(
-            "Large-prefill FP8 quant guard needs a positive row limit"
-        )
+    if max_fused_rows == 0:
+        return {
+            "enabled": False,
+            "max_fused_rows": 0,
+            "already_installed": False,
+        }
+    if max_fused_rows < 0:
+        raise RuntimeError("FP8 quant guard row limit cannot be negative")
 
     from tensorrt_llm._torch.custom_ops import torch_custom_ops
 
@@ -412,6 +429,7 @@ def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
         torch_custom_ops._fp8_quantize_1x128_ue8m0 = guarded_quantize
 
     return {
+        "enabled": True,
         "max_fused_rows": max_fused_rows,
         "already_installed": (
             tactic_filter_installed and dispatch_guard_installed
@@ -423,10 +441,16 @@ def _install_large_prefill_fp8_gemm_chunking() -> dict[str, Any]:
     max_chunk_rows = int(
         os.environ["TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS"]
     )
-    if max_chunk_rows <= 0:
-        raise RuntimeError(
-            "Large-prefill FP8 GEMM chunking needs a positive row limit"
-        )
+    if max_chunk_rows == 0:
+        return {
+            "enabled": False,
+            "max_chunk_rows": 0,
+            "target": None,
+            "synchronize_chunks": False,
+            "already_installed": False,
+        }
+    if max_chunk_rows < 0:
+        raise RuntimeError("FP8 GEMM row limit cannot be negative")
 
     from tensorrt_llm._torch.custom_ops import torch_custom_ops
 
@@ -444,6 +468,7 @@ def _install_large_prefill_fp8_gemm_chunking() -> dict[str, Any]:
                 f"{installed_limit}, requested {max_chunk_rows}"
             )
         return {
+            "enabled": True,
             "max_chunk_rows": max_chunk_rows,
             "target": f"{runner_class.__name__}.forward",
             "synchronize_chunks": True,
@@ -546,6 +571,7 @@ def _install_large_prefill_fp8_gemm_chunking() -> dict[str, Any]:
     )
     runner_class.forward = chunked_forward
     return {
+        "enabled": True,
         "max_chunk_rows": max_chunk_rows,
         "target": f"{runner_class.__name__}.forward",
         "synchronize_chunks": True,
@@ -716,7 +742,7 @@ def _write_marker(event: str = "entry_ready", **details: Any) -> None:
         expected_environment = {}
     payload = {
         "pid": os.getpid(),
-        "rank": os.getenv("OMPI_COMM_WORLD_RANK"),
+        "rank": _rank(),
         "perfect_router": os.getenv("ENABLE_PERFECT_ROUTER"),
         "cute_dsl_cache_dir": os.getenv("CUTE_DSL_CACHE_DIR"),
         "benchmark_environment": {
@@ -817,12 +843,14 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     )
     print(
         "[offline-trt-mpi] large-prefill FP8 quant guard "
+        f"enabled={fp8_guard['enabled']} "
         f"max_fused_rows={fp8_guard['max_fused_rows']} "
         f"already_installed={fp8_guard['already_installed']}",
         flush=True,
     )
     print(
         "[offline-trt-mpi] large-prefill FP8 GEMM chunking "
+        f"enabled={fp8_gemm_chunking['enabled']} "
         f"max_chunk_rows={fp8_gemm_chunking['max_chunk_rows']} "
         f"target={fp8_gemm_chunking['target']} "
         f"synchronize_chunks={fp8_gemm_chunking['synchronize_chunks']} "

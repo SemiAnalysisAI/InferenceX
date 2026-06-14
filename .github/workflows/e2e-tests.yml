@@ -1,5 +1,5 @@
-name: B300 TRT Fixed-GBS Offline Benchmark
-run-name: ${{ inputs.test-name || 'DeepSeek-V4 B300 TRT Huawei-style offline' }}
+name: TRT Fixed-GBS Offline Benchmark
+run-name: ${{ inputs.test-name || 'DeepSeek-V4 TRT Huawei-style offline' }}
 
 on:
   workflow_dispatch:
@@ -9,11 +9,19 @@ on:
         required: false
         type: string
         default: trt-bench
+      hardware-profile:
+        description: Offline hardware profile
+        required: false
+        type: choice
+        options:
+          - gb300
+          - b300
+        default: gb300
       test-name:
         description: Display name for this benchmark run
         required: false
         type: string
-        default: DeepSeek-V4 B300 TRT Huawei-style offline
+        default: DeepSeek-V4 GB300 TRT Huawei-style offline
       global_batch_sizes:
         description: Comma-separated Huawei global batches (16,64,128)
         required: false
@@ -23,7 +31,7 @@ on:
         description: Slurm allocation time limit in minutes
         required: false
         type: string
-        default: "150"
+        default: "180"
       worker-timeout:
         description: Timeout in seconds for the fresh TRT engine
         required: false
@@ -49,11 +57,17 @@ jobs:
         id: matrix
         env:
           GLOBAL_BATCH_SIZES: ${{ inputs.global_batch_sizes }}
+          HARDWARE_PROFILE: ${{ inputs.hardware-profile }}
         run: |
           python3 - <<'PY'
           import json
           import os
 
+          hardware_profile = os.environ["HARDWARE_PROFILE"]
+          if hardware_profile not in {"b300", "gb300"}:
+              raise SystemExit(
+                  f"Unsupported hardware profile: {hardware_profile}"
+              )
           allowed = {16, 64, 128}
           values = [
               int(item.strip())
@@ -88,21 +102,24 @@ jobs:
 
   benchmark:
     needs: prepare
-    runs-on: [self-hosted, b300]
-    timeout-minutes: 210
-    name: B300 TRT offline / GBS ${{ matrix.global_batch_size }}
+    runs-on:
+      - self-hosted
+      - ${{ inputs.hardware-profile == 'gb300' && 'gb300-nv' || 'b300' }}
+    timeout-minutes: 240
+    name: ${{ inputs.hardware-profile }} TRT offline / GBS ${{ matrix.global_batch_size }}
     strategy:
       fail-fast: false
-      max-parallel: 3
+      max-parallel: 1
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
       GLOBAL_BATCH_SIZE: ${{ matrix.global_batch_size }}
       BENCH_ID: ${{ matrix.id }}
-      IMAGE: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
+      TRT_BENCH_HARDWARE_PROFILE: ${{ inputs.hardware-profile }}
+      IMAGE: ${{ inputs.hardware-profile == 'gb300' && 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1' || 'ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066' }}
       MODEL_PATH: /scratch/models/DeepSeek-V4-Pro
       DATASET_REVISION: 90f0394333616266d9fe85824ceaf505093cbaa5
-      TRT_BENCH_CACHE_ROOT: /data/trtllm-cache/dsv4-c185066-sm100a
+      TRT_BENCH_CACHE_ROOT: ${{ inputs.hardware-profile == 'gb300' && '/data/home/sa-shared/gharunners/offline-trt/cache/dsv4-1.3.0-deepseek-v4-dev.1-sm100a' || '/data/trtllm-cache/dsv4-c185066-sm100a' }}
       SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
       WORKER_TIMEOUT: ${{ inputs.worker-timeout }}
       TRTLLM_WORKER_PRINT_STACKS_PERIOD: ${{ inputs.worker-stack-period }}
@@ -122,7 +139,10 @@ jobs:
           rm -f "${{ github.workspace }}"/offline_result_*.json
           rm -f "${{ github.workspace }}"/offline_controller_*.log
           rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
+          rm -f "${{ github.workspace }}"/offline_rank_map_*.tsv
+          rm -f "${{ github.workspace }}"/offline_topology_*.log
           rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
+          rm -rf "${{ github.workspace }}"/.offline_work_*
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -136,7 +156,11 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: |
-          bash benchmarks/single_node/offline/dsv4_fp4_b300_trt.sh
+          if [[ "$TRT_BENCH_HARDWARE_PROFILE" == "gb300" ]]; then
+            bash benchmarks/multi_node/offline/dsv4_fp4_gb300_trt.sh
+          else
+            bash benchmarks/single_node/offline/dsv4_fp4_b300_trt.sh
+          fi
 
       - name: Show result headline
         if: always()
@@ -146,6 +170,9 @@ jobs:
             jq '{
               status,
               benchmark: {
+                hardware: .benchmark.hardware,
+                hardware_profile: .benchmark.hardware_profile,
+                effective_parallelism: .benchmark.effective_parallelism,
                 global_batch_size: .benchmark.global_batch_size,
                 local_batch_size: .benchmark.local_batch_size,
                 active_gpu_count: .benchmark.active_gpu_count,
@@ -176,6 +203,9 @@ jobs:
             offline_result_${{ matrix.id }}.json
             offline_controller_${{ matrix.id }}.log
             offline_gpu_metrics_${{ matrix.id }}.csv
+            offline_gpu_metrics_${{ matrix.id }}_*.csv
+            offline_rank_map_${{ matrix.id }}.tsv
+            offline_topology_${{ matrix.id }}.log
             offline_debug_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14

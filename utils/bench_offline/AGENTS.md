@@ -5,12 +5,42 @@ benchmark.
 
 - This branch is disposable and must remain isolated from the normal serving
   sweep. Never edit `nvidia-master.yaml` or `perf-changelog.yaml`.
-- The benchmark has one contract only: DeepSeek-V4 Pro, B300 DEP8, exact
-  global batches `16`, `64`, and `128`, 8192 input tokens, MTP3, two warmup
-  decode rounds, and 256 measured decode rounds.
+- The benchmark has one measurement contract and two hardware profiles:
+  validated B300 DEP8 and current GB300 NVL16 DEP16. Both use DeepSeek-V4 Pro,
+  exact global batches `16`, `64`, and `128`, 8192 input tokens, MTP3, two
+  warmup decode rounds, and 256 measured decode rounds.
 - `global_batch_size` is authoritative. TRT `max_batch_size` and CUDA graph
-  size are exactly `global_batch_size / 8`; `max_num_tokens` is exactly
-  `local_batch_size * 8192` so every local prompt can prefill together.
+  size are exactly `global_batch_size / active_gpu_count`; `max_num_tokens`
+  is exactly `local_batch_size * 8192` so every local prompt can prefill
+  together.
+
+## GB300 Profile
+
+- Select with `TRT_BENCH_HARDWARE_PROFILE=gb300`. It is four physical nodes,
+  four GPUs/tasks per node, and one external 16-rank
+  `trtllm-llmapi-launch` world. The ranks must be exactly `0..15`.
+- Use image
+  `nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1`
+  and TRT source `34a563ac6d8cc0ca7068c7f619e869fb8a625333`. The working
+  topology/config reference is InferenceX PR #1689.
+- Keep TP16, EP16, attention DP, LM-head TP, MoE TP1,
+  `MEGAMOE_DEEPGEMM`, the pinned EP16/384-slot load-balancer file, KV
+  fraction `0.70`, and PDL enabled.
+- GB300 local batches are `1`, `4`, and `8`; max token shapes are `8192`,
+  `32768`, and `65536`. The B300-only attention workspace, 12 GiB KV reserve,
+  FP8 quantizer guard, and oversized DeepGemm chunker must remain disabled.
+- The barrier arm file, rank marker, corpus, and worker artifacts must be on
+  shared `/workspace`, never node-local `/tmp`.
+- Before engine launch, require four nodes with four ranks each and four
+  `Completed`/`Success` NVLink Fabric records per node. Preserve
+  `offline_rank_map_gbsN.tsv`, `offline_topology_gbsN.log`, and per-node GPU
+  telemetry.
+- The dispatchable workflow is `.github/workflows/e2e-tests.yml` with
+  `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
+  because every row consumes 16 GPUs.
+
+## B300 Baseline Constraints
+
 - Start KV capacity from
   `kv_cache_config.free_gpu_memory_fraction=0.60`. An explicit KV token cap
   underprovisions the pinned DeepSeek-V4 multi-pool cache and staggered half
@@ -52,6 +82,9 @@ benchmark.
   final output and writes two row chunks through the existing transformed
   DeepGemm weights. Synchronize oversized chunks for precise failures.
   Decode has at most 16 rows and must call the pinned runner unchanged.
+
+## Shared Measurement Invariants
+
 - `LLM.generate()` submits requests individually. The MPI entry shim patches
   TRT's idle request fetch so each warmup/measured pass waits for exactly one
   complete GBS before routing. Do not remove that barrier while claiming a
@@ -73,19 +106,20 @@ benchmark.
   calculate the 25th/75th percentiles, and discard only values above
   `Q3 + 1.5 * IQR`.
 - The headline metric is raw decode-round throughput:
-  `GBS / decode_round_TPOT / 8`. MTP output yield and acceptance are separate.
+  `GBS / decode_round_TPOT / active_gpu_count`. MTP output yield and
+  acceptance are separate.
 - The 1025-token measured output cap guarantees at least 256 MTP3 decode
   iterations even if every round emits four tokens. Only the first 256 valid
   full-batch rounds are measured.
 - Preserve perfect routing, exact 8192-token real prompts, temperature 1,
-  engine-global seed 42, LM-head TP, heuristic sparse top-k, ConfigurableMoE,
-  and rank environment validation.
+  engine-global seed 42, LM-head TP, heuristic sparse top-k, and rank
+  environment validation. ConfigurableMoE remains enabled only on B300.
 - Do not enable `TLLM_METRICS_ALL_RANKS`; its per-iteration collective changes
   the timing path. Rank 0 stats are valid only after exact equal-length prompt
   routing and full-local-batch validation.
 - The comparison is methodological, not identical hardware: this branch uses
-  eight B300 GPUs and FP4, while Huawei publishes sixteen 950DT chips with
-  hybrid MXFP8/MXFP4.
+  B300 or GB300 FP4 GPUs, while Huawei publishes 950DT chips with hybrid
+  MXFP8/MXFP4.
 - Final known-good full sweep is Actions run `27493336994` at
   `9796f5d17c96ab56136b8b9b1e196b6e6db84426`. Its GBS16/64/128 raw
   decode-step rates are `90.621203`, `248.910481`, and `434.410801`
@@ -106,7 +140,7 @@ benchmark.
   archive contains TRT's all-thread stack dumps. Keep the normal default at
   `-1`; stack dumping changes logging overhead and is diagnostic only.
 - Verify with `python -m pytest utils/bench_offline -v`,
-  `python -m compileall utils/bench_offline`, `bash -n` on both launchers, and
-  YAML parsing of `.github/workflows/e2e-tests.yml`.
+  `python -m compileall utils/bench_offline`, `bash -n` and `shellcheck` on
+  all three launchers, and `actionlint .github/workflows/e2e-tests.yml`.
 - A GPU benchmark is not valid until its Actions artifact proves the schedule
   validation, timing filter, exact rank set, and result values.

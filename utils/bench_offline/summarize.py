@@ -67,6 +67,24 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
     if global_batch is None or output_tput is None:
         return None
 
+    config = result.get("config") or {}
+    active_gpu_count = int(
+        benchmark.get("active_gpu_count")
+        or config.get("active_gpu_count")
+        or 8
+    )
+    tensor_parallel_size = int(
+        config.get("tensor_parallel_size") or active_gpu_count
+    )
+    expert_parallel_size = int(
+        config.get("moe_expert_parallel_size") or active_gpu_count
+    )
+    is_multinode = bool(
+        benchmark.get(
+            "is_multinode",
+            int(benchmark.get("physical_nodes") or 1) > 1,
+        )
+    )
     tokens_per_step = float(aggregate["observed_tokens_per_step"])
     equivalent_percentiles = {
         "median_tpot": (
@@ -89,7 +107,11 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         float(aggregate["equivalent_output_tpot_ms"]) / 1000.0
     )
     row: dict[str, Any] = {
-        "hw": "b300",
+        "hw": str(
+            benchmark.get("renderer_hw")
+            or benchmark.get("hardware_profile")
+            or "b300"
+        ),
         "model": RENDERER_MODEL,
         "infmax_model_prefix": RENDERER_MODEL_PREFIX,
         "framework": RENDERER_FRAMEWORK,
@@ -99,22 +121,22 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         "conc": int(global_batch),
         "image": (result.get("provenance") or {}).get("image"),
         "disagg": False,
-        "is_multinode": False,
+        "is_multinode": is_multinode,
         "spec_decoding": "mtp",
         "tput_per_gpu": float(output_tput),
         "output_tput_per_gpu": float(output_tput),
         "mean_tpot": equivalent_tpot_s,
         "mean_intvty": 1.0 / equivalent_tpot_s,
-        "prefill_tp": 8,
-        "prefill_ep": 8,
+        "prefill_tp": tensor_parallel_size,
+        "prefill_ep": expert_parallel_size,
         "prefill_dp_attention": True,
         "prefill_num_workers": 0,
-        "decode_tp": 8,
-        "decode_ep": 8,
+        "decode_tp": tensor_parallel_size,
+        "decode_ep": expert_parallel_size,
         "decode_dp_attention": True,
         "decode_num_workers": 0,
-        "num_prefill_gpu": 8,
-        "num_decode_gpu": 8,
+        "num_prefill_gpu": active_gpu_count,
+        "num_decode_gpu": active_gpu_count,
         # Custom fields remain useful in downloaded flat rows. The standard
         # renderer ignores fields it does not understand.
         "global_batch_size": int(global_batch),
@@ -176,8 +198,33 @@ def result_row(
     benchmark = result.get("benchmark") or {}
     aggregate = result.get("aggregate") or {}
     huawei = result.get("huawei") or {}
+    hardware_profile = str(
+        benchmark.get("hardware_profile")
+        or huawei.get("hardware_key")
+        or "b300"
+    )
+    step_ratio = huawei.get(
+        "hardware_to_huawei_decode_step_ratio"
+    )
+    if step_ratio is None:
+        step_ratio = huawei.get(
+            f"{hardware_profile}_to_huawei_decode_step_ratio"
+        )
+    if step_ratio is None:
+        step_ratio = huawei.get("b300_to_huawei_decode_step_ratio")
+    output_ratio = huawei.get("hardware_to_huawei_output_ratio")
+    if output_ratio is None:
+        output_ratio = huawei.get(
+            f"{hardware_profile}_to_huawei_output_ratio"
+        )
+    if output_ratio is None:
+        output_ratio = huawei.get("b300_to_huawei_output_ratio")
     return {
         "experiment_id": experiment_id,
+        "hardware": benchmark.get("hardware"),
+        "hardware_profile": hardware_profile,
+        "effective_parallelism": benchmark.get("effective_parallelism"),
+        "physical_nodes": benchmark.get("physical_nodes"),
         "global_batch_size": benchmark.get(
             "global_batch_size",
             benchmark.get("concurrency"),
@@ -225,12 +272,8 @@ def result_row(
         "huawei_decode_step_tput_per_chip": huawei.get(
             "decode_step_tput_per_chip"
         ),
-        "b300_to_huawei_decode_step_ratio": huawei.get(
-            "b300_to_huawei_decode_step_ratio"
-        ),
-        "b300_to_huawei_output_ratio": huawei.get(
-            "b300_to_huawei_output_ratio"
-        ),
+        "hardware_to_huawei_decode_step_ratio": step_ratio,
+        "hardware_to_huawei_output_ratio": output_ratio,
         "failure_kind": result.get("failure_kind"),
         "error": result.get("error"),
         "source": str(source) if source else None,
@@ -238,10 +281,42 @@ def result_row(
 
 
 def markdown(rows: list[dict[str, Any]]) -> str:
+    hardware = next(
+        (
+            str(row["hardware"])
+            for row in rows
+            if row.get("hardware")
+        ),
+        "TRT hardware",
+    )
+    hardware_profile = next(
+        (
+            str(row["hardware_profile"]).upper()
+            for row in rows
+            if row.get("hardware_profile")
+        ),
+        "TRT",
+    )
+    gpu_count = next(
+        (
+            int(row["active_gpu_count"])
+            for row in rows
+            if row.get("active_gpu_count") is not None
+        ),
+        None,
+    )
+    topology = next(
+        (
+            str(row["effective_parallelism"])
+            for row in rows
+            if row.get("effective_parallelism")
+        ),
+        None,
+    )
     lines = [
-        "# DeepSeek-V4 B300 TRT Fixed-GBS Offline Benchmark",
+        f"# DeepSeek-V4 {hardware} TRT Fixed-GBS Offline Benchmark",
         "",
-        "| GBS | Local/rank | GPUs | Status | Decode round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained rounds | Huawei TPOT ms | Huawei steps/s/chip | B300/Huawei step |",
+        f"| GBS | Local/rank | GPUs | Status | Decode round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained rounds | Huawei TPOT ms | Huawei steps/s/chip | {hardware_profile}/Huawei step |",
         "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
@@ -281,7 +356,7 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                     2,
                 ),
                 ratio=_fmt(
-                    row.get("b300_to_huawei_decode_step_ratio"),
+                    row.get("hardware_to_huawei_decode_step_ratio"),
                     3,
                 ),
             )
@@ -291,12 +366,39 @@ def markdown(rows: list[dict[str, Any]]) -> str:
             "",
             "## Metric meanings",
             "",
-            "- `GBS` is the one authoritative global batch submitted to TRT. `Local/rank` is exactly `GBS / 8` for DEP8.",
+            (
+                "- `GBS` is the one authoritative global batch submitted "
+                f"to TRT. `Local/rank` is exactly `GBS / {gpu_count}`"
+                + (f" for {topology}." if topology else ".")
+                if gpu_count is not None
+                else (
+                    "- `GBS` is the one authoritative global batch "
+                    "submitted to TRT."
+                )
+            ),
             "- `Decode round TPOT` is the mean `iterLatencyMS` for 256 consecutive full-local-batch decode iterations after skipping the first and removing only upper-IQR outliers, matching Huawei's `process_infer_time` path.",
-            "- `Decode steps/s/GPU` is `GBS / decode_round_TPOT / 8`. This is the direct comparison with Huawei's published table.",
+            (
+                "- `Decode steps/s/GPU` is "
+                f"`GBS / decode_round_TPOT / {gpu_count}`. This is the "
+                "direct comparison with Huawei's published table."
+                if gpu_count is not None
+                else (
+                    "- `Decode steps/s/GPU` divides the full-batch "
+                    "decode-step rate by active GPUs."
+                )
+            ),
             "- `Tok/step` is MTP output yield and is reported separately. `Output tok/s/GPU` multiplies decode-step throughput by that yield.",
             "- `Wall tok/s/GPU` covers the entire `LLM.generate()` call and remains diagnostic; it includes the deliberately longer output cap used to guarantee at least 256 decode rounds.",
-            "- The global batch and timing method match Huawei. The topology does not: this run uses eight B300 GPUs, while Huawei publishes sixteen 950DT chips.",
+            (
+                "- The global batch and timing method match Huawei. "
+                f"The hardware does not: this run uses {gpu_count} "
+                f"{hardware} GPUs, while Huawei publishes 16 950DT chips."
+                if gpu_count is not None
+                else (
+                    "- The global batch and timing method match Huawei; "
+                    "the hardware does not."
+                )
+            ),
             "",
         ]
     )

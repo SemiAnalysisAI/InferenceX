@@ -71,14 +71,14 @@ def iteration(
     }
 
 
-def fixed_batch_stats():
+def fixed_batch_stats(local_batch_size=8):
     stats = [
         iteration(
             1,
             latency_ms=50.0,
-            active=8,
-            scheduled=8,
-            context=8,
+            active=local_batch_size,
+            scheduled=local_batch_size,
+            context=local_batch_size,
             generation=0,
             drafted=0,
             accepted=0,
@@ -88,6 +88,11 @@ def fixed_batch_stats():
         iteration(
             index,
             latency_ms=100.0 if index in {2, 257} else 20.0,
+            active=local_batch_size,
+            scheduled=local_batch_size,
+            generation=local_batch_size,
+            drafted=local_batch_size * 3,
+            accepted=local_batch_size * 3 // 2,
         )
         for index in range(2, 258)
     )
@@ -245,4 +250,27 @@ def test_huawei_comparison_uses_raw_step_rate_and_separate_yield():
     )
     assert comparison["published_output_tput_per_chip"] == pytest.approx(
         210.16 * 2.44
+    )
+
+
+def test_huawei_comparison_names_gb300_and_matches_device_count():
+    decode = summarize_decode_rounds(
+        fixed_batch_stats(local_batch_size=4),
+        global_batch_size=64,
+        local_batch_size=4,
+        num_gpus=16,
+    )
+    comparison = huawei_comparison(
+        64,
+        decode,
+        hardware_key="gb300",
+        hardware_label="GB300 NVL16",
+    )
+    assert comparison["device_count_match"] is True
+    assert comparison["gb300_active_gpu_count"] == 16
+    assert comparison[
+        "gb300_to_huawei_decode_step_ratio"
+    ] == pytest.approx(200.0 / 210.16)
+    assert comparison["hardware_to_huawei_decode_step_ratio"] == pytest.approx(
+        200.0 / 210.16
     )

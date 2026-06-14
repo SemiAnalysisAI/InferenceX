@@ -426,6 +426,9 @@ def summarize_decode_rounds(
 def huawei_comparison(
     global_batch_size: int,
     decode_rounds: dict[str, Any],
+    *,
+    hardware_key: str = "b300",
+    hardware_label: str = "B300",
 ) -> dict[str, Any]:
     reference = HUAWEI_REFERENCE[global_batch_size]
     device_count_match = (
@@ -439,44 +442,67 @@ def huawei_comparison(
         float(reference["decode_step_tput_per_chip"])
         * huawei_tokens_per_step
     )
-    b300_step_tput = float(decode_rounds["decode_step_tput_per_gpu"])
-    b300_output_tput = float(decode_rounds["output_tput_per_gpu"])
-    return {
+    step_tput = float(decode_rounds["decode_step_tput_per_gpu"])
+    output_tput = float(decode_rounds["output_tput_per_gpu"])
+    active_gpu_count = int(decode_rounds["active_gpu_count"])
+    local_batch = int(decode_rounds["local_batch_size"])
+    prefix = hardware_key.lower().replace("-", "_")
+    comparison = {
         **reference,
         "mode": "fixed_global_batch_offline_decode",
         "global_batch_match": True,
         "device_count_match": device_count_match,
         "hardware_topology_match": False,
-        "b300_active_gpu_count": int(
-            decode_rounds["active_gpu_count"]
-        ),
-        "b300_local_batch_size": int(
-            decode_rounds["local_batch_size"]
-        ),
+        "hardware_key": hardware_key,
+        "hardware_label": hardware_label,
+        "active_gpu_count": active_gpu_count,
+        "local_batch_size": local_batch,
         "huawei_local_batch_size": (
             global_batch_size / int(reference["chips"])
         ),
         "published_tokens_per_step": huawei_tokens_per_step,
         "published_output_tput_per_chip": huawei_output_tput,
-        "b300_decode_round_tpot_ms": float(
+        "decode_round_tpot_ms_measured": float(
             decode_rounds["decode_round_tpot_ms"]
         ),
-        "b300_decode_step_tput_per_gpu": b300_step_tput,
-        "b300_observed_tokens_per_step": float(
+        "decode_step_tput_per_gpu_measured": step_tput,
+        "observed_tokens_per_step_measured": float(
             decode_rounds["observed_tokens_per_step"]
         ),
-        "b300_output_tput_per_gpu": b300_output_tput,
-        "b300_to_huawei_decode_step_ratio": (
-            b300_step_tput
+        "output_tput_per_gpu_measured": output_tput,
+        "hardware_to_huawei_decode_step_ratio": (
+            step_tput
             / float(reference["decode_step_tput_per_chip"])
         ),
-        "b300_to_huawei_output_ratio": (
-            b300_output_tput / huawei_output_tput
+        "hardware_to_huawei_output_ratio": (
+            output_tput / huawei_output_tput
         ),
         "comparison_note": (
             "The global batch, sequence length, MTP depth, warmup count, "
             "decode-round count, and timing filter match the Huawei code. "
-            "Hardware count and quantization differ: eight B300 GPUs versus "
-            "sixteen 950DT chips."
+            f"The measured hardware is {active_gpu_count} {hardware_label} "
+            "GPUs with FP4, while Huawei publishes 16 950DT chips with "
+            "hybrid MXFP8/MXFP4."
         ),
     }
+    comparison.update(
+        {
+            f"{prefix}_active_gpu_count": active_gpu_count,
+            f"{prefix}_local_batch_size": local_batch,
+            f"{prefix}_decode_round_tpot_ms": comparison[
+                "decode_round_tpot_ms_measured"
+            ],
+            f"{prefix}_decode_step_tput_per_gpu": step_tput,
+            f"{prefix}_observed_tokens_per_step": comparison[
+                "observed_tokens_per_step_measured"
+            ],
+            f"{prefix}_output_tput_per_gpu": output_tput,
+            f"{prefix}_to_huawei_decode_step_ratio": comparison[
+                "hardware_to_huawei_decode_step_ratio"
+            ],
+            f"{prefix}_to_huawei_output_ratio": comparison[
+                "hardware_to_huawei_output_ratio"
+            ],
+        }
+    )
+    return comparison

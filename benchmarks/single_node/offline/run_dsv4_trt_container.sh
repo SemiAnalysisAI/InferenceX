@@ -2,6 +2,7 @@
 
 set -Eeuo pipefail
 
+# shellcheck disable=SC1091
 source /workspace/benchmarks/benchmark_lib.sh
 
 : "${GLOBAL_BATCH_SIZE:?GLOBAL_BATCH_SIZE is required}"
@@ -11,14 +12,20 @@ source /workspace/benchmarks/benchmark_lib.sh
 
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-7200}"
 BENCH_ID="${BENCH_ID:-gbs${GLOBAL_BATCH_SIZE}}"
+TRT_BENCH_HARDWARE_PROFILE="${TRT_BENCH_HARDWARE_PROFILE:-b300}"
+TRT_BENCH_EXTERNAL_MPI="${TRT_BENCH_EXTERNAL_MPI:-0}"
 TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
     echo "Invalid BENCH_ID: $BENCH_ID" >&2
     exit 1
 fi
-ALLOCATION_JOB_ID="${SLURM_JOB_ID:-unknown}"
-ALLOCATION_NODE="${SLURMD_NODENAME:-unknown}"
-WORK_DIR="/tmp/inferencex-trt-offline-${BENCH_ID}-${ALLOCATION_JOB_ID}-$$"
+ALLOCATION_JOB_ID="${TRT_BENCH_ALLOCATION_JOB_ID:-${SLURM_JOB_ID:-unknown}}"
+ALLOCATION_NODE="${TRT_BENCH_ALLOCATION_NODE:-${SLURMD_NODENAME:-unknown}}"
+if [[ "$TRT_BENCH_EXTERNAL_MPI" == "1" ]]; then
+    WORK_DIR="/workspace/.offline_work_${BENCH_ID}_${ALLOCATION_JOB_ID}"
+else
+    WORK_DIR="/tmp/inferencex-trt-offline-${BENCH_ID}-${ALLOCATION_JOB_ID}-$$"
+fi
 RESULT_FILE="/workspace/offline_result_${BENCH_ID}.json"
 CONTROLLER_LOG="/workspace/offline_controller_${BENCH_ID}.log"
 DEBUG_ARCHIVE="/workspace/offline_debug_${BENCH_ID}.tar.gz"
@@ -44,6 +51,7 @@ start_offline_gpu_monitor() {
     log "GPU telemetry started pid=$GPU_MONITOR_PID output=$GPU_METRICS"
 }
 
+rm -rf "$WORK_DIR"
 mkdir -p "$WORK_DIR"
 
 finalize() {
@@ -64,11 +72,24 @@ finalize() {
         if [[ "$rc" -eq 0 ]]; then
             rc=1
         fi
-        python3 - "$RESULT_FILE" "$GLOBAL_BATCH_SIZE" "$rc" "$BENCH_ID" <<'PY'
+        python3 - \
+            "$RESULT_FILE" \
+            "$GLOBAL_BATCH_SIZE" \
+            "$rc" \
+            "$BENCH_ID" \
+            "$TRT_BENCH_HARDWARE_PROFILE" <<'PY'
 import json
 import sys
 
-path, global_batch_size, return_code, experiment_id = sys.argv[1:]
+(
+    path,
+    global_batch_size,
+    return_code,
+    experiment_id,
+    hardware_profile,
+) = sys.argv[1:]
+world_size = 16 if hardware_profile == "gb300" else 8
+hardware = "GB300 NVL16" if hardware_profile == "gb300" else "B300"
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
@@ -78,6 +99,9 @@ with open(path, "w", encoding="utf-8") as stream:
                 "global_batch_size": int(global_batch_size),
                 "concurrency": int(global_batch_size),
                 "experiment_id": experiment_id,
+                "hardware": hardware,
+                "hardware_profile": hardware_profile,
+                "active_gpu_count": world_size,
             },
             "error": "Container benchmark exited before result.json was written",
             "return_code": int(return_code),
@@ -110,15 +134,19 @@ fi
 
 export TRT_BENCH_SLURM_JOB_ID="$ALLOCATION_JOB_ID"
 export TRT_BENCH_SLURM_NODE="$ALLOCATION_NODE"
-while IFS='=' read -r name _; do
-    case "$name" in
-        SLURM_*|PMIX*|PMI*|OMPI_*|ORTE_*)
-            unset "$name"
-            ;;
-    esac
-done < <(env)
+if [[ "$TRT_BENCH_EXTERNAL_MPI" != "1" ]]; then
+    while IFS='=' read -r name _; do
+        case "$name" in
+            SLURM_*|PMIX*|PMI*|OMPI_*|ORTE_*)
+                unset "$name"
+                ;;
+        esac
+    done < <(env)
+fi
 
-export NCCL_NVLS_ENABLE=0
+if [[ "$TRT_BENCH_HARDWARE_PROFILE" == "b300" ]]; then
+    export NCCL_NVLS_ENABLE=0
+fi
 export NCCL_GRAPH_MIXING_SUPPORT=0
 export MIMALLOC_PURGE_DELAY=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
@@ -136,16 +164,21 @@ export CUTE_DSL_CACHE_DIR="$TRT_BENCH_CACHE_ROOT/cute-dsl"
 export TRTLLM_BENCH_CUTE_DSL_CACHE_DIR="$CUTE_DSL_CACHE_DIR"
 mkdir -p "$CUTE_DSL_CACHE_DIR"
 
-log "benchmark start global_batch=$GLOBAL_BATCH_SIZE model=$MODEL_PATH"
+log "benchmark start hardware_profile=$TRT_BENCH_HARDWARE_PROFILE global_batch=$GLOBAL_BATCH_SIZE model=$MODEL_PATH"
 log "benchmark id=$BENCH_ID execution=fixed-global-batch"
 log "dataset revision=$DATASET_REVISION path=$DATASET_PATH"
-log "allocation job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE"
+log "allocation job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE nodes=${TRT_BENCH_SLURM_NODELIST:-$ALLOCATION_NODE}"
+log "external MPI=$TRT_BENCH_EXTERNAL_MPI"
 log "worker timeout=${WORKER_TIMEOUT}s work_dir=$WORK_DIR"
 log "persistent CuTe cache path=$CUTE_DSL_CACHE_DIR"
 nvidia-smi
 
-log "starting one-second GPU telemetry with used/free memory"
-start_offline_gpu_monitor
+if [[ "$TRT_BENCH_EXTERNAL_MPI" == "1" ]]; then
+    log "per-node GPU telemetry is managed by the host launcher"
+else
+    log "starting one-second GPU telemetry with used/free memory"
+    start_offline_gpu_monitor
+fi
 
 log "starting offline benchmark controller"
 CONTROLLER_ARGS=(

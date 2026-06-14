@@ -741,6 +741,7 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
     large = [SimpleNamespace(shape=(65536, 7168))]
 
     assert installed == {
+        "enabled": True,
         "max_fused_rows": 32768,
         "already_installed": False,
     }
@@ -756,6 +757,23 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
         ((16, 7168), 0),
         ((65536, 7168), 1),
     ]
+
+
+def test_gb300_disables_b300_fp8_prefill_hooks(monkeypatch):
+    monkeypatch.setenv("TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS", "0")
+    monkeypatch.setenv("TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS", "0")
+    assert _install_large_prefill_fp8_quant_guard() == {
+        "enabled": False,
+        "max_fused_rows": 0,
+        "already_installed": False,
+    }
+    assert _install_large_prefill_fp8_gemm_chunking() == {
+        "enabled": False,
+        "max_chunk_rows": 0,
+        "target": None,
+        "synchronize_chunks": False,
+        "already_installed": False,
+    }
 
 
 def test_large_prefill_fp8_gemm_chunks_only_oversized_rows(
@@ -896,6 +914,7 @@ def test_large_prefill_fp8_gemm_chunks_only_oversized_rows(
     output = runner.forward([large, weight, weight_scale], tactic=9)
 
     assert installed == {
+        "enabled": True,
         "max_chunk_rows": 65536,
         "target": "FakeFp8SwapABGemmRunner.forward",
         "synchronize_chunks": True,

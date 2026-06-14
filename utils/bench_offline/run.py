@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Controller for the fixed-global-batch B300 TRT offline benchmark."""
+"""Controller for the fixed-global-batch TRT offline benchmark."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ from trt_config import (
     CONTROLLED_ENVIRONMENT_VARIABLES,
     FIXED_BATCH_ARM_FILENAME,
     FIXED_BENCHMARK_CONFIG,
-    FP8_DEEP_GEMM_MAX_ROWS,
+    HARDWARE_PROFILE,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
     INPUT_TOKENS,
@@ -43,11 +43,6 @@ from trt_config import (
 )
 
 
-TRT_SOURCE_COMMIT = "c185066"
-DEFAULT_IMAGE = (
-    "ghcr.io#semianalysisai/"
-    "trtllm-deepseek-v4:feat-deepseek_v4-c185066"
-)
 PROGRESS_INTERVAL_SECONDS = 60.0
 WORKER_PROGRESS_PREFIX = "[offline-trt-worker "
 MPI_PROGRESS_PREFIX = "[offline-trt-mpi] "
@@ -295,10 +290,17 @@ def main() -> int:
             "experiment_id": experiment_id,
             "engine": "TensorRT-LLM PyTorch backend",
             "request_path": "direct LLM.generate; no server or HTTP",
-            "hardware": "B300",
+            "hardware": HARDWARE_PROFILE.hardware,
+            "hardware_profile": HARDWARE_PROFILE.key,
+            "renderer_hw": HARDWARE_PROFILE.renderer_hw,
             "world_size": WORLD_SIZE,
             "active_gpu_count": WORLD_SIZE,
-            "effective_parallelism": "DEP8",
+            "physical_nodes": HARDWARE_PROFILE.physical_nodes,
+            "gpus_per_node": HARDWARE_PROFILE.gpus_per_node,
+            "is_multinode": HARDWARE_PROFILE.is_multinode,
+            "effective_parallelism": (
+                FIXED_BENCHMARK_CONFIG.parallelism
+            ),
             "global_batch_size": args.global_batch_size,
             # Retained for the renderer and old result-discovery clients.
             "concurrency": args.global_batch_size,
@@ -312,7 +314,9 @@ def main() -> int:
             "mtp_max_draft_len": MTP_DRAFT_TOKENS,
             "max_seq_len": MAX_SEQ_LEN,
             "attention_workspace_target_bytes": None,
-            "fp8_deep_gemm_max_rows": FP8_DEEP_GEMM_MAX_ROWS,
+            "fp8_deep_gemm_max_rows": (
+                FIXED_BENCHMARK_CONFIG.fp8_deep_gemm_max_rows
+            ),
             "warmup_decode_rounds": HUAWEI_WARMUP_DECODE_ROUNDS,
             "measured_decode_rounds": HUAWEI_MEASURED_DECODE_ROUNDS,
             "sampling": {
@@ -342,16 +346,29 @@ def main() -> int:
         "config": FIXED_BENCHMARK_CONFIG.to_dict(),
         "provenance": {
             "git_revision": git_revision(),
-            "image": os.getenv("IMAGE", DEFAULT_IMAGE),
-            "trt_source_commit": TRT_SOURCE_COMMIT,
+            "image": os.getenv("IMAGE", HARDWARE_PROFILE.image),
+            "trt_source_commit": os.getenv(
+                "TRT_LLM_GIT_COMMIT",
+                HARDWARE_PROFILE.trt_source_commit,
+            ),
+            "reference_pr": HARDWARE_PROFILE.reference_pr,
             "model": model_manifest(args.model_path),
             "slurm_job_id": os.getenv("TRT_BENCH_SLURM_JOB_ID"),
             "slurm_node": os.getenv("TRT_BENCH_SLURM_NODE"),
+            "slurm_nodes": os.getenv("TRT_BENCH_SLURM_NODELIST"),
+            "rank_map_artifact": os.getenv(
+                "TRT_BENCH_RANK_MAP_ARTIFACT"
+            ),
+            "topology_artifact": os.getenv(
+                "TRT_BENCH_TOPOLOGY_ARTIFACT"
+            ),
         },
     }
     write_json(result_path, base_result)
     log_progress(
-        f"benchmark start global_batch={args.global_batch_size} "
+        f"benchmark start hardware={HARDWARE_PROFILE.hardware} "
+        f"topology={FIXED_BENCHMARK_CONFIG.parallelism} "
+        f"global_batch={args.global_batch_size} "
         f"experiment_id={experiment_id} input_tokens={INPUT_TOKENS} "
         f"warmup_rounds={HUAWEI_WARMUP_DECODE_ROUNDS} "
         f"measured_rounds={HUAWEI_MEASURED_DECODE_ROUNDS} "
@@ -454,7 +471,8 @@ def main() -> int:
             f"max_num_tokens={max_num_tokens(args.global_batch_size)} "
             "attention_workspace_bytes="
             f"{attention_workspace_target_bytes(args.global_batch_size)} "
-            f"fp8_deep_gemm_max_rows={FP8_DEEP_GEMM_MAX_ROWS} "
+            "fp8_deep_gemm_max_rows="
+            f"{FIXED_BENCHMARK_CONFIG.fp8_deep_gemm_max_rows} "
             f"fixed_batch_arm_file={fixed_batch_arm_path}"
         )
         started = time.perf_counter()
@@ -562,6 +580,8 @@ def main() -> int:
                 "huawei": huawei_comparison(
                     args.global_batch_size,
                     aggregate,
+                    hardware_key=HARDWARE_PROFILE.key,
+                    hardware_label=HARDWARE_PROFILE.hardware,
                 ),
             }
         )

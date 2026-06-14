@@ -5,18 +5,107 @@ These are operational notes for running and debugging `trt-bench`.
 ## Current Contract
 
 - Branch-only; never merge to `main`.
-- One B300 node, eight GPUs, DEP8.
-- DeepSeek-V4 Pro FP4, TRT commit `c185066`.
+- DeepSeek-V4 Pro FP4 with `b300` and `gb300` hardware profiles.
 - Exact GBS `16`, `64`, `128`.
 - Exact 8192-token prompts.
 - MTP3, temperature 1, engine-global seed 42, EOS ignored.
-- Perfect router, LM-head TP, heuristic sparse top-k, ConfigurableMoE.
+- Perfect router, LM-head TP, and heuristic sparse top-k.
 - Overlap scheduler disabled.
 - Two warmup decode rounds.
 - 256 measured full-batch decode rounds.
 - First measured round skipped and upper-IQR outliers removed.
-- Headline throughput is `GBS / decode-round TPOT / 8`.
+- Headline throughput is
+  `GBS / decode-round TPOT / active_gpu_count`.
 - MTP yield is separate.
+
+The validated baseline is B300 DEP8 at TRT `c185066`. The current target is
+GB300 NVL16 DEP16 using the DeepSeek-V4 development image from InferenceX
+PR #1689.
+
+## GB300 NVL16 Implementation
+
+Reference:
+
+```text
+PR: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
+TRT source: 34a563ac6d8cc0ca7068c7f619e869fb8a625333
+runner: gb300-nv
+```
+
+The successful PR launch uses four physical GB300 nodes, four tasks per node,
+and one 16-rank `trtllm-llmapi-launch` decode worker. The offline launcher
+reuses that execution model directly and does not start Dynamo, HTTP, NATS,
+etcd, or srt-slurm.
+
+Fixed GB300 engine profile:
+
+- TP16, EP16, attention DP, LM-head TP, MoE TP1.
+- `MEGAMOE_DEEPGEMM`.
+- KV FP8, 128-token blocks, no block reuse, memory fraction `0.70`.
+- Pinned load balancer
+  `/dsv4-eplb-configs/moe_load_balancer_gen_ep16_slots384.yaml`.
+- Load-balancer source is pinned to NVIDIA/srt-slurm
+  `sa-submission-q2-2026`, SHA256
+  `278da78f94be418d189015b18625ba2dbdfe03ee4be09e1a685f0e93708f681b`.
+- PDL enabled. ConfigurableMoE disabled to match the PR runtime path.
+- CUDA graph contains only the exact fixed local batch for each row.
+- Overlap remains disabled because this benchmark times synchronized decode
+  rounds rather than the serving recipe's overlapped scheduler.
+
+Capacity:
+
+| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` | Minimum KV tokens |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 1 | 1 | 1 | 8192 | 9344 |
+| 64 | 4 | 4 | 4 | 32768 | 37376 |
+| 128 | 8 | 8 | 8 | 65536 | 74752 |
+
+Every GB300 shape fits the 65536-token warmup ceiling. The B300-only eager
+attention workspace, 12 GiB KV reserve, packed-FP8 tactic guard, and
+131072-row DeepGemm chunker are disabled.
+
+Launch chain:
+
+1. Import the ARM64 image on a GB300 compute node into the shared squash
+   cache. Do not import it on the x86 runner/login node.
+2. Allocate four nodes with `--gpus-per-node=4` and
+   `--ntasks-per-node=4`.
+3. Run a 16-task probe and require global ranks `0..15`, local ranks `0..3`
+   on each of exactly four hosts.
+4. Run a one-task-per-node fabric probe and require four GPUs plus four
+   `State: Completed` and four `Status: Success` records per node.
+5. Start one telemetry task per physical node.
+6. Start the engine with:
+
+```text
+srun --overlap --mpi=pmix --oversubscribe --cpu-bind=verbose,none \
+  --nodes=4 --ntasks=16 --ntasks-per-node=4 \
+  ... \
+  numactl -m 0,1 trtllm-llmapi-launch \
+  bash /workspace/benchmarks/single_node/offline/run_dsv4_trt_container.sh
+```
+
+The rank marker and fixed-batch arm file must be under shared `/workspace`.
+External MPI rank processes also need
+`PYTHONPATH=/workspace/utils/bench_offline` before
+`trtllm-llmapi-launch`, otherwise they cannot import the monkeypatched worker
+entry submitted by the controller.
+
+Artifacts unique to GB300:
+
+- `offline_rank_map_gbsN.tsv`
+- `offline_topology_gbsN.log`
+- `offline_gpu_metrics_gbsN_HOST.csv` for all four hosts
+
+The topology log is proof that the allocation entered the 16-GPU NVLink
+fabric before the measured engine was started. The result itself records the
+Slurm node list and artifact names.
+
+Status as of implementation: no GB300 row is considered validated until an
+Actions artifact proves the exact 16-rank set, fabric checks, fixed-batch
+schedule, 256-round window, and final flat renderer row. Record the canary and
+full-sweep run IDs in this file after they complete.
 
 ## Why The Old Result Was Too High
 
@@ -69,7 +158,7 @@ Pinned TRT:
   main-model and MTP timing regions inside CANN. The workload, decode window,
   and filtering match; the runtime instrumentation point does not.
 
-## Capacity Table
+## B300 Capacity And Workaround History
 
 | GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` | Minimum KV tokens | KV reserve |
 |---:|---:|---:|---:|---:|---:|---:|
@@ -275,7 +364,7 @@ the first two valid warmup rounds are required.
 
 ## Dispatch
 
-Full sweep:
+GB300 full sweep:
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
@@ -283,14 +372,15 @@ gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT Huawei fixed GBS' \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[test-name]=DSV4 GB300 TRT Huawei fixed GBS' \
   -f 'inputs[global_batch_sizes]=16,64,128' \
-  -f 'inputs[salloc-time]=150' \
+  -f 'inputs[salloc-time]=180' \
   -f 'inputs[worker-timeout]=7200' \
   -f 'inputs[worker-stack-period]=-1'
 ```
 
-Canary:
+GB300 GBS16 canary:
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
@@ -298,12 +388,16 @@ gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT fixed GBS128 canary' \
-  -f 'inputs[global_batch_sizes]=128' \
-  -f 'inputs[salloc-time]=45' \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[test-name]=DSV4 GB300 TRT fixed GBS16 canary' \
+  -f 'inputs[global_batch_sizes]=16' \
+  -f 'inputs[salloc-time]=60' \
   -f 'inputs[worker-timeout]=1800' \
   -f 'inputs[worker-stack-period]=-1'
 ```
+
+B300 reruns use the same command with
+`-f 'inputs[hardware-profile]=b300'`.
 
 Find and watch:
 
@@ -349,7 +443,7 @@ Flat renderer row:
 Do not put the custom aggregate wrapper in `results_bmk`; the unofficial-run
 API expects every JSON object there to be a flat benchmark row.
 
-## Final Validated Run
+## Final Validated B300 Run
 
 Workflow:
 
@@ -550,10 +644,13 @@ Exact flat renderer rows, sorted by GBS for readability:
    ' measured_iteration_stats.json | head -40
    ```
 
-7. Confirm rank markers are exactly `0..7`.
-8. At GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for 131072
-   rows, two 65536-row chunks, and synchronized chunks.
-9. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
+7. Confirm rank markers are exactly `0..7` on B300 or `0..15` on GB300.
+8. On GB300, inspect `offline_rank_map_gbsN.tsv` and
+   `offline_topology_gbsN.log` before debugging TRT. A rank-placement or
+   fabric failure is infrastructure, not a benchmark result.
+9. On B300 GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for
+   131072 rows, two 65536-row chunks, and synchronized chunks.
+10. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
    idle prefill gaps, or a hung rank.
 
 Do not weaken the fixed-batch gate. Infrastructure errors may be retried on a

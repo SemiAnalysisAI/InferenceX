@@ -1,4 +1,4 @@
-# DeepSeek-V4 B300 TRT Huawei-Style Offline Benchmark
+# DeepSeek-V4 TRT Huawei-Style Offline Benchmark
 
 This is a branch-only benchmark. It does not use the normal InferenceX serving
 pipeline and is not intended to merge into `main`.
@@ -29,17 +29,15 @@ The reference implementation is:
 ```
 
 The hardware is not identical. Huawei's published DeepSeek-V4 Pro table uses
-16 950DT chips and hybrid MXFP8/MXFP4. This branch uses one eight-GPU B300 node
-and the staged FP4 TensorRT-LLM checkpoint.
+16 950DT chips and hybrid MXFP8/MXFP4. This branch has two FP4 TRT profiles:
+the validated one-node B300 DEP8 baseline and the current four-node GB300
+NVL16 DEP16 target.
 
 ## Fixed Workload
 
 | Setting | Value |
 |---|---|
 | Model | `/scratch/models/DeepSeek-V4-Pro` |
-| TRT image | `ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066` |
-| TRT source | `c185066` |
-| Topology | DEP8: attention DP 8, expert parallel 8, MoE TP 1 |
 | Global batch sizes | `16`, `64`, `128` |
 | Input length | exactly 8192 real token IDs |
 | MTP depth | 3 draft tokens |
@@ -50,6 +48,17 @@ and the staged FP4 TensorRT-LLM checkpoint.
 | Routing | perfect router |
 | Overlap scheduler | disabled |
 
+| Profile | Nodes x GPUs | TRT image/source | Parallelism | MoE/KV |
+|---|---:|---|---|---|
+| `b300` | `1 x 8` | `ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066`, `c185066` | DEP8, TP8, EP8, attention DP | TRTLLM MoE, KV fraction `0.60` |
+| `gb300` | `4 x 4` in one NVLink domain | `nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1`, `34a563ac6d8cc0ca7068c7f619e869fb8a625333` | DEP16, TP16, EP16, attention DP | `MEGAMOE_DEEPGEMM`, EP16/384-slot load balancer, KV fraction `0.70` |
+
+The GB300 runtime/topology reference is
+[InferenceX PR #1689](https://github.com/SemiAnalysisAI/InferenceX/pull/1689).
+The offline path does not use Dynamo or srt-slurm; it reuses that PR's working
+image, four-node task layout, `trtllm-llmapi-launch`, and decode-engine
+configuration.
+
 The prompt is built from pinned InfiniteBench `longbook_qa_eng.jsonl` data and
 DeepSeek-V4 chat formatting. Prompt construction fails instead of inserting
 pad or synthetic token IDs.
@@ -57,28 +66,41 @@ pad or synthetic token IDs.
 ## Global And Local Batch
 
 There is one authoritative `global_batch_size`. Every per-rank capacity is
-derived from it:
+derived from it and the selected profile's attention-DP width:
 
 ```text
-local_batch_size = global_batch_size / 8
+local_batch_size = global_batch_size / active_gpu_count
 max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
 synthetic pure-context warmup request = min(max_num_tokens, 65536)
-GBS128 eager attention workspace = 200 KiB * max_num_tokens + 256 MiB
-kv_cache.free_gpu_memory_fraction = 0.60
 minimum runtime KV tokens = local_batch_size * 9344
-GBS128 final KV budget = calibrated budget - 12 GiB transient reserve
-moe.max_num_tokens = 65536
-fused FP8 quantizer max rows = 32768
-Triton-quantize + DeepGemm max rows per internal call = 65536
 ```
+
+### B300 Capacity
 
 | GBS | Local batch/rank | TRT max_num_tokens/rank | Minimum KV tokens/rank | KV reserve |
 |---:|---:|---:|---:|---:|
 | 16 | 2 | 16384 | 18688 | 0 |
 | 64 | 8 | 65536 | 74752 | 0 |
 | 128 | 16 | 131072 | 149504 | 12 GiB |
+
+### GB300 Capacity
+
+| GBS | Local batch/rank | TRT max_num_tokens/rank | Minimum KV tokens/rank | KV reserve |
+|---:|---:|---:|---:|---:|
+| 16 | 1 | 8192 | 9344 | 0 |
+| 64 | 4 | 32768 | 37376 | 0 |
+| 128 | 8 | 65536 | 74752 | 0 |
+
+All GB300 runtime shapes fit the fixed 65536-token synthetic warmup ceiling.
+The B300-only eager attention workspace, 12 GiB KV reduction, FP8 quantizer
+guard, and oversized DeepGemm chunker are disabled in the GB300 profile.
+
+### B300 Pinned-Image Workarounds
+
+The remaining capacity history in this section applies to the pinned B300
+`c185066` image.
 
 KV capacity starts from TRT's memory-derived calibration at a fixed 60%
 fraction. Do not set `kv_cache.max_tokens`: the pinned DeepSeek-V4 multi-pool
@@ -285,11 +307,12 @@ per round.
 | 64 | 16 | 19.03 | 210.16 |
 | 128 | 16 | 20.61 | 388.23 |
 
-The direct comparison is B300 `decode_step_tput_per_gpu` divided by Huawei
+The direct comparison is the selected profile's
+`decode_step_tput_per_gpu` divided by Huawei
 `decode_step_tput_per_chip`. The result also reports an output-token ratio
 using each stack's observed or published MTP yield.
 
-Final validated run `27493336994` at git revision
+The final validated B300 baseline is run `27493336994` at git revision
 `9796f5d17c96ab56136b8b9b1e196b6e6db84426`:
 
 | GBS | Round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU |
@@ -306,24 +329,28 @@ Artifacts:
 ## Execution Chain
 
 1. Dispatch `.github/workflows/e2e-tests.yml`.
-2. Fan out one job per requested global batch.
-3. Allocate one exclusive eight-GPU B300 Slurm node per job.
+2. Run one requested global batch at a time.
+3. Allocate either one eight-GPU B300 node or four four-GPU GB300 nodes.
+   GB300 captures an exact `0..15` rank map and requires four successful
+   NVLink Fabric states on every physical node before engine launch.
 4. Build the exact 8192-token corpus.
-5. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
+5. GB300 starts one 16-rank external MPI world with
+   `trtllm-llmapi-launch`; B300 lets TRT create its local MPI pool.
+6. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
    GBS-derived value while synthetic pure-context warmup requests are capped
-   at 65536 tokens. At GBS128, reserve the full-runtime non-graph attention
+   at 65536 tokens. On B300 GBS128, reserve the full-runtime non-graph attention
    workspace before the first forward, then subtract the 12 GiB real-prefill
    transient from TRT's calibrated final KV budget while preserving the
    fixed-batch minimum cache cost. TRT's internal capacity probes run while
    the benchmark request gate is disarmed.
-6. Keep oversized FP8 activation quantization and DeepGemm calls at no more
-   than 65536 rows while preserving one executor-level prefill iteration.
-7. Atomically arm the fixed-batch request gate after engine initialization.
-8. Run the short full-batch warmup.
-9. Run one measured generation.
-10. Validate and filter 256 iteration stats.
-11. Upload per-job result/debug artifacts.
-12. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
+7. On B300 only, keep oversized FP8 activation quantization and DeepGemm
+   calls bounded while preserving one executor-level prefill iteration.
+8. Atomically arm the fixed-batch request gate after engine initialization.
+9. Run the short full-batch warmup.
+10. Run one measured generation.
+11. Validate and filter 256 iteration stats.
+12. Upload per-job result/debug/topology artifacts.
+13. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
 
 There is no HTTP server, request-rate generator, generic benchmark client,
 serial scheduler tuning, or normal InferenceX matrix processing.
@@ -340,8 +367,8 @@ serial scheduler tuning, or normal InferenceX matrix processing.
 - `filter.retained_rounds`: retained values after first-round skip/outliers
 - `filter.outlier_rounds`: upper-IQR values removed
 - `schedule_validation`: iteration range and exact local-batch proof
-- `b300_to_huawei_decode_step_ratio`: direct raw-step comparison
-- `b300_to_huawei_output_ratio`: output rate using each stack's yield
+- `hardware_to_huawei_decode_step_ratio`: direct raw-step comparison
+- `hardware_to_huawei_output_ratio`: output rate using each stack's yield
 
 `results_bmk/agg_bmk.json` remains renderer-compatible. Standard throughput
 and TPOT fields use acceptance-adjusted output-token metrics. Custom flat
@@ -356,9 +383,10 @@ gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT Huawei fixed GBS' \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[test-name]=DSV4 GB300 TRT Huawei fixed GBS' \
   -f 'inputs[global_batch_sizes]=16,64,128' \
-  -f 'inputs[salloc-time]=150' \
+  -f 'inputs[salloc-time]=180' \
   -f 'inputs[worker-timeout]=7200' \
   -f 'inputs[worker-stack-period]=-1'
 ```
@@ -387,7 +415,10 @@ Each job uploads:
 
 - `offline_result_gbsN.json`
 - `offline_controller_gbsN.log`
-- `offline_gpu_metrics_gbsN.csv`
+- `offline_gpu_metrics_gbsN.csv` on B300
+- `offline_gpu_metrics_gbsN_HOST.csv` on every GB300 node
+- `offline_rank_map_gbsN.tsv` on GB300
+- `offline_topology_gbsN.log` on GB300
 - `offline_debug_gbsN.tar.gz`
 
 The debug archive contains the corpus manifest, worker log/result,
@@ -402,23 +433,27 @@ Debug in this order:
 4. Use `jq` on iteration stats; do not dump the full JSON into the chat.
 5. Confirm context-only iterations precede a consecutive full-batch decode
    range.
-6. Confirm all rank markers are `0..7` with identical fixed environment.
-7. For initialization stalls, use the controller heartbeat's `rank_progress`
+6. Confirm all rank markers are `0..7` for B300 or `0..15` for GB300 with
+   identical fixed environment.
+7. On GB300, confirm the rank map has four hosts, four local ranks per host,
+   and global ranks exactly `0..15`; confirm every fabric summary reports four
+   GPUs, four `Completed` states, and four `Success` statuses.
+8. For initialization stalls, use the controller heartbeat's `rank_progress`
    to identify which ranks reached warmup completion, clock synchronization,
    and executor worker start.
-8. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
+9. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
    logged `engine initialization complete`.
-9. At GBS128, confirm every rank emitted
+10. On B300 GBS128, confirm every rank emitted
    `attention_workspace_preallocated` with target and allocated bytes
    `27111981056`, and `cuda_graph_workspace_bytes=0`.
-10. At GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
+11. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
     reserve `12884901888`, minimum tokens `149504`, an exact
     configured-minus-adjusted delta, and adjusted bytes at least the reported
     minimum runtime KV bytes.
-11. At GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
+12. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
     exactly 131072 rows, two 65536-row chunks, and synchronized chunks.
-12. Inspect `memory.used` and `memory.free` in
-    `offline_gpu_metrics_gbs128.csv` around full prefill.
+13. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
+    files around full prefill.
 
 Do not fix failures by reducing the global batch, splitting prefill across
 executor iterations, enabling overlap scheduling, weakening schedule
