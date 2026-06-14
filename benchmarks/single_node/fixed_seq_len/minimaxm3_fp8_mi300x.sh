@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 # MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe.
-# Reuses the dedicated ROCm image and applies the checked-in gfx94x MXFP8 MoE
-# patch before starting vLLM. Block size 128 is mandatory for MSA sparse
-# attention. Keep the default BF16 KV cache on gfx942: the checkpoint has no
-# calibrated q/prob scales for ROCm FP8 attention, and vLLM's fallback scale of
-# 1.0 corrupts model accuracy.
+# Reuses the dedicated ROCm image and applies the checked-in hybrid gfx94x
+# MXFP8 MoE patch before starting vLLM. Block size 128 is mandatory for MSA
+# sparse attention. Keep the default BF16 KV cache on gfx942: the checkpoint
+# has no calibrated q/prob scales for ROCm FP8 attention, and vLLM's fallback
+# scale of 1.0 corrupts model accuracy.
 # Target image vLLM revision: 4a560dd8db67c270f5e2afb614558271b76f2294.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"

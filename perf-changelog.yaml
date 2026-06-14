@@ -3759,15 +3759,6 @@
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm
   description:
-    - "Replace the gfx942 BF16 MoE emulation path with a fused Triton MXFP8 backend that keeps expert weights compressed and applies 1x32 E8M0 scales in-kernel"
-    - "Normalize OCP E4M3FN checkpoint values to AMD E4M3FNUZ so the grouped expert GEMMs use native CDNA3 FP8 matrix cores"
-    - "Preserve the existing TP8 and TP8+EP8 search space, default BF16 KV cache, and BF16 dense-linear path"
-    - "Reduce model memory from 101.27 GiB to 53.18 GiB per GPU and increase available KV-cache memory from 69.35 GiB to 117.43 GiB"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753
-  
-- config-keys:
-    - minimaxm3-fp8-mi300x-vllm
-  description:
     - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI300X and set VLLM_USE_BREAKABLE_CUDAGRAPH=0 per AMD guidance"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1750
 
@@ -3777,3 +3768,12 @@
     - "Run the MiniMax-M3 MXFP8 MI300X EAGLE3 MTP recipe with CUDA graphs instead of --enforce-eager"
     - "Drop --enforce-eager and set VLLM_USE_BREAKABLE_CUDAGRAPH=0 (matching the non-MTP MI300X recipe, #1750), which avoids the M3-decode breakable-cudagraph path that previously forced eager execution"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1756
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Add a fused gfx942 MXFP8 MoE kernel, normalize OCP E4M3FN weights to AMD E4M3FNUZ, and reconstruct E8M0 scales with the Marlin-style BF16 exponent bitcast"
+    - "Dispatch short-context TP decode batches of up to 16 tokens through retained BF16 experts, larger TP batches through native W8A8, and gfx942 expert parallelism through load-time BF16 dequantization"
+    - "Recover the BF16 low-concurrency and EP serving curve while retaining the native high-concurrency gain: 80.24 tok/s/GPU at TP8 conc-4, 452.47 at conc-64, 626.20 at conc-128, and 767.12 at TP8+EP8 conc-256"
+    - "Keep only compressed MXFP8 experts for the 8k1k configuration, reducing model memory from 101.27 GiB to 53.18 GiB per GPU and increasing available KV cache from 69.33 GiB to 117.44 GiB"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753
