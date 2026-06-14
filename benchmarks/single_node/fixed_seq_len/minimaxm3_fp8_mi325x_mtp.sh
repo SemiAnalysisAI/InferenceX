@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 
-# MiniMax-M3 MXFP8 MI355X (gfx950) single-node vLLM recipe with EAGLE3
+# MiniMax-M3 MXFP8 MI325X (gfx942) single-node vLLM recipe with EAGLE3
 # speculative decoding — the spec-decoding=mtp variant of
-# minimaxm3_fp8_mi355x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
+# minimaxm3_fp8_mi325x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
 # --speculative-config with 3 speculative tokens. Everything else mirrors the
-# non-MTP recipe: MXFP8 from TP=4 on gfx950, mandatory --block-size 128,
-# --language-model-only for the text-only benchmark, FP8 KV cache, and
-# --attention-backend TRITON_ATTN. Runs with CUDA graphs (no --enforce-eager);
+# non-MTP MI325X recipe: mandatory --block-size 128, --language-model-only for
+# the text-only benchmark, --attention-backend TRITON_ATTN, and
+# --no-enable-prefix-caching. Runs with CUDA graphs (no --enforce-eager);
 # VLLM_USE_BREAKABLE_CUDAGRAPH=0 avoids the M3-decode breakable-cudagraph path.
+# The default BF16 KV cache is retained (unlike the MI355X recipe's FP8 KV
+# cache): gfx942 has no calibrated q/prob scales for ROCm FP8 attention and
+# vLLM's fallback scale of 1.0 corrupts accuracy.
 #
 # Unlike the CUDA recipes, the drafter needs no attention_backend override:
 # the FlashInfer "page size 128 requires GQA/MQA" limitation that forced
@@ -19,10 +22,11 @@
 # does NOT implement SupportsEagle3 on the AMD MiniMax-M3 model, so EAGLE3
 # engine init fails with "Model does not support EAGLE3 interface but
 # aux_hidden_state_outputs was requested". This recipe applies that fix
-# (functionstackx/vllm#1 — ported from nvidia/model.py) in-place to the
-# installed vllm before serving, so we can validate EAGLE3 on real MI355X
-# hardware ahead of an image rebuild. The patch is idempotent and fails the
-# job loudly if the installed amd/model.py has drifted from the expected base.
+# (functionstackx/vllm#1 — ported from nvidia/model.py, upstreamed as
+# vllm-project/vllm#45546) in-place to the installed vllm before serving, so we
+# can validate EAGLE3 on real MI325X hardware ahead of an image rebuild. The
+# same patch is validated green on MI355X. It is idempotent and fails the job
+# loudly if the installed amd/model.py has drifted from the expected base.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -44,9 +48,8 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# MODEL stays a bare HF id on the mi355x single-node runner (weights are
-# pre-staged in the mounted NFS HF cache, so this is a fast cache hit). The
-# EAGLE3 draft is not staged; fetch it into the same cache.
+# MODEL is a bare HF id on the mi325x single-node runner (a fast cache hit when
+# pre-staged). The EAGLE3 draft is not staged; fetch it into the same cache.
 if [[ "$MODEL" != /* ]]; then
   hf download "$MODEL"
   hf download "$DRAFT_MODEL"
@@ -58,8 +61,6 @@ fi
 
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
-# Run with CUDA graphs (no --enforce-eager): VLLM_USE_BREAKABLE_CUDAGRAPH=0
-# avoids the M3-decode breakable-cudagraph path that previously forced eager.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -81,11 +82,11 @@ fi
 NUM_SPEC_TOKENS=3
 
 # [AI generated draft test] Patch the installed AMD MiniMax-M3 model to add the
-# SupportsEagle3 interface (functionstackx/vllm#1). Mirrors nvidia/model.py:
-# adds EagleModelMixin to the inner model + aux-hidden-state emission, and
-# SupportsEagle3 to the two outer classes. Idempotent; hard-fails if the
-# installed file has drifted from the expected base (so we never silently run
-# unpatched and mislabel the result).
+# SupportsEagle3 interface (functionstackx/vllm#1, upstream vllm-project/vllm#45546).
+# Mirrors nvidia/model.py: adds EagleModelMixin to the inner model +
+# aux-hidden-state emission, and SupportsEagle3 to the two outer classes.
+# Idempotent; hard-fails if the installed file has drifted from the expected
+# base (so we never silently run unpatched and mislabel the result).
 python3 - <<'PYEOF' || { echo "EAGLE3 in-place patch failed" >&2; exit 1; }
 import ast, importlib.util, pathlib, sys
 
@@ -148,7 +149,9 @@ edits = [
     ),
     (
         "class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal):",
-        "class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal, SupportsEagle3):",
+        "class MiniMaxM3SparseForConditionalGeneration(\n"
+        "    nn.Module, SupportsMultiModal, SupportsEagle3\n"
+        "):",
     ),
 ]
 
@@ -175,7 +178,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
-    --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
