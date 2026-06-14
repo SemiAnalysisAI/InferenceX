@@ -307,8 +307,10 @@ jobs:
             printf '%s\n' "$job_record"
             echo '--- target job steps ---'
             squeue \
-              --steps="$job_id" \
-              --format='%.24i %.10T %.10M %.6D %.30R %.40j'
+              --steps \
+              --jobs="$job_id" \
+              --format='%.24i %.10T %.10M %.6D %.30R %.40j' \
+              || true
             echo '--- target job accounting ---'
             sstat \
               --allsteps \
