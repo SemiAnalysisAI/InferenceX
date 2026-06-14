@@ -3745,3 +3745,9 @@
     - "H100-aligned layouts and concurrency ranges: TP8 and TP8+EP8 across 1k1k and 8k1k"
     - "Fix launch_mi300x-amds.sh node exclusion to use the current short Slurm node name"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1746
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI300X and set VLLM_USE_BREAKABLE_CUDAGRAPH=0 per AMD guidance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
