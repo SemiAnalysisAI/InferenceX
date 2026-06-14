@@ -17,6 +17,8 @@ if [ -z "$JOB_ID" ]; then
 fi
 
 export PORT=$(( 40000 + (JOB_ID % 10000) ))
+export XDG_CACHE_HOME="/tmp/xdg-cache-$JOB_ID"
+export TRITON_CACHE_DIR="/tmp/triton-cache-$JOB_ID"
 
 trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
