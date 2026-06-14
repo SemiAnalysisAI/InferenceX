@@ -64,8 +64,10 @@ Capacity:
 | 128 | 8 | 8 | 8 | 65536 | 74752 |
 
 Every GB300 shape fits the 65536-token warmup ceiling. The B300-only eager
-attention workspace, 12 GiB KV reserve, packed-FP8 tactic guard, and
-131072-row DeepGemm chunker are disabled.
+attention workspace, 12 GiB KV reserve, and 131072-row DeepGemm chunker are
+disabled. The packed-FP8 tactic guard is enabled above 32768 rows so GBS128's
+65536-row warmup/prefill projection uses TRT's Triton quantizer; GBS16/64 and
+all measured decode shapes stay on the fused path.
 
 Launch chain:
 
@@ -271,6 +273,24 @@ leading rows that prove they are an inactive prior-pass tail:
 `context=0`, `generation=scheduled=local_batch`, and
 `active=queued=paused=0`. It records the ignored count and iteration range.
 Any active, queued, partial, or mixed work before prefill still fails.
+
+Run `27515257151`, source
+`4a003c6a839a66eeeb31be733ea693b696479dd3`, completed GBS16 and GBS64.
+GBS16 measured `25.939235 ms`, `38.551639` decode steps/s/GPU,
+`2.957031` output tokens/step, and `113.998400` output tok/s/GPU. GBS64
+measured `32.456790 ms`, `123.240778` decode steps/s/GPU,
+`3.477539` output tokens/step, and `428.574620` output tok/s/GPU. Both had one
+full-batch prefill, zero mixed iterations, and 256 consecutive full-batch
+decode rounds. Their result and completion statuses matched.
+
+GBS128 failed during TRT engine warmup on rank 11. The runtime shape was
+`max_batch_size=8`, `max_num_tokens=65536`; the fused
+`fp8_quantize_1x128_packed_ue8m0` kernel rejected its 65536-row launch with
+CUDA `invalid argument`. Telemetry still showed about 10-12 GiB free per GPU,
+so this was not an OOM. The profile had disabled the packed-FP8 guard because
+the shape fits the warmup ceiling, but that ceiling is exactly the failing
+kernel shape. The follow-up enables the existing 32768-row Triton fallback
+for GB300 while leaving DeepGemm chunking and B300 memory workarounds off.
 
 ## Why The Old Result Was Too High
 

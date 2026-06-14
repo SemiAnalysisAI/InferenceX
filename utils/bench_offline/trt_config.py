@@ -53,9 +53,9 @@ MIN_RUNTIME_KV_TOKENS_ENV = "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS"
 ATTENTION_WORKSPACE_BYTES_PER_TOKEN = 200 * 1024
 ATTENTION_WORKSPACE_HEADROOM_BYTES = 256 * 1024 * 1024
 ATTENTION_WORKSPACE_ENV = "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"
-# The pinned fused packed-FP8 quantizer fails its CUDA launch for the
-# 65536-row MTP projection used by GBS64 prefill. Keep the fused decode path,
-# but select TRT's existing Triton quantizer for larger prefill matrices.
+# The pinned fused packed-FP8 quantizer fails its CUDA launch for 65536-row
+# MTP projections used by B300 GBS64 and GB300 GBS128. Keep the fused decode
+# path, but select TRT's existing Triton quantizer for larger prefill matrices.
 FP8_FUSED_QUANT_MAX_ROWS = 32768
 # The pinned Triton-quantize + DeepGemm runner also fails when the real
 # GBS128 prefill presents 131072 rows at once. Process only that oversized
@@ -205,7 +205,7 @@ GB300_PROFILE = HardwareProfile(
         kv_cache_free_gpu_memory_fraction=0.70,
         enable_configurable_moe=True,
         enable_pdl=True,
-        fp8_fused_quant_max_rows=None,
+        fp8_fused_quant_max_rows=FP8_FUSED_QUANT_MAX_ROWS,
         fp8_deep_gemm_max_rows=None,
     ),
     reference_pr="https://github.com/SemiAnalysisAI/InferenceX/pull/1689",

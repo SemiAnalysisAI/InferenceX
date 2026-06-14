@@ -98,8 +98,10 @@ minimum runtime KV tokens = local_batch_size * 9344
 | 128 | 8 | 65536 | 74752 | 0 |
 
 All GB300 runtime shapes fit the fixed 65536-token synthetic warmup ceiling.
-The B300-only eager attention workspace, 12 GiB KV reduction, FP8 quantizer
-guard, and oversized DeepGemm chunker are disabled in the GB300 profile.
+GB300 uses the packed-FP8 quantizer guard above 32768 rows because GBS128
+reaches a 65536-row warmup/prefill projection. The B300-only eager attention
+workspace, 12 GiB KV reduction, and oversized DeepGemm chunker remain
+disabled.
 
 ### B300 Pinned-Image Workarounds
 

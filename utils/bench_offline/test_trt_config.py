@@ -125,7 +125,7 @@ def test_gb300_fixed_batches_do_not_need_b300_large_prefill_reserves():
     assert minimum_runtime_kv_tokens(128, GB300_PROFILE) == 74752
 
 
-def test_gb300_rank_environment_enables_only_profile_runtime_flags():
+def test_gb300_rank_environment_enables_required_runtime_flags():
     environment = fixed_environment(128, GB300_PROFILE)
     assert environment["ENABLE_CONFIGURABLE_MOE"] == "1"
     assert environment["TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"] == "1"
@@ -135,7 +135,7 @@ def test_gb300_rank_environment_enables_only_profile_runtime_flags():
     assert environment[MIN_RUNTIME_KV_TOKENS_ENV] == "74752"
     assert environment[
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
-    ] == "0"
+    ] == "32768"
     assert environment[FP8_DEEP_GEMM_MAX_ROWS_ENV] == "0"
 
 

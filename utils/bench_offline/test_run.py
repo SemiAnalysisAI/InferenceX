@@ -851,7 +851,7 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
     ]
 
 
-def test_gb300_disables_b300_fp8_prefill_hooks(monkeypatch):
+def test_zero_row_limits_disable_fp8_prefill_hooks(monkeypatch):
     monkeypatch.setenv("TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS", "0")
     monkeypatch.setenv("TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS", "0")
     assert _install_large_prefill_fp8_quant_guard() == {

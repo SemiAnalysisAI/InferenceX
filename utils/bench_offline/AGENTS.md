@@ -30,7 +30,10 @@ benchmark.
   MegaMoE base backend without the wrapper's concrete `forward_impl`.
 - GB300 local batches are `1`, `4`, and `8`; max token shapes are `8192`,
   `32768`, and `65536`. The B300-only attention workspace, 12 GiB KV reserve,
-  FP8 quantizer guard, and oversized DeepGemm chunker must remain disabled.
+  and oversized DeepGemm chunker must remain disabled. Keep the shared
+  packed-FP8 quantizer guard at 32768 rows: run `27515257151` showed the
+  GB300 GBS128 65536-row warmup projection fail
+  `fp8_quantize_1x128_packed_ue8m0` with a CUDA `invalid argument`.
 - The barrier arm file, rank marker, corpus, and worker artifacts must be on
   shared `/workspace`, never node-local `/tmp`.
 - External MPI management workers start before rank 0 launches `run.py`.
