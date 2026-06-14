@@ -41,13 +41,16 @@ fi
 RESULT_FILE="${GITHUB_WORKSPACE}/offline_result_${BENCH_ID}.json"
 RANK_MAP_FILE="${GITHUB_WORKSPACE}/offline_rank_map_${BENCH_ID}.tsv"
 TOPOLOGY_FILE="${GITHUB_WORKSPACE}/offline_topology_${BENCH_ID}.log"
+ALLOCATION_LOG="${GITHUB_WORKSPACE}/offline_allocation_${BENCH_ID}.log"
 JOB_ID=""
 TELEMETRY_STEP_PID=""
 RANK_ENV_RECORDS=""
+SALLOC_PIPE_PID=""
 rm -f \
     "$RESULT_FILE" \
     "$RANK_MAP_FILE" \
     "$TOPOLOGY_FILE" \
+    "$ALLOCATION_LOG" \
     "${GITHUB_WORKSPACE}/offline_gpu_metrics_${BENCH_ID}_"*.csv
 
 log() {
@@ -106,6 +109,10 @@ cleanup() {
     fi
     if [[ -n "$RANK_ENV_RECORDS" ]]; then
         rm -f "$RANK_ENV_RECORDS"
+    fi
+    if [[ -n "$SALLOC_PIPE_PID" ]]; then
+        kill "$SALLOC_PIPE_PID" >/dev/null 2>&1 || true
+        wait "$SALLOC_PIPE_PID" >/dev/null 2>&1 || true
     fi
     if [[ -n "$JOB_ID" ]]; then
         scancel "$JOB_ID" >/dev/null 2>&1 || true
@@ -196,30 +203,66 @@ import_squash_on_arm_compute
 
 log "requesting ${PHYSICAL_NODES} GB300 nodes and ${WORLD_SIZE} GPUs"
 set +e
-allocation_output="$(
-    salloc \
-        --partition="$SLURM_PARTITION" \
-        --account="$SLURM_ACCOUNT" \
-        --nodes="$PHYSICAL_NODES" \
-        --ntasks="$WORLD_SIZE" \
-        --ntasks-per-node="$GPUS_PER_NODE" \
-        --gpus-per-node="$GPUS_PER_NODE" \
-        --exclusive \
-        --time="$SALLOC_TIME_LIMIT" \
-        --no-shell \
-        --job-name="$RUNNER_NAME" 2>&1
-)"
+salloc \
+    --partition="$SLURM_PARTITION" \
+    --account="$SLURM_ACCOUNT" \
+    --nodes="$PHYSICAL_NODES" \
+    --ntasks="$WORLD_SIZE" \
+    --ntasks-per-node="$GPUS_PER_NODE" \
+    --gpus-per-node="$GPUS_PER_NODE" \
+    --exclusive \
+    --time="$SALLOC_TIME_LIMIT" \
+    --no-shell \
+    --job-name="$RUNNER_NAME" \
+    2>&1 | tee "$ALLOCATION_LOG" &
+SALLOC_PIPE_PID=$!
+set -e
+allocation_started="$SECONDS"
+while kill -0 "$SALLOC_PIPE_PID" >/dev/null 2>&1; do
+    if [[ -z "$JOB_ID" && -s "$ALLOCATION_LOG" ]]; then
+        JOB_ID="$(
+            sed -n \
+                -e 's/.*Pending job allocation \([0-9][0-9]*\).*/\1/p' \
+                -e 's/.*Granted job allocation \([0-9][0-9]*\).*/\1/p' \
+                "$ALLOCATION_LOG" \
+                | tail -n 1
+        )"
+    fi
+    allocation_elapsed=$((SECONDS - allocation_started))
+    if (( allocation_elapsed > 0 && allocation_elapsed % 60 == 0 )); then
+        if [[ -n "$JOB_ID" ]]; then
+            queue_state="$(
+                squeue \
+                    --jobs="$JOB_ID" \
+                    --noheader \
+                    --format='state=%T reason=%R nodes=%D start=%S' \
+                    2>/dev/null \
+                    || true
+            )"
+            log "waiting for GB300 allocation job=$JOB_ID elapsed=${allocation_elapsed}s ${queue_state:-state=transitioning}"
+        else
+            log "waiting for Slurm allocation id elapsed=${allocation_elapsed}s"
+        fi
+    fi
+    sleep 1
+done
+set +e
+wait "$SALLOC_PIPE_PID"
 allocation_rc=$?
 set -e
-printf '%s\n' "$allocation_output"
+SALLOC_PIPE_PID=""
+allocation_output="$(cat "$ALLOCATION_LOG")"
 if [[ "$allocation_rc" -ne 0 ]]; then
     exit "$allocation_rc"
 fi
-JOB_ID="$(
+granted_job_id="$(
     printf '%s\n' "$allocation_output" \
         | sed -n 's/.*Granted job allocation \([0-9][0-9]*\).*/\1/p' \
         | tail -n 1
 )"
+if [[ -n "$granted_job_id" ]]; then
+    JOB_ID="$granted_job_id"
+fi
 if [[ -z "$JOB_ID" ]]; then
     echo "Could not determine Slurm allocation ID" >&2
     exit 1

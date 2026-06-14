@@ -421,6 +421,7 @@ Each job uploads:
 - `offline_controller_gbsN.log`
 - `offline_gpu_metrics_gbsN.csv` on B300
 - `offline_gpu_metrics_gbsN_HOST.csv` on every GB300 node
+- `offline_allocation_gbsN.log` on GB300
 - `offline_rank_map_gbsN.tsv` on GB300
 - `offline_topology_gbsN.log` on GB300
 - `offline_debug_gbsN.tar.gz`

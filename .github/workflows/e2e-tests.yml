@@ -42,12 +42,18 @@ on:
         required: false
         type: string
         default: "-1"
+      diagnostic-only:
+        description: Print GB300 Slurm state without requesting GPUs
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
 
 jobs:
   prepare:
+    if: ${{ !inputs.diagnostic-only }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.matrix.outputs.matrix }}
@@ -141,6 +147,7 @@ jobs:
           rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
           rm -f "${{ github.workspace }}"/offline_rank_map_*.tsv
           rm -f "${{ github.workspace }}"/offline_topology_*.log
+          rm -f "${{ github.workspace }}"/offline_allocation_*.log
           rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
           rm -rf "${{ github.workspace }}"/.offline_work_*
 
@@ -206,6 +213,7 @@ jobs:
             offline_gpu_metrics_${{ matrix.id }}_*.csv
             offline_rank_map_${{ matrix.id }}.tsv
             offline_topology_${{ matrix.id }}.log
+            offline_allocation_${{ matrix.id }}.log
             offline_debug_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14
@@ -219,7 +227,7 @@ jobs:
 
   collect-results:
     needs: [prepare, benchmark]
-    if: always()
+    if: ${{ always() && !inputs.diagnostic-only }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout benchmark branch
@@ -269,3 +277,34 @@ jobs:
           path: agg_bmk.json
           if-no-files-found: warn
           retention-days: 30
+
+  gb300-status:
+    if: ${{ inputs.diagnostic-only }}
+    runs-on:
+      - self-hosted
+      - ${{ inputs.hardware-profile == 'gb300' && 'gb300-nv' || 'gb300-nv' }}
+    timeout-minutes: 5
+    steps:
+      - name: Show GB300 Slurm state
+        run: |
+          set -Eeuo pipefail
+          date -u '+timestamp=%Y-%m-%dT%H:%M:%SZ'
+          printf 'runner=%s host=%s\n' '${{ runner.name }}' "$(hostname)"
+          echo '--- target offline job ---'
+          squeue \
+            --name=gb300-nv_2 \
+            --format='%.18i %.10T %.10M %.10l %.6D %.30R %.40j'
+          echo '--- batch_1 queue ---'
+          squeue \
+            --partition=batch_1 \
+            --format='%.18i %.10T %.10M %.10l %.6D %.30R %.40j'
+          echo '--- predicted starts ---'
+          squeue \
+            --partition=batch_1 \
+            --start \
+            --format='%.18i %.10T %.19S %.6D %.30R %.40j'
+          echo '--- node state ---'
+          sinfo \
+            --partition=batch_1 \
+            --Node \
+            --format='%20N %10T %8c %12G'

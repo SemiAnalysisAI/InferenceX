@@ -41,7 +41,10 @@ benchmark.
   `nvidia-smi -q` output, not the unsupported `-d FABRIC` selector, and
   require one shared non-empty `ClusterUUID` and `CliqueId` across all 16
   GPUs. Preserve `offline_rank_map_gbsN.tsv`,
-  `offline_topology_gbsN.log`, and per-node GPU telemetry.
+  `offline_topology_gbsN.log`, `offline_allocation_gbsN.log`, and per-node
+  GPU telemetry. The host launcher must stream `salloc` output and emit a
+  one-minute pending-allocation heartbeat so queue time is not mistaken for
+  TRT initialization.
 - The dispatchable workflow is `.github/workflows/e2e-tests.yml` with
   `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
   because every row consumes 16 GPUs.

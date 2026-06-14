@@ -107,6 +107,7 @@ too late for external ranks.
 
 Artifacts unique to GB300:
 
+- `offline_allocation_gbsN.log`
 - `offline_rank_map_gbsN.tsv`
 - `offline_topology_gbsN.log`
 - `offline_gpu_metrics_gbsN_HOST.csv` for all four hosts
@@ -459,6 +460,21 @@ RUN_ID=$(gh run list --repo SemiAnalysisAI/InferenceX \
   --json databaseId --jq '.[0].databaseId')
 gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --exit-status
 ```
+
+When a benchmark is silent inside `salloc`, run a read-only queue snapshot on
+an available GB300 runner:
+
+```bash
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f 'inputs[diagnostic-only]=true' \
+  -f 'inputs[test-name]=GB300 Slurm status'
+```
+
+Normal launches stream `salloc` output, print one queue heartbeat per minute,
+and preserve `offline_allocation_gbsN.log`. A `PENDING` heartbeat means TRT
+has not started and the worker timeout has not begun.
 
 For an initialization hang, let the controller time out so the container
 finalizer preserves `worker.log`; do not cancel the Actions run externally.
