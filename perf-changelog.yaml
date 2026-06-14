@@ -3785,6 +3785,23 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1748
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Run the MiniMax-M3 MXFP8 MI355X EAGLE3 MTP recipe with CUDA graphs instead of --enforce-eager"
+    - "Drop --enforce-eager and set VLLM_USE_BREAKABLE_CUDAGRAPH=0, which avoids the M3-decode breakable-cudagraph path that previously forced eager execution (the non-MTP MI355X recipe already got this in #1754)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1755
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-mtp
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 MI325X (gfx942) vLLM benchmark with EAGLE3 speculative decoding (target: MiniMaxAI/MiniMax-M3-MXFP8, draft: Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens) — spec-decoding=mtp variant of the MI325X day-zero recipe (#1748)"
+    - "Image: vllm/vllm-openai-rocm:minimax-m3 (same day-zero ROCm build as the non-MTP entry)"
+    - "Serve shape follows minimaxm3-fp8-mi325x-vllm: --block-size 128, --no-enable-prefix-caching, --language-model-only, --attention-backend TRITON_ATTN, minimax_m3 parsers, default BF16 KV cache (gfx942 lacks calibrated ROCm FP8 attention scales). Runs with CUDA graphs (no --enforce-eager, VLLM_USE_BREAKABLE_CUDAGRAPH=0); prompts via chat template for realistic acceptance"
+    - "H200-style search space (TP4/TP8 latency, TP4+EP4/TP8+EP8 TEP, TP8+EP8 dp-attn DEP) trimmed at the extreme-concurrency end with TP-only latency rows started at conc 1"
+    - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, upstream vllm-project/vllm#45546; validated green on MI355X/MI300X) before serving; also adds SPEC_SUFFIX to launch_mi325x-amds.sh so spec-decoding=mtp routes to the _mtp script"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1759
+
+- config-keys:
     - minimaxm3-fp8-mi300x-vllm
   description:
     - "Add a fused gfx942 MXFP8 MoE kernel, normalize OCP E4M3FN weights to AMD E4M3FNUZ, and reconstruct E8M0 scales with the Marlin-style BF16 exponent bitcast"

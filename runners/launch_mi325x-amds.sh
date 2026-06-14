@@ -7,6 +7,10 @@ PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
+# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
+# the h200 launchers, which have carried SPEC_SUFFIX since #392).
+SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
+
 set -x
 
 JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
@@ -42,6 +46,6 @@ srun --jobid="$JOB_ID" \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi325x.sh
+bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi325x${SPEC_SUFFIX}.sh
 
 scancel $JOB_ID
