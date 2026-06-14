@@ -50,9 +50,11 @@ sparse_attention = (
 sparse_ops = (
     root / "models/minimax_m3/common/ops/sparse_attn.py"
 ).read_text()
+amd_model = (root / "models/minimax_m3/amd/model.py").read_text()
 
 assert "else current_platform.fp8_dtype()" in sparse_attention
 assert "torch.float8_e4m3fnuz" in sparse_ops
+assert "MINIMAX_M3_FP8_KV_RUNTIME_VERIFIED" in amd_model
 assert current_platform.fp8_dtype() == torch.float8_e4m3fnuz
 print("VLLM_MINIMAX_M3_FNUZ_PATCH_VERIFIED", current_platform.fp8_dtype())
 PY

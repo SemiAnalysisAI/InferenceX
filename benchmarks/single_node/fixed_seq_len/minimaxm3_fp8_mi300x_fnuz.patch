@@ -47,3 +47,81 @@ index 8cca0e8..9fcf0b8 100644
          )
          # Sparse selection parameters (block_size == page size == SPARSE_BLOCK_SIZE).
          self.topk_blocks = topk_blocks
+diff --git a/vllm/models/minimax_m3/amd/model.py b/vllm/models/minimax_m3/amd/model.py
+index b80d3b8..9618689 100644
+--- a/vllm/models/minimax_m3/amd/model.py
++++ b/vllm/models/minimax_m3/amd/model.py
+@@ -92,6 +92,7 @@ from vllm.models.minimax_m3.common.sparse_attention import (
+ )
+ from vllm.models.minimax_m3.common.vision_tower import MiniMaxVLVisionModel
+ from vllm.multimodal import MULTIMODAL_REGISTRY
++from vllm.platforms import current_platform
+ from vllm.utils.torch_utils import kv_cache_dtype_str_to_dtype
+ from vllm.v1.kv_cache_interface import (
+     FullAttentionSpec,
+@@ -100,6 +101,9 @@ from vllm.v1.kv_cache_interface import (
+ )
+ 
+ 
++_FP8_KV_RUNTIME_VERIFIED = False
++
++
+ def _sparse_attention_layer_ids(config: PretrainedConfig) -> set[int]:
+     """Layer ids whose attention runs the extra sparse "index" branch."""
+     cfg = getattr(config, "sparse_attention_config", None)
+@@ -620,6 +624,56 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+             scale,
+             scale,
+         )
++
++        global _FP8_KV_RUNTIME_VERIFIED
++        if not _FP8_KV_RUNTIME_VERIFIED:
++            fp8_dtype = current_platform.fp8_dtype()
++            assert self.kv_cache_dtype == "fp8"
++            assert fp8_dtype == torch.float8_e4m3fnuz
++            assert self.kv_cache.dtype == torch.uint8
++            assert self.kv_cache.element_size() == 1
++
++            valid_tokens = torch.nonzero(main_slot_mapping >= 0).flatten()
++            assert valid_tokens.numel() > 0
++            token_idx = int(valid_tokens[0].item())
++            slot_idx = int(main_slot_mapping[token_idx].item())
++            block_size = key_cache.shape[1]
++            block_idx, block_offset = divmod(slot_idx, block_size)
++
++            key_input = key.view(
++                -1, self.num_kv_heads, self.head_dim
++            )[token_idx]
++            value_input = value.view(
++                -1, self.num_kv_heads, self.head_dim
++            )[token_idx]
++            expected_key_bits = key_input.to(fp8_dtype).view(torch.uint8)
++            expected_value_bits = value_input.to(fp8_dtype).view(torch.uint8)
++            actual_key_bits = key_cache[block_idx, block_offset]
++            actual_value_bits = value_cache[block_idx, block_offset]
++
++            torch.testing.assert_close(
++                actual_key_bits, expected_key_bits, rtol=0, atol=0
++            )
++            torch.testing.assert_close(
++                actual_value_bits, expected_value_bits, rtol=0, atol=0
++            )
++            assert torch.count_nonzero(actual_key_bits).item() > 0
++            assert torch.count_nonzero(actual_value_bits).item() > 0
++
++            logical_bytes = self.kv_cache.numel() * self.kv_cache.element_size()
++            print(
++                "MINIMAX_M3_FP8_KV_RUNTIME_VERIFIED",
++                f"config={self.kv_cache_dtype}",
++                f"storage_dtype={self.kv_cache.dtype}",
++                f"view_dtype={fp8_dtype}",
++                f"element_size={self.kv_cache.element_size()}",
++                f"logical_bytes={logical_bytes}",
++                f"bf16_equivalent_bytes={self.kv_cache.numel() * 2}",
++                f"checked_kv_values={actual_key_bits.numel() * 2}",
++                flush=True,
++            )
++            _FP8_KV_RUNTIME_VERIFIED = True
++
+         idx_cache = self.indexer.index_cache.kv_cache.view(-1, self.idx_head_dim)
+         idx_cache[index_slot_mapping] = index_key.to(idx_cache.dtype)
