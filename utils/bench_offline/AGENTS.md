@@ -86,6 +86,10 @@ benchmark.
 - The comparison is methodological, not identical hardware: this branch uses
   eight B300 GPUs and FP4, while Huawei publishes sixteen 950DT chips with
   hybrid MXFP8/MXFP4.
+- Final known-good full sweep is Actions run `27493336994` at
+  `9796f5d17c96ab56136b8b9b1e196b6e6db84426`. Its GBS16/64/128 raw
+  decode-step rates are `90.621203`, `248.910481`, and `434.410801`
+  steps/s/GPU. Use it as the regression baseline when debugging later runs.
 - `offline_aggregate.json` is authoritative. `results_bmk/agg_bmk.json` uses
   acceptance-adjusted output-token throughput and equivalent output-token
   TPOT for standard renderer fields, while retaining custom decode-round

@@ -349,6 +349,183 @@ Flat renderer row:
 Do not put the custom aggregate wrapper in `results_bmk`; the unofficial-run
 API expects every JSON object there to be a flat benchmark row.
 
+## Final Validated Run
+
+Workflow:
+
+```text
+run: 27493336994
+url: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27493336994
+git: 9796f5d17c96ab56136b8b9b1e196b6e6db84426
+TRT source: c185066
+image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
+```
+
+Renderer:
+
+```text
+https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27493336994
+```
+
+An unauthenticated `curl` to the renderer returns HTTP 401. Open it in an
+authenticated browser session. The run has a `results_bmk` artifact whose
+`agg_bmk.json` is a top-level array of the flat rows below.
+
+| GBS | Local/rank | Round TPOT ms | Steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 2 | 22.069890 | 90.621203 | 3.001953 | 272.040604 | 198.178843 | 251/255 |
+| 64 | 8 | 32.140069 | 248.910481 | 3.507324 | 873.009760 | 378.422175 | 251/255 |
+| 128 | 16 | 36.831497 | 434.410801 | 3.298096 | 1432.728396 | 143.915720 | 253/255 |
+
+Every row proved one context-only full-local-batch prefill, zero mixed
+context/generation iterations, and 256 consecutive full-local-batch decode
+rounds. GBS128 additionally proved attention-workspace reservation, the
+12 GiB KV reserve, and 131072-row FP8 chunk completion on ranks `0..7` with
+no chunk errors. Final GPU telemetry observed minimum free memory of
+42714 MiB at GBS16, 1742 MiB at GBS64, and 268 MiB at GBS128.
+
+Exact flat renderer rows, sorted by GBS for readability:
+
+```json
+[
+  {
+    "conc": 16,
+    "decode_dp_attention": true,
+    "decode_ep": 8,
+    "decode_num_workers": 0,
+    "decode_round_tpot_ms": 22.069890185656302,
+    "decode_step_tput_per_gpu": 90.62120305881011,
+    "decode_tp": 8,
+    "disagg": false,
+    "framework": "trt",
+    "global_batch_size": 16,
+    "hw": "b300",
+    "image": "ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": false,
+    "isl": 8192,
+    "local_batch_size": 2,
+    "mean_e2el": 8.506522687501274,
+    "mean_intvty": 136.02030185682727,
+    "mean_tpot": 0.0073518437053064585,
+    "mean_ttft": 1.1691594375006389,
+    "measured_decode_rounds": 256,
+    "median_e2el": 8.623861999993096,
+    "median_tpot": 0.00730873162512199,
+    "median_ttft": 1.1679470000017318,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 8,
+    "num_prefill_gpu": 8,
+    "observed_tokens_per_step": 3.001953125,
+    "osl": 1025,
+    "output_tput_per_gpu": 272.04060371365455,
+    "p90_e2el": 9.453417500000796,
+    "p90_tpot": 0.007495053650577423,
+    "p90_ttft": 1.1728185000029043,
+    "p99_e2el": 10.272390650002489,
+    "p99_tpot": 0.007593575591147528,
+    "p99_ttft": 1.1783019500035152,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 8,
+    "prefill_num_workers": 0,
+    "prefill_tp": 8,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 272.04060371365455
+  },
+  {
+    "conc": 64,
+    "decode_dp_attention": true,
+    "decode_ep": 8,
+    "decode_num_workers": 0,
+    "decode_round_tpot_ms": 32.140068798901076,
+    "decode_step_tput_per_gpu": 248.91048149447437,
+    "decode_tp": 8,
+    "disagg": false,
+    "framework": "trt",
+    "global_batch_size": 64,
+    "hw": "b300",
+    "image": "ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": false,
+    "isl": 8192,
+    "local_batch_size": 8,
+    "mean_e2el": 15.425251343747732,
+    "mean_intvty": 109.1262200057867,
+    "mean_tpot": 0.009163700529047669,
+    "mean_ttft": 4.942900421874583,
+    "measured_decode_rounds": 256,
+    "median_e2el": 15.344337999995332,
+    "median_tpot": 0.009183670972260893,
+    "median_ttft": 4.937785499962047,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 8,
+    "num_prefill_gpu": 8,
+    "observed_tokens_per_step": 3.50732421875,
+    "osl": 1025,
+    "output_tput_per_gpu": 873.0097600462936,
+    "p90_e2el": 17.614075799973214,
+    "p90_tpot": 0.009266875239280244,
+    "p90_ttft": 4.976919700019062,
+    "p99_e2el": 21.29510529000894,
+    "p99_tpot": 0.009333493034769593,
+    "p99_ttft": 4.982044999995269,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 8,
+    "prefill_num_workers": 0,
+    "prefill_tp": 8,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 873.0097600462936
+  },
+  {
+    "conc": 128,
+    "decode_dp_attention": true,
+    "decode_ep": 8,
+    "decode_num_workers": 0,
+    "decode_round_tpot_ms": 36.83149673250824,
+    "decode_step_tput_per_gpu": 434.4108010652217,
+    "decode_tp": 8,
+    "disagg": false,
+    "framework": "trt",
+    "global_batch_size": 128,
+    "hw": "b300",
+    "image": "ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": false,
+    "isl": 8192,
+    "local_batch_size": 16,
+    "mean_e2el": 105.22999424999762,
+    "mean_intvty": 89.54552477401855,
+    "mean_tpot": 0.011167503931923442,
+    "mean_ttft": 93.36035996875306,
+    "measured_decode_rounds": 256,
+    "median_e2el": 105.04664299997967,
+    "median_tpot": 0.011193058794137243,
+    "median_ttft": 93.350035499956,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 8,
+    "num_prefill_gpu": 8,
+    "observed_tokens_per_step": 3.298095703125,
+    "osl": 1025,
+    "output_tput_per_gpu": 1432.7283963842967,
+    "p90_e2el": 108.02184229998383,
+    "p90_tpot": 0.011256818371085943,
+    "p90_ttft": 93.43148689994122,
+    "p99_e2el": 112.4452570800099,
+    "p99_tpot": 0.01132884211451625,
+    "p99_ttft": 93.4409581200045,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 8,
+    "prefill_num_workers": 0,
+    "prefill_tp": 8,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 1432.7283963842967
+  }
+]
+```
+
 ## Debug Checklist
 
 1. Inspect `Show result headline`.

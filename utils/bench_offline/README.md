@@ -289,6 +289,20 @@ The direct comparison is B300 `decode_step_tput_per_gpu` divided by Huawei
 `decode_step_tput_per_chip`. The result also reports an output-token ratio
 using each stack's observed or published MTP yield.
 
+Final validated run `27493336994` at git revision
+`9796f5d17c96ab56136b8b9b1e196b6e6db84426`:
+
+| GBS | Round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU |
+|---:|---:|---:|---:|---:|
+| 16 | 22.069890 | 90.621203 | 3.001953 | 272.040604 |
+| 64 | 32.140069 | 248.910481 | 3.507324 | 873.009760 |
+| 128 | 36.831497 | 434.410801 | 3.298096 | 1432.728396 |
+
+Artifacts:
+
+- [GitHub Actions run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27493336994)
+- [InferenceMAX unofficial run](https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27493336994)
+
 ## Execution Chain
 
 1. Dispatch `.github/workflows/e2e-tests.yml`.
@@ -302,12 +316,14 @@ using each stack's observed or published MTP yield.
    transient from TRT's calibrated final KV budget while preserving the
    fixed-batch minimum cache cost. TRT's internal capacity probes run while
    the benchmark request gate is disarmed.
-6. Atomically arm the fixed-batch request gate after engine initialization.
-7. Run the short full-batch warmup.
-8. Run one measured generation.
-9. Validate and filter 256 iteration stats.
-10. Upload per-job result/debug artifacts.
-11. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
+6. Keep oversized FP8 activation quantization and DeepGemm calls at no more
+   than 65536 rows while preserving one executor-level prefill iteration.
+7. Atomically arm the fixed-batch request gate after engine initialization.
+8. Run the short full-batch warmup.
+9. Run one measured generation.
+10. Validate and filter 256 iteration stats.
+11. Upload per-job result/debug artifacts.
+12. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
 
 There is no HTTP server, request-rate generator, generic benchmark client,
 serial scheduler tuning, or normal InferenceX matrix processing.
