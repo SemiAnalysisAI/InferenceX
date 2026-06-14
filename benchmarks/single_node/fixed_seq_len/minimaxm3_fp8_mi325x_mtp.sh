@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 
-# MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe with EAGLE3
+# MiniMax-M3 MXFP8 MI325X (gfx942) single-node vLLM recipe with EAGLE3
 # speculative decoding — the spec-decoding=mtp variant of
-# minimaxm3_fp8_mi300x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
+# minimaxm3_fp8_mi325x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
 # --speculative-config with 3 speculative tokens. Everything else mirrors the
-# non-MTP MI300X recipe: mandatory --block-size 128, --language-model-only for
+# non-MTP MI325X recipe: mandatory --block-size 128, --language-model-only for
 # the text-only benchmark, --attention-backend TRITON_ATTN, and
 # --no-enable-prefix-caching. Runs with CUDA graphs (no --enforce-eager);
 # VLLM_USE_BREAKABLE_CUDAGRAPH=0 avoids the M3-decode breakable-cudagraph path.
-# The default BF16 KV cache is retained (unlike
-# the MI355X recipe's FP8 KV cache): gfx942 has no calibrated q/prob scales for
-# ROCm FP8 attention and vLLM's fallback scale of 1.0 corrupts accuracy.
+# The default BF16 KV cache is retained (unlike the MI355X recipe's FP8 KV
+# cache): gfx942 has no calibrated q/prob scales for ROCm FP8 attention and
+# vLLM's fallback scale of 1.0 corrupts accuracy.
 #
 # Unlike the CUDA recipes, the drafter needs no attention_backend override:
 # the FlashInfer "page size 128 requires GQA/MQA" limitation that forced
@@ -24,7 +24,7 @@
 # aux_hidden_state_outputs was requested". This recipe applies that fix
 # (functionstackx/vllm#1 — ported from nvidia/model.py, upstreamed as
 # vllm-project/vllm#45546) in-place to the installed vllm before serving, so we
-# can validate EAGLE3 on real MI300X hardware ahead of an image rebuild. The
+# can validate EAGLE3 on real MI325X hardware ahead of an image rebuild. The
 # same patch is validated green on MI355X. It is idempotent and fails the job
 # loudly if the installed amd/model.py has drifted from the expected base.
 
@@ -48,7 +48,7 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-# MODEL is a bare HF id on the mi300x single-node runner (a fast cache hit when
+# MODEL is a bare HF id on the mi325x single-node runner (a fast cache hit when
 # pre-staged). The EAGLE3 draft is not staged; fetch it into the same cache.
 if [[ "$MODEL" != /* ]]; then
   hf download "$MODEL"
