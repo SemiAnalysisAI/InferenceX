@@ -358,8 +358,10 @@ Artifacts:
 10. Run one measured generation.
 11. Validate and filter 256 iteration stats.
 12. After result and debug files are finalized, atomically publish a
-    completion record and cancel the GB300 allocation to stop the external
-    MPI management ranks.
+    completion record. The GB300 host requires both the result and completion
+    files before accepting success. If the external MPI world exits first, it
+    waits up to 120 seconds for shared-filesystem visibility, then verifies
+    both statuses and cancels the allocation.
 13. Upload per-job result/debug/topology artifacts.
 14. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
 

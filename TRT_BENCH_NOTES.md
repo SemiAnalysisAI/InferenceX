@@ -230,6 +230,30 @@ all use the isolated directory. Never restore a root-level clean checkout on
 these shared runners: unrelated rack workflows intentionally leave large
 untracked trees and may still have open NFS handles during job handoff.
 
+Run `27513364142`, source
+`a6cb0c4240d822d9c982e3b663cf02e33a9947a0`, proved the isolated checkout:
+GBS16 completed and GBS64 reached a valid controller result. GBS16 measured
+`29.196502 ms` round TPOT, `34.250679` decode steps/s/GPU,
+`3.019531` output tokens/step, and `103.420994` output tok/s/GPU. GBS64
+measured `32.447992 ms`, `123.274191` decode steps/s/GPU,
+`3.482422` output tokens/step, and `429.292739` output tok/s/GPU. Its schedule
+had one full-batch prefill, zero mixed iterations, and 256 consecutive
+local-batch-4 decode rounds; the filter retained `203/255` candidate rounds.
+
+The workflow still marked GBS64 failed because the external MPI world exited
+cleanly about 45 seconds after rank 0 atomically published its success files.
+The host's repeated negative NFS lookup did not expose those files until
+roughly 50 seconds after publication, just after the old five-second
+post-exit grace expired. Artifact upload then found the successful completion
+and debug archive, while the host failure fallback had overwritten only the
+top-level result. GBS128 was canceled by fail-fast.
+
+The follow-up requires both the result and completion file, waits up to
+`TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT=120` seconds after a clean transport
+exit, logs visibility every ten seconds, and only then compares statuses.
+Do not reduce this to a short fixed sleep or accept the MPI return code as
+benchmark success.
+
 ## Why The Old Result Was Too High
 
 Run `27483465692` used a request pool and mean per-request decode windows. At

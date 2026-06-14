@@ -61,6 +61,13 @@ benchmark.
   root. Run `27511740130` inherited open `.nfs*` logs from an unrelated
   srt-slurm job; root-level `git clean -ffdx` spent ten minutes deleting that
   tree and then failed with `EBUSY` before GBS64 launched.
+- Treat GB300 controller success as ready only when both
+  `offline_result_gbsN.json` and `offline_completion_gbsN.json` are visible
+  and their statuses agree. The rack workspace has roughly 50-second negative
+  NFS lookup caching: run `27513364142` completed GBS64 successfully inside
+  the container, but the cleanly exited MPI world exposed the files just
+  after the old five-second host grace expired. Preserve the bounded
+  `TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT` wait and its progress logs.
 - `perfect_router.jsonl` is shared by all 16 ranks over the workspace
   filesystem. Every writer must use `io_utils.append_json_line`, every strict
   reader must take the matching lock, and malformed lines are a validation

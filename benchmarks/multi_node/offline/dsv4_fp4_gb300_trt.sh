@@ -24,6 +24,7 @@ SQUASH_ROOT="${SQUASH_ROOT:-/data/home/sa-shared/gharunners/squash}"
 SQUASH_FILE="${SQUASH_ROOT}/$(printf '%s' "$IMAGE" | sed 's|[/:@#]|_|g').sqsh"
 SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-180}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-7200}"
+COMPLETION_VISIBILITY_TIMEOUT="${TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT:-120}"
 BENCH_ID="${BENCH_ID:-gbs${GLOBAL_BATCH_SIZE}}"
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
@@ -36,6 +37,10 @@ BENCH_GIT_REVISION="$(
 
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
     echo "Invalid BENCH_ID: $BENCH_ID" >&2
+    exit 1
+fi
+if [[ ! "$COMPLETION_VISIBILITY_TIMEOUT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Invalid TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT: $COMPLETION_VISIBILITY_TIMEOUT" >&2
     exit 1
 fi
 
@@ -60,6 +65,40 @@ rm -f \
 log() {
     printf '[offline-trt-gb300 %s] %s\n' \
         "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
+}
+
+controller_artifacts_ready() {
+    [[ -s "$COMPLETION_FILE" && -s "$RESULT_FILE" ]]
+}
+
+wait_for_controller_artifacts() {
+    local timeout="$1"
+    local started="$SECONDS"
+    local elapsed
+    local last_heartbeat=-1
+    local completion_ready
+    local result_ready
+
+    while (( SECONDS - started < timeout )); do
+        if controller_artifacts_ready; then
+            return 0
+        fi
+        elapsed=$((SECONDS - started))
+        if (( elapsed / 10 > last_heartbeat )); then
+            last_heartbeat=$((elapsed / 10))
+            completion_ready=no
+            result_ready=no
+            if [[ -s "$COMPLETION_FILE" ]]; then
+                completion_ready=yes
+            fi
+            if [[ -s "$RESULT_FILE" ]]; then
+                result_ready=yes
+            fi
+            log "waiting for controller artifacts elapsed=${elapsed}s timeout=${timeout}s completion_ready=$completion_ready result_ready=$result_ready"
+        fi
+        sleep 1
+    done
+    controller_artifacts_ready
 }
 
 write_host_failure() {
@@ -509,7 +548,7 @@ WORLD_STEP_PID=$!
 set -e
 
 while kill -0 "$WORLD_STEP_PID" >/dev/null 2>&1; do
-    if [[ -s "$COMPLETION_FILE" ]]; then
+    if controller_artifacts_ready; then
         break
     fi
     world_elapsed=$((SECONDS - world_started))
@@ -528,20 +567,15 @@ while kill -0 "$WORLD_STEP_PID" >/dev/null 2>&1; do
     sleep 1
 done
 
-if [[ ! -s "$COMPLETION_FILE" ]]; then
+if ! controller_artifacts_ready; then
     set +e
     wait "$WORLD_STEP_PID"
     world_rc=$?
     set -e
     WORLD_STEP_PID=""
-    for _ in 1 2 3 4 5; do
-        if [[ -s "$COMPLETION_FILE" ]]; then
-            break
-        fi
-        sleep 1
-    done
-    if [[ ! -s "$COMPLETION_FILE" ]]; then
-        log "external TRT world exited without controller completion return_code=$world_rc"
+    log "external TRT world exited return_code=$world_rc; waiting up to ${COMPLETION_VISIBILITY_TIMEOUT}s for shared result visibility"
+    if ! wait_for_controller_artifacts "$COMPLETION_VISIBILITY_TIMEOUT"; then
+        log "external TRT world exited without visible controller result and completion artifacts return_code=$world_rc"
         if [[ "$world_rc" -eq 0 ]]; then
             exit 1
         fi
