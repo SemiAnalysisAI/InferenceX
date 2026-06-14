@@ -126,7 +126,7 @@ index 71dd7634a..63500487d 100644
 
  import torch
 diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
-index 33851fdc8..70c59f55f 100644
+index 33851fdc8..815d8ef94 100644
 --- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 +++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 @@ -1,28 +1,35 @@
@@ -325,7 +325,7 @@ index 33851fdc8..70c59f55f 100644
  def _grouped_gemm_mxfp8(
      a_q: torch.Tensor,  # [M, K] fp8 e4m3
      a_scale: torch.Tensor,  # [M, K//32] uint8 (E8M0)
-@@ -143,16 +284,58 @@ def _grouped_gemm_mxfp8(
+@@ -143,16 +284,71 @@ def _grouped_gemm_mxfp8(
  ) -> torch.Tensor:
      M_routed = num_valid_tokens
      E, N, K = w.shape
@@ -334,6 +334,19 @@ index 33851fdc8..70c59f55f 100644
 +    assert K % k_alignment == 0, (
 +        f"MXFP8 native MoE requires K%{k_alignment}==0, got K={K}"
 +    )
++    if w_scale.shape == (E, N, K // 32):
++        scale_stride_e = w_scale.stride(0)
++        scale_stride_n = w_scale.stride(1)
++        scale_stride_k = w_scale.stride(2)
++    elif w_scale.shape == (E, K // 32, N):
++        scale_stride_e = w_scale.stride(0)
++        scale_stride_n = w_scale.stride(2)
++        scale_stride_k = w_scale.stride(1)
++    else:
++        raise ValueError(
++            "MXFP8 weight scales must use [E, N, K/32] or packed "
++            f"[E, K/32, N] layout, got {tuple(w_scale.shape)}."
++        )
 +    BLOCK_K = (
 +        128
 +        if current_platform.is_fp8_fnuz() and K % 128 == 0 and block_m <= 16
@@ -390,7 +403,20 @@ index 33851fdc8..70c59f55f 100644
          a_q,
          a_scale,
          w,
-@@ -183,7 +366,7 @@ def _grouped_gemm_mxfp8(
+@@ -173,9 +369,9 @@ def _grouped_gemm_mxfp8(
+         w.stride(0),
+         w.stride(1),
+         w.stride(2),
+-        w_scale.stride(0),
+-        w_scale.stride(1),
+-        w_scale.stride(2),
++        scale_stride_e,
++        scale_stride_n,
++        scale_stride_k,
+         out.stride(0),
+         out.stride(1),
+         A_DIV=a_div,
+@@ -183,7 +379,7 @@ def _grouped_gemm_mxfp8(
          BLOCK_M=block_m,
          BLOCK_N=BLOCK_N,
          BLOCK_K=BLOCK_K,
@@ -399,7 +425,7 @@ index 33851fdc8..70c59f55f 100644
      )
      return out
 
-@@ -202,12 +385,20 @@ def fused_moe_mxfp8_native(
+@@ -202,12 +398,20 @@ def fused_moe_mxfp8_native(
      limit: float | None,
      global_num_experts: int,
      expert_map: torch.Tensor | None,
@@ -421,7 +447,7 @@ index 33851fdc8..70c59f55f 100644
      sorted_ids, expert_ids, num_post = moe_align_block_size(
          topk_ids,
          block_m,
-@@ -256,17 +447,64 @@ def fused_moe_mxfp8_native(
+@@ -256,17 +460,74 @@ def fused_moe_mxfp8_native(
          M,
          top_k,
          block_m,
@@ -486,10 +512,20 @@ index 33851fdc8..70c59f55f 100644
 +        self.w1_bf16 = w1_bf16
 +        self.w2_bf16 = w2_bf16
 +        self.native_weights_available = native_weights_available
++
++    def bind_packed_weight_scales(
++        self,
++        w1_scale: torch.Tensor,
++        w2_scale: torch.Tensor,
++    ) -> None:
++        if not current_platform.is_fp8_fnuz():
++            raise RuntimeError("Packed MXFP8 scales are specific to gfx94x.")
++        self.w1_scale_val = w1_scale
++        self.w2_scale_val = w2_scale
 
      @property
      def quant_dtype(self) -> torch.dtype | str | None:
-@@ -283,7 +521,9 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -283,7 +544,9 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
 
      @staticmethod
      def _supports_current_device() -> bool:
@@ -500,7 +536,7 @@ index 33851fdc8..70c59f55f 100644
 
      def apply(
          self,
-@@ -303,6 +543,36 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -303,6 +566,36 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
          expert_tokens_meta: mk.ExpertTokensMetadata | None,
          apply_router_weight_on_input: bool,
      ):
@@ -537,7 +573,7 @@ index 33851fdc8..70c59f55f 100644
          alpha = self.quant_config.gemm1_alpha
          alpha = 1.702 if alpha is None else float(alpha)
          beta = self.quant_config.gemm1_beta
-@@ -322,5 +592,6 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -322,5 +615,6 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
              limit=limit,
              global_num_experts=global_num_experts,
              expert_map=expert_map,
@@ -659,7 +695,7 @@ index d0d7c7648..bc00da41e 100644
 
      raise ValueError("No MXFP8 MoE backends available.")
 diff --git a/vllm/model_executor/layers/quantization/modelopt.py b/vllm/model_executor/layers/quantization/modelopt.py
-index 33c7c7532..80baf5585 100644
+index 33c7c7532..9e26aa823 100644
 --- a/vllm/model_executor/layers/quantization/modelopt.py
 +++ b/vllm/model_executor/layers/quantization/modelopt.py
 @@ -92,6 +92,7 @@ from vllm.model_executor.parameter import (
@@ -679,7 +715,7 @@ index 33c7c7532..80baf5585 100644
          ``Mxfp8EmulationTritonExperts`` otherwise dequantizes every expert
          weight to BF16 on *every* forward step -- the dominant cost (conc1
          ~1.3 tok/s). Doing the dequant once here and replacing the MXFP8
-@@ -2121,6 +2122,62 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+@@ -2121,6 +2122,90 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
              num_experts,
          )
 
@@ -739,10 +775,38 @@ index 33c7c7532..80baf5585 100644
 +                "remaining layers."
 +            )
 +
++    def _pack_mxfp8_weight_scales(self, layer: RoutedExperts, experts) -> None:
++        """Pack gfx94x E8M0 scales so consecutive output columns are contiguous."""
++        if not experts.native_weights_available:
++            return
++
++        def pack(scale: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
++            E, N, K = weight.shape
++            if scale.shape == (E, K // 32, N):
++                return scale
++            if scale.shape != (E, N, K // 32):
++                raise ValueError(
++                    "Unexpected MXFP8 weight-scale shape "
++                    f"{tuple(scale.shape)} for weight {tuple(weight.shape)}."
++                )
++            return scale.transpose(1, 2).contiguous()
++
++        w13_scale = pack(layer.w13_weight_scale, layer.w13_weight)
++        w2_scale = pack(layer.w2_weight_scale, layer.w2_weight)
++        replace_parameter(layer, "w13_weight_scale", w13_scale)
++        replace_parameter(layer, "w2_weight_scale", w2_scale)
++        experts.bind_packed_weight_scales(
++            layer.w13_weight_scale,
++            layer.w2_weight_scale,
++        )
++        logger.info_once(
++            "Packed gfx94x MXFP8 MoE weight scales as [expert, K/32, N]."
++        )
++
      def process_weights_after_loading(self, layer: RoutedExperts) -> None:
          # TODO(bnell): why is this required only for mxfp8?
          if getattr(layer, "_already_called_process_weights_after_loading", False):
-@@ -2158,7 +2215,20 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+@@ -2158,7 +2243,21 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
              routing_tables=layer._expert_routing_tables(),
          )
 
@@ -756,9 +820,10 @@ index 33c7c7532..80baf5585 100644
 +            self.mxfp8_backend == Fp8MoeBackend.NATIVE_MXFP8
 +            and current_platform.is_fp8_fnuz()
 +            and isinstance(experts, Mxfp8NativeTritonExperts)
-+            and experts.requires_bf16_fallback_weights
 +        ):
-+            self._retain_bf16_fallback_weights(layer)
++            if experts.requires_bf16_fallback_weights:
++                self._retain_bf16_fallback_weights(layer)
++            self._pack_mxfp8_weight_scales(layer, experts)
 +
 +        # No fused MXFP8 MoE kernel on this device: the emulation
          # experts would dequant MXFP8->BF16 every forward step. Convert the
