@@ -294,6 +294,52 @@ jobs:
           squeue \
             --name=gb300-nv_2 \
             --format='%.18i %.10T %.10M %.10l %.6D %.30R %.40j'
+          job_id="$(
+            squeue \
+              --name=gb300-nv_2 \
+              --noheader \
+              --format='%i' \
+              | head -n 1
+          )"
+          if [[ -n "$job_id" ]]; then
+            echo '--- target job details ---'
+            job_record="$(scontrol show job --oneliner "$job_id")"
+            printf '%s\n' "$job_record"
+            echo '--- target job steps ---'
+            squeue \
+              --steps="$job_id" \
+              --format='%.24i %.10T %.10M %.6D %.30R %.40j'
+            echo '--- target job accounting ---'
+            sstat \
+              --allsteps \
+              --jobs="$job_id" \
+              --format='JobID,NTasks,MaxRSS,AveRSS,AveCPU,NodeList' \
+              || true
+
+            work_dir="$(
+              sed -n 's/.* WorkDir=\([^ ]*\).*/\1/p' <<<"$job_record"
+            )"
+            if [[ -n "$work_dir" && -d "$work_dir" ]]; then
+              echo "--- shared artifacts: $work_dir ---"
+              find "$work_dir" \
+                -maxdepth 2 \
+                -type f \
+                \( -name 'offline_*' -o -name 'worker.log' \
+                   -o -name 'perfect_router.jsonl' \) \
+                -printf '%TY-%Tm-%TdT%TH:%TM:%TS %12s %p\n' \
+                | sort
+              for log_path in \
+                "$work_dir/offline_controller_gbs16.log" \
+                "$work_dir/.offline_work_gbs16_${job_id}/worker.log" \
+                "$work_dir/.offline_work_gbs16_${job_id}/perfect_router.jsonl"
+              do
+                if [[ -f "$log_path" ]]; then
+                  echo "--- tail: $log_path ---"
+                  tail -n 120 "$log_path"
+                fi
+              done
+            fi
+          fi
           echo '--- batch_1 queue ---'
           squeue \
             --partition=batch_1 \
