@@ -3800,3 +3800,10 @@
     - "H200-style search space (TP4/TP8 latency, TP4+EP4/TP8+EP8 TEP, TP8+EP8 dp-attn DEP) trimmed at the extreme-concurrency end with TP-only latency rows started at conc 1"
     - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, upstream vllm-project/vllm#45546; validated green on MI355X/MI300X) before serving; also adds SPEC_SUFFIX to launch_mi325x-amds.sh so spec-decoding=mtp routes to the _mtp script"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1759
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+    - minimaxm3-fp8-mi325x-vllm
+  description:
+    - "Extend the MiniMax-M3 MXFP8 MI300X and MI325X non-MTP sweeps down to concurrency 1 on the TP-only latency rows (was conc 4), to capture the single-request latency point; TEP/DEP rows keep their higher concurrency starts"
+  pr-link: TBD
