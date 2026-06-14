@@ -10,7 +10,9 @@ These notes are for the next agent running and debugging `trt-bench`.
 - TensorRT-LLM only.
 - Offline `LLM.generate()`, no server or generic InferenceX processing.
 - Optimization workflows may use up to ten parallel single-node B300 jobs.
-- Huawei-comparable rows remain DEP8/MTP3 at c8, c32, and c64.
+- Historical equal-batch-per-chip Huawei experiments use DEP8/MTP3 at c8,
+  c32, and c64. The current exact-global-batch gate uses TP4 at c16 and DEP4
+  at c64/c128; it matches global batch and MTP depth, not hardware topology.
 
 ## Pinned TRT Facts
 
@@ -195,8 +197,9 @@ Do not call a row valid unless:
 - derived step throughput and step TPOT are present
 - token/step and effective acceptance are present
 - raw TRT acceptance is either populated or explicitly marked unavailable
-- Huawei output and step-rate ratios are present only for matching DEP8/MTP3
-  c8/c32/c64 rows; TP4/DEP4 rows must keep them null
+- Huawei output and step-rate ratios are present only for exact-global-batch
+  MTP3 references currently defined at c16, c64, and c128; other
+  concurrencies keep them null
 
 Capacity failures at 512/1024 remain useful rows. They are not successful
 performance measurements.
@@ -1170,3 +1173,61 @@ per-request TPOT calculation by staggering starts while worsening TTFT and
 whole-batch throughput. The c512/c1024 rows also must not use the old global
 graph sizes; c1024 previously exhausted 90 minutes on the first legacy tuning
 engine. This matrix runs only one fresh engine per point.
+
+Exact trigger:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(jq -c . utils/bench_offline/b300_best_config_sweep.json)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT best-config c16-c1024' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=120' \
+  -f 'inputs[worker-timeout]=5400'
+```
+
+### Completed Best-Config Sweep
+
+- Run:
+  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27483465692`
+- Producer commit:
+  `c03246dcd87a05e56af06bbb933e32dea0e6f10d`
+- Started `2026-06-14T00:26:47Z`; completed `2026-06-14T00:45:54Z`.
+- All six benchmark jobs and `collect-results` succeeded. Individual job
+  durations ranged from `10m26s` at c64 to `18m41s` at c1024.
+- Every row used one fresh engine, one full-shape warmup, one measured pass,
+  exact 8192-token inputs, exact 625-token outputs, and MTP3.
+
+| Conc | Topology | Token TPOT ms | Step TPOT ms | Derived output/GPU | Step/s/GPU | Wall output/GPU | Tok/step | Eff accept | Mean TTFT ms |
+|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| 16 | TP4 | 11.98 | 36.36 | 333.92 | 110.00 | 189.74 | 2.970 | 65.7% | 2807.27 |
+| 32 | TP4 | 16.38 | 49.89 | 488.44 | 160.35 | 270.56 | 3.008 | 66.9% | 5203.23 |
+| 64 | DEP4 | 17.16 | 54.98 | 932.20 | 291.03 | 482.11 | 3.157 | 71.9% | 5757.67 |
+| 128 | DEP4 | 25.11 | 81.98 | 1274.21 | 390.34 | 588.16 | 3.216 | 73.9% | 10543.52 |
+| 512 | DEP8 | 47.34 | 148.52 | 1351.94 | 430.93 | 625.39 | 3.091 | 69.7% | 21104.40 |
+| 1024 | DEP8 | 80.87 | 256.94 | 1582.72 | 498.17 | 731.58 | 3.123 | 70.8% | 41783.57 |
+
+The c16, c64, and c128 exact-global-batch rows passed both Huawei ratios:
+
+| Conc | B300/Huawei output | B300/Huawei step |
+|---:|---:|---:|
+| 16 | 2.414 | 1.940 |
+| 64 | 1.818 | 1.385 |
+| 128 | 1.345 | 1.005 |
+
+The c128 step-rate margin is only `0.5%` from a one-pass measurement. Repeat
+that row before using the narrow step-rate win as a stable claim.
+
+The canonical `results_bmk/agg_bmk.json` contains six flat rows with
+concurrencies `16,32,64,128,512,1024`. InferenceX App PR 257 at commit
+`747f1ad41399f3593935aa49162e6bc7b8014014` returned HTTP 200 from
+`/api/unofficial-run?runId=27483465692` and normalized all six rows. The
+matching page route also returned HTTP 200 locally:
+
+`https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27483465692`
+
+That Vercel preview requires authentication from an unauthenticated CLI, so a
+CLI HTTP 401 there is preview access control, not an artifact/schema failure.

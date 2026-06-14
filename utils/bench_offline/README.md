@@ -666,6 +666,23 @@ gh api -X POST \
   -f 'inputs[worker-timeout]=5400'
 ```
 
+Run `27483465692` completed this exact matrix successfully on producer commit
+`c03246dcd87a05e56af06bbb933e32dea0e6f10d`. The whole workflow took
+`19m07s`, including result collection.
+
+| Conc | Topology | Token TPOT ms | Step TPOT ms | Derived output/GPU | Step/s/GPU | Wall output/GPU | Mean TTFT ms |
+|---:|---|---:|---:|---:|---:|---:|---:|
+| 16 | TP4 | 11.98 | 36.36 | 333.92 | 110.00 | 189.74 | 2807.27 |
+| 32 | TP4 | 16.38 | 49.89 | 488.44 | 160.35 | 270.56 | 5203.23 |
+| 64 | DEP4 | 17.16 | 54.98 | 932.20 | 291.03 | 482.11 | 5757.67 |
+| 128 | DEP4 | 25.11 | 81.98 | 1274.21 | 390.34 | 588.16 | 10543.52 |
+| 512 | DEP8 | 47.34 | 148.52 | 1351.94 | 430.93 | 625.39 | 21104.40 |
+| 1024 | DEP8 | 80.87 | 256.94 | 1582.72 | 498.17 | 731.58 | 41783.57 |
+
+The collector uploaded six flat rows in `results_bmk/agg_bmk.json`. The
+InferenceX App PR 257 unofficial-run API normalized all six rows from this
+run, including the `8192/625` sequence.
+
 ## Artifacts And Collected Values
 
 Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
