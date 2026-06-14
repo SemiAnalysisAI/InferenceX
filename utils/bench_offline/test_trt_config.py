@@ -11,6 +11,8 @@ from trt_config import (
     build_llm_kwargs,
     candidate_environment,
     choose_winner,
+    cuda_graph_batch_size,
+    max_batch_size,
     resolved_parallelism,
     validate_candidate_concurrency,
 )
@@ -19,6 +21,61 @@ from trt_config import (
 def test_benchmark_uses_one_measured_pass():
     assert TUNING_MEASURED_PASSES == 1
     assert FINAL_MEASURED_PASSES == 1
+
+
+def test_best_config_sweep_uses_proven_topologies_and_local_capacity():
+    path = Path(__file__).with_name("b300_best_config_sweep.json")
+    experiments = json.loads(path.read_text(encoding="utf-8"))
+
+    assert [item["concurrency"] for item in experiments] == [
+        16,
+        32,
+        64,
+        128,
+        512,
+        1024,
+    ]
+    expected_parallelism = {
+        16: "tp4",
+        32: "tp4",
+        64: "dep4",
+        128: "dep4",
+        512: "dep8",
+        1024: "dep8",
+    }
+    expected_graph_batch = {
+        16: 16,
+        32: 32,
+        64: 16,
+        128: 32,
+        512: 64,
+        1024: 128,
+    }
+
+    for item in experiments:
+        concurrency = item["concurrency"]
+        candidate = CandidateConfig.from_dict(item["candidate"])
+        validate_candidate_concurrency(concurrency, candidate)
+
+        assert candidate.parallelism == expected_parallelism[concurrency]
+        assert candidate.batching_wait_iters == 0
+        assert candidate.enable_heuristic_topk is True
+        assert candidate.enable_configurable_moe is True
+        assert candidate.mtp_draft_tokens == 3
+        assert max_batch_size(concurrency, candidate) == (
+            expected_graph_batch[concurrency]
+        )
+        assert cuda_graph_batch_size(concurrency, candidate) == (
+            expected_graph_batch[concurrency]
+        )
+
+        if candidate.parallelism == "tp4":
+            assert candidate.dsv4_skip_premoe_allreduce is True
+            assert candidate.moe_autotune_dummy_distribution == "balanced"
+        else:
+            assert candidate.attention_dp_batch_mode == "local-rank"
+            assert candidate.enable_lm_head_tp_in_adp is True
+            assert candidate.moe_autotune_dummy_distribution == "random"
 
 
 def result(value: float, name: str) -> dict:
@@ -625,6 +682,7 @@ def test_resolved_parallelism_validates_sparse_indexer_switches():
 @pytest.mark.parametrize(
     "filename",
     (
+        "b300_best_config_sweep.json",
         "b300_huawei_experiments.json",
         "b300_stage2_experiments.json",
         "b300_stage3_local_batch_experiments.json",

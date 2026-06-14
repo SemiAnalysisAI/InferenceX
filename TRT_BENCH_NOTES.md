@@ -1147,3 +1147,26 @@ Exact `results_bmk/agg_bmk.json` from run `27482213487`:
   }
 ]
 ```
+
+## Best-Config Sweep
+
+Matrix: `utils/bench_offline/b300_best_config_sweep.json`.
+
+The six independent one-engine rows cover c16, c32, c64, c128, c512, and
+c1024. They use one warmup and one measured pass, MTP3, wait 0, heuristic
+top-k, ConfigurableMoE, and the default one-sided NVLink path.
+
+| Concurrency | Topology | Local graph batch | Additional settings |
+|---:|---|---:|---|
+| 16 | TP4 | 16 | balanced MoE autotune, skip redundant pre-MoE allreduce |
+| 32 | TP4 | 32 | balanced MoE autotune, skip redundant pre-MoE allreduce |
+| 64 | DEP4 | 16 | LM-head TP, local-rank capacity |
+| 128 | DEP4 | 32 | LM-head TP, local-rank capacity |
+| 512 | DEP8 | 64 | LM-head TP, local-rank capacity |
+| 1024 | DEP8 | 128 | LM-head TP, local-rank capacity |
+
+Do not substitute the c128 wait-30/wait-60 scheduler rows: they improve the
+per-request TPOT calculation by staggering starts while worsening TTFT and
+whole-batch throughput. The c512/c1024 rows also must not use the old global
+graph sizes; c1024 previously exhausted 90 minutes on the first legacy tuning
+engine. This matrix runs only one fresh engine per point.

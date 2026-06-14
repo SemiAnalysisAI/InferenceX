@@ -76,6 +76,11 @@ benchmark.
   concurrency 32. Do not schedule TP4 above c32; use DEP4 at c64/c128.
   Run `27480420625` proved c128 TP4 spends about 8.3 minutes initializing,
   then OOMs late in warmup after about 35 minutes total.
+- `b300_best_config_sweep.json` is the current c16/c32/c64/c128/c512/c1024
+  sweep. It uses TP4 through c32, DEP4 at c64/c128, and production-shape DEP8
+  at c512/c1024. Attention-DP rows use wait 0 and local-rank graph capacity;
+  do not replace them with staggered wait-30/wait-60 rows or global graph
+  sizes.
 - Run `27481295672` completed the two c32 TP4 rows in about 15 minutes each.
   Engine initialization took `494-507 s`, warmup took `270-272 s`, and the
   only measured pass took `18.7-19.5 s`. Further pass-count reduction cannot

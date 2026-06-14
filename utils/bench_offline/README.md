@@ -635,6 +635,37 @@ Job time was `14m42s-15m02s`. Per worker, engine initialization took
 measured pass took `18.7-19.5 s`. The benchmark is already at one measured
 pass; startup and warmup now dominate its runtime.
 
+### Best-Config Concurrency Sweep
+
+`b300_best_config_sweep.json` is the current end-to-end sweep at
+concurrencies `16,32,64,128,512,1024`. It uses exactly one fresh engine, one
+full-shape warmup, and one measured pass per row.
+
+- c16/c32: TP4, heuristic top-k, ConfigurableMoE, balanced MoE autotuning,
+  and the redundant pre-MoE allreduce backport.
+- c64/c128: DEP4, wait 0, local-rank engine/CUDA-graph capacity, LM-head TP,
+  heuristic top-k, ConfigurableMoE, and the default one-sided NVLink path.
+- c512/c1024: the same wait-0 optimized path on DEP8, matching the checked-in
+  high-concurrency B300 topology. Local-rank capacity resolves to 64 and 128,
+  respectively, instead of the old global 512/1024 graph sizes.
+
+The sweep deliberately avoids wait-30/wait-60 scheduler staggering. Those
+settings can inflate `concurrency / mean per-request TPOT / GPUs` while
+increasing TTFT and reducing measured whole-batch throughput.
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+EXPERIMENTS="$(jq -c . utils/bench_offline/b300_best_config_sweep.json)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT best-config c16-c1024' \
+  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[salloc-time]=120' \
+  -f 'inputs[worker-timeout]=5400'
+```
+
 ## Artifacts And Collected Values
 
 Each matrix job uploads `offline-trt-job-EXPERIMENT_ID`:
