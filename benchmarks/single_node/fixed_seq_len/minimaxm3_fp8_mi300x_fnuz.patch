@@ -69,21 +69,20 @@ index b80d3b8..9618689 100644
  def _sparse_attention_layer_ids(config: PretrainedConfig) -> set[int]:
      """Layer ids whose attention runs the extra sparse "index" branch."""
      cfg = getattr(config, "sparse_attention_config", None)
-@@ -620,6 +624,56 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
+@@ -620,6 +624,55 @@ class MiniMaxM3SparseAttention(nn.Module, AttentionLayerBase):
              scale,
              scale,
          )
 +
 +        global _FP8_KV_RUNTIME_VERIFIED
-+        if not _FP8_KV_RUNTIME_VERIFIED:
++        valid_tokens = torch.nonzero(main_slot_mapping >= 0).flatten()
++        if not _FP8_KV_RUNTIME_VERIFIED and valid_tokens.numel() > 0:
 +            fp8_dtype = current_platform.fp8_dtype()
 +            assert self.kv_cache_dtype == "fp8"
 +            assert fp8_dtype == torch.float8_e4m3fnuz
 +            assert self.kv_cache.dtype == torch.uint8
 +            assert self.kv_cache.element_size() == 1
 +
-+            valid_tokens = torch.nonzero(main_slot_mapping >= 0).flatten()
-+            assert valid_tokens.numel() > 0
 +            token_idx = int(valid_tokens[0].item())
 +            slot_idx = int(main_slot_mapping[token_idx].item())
 +            block_size = key_cache.shape[1]
