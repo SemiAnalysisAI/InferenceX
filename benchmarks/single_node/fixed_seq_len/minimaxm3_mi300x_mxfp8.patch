@@ -1,0 +1,656 @@
+diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
+index 33851fdc8..8bcfa9d13 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
+@@ -1,24 +1,25 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+-"""Native MXFP8 (1x32 block, E8M0 scale) MoE for AMD CDNA4 (gfx950) via Triton
+-``tl.dot_scaled`` (hardware microscaling matmul).
++"""Fused MXFP8 (1x32 block, E8M0 scale) MoE for AMD CDNA3/CDNA4.
+
+ The expert GEMMs consume the FP8 E4M3 weights and their E8M0 block scales
+ directly (no dequant-to-BF16), and activations are MXFP8-quantized per token.
+-On CDNA4 ``dot_scaled`` maps to the native MX matrix-core ops; on other archs
+-Triton upcasts to BF16 (so this stays correct, just not faster) — but the
+-oracle only selects this path on gfx950 and routes everything else to the
+-BF16 ``Mxfp8EmulationTritonExperts`` fallback.
++CDNA4 uses ``tl.dot_scaled`` and native MX matrix-core ops. CDNA3 stores the
++weights as E4M3FNUZ, runs one native FP8 ``tl.dot`` per 32-value MX block, and
++applies the E8M0 scale products in-register. Both paths keep weights compressed
++in HBM instead of expanding them to persistent BF16.
+
+ Structure mirrors vLLM's ``fused_moe_kernel``: tokens are sorted by expert
+ (``moe_align_block_size``); each program computes a ``[BLOCK_M, BLOCK_N]`` tile
+-for one expert, accumulating over K with ``dot_scaled``. SwiGLU-OAI activation
+-and the top-k weighted reduction run in PyTorch between/after the two GEMMs.
++for one expert, accumulating over K with the architecture-specific fused path.
++SwiGLU-OAI activation and the top-k weighted reduction run between/after the
++two GEMMs.
+ """
+
+ import torch
+
+ import vllm.model_executor.layers.fused_moe.modular_kernel as mk
++from vllm import _custom_ops as ops
+ from vllm.logger import init_logger
+ from vllm.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
+     Mxfp8TritonExpertsBase,
+@@ -35,8 +36,29 @@ from vllm.triton_utils import tl, triton
+ logger = init_logger(__name__)
+
+
++def _select_split_k(
++    max_post_padded: int,
++    block_m: int,
++    N: int,
++    K: int,
++) -> int:
++    if not (current_platform.is_fp8_fnuz() and K >= 2048 and N <= 1024):
++        return 1
++
++    base_programs = triton.cdiv(max_post_padded, block_m) * triton.cdiv(N, 128)
++    if base_programs >= 256:
++        return 1
++
++    target_split = triton.cdiv(256, max(base_programs, 1))
++    return min(
++        8,
++        1 << (target_split - 1).bit_length(),
++        triton.cdiv(K, 32),
++    )
++
++
+ @triton.jit
+-def _mxfp8_grouped_gemm_kernel(
++def _mxfp8_grouped_gemm_dot_scaled_kernel(
+     a_ptr,
+     a_scale_ptr,
+     b_ptr,
+@@ -67,9 +89,11 @@ def _mxfp8_grouped_gemm_kernel(
+     BLOCK_M: tl.constexpr,
+     BLOCK_N: tl.constexpr,
+     BLOCK_K: tl.constexpr,
++    SPLIT_K: tl.constexpr,
+ ):
+     pid_m = tl.program_id(0)
+     pid_n = tl.program_id(1)
++    pid_k = tl.program_id(2)
+     num_post = tl.load(num_tokens_post_padded_ptr)
+     if pid_m * BLOCK_M >= num_post:
+         return
+@@ -101,28 +125,194 @@ def _mxfp8_grouped_gemm_kernel(
+
+     acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
+     n_mask = offs_n < N
+-    for _ in range(0, tl.cdiv(K, BLOCK_K)):
+-        a = tl.load(a_ptrs, mask=token_mask[:, None], other=0.0)
+-        b = tl.load(b_ptrs, mask=n_mask[:, None], other=0.0)
+-        asc = tl.load(as_ptrs, mask=token_mask[:, None], other=0)
+-        bsc = tl.load(bs_ptrs, mask=n_mask[:, None], other=0)
+-        acc += tl.dot_scaled(a, asc, "e4m3", b.T, bsc, "e4m3")
+-
+-        a_ptrs += BLOCK_K * stride_ak
+-        b_ptrs += BLOCK_K * stride_bk
+-        as_ptrs += (BLOCK_K // 32) * stride_ask
+-        bs_ptrs += (BLOCK_K // 32) * stride_bsk
++    if SPLIT_K == 1:
++        for _ in range(0, tl.cdiv(K, BLOCK_K)):
++            a = tl.load(a_ptrs, mask=token_mask[:, None], other=0.0)
++            b = tl.load(b_ptrs, mask=n_mask[:, None], other=0.0)
++            asc = tl.load(as_ptrs, mask=token_mask[:, None], other=0)
++            bsc = tl.load(bs_ptrs, mask=n_mask[:, None], other=0)
++            acc += tl.dot_scaled(a, asc, "e4m3", b.T, bsc, "e4m3")
++
++            a_ptrs += BLOCK_K * stride_ak
++            b_ptrs += BLOCK_K * stride_bk
++            as_ptrs += (BLOCK_K // 32) * stride_ask
++            bs_ptrs += (BLOCK_K // 32) * stride_bsk
++    else:
++        num_k_tiles = tl.cdiv(K, BLOCK_K)
++        tiles_per_split = tl.cdiv(num_k_tiles, SPLIT_K)
++        k_tile = pid_k * tiles_per_split
++        k_tile_end = min(k_tile + tiles_per_split, num_k_tiles)
++        a_ptrs += k_tile * BLOCK_K * stride_ak
++        b_ptrs += k_tile * BLOCK_K * stride_bk
++        as_ptrs += k_tile * (BLOCK_K // 32) * stride_ask
++        bs_ptrs += k_tile * (BLOCK_K // 32) * stride_bsk
++        while k_tile < k_tile_end:
++            a = tl.load(a_ptrs, mask=token_mask[:, None], other=0.0)
++            b = tl.load(b_ptrs, mask=n_mask[:, None], other=0.0)
++            asc = tl.load(as_ptrs, mask=token_mask[:, None], other=0)
++            bsc = tl.load(bs_ptrs, mask=n_mask[:, None], other=0)
++            acc += tl.dot_scaled(a, asc, "e4m3", b.T, bsc, "e4m3")
++
++            a_ptrs += BLOCK_K * stride_ak
++            b_ptrs += BLOCK_K * stride_bk
++            as_ptrs += (BLOCK_K // 32) * stride_ask
++            bs_ptrs += (BLOCK_K // 32) * stride_bsk
++            k_tile += 1
+
+     if MUL_WEIGHT:
+         w = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0.0)
+         acc = acc * w[:, None]
+
+     c_ptrs = c_ptr + offs_token[:, None] * stride_cm + offs_n[None, :] * stride_cn
+-    tl.store(
+-        c_ptrs,
+-        acc.to(c_ptr.dtype.element_ty),
+-        mask=token_mask[:, None] & n_mask[None, :],
++    c_mask = token_mask[:, None] & n_mask[None, :]
++    if SPLIT_K == 1:
++        tl.store(c_ptrs, acc.to(c_ptr.dtype.element_ty), mask=c_mask)
++    else:
++        tl.atomic_add(c_ptrs, acc, mask=c_mask)
++
++
++@triton.jit
++def _mxfp8_grouped_gemm_fnuz_kernel(
++    a_ptr,
++    a_scale_ptr,
++    b_ptr,
++    b_scale_ptr,
++    c_ptr,
++    topk_weights_ptr,
++    sorted_token_ids_ptr,
++    expert_ids_ptr,
++    num_tokens_post_padded_ptr,
++    N,
++    K,
++    num_valid_tokens,
++    top_k,
++    stride_am,
++    stride_ak,
++    stride_asm,
++    stride_ask,
++    stride_be,
++    stride_bn,
++    stride_bk,
++    stride_bse,
++    stride_bsn,
++    stride_bsk,
++    stride_cm,
++    stride_cn,
++    A_DIV: tl.constexpr,
++    MUL_WEIGHT: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++    BLOCK_N: tl.constexpr,
++    BLOCK_K: tl.constexpr,
++    SPLIT_K: tl.constexpr,
++):
++    pid_m = tl.program_id(0)
++    pid_n = tl.program_id(1)
++    pid_k = tl.program_id(2)
++    num_post = tl.load(num_tokens_post_padded_ptr)
++    if pid_m * BLOCK_M >= num_post:
++        return
++
++    offs_tid = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
++    offs_token = tl.load(sorted_token_ids_ptr + offs_tid).to(tl.int64)
++    token_mask = offs_token < num_valid_tokens
++    off_e = tl.load(expert_ids_ptr + pid_m).to(tl.int64)
++
++    offs_n = pid_n * BLOCK_N + tl.arange(0, BLOCK_N)
++    offs_k = tl.arange(0, 32)
++    a_row = offs_token // A_DIV
++
++    a_ptrs = a_ptr + a_row[:, None] * stride_am + offs_k[None, :] * stride_ak
++    as_ptrs = a_scale_ptr + a_row * stride_asm
++    b_ptrs = (
++        b_ptr
++        + off_e * stride_be
++        + offs_n[:, None] * stride_bn
++        + offs_k[None, :] * stride_bk
+     )
++    bs_ptrs = b_scale_ptr + off_e * stride_bse + offs_n * stride_bsn
++
++    acc = tl.zeros((BLOCK_M, BLOCK_N), dtype=tl.float32)
++    n_mask = offs_n < N
++    if SPLIT_K == 1:
++        for _ in range(0, tl.cdiv(K, BLOCK_K)):
++            for k_offset in tl.static_range(0, BLOCK_K, 32):
++                a = tl.load(
++                    a_ptrs + k_offset * stride_ak,
++                    mask=token_mask[:, None],
++                    other=0.0,
++                )
++                b = tl.load(
++                    b_ptrs + k_offset * stride_bk,
++                    mask=n_mask[:, None],
++                    other=0.0,
++                )
++                asc = tl.load(
++                    as_ptrs + (k_offset // 32) * stride_ask,
++                    mask=token_mask,
++                    other=0,
++                ).to(tl.float32)
++                bsc = tl.load(
++                    bs_ptrs + (k_offset // 32) * stride_bsk,
++                    mask=n_mask,
++                    other=0,
++                ).to(tl.float32)
++                block_scale = tl.exp2(asc[:, None] + bsc[None, :] - 254.0)
++                acc += tl.dot(a, b.T) * block_scale
++
++            a_ptrs += BLOCK_K * stride_ak
++            b_ptrs += BLOCK_K * stride_bk
++            as_ptrs += (BLOCK_K // 32) * stride_ask
++            bs_ptrs += (BLOCK_K // 32) * stride_bsk
++    else:
++        num_k_tiles = tl.cdiv(K, BLOCK_K)
++        tiles_per_split = tl.cdiv(num_k_tiles, SPLIT_K)
++        k_tile = pid_k * tiles_per_split
++        k_tile_end = min(k_tile + tiles_per_split, num_k_tiles)
++        a_ptrs += k_tile * BLOCK_K * stride_ak
++        b_ptrs += k_tile * BLOCK_K * stride_bk
++        as_ptrs += k_tile * (BLOCK_K // 32) * stride_ask
++        bs_ptrs += k_tile * (BLOCK_K // 32) * stride_bsk
++        while k_tile < k_tile_end:
++            for k_offset in tl.static_range(0, BLOCK_K, 32):
++                a = tl.load(
++                    a_ptrs + k_offset * stride_ak,
++                    mask=token_mask[:, None],
++                    other=0.0,
++                )
++                b = tl.load(
++                    b_ptrs + k_offset * stride_bk,
++                    mask=n_mask[:, None],
++                    other=0.0,
++                )
++                asc = tl.load(
++                    as_ptrs + (k_offset // 32) * stride_ask,
++                    mask=token_mask,
++                    other=0,
++                ).to(tl.float32)
++                bsc = tl.load(
++                    bs_ptrs + (k_offset // 32) * stride_bsk,
++                    mask=n_mask,
++                    other=0,
++                ).to(tl.float32)
++                block_scale = tl.exp2(asc[:, None] + bsc[None, :] - 254.0)
++                acc += tl.dot(a, b.T) * block_scale
++
++            a_ptrs += BLOCK_K * stride_ak
++            b_ptrs += BLOCK_K * stride_bk
++            as_ptrs += (BLOCK_K // 32) * stride_ask
++            bs_ptrs += (BLOCK_K // 32) * stride_bsk
++            k_tile += 1
++
++    if MUL_WEIGHT:
++        w = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0.0)
++        acc = acc * w[:, None]
++
++    c_ptrs = c_ptr + offs_token[:, None] * stride_cm + offs_n[None, :] * stride_cn
++    c_mask = token_mask[:, None] & n_mask[None, :]
++    if SPLIT_K == 1:
++        tl.store(c_ptrs, acc.to(c_ptr.dtype.element_ty), mask=c_mask)
++    else:
++        tl.atomic_add(c_ptrs, acc, mask=c_mask)
+
+
+ def _grouped_gemm_mxfp8(
+@@ -143,16 +333,48 @@ def _grouped_gemm_mxfp8(
+ ) -> torch.Tensor:
+     M_routed = num_valid_tokens
+     E, N, K = w.shape
+-    assert K % 128 == 0, f"MXFP8 native MoE requires K%128==0, got K={K}"
++    k_alignment = 32 if current_platform.is_fp8_fnuz() else 128
++    assert K % k_alignment == 0, (
++        f"MXFP8 native MoE requires K%{k_alignment}==0, got K={K}"
++    )
++    BLOCK_K = (
++        128
++        if current_platform.is_fp8_fnuz() and K % 128 == 0 and block_m <= 16
++        else 64
++        if current_platform.is_fp8_fnuz() and K % 64 == 0
++        else 32
++        if current_platform.is_fp8_fnuz()
++        else 128
++    )
++    # moe_align_block_size allocates for the worst case where every expert is
++    # active. At small batches that can be much larger than the number of
++    # blocks that can contain valid assignments. Limit the launch to the
++    # tighter static upper bound; the device-side num_post check handles the
++    # remaining tail.
++    max_post_padded = min(sorted_token_ids.shape[0], M_routed * block_m)
++    BLOCK_N = 128
++    m_blocks = triton.cdiv(max_post_padded, block_m)
++    n_blocks = triton.cdiv(N, BLOCK_N)
++    split_k = _select_split_k(max_post_padded, block_m, N, K)
++
+     # Under expert parallelism (expert_map set) tokens routed to non-local
+     # experts are dropped from sorted_token_ids, so their output rows are never
+-    # written — zero them so the downstream reduction ignores their garbage.
+-    alloc = torch.zeros if expert_map is not None else torch.empty
+-    out = alloc((M_routed, N), dtype=out_dtype, device=a_q.device)
+-    BLOCK_N = 128
+-    BLOCK_K = 128
+-    grid = (triton.cdiv(sorted_token_ids.shape[0], block_m), triton.cdiv(N, BLOCK_N))
+-    _mxfp8_grouped_gemm_kernel[grid](
++    # written. Split-K also needs a zeroed FP32 accumulation buffer.
++    kernel_out_dtype = torch.float32 if split_k > 1 else out_dtype
++    needs_zero = expert_map is not None or split_k > 1
++    alloc = torch.zeros if needs_zero else torch.empty
++    out = alloc((M_routed, N), dtype=kernel_out_dtype, device=a_q.device)
++    grid = (m_blocks, n_blocks, split_k)
++    kernel = (
++        _mxfp8_grouped_gemm_fnuz_kernel
++        if current_platform.is_fp8_fnuz()
++        else _mxfp8_grouped_gemm_dot_scaled_kernel
++    )
++    if current_platform.is_fp8_fnuz() and (
++        a_q.dtype != torch.float8_e4m3fnuz or w.dtype != torch.float8_e4m3fnuz
++    ):
++        raise ValueError("gfx94x MXFP8 MoE requires E4M3FNUZ inputs.")
++    kernel[grid](
+         a_q,
+         a_scale,
+         w,
+@@ -183,7 +405,8 @@ def _grouped_gemm_mxfp8(
+         BLOCK_M=block_m,
+         BLOCK_N=BLOCK_N,
+         BLOCK_K=BLOCK_K,
+-        num_warps=8,
++        SPLIT_K=split_k,
++        num_warps=(4 if current_platform.is_fp8_fnuz() and block_m <= 32 else 8),
+     )
+     return out
+
+@@ -202,12 +425,20 @@ def fused_moe_mxfp8_native(
+     limit: float | None,
+     global_num_experts: int,
+     expert_map: torch.Tensor | None,
++    output: torch.Tensor | None = None,
+ ) -> torch.Tensor:
+     T, H = hidden_states.shape
+     top_k = topk_ids.shape[1]
+     M = T * top_k
+
+-    block_m = 64
++    if current_platform.is_fp8_fnuz():
++        # Padding is per expert, so tile from the average expert occupancy
++        # rather than the total routed-token count. MiniMax-M3 has 128 experts;
++        # a 64-row tile wastes most of both GEMMs at low occupancy.
++        tokens_per_expert = max(1, M // global_num_experts)
++        block_m = max(16, min(1 << (tokens_per_expert - 1).bit_length(), 64))
++    else:
++        block_m = 64
+     sorted_ids, expert_ids, num_post = moe_align_block_size(
+         topk_ids,
+         block_m,
+@@ -218,6 +449,12 @@ def fused_moe_mxfp8_native(
+
+     # GEMM1: x (mxfp8) @ w13^T -> [M, 2I]
+     a_q, a_s = mxfp8_e4m3_quantize(hidden_states)
++    max_post_padded = min(sorted_ids.shape[0], M * block_m)
++    g1_dtype = (
++        torch.float32
++        if _select_split_k(max_post_padded, block_m, w13.shape[1], w13.shape[2]) > 1
++        else hidden_states.dtype
++    )
+     g1 = _grouped_gemm_mxfp8(
+         a_q,
+         a_s,
+@@ -229,7 +466,7 @@ def fused_moe_mxfp8_native(
+         M,
+         top_k,
+         block_m,
+-        hidden_states.dtype,
++        g1_dtype,
+         a_div=top_k,
+         expert_map=expert_map,
+     )  # [M, 2I]
+@@ -256,17 +493,27 @@ def fused_moe_mxfp8_native(
+         M,
+         top_k,
+         block_m,
+-        torch.float32,
++        hidden_states.dtype if current_platform.is_fp8_fnuz() else torch.float32,
+         a_div=1,
+         mul_weight_by=topk_weights.reshape(-1).to(torch.float32),
+         expert_map=expert_map,
+     )  # [M, H] == [T*top_k, H]
+
+-    return g2.view(T, top_k, H).sum(dim=1).to(hidden_states.dtype)
++    if current_platform.is_fp8_fnuz():
++        if output is None:
++            output = torch.empty_like(hidden_states)
++        ops.moe_sum(g2.view(T, top_k, H), output)
++        return output
++
++    result = g2.view(T, top_k, H).sum(dim=1).to(hidden_states.dtype)
++    if output is not None:
++        output.copy_(result)
++        return output
++    return result
+
+
+ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+-    """Native MXFP8 MoE (CDNA4 ``dot_scaled``) on gfx950."""
++    """Fused MXFP8 MoE on gfx94x/gfx95x."""
+
+     @property
+     def quant_dtype(self) -> torch.dtype | str | None:
+@@ -283,7 +530,9 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+
+     @staticmethod
+     def _supports_current_device() -> bool:
+-        return current_platform.is_rocm() and current_platform.supports_mx()
++        return current_platform.is_rocm() and (
++            current_platform.supports_mx() or current_platform.is_fp8_fnuz()
++        )
+
+     def apply(
+         self,
+@@ -322,5 +571,6 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+             limit=limit,
+             global_num_experts=global_num_experts,
+             expert_map=expert_map,
++            output=output,
+         )
+-        output.copy_(out)
++        assert out is output
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/fp8.py b/vllm/model_executor/layers/fused_moe/oracle/fp8.py
+index acbf2cb46..1fcf67678 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/fp8.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/fp8.py
+@@ -55,9 +55,9 @@ class Fp8MoeBackend(Enum):
+     # Dequantize-to-BF16 emulation for MXFP8 on devices without a native
+     # MXFP8 MoE kernel (e.g. ROCm). Weights pass through unchanged here.
+     EMULATION = "EMULATION"
+-    # MXFP8 MoE via a Triton ``dot_scaled`` kernel that lowers to CDNA4
+-    # (gfx950) native MX matrix-core ops. Weights stay in MXFP8 (no load-time
+-    # format conversion); the FP8 values + E8M0 scales are consumed directly.
++    # Fused ROCm MXFP8 MoE. CDNA4 (gfx95x) uses native ``dot_scaled`` MX ops;
++    # CDNA3 (gfx94x) uses E4M3FNUZ FP8 partial dots with in-register E8M0 scale
++    # application. Both consume compressed weights directly.
+     NATIVE_MXFP8 = "NATIVE_MXFP8"
+
+
+@@ -463,6 +463,13 @@ def convert_to_fp8_moe_kernel_format(
+         )
+
+         w13, w2 = prepare_fp8_moe_layer_for_cpu(w13, w2)
++    elif fp8_backend == Fp8MoeBackend.NATIVE_MXFP8 and current_platform.is_fp8_fnuz():
++        from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
++            normalize_mxfp8_e4m3fn_to_e4m3fnuz,
++        )
++
++        w13, w13_scale = normalize_mxfp8_e4m3fn_to_e4m3fnuz(w13, w13_scale)
++        w2, w2_scale = normalize_mxfp8_e4m3fn_to_e4m3fnuz(w2, w2_scale)
+     else:
+         if fp8_backend not in [
+             Fp8MoeBackend.TRITON,
+@@ -470,8 +477,8 @@ def convert_to_fp8_moe_kernel_format(
+             Fp8MoeBackend.VLLM_CUTLASS,
+             Fp8MoeBackend.BATCHED_VLLM_CUTLASS,
+             Fp8MoeBackend.XPU,
+-            # EMULATION dequantizes weights at runtime; NATIVE_MXFP8 consumes
+-            # the MXFP8 weights as-is — neither needs a load-time layout change.
++            # EMULATION consumes checkpoint layout directly. CDNA4 NATIVE_MXFP8
++            # also needs no layout change; CDNA3 normalization is handled above.
+             Fp8MoeBackend.EMULATION,
+             Fp8MoeBackend.NATIVE_MXFP8,
+         ]:
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
+index d0d7c7648..cb3e5d446 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
+@@ -79,12 +79,20 @@ def _select_kernel_cls(
+ def _select_rocm_mxfp8_backend() -> tuple[Fp8MoeBackend, type[mk.FusedMoEExperts]]:
+     """ROCm fallback when vendor MXFP8 backends are unavailable."""
+
+-    if current_platform.supports_mx():
++    if current_platform.supports_mx() or current_platform.is_fp8_fnuz():
+         from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
+             Mxfp8NativeTritonExperts,
+         )
+
+-        logger.info_once("Using native CDNA4 (gfx950) MXFP8 dot_scaled MoE backend.")
++        if current_platform.supports_mx():
++            logger.info_once(
++                "Using native CDNA4 (gfx95x) MXFP8 dot_scaled MoE backend."
++            )
++        else:
++            logger.info_once(
++                "Using fused CDNA3 (gfx94x) MXFP8 FP8 MoE backend; weights "
++                "remain compressed and 1x32 scales are applied in-kernel."
++            )
+         return Fp8MoeBackend.NATIVE_MXFP8, Mxfp8NativeTritonExperts
+
+     from vllm.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
+diff --git a/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py b/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
+index e6063b463..fa5b01615 100644
+--- a/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
++++ b/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
+@@ -11,6 +11,32 @@ MXFP8_SCALE_DTYPE = torch.uint8
+ MXFP8_BLOCK_SIZE = 32
+
+
++def normalize_mxfp8_e4m3fn_to_e4m3fnuz(
++    values: torch.Tensor,
++    scales: torch.Tensor,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Convert OCP E4M3 MXFP8 storage to AMD E4M3FNUZ in place.
++
++    For an identical byte pattern, E4M3FNUZ represents half the E4M3FN value.
++    Incrementing the E8M0 exponent preserves the dequantized value without
++    expanding the one-byte weights. OCP negative zero (0x80) is NaN in FNUZ,
++    so it must be canonicalized to positive zero before reinterpreting.
++    """
++    if values.dtype == torch.float8_e4m3fnuz:
++        return values, scales
++    if values.dtype != torch.float8_e4m3fn:
++        raise ValueError(f"Expected E4M3FN or E4M3FNUZ values, got {values.dtype}.")
++    if scales.dtype != MXFP8_SCALE_DTYPE:
++        raise ValueError(f"Expected {MXFP8_SCALE_DTYPE} scales, got {scales.dtype}.")
++    if int(scales.max().item()) >= 254:
++        raise ValueError("Cannot convert MXFP8 scale exponent 254 to E4M3FNUZ.")
++
++    value_bits = values.view(torch.int8)
++    value_bits.masked_fill_(value_bits == -128, 0)
++    scales.add_(1)
++    return value_bits.view(torch.float8_e4m3fnuz), scales
++
++
+ def swizzle_mxfp8_scale(sf: torch.Tensor, M: int, K: int) -> torch.Tensor:
+     """Swizzle MXFP8 scales from row-major 2D to F8_128x4 layout."""
+     scaling_vector_size = MXFP8_BLOCK_SIZE  # 32 for MXFP8
+@@ -38,6 +64,7 @@ def swizzle_mxfp8_scale(sf: torch.Tensor, M: int, K: int) -> torch.Tensor:
+ def _mxfp8_e4m3_quantize_torch(
+     x: torch.Tensor,
+     is_sf_swizzled_layout: bool = False,
++    value_dtype: torch.dtype = MXFP8_VALUE_DTYPE,
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+     """Naive MXFP8 quantization.
+     For each block of 32 elements along the last dimension, compute a
+@@ -65,7 +92,7 @@ def _mxfp8_e4m3_quantize_torch(
+     descale = torch.exp2(scale_biased - 127.0)
+     x_scaled = x_blocked / descale.unsqueeze(-1)
+
+-    x_fp8 = x_scaled.view(orig_shape).to(MXFP8_VALUE_DTYPE)
++    x_fp8 = x_scaled.view(orig_shape).to(value_dtype)
+
+     if x.ndim == 2:
+         M, K = x.shape
+@@ -139,6 +166,7 @@ def _mxfp8_e4m3_quantize_triton(
+     x: torch.Tensor,
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+     """Fused 2D MXFP8 quant (non-swizzled, row-major [M, K//32] scales)."""
++    from vllm.platforms import current_platform
+     from vllm.triton_utils import triton
+
+     global _MXFP8_QUANT_KERNEL
+@@ -147,7 +175,10 @@ def _mxfp8_e4m3_quantize_triton(
+
+     M, K = x.shape
+     x = x.contiguous()
+-    xq = torch.empty((M, K), dtype=MXFP8_VALUE_DTYPE, device=x.device)
++    value_dtype = (
++        torch.float8_e4m3fnuz if current_platform.is_fp8_fnuz() else MXFP8_VALUE_DTYPE
++    )
++    xq = torch.empty((M, K), dtype=value_dtype, device=x.device)
+     scales = torch.empty(
+         (M, K // MXFP8_BLOCK_SIZE), dtype=MXFP8_SCALE_DTYPE, device=x.device
+     )
+@@ -233,7 +264,19 @@ def mxfp8_e4m3_quantize_fake(
+     alignment: int = 0,
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+     """Fake implementation for torch.compile tracing."""
+-    fp_data = torch.empty_like(x, dtype=MXFP8_VALUE_DTYPE)
++    from vllm.platforms import current_platform
++
++    value_dtype = (
++        torch.float8_e4m3fnuz
++        if (
++            current_platform.is_fp8_fnuz()
++            and not is_sf_swizzled_layout
++            and x.ndim == 2
++            and x.shape[-1] % MXFP8_BLOCK_SIZE == 0
++        )
++        else MXFP8_VALUE_DTYPE
++    )
++    fp_data = torch.empty_like(x, dtype=value_dtype)
+
+     block_size = MXFP8_BLOCK_SIZE
+
+diff --git a/vllm/models/minimax_m3/amd/ops/swiglu_oai.py b/vllm/models/minimax_m3/amd/ops/swiglu_oai.py
+index 836649b72..9572c5109 100644
+--- a/vllm/models/minimax_m3/amd/ops/swiglu_oai.py
++++ b/vllm/models/minimax_m3/amd/ops/swiglu_oai.py
+@@ -24,6 +24,7 @@ HIP graphs already eliminate — measured end-to-end throughput is identical
+
+ import torch
+
++from vllm.platforms import current_platform
+ from vllm.triton_utils import tl, triton
+
+
+@@ -132,11 +133,10 @@ def swiglu_oai_quantize_mxfp8(
+ ) -> tuple[torch.Tensor, torch.Tensor]:
+     """SwiGLU-OAI on split-layout ``[M, 2I]`` fused with MXFP8 activation-quant.
+
+-    Returns ``(act_q [M, I] float8_e4m3fn, act_scale [M, I//32] uint8 E8M0)``,
+-    identical to ``mxfp8_e4m3_quantize(swiglu_oai_split(gate_up))`` but in a
+-    single Triton pass (no bf16 intermediate). Used between the two GEMMs of the
+-    native MXFP8 MoE. Numerically equivalent to the unfused chain (bit-exact on
+-    measured MoE shapes); marginally more accurate (fp32 act, no bf16 round-trip).
++    Returns platform-native E4M3 values plus ``[M, I//32]`` uint8 E8M0 scales,
++    equivalent to ``mxfp8_e4m3_quantize(swiglu_oai_split(gate_up))`` but in a
++    single Triton pass (no bf16 intermediate). gfx94x emits E4M3FNUZ so
++    ``tl.dot`` lowers to the native CDNA3 FP8 matrix cores.
+     """
+     from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
+         MXFP8_BLOCK_SIZE,
+@@ -151,7 +151,10 @@ def swiglu_oai_quantize_mxfp8(
+     )
+     g1 = gate_up.reshape(-1, two_i).contiguous()
+     M = g1.shape[0]
+-    aq = torch.empty((M, n_inter), dtype=MXFP8_VALUE_DTYPE, device=g1.device)
++    value_dtype = (
++        torch.float8_e4m3fnuz if current_platform.is_fp8_fnuz() else MXFP8_VALUE_DTYPE
++    )
++    aq = torch.empty((M, n_inter), dtype=value_dtype, device=g1.device)
+     asc = torch.empty(
+         (M, n_inter // MXFP8_BLOCK_SIZE), dtype=MXFP8_SCALE_DTYPE, device=g1.device
+     )
