@@ -94,6 +94,17 @@ External MPI rank processes also need
 `trtllm-llmapi-launch`, otherwise they cannot import the monkeypatched worker
 entry submitted by the controller.
 
+External MPI has an additional launch-order requirement. Its 16 management
+workers are created before rank 0 starts `run.py`, so environment variables
+added only to the later `trt_worker.py` subprocess do not reach the other
+ranks. The host launcher must call `emit_rank_environment.py` and export the
+complete fixed-batch contract before `trtllm-llmapi-launch`. This includes the
+warmup cap, fixed GBS, arm file, rank-contract JSON, perfect-router aliases,
+CuTe cache alias, MoE controls, KV controls, and PDL. `run.py` recomputes the
+contract and fails before engine construction if any preseeded value differs.
+Do not move this setup into `run_dsv4_trt_container.sh`; that command starts
+too late for external ranks.
+
 Artifacts unique to GB300:
 
 - `offline_rank_map_gbsN.tsv`
@@ -121,6 +132,32 @@ code `2`. Fabric data is present in full `nvidia-smi -q` output. The follow-up
 uses the tested `gb300_fabric.py` parser and additionally requires one shared
 non-empty `ClusterUUID` and one shared non-empty `CliqueId` across all 16
 GPUs.
+
+Run `27504087069`, source
+`eec84a369a90148aef7d2bc7531bbcaede3529b7`, reached Slurm allocation
+`8712` on `im-gb300-r01-c015` through `c018`. It proved:
+
+- Global ranks `0..15`, local ranks `0..3`, four ranks on each node.
+- Fabric `State: Completed` and `Status: Success` for all 16 GPUs.
+- Shared Fabric `ClusterUUID`
+  `8fe56262-d2bb-4602-b338-8898d34c4731`.
+- Shared Fabric `CliqueId` `32766`.
+
+The engine never loaded. All 16 external workers immediately raised
+`KeyError: 'TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS'` in
+`trt_mpi_entry.py`. Maximum observed memory was only 4464 MiB on one node and
+2930 MiB on the other three, with at most 2% GPU utilization. The outer MPI
+server reported `16/16 MPI worker(s) failed`, but rank 0 remained alive until
+the 1800-second controller timeout. This established that the external MPI
+management workers did not inherit the controller subprocess's dynamic
+environment.
+
+The follow-up preseeds the rank environment on the host before
+`trtllm-llmapi-launch`, validates it again in `run.py`, and writes
+`entry_start`/`entry_failed` markers around rank shim installation. The
+controller now treats an `entry_failed` or `*_error` marker as terminal, so
+the same class of failure should stop on the next 60-second heartbeat instead
+of consuming the full timeout.
 
 ## Why The Old Result Was Too High
 
@@ -406,8 +443,8 @@ gh api -X POST \
   -f 'inputs[hardware-profile]=gb300' \
   -f 'inputs[test-name]=DSV4 GB300 TRT fixed GBS16 canary' \
   -f 'inputs[global_batch_sizes]=16' \
-  -f 'inputs[salloc-time]=60' \
-  -f 'inputs[worker-timeout]=1800' \
+  -f 'inputs[salloc-time]=120' \
+  -f 'inputs[worker-timeout]=7200' \
   -f 'inputs[worker-stack-period]=-1'
 ```
 

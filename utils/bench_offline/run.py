@@ -37,6 +37,7 @@ from trt_config import (
     WORLD_SIZE,
     attention_workspace_target_bytes,
     benchmark_environment,
+    external_mpi_rank_environment,
     local_batch_size,
     max_num_tokens,
     validate_global_batch_size,
@@ -126,6 +127,29 @@ def latest_worker_fatal(worker_log: Path) -> str | None:
     return None
 
 
+def latest_rank_fatal(marker_path: Path) -> str | None:
+    if not marker_path.exists():
+        return None
+    for line in reversed(
+        tail_text(marker_path, max_bytes=256_000).splitlines()
+    ):
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        event = str(row.get("event", ""))
+        if row.get("source") != "trt_mpi_entry" or not (
+            event == "entry_failed" or event.endswith("_error")
+        ):
+            continue
+        return (
+            f"rank={row.get('rank')} event={event} "
+            f"error_type={row.get('error_type')} "
+            f"error={row.get('error')}"
+        )
+    return None
+
+
 def wait_for_worker_process(
     process: subprocess.Popen[Any],
     *,
@@ -153,6 +177,13 @@ def wait_for_worker_process(
             fatal_line = latest_worker_fatal(worker_log)
             if fatal_line is not None:
                 raise WorkerFatalLogError(fatal_line)
+            rank_fatal = (
+                latest_rank_fatal(marker_path)
+                if marker_path is not None
+                else None
+            )
+            if rank_fatal is not None:
+                raise WorkerFatalLogError(rank_fatal)
             latest = latest_worker_progress(worker_log)
             details = []
             if latest is not None:
@@ -457,12 +488,44 @@ def main() -> int:
         environment["ENABLE_PERFECT_ROUTER"] = "1"
         environment["TRTLLM_ENABLE_PERFECT_ROUTER"] = "1"
         environment["TRTLLM_PERFECT_ROUTER_MARKER"] = str(marker_path)
-        for name in CONTROLLED_ENVIRONMENT_VARIABLES:
-            environment.pop(name, None)
         configured_environment = benchmark_environment(
             args.global_batch_size,
             fixed_batch_arm_path,
         )
+        if os.getenv("TRT_BENCH_EXTERNAL_MPI") == "1":
+            cute_cache_dir = environment.get(
+                "TRTLLM_BENCH_CUTE_DSL_CACHE_DIR"
+            )
+            if not cute_cache_dir:
+                raise RuntimeError(
+                    "External MPI launch is missing "
+                    "TRTLLM_BENCH_CUTE_DSL_CACHE_DIR"
+                )
+            expected_launch_environment = external_mpi_rank_environment(
+                args.global_batch_size,
+                fixed_batch_arm_path,
+                marker_path,
+                cute_cache_dir,
+            )
+            launch_mismatches = {
+                name: {
+                    "expected": expected,
+                    "actual": environment.get(name),
+                }
+                for name, expected in expected_launch_environment.items()
+                if environment.get(name) != expected
+            }
+            if launch_mismatches:
+                raise RuntimeError(
+                    "External MPI rank environment was not preseeded "
+                    f"before trtllm-llmapi-launch: {launch_mismatches}"
+                )
+            log_progress(
+                "validated preseeded external MPI rank environment "
+                f"keys={len(expected_launch_environment)}"
+            )
+        for name in CONTROLLED_ENVIRONMENT_VARIABLES:
+            environment.pop(name, None)
         environment.update(configured_environment)
         environment["TRTLLM_BENCH_EXPECTED_RANK_ENV"] = json.dumps(
             configured_environment,

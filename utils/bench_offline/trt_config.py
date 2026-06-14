@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -438,6 +439,43 @@ def benchmark_environment(
     return {
         **fixed_environment(global_batch_size, profile),
         FIXED_BATCH_ARM_ENV: str(arm_path),
+    }
+
+
+def external_mpi_rank_environment(
+    global_batch_size: int,
+    fixed_batch_arm_file: str | Path,
+    marker_file: str | Path,
+    cute_cache_dir: str | Path,
+    profile: HardwareProfile | None = None,
+) -> dict[str, str]:
+    """Build the environment required before external MPI ranks start."""
+    marker_path = Path(marker_file)
+    cache_path = Path(cute_cache_dir)
+    for label, path in (
+        ("Perfect-router marker", marker_path),
+        ("CuTe cache directory", cache_path),
+    ):
+        if not path.is_absolute():
+            raise ValueError(f"{label} must use an absolute path")
+
+    configured = benchmark_environment(
+        global_batch_size,
+        fixed_batch_arm_file,
+        profile,
+    )
+    return {
+        **configured,
+        "ENABLE_PERFECT_ROUTER": "1",
+        "TRTLLM_ENABLE_PERFECT_ROUTER": "1",
+        "TRTLLM_PERFECT_ROUTER_MARKER": str(marker_path),
+        "CUTE_DSL_CACHE_DIR": str(cache_path),
+        "TRTLLM_BENCH_CUTE_DSL_CACHE_DIR": str(cache_path),
+        "TRTLLM_BENCH_EXPECTED_RANK_ENV": json.dumps(
+            configured,
+            sort_keys=True,
+            separators=(",", ":"),
+        ),
     }
 
 

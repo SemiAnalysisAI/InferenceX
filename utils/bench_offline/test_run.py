@@ -8,10 +8,12 @@ from types import ModuleType, SimpleNamespace
 
 import pytest
 
+import trt_mpi_entry
 from run import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     classify_failure,
     git_revision,
+    latest_rank_fatal,
     latest_rank_progress,
     latest_worker_fatal,
     latest_worker_progress,
@@ -131,6 +133,27 @@ def test_latest_rank_progress_groups_each_ranks_latest_event(tmp_path):
     )
 
 
+def test_latest_rank_fatal_reports_entry_failure(tmp_path):
+    marker = tmp_path / "perfect_router.jsonl"
+    marker.write_text(
+        json.dumps(
+            {
+                "source": "trt_mpi_entry",
+                "rank": "12",
+                "event": "entry_failed",
+                "error_type": "KeyError",
+                "error": "missing rank environment",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    assert latest_rank_fatal(marker) == (
+        "rank=12 event=entry_failed error_type=KeyError "
+        "error=missing rank environment"
+    )
+
+
 def test_wait_for_worker_process_reports_heartbeat(tmp_path, capsys):
     class FakeProcess:
         args = ["fake-worker"]
@@ -191,6 +214,67 @@ def test_wait_for_worker_process_stops_on_native_fatal_log(tmp_path):
             timeout_seconds=10,
             heartbeat_seconds=0.01,
         )
+
+
+def test_wait_for_worker_process_stops_on_rank_marker_failure(tmp_path):
+    class FakeProcess:
+        args = ["fake-worker"]
+
+        def wait(self, timeout):
+            raise subprocess.TimeoutExpired(self.args, timeout)
+
+    worker_log = tmp_path / "worker.log"
+    worker_log.write_text("", encoding="utf-8")
+    marker = tmp_path / "perfect_router.jsonl"
+    marker.write_text(
+        json.dumps(
+            {
+                "source": "trt_mpi_entry",
+                "rank": "3",
+                "event": "engine_warmup_error",
+                "error_type": "RuntimeError",
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(WorkerFatalLogError, match="engine_warmup_error"):
+        wait_for_worker_process(
+            FakeProcess(),
+            label="gbs16",
+            worker_log=worker_log,
+            marker_path=marker,
+            started=time.perf_counter(),
+            timeout_seconds=10,
+            heartbeat_seconds=0.01,
+        )
+
+
+def test_mpi_entry_records_installation_failure(tmp_path, monkeypatch):
+    marker = tmp_path / "perfect_router.jsonl"
+    monkeypatch.setenv("TRTLLM_PERFECT_ROUTER_MARKER", str(marker))
+
+    def fail_installation():
+        raise KeyError("missing rank contract")
+
+    monkeypatch.setattr(
+        trt_mpi_entry,
+        "_install_engine_warmup_shape_cap",
+        fail_installation,
+    )
+    with pytest.raises(KeyError, match="missing rank contract"):
+        trt_mpi_entry.worker_main()
+
+    rows = [
+        json.loads(line)
+        for line in marker.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["event"] for row in rows] == [
+        "entry_start",
+        "entry_failed",
+    ]
+    assert rows[-1]["error_type"] == "KeyError"
+    assert "missing rank contract" in rows[-1]["error"]
 
 
 def test_mpi_entry_sets_fixed_environment_before_real_worker(
@@ -385,7 +469,15 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
 
     assert worker_main(1, value=2) == "done"
     assert calls == [((1,), {"value": 2})]
-    row = json.loads(marker.read_text(encoding="utf-8"))
+    rows = [
+        json.loads(line)
+        for line in marker.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["event"] for row in rows] == [
+        "entry_start",
+        "entry_ready",
+    ]
+    row = rows[-1]
     assert row["perfect_router"] == "1"
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["benchmark_environment"] == expected

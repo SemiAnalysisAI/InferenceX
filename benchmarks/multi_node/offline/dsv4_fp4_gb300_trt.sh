@@ -43,6 +43,7 @@ RANK_MAP_FILE="${GITHUB_WORKSPACE}/offline_rank_map_${BENCH_ID}.tsv"
 TOPOLOGY_FILE="${GITHUB_WORKSPACE}/offline_topology_${BENCH_ID}.log"
 JOB_ID=""
 TELEMETRY_STEP_PID=""
+RANK_ENV_RECORDS=""
 rm -f \
     "$RESULT_FILE" \
     "$RANK_MAP_FILE" \
@@ -102,6 +103,9 @@ cleanup() {
     if [[ -n "$TELEMETRY_STEP_PID" ]]; then
         kill "$TELEMETRY_STEP_PID" >/dev/null 2>&1 || true
         wait "$TELEMETRY_STEP_PID" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$RANK_ENV_RECORDS" ]]; then
+        rm -f "$RANK_ENV_RECORDS"
     fi
     if [[ -n "$JOB_ID" ]]; then
         scancel "$JOB_ID" >/dev/null 2>&1 || true
@@ -366,6 +370,49 @@ export TRTLLM_ENABLE_PDL=1
 export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
 export TRTLLM_EPLB_SHM_NAME="offline_${JOB_ID}_${BENCH_ID}"
+
+EXTERNAL_WORK_DIR="/workspace/.offline_work_${BENCH_ID}_${JOB_ID}"
+FIXED_BATCH_ARM_FILE="${EXTERNAL_WORK_DIR}/fixed_batch_barrier.armed.json"
+PERFECT_ROUTER_MARKER="${EXTERNAL_WORK_DIR}/perfect_router.jsonl"
+CUTE_CACHE_DIR="${TRT_BENCH_CACHE_ROOT}/cute-dsl"
+RANK_ENV_RECORDS="$(mktemp /tmp/offline-trt-rank-env.XXXXXX)"
+python3 \
+    "$GITHUB_WORKSPACE/utils/bench_offline/emit_rank_environment.py" \
+    --global-batch-size "$GLOBAL_BATCH_SIZE" \
+    --fixed-batch-arm-file "$FIXED_BATCH_ARM_FILE" \
+    --marker-file "$PERFECT_ROUTER_MARKER" \
+    --cute-cache-dir "$CUTE_CACHE_DIR" \
+    --hardware-profile gb300 \
+    --format nul > "$RANK_ENV_RECORDS"
+rank_env_exports=0
+rank_env_unsets=0
+while IFS= read -r -d '' operation; do
+    IFS= read -r -d '' name
+    if [[ ! "$name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+        echo "Invalid rank environment variable name: $name" >&2
+        exit 1
+    fi
+    case "$operation" in
+        unset)
+            unset "$name"
+            ((rank_env_unsets += 1))
+            ;;
+        export)
+            IFS= read -r -d '' value
+            printf -v "$name" '%s' "$value"
+            export "${name?}"
+            ((rank_env_exports += 1))
+            ;;
+        *)
+            echo "Invalid rank environment operation: $operation" >&2
+            exit 1
+            ;;
+    esac
+done < "$RANK_ENV_RECORDS"
+rm -f "$RANK_ENV_RECORDS"
+RANK_ENV_RECORDS=""
+log "preseeded external MPI rank environment exports=$rank_env_exports cleared=$rank_env_unsets"
+log "rank marker=$PERFECT_ROUTER_MARKER arm_file=$FIXED_BATCH_ARM_FILE"
 
 CONTAINER_MOUNTS="${GITHUB_WORKSPACE}:/workspace"
 CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"

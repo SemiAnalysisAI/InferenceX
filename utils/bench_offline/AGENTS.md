@@ -31,6 +31,11 @@ benchmark.
   FP8 quantizer guard, and oversized DeepGemm chunker must remain disabled.
 - The barrier arm file, rank marker, corpus, and worker artifacts must be on
   shared `/workspace`, never node-local `/tmp`.
+- External MPI management workers start before rank 0 launches `run.py`.
+  Therefore `dsv4_fp4_gb300_trt.sh` must export the complete output of
+  `emit_rank_environment.py` before `trtllm-llmapi-launch`; setting dynamic
+  `TRTLLM_BENCH_*` values only in `run.py` leaves ranks 1-15 without the
+  benchmark contract. Preserve rank 0's exact preseed validation.
 - Before engine launch, require four nodes with four ranks each and four
   `Completed`/`Success` NVLink Fabric records per node. Parse full
   `nvidia-smi -q` output, not the unsupported `-d FABRIC` selector, and
@@ -137,6 +142,9 @@ benchmark.
 - Treat TRT's `Fatal error detected, initiating shutdown` line as terminal.
   The MPI parent can remain alive after all ranks fail, so waiting for the
   full controller timeout only hides the real error and wastes the node.
+- Treat rank `entry_failed` and `*_error` marker events as terminal for the
+  same reason. Run `27504087069` otherwise waited 1800 seconds after all 16
+  external ranks failed immediately on a missing warmup-cap variable.
 - For a readiness hang, dispatch with `worker-stack-period=120` and a short
   controller timeout, then let the controller exit on its own so the debug
   archive contains TRT's all-thread stack dumps. Keep the normal default at

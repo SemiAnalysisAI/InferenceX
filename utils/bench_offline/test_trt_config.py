@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 
 import pytest
@@ -27,6 +28,7 @@ from trt_config import (
     attention_workspace_target_bytes,
     benchmark_environment,
     build_llm_kwargs,
+    external_mpi_rank_environment,
     fixed_environment,
     kv_prefill_reserve_bytes,
     local_batch_size,
@@ -211,6 +213,63 @@ def test_benchmark_environment_adds_absolute_barrier_arm_path(tmp_path):
     assert environment[FIXED_BATCH_ARM_ENV] == str(arm_file)
     with pytest.raises(ValueError, match="absolute path"):
         benchmark_environment(64, "relative-arm-file")
+
+
+def test_external_mpi_rank_environment_is_complete(tmp_path):
+    arm_file = tmp_path / "fixed-batch.armed.json"
+    marker_file = tmp_path / "perfect-router.jsonl"
+    cache_dir = tmp_path / "cute-cache"
+    environment = external_mpi_rank_environment(
+        16,
+        arm_file,
+        marker_file,
+        cache_dir,
+        GB300_PROFILE,
+    )
+    configured = benchmark_environment(16, arm_file, GB300_PROFILE)
+
+    assert environment["ENABLE_PERFECT_ROUTER"] == "1"
+    assert environment["TRTLLM_ENABLE_PERFECT_ROUTER"] == "1"
+    assert environment["TRTLLM_PERFECT_ROUTER_MARKER"] == str(marker_file)
+    assert environment["CUTE_DSL_CACHE_DIR"] == str(cache_dir)
+    assert environment["TRTLLM_BENCH_CUTE_DSL_CACHE_DIR"] == str(cache_dir)
+    assert (
+        environment["TRTLLM_BENCH_EXPECTED_RANK_ENV"]
+        == json.dumps(
+            configured,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+    )
+    for name, value in configured.items():
+        assert environment[name] == value
+
+
+@pytest.mark.parametrize(
+    ("keyword", "value"),
+    (
+        ("fixed_batch_arm_file", "relative-arm"),
+        ("marker_file", "relative-marker"),
+        ("cute_cache_dir", "relative-cache"),
+    ),
+)
+def test_external_mpi_rank_environment_requires_absolute_paths(
+    tmp_path,
+    keyword,
+    value,
+):
+    arguments = {
+        "fixed_batch_arm_file": tmp_path / "arm",
+        "marker_file": tmp_path / "marker",
+        "cute_cache_dir": tmp_path / "cache",
+    }
+    arguments[keyword] = value
+    with pytest.raises(ValueError, match="absolute path"):
+        external_mpi_rank_environment(
+            16,
+            profile=GB300_PROFILE,
+            **arguments,
+        )
 
 
 def test_old_tuning_environment_is_always_cleared():

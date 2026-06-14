@@ -335,8 +335,11 @@ Artifacts:
    NVLink Fabric states on every physical node plus one shared
    `ClusterUUID` and `CliqueId` across all 16 GPUs before engine launch.
 4. Build the exact 8192-token corpus.
-5. GB300 starts one 16-rank external MPI world with
-   `trtllm-llmapi-launch`; B300 lets TRT create its local MPI pool.
+5. Before GB300 starts `trtllm-llmapi-launch`, preseed the complete
+   fixed-batch environment because the 16 external MPI management workers
+   exist before rank 0 creates its later worker subprocess. Rank 0 recomputes
+   and validates this contract before engine construction. B300 lets TRT
+   create its local MPI pool and does not need this host-side step.
 6. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
    GBS-derived value while synthetic pure-context warmup requests are capped
    at 65536 tokens. On B300 GBS128, reserve the full-runtime non-graph attention
@@ -443,18 +446,22 @@ Debug in this order:
 8. For initialization stalls, use the controller heartbeat's `rank_progress`
    to identify which ranks reached warmup completion, clock synchronization,
    and executor worker start.
-9. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
+9. If ranks fail during shim installation, inspect `entry_failed` markers.
+   If there are only `sitecustomize` rows and no `entry_start`, confirm the
+   host logged `preseeded external MPI rank environment` before
+   `trtllm-llmapi-launch`.
+10. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
    logged `engine initialization complete`.
-10. On B300 GBS128, confirm every rank emitted
+11. On B300 GBS128, confirm every rank emitted
    `attention_workspace_preallocated` with target and allocated bytes
    `27111981056`, and `cuda_graph_workspace_bytes=0`.
-11. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
+12. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
     reserve `12884901888`, minimum tokens `149504`, an exact
     configured-minus-adjusted delta, and adjusted bytes at least the reported
     minimum runtime KV bytes.
-12. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
+13. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
     exactly 131072 rows, two 65536-row chunks, and synchronized chunks.
-13. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
+14. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
     files around full prefill.
 
 Do not fix failures by reducing the global batch, splitting prefill across

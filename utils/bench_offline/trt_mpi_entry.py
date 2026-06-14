@@ -800,14 +800,23 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     cute_cache_dir = os.getenv("TRTLLM_BENCH_CUTE_DSL_CACHE_DIR")
     if cute_cache_dir:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
-    warmup_cap = _install_engine_warmup_shape_cap()
-    attention_workspace = _install_attention_workspace_preallocation()
-    kv_prefill_reserve = _install_kv_prefill_memory_reserve()
-    fp8_guard = _install_large_prefill_fp8_quant_guard()
-    fp8_gemm_chunking = _install_large_prefill_fp8_gemm_chunking()
-    lifecycle_trace = _install_executor_lifecycle_trace()
-    fixed_batch_barrier = _install_fixed_batch_request_barrier()
-    _write_marker()
+    _write_marker("entry_start")
+    try:
+        warmup_cap = _install_engine_warmup_shape_cap()
+        attention_workspace = _install_attention_workspace_preallocation()
+        kv_prefill_reserve = _install_kv_prefill_memory_reserve()
+        fp8_guard = _install_large_prefill_fp8_quant_guard()
+        fp8_gemm_chunking = _install_large_prefill_fp8_gemm_chunking()
+        lifecycle_trace = _install_executor_lifecycle_trace()
+        fixed_batch_barrier = _install_fixed_batch_request_barrier()
+    except Exception as error:
+        _write_marker(
+            "entry_failed",
+            error_type=type(error).__name__,
+            error=str(error),
+        )
+        raise
+    _write_marker("entry_ready")
     print(
         "[offline-trt-mpi] fixed-batch request barrier "
         f"global_batch={fixed_batch_barrier['global_batch_size']} "
