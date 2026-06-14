@@ -3763,6 +3763,19 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1750
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm-mtp
+  description:
+    - "Run the MiniMax-M3 MXFP8 MI300X EAGLE3 MTP recipe with CUDA graphs instead of --enforce-eager"
+    - "Drop --enforce-eager and set VLLM_USE_BREAKABLE_CUDAGRAPH=0 (matching the non-MTP MI300X recipe, #1750), which avoids the M3-decode breakable-cudagraph path that previously forced eager execution"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1756
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI355X, set VLLM_USE_BREAKABLE_CUDAGRAPH=0, and disable prefix caching"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1754
+
+- config-keys:
     - minimaxm3-fp8-mi325x-vllm
   description:
     - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI325X / gfx942"

@@ -5,8 +5,10 @@
 # minimaxm3_fp8_mi300x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
 # --speculative-config with 3 speculative tokens. Everything else mirrors the
 # non-MTP MI300X recipe: mandatory --block-size 128, --language-model-only for
-# the text-only benchmark, --attention-backend TRITON_ATTN, --enforce-eager,
-# and --no-enable-prefix-caching. The default BF16 KV cache is retained (unlike
+# the text-only benchmark, --attention-backend TRITON_ATTN, and
+# --no-enable-prefix-caching. Runs with CUDA graphs (no --enforce-eager);
+# VLLM_USE_BREAKABLE_CUDAGRAPH=0 avoids the M3-decode breakable-cudagraph path.
+# The default BF16 KV cache is retained (unlike
 # the MI355X recipe's FP8 KV cache): gfx942 has no calibrated q/prob scales for
 # ROCm FP8 attention and vLLM's fallback scale of 1.0 corrupts accuracy.
 #
@@ -59,6 +61,7 @@ fi
 
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -176,7 +179,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
-    --enforce-eager \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
