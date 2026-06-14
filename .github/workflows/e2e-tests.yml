@@ -131,6 +131,7 @@ jobs:
       TRTLLM_WORKER_PRINT_STACKS_PERIOD: ${{ inputs.worker-stack-period }}
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/inferencex-offline-pycache
+      TRT_BENCH_WORKSPACE: ${{ github.workspace }}/offline-bench
     steps:
       - name: Resource cleanup
         run: |
@@ -142,25 +143,28 @@ jobs:
               sleep 5
             done
           fi
-          rm -f "${{ github.workspace }}"/offline_result_*.json
-          rm -f "${{ github.workspace }}"/offline_controller_*.log
-          rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
-          rm -f "${{ github.workspace }}"/offline_rank_map_*.tsv
-          rm -f "${{ github.workspace }}"/offline_topology_*.log
-          rm -f "${{ github.workspace }}"/offline_allocation_*.log
-          rm -f "${{ github.workspace }}"/offline_completion_*.json
-          rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
-          rm -rf "${{ github.workspace }}"/.offline_work_*
+          mkdir -p "$TRT_BENCH_WORKSPACE"
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_result_*.json
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_controller_*.log
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_gpu_metrics_*.csv
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_rank_map_*.tsv
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_topology_*.log
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_allocation_*.log
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_completion_*.json
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_debug_*.tar.gz
+          rm -rf "$TRT_BENCH_WORKSPACE"/.offline_work_*
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
-          fetch-depth: 0
+          fetch-depth: 1
           ref: ${{ inputs.ref || github.ref_name }}
-          clean: true
+          path: offline-bench
+          clean: false
 
       - name: Run fixed-global-batch benchmark
+        working-directory: ${{ env.TRT_BENCH_WORKSPACE }}
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: |
@@ -172,6 +176,7 @@ jobs:
 
       - name: Show result headline
         if: always()
+        working-directory: ${{ env.TRT_BENCH_WORKSPACE }}
         run: |
           result="offline_result_${BENCH_ID}.json"
           if [[ -f "$result" ]]; then
@@ -208,15 +213,15 @@ jobs:
         with:
           name: offline-trt-job-${{ matrix.id }}
           path: |
-            offline_result_${{ matrix.id }}.json
-            offline_controller_${{ matrix.id }}.log
-            offline_gpu_metrics_${{ matrix.id }}.csv
-            offline_gpu_metrics_${{ matrix.id }}_*.csv
-            offline_rank_map_${{ matrix.id }}.tsv
-            offline_topology_${{ matrix.id }}.log
-            offline_allocation_${{ matrix.id }}.log
-            offline_completion_${{ matrix.id }}.json
-            offline_debug_${{ matrix.id }}.tar.gz
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_result_${{ matrix.id }}.json
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_controller_${{ matrix.id }}.log
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_gpu_metrics_${{ matrix.id }}.csv
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_gpu_metrics_${{ matrix.id }}_*.csv
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_rank_map_${{ matrix.id }}.tsv
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_topology_${{ matrix.id }}.log
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_allocation_${{ matrix.id }}.log
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_completion_${{ matrix.id }}.json
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_debug_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14
 

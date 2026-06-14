@@ -6,6 +6,7 @@ set -Eeuo pipefail
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 : "${RUNNER_NAME:?RUNNER_NAME is required}"
 
+TRT_BENCH_WORKSPACE="${TRT_BENCH_WORKSPACE:-$GITHUB_WORKSPACE}"
 IMAGE="${IMAGE:-nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1}"
 MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
 DATASET_REVISION="${DATASET_REVISION:-90f0394333616266d9fe85824ceaf505093cbaa5}"
@@ -30,7 +31,7 @@ PHYSICAL_NODES=4
 GPUS_PER_NODE=4
 WORLD_SIZE=16
 BENCH_GIT_REVISION="$(
-    git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+    git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD
 )"
 
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
@@ -38,11 +39,11 @@ if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
     exit 1
 fi
 
-RESULT_FILE="${GITHUB_WORKSPACE}/offline_result_${BENCH_ID}.json"
-RANK_MAP_FILE="${GITHUB_WORKSPACE}/offline_rank_map_${BENCH_ID}.tsv"
-TOPOLOGY_FILE="${GITHUB_WORKSPACE}/offline_topology_${BENCH_ID}.log"
-ALLOCATION_LOG="${GITHUB_WORKSPACE}/offline_allocation_${BENCH_ID}.log"
-COMPLETION_FILE="${GITHUB_WORKSPACE}/offline_completion_${BENCH_ID}.json"
+RESULT_FILE="${TRT_BENCH_WORKSPACE}/offline_result_${BENCH_ID}.json"
+RANK_MAP_FILE="${TRT_BENCH_WORKSPACE}/offline_rank_map_${BENCH_ID}.tsv"
+TOPOLOGY_FILE="${TRT_BENCH_WORKSPACE}/offline_topology_${BENCH_ID}.log"
+ALLOCATION_LOG="${TRT_BENCH_WORKSPACE}/offline_allocation_${BENCH_ID}.log"
+COMPLETION_FILE="${TRT_BENCH_WORKSPACE}/offline_completion_${BENCH_ID}.json"
 JOB_ID=""
 TELEMETRY_STEP_PID=""
 RANK_ENV_RECORDS=""
@@ -54,7 +55,7 @@ rm -f \
     "$TOPOLOGY_FILE" \
     "$ALLOCATION_LOG" \
     "$COMPLETION_FILE" \
-    "${GITHUB_WORKSPACE}/offline_gpu_metrics_${BENCH_ID}_"*.csv
+    "${TRT_BENCH_WORKSPACE}/offline_gpu_metrics_${BENCH_ID}_"*.csv
 
 log() {
     printf '[offline-trt-gb300 %s] %s\n' \
@@ -333,7 +334,7 @@ PY
 cat "$RANK_MAP_FILE"
 
 log "capturing per-node NVLink fabric state"
-FABRIC_PROBE="${GITHUB_WORKSPACE}/utils/bench_offline/gb300_fabric.py"
+FABRIC_PROBE="${TRT_BENCH_WORKSPACE}/utils/bench_offline/gb300_fabric.py"
 srun \
     --jobid="$JOB_ID" \
     --overlap \
@@ -366,7 +367,7 @@ FABRIC_CLIQUE_ID="$(
 log "validated one 16-GPU NVLink fabric cluster_uuid=$FABRIC_CLUSTER_UUID clique_id=$FABRIC_CLIQUE_ID"
 
 export BENCH_ID
-export TRT_BENCH_TELEMETRY_DIR="$GITHUB_WORKSPACE"
+export TRT_BENCH_TELEMETRY_DIR="$TRT_BENCH_WORKSPACE"
 log "starting one-second GPU telemetry on every physical node"
 # shellcheck disable=SC2016
 srun \
@@ -423,7 +424,7 @@ export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
 export TRTLLM_EPLB_SHM_NAME="offline_${JOB_ID}_${BENCH_ID}"
 
-HOST_EXTERNAL_WORK_DIR="${GITHUB_WORKSPACE}/.offline_work_${BENCH_ID}_${JOB_ID}"
+HOST_EXTERNAL_WORK_DIR="${TRT_BENCH_WORKSPACE}/.offline_work_${BENCH_ID}_${JOB_ID}"
 EXTERNAL_WORK_DIR="/workspace/.offline_work_${BENCH_ID}_${JOB_ID}"
 FIXED_BATCH_ARM_FILE="${EXTERNAL_WORK_DIR}/fixed_batch_barrier.armed.json"
 PERFECT_ROUTER_MARKER="${EXTERNAL_WORK_DIR}/perfect_router.jsonl"
@@ -431,7 +432,7 @@ HOST_PERFECT_ROUTER_MARKER="${HOST_EXTERNAL_WORK_DIR}/perfect_router.jsonl"
 CUTE_CACHE_DIR="${TRT_BENCH_CACHE_ROOT}/cute-dsl"
 RANK_ENV_RECORDS="$(mktemp /tmp/offline-trt-rank-env.XXXXXX)"
 python3 \
-    "$GITHUB_WORKSPACE/utils/bench_offline/emit_rank_environment.py" \
+    "$TRT_BENCH_WORKSPACE/utils/bench_offline/emit_rank_environment.py" \
     --global-batch-size "$GLOBAL_BATCH_SIZE" \
     --fixed-batch-arm-file "$FIXED_BATCH_ARM_FILE" \
     --marker-file "$PERFECT_ROUTER_MARKER" \
@@ -468,7 +469,7 @@ RANK_ENV_RECORDS=""
 log "preseeded external MPI rank environment exports=$rank_env_exports cleared=$rank_env_unsets"
 log "rank marker=$PERFECT_ROUTER_MARKER host_marker=$HOST_PERFECT_ROUTER_MARKER arm_file=$FIXED_BATCH_ARM_FILE"
 
-CONTAINER_MOUNTS="${GITHUB_WORKSPACE}:/workspace"
+CONTAINER_MOUNTS="${TRT_BENCH_WORKSPACE}:/workspace"
 CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"
 CONTAINER_MOUNTS+=",${DATASET_ROOT}:${DATASET_ROOT}"
 CONTAINER_MOUNTS+=",${TRT_BENCH_CACHE_ROOT}:${TRT_BENCH_CACHE_ROOT}"

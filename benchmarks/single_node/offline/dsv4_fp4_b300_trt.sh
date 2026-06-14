@@ -6,6 +6,7 @@ set -Eeuo pipefail
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 : "${RUNNER_NAME:?RUNNER_NAME is required}"
 
+TRT_BENCH_WORKSPACE="${TRT_BENCH_WORKSPACE:-$GITHUB_WORKSPACE}"
 IMAGE="${IMAGE:-ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066}"
 MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
 DATASET_REVISION="${DATASET_REVISION:-90f0394333616266d9fe85824ceaf505093cbaa5}"
@@ -19,13 +20,13 @@ TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 BENCH_GIT_REVISION="$(
-    git -C "$GITHUB_WORKSPACE" rev-parse HEAD
+    git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD
 )"
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
     echo "Invalid BENCH_ID: $BENCH_ID" >&2
     exit 1
 fi
-RESULT_FILE="${GITHUB_WORKSPACE}/offline_result_${BENCH_ID}.json"
+RESULT_FILE="${TRT_BENCH_WORKSPACE}/offline_result_${BENCH_ID}.json"
 JOB_ID=""
 rm -f "$RESULT_FILE"
 
@@ -137,7 +138,7 @@ if [[ -z "$JOB_ID" ]]; then
     exit 1
 fi
 
-CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/workspace"
+CONTAINER_MOUNTS="$TRT_BENCH_WORKSPACE:/workspace"
 CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"
 CONTAINER_MOUNTS+=",/data/datasets:/data/datasets"
 CONTAINER_MOUNTS+=",$TRT_BENCH_CACHE_ROOT:$TRT_BENCH_CACHE_ROOT"

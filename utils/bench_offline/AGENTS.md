@@ -55,6 +55,12 @@ benchmark.
   `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
   because every row consumes 16 GPUs. It is fail-fast so a broken smaller
   shape does not consume the later rack allocations.
+- Keep the self-hosted checkout isolated under
+  `${GITHUB_WORKSPACE}/offline-bench` and use `TRT_BENCH_WORKSPACE` for
+  source, output, mounts, and artifacts. Do not clean the runner's repository
+  root. Run `27511740130` inherited open `.nfs*` logs from an unrelated
+  srt-slurm job; root-level `git clean -ffdx` spent ten minutes deleting that
+  tree and then failed with `EBUSY` before GBS64 launched.
 - `perfect_router.jsonl` is shared by all 16 ranks over the workspace
   filesystem. Every writer must use `io_utils.append_json_line`, every strict
   reader must take the matching lock, and malformed lines are a validation

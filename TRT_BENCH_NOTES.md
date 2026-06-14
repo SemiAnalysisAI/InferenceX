@@ -213,6 +213,23 @@ if any malformed record remains. It also makes the host heartbeat read the
 host-visible `${GITHUB_WORKSPACE}` marker path; the canary incorrectly logged
 `rank_events=0` while checking its `/workspace` container alias.
 
+Run `27511740130`, source
+`782fb58191c7887ab7b3cfeea44917a2e7376419`, proved the marker fix at GBS16:
+all 248 physical JSONL lines parsed, all required lifecycle events covered
+ranks `0..15`, and the host heartbeat reported increasing event counts.
+GBS16 completed successfully, but the sequential GBS64 job inherited
+`gb300-nv_0` immediately after srt-slurm run `27164980476`. Root-level
+`actions/checkout` ran `git clean -ffdx` over that job's open NFS log files,
+retried for ten minutes, and failed on `.nfs*` with `EBUSY`. GBS128 was then
+canceled by fail-fast; no GBS64 benchmark process or GPU allocation started.
+
+The follow-up checks out this workflow under
+`${GITHUB_WORKSPACE}/offline-bench` and sets `TRT_BENCH_WORKSPACE` to that
+isolated tree. Benchmark source, output, container mounts, and artifact paths
+all use the isolated directory. Never restore a root-level clean checkout on
+these shared runners: unrelated rack workflows intentionally leave large
+untracked trees and may still have open NFS handles during job handoff.
+
 ## Why The Old Result Was Too High
 
 Run `27483465692` used a request pool and mean per-request decode windows. At
