@@ -3754,4 +3754,4 @@
     - "Serve shape follows minimaxm3-fp8-mi300x-vllm: --block-size 128, --no-enable-prefix-caching, --language-model-only, --attention-backend TRITON_ATTN, --enforce-eager, minimax_m3 parsers, and the default BF16 KV cache (gfx942 lacks calibrated ROCm FP8 attention scales); prompts routed through the chat template for realistic acceptance"
     - "TP8-only search space (gfx942 192 GB is memory-tight, like H100): TP8 latency rows started at conc 1, TP8+EP8 (TEP) at high concurrency, across 1k1k and 8k1k"
     - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, upstream vllm-project/vllm#45546; validated green on MI355X) before serving — validates EAGLE3 on MI300X ahead of an image rebuild"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1749
