@@ -4,7 +4,7 @@ import queue
 import subprocess
 import sys
 import time
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 from run import (
     ALLOWED_GLOBAL_BATCH_SIZES,
@@ -13,7 +13,11 @@ from run import (
     latest_worker_progress,
     wait_for_worker_process,
 )
-from trt_mpi_entry import _install_fixed_batch_request_barrier, worker_main
+from trt_mpi_entry import (
+    _install_fixed_batch_request_barrier,
+    _install_large_prefill_fp8_quant_guard,
+    worker_main,
+)
 from trt_worker import read_perfect_router_marker
 
 
@@ -116,6 +120,11 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     request_queue_module = ModuleType(
         "tensorrt_llm._torch.pyexecutor.executor_request_queue"
     )
+    custom_ops_package = ModuleType("tensorrt_llm._torch.custom_ops")
+    custom_ops_package.__path__ = []
+    torch_custom_ops_module = ModuleType(
+        "tensorrt_llm._torch.custom_ops.torch_custom_ops"
+    )
     executor_module = ModuleType("tensorrt_llm.executor")
     executor_module.__path__ = []
     worker_module = ModuleType("tensorrt_llm.executor.worker")
@@ -124,21 +133,37 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         def get_from_request_queue(self, timeout):
             return []
 
+    class FakeFp8QuantKernelRunner:
+        TACTIC_TRITON = 1
+
+        def get_valid_tactics(self, inputs, profile, **kwargs):
+            return [0, self.TACTIC_TRITON]
+
     def fake_worker(*args, **kwargs):
         calls.append((args, kwargs))
         return "done"
 
     request_queue_module.ExecutorRequestQueue = FakeExecutorRequestQueue
+    torch_custom_ops_module.Fp8QuantKernelRunner = (
+        FakeFp8QuantKernelRunner
+    )
+    custom_ops_package.torch_custom_ops = torch_custom_ops_module
     worker_module.worker_main = fake_worker
     trt_module._torch = torch_module
     trt_module.executor = executor_module
     torch_module.pyexecutor = pyexecutor_module
+    torch_module.custom_ops = custom_ops_package
     pyexecutor_module.executor_request_queue = request_queue_module
     executor_module.worker = worker_module
     for name, module in (
         ("tensorrt_llm", trt_module),
         ("tensorrt_llm._torch", torch_module),
         ("tensorrt_llm._torch.pyexecutor", pyexecutor_module),
+        ("tensorrt_llm._torch.custom_ops", custom_ops_package),
+        (
+            "tensorrt_llm._torch.custom_ops.torch_custom_ops",
+            torch_custom_ops_module,
+        ),
         (
             "tensorrt_llm._torch.pyexecutor.executor_request_queue",
             request_queue_module,
@@ -156,6 +181,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     expected = {
         "ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
+        "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": "32768",
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": "64",
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": "random",
@@ -180,6 +206,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         "120",
     )
     monkeypatch.setenv("TRTLLM_BENCH_GLOBAL_BATCH_SIZE", "64")
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
+        "32768",
+    )
     monkeypatch.delenv("ENABLE_CONFIGURABLE_MOE", raising=False)
     monkeypatch.delenv("ENABLE_PERFECT_ROUTER", raising=False)
     monkeypatch.delenv("CUTE_DSL_CACHE_DIR", raising=False)
@@ -191,8 +221,56 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["benchmark_environment"] == expected
     assert row["fixed_batch_global_size"] == "64"
+    assert row["fp8_fused_quant_max_rows"] == "32768"
     assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "1"
     assert row["source"] == "trt_mpi_entry"
+
+
+def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
+    monkeypatch,
+):
+    custom_ops_package = ModuleType("tensorrt_llm._torch.custom_ops")
+    custom_ops_package.__path__ = []
+    torch_custom_ops_module = ModuleType(
+        "tensorrt_llm._torch.custom_ops.torch_custom_ops"
+    )
+
+    class FakeFp8QuantKernelRunner:
+        TACTIC_TRITON = 1
+
+        def get_valid_tactics(self, inputs, profile, **kwargs):
+            return [0, self.TACTIC_TRITON]
+
+    torch_custom_ops_module.Fp8QuantKernelRunner = (
+        FakeFp8QuantKernelRunner
+    )
+    custom_ops_package.torch_custom_ops = torch_custom_ops_module
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.custom_ops",
+        custom_ops_package,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.custom_ops.torch_custom_ops",
+        torch_custom_ops_module,
+    )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
+        "32768",
+    )
+
+    installed = _install_large_prefill_fp8_quant_guard()
+    runner = FakeFp8QuantKernelRunner()
+    small = [SimpleNamespace(shape=(16, 7168))]
+    large = [SimpleNamespace(shape=(65536, 7168))]
+
+    assert installed == {
+        "max_fused_rows": 32768,
+        "already_installed": False,
+    }
+    assert runner.get_valid_tactics(small, None) == [0, 1]
+    assert runner.get_valid_tactics(large, None) == [1]
 
 
 def test_fixed_batch_barrier_waits_for_one_complete_global_batch(

@@ -13,11 +13,14 @@ benchmark.
   `local_batch_size * 8192` so every local prompt can prefill together.
 - Leave KV capacity memory-derived with
   `kv_cache_config.free_gpu_memory_fraction=0.60`. An explicit KV token cap
-  underprovisions this pinned one-model MTP schedule because target and draft
-  KV are accounted separately. The fixed
+  underprovisions the pinned DeepSeek-V4 multi-pool cache and staggered half
+  of each local batch in run `27486168511`. The fixed
   `moe_config.max_num_tokens=65536` cap chunks only oversized fused-MoE
   tensors inside that one executor iteration; measured decode never reaches
   the cap.
+- Keep the rank-local packed-FP8 guard at 32768 rows. It selects TRT's Triton
+  quantizer only for large GBS64/128 prefill projections; measured decode has
+  at most 16 rows and stays on the original fused path.
 - `LLM.generate()` submits requests individually. The MPI entry shim patches
   TRT's idle request fetch so each warmup/measured pass waits for exactly one
   complete GBS before routing. Do not remove that barrier while claiming a

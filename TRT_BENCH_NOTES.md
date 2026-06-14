@@ -80,12 +80,19 @@ Pinned TRT:
 `max_num_tokens` is intentionally much larger than the old recipe. It permits
 all local 8192-token prompts to prefill in the same iteration. KV capacity is
 memory-derived with a fixed 0.60 free-memory fraction. Do not set an exact
-`kv_cache.max_tokens`: the pinned one-model MTP path accounts for target and
-draft KV separately, and the explicit cap used in run `27486168511` admitted
-only half of each local batch into prefill. TRT fused MoE is capped at 65536
-tokens per internal invocation so its synthetic autotune and prefill tensors
-are chunked without splitting the executor-level prefill iteration. Measured
-decode is far below the cap.
+`kv_cache.max_tokens`: the pinned DeepSeek-V4 multi-pool cache manager did not
+turn the exact-sequence quota into sufficient physical capacity, and the cap
+used in run `27486168511` admitted only half of each local batch into prefill.
+TRT fused MoE is capped at 65536 tokens per internal invocation so its
+synthetic autotune and prefill tensors are chunked without splitting the
+executor-level prefill iteration. Measured decode is far below the cap.
+
+Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
+GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA
+quantizer rejected the 65536-row MTP `h_proj` launch during engine warmup.
+Each MPI rank now restricts that fused tactic to at most 32768 rows and uses
+TRT's existing Triton quantizer above the limit. Decode matrices are only
+local batch 2/8/16, so headline timing remains on the original fused path.
 
 ## Schedule Gate
 

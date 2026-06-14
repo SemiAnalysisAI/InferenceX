@@ -32,6 +32,10 @@ MAX_SEQ_LEN = 9344
 # executor's one-iteration full-batch token budget. Decode is far below this
 # fixed cap for every supported GBS.
 MOE_MAX_NUM_TOKENS = WORLD_SIZE * INPUT_TOKENS
+# The pinned fused packed-FP8 quantizer fails its CUDA launch for the
+# 65536-row MTP projection used by GBS64 prefill. Keep the fused decode path,
+# but select TRT's existing Triton quantizer for larger prefill matrices.
+FP8_FUSED_QUANT_MAX_ROWS = 32768
 SAMPLING_TEMPERATURE = 1.0
 SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
@@ -45,6 +49,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     "TLLM_TORCH_PROFILE_TRACE",
     "TRTLLM_BENCH_DSV4_PATCHED_SHA256",
     "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
+    "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
     "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
     "TRTLLM_BENCH_GLOBAL_BATCH_SIZE",
     "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
@@ -184,6 +189,9 @@ def fixed_environment(global_batch_size: int) -> dict[str, str]:
     return {
         "ENABLE_CONFIGURABLE_MOE": configurable,
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": configurable,
+        "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": str(
+            FP8_FUSED_QUANT_MAX_ROWS
+        ),
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": str(global_batch_size),
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": (

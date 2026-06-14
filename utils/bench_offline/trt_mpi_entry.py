@@ -10,6 +10,50 @@ from pathlib import Path
 from typing import Any
 
 
+def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
+    max_fused_rows = int(
+        os.environ["TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"]
+    )
+    if max_fused_rows <= 0:
+        raise RuntimeError(
+            "Large-prefill FP8 quant guard needs a positive row limit"
+        )
+
+    from tensorrt_llm._torch.custom_ops import torch_custom_ops
+
+    runner_class = torch_custom_ops.Fp8QuantKernelRunner
+    original = runner_class.get_valid_tactics
+    if getattr(original, "_offline_large_prefill_guard", False):
+        return {
+            "max_fused_rows": max_fused_rows,
+            "already_installed": True,
+        }
+
+    def guarded_get_valid_tactics(
+        runner: Any,
+        inputs: list[Any],
+        profile: Any,
+        **kwargs: Any,
+    ) -> list[Any]:
+        tactics = original(runner, inputs, profile, **kwargs)
+        rows = int(inputs[0].shape[0])
+        if rows <= max_fused_rows:
+            return tactics
+        triton_tactic = runner.TACTIC_TRITON
+        if triton_tactic not in tactics:
+            raise RuntimeError(
+                "TRT large-prefill FP8 quantization has no Triton tactic"
+            )
+        return [triton_tactic]
+
+    guarded_get_valid_tactics._offline_large_prefill_guard = True
+    runner_class.get_valid_tactics = guarded_get_valid_tactics
+    return {
+        "max_fused_rows": max_fused_rows,
+        "already_installed": False,
+    }
+
+
 def _install_fixed_batch_request_barrier() -> dict[str, Any]:
     expected = int(os.environ["TRTLLM_BENCH_GLOBAL_BATCH_SIZE"])
     timeout_seconds = float(
@@ -110,6 +154,9 @@ def _write_marker() -> None:
         "fixed_batch_global_size": os.getenv(
             "TRTLLM_BENCH_GLOBAL_BATCH_SIZE"
         ),
+        "fp8_fused_quant_max_rows": os.getenv(
+            "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
+        ),
         "source": "trt_mpi_entry",
     }
     path = Path(marker)
@@ -130,8 +177,15 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     cute_cache_dir = os.getenv("TRTLLM_BENCH_CUTE_DSL_CACHE_DIR")
     if cute_cache_dir:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
+    fp8_guard = _install_large_prefill_fp8_quant_guard()
     _install_fixed_batch_request_barrier()
     _write_marker()
+    print(
+        "[offline-trt-mpi] large-prefill FP8 quant guard "
+        f"max_fused_rows={fp8_guard['max_fused_rows']} "
+        f"already_installed={fp8_guard['already_installed']}",
+        flush=True,
+    )
 
     from tensorrt_llm.executor.worker import worker_main as trt_worker_main
 

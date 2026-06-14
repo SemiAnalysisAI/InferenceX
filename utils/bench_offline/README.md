@@ -66,6 +66,7 @@ cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
 kv_cache.free_gpu_memory_fraction = 0.60
 moe.max_num_tokens = 65536
+fused FP8 quantizer max rows = 32768
 ```
 
 | GBS | Local batch/rank | TRT max_num_tokens/rank |
@@ -75,14 +76,20 @@ moe.max_num_tokens = 65536
 | 128 | 16 | 131072 |
 
 KV capacity remains memory-derived at a fixed 60% fraction. Do not set
-`kv_cache.max_tokens`: this pinned one-model MTP implementation accounts for
-target and draft KV separately, and an explicit exact-sequence cap
-underprovisions the target schedule and staggers prefill. The fixed
-65536-token MoE cap applies inside a fused-MoE invocation. It lets TRT
-internally chunk the very large prefill/autotune tensor while the executor
-still schedules the complete local batch in one prefill iteration. Decode has
-at most 128 tokens node-wide, so the measured decode rounds never hit this
-cap.
+`kv_cache.max_tokens`: the pinned DeepSeek-V4 multi-pool cache manager did not
+translate the exact-sequence token quota into enough physical capacity for
+the fixed batch, and run `27486168511` admitted only half of each local batch
+into prefill. The fixed 65536-token MoE cap applies inside a fused-MoE
+invocation. It lets TRT internally chunk the very large prefill/autotune
+tensor while the executor still schedules the complete local batch in one
+prefill iteration.
+
+The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
+65536-row MTP projection produced by GBS64 prefill. Every rank installs a
+guard that selects TRT's existing Triton FP8 quantizer above 32768 rows.
+Measured decode has only `local_batch_size` rows, at most 16, so this guard
+does not change the measured decode kernel path. Decode also has at most 128
+tokens node-wide, so it never reaches the MoE cap.
 
 The old harness used approximately one prompt's prefill token budget even for
 large global batches. TRT therefore queued and staggered requests. Dividing
