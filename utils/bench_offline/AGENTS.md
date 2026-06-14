@@ -11,10 +11,17 @@ benchmark.
 - `global_batch_size` is authoritative. TRT `max_batch_size` and CUDA graph
   size are exactly `global_batch_size / 8`; `max_num_tokens` is exactly
   `local_batch_size * 8192` so every local prompt can prefill together.
-- Leave KV capacity memory-derived with
+- Start KV capacity from
   `kv_cache_config.free_gpu_memory_fraction=0.60`. An explicit KV token cap
   underprovisions the pinned DeepSeek-V4 multi-pool cache and staggered half
-  of each local batch in run `27486168511`. The fixed
+  of each local batch in run `27486168511`. For GBS128, subtract exactly
+  12 GiB from TRT's calibrated `max_gpu_total_bytes` after capacity
+  estimation and before final manager construction. Preserve at least TRT's
+  aggregate `CacheCost.bytes_for_tokens(16 * 9344)`; fail rather than reducing
+  that minimum. GBS16/64 use no reserve. Run `27491999545` proved why the
+  reserve is required: final KV allocation left 1.17-2.35 GiB free before the
+  real prefill requested an 8 GiB FP8 Q buffer and a following roughly 2 GiB
+  BF16 RoPE buffer. The fixed
   `moe_config.max_num_tokens=65536` cap chunks only oversized fused-MoE
   tensors inside that one executor iteration; measured decode never reaches
   the cap.
@@ -32,6 +39,10 @@ benchmark.
   illegal memory access on every rank. Reserve only
   `TrtllmAttentionMetadata.workspace` when the cached runtime metadata is
   created. Do not preallocate or replace `cuda_graph_workspace`.
+- GBS128 initialization builds two engine phases and resets attention
+  metadata between them. Duplicate workspace events are expected. The KV
+  reserve event occurs after phase-one calibration and must cover ranks
+  `0..7` exactly.
 - Keep the rank-local packed-FP8 guard at 32768 rows. It selects TRT's Triton
   quantizer only for large GBS64/128 prefill projections; measured decode has
   at most 16 rows and stays on the original fused path.

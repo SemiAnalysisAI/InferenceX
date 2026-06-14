@@ -38,6 +38,13 @@ MOE_MAX_NUM_TOKENS = WORLD_SIZE * INPUT_TOKENS
 # at runtime capacity because DeepSeek-V4 attention metadata allocates lazily
 # from it on the first forward pass.
 ENGINE_WARMUP_MAX_TOKENS = WORLD_SIZE * INPUT_TOKENS
+# TRT's capacity estimator does not exercise the 131072-token real prefill.
+# Leave room for its 8 GiB FP8 Q projection and 2 GiB BF16 RoPE projection,
+# plus allocator headroom, by reducing only the final GBS128 KV budget.
+GIB = 1024**3
+GBS128_PREFILL_TRANSIENT_RESERVE_BYTES = 12 * GIB
+KV_PREFILL_RESERVE_ENV = "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES"
+MIN_RUNTIME_KV_TOKENS_ENV = "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS"
 # The pinned TRT MLA context workspace grows by about 192 KiB per scheduled
 # context token. Reserve a slightly larger linear budget plus fixed headroom
 # before the first forward so the C++ attention op never resizes its live CUDA
@@ -70,6 +77,8 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     FIXED_BATCH_ARM_ENV,
     "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
     "TRTLLM_BENCH_GLOBAL_BATCH_SIZE",
+    KV_PREFILL_RESERVE_ENV,
+    MIN_RUNTIME_KV_TOKENS_ENV,
     "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
     "TRTLLM_ENABLE_PDL",
     "TRTLLM_FORCE_COMM_METHOD",
@@ -143,6 +152,18 @@ def attention_workspace_target_bytes(global_batch_size: int) -> int:
         runtime_tokens * ATTENTION_WORKSPACE_BYTES_PER_TOKEN
         + ATTENTION_WORKSPACE_HEADROOM_BYTES
     )
+
+
+def kv_prefill_reserve_bytes(global_batch_size: int) -> int:
+    """Reserve transient memory only when runtime prefill exceeds warmup."""
+    if max_num_tokens(global_batch_size) <= ENGINE_WARMUP_MAX_TOKENS:
+        return 0
+    return GBS128_PREFILL_TRANSIENT_RESERVE_BYTES
+
+
+def minimum_runtime_kv_tokens(global_batch_size: int) -> int:
+    """Return the KV capacity required for every fixed-batch sequence."""
+    return local_batch_size(global_batch_size) * MAX_SEQ_LEN
 
 
 def build_llm_kwargs(
@@ -229,6 +250,12 @@ def fixed_environment(global_batch_size: int) -> dict[str, str]:
         ),
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": str(global_batch_size),
+        KV_PREFILL_RESERVE_ENV: str(
+            kv_prefill_reserve_bytes(global_batch_size)
+        ),
+        MIN_RUNTIME_KV_TOKENS_ENV: str(
+            minimum_runtime_kv_tokens(global_batch_size)
+        ),
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": (
             config.moe_autotune_dummy_distribution
         ),

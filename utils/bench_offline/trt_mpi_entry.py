@@ -241,6 +241,120 @@ def _install_attention_workspace_preallocation() -> dict[str, Any]:
     }
 
 
+def _install_kv_prefill_memory_reserve() -> dict[str, Any]:
+    reserve_bytes = int(
+        os.environ["TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES"]
+    )
+    minimum_tokens = int(
+        os.environ["TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS"]
+    )
+    if reserve_bytes < 0:
+        raise RuntimeError("TRT KV prefill reserve cannot be negative")
+    if minimum_tokens <= 0:
+        raise RuntimeError(
+            "TRT minimum runtime KV capacity needs a positive token count"
+        )
+    if reserve_bytes == 0:
+        return {
+            "enabled": False,
+            "reserve_bytes": 0,
+            "minimum_tokens": minimum_tokens,
+            "target": None,
+            "already_installed": False,
+        }
+
+    from tensorrt_llm._torch.pyexecutor import _util
+
+    creator_class = _util.KvCacheCreator
+    configure_capacity = creator_class.configure_kv_cache_capacity
+    installed_reserve = getattr(
+        configure_capacity,
+        "_offline_kv_prefill_reserve_bytes",
+        None,
+    )
+    installed_minimum = getattr(
+        configure_capacity,
+        "_offline_kv_prefill_minimum_tokens",
+        None,
+    )
+    if installed_reserve is not None or installed_minimum is not None:
+        if (
+            installed_reserve != reserve_bytes
+            or installed_minimum != minimum_tokens
+        ):
+            raise RuntimeError(
+                "TRT KV prefill reserve hook already has reserve/minimum "
+                f"{installed_reserve}/{installed_minimum}, requested "
+                f"{reserve_bytes}/{minimum_tokens}"
+            )
+        return {
+            "enabled": True,
+            "reserve_bytes": reserve_bytes,
+            "minimum_tokens": minimum_tokens,
+            "target": (
+                f"{creator_class.__name__}.configure_kv_cache_capacity"
+            ),
+            "already_installed": True,
+        }
+
+    def configure_with_prefill_reserve(
+        creator: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        result = configure_capacity(creator, *args, **kwargs)
+        configured_raw = creator._kv_cache_config.max_gpu_total_bytes
+        if configured_raw is None:
+            raise RuntimeError(
+                "TRT KV capacity estimator did not set max_gpu_total_bytes"
+            )
+        configured_bytes = int(configured_raw)
+        cache_cost = creator._get_kv_size_per_token()
+        minimum_bytes = int(cache_cost.bytes_for_tokens(minimum_tokens))
+        adjusted_bytes = configured_bytes - reserve_bytes
+        if adjusted_bytes < minimum_bytes:
+            raise RuntimeError(
+                "Cannot reserve full-prefill transient memory while "
+                "preserving the fixed-batch KV capacity: "
+                f"configured_bytes={configured_bytes} "
+                f"reserve_bytes={reserve_bytes} "
+                f"adjusted_bytes={adjusted_bytes} "
+                f"minimum_tokens={minimum_tokens} "
+                f"minimum_bytes={minimum_bytes}"
+            )
+        creator._kv_cache_config.max_gpu_total_bytes = adjusted_bytes
+        _emit_rank_event(
+            "kv_prefill_reserve_applied",
+            configured_bytes=configured_bytes,
+            reserve_bytes=reserve_bytes,
+            adjusted_bytes=adjusted_bytes,
+            minimum_runtime_kv_tokens=minimum_tokens,
+            minimum_runtime_kv_bytes=minimum_bytes,
+        )
+        return result
+
+    setattr(
+        configure_with_prefill_reserve,
+        "_offline_kv_prefill_reserve_bytes",
+        reserve_bytes,
+    )
+    setattr(
+        configure_with_prefill_reserve,
+        "_offline_kv_prefill_minimum_tokens",
+        minimum_tokens,
+    )
+    creator_class.configure_kv_cache_capacity = (
+        configure_with_prefill_reserve
+    )
+    return {
+        "enabled": True,
+        "reserve_bytes": reserve_bytes,
+        "minimum_tokens": minimum_tokens,
+        "target": f"{creator_class.__name__}.configure_kv_cache_capacity",
+        "already_installed": False,
+    }
+
+
 def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
     max_fused_rows = int(
         os.environ["TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"]
@@ -492,6 +606,12 @@ def _write_marker(event: str = "entry_ready", **details: Any) -> None:
         "attention_workspace_target_bytes": os.getenv(
             "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"
         ),
+        "kv_prefill_reserve_bytes": os.getenv(
+            "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES"
+        ),
+        "minimum_runtime_kv_tokens": os.getenv(
+            "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS"
+        ),
         "fp8_fused_quant_max_rows": os.getenv(
             "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
         ),
@@ -519,6 +639,7 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
     warmup_cap = _install_engine_warmup_shape_cap()
     attention_workspace = _install_attention_workspace_preallocation()
+    kv_prefill_reserve = _install_kv_prefill_memory_reserve()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
     lifecycle_trace = _install_executor_lifecycle_trace()
     fixed_batch_barrier = _install_fixed_batch_request_barrier()
@@ -545,6 +666,15 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         f"target_bytes={attention_workspace['target_bytes']} "
         f"target={attention_workspace['target']} "
         f"already_installed={attention_workspace['already_installed']}",
+        flush=True,
+    )
+    print(
+        "[offline-trt-mpi] KV prefill transient reserve "
+        f"enabled={kv_prefill_reserve['enabled']} "
+        f"reserve_bytes={kv_prefill_reserve['reserve_bytes']} "
+        f"minimum_tokens={kv_prefill_reserve['minimum_tokens']} "
+        f"target={kv_prefill_reserve['target']} "
+        f"already_installed={kv_prefill_reserve['already_installed']}",
         flush=True,
     )
     print(

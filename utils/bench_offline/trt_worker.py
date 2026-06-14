@@ -295,6 +295,49 @@ def validate_rank_propagation(
                 "TRT eager attention workspace reservation mismatch: "
                 f"{invalid_workspace_rows}"
             )
+    kv_reserve = int(
+        rank_environment["TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES"]
+    )
+    minimum_kv_tokens = int(
+        rank_environment["TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS"]
+    )
+    if kv_reserve > 0:
+        event_name = "kv_prefill_reserve_applied"
+        reserve_ranks = marker["event_ranks"].get(event_name, [])
+        if reserve_ranks != expected_ranks:
+            raise RuntimeError(
+                "TRT KV prefill reserve was not applied on every rank: "
+                f"{reserve_ranks!r} != {expected_ranks!r}"
+            )
+        invalid_reserve_rows = [
+            {
+                "rank": row.get("rank"),
+                "configured_bytes": row.get("configured_bytes"),
+                "reserve_bytes": row.get("reserve_bytes"),
+                "adjusted_bytes": row.get("adjusted_bytes"),
+                "minimum_runtime_kv_tokens": row.get(
+                    "minimum_runtime_kv_tokens"
+                ),
+                "minimum_runtime_kv_bytes": row.get(
+                    "minimum_runtime_kv_bytes"
+                ),
+            }
+            for row in marker["events"][event_name]
+            if int(row.get("reserve_bytes", -1)) != kv_reserve
+            or int(row.get("configured_bytes", -1))
+            - int(row.get("adjusted_bytes", -1))
+            != kv_reserve
+            or int(row.get("minimum_runtime_kv_tokens", -1))
+            != minimum_kv_tokens
+            or int(row.get("minimum_runtime_kv_bytes", -1)) <= 0
+            or int(row.get("adjusted_bytes", -1))
+            < int(row.get("minimum_runtime_kv_bytes", -1))
+        ]
+        if invalid_reserve_rows:
+            raise RuntimeError(
+                "TRT KV prefill reserve mismatch: "
+                f"{invalid_reserve_rows}"
+            )
     expected_cache = os.getenv("CUTE_DSL_CACHE_DIR")
     if not expected_cache:
         raise RuntimeError("CUTE_DSL_CACHE_DIR is required")

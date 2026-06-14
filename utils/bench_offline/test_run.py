@@ -22,6 +22,7 @@ from trt_mpi_entry import (
     _install_attention_workspace_preallocation,
     _install_engine_warmup_shape_cap,
     _install_fixed_batch_request_barrier,
+    _install_kv_prefill_memory_reserve,
     _install_large_prefill_fp8_quant_guard,
     worker_main,
 )
@@ -317,6 +318,8 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE": str(fixed_batch_arm_file),
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": "64",
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES": "0",
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS": "74752",
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": "random",
     }
     monkeypatch.setenv("TRTLLM_ENABLE_PERFECT_ROUTER", "1")
@@ -344,6 +347,14 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     )
     monkeypatch.setenv("TRTLLM_BENCH_GLOBAL_BATCH_SIZE", "64")
     monkeypatch.setenv(
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES",
+        "0",
+    )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS",
+        "74752",
+    )
+    monkeypatch.setenv(
         "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES",
         "0",
     )
@@ -370,6 +381,8 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["fixed_batch_barrier_armed"] is False
     assert row["engine_warmup_max_tokens"] == "65536"
     assert row["attention_workspace_target_bytes"] == "0"
+    assert row["kv_prefill_reserve_bytes"] == "0"
+    assert row["minimum_runtime_kv_tokens"] == "74752"
     assert row["fp8_fused_quant_max_rows"] == "32768"
     assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "1"
     assert row["source"] == "trt_mpi_entry"
@@ -547,6 +560,124 @@ def test_attention_workspace_preallocation_keeps_graph_workspace(
     assert event["cuda_graph_workspace_bytes"] == 7
 
 
+def test_kv_prefill_reserve_uses_trt_cache_cost(tmp_path, monkeypatch):
+    class FakeCacheCost:
+        def bytes_for_tokens(self, tokens):
+            return 4 * tokens
+
+    class FakeKvCacheCreator:
+        def __init__(self):
+            self._kv_cache_config = SimpleNamespace(
+                max_gpu_total_bytes=None
+            )
+
+        def _get_kv_size_per_token(self):
+            return FakeCacheCost()
+
+        def configure_kv_cache_capacity(self, py_executor=None):
+            self._kv_cache_config.max_gpu_total_bytes = 1000
+            return py_executor
+
+    util_module = ModuleType("tensorrt_llm._torch.pyexecutor._util")
+    util_module.KvCacheCreator = FakeKvCacheCreator
+    pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
+    pyexecutor_module.__path__ = []
+    pyexecutor_module._util = util_module
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor",
+        pyexecutor_module,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor._util",
+        util_module,
+    )
+    marker = tmp_path / "marker.jsonl"
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES",
+        "200",
+    )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS",
+        "100",
+    )
+    monkeypatch.setenv("TRTLLM_PERFECT_ROUTER_MARKER", str(marker))
+    monkeypatch.setenv("OMPI_COMM_WORLD_RANK", "5")
+
+    installed = _install_kv_prefill_memory_reserve()
+    creator = FakeKvCacheCreator()
+
+    assert creator.configure_kv_cache_capacity("executor") == "executor"
+    assert installed == {
+        "enabled": True,
+        "reserve_bytes": 200,
+        "minimum_tokens": 100,
+        "target": "FakeKvCacheCreator.configure_kv_cache_capacity",
+        "already_installed": False,
+    }
+    assert creator._kv_cache_config.max_gpu_total_bytes == 800
+    event = json.loads(marker.read_text(encoding="utf-8"))
+    assert event["event"] == "kv_prefill_reserve_applied"
+    assert event["rank"] == "5"
+    assert event["configured_bytes"] == 1000
+    assert event["reserve_bytes"] == 200
+    assert event["adjusted_bytes"] == 800
+    assert event["minimum_runtime_kv_tokens"] == 100
+    assert event["minimum_runtime_kv_bytes"] == 400
+
+
+def test_kv_prefill_reserve_rejects_insufficient_runtime_cache(
+    monkeypatch,
+):
+    class FakeCacheCost:
+        def bytes_for_tokens(self, tokens):
+            return 8 * tokens
+
+    class FakeKvCacheCreator:
+        def __init__(self):
+            self._kv_cache_config = SimpleNamespace(
+                max_gpu_total_bytes=None
+            )
+
+        def _get_kv_size_per_token(self):
+            return FakeCacheCost()
+
+        def configure_kv_cache_capacity(self):
+            self._kv_cache_config.max_gpu_total_bytes = 1000
+
+    util_module = ModuleType("tensorrt_llm._torch.pyexecutor._util")
+    util_module.KvCacheCreator = FakeKvCacheCreator
+    pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
+    pyexecutor_module.__path__ = []
+    pyexecutor_module._util = util_module
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor",
+        pyexecutor_module,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor._util",
+        util_module,
+    )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES",
+        "300",
+    )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS",
+        "100",
+    )
+
+    _install_kv_prefill_memory_reserve()
+    with pytest.raises(
+        RuntimeError,
+        match="preserving the fixed-batch KV capacity",
+    ):
+        FakeKvCacheCreator().configure_kv_cache_capacity()
+
+
 def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
     monkeypatch,
 ):
@@ -718,6 +849,8 @@ def test_rank_validation_requires_exact_attention_workspace_events(
     marker = tmp_path / "marker.jsonl"
     rank_environment = {
         "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "100",
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES": "0",
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS": "149504",
     }
     rows = [
         {
@@ -751,4 +884,51 @@ def test_rank_validation_requires_exact_attention_workspace_events(
         encoding="utf-8",
     )
     with pytest.raises(RuntimeError, match="reservation mismatch"):
+        validate_rank_propagation(marker, rank_environment)
+
+
+def test_rank_validation_requires_exact_kv_prefill_reserve_events(
+    tmp_path,
+    monkeypatch,
+):
+    marker = tmp_path / "marker.jsonl"
+    rank_environment = {
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "0",
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES": "200",
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS": "100",
+    }
+    rows = [
+        {
+            "pid": 100 + rank,
+            "rank": str(rank),
+            "perfect_router": "1",
+            "cute_dsl_cache_dir": "/cache",
+            "benchmark_environment": rank_environment,
+            "event": "kv_prefill_reserve_applied",
+            "configured_bytes": 1000,
+            "reserve_bytes": 200,
+            "adjusted_bytes": 800,
+            "minimum_runtime_kv_tokens": 100,
+            "minimum_runtime_kv_bytes": 400,
+            "source": "trt_mpi_entry",
+        }
+        for rank in range(8)
+    ]
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CUTE_DSL_CACHE_DIR", "/cache")
+
+    parsed = validate_rank_propagation(marker, rank_environment)
+    assert parsed["event_ranks"]["kv_prefill_reserve_applied"] == list(
+        range(8)
+    )
+
+    rows[-1]["minimum_runtime_kv_bytes"] = 900
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="prefill reserve mismatch"):
         validate_rank_propagation(marker, rank_environment)

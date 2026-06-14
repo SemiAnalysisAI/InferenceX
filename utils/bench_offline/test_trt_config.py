@@ -11,19 +11,24 @@ from trt_config import (
     ENGINE_WARMUP_MAX_TOKENS,
     FIXED_BATCH_ARM_ENV,
     FP8_FUSED_QUANT_MAX_ROWS,
+    GBS128_PREFILL_TRANSIENT_RESERVE_BYTES,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
     ITERATION_STATS_CAPACITY,
+    KV_PREFILL_RESERVE_ENV,
     MAX_SEQ_LEN,
     MEASURED_OUTPUT_TOKENS,
+    MIN_RUNTIME_KV_TOKENS_ENV,
     MOE_MAX_NUM_TOKENS,
     WARMUP_OUTPUT_TOKENS,
     attention_workspace_target_bytes,
     benchmark_environment,
     build_llm_kwargs,
     fixed_environment,
+    kv_prefill_reserve_bytes,
     local_batch_size,
     max_num_tokens,
+    minimum_runtime_kv_tokens,
     resolved_parallelism,
     validate_global_batch_size,
 )
@@ -75,6 +80,18 @@ def test_attention_workspace_reservation_only_applies_above_warmup_cap():
     assert attention_workspace_target_bytes(128) == 27_111_981_056
 
 
+def test_prefill_reserve_preserves_full_fixed_batch_kv_capacity():
+    assert kv_prefill_reserve_bytes(16) == 0
+    assert kv_prefill_reserve_bytes(64) == 0
+    assert kv_prefill_reserve_bytes(128) == (
+        GBS128_PREFILL_TRANSIENT_RESERVE_BYTES
+    )
+    assert kv_prefill_reserve_bytes(128) == 12_884_901_888
+    assert minimum_runtime_kv_tokens(16) == 18_688
+    assert minimum_runtime_kv_tokens(64) == 74_752
+    assert minimum_runtime_kv_tokens(128) == 149_504
+
+
 def test_llm_kwargs_force_synchronized_dep8_iteration_stats():
     kwargs = build_llm_kwargs("/model", 64)
     assert kwargs["tensor_parallel_size"] == 8
@@ -104,6 +121,8 @@ def test_fixed_rank_environment_is_explicit():
         ),
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": "64",
+        KV_PREFILL_RESERVE_ENV: "0",
+        MIN_RUNTIME_KV_TOKENS_ENV: "74752",
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": "random",
     }
 
@@ -122,6 +141,8 @@ def test_old_tuning_environment_is_always_cleared():
         "TLLM_METRICS_ALL_RANKS",
         ATTENTION_WORKSPACE_ENV,
         FIXED_BATCH_ARM_ENV,
+        KV_PREFILL_RESERVE_ENV,
+        MIN_RUNTIME_KV_TOKENS_ENV,
         "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
         "TRTLLM_ENABLE_PDL",
         "TRTLLM_FORCE_COMM_METHOD",

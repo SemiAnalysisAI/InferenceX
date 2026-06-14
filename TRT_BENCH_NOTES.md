@@ -71,18 +71,29 @@ Pinned TRT:
 
 ## Capacity Table
 
-| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` |
-|---:|---:|---:|---:|---:|
-| 16 | 2 | 2 | 2 | 16384 |
-| 64 | 8 | 8 | 8 | 65536 |
-| 128 | 16 | 16 | 16 | 131072 |
+| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` | Minimum KV tokens | KV reserve |
+|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 2 | 2 | 2 | 16384 | 18688 | 0 |
+| 64 | 8 | 8 | 8 | 65536 | 74752 | 0 |
+| 128 | 16 | 16 | 16 | 131072 | 149504 | 12 GiB |
 
 `max_num_tokens` is intentionally much larger than the old recipe. It permits
-all local 8192-token prompts to prefill in the same iteration. KV capacity is
-memory-derived with a fixed 0.60 free-memory fraction. Do not set an exact
-`kv_cache.max_tokens`: the pinned DeepSeek-V4 multi-pool cache manager did not
-turn the exact-sequence quota into sufficient physical capacity, and the cap
-used in run `27486168511` admitted only half of each local batch into prefill.
+all local 8192-token prompts to prefill in the same iteration. KV capacity
+starts from TRT's memory-derived calibration with a fixed 0.60 free-memory
+fraction. Do not set an exact `kv_cache.max_tokens`: the pinned DeepSeek-V4
+multi-pool cache manager did not turn the exact-sequence quota into sufficient
+physical capacity, and the cap used in run `27486168511` admitted only half of
+each local batch into prefill.
+
+At GBS128, subtract 12 GiB from the calibrated final
+`max_gpu_total_bytes`. The hook runs immediately after
+`KvCacheCreator.configure_kv_cache_capacity()` and before
+`build_managers(..., False)`. DeepSeek-V4 uses a `KVCacheManagerV2` subclass,
+so this byte budget directly controls the final multi-pool allocation. Before
+changing it, the hook uses TRT's aggregate cache cost to require capacity for
+`16 * 9344 = 149504` tokens. It fails initialization if the reserve would
+violate that bound. GBS16 and GBS64 leave calibration unchanged.
+
 TRT fused MoE is capped at 65536 tokens per internal invocation so its
 synthetic autotune and prefill tensors are chunked without splitting the
 executor-level prefill iteration. Measured decode is far below the cap.
@@ -161,6 +172,31 @@ exact target, an allocation at least that large, and zero CUDA-graph
 workspace bytes at hook time. The controller also treats TRT's native
 `Fatal error detected, initiating shutdown` line as terminal instead of
 waiting for a stuck MPI parent.
+
+Run `27491999545` proved the eager workspace fix. All eight ranks allocated
+the exact 27,111,981,056-byte target in both engine phases. The first engine
+warmup completed in about 337.5 seconds, final warmup completed in about
+42.4 seconds, and `LLM(...)` returned after 580.9 seconds without the old
+workspace resize or illegal memory access.
+
+The first real GBS128 warmup then failed in
+`_deepseek_v4_q_b_layernorm_fused_fp8`. Final KV pools had left only
+1.17-2.35 GiB free per GPU, but the exact full-batch prefill needed an 8 GiB
+FP8 Q projection buffer:
+
+```text
+131072 tokens * 128 heads * 512 qk_head_dim * 1 byte = 8 GiB
+```
+
+The next BF16 RoPE projection is roughly another 2 GiB:
+
+```text
+131072 tokens * 128 heads * 64 rope_dim * 2 bytes = 2 GiB
+```
+
+The new 12 GiB final-KV reserve covers both tensors and allocator margin. This
+does not lower runtime `max_num_tokens`, split prefill, reduce MTP3, or alter
+the decode kernel path.
 
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA

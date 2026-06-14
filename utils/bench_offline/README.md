@@ -67,24 +67,32 @@ max_num_tokens = local_batch_size * 8192
 synthetic pure-context warmup request = min(max_num_tokens, 65536)
 GBS128 eager attention workspace = 200 KiB * max_num_tokens + 256 MiB
 kv_cache.free_gpu_memory_fraction = 0.60
+minimum runtime KV tokens = local_batch_size * 9344
+GBS128 final KV budget = calibrated budget - 12 GiB transient reserve
 moe.max_num_tokens = 65536
 fused FP8 quantizer max rows = 32768
 ```
 
-| GBS | Local batch/rank | TRT max_num_tokens/rank |
-|---:|---:|---:|
-| 16 | 2 | 16384 |
-| 64 | 8 | 65536 |
-| 128 | 16 | 131072 |
+| GBS | Local batch/rank | TRT max_num_tokens/rank | Minimum KV tokens/rank | KV reserve |
+|---:|---:|---:|---:|---:|
+| 16 | 2 | 16384 | 18688 | 0 |
+| 64 | 8 | 65536 | 74752 | 0 |
+| 128 | 16 | 131072 | 149504 | 12 GiB |
 
-KV capacity remains memory-derived at a fixed 60% fraction. Do not set
-`kv_cache.max_tokens`: the pinned DeepSeek-V4 multi-pool cache manager did not
-translate the exact-sequence token quota into enough physical capacity for
-the fixed batch, and run `27486168511` admitted only half of each local batch
-into prefill. The fixed 65536-token MoE cap applies inside a fused-MoE
-invocation. It lets TRT internally chunk the very large prefill/autotune
-tensor while the executor still schedules the complete local batch in one
-prefill iteration.
+KV capacity starts from TRT's memory-derived calibration at a fixed 60%
+fraction. Do not set `kv_cache.max_tokens`: the pinned DeepSeek-V4 multi-pool
+cache manager did not translate the exact-sequence token quota into enough
+physical capacity for the fixed batch, and run `27486168511` admitted only
+half of each local batch into prefill. At GBS128 only, the MPI shim subtracts
+12 GiB from TRT's calibrated `max_gpu_total_bytes` before final cache
+construction. It first uses TRT's own aggregate `CacheCost` to prove the
+adjusted budget still covers all 16 sequences through `max_seq_len=9344`,
+or initialization fails. GBS16 and GBS64 retain the unmodified calibrated
+budget.
+
+The fixed 65536-token MoE cap applies inside a fused-MoE invocation. It lets
+TRT internally chunk the very large prefill/autotune tensor while the executor
+still schedules the complete local batch in one prefill iteration.
 
 TRT's internal `PyTorchModelEngine.warmup()` otherwise profiles tunable
 operators with the full runtime `max_num_tokens`. At GBS128 that means a
@@ -111,6 +119,18 @@ metadata object is created. This is the 131072-token runtime budget at
 `cuda_graph_workspace` remains untouched; it is small and decode-specific.
 GBS16 and GBS64 reserve nothing because their full runtime shape is already
 covered by the 65536-token warmup.
+
+Run `27491999545` proved that workspace reservation: both TRT engine phases
+completed without the previous in-place resize or illegal memory access, and
+`LLM(...)` returned after about 581 seconds. The first real full-batch prefill
+then failed because final KV allocation left only 1.17-2.35 GiB free per GPU.
+DeepSeek-V4's fused Q path requested an 8 GiB FP8 buffer for
+`[131072, 128 * 512]`, followed by a roughly 2 GiB BF16 RoPE buffer for
+`[131072, 128 * 64]`. TRT's capped synthetic calibration does not exercise
+that full real-prefill transient. The 12 GiB final-KV reduction covers those
+10 GiB of tensors plus allocator headroom without changing runtime
+`max_num_tokens`, fixed-batch admission, MTP depth, or the measured decode
+path.
 
 The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
 65536-row MTP projection produced by GBS64 prefill. Every rank installs a
@@ -256,8 +276,10 @@ using each stack's observed or published MTP yield.
 5. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
    GBS-derived value while synthetic pure-context warmup requests are capped
    at 65536 tokens. At GBS128, reserve the full-runtime non-graph attention
-   workspace before the first forward. TRT's internal capacity probes run
-   while the benchmark request gate is disarmed.
+   workspace before the first forward, then subtract the 12 GiB real-prefill
+   transient from TRT's calibrated final KV budget while preserving the
+   fixed-batch minimum cache cost. TRT's internal capacity probes run while
+   the benchmark request gate is disarmed.
 6. Atomically arm the fixed-batch request gate after engine initialization.
 7. Run the short full-batch warmup.
 8. Run one measured generation.
@@ -351,6 +373,10 @@ Debug in this order:
 9. At GBS128, confirm every rank emitted
    `attention_workspace_preallocated` with target and allocated bytes
    `27111981056`, and `cuda_graph_workspace_bytes=0`.
+10. At GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
+    reserve `12884901888`, minimum tokens `149504`, an exact
+    configured-minus-adjusted delta, and adjusted bytes at least the reported
+    minimum runtime KV bytes.
 
 Do not fix failures by reducing the global batch, splitting prefill across
 executor iterations, enabling overlap scheduling, weakening schedule
