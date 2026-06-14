@@ -1,10 +1,11 @@
-name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-1k1k"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-8k1k"
 
-# MiniMax-M3 disaggregated 1P+1D recipe for GB200 (low-latency curve).
+# MiniMax-M3 disaggregated 1P+1D recipe for GB200 (low-latency, 8k1k).
 # Prefill (TP4, 1 node) -> NixlConnector -> Decode (TP4, 1 node). Pure
 # TP, no expert parallel: lowest TTFT/ITL at small concurrencies where
 # wide EP would leave DP ranks idle. FLASHINFER (trtllm-gen) attention,
 # block-size 128 (MSA index-cache alignment, vllm#45381 @ 022448dd).
+# Low-conc tuned: stream-interval 1, cudagraph cap 128.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -44,9 +45,6 @@ backend:
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    # NIXL/UCX KV transfer over the NVL72 NVLink fabric (cuda_ipc) instead
-    # of TCP: UCX_CUDA_IPC_ENABLE_MNNVL=y enables cross-node NVLink IPC and
-    # NCCL_CUMEM_ENABLE=1 cuMem-allocates buffers so they are IPC-exportable.
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
@@ -56,9 +54,6 @@ backend:
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    # NIXL/UCX KV transfer over the NVL72 NVLink fabric (cuda_ipc) instead
-    # of TCP: UCX_CUDA_IPC_ENABLE_MNNVL=y enables cross-node NVLink IPC and
-    # NCCL_CUMEM_ENABLE=1 cuMem-allocates buffers so they are IPC-exportable.
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
@@ -71,7 +66,7 @@ backend:
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
       enforce-eager: true
-      max-model-len: 2304
+      max-model-len: 9472
       max-num-seqs: 16
       max-num-batched-tokens: 16384
       block-size: 128
@@ -89,7 +84,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      max-model-len: 2304
+      max-model-len: 9472
       max-num-seqs: 256
       max-num-batched-tokens: 256
       max-cudagraph-capture-size: 128
@@ -106,6 +101,6 @@ backend:
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
-  concurrencies: "1x2x4x8x16x32x64"
+  concurrencies: "1x2x4x8x16"
