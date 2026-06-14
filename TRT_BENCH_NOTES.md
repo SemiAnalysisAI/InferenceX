@@ -1034,7 +1034,7 @@ Debug rules:
   Treat a marginal TPOT difference as inconclusive; the profile-level
   collective reduction is the supporting signal.
 
-## Run 27481295672
+## Final C32 TP4 Comparison
 
 - URL:
   `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27481295672`
@@ -1062,50 +1062,88 @@ Debug rules:
   `18.7-19.5 s`. One measured pass is already the practical minimum; further
   runtime work must target engine startup or lazy warmup.
 
-## Unofficial Renderer Contract
+## Unofficial Renderer
 
-Run `27481295672` cannot render through InferenceX App PR 257 for three
-independent reasons:
+The original comparison run `27481295672` is not renderable because its
+immutable artifacts predate the renderer export: it has no `results_bmk`, its
+`offline_aggregate.json` is a custom wrapper rather than a flat row array, and
+the old app build did not recognize `8192/625`.
 
-1. It has only `offline-trt-summary` and `offline-trt-job-*` artifacts. The
-   app endpoint selects `results_bmk`, then falls back to `bmk_*`.
-2. `offline_aggregate.json` is a custom wrapper object. Renaming that artifact
-   would still fail because the endpoint expects flat canonical benchmark
-   rows.
-3. The workload is exactly `8192/625`, while PR 257 originally recognized
-   only `1k/1k`, `1k/8k`, `8k/1k`, and `8k/256`.
+Known-good end-to-end validation:
 
-The collector now writes a flat `agg_bmk.json` and uploads it as
-`results_bmk`. Successful rows use `b300`, `dsv4`, `trt`, `fp4`, `mtp`, exact
-`8192/625`, explicit TP/EP/attention-DP topology, second-based latency fields,
-and TPOT-derived output throughput. Keep `offline_aggregate.json` as the
-authoritative source for wall throughput, decode-step throughput, MTP yield,
-and Huawei ratios.
-
-## Renderer Validation Run 27482213487
-
-- URL:
+- Benchmark run:
   `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27482213487`
-- Completed successfully on commit
-  `8b55b2cd8a86cdbcb610984f021358e7ed8f299a`.
-- Dispatch `inputs[ref]` must be a branch, tag, or full 40-character commit
-  SHA. Run `27482130882` used the short SHA `8b55b2cd` and failed at checkout
-  before allocating benchmark work.
-- The successful run uploaded both the diagnostic `offline-trt-summary`
-  artifact and the renderer contract artifact `results_bmk`. Their
-  `agg_bmk.json` files are byte-identical.
-- The canonical row is B300 / DeepSeek-V4-Pro / TRT / FP4 / MTP,
-  `8192/625`, TP4, concurrency 32. Headline values are token TPOT
-  `16.366 ms`, TPOT-derived output throughput `488.83 tok/s/GPU`, decode-step
-  throughput `158.66 steps/s/GPU`, and wall output throughput
-  `269.02 tok/s/GPU`.
-- InferenceX App PR 257 at commit
-  `7b4dc87b128ee237582bb0255c16c719570dc024` fetched the real GitHub run
-  through `/api/unofficial-run?runId=27482213487`. It normalized one row and
-  built one E2E plus one interactivity chart point under
-  `DeepSeek-V4-Pro_8k/625`.
-- The PR still prefers `8K / 256` for runs that provide it, but falls back to
-  the loaded run's actual sequence. Therefore a bare
-  `?unofficialrun=27482213487` URL selects `8K / 625` and shows this point.
-- Current PR preview:
+- Producer commit:
+  `8b55b2cd8a86cdbcb610984f021358e7ed8f299a`
+- InferenceX App PR 257 commit:
+  `7b4dc87b128ee237582bb0255c16c719570dc024`
+- Rendered preview:
   `https://inferencemax-app-git-claude-huawei-950dt-0f2683-semianalysisai.vercel.app/inference?unofficialrun=27482213487`
+
+Run `27482213487` reran only the optimized c32 TP4 candidate. It uploaded
+byte-identical `agg_bmk.json` files in `offline-trt-summary` and the canonical
+`results_bmk` artifact. PR 257 fetched that artifact through
+`/api/unofficial-run?runId=27482213487`, normalized one row, selected the
+run's `8K / 625` sequence, and built one E2E plus one interactivity point.
+
+Renderer metric rules:
+
+- The top level must be a flat JSON array with one object per successful row.
+- `tput_per_gpu` and `output_tput_per_gpu` both contain TPOT-derived output
+  throughput for this offline comparison.
+- Latencies use seconds, not milliseconds.
+- `offline_aggregate.json` remains authoritative for wall throughput,
+  decode-step throughput, MTP yield, candidate labels, and Huawei ratios.
+- Dispatch `inputs[ref]` with a branch, tag, or full 40-character commit SHA;
+  a short SHA does not resolve in the workflow checkout.
+
+### Flat Benchmark Rows
+
+Exact `results_bmk/agg_bmk.json` from run `27482213487`:
+
+```json
+[
+  {
+    "conc": 32,
+    "decode_dp_attention": false,
+    "decode_ep": 1,
+    "decode_num_workers": 0,
+    "decode_tp": 4,
+    "disagg": false,
+    "framework": "trt",
+    "hw": "b300",
+    "image": "ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": false,
+    "isl": 8192,
+    "mean_e2el": 15.44809818750582,
+    "mean_intvty": 65.54496134009257,
+    "mean_tpot": 0.01636564983976267,
+    "mean_ttft": 5.235932687493914,
+    "median_e2el": 15.208934499998577,
+    "median_intvty": 64.50887235293361,
+    "median_tpot": 0.015515080128235964,
+    "median_ttft": 5.242103500000667,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 4,
+    "num_prefill_gpu": 4,
+    "osl": 625,
+    "output_tput_per_gpu": 488.8287405833934,
+    "p90_e2el": 16.66778830002295,
+    "p90_intvty": 88.56372053260684,
+    "p90_tpot": 0.02252680961539273,
+    "p90_ttft": 8.958986799954436,
+    "p99_e2el": 18.53384665003745,
+    "p99_intvty": 104.67613406750466,
+    "p99_tpot": 0.023902120032028344,
+    "p99_ttft": 9.595472099982434,
+    "precision": "fp4",
+    "prefill_dp_attention": false,
+    "prefill_ep": 1,
+    "prefill_num_workers": 0,
+    "prefill_tp": 4,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 488.8287405833934
+  }
+]
+```
