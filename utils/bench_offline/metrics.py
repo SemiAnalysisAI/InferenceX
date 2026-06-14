@@ -235,6 +235,21 @@ def _is_full_batch_prefill(
     )
 
 
+def _is_inactive_prior_pass_tail(
+    item: dict[str, Any],
+    local_batch_size: int,
+) -> bool:
+    return (
+        item["latency_ms"] > 0
+        and item["context"] == 0
+        and item["generation"] == local_batch_size
+        and item["scheduled"] == local_batch_size
+        and item["active"] == 0
+        and item["queued"] == 0
+        and item["paused"] == 0
+    )
+
+
 def select_full_batch_decode_rounds(
     iteration_stats: list[dict[str, Any]],
     *,
@@ -243,7 +258,13 @@ def select_full_batch_decode_rounds(
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Select one consecutive fixed-batch decode window or fail."""
     normalized = [_iteration_fields(stat) for stat in iteration_stats]
-    scheduled = [item for item in normalized if item["scheduled"] > 0]
+    raw_scheduled = [item for item in normalized if item["scheduled"] > 0]
+    leading_inactive: list[dict[str, Any]] = []
+    for item in raw_scheduled:
+        if not _is_inactive_prior_pass_tail(item, local_batch_size):
+            break
+        leading_inactive.append(item)
+    scheduled = raw_scheduled[len(leading_inactive) :]
     mixed = [
         item
         for item in scheduled
@@ -299,7 +320,15 @@ def select_full_batch_decode_rounds(
     selected = consecutive[:required_rounds]
     diagnostics = {
         "iteration_stats_count": len(iteration_stats),
-        "scheduled_iterations": len(scheduled),
+        "scheduled_iterations": len(raw_scheduled),
+        "pass_scheduled_iterations": len(scheduled),
+        "leading_inactive_iterations_ignored": len(leading_inactive),
+        "leading_inactive_first_iter": (
+            leading_inactive[0]["iter"] if leading_inactive else None
+        ),
+        "leading_inactive_last_iter": (
+            leading_inactive[-1]["iter"] if leading_inactive else None
+        ),
         "context_only_iterations": sum(
             item["context"] > 0 and item["generation"] == 0
             for item in scheduled

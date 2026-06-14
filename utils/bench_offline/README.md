@@ -257,6 +257,15 @@ filter as Huawei's `process_infer_time`:
 4. Drop only latencies above the upper fence.
 5. Average retained round latencies.
 
+The pinned TRT stats queue can publish inactive tail iterations after one
+`get_stats()` call has marked the queue done. The next prompt submission marks
+that queue active again, so those prior-pass rows can appear immediately
+before the next pass's prefill. The selector ignores only a leading tail with
+the exact fixed local generation/scheduled count and
+`active=queued=paused=0`. It records the ignored count and iteration range.
+Any active, queued, partial, or mixed row before prefill remains a validation
+failure.
+
 The timer scope is the closest TRT runtime equivalent, not the same
 instrumentation point. TRT's `iterLatencyMS` covers one complete executor
 iteration with overlap disabled. Huawei records and sums the main-model and

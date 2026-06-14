@@ -189,6 +189,49 @@ def test_decode_validation_rejects_staggered_first_generation_round():
         )
 
 
+def test_decode_validation_ignores_only_inactive_prior_pass_tail():
+    stats = [
+        iteration(
+            0,
+            active=0,
+            scheduled=8,
+            context=0,
+            generation=8,
+        ),
+        *fixed_batch_stats(),
+    ]
+    selected, diagnostics = select_full_batch_decode_rounds(
+        stats,
+        local_batch_size=8,
+        required_rounds=256,
+    )
+    assert len(selected) == 256
+    assert selected[0]["iter"] == 2
+    assert diagnostics["leading_inactive_iterations_ignored"] == 1
+    assert diagnostics["leading_inactive_first_iter"] == 0
+    assert diagnostics["leading_inactive_last_iter"] == 0
+    assert diagnostics["prefill_iter"] == 1
+
+
+def test_decode_validation_rejects_active_decode_before_prefill():
+    stats = [
+        iteration(
+            0,
+            active=8,
+            scheduled=8,
+            context=0,
+            generation=8,
+        ),
+        *fixed_batch_stats(),
+    ]
+    with pytest.raises(RuntimeError, match="full-local-batch prefill"):
+        select_full_batch_decode_rounds(
+            stats,
+            local_batch_size=8,
+            required_rounds=256,
+        )
+
+
 def test_decode_validation_rejects_staggered_prefill():
     stats = [
         iteration(

@@ -68,6 +68,12 @@ benchmark.
   the container, but the cleanly exited MPI world exposed the files just
   after the old five-second host grace expired. Preserve the bounded
   `TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT` wait and its progress logs.
+- Pinned TRT can enqueue inactive iteration-stat tails after `get_stats()`
+  marks its queue done, then expose them when the next submission calls
+  `mark_undone()`. Run `27514818464` returned one warmup tail before the
+  measured prefill. The selector may ignore only leading rows with the exact
+  fixed local generation/scheduled count and `active=queued=paused=0`; record
+  their count/range and reject every active, partial, queued, or mixed row.
 - `perfect_router.jsonl` is shared by all 16 ranks over the workspace
   filesystem. Every writer must use `io_utils.append_json_line`, every strict
   reader must take the matching lock, and malformed lines are a validation

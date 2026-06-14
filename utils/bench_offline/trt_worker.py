@@ -615,12 +615,15 @@ def main() -> int:
                 local_batch_size=local_batch,
                 num_gpus=WORLD_SIZE,
             )
+            schedule_validation = decode_rounds["schedule_validation"]
             log_progress(
                 "measured decode window validated "
                 f"iters="
-                f"{decode_rounds['schedule_validation']['selected_first_iter']}"
+                f"{schedule_validation['selected_first_iter']}"
                 "-"
-                f"{decode_rounds['schedule_validation']['selected_last_iter']} "
+                f"{schedule_validation['selected_last_iter']} "
+                "leading_inactive_stats_ignored="
+                f"{schedule_validation['leading_inactive_iterations_ignored']} "
                 f"round_tpot={decode_rounds['decode_round_tpot_ms']:.3f}ms "
                 "step_tput_per_gpu="
                 f"{decode_rounds['decode_step_tput_per_gpu']:.2f} "

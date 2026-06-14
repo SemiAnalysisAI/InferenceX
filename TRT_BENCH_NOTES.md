@@ -254,6 +254,24 @@ exit, logs visibility every ten seconds, and only then compares statuses.
 Do not reduce this to a short fixed sleep or accept the MPI return code as
 benchmark success.
 
+Run `27514818464`, source
+`e173082762cf949819d6220e1b44f54967c87a26`, proved the handoff fix: the host
+read matching failed result/completion files and canceled the allocation
+without the earlier visibility fallback. GBS16 itself failed schedule
+validation because its measured stats began with inactive warmup tail
+iteration `4`, followed by the real measured prefill at `5` and 279
+consecutive full-batch decode rounds at `6..284`. The prior successful GBS16
+had drained three such tails into the warmup read, so its measured history
+started directly at prefill.
+
+This is a pinned TRT `IterationResult` boundary race. `get_results()` marks
+the queue done when it appears empty; a late stat can remain queued until the
+next prompt submission calls `mark_undone()`. The selector now ignores only
+leading rows that prove they are an inactive prior-pass tail:
+`context=0`, `generation=scheduled=local_batch`, and
+`active=queued=paused=0`. It records the ignored count and iteration range.
+Any active, queued, partial, or mixed work before prefill still fails.
+
 ## Why The Old Result Was Too High
 
 Run `27483465692` used a request pool and mean per-request decode windows. At
