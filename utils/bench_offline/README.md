@@ -64,7 +64,7 @@ local_batch_size = global_batch_size / 8
 max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
-synthetic engine warmup max_num_tokens = min(max_num_tokens, 65536)
+synthetic pure-context warmup request = min(max_num_tokens, 65536)
 kv_cache.free_gpu_memory_fraction = 0.60
 moe.max_num_tokens = 65536
 fused FP8 quantizer max rows = 32768
@@ -88,10 +88,14 @@ prefill iteration.
 TRT's internal `PyTorchModelEngine.warmup()` otherwise profiles tunable
 operators with the full runtime `max_num_tokens`. At GBS128 that means a
 synthetic 131072-token prefill shape and can spend hours in initialization.
-The branch-local MPI shim temporarily caps only this synthetic engine warmup
-at 65536 tokens, then restores `max_num_tokens=131072` before the benchmark's
-real warmup and measured generations. This is not a runtime capacity reduction:
-a result is accepted only if the later schedule proof shows one complete
+The branch-local MPI shim leaves `engine.max_num_tokens=131072` unchanged and
+caps only pure-context requests created by TRT's
+`_create_warmup_request()` at 65536 tokens. The distinction is required:
+DeepSeek-V4 sparse-attention metadata is allocated lazily from
+`engine.max_num_tokens` on the first forward. Temporarily lowering that field
+allocated 65536-token buffers and made the later 84087-token KV-capacity probe
+fail in run `27490833024`. Runtime buffers now retain full capacity. A result
+is still accepted only if the schedule proof shows one complete
 local-batch-16 prefill and 256 consecutive local-batch-16 decode iterations.
 
 The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
@@ -235,9 +239,10 @@ using each stack's observed or published MTP yield.
 2. Fan out one job per requested global batch.
 3. Allocate one exclusive eight-GPU B300 Slurm node per job.
 4. Build the exact 8192-token corpus.
-5. Start one fresh TensorRT-LLM engine, with synthetic tuning capped at 65536
-   tokens and runtime capacity restored afterward. TRT's internal capacity
-   probes run while the benchmark request gate is disarmed.
+5. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
+   GBS-derived value while synthetic pure-context warmup requests are capped
+   at 65536 tokens. TRT's internal capacity probes run while the benchmark
+   request gate is disarmed.
 6. Atomically arm the fixed-batch request gate after engine initialization.
 7. Run the short full-batch warmup.
 8. Run one measured generation.

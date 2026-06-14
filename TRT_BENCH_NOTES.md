@@ -91,17 +91,15 @@ The pinned engine also uses `max_num_tokens` to build synthetic shapes during
 `PyTorchModelEngine.warmup()`. GBS128 run `27487131935` completed GBS16 and
 GBS64,
 but spent 62 minutes in GBS128 initialization before cancellation because it
-was tuning a synthetic 131072-token prefill shape. The MPI shim now
-temporarily limits only this internal warmup to 65536 tokens. It restores
-`max_num_tokens=131072` in a `finally` block before the benchmark's real
-warmup and measured generations. The run remains invalid unless schedule
-validation proves one local-batch-16 prefill and 256 full-batch decode rounds.
+was tuning a synthetic 131072-token prefill shape. The first mitigation
+temporarily changed `engine.max_num_tokens` to 65536 during warmup and restored
+it afterward.
 
 Run `27488380128` exposed an implementation mistake in the first cap: it
 patched the abstract `ModelEngine.warmup`, while the runtime calls the
 overridden `PyTorchModelEngine.warmup`. GPU activity stopped after initial
-setup and the job remained in engine initialization for 52 minutes. The shim
-and its unit test now target the concrete override explicitly.
+setup and the job remained in engine initialization for 52 minutes. That
+revision and its unit test then targeted the concrete override explicitly.
 
 Run `27489466718` proved the concrete cap executes: rank output reported
 `runtime_max_tokens=131072`, `tuned_max_tokens=65536`, then completion after
@@ -123,6 +121,21 @@ initializes. The controller clears a unique arm file before launch; the parent
 worker atomically creates it only after `LLM(...)` returns and immediately
 before real warmup generation. Rank 0 then latches the gate on for both the
 warmup and measured passes. A stale or early arm file is a hard error.
+
+Run `27490833024` proved that arm lifecycle works: calibration was no longer
+blocked at `120/128`. It then exposed a flaw in the old warmup mitigation.
+DeepSeek-V4 attention metadata is allocated lazily during the first warmup
+forward, so lowering `engine.max_num_tokens` created 65536-token buffers.
+Calibration later scheduled 84087 tokens and failed in
+`host_req_idx_per_token` with target size 65536.
+
+The current shim never changes runtime `max_num_tokens`. It wraps only
+`PyTorchModelEngine._create_warmup_request()` and clamps pure-context
+synthetic requests to 65536 tokens. The first forward therefore allocates
+attention/spec metadata for the full 131072-token runtime capacity while
+expensive general/autotuner warmup shapes remain bounded. The run remains
+invalid unless schedule validation proves one local-batch-16 prefill and 256
+full-batch decode rounds.
 
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA

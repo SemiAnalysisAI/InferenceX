@@ -33,10 +33,10 @@ MAX_SEQ_LEN = 9344
 # executor's one-iteration full-batch token budget. Decode is far below this
 # fixed cap for every supported GBS.
 MOE_MAX_NUM_TOKENS = WORLD_SIZE * INPUT_TOKENS
-# TRT's synthetic engine warmup profiles every tunable op at max_num_tokens.
-# GBS128 would therefore spend hours profiling a 131072-token prefill shape
-# that never enters the decode metric. Real warmup and measured generations
-# retain the full runtime token limit and validate the complete fixed batch.
+# TRT's synthetic engine warmup profiles tunable ops with a max-shape pure
+# context request. Cap only that request shape; engine.max_num_tokens must stay
+# at runtime capacity because DeepSeek-V4 attention metadata allocates lazily
+# from it on the first forward pass.
 ENGINE_WARMUP_MAX_TOKENS = WORLD_SIZE * INPUT_TOKENS
 # The pinned fused packed-FP8 quantizer fails its CUDA launch for the
 # 65536-row MTP projection used by GBS64 prefill. Keep the fused decode path,

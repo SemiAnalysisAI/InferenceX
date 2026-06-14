@@ -17,7 +17,7 @@ from run import (
     wait_for_worker_process,
 )
 from trt_mpi_entry import (
-    _install_engine_warmup_token_cap,
+    _install_engine_warmup_shape_cap,
     _install_fixed_batch_request_barrier,
     _install_large_prefill_fp8_quant_guard,
     worker_main,
@@ -82,14 +82,14 @@ def test_latest_worker_progress_surfaces_mpi_warmup_marker(tmp_path):
     worker_log.write_text(
         "[offline-trt-worker 2026-06-13T12:00:00+00:00] "
         "engine initialization start\n"
-        "[offline-trt-mpi] synthetic engine warmup start "
-        "runtime_max_tokens=131072 tuned_max_tokens=65536\n"
+        "[offline-trt-mpi] rank=0 event=engine_warmup_shape_capped "
+        "requested_tokens=84087 tuned_tokens=65536\n"
         "native TRT output\n",
         encoding="utf-8",
     )
     assert latest_worker_progress(worker_log) == (
-        "[offline-trt-mpi] synthetic engine warmup start "
-        "runtime_max_tokens=131072 tuned_max_tokens=65536"
+        "[offline-trt-mpi] rank=0 event=engine_warmup_shape_capped "
+        "requested_tokens=84087 tuned_tokens=65536"
     )
 
 
@@ -188,6 +188,14 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
             return []
 
     class FakeModelEngine:
+        def _create_warmup_request(
+            self,
+            resource_manager,
+            num_tokens,
+            num_gen_requests,
+        ):
+            return num_tokens, num_gen_requests
+
         def warmup(self, resource_manager):
             return None
 
@@ -324,8 +332,9 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["source"] == "trt_mpi_entry"
 
 
-def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
-    seen = []
+def test_engine_warmup_shape_cap_preserves_runtime_capacity(monkeypatch):
+    seen_runtime_capacity = []
+    seen_requests = []
     model_engine_module = ModuleType(
         "tensorrt_llm._torch.pyexecutor.model_engine"
     )
@@ -338,9 +347,24 @@ def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
         def __init__(self, max_num_tokens):
             self.max_num_tokens = max_num_tokens
 
-        def warmup(self, resource_manager):
-            seen.append(self.max_num_tokens)
+        def _create_warmup_request(
+            self,
+            resource_manager,
+            num_tokens,
+            num_gen_requests,
+        ):
+            seen_requests.append((num_tokens, num_gen_requests))
             return resource_manager
+
+        def warmup(self, resource_manager):
+            seen_runtime_capacity.append(self.max_num_tokens)
+            self._create_warmup_request(
+                resource_manager,
+                self.max_num_tokens,
+                num_gen_requests=0,
+            )
+            self._create_warmup_request(resource_manager, 16, 16)
+            return self.max_num_tokens
 
     model_engine_module.ModelEngine = FakeModelEngine
     model_engine_module.PyTorchModelEngine = FakePyTorchModelEngine
@@ -362,25 +386,32 @@ def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
         "65536",
     )
 
-    installed = _install_engine_warmup_token_cap()
+    installed = _install_engine_warmup_shape_cap()
     large = FakePyTorchModelEngine(131072)
     small = FakePyTorchModelEngine(16384)
 
     assert installed == {
         "max_warmup_tokens": 65536,
-        "target": "FakePyTorchModelEngine",
+        "target": "FakePyTorchModelEngine._create_warmup_request",
+        "trace_target": "FakePyTorchModelEngine.warmup",
         "already_installed": False,
     }
     assert not getattr(
         FakeModelEngine.warmup,
-        "_offline_engine_warmup_token_cap",
+        "_offline_engine_warmup_trace",
         False,
     )
-    assert large.warmup("large") == "large"
+    assert large.warmup("large") == 131072
     assert large.max_num_tokens == 131072
-    assert small.warmup("small") == "small"
+    assert small.warmup("small") == 16384
     assert small.max_num_tokens == 16384
-    assert seen == [65536, 16384]
+    assert seen_runtime_capacity == [131072, 16384]
+    assert seen_requests == [
+        (65536, 0),
+        (16, 16),
+        (16384, 0),
+        (16, 16),
+    ]
 
 
 def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(

@@ -23,75 +23,113 @@ def _emit_rank_event(event: str, **details: Any) -> None:
     )
 
 
-def _install_engine_warmup_token_cap() -> dict[str, Any]:
+def _install_engine_warmup_shape_cap() -> dict[str, Any]:
     max_warmup_tokens = int(
         os.environ["TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"]
     )
     if max_warmup_tokens <= 0:
         raise RuntimeError(
-            "TRT engine warmup token cap needs a positive limit"
+            "TRT engine warmup shape cap needs a positive limit"
         )
 
     from tensorrt_llm._torch.pyexecutor import model_engine
 
-    # PyTorchModelEngine overrides the abstract ModelEngine.warmup method.
-    # Patching the base method does not intercept the runtime call.
     model_engine_class = model_engine.PyTorchModelEngine
-    original = model_engine_class.warmup
-    if getattr(original, "_offline_engine_warmup_token_cap", False):
-        return {
-            "max_warmup_tokens": max_warmup_tokens,
-            "target": model_engine_class.__name__,
-            "already_installed": True,
-        }
+    create_warmup_request = model_engine_class._create_warmup_request
+    cap_already_installed = getattr(
+        create_warmup_request,
+        "_offline_engine_warmup_shape_cap",
+        False,
+    )
+    if not cap_already_installed:
 
-    def bounded_warmup(
-        engine: Any,
-        resource_manager: Any,
-        *args: Any,
-        **kwargs: Any,
-    ) -> Any:
-        runtime_max_num_tokens = int(engine.max_num_tokens)
-        tuned_max_num_tokens = min(
-            runtime_max_num_tokens,
-            max_warmup_tokens,
-        )
-        engine.max_num_tokens = tuned_max_num_tokens
-        started_at = time.monotonic()
-        _emit_rank_event(
-            "engine_warmup_start",
-            runtime_max_tokens=runtime_max_num_tokens,
-            tuned_max_tokens=tuned_max_num_tokens,
-        )
-        warmup_error: BaseException | None = None
-        try:
-            return original(engine, resource_manager, *args, **kwargs)
-        except BaseException as error:
-            warmup_error = error
-            raise
-        finally:
-            engine.max_num_tokens = runtime_max_num_tokens
-            _emit_rank_event(
-                (
-                    "engine_warmup_complete"
-                    if warmup_error is None
-                    else "engine_warmup_error"
-                ),
-                elapsed_seconds=f"{time.monotonic() - started_at:.3f}",
-                restored_max_tokens=runtime_max_num_tokens,
-                **(
-                    {}
-                    if warmup_error is None
-                    else {"error_type": type(warmup_error).__name__}
-                ),
+        def bounded_warmup_request(
+            engine: Any,
+            resource_manager: Any,
+            num_tokens: int,
+            num_gen_requests: int,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            requested_tokens = int(num_tokens)
+            bounded_tokens = (
+                min(requested_tokens, max_warmup_tokens)
+                if int(num_gen_requests) == 0
+                else requested_tokens
+            )
+            if bounded_tokens != requested_tokens:
+                _emit_rank_event(
+                    "engine_warmup_shape_capped",
+                    requested_tokens=requested_tokens,
+                    tuned_tokens=bounded_tokens,
+                )
+            return create_warmup_request(
+                engine,
+                resource_manager,
+                bounded_tokens,
+                num_gen_requests,
+                *args,
+                **kwargs,
             )
 
-    bounded_warmup._offline_engine_warmup_token_cap = True
-    model_engine_class.warmup = bounded_warmup
+        bounded_warmup_request._offline_engine_warmup_shape_cap = True
+        model_engine_class._create_warmup_request = bounded_warmup_request
+
+    warmup = model_engine_class.warmup
+    trace_already_installed = getattr(
+        warmup,
+        "_offline_engine_warmup_trace",
+        False,
+    )
+    if not trace_already_installed:
+
+        def traced_warmup(
+            engine: Any,
+            resource_manager: Any,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            runtime_max_num_tokens = int(engine.max_num_tokens)
+            started_at = time.monotonic()
+            _emit_rank_event(
+                "engine_warmup_start",
+                runtime_max_tokens=runtime_max_num_tokens,
+                max_context_warmup_tokens=max_warmup_tokens,
+            )
+            warmup_error: BaseException | None = None
+            try:
+                return warmup(engine, resource_manager, *args, **kwargs)
+            except BaseException as error:
+                warmup_error = error
+                raise
+            finally:
+                _emit_rank_event(
+                    (
+                        "engine_warmup_complete"
+                        if warmup_error is None
+                        else "engine_warmup_error"
+                    ),
+                    elapsed_seconds=f"{time.monotonic() - started_at:.3f}",
+                    runtime_max_tokens=runtime_max_num_tokens,
+                    **(
+                        {}
+                        if warmup_error is None
+                        else {"error_type": type(warmup_error).__name__}
+                    ),
+                )
+
+        traced_warmup._offline_engine_warmup_trace = True
+        model_engine_class.warmup = traced_warmup
+
     return {
         "max_warmup_tokens": max_warmup_tokens,
-        "target": model_engine_class.__name__,
-        "already_installed": False,
+        "target": (
+            f"{model_engine_class.__name__}._create_warmup_request"
+        ),
+        "trace_target": f"{model_engine_class.__name__}.warmup",
+        "already_installed": (
+            cap_already_installed and trace_already_installed
+        ),
     }
 
 
@@ -368,7 +406,7 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     cute_cache_dir = os.getenv("TRTLLM_BENCH_CUTE_DSL_CACHE_DIR")
     if cute_cache_dir:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
-    warmup_cap = _install_engine_warmup_token_cap()
+    warmup_cap = _install_engine_warmup_shape_cap()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
     lifecycle_trace = _install_executor_lifecycle_trace()
     fixed_batch_barrier = _install_fixed_batch_request_barrier()
@@ -382,9 +420,10 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         flush=True,
     )
     print(
-        "[offline-trt-mpi] synthetic engine warmup token cap "
+        "[offline-trt-mpi] synthetic engine warmup shape cap "
         f"max_tokens={warmup_cap['max_warmup_tokens']} "
         f"target={warmup_cap['target']} "
+        f"trace_target={warmup_cap['trace_target']} "
         f"already_installed={warmup_cap['already_installed']}",
         flush=True,
     )
