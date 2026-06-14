@@ -2729,3 +2729,40 @@ minimaxm3-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+
+# MiniMax-M3 MXFP8 MI355X vLLM disaggregated (prefill/decode) smoke test on the
+# day-zero ROCm image. Minimal 1 prefill (TP8) + 1 decode (TP8) at conc 1 to
+# validate the MoRI-IO KV-transfer disagg pipeline end-to-end for M3. Layered on
+# the MoRI-patch-removal infra (#1585). No EP (TP8 only); MoE experts are
+# TP-sharded as in the single-node M3 TP8 recipe. Per-worker serve flags live in
+# benchmarks/multi_node/amd_utils/models_vllm.yaml (MiniMax-M3-MXFP8).
+minimaxm3-fp8-mi355x-vllm-disagg:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi355x-disagg
+  precision: fp8
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
