@@ -2930,3 +2930,39 @@ minimaxm3-fp8-mi325x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
+
+# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
+# minimaxm3-fp8-mi325x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). Same H200-style
+# search space as the non-MTP MI325X entry, trimmed at the extreme-concurrency
+# end with TP-only latency rows started at conc 1 (matching the H200/MI355X MTP
+# recipes). Runs with CUDA graphs (no --enforce-eager, VLLM_USE_BREAKABLE_CUDAGRAPH=0,
+# BF16 KV on gfx942). The shipped ROCm image lacks SupportsEagle3 on the AMD
+# MiniMax-M3 model, so the recipe applies that fix in-place at runtime
+# (functionstackx/vllm#1, upstream vllm-project/vllm#45546; validated green on
+# MI355X/MI300X) before serving.
+minimaxm3-fp8-mi325x-vllm-mtp:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi325x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
