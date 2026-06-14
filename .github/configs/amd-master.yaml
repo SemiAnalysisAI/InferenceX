@@ -751,11 +751,13 @@ kimik2.5-int4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
 
 kimik2.5-int4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.21.0
