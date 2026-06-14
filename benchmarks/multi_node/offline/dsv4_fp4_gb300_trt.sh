@@ -279,7 +279,7 @@ PY
 cat "$RANK_MAP_FILE"
 
 log "capturing per-node NVLink fabric state"
-# shellcheck disable=SC2016
+FABRIC_PROBE="${GITHUB_WORKSPACE}/utils/bench_offline/gb300_fabric.py"
 srun \
     --jobid="$JOB_ID" \
     --overlap \
@@ -288,20 +288,23 @@ srun \
     --ntasks-per-node=1 \
     --cpu-bind=none \
     --kill-on-bad-exit=1 \
-    bash -c '
-        set -Eeuo pipefail
-        host="$(hostname)"
-        gpu_count="$(nvidia-smi -L | wc -l)"
-        fabric="$(nvidia-smi -q -d FABRIC)"
-        completed="$(grep -Ec "State[[:space:]]*:[[:space:]]*Completed" <<<"$fabric" || true)"
-        success="$(grep -Ec "Status[[:space:]]*:[[:space:]]*Success" <<<"$fabric" || true)"
-        printf "===== %s =====\n" "$host"
-        nvidia-smi -L
-        printf "%s\n" "$fabric"
-        printf "__FABRIC_SUMMARY__ host=%s gpus=%s completed=%s success=%s\n" \
-            "$host" "$gpu_count" "$completed" "$success"
-        [[ "$gpu_count" -eq 4 && "$completed" -eq 4 && "$success" -eq 4 ]]
-    ' 2>&1 | tee "$TOPOLOGY_FILE"
+    python3 "$FABRIC_PROBE" probe \
+        --expected-gpus="$GPUS_PER_NODE" \
+    2>&1 | tee "$TOPOLOGY_FILE"
+fabric_validation="$(
+    python3 "$FABRIC_PROBE" validate-log \
+        "$TOPOLOGY_FILE" \
+        --expected-nodes="$PHYSICAL_NODES" \
+        --expected-gpus-per-node="$GPUS_PER_NODE"
+)"
+printf '__FABRIC_DOMAIN__ %s\n' "$fabric_validation" \
+    | tee -a "$TOPOLOGY_FILE"
+FABRIC_CLUSTER_UUID="$(
+    python3 -c \
+        'import json, sys; print(json.load(sys.stdin)["cluster_uuid"])' \
+        <<<"$fabric_validation"
+)"
+log "validated one 16-GPU NVLink fabric cluster_uuid=$FABRIC_CLUSTER_UUID"
 
 export BENCH_ID
 export TRT_BENCH_TELEMETRY_DIR="$GITHUB_WORKSPACE"
@@ -341,6 +344,7 @@ TRT_BENCH_RANK_MAP_ARTIFACT="$(basename "$RANK_MAP_FILE")"
 TRT_BENCH_TOPOLOGY_ARTIFACT="$(basename "$TOPOLOGY_FILE")"
 export TRT_BENCH_RANK_MAP_ARTIFACT
 export TRT_BENCH_TOPOLOGY_ARTIFACT
+export TRT_BENCH_FABRIC_CLUSTER_UUID="$FABRIC_CLUSTER_UUID"
 export UCX_TLS="cuda_ipc,cuda_copy,sm,self,tcp"
 export PYTHONUNBUFFERED=1
 export PYTHONDONTWRITEBYTECODE=1

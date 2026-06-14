@@ -362,6 +362,9 @@ def main() -> int:
             "topology_artifact": os.getenv(
                 "TRT_BENCH_TOPOLOGY_ARTIFACT"
             ),
+            "fabric_cluster_uuid": os.getenv(
+                "TRT_BENCH_FABRIC_CLUSTER_UUID"
+            ),
         },
     }
     write_json(result_path, base_result)

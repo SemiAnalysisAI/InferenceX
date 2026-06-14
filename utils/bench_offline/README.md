@@ -332,7 +332,8 @@ Artifacts:
 2. Run one requested global batch at a time.
 3. Allocate either one eight-GPU B300 node or four four-GPU GB300 nodes.
    GB300 captures an exact `0..15` rank map and requires four successful
-   NVLink Fabric states on every physical node before engine launch.
+   NVLink Fabric states on every physical node plus one shared
+   `ClusterUUID` across all 16 GPUs before engine launch.
 4. Build the exact 8192-token corpus.
 5. GB300 starts one 16-rank external MPI world with
    `trtllm-llmapi-launch`; B300 lets TRT create its local MPI pool.
@@ -437,7 +438,8 @@ Debug in this order:
    identical fixed environment.
 7. On GB300, confirm the rank map has four hosts, four local ranks per host,
    and global ranks exactly `0..15`; confirm every fabric summary reports four
-   GPUs, four `Completed` states, and four `Success` statuses.
+   GPUs, four `Completed` states, four `Success` statuses, and the same
+   non-empty `ClusterUUID`.
 8. For initialization stalls, use the controller heartbeat's `rank_progress`
    to identify which ranks reached warmup completion, clock synchronization,
    and executor worker start.

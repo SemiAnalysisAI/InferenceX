@@ -73,8 +73,9 @@ Launch chain:
    `--ntasks-per-node=4`.
 3. Run a 16-task probe and require global ranks `0..15`, local ranks `0..3`
    on each of exactly four hosts.
-4. Run a one-task-per-node fabric probe and require four GPUs plus four
-   `State: Completed` and four `Status: Success` records per node.
+4. Run a one-task-per-node full `nvidia-smi -q` Fabric probe. Require four
+   GPUs plus four `State: Completed` and four `Status: Success` records per
+   node, then require one shared non-empty `ClusterUUID` across all 16 GPUs.
 5. Start one telemetry task per physical node.
 6. Start the engine with:
 
@@ -98,14 +99,25 @@ Artifacts unique to GB300:
 - `offline_topology_gbsN.log`
 - `offline_gpu_metrics_gbsN_HOST.csv` for all four hosts
 
-The topology log is proof that the allocation entered the 16-GPU NVLink
-fabric before the measured engine was started. The result itself records the
-Slurm node list and artifact names.
+The topology log is proof that the allocation entered one 16-GPU NVLink
+Fabric domain before the measured engine was started. The result itself
+records the Slurm node list, Fabric `ClusterUUID`, and artifact names.
 
 Status as of implementation: no GB300 row is considered validated until an
 Actions artifact proves the exact 16-rank set, fabric checks, fixed-batch
 schedule, 256-round window, and final flat renderer row. Record the canary and
 full-sweep run IDs in this file after they complete.
+
+### GB300 Canary History
+
+Run `27502789238`, source
+`3ca9a9febe452918641fc842e5e425553cf035a2`, reached Slurm allocation
+`8707` on `im-gb300-r01-c011` through `c014`. Its rank artifact proves global
+ranks `0..15`, four ranks per host, and local ranks `0..3`. The run stopped
+before TRT because this driver rejects `nvidia-smi -q -d FABRIC` with exit
+code `2`. Fabric data is present in full `nvidia-smi -q` output. The follow-up
+uses the tested `gb300_fabric.py` parser and additionally requires one shared
+non-empty `ClusterUUID` across all 16 GPUs.
 
 ## Why The Old Result Was Too High
 
