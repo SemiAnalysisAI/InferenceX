@@ -71,6 +71,7 @@ minimum runtime KV tokens = local_batch_size * 9344
 GBS128 final KV budget = calibrated budget - 12 GiB transient reserve
 moe.max_num_tokens = 65536
 fused FP8 quantizer max rows = 32768
+Triton-quantize + DeepGemm max rows per internal call = 65536
 ```
 
 | GBS | Local batch/rank | TRT max_num_tokens/rank | Minimum KV tokens/rank | KV reserve |
@@ -131,6 +132,27 @@ that full real-prefill transient. The 12 GiB final-KV reduction covers those
 10 GiB of tensors plus allocator headroom without changing runtime
 `max_num_tokens`, fixed-batch admission, MTP depth, or the measured decode
 path.
+
+Run `27492438399` proved the 12 GiB KV reduction on all eight ranks. Both
+engine phases completed, `LLM(...)` returned after about 575 seconds, the
+fixed-batch barrier armed, and the real 131072-token prefill ran for about
+118 seconds before every rank reported an illegal memory access. The first
+useful stack was in `q_b_proj` inside TRT's
+`fp8SwapABGemmRunner.forward()`. The error surfaced at the output allocation,
+immediately after `_fp8_quantize_1x128_ue8m0()` had launched on all 131072
+rows, so the asynchronous root could be the oversized Triton quantizer or the
+following DeepGemm path.
+
+The MPI shim now wraps only `fp8SwapABGemmRunner.forward()`. Inputs with at
+most 65536 rows use the pinned implementation unchanged. Larger matrices
+allocate the final output once, then quantize and execute DeepGemm over
+contiguous row slices of at most 65536, writing directly into output views.
+The transformed weight and weight-scale layout remains unchanged. Each
+oversized chunk is synchronized because this path is prefill-only; any pinned
+kernel fault therefore surfaces at the exact chunk instead of a later
+allocation or sampler event. This internal GEMM chunking does not split the
+executor's required one-iteration full-batch prefill, and measured decode has
+only 2, 8, or 16 rows.
 
 The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
 65536-row MTP projection produced by GBS64 prefill. Every rank installs a
@@ -377,6 +399,10 @@ Debug in this order:
     reserve `12884901888`, minimum tokens `149504`, an exact
     configured-minus-adjusted delta, and adjusted bytes at least the reported
     minimum runtime KV bytes.
+11. At GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
+    exactly 131072 rows, two 65536-row chunks, and synchronized chunks.
+12. Inspect `memory.used` and `memory.free` in
+    `offline_gpu_metrics_gbs128.csv` around full prefill.
 
 Do not fix failures by reducing the global batch, splitting prefill across
 executor iterations, enabling overlap scheduling, weakening schedule

@@ -10,6 +10,8 @@ from trt_config import (
     CONTROLLED_ENVIRONMENT_VARIABLES,
     ENGINE_WARMUP_MAX_TOKENS,
     FIXED_BATCH_ARM_ENV,
+    FP8_DEEP_GEMM_MAX_ROWS,
+    FP8_DEEP_GEMM_MAX_ROWS_ENV,
     FP8_FUSED_QUANT_MAX_ROWS,
     GBS128_PREFILL_TRANSIENT_RESERVE_BYTES,
     HUAWEI_MEASURED_DECODE_ROUNDS,
@@ -68,6 +70,7 @@ def test_huawei_round_and_sequence_capacity_is_fixed():
     assert WARMUP_OUTPUT_TOKENS == 6
     assert MEASURED_OUTPUT_TOKENS == 1025
     assert MAX_SEQ_LEN == 9344
+    assert FP8_DEEP_GEMM_MAX_ROWS == 65536
 
 
 def test_attention_workspace_reservation_only_applies_above_warmup_cap():
@@ -116,6 +119,7 @@ def test_fixed_rank_environment_is_explicit():
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
             ENGINE_WARMUP_MAX_TOKENS
         ),
+        FP8_DEEP_GEMM_MAX_ROWS_ENV: str(FP8_DEEP_GEMM_MAX_ROWS),
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": str(
             FP8_FUSED_QUANT_MAX_ROWS
         ),
@@ -141,6 +145,7 @@ def test_old_tuning_environment_is_always_cleared():
         "TLLM_METRICS_ALL_RANKS",
         ATTENTION_WORKSPACE_ENV,
         FIXED_BATCH_ARM_ENV,
+        FP8_DEEP_GEMM_MAX_ROWS_ENV,
         KV_PREFILL_RESERVE_ENV,
         MIN_RUNTIME_KV_TOKENS_ENV,
         "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",

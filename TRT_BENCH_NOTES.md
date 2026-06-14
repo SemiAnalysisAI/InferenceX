@@ -97,6 +97,9 @@ violate that bound. GBS16 and GBS64 leave calibration unchanged.
 TRT fused MoE is capped at 65536 tokens per internal invocation so its
 synthetic autotune and prefill tensors are chunked without splitting the
 executor-level prefill iteration. Measured decode is far below the cap.
+The FP8 block-scaled linear runner likewise keeps each oversized activation
+quantization and DeepGemm call at no more than 65536 rows while writing into
+one final output tensor.
 
 The pinned engine also uses `max_num_tokens` to build synthetic shapes during
 `PyTorchModelEngine.warmup()`. GBS128 run `27487131935` completed GBS16 and
@@ -197,6 +200,21 @@ The next BF16 RoPE projection is roughly another 2 GiB:
 The new 12 GiB final-KV reserve covers both tensors and allocator margin. This
 does not lower runtime `max_num_tokens`, split prefill, reduce MTP3, or alter
 the decode kernel path.
+
+Run `27492438399` proved the reserve hook on ranks `0..7`. Both engine warmups
+completed, `LLM(...)` returned after 575.4 seconds, and the real full-batch
+prefill ran for about 118 seconds before an illegal memory access. The first
+useful stack was `q_b_proj -> fp8_swap_ab_gemm`, with the error surfacing at
+the output allocation immediately after the 131072-row Triton activation
+quantizer launch. Because CUDA reported it asynchronously, that stack does
+not distinguish the quantizer from the following DeepGemm operation.
+
+The rank shim now wraps `fp8SwapABGemmRunner.forward()` only above 65536 rows.
+It allocates the final output once, quantizes contiguous row chunks, and calls
+DeepGemm with the pinned transformed weight/scale pair while writing directly
+to output row views. Every oversized chunk is synchronized. This affects
+prefill and calibration only; decode rows remain 2, 8, or 16 and execute the
+original runner without the wrapper body.
 
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA
@@ -356,7 +374,10 @@ API expects every JSON object there to be a flat benchmark row.
    ```
 
 7. Confirm rank markers are exactly `0..7`.
-8. Check GPU telemetry for OOM, idle prefill gaps, or a hung rank.
+8. At GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for 131072
+   rows, two 65536-row chunks, and synchronized chunks.
+9. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
+   idle prefill gaps, or a hung rank.
 
 Do not weaken the fixed-batch gate. Infrastructure errors may be retried on a
 fresh node; capacity or schedule failures require an implementation fix.

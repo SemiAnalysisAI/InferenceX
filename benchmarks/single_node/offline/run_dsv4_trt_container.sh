@@ -29,6 +29,21 @@ log() {
         "$(date -u '+%Y-%m-%dT%H:%M:%SZ')" "$*"
 }
 
+start_offline_gpu_monitor() {
+    local query
+    query="timestamp,index,power.draw,temperature.gpu"
+    query+=",clocks.current.sm,clocks.current.memory"
+    query+=",utilization.gpu,utilization.memory,memory.used,memory.free"
+    GPU_METRICS_CSV="$GPU_METRICS"
+    export GPU_METRICS_CSV
+    nvidia-smi \
+        --query-gpu="$query" \
+        --format=csv \
+        -l 1 > "$GPU_METRICS" 2>/dev/null &
+    GPU_MONITOR_PID=$!
+    log "GPU telemetry started pid=$GPU_MONITOR_PID output=$GPU_METRICS"
+}
+
 mkdir -p "$WORK_DIR"
 
 finalize() {
@@ -129,8 +144,8 @@ log "worker timeout=${WORKER_TIMEOUT}s work_dir=$WORK_DIR"
 log "persistent CuTe cache path=$CUTE_DSL_CACHE_DIR"
 nvidia-smi
 
-log "starting one-second GPU telemetry"
-start_gpu_monitor --output "$GPU_METRICS"
+log "starting one-second GPU telemetry with used/free memory"
+start_offline_gpu_monitor
 
 log "starting offline benchmark controller"
 CONTROLLER_ARGS=(

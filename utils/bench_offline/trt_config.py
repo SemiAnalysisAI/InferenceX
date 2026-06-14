@@ -56,6 +56,14 @@ ATTENTION_WORKSPACE_ENV = "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"
 # 65536-row MTP projection used by GBS64 prefill. Keep the fused decode path,
 # but select TRT's existing Triton quantizer for larger prefill matrices.
 FP8_FUSED_QUANT_MAX_ROWS = 32768
+# The pinned Triton-quantize + DeepGemm runner also fails when the real
+# GBS128 prefill presents 131072 rows at once. Process only that oversized
+# internal GEMM in known-good 65536-row pieces while retaining one executor
+# prefill iteration and the existing transformed DeepGemm weights.
+FP8_DEEP_GEMM_MAX_ROWS = WORLD_SIZE * INPUT_TOKENS
+FP8_DEEP_GEMM_MAX_ROWS_ENV = (
+    "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS"
+)
 SAMPLING_TEMPERATURE = 1.0
 SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
@@ -73,6 +81,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
     ATTENTION_WORKSPACE_ENV,
     "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
+    FP8_DEEP_GEMM_MAX_ROWS_ENV,
     "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
     FIXED_BATCH_ARM_ENV,
     "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
@@ -245,6 +254,7 @@ def fixed_environment(global_batch_size: int) -> dict[str, str]:
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
             ENGINE_WARMUP_MAX_TOKENS
         ),
+        FP8_DEEP_GEMM_MAX_ROWS_ENV: str(FP8_DEEP_GEMM_MAX_ROWS),
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": str(
             FP8_FUSED_QUANT_MAX_ROWS
         ),

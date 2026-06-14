@@ -419,6 +419,140 @@ def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
     }
 
 
+def _install_large_prefill_fp8_gemm_chunking() -> dict[str, Any]:
+    max_chunk_rows = int(
+        os.environ["TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS"]
+    )
+    if max_chunk_rows <= 0:
+        raise RuntimeError(
+            "Large-prefill FP8 GEMM chunking needs a positive row limit"
+        )
+
+    from tensorrt_llm._torch.custom_ops import torch_custom_ops
+
+    runner_class = torch_custom_ops.fp8SwapABGemmRunner
+    forward = runner_class.forward
+    installed_limit = getattr(
+        forward,
+        "_offline_fp8_deep_gemm_max_rows",
+        None,
+    )
+    if installed_limit is not None:
+        if int(installed_limit) != max_chunk_rows:
+            raise RuntimeError(
+                "TRT large-prefill FP8 GEMM hook already has row limit "
+                f"{installed_limit}, requested {max_chunk_rows}"
+            )
+        return {
+            "max_chunk_rows": max_chunk_rows,
+            "target": f"{runner_class.__name__}.forward",
+            "synchronize_chunks": True,
+            "already_installed": True,
+        }
+
+    reported_rows: set[int] = set()
+
+    def chunked_forward(
+        runner: Any,
+        inputs: list[Any],
+        tactic: int = -1,
+    ) -> Any:
+        input_tensor, weight, weight_scale = inputs
+        rows = int(input_tensor.size(0))
+        if rows <= max_chunk_rows:
+            return forward(runner, inputs, tactic=tactic)
+
+        output_features = int(weight.size(0))
+        chunk_count = (
+            rows + max_chunk_rows - 1
+        ) // max_chunk_rows
+        output = input_tensor.new_empty(
+            (rows, output_features),
+            dtype=runner.output_dtype,
+        )
+        trace_shape = rows not in reported_rows
+        if trace_shape:
+            _emit_rank_event(
+                "fp8_prefill_gemm_chunking_start",
+                rows=rows,
+                input_features=int(input_tensor.size(1)),
+                output_features=output_features,
+                max_chunk_rows=max_chunk_rows,
+                chunks=chunk_count,
+                quant_tactic=int(runner.quant_tactic),
+            )
+
+        for chunk_index, start_row in enumerate(
+            range(0, rows, max_chunk_rows)
+        ):
+            end_row = min(start_row + max_chunk_rows, rows)
+            input_chunk = input_tensor[start_row:end_row]
+            output_chunk = output[start_row:end_row]
+            try:
+                act, act_scale = (
+                    torch_custom_ops._fp8_quantize_1x128_ue8m0(
+                        input_chunk,
+                        runner.quant_tactic,
+                    )
+                )
+                torch_custom_ops.deep_gemm.fp8_gemm_nt(
+                    (act, act_scale),
+                    (weight, weight_scale),
+                    output_chunk,
+                    disable_ue8m0_cast=runner.disable_ue8m0_cast,
+                )
+                # This path is prefill-only. Synchronizing makes a pinned
+                # kernel fault surface at the exact failing chunk instead of
+                # a later allocation or sampler event.
+                torch_custom_ops.torch.cuda.synchronize(
+                    input_tensor.device
+                )
+            except BaseException as error:
+                if trace_shape:
+                    _emit_rank_event(
+                        "fp8_prefill_gemm_chunk_error",
+                        rows=rows,
+                        chunk_index=chunk_index,
+                        start_row=start_row,
+                        end_row=end_row,
+                        error_type=type(error).__name__,
+                    )
+                raise
+            if trace_shape:
+                _emit_rank_event(
+                    "fp8_prefill_gemm_chunk_complete",
+                    rows=rows,
+                    chunk_index=chunk_index,
+                    start_row=start_row,
+                    end_row=end_row,
+                )
+
+        if trace_shape:
+            reported_rows.add(rows)
+            _emit_rank_event(
+                "fp8_prefill_gemm_chunked",
+                rows=rows,
+                output_features=output_features,
+                max_chunk_rows=max_chunk_rows,
+                chunks=chunk_count,
+                synchronized_chunks=True,
+            )
+        return output
+
+    setattr(
+        chunked_forward,
+        "_offline_fp8_deep_gemm_max_rows",
+        max_chunk_rows,
+    )
+    runner_class.forward = chunked_forward
+    return {
+        "max_chunk_rows": max_chunk_rows,
+        "target": f"{runner_class.__name__}.forward",
+        "synchronize_chunks": True,
+        "already_installed": False,
+    }
+
+
 def _install_executor_lifecycle_trace() -> dict[str, Any]:
     from tensorrt_llm._torch.pyexecutor import py_executor
 
@@ -615,6 +749,9 @@ def _write_marker(event: str = "entry_ready", **details: Any) -> None:
         "fp8_fused_quant_max_rows": os.getenv(
             "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
         ),
+        "fp8_deep_gemm_max_rows": os.getenv(
+            "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS"
+        ),
         "event": event,
         "source": "trt_mpi_entry",
     }
@@ -641,6 +778,7 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     attention_workspace = _install_attention_workspace_preallocation()
     kv_prefill_reserve = _install_kv_prefill_memory_reserve()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
+    fp8_gemm_chunking = _install_large_prefill_fp8_gemm_chunking()
     lifecycle_trace = _install_executor_lifecycle_trace()
     fixed_batch_barrier = _install_fixed_batch_request_barrier()
     _write_marker()
@@ -681,6 +819,14 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         "[offline-trt-mpi] large-prefill FP8 quant guard "
         f"max_fused_rows={fp8_guard['max_fused_rows']} "
         f"already_installed={fp8_guard['already_installed']}",
+        flush=True,
+    )
+    print(
+        "[offline-trt-mpi] large-prefill FP8 GEMM chunking "
+        f"max_chunk_rows={fp8_gemm_chunking['max_chunk_rows']} "
+        f"target={fp8_gemm_chunking['target']} "
+        f"synchronize_chunks={fp8_gemm_chunking['synchronize_chunks']} "
+        f"already_installed={fp8_gemm_chunking['already_installed']}",
         flush=True,
     )
     print(

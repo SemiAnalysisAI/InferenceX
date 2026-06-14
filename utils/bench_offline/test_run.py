@@ -23,6 +23,7 @@ from trt_mpi_entry import (
     _install_engine_warmup_shape_cap,
     _install_fixed_batch_request_barrier,
     _install_kv_prefill_memory_reserve,
+    _install_large_prefill_fp8_gemm_chunking,
     _install_large_prefill_fp8_quant_guard,
     worker_main,
 )
@@ -250,6 +251,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         def get_valid_tactics(self, inputs, profile, **kwargs):
             return [0, self.TACTIC_TRITON]
 
+    class FakeFp8SwapABGemmRunner:
+        def forward(self, inputs, tactic=-1):
+            return inputs, tactic
+
     def fake_fp8_quantize(input_tensor, tactic):
         return input_tensor, tactic
 
@@ -263,6 +268,9 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     py_executor_impl_module.PyExecutor = FakePyExecutor
     torch_custom_ops_module.Fp8QuantKernelRunner = (
         FakeFp8QuantKernelRunner
+    )
+    torch_custom_ops_module.fp8SwapABGemmRunner = (
+        FakeFp8SwapABGemmRunner
     )
     torch_custom_ops_module._fp8_quantize_1x128_ue8m0 = (
         fake_fp8_quantize
@@ -314,6 +322,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "0",
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": "65536",
+        "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS": "65536",
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": "32768",
         "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE": str(fixed_batch_arm_file),
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
@@ -366,6 +375,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
         "32768",
     )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS",
+        "65536",
+    )
     monkeypatch.delenv("ENABLE_CONFIGURABLE_MOE", raising=False)
     monkeypatch.delenv("ENABLE_PERFECT_ROUTER", raising=False)
     monkeypatch.delenv("CUTE_DSL_CACHE_DIR", raising=False)
@@ -384,6 +397,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["kv_prefill_reserve_bytes"] == "0"
     assert row["minimum_runtime_kv_tokens"] == "74752"
     assert row["fp8_fused_quant_max_rows"] == "32768"
+    assert row["fp8_deep_gemm_max_rows"] == "65536"
     assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "1"
     assert row["source"] == "trt_mpi_entry"
 
@@ -744,6 +758,185 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
     ]
 
 
+def test_large_prefill_fp8_gemm_chunks_only_oversized_rows(
+    tmp_path,
+    monkeypatch,
+):
+    custom_ops_package = ModuleType("tensorrt_llm._torch.custom_ops")
+    custom_ops_package.__path__ = []
+    torch_custom_ops_module = ModuleType(
+        "tensorrt_llm._torch.custom_ops.torch_custom_ops"
+    )
+    original_calls = []
+    allocations = []
+    quantize_calls = []
+    gemm_calls = []
+    synchronize_calls = []
+
+    class FakeTensor:
+        def __init__(
+            self,
+            rows,
+            columns,
+            *,
+            parent=None,
+            row_range=None,
+            dtype="bf16",
+            device="cuda:0",
+        ):
+            self.shape = (rows, columns)
+            self.parent = parent
+            self.row_range = row_range
+            self.dtype = dtype
+            self.device = device
+
+        def size(self, dimension):
+            return self.shape[dimension]
+
+        def new_empty(self, shape, dtype=None):
+            tensor = FakeTensor(
+                shape[0],
+                shape[1],
+                dtype=dtype,
+                device=self.device,
+            )
+            allocations.append(tensor)
+            return tensor
+
+        def __getitem__(self, row_slice):
+            assert isinstance(row_slice, slice)
+            start = 0 if row_slice.start is None else row_slice.start
+            end = self.shape[0] if row_slice.stop is None else row_slice.stop
+            return FakeTensor(
+                end - start,
+                self.shape[1],
+                parent=self,
+                row_range=(start, end),
+                dtype=self.dtype,
+                device=self.device,
+            )
+
+    class FakeFp8SwapABGemmRunner:
+        def __init__(self):
+            self.output_dtype = "bf16"
+            self.disable_ue8m0_cast = False
+            self.quant_tactic = 1
+
+        def forward(self, inputs, tactic=-1):
+            original_calls.append((inputs, tactic))
+            return "original"
+
+    def fake_quantize(input_tensor, tactic):
+        quantize_calls.append(
+            (input_tensor.row_range, input_tensor.shape, tactic)
+        )
+        return (
+            f"act-{input_tensor.row_range}",
+            f"scale-{input_tensor.row_range}",
+        )
+
+    def fake_gemm(
+        activation,
+        transformed_weight,
+        output,
+        *,
+        disable_ue8m0_cast,
+    ):
+        gemm_calls.append(
+            (
+                activation,
+                transformed_weight,
+                output.parent,
+                output.row_range,
+                disable_ue8m0_cast,
+            )
+        )
+
+    torch_custom_ops_module.fp8SwapABGemmRunner = (
+        FakeFp8SwapABGemmRunner
+    )
+    torch_custom_ops_module._fp8_quantize_1x128_ue8m0 = fake_quantize
+    torch_custom_ops_module.deep_gemm = SimpleNamespace(
+        fp8_gemm_nt=fake_gemm
+    )
+    torch_custom_ops_module.torch = SimpleNamespace(
+        cuda=SimpleNamespace(
+            synchronize=lambda device: synchronize_calls.append(device)
+        )
+    )
+    custom_ops_package.torch_custom_ops = torch_custom_ops_module
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.custom_ops",
+        custom_ops_package,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.custom_ops.torch_custom_ops",
+        torch_custom_ops_module,
+    )
+    marker = tmp_path / "marker.jsonl"
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS",
+        "65536",
+    )
+    monkeypatch.setenv("TRTLLM_PERFECT_ROUTER_MARKER", str(marker))
+    monkeypatch.setenv("OMPI_COMM_WORLD_RANK", "6")
+
+    installed = _install_large_prefill_fp8_gemm_chunking()
+    runner = FakeFp8SwapABGemmRunner()
+    weight = FakeTensor(10, 4)
+    weight_scale = object()
+    small = FakeTensor(16, 4)
+    large = FakeTensor(131072, 4)
+
+    assert runner.forward([small, weight, weight_scale], tactic=9) == (
+        "original"
+    )
+    output = runner.forward([large, weight, weight_scale], tactic=9)
+
+    assert installed == {
+        "max_chunk_rows": 65536,
+        "target": "FakeFp8SwapABGemmRunner.forward",
+        "synchronize_chunks": True,
+        "already_installed": False,
+    }
+    assert original_calls == [([small, weight, weight_scale], 9)]
+    assert allocations == [output]
+    assert output.shape == (131072, 10)
+    assert output.dtype == "bf16"
+    assert quantize_calls == [
+        ((0, 65536), (65536, 4), 1),
+        ((65536, 131072), (65536, 4), 1),
+    ]
+    assert [call[3] for call in gemm_calls] == [
+        (0, 65536),
+        (65536, 131072),
+    ]
+    assert all(call[2] is output for call in gemm_calls)
+    assert all(call[4] is False for call in gemm_calls)
+    assert synchronize_calls == ["cuda:0", "cuda:0"]
+    events = [
+        json.loads(line)
+        for line in marker.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [row["event"] for row in events] == [
+        "fp8_prefill_gemm_chunking_start",
+        "fp8_prefill_gemm_chunk_complete",
+        "fp8_prefill_gemm_chunk_complete",
+        "fp8_prefill_gemm_chunked",
+    ]
+    assert events[-1]["rank"] == "6"
+    assert events[-1]["rows"] == 131072
+    assert events[-1]["output_features"] == 10
+    assert events[-1]["max_chunk_rows"] == 65536
+    assert events[-1]["chunks"] == 2
+    assert events[-1]["synchronized_chunks"] is True
+    assert _install_large_prefill_fp8_gemm_chunking()[
+        "already_installed"
+    ] is True
+
+
 def test_fixed_batch_barrier_bypasses_init_then_waits_for_global_batch(
     tmp_path,
     monkeypatch,
@@ -931,4 +1124,53 @@ def test_rank_validation_requires_exact_kv_prefill_reserve_events(
         encoding="utf-8",
     )
     with pytest.raises(RuntimeError, match="prefill reserve mismatch"):
+        validate_rank_propagation(marker, rank_environment)
+
+
+def test_rank_validation_requires_full_prefill_fp8_chunk_events(
+    tmp_path,
+    monkeypatch,
+):
+    marker = tmp_path / "marker.jsonl"
+    rank_environment = {
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "0",
+        "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS": "65536",
+        "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": "128",
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES": "0",
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS": "149504",
+    }
+    rows = [
+        {
+            "pid": 100 + rank,
+            "rank": str(rank),
+            "perfect_router": "1",
+            "cute_dsl_cache_dir": "/cache",
+            "benchmark_environment": rank_environment,
+            "event": "fp8_prefill_gemm_chunked",
+            "rows": 131072,
+            "output_features": 65536,
+            "max_chunk_rows": 65536,
+            "chunks": 2,
+            "synchronized_chunks": True,
+            "source": "trt_mpi_entry",
+        }
+        for rank in range(8)
+    ]
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CUTE_DSL_CACHE_DIR", "/cache")
+
+    parsed = validate_rank_propagation(marker, rank_environment)
+    assert parsed["event_ranks"]["fp8_prefill_gemm_chunked"] == list(
+        range(8)
+    )
+
+    rows[-1]["rows"] = 65536
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="not chunked on every rank"):
         validate_rank_propagation(marker, rank_environment)

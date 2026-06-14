@@ -25,6 +25,7 @@ from trt_config import (
     FIXED_BATCH_ARM_ENV,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
+    INPUT_TOKENS,
     MEASURED_OUTPUT_TOKENS,
     SAMPLING_TEMPERATURE,
     SAMPLING_TOP_K,
@@ -338,6 +339,63 @@ def validate_rank_propagation(
                 "TRT KV prefill reserve mismatch: "
                 f"{invalid_reserve_rows}"
             )
+    fp8_gemm_limit_raw = rank_environment.get(
+        "TRTLLM_BENCH_FP8_DEEP_GEMM_MAX_ROWS"
+    )
+    global_batch_raw = rank_environment.get(
+        "TRTLLM_BENCH_GLOBAL_BATCH_SIZE"
+    )
+    if fp8_gemm_limit_raw is not None and global_batch_raw is not None:
+        fp8_gemm_limit = int(fp8_gemm_limit_raw)
+        global_batch_size = int(global_batch_raw)
+        expected_prefill_rows = (
+            global_batch_size // WORLD_SIZE
+        ) * INPUT_TOKENS
+        if expected_prefill_rows > fp8_gemm_limit:
+            event_name = "fp8_prefill_gemm_chunked"
+            full_prefill_rows = [
+                row
+                for row in marker["events"].get(event_name, [])
+                if int(row.get("rows", -1)) == expected_prefill_rows
+            ]
+            chunked_ranks = sorted(
+                {
+                    int(row["rank"])
+                    for row in full_prefill_rows
+                    if row.get("rank") is not None
+                }
+            )
+            if chunked_ranks != expected_ranks:
+                raise RuntimeError(
+                    "TRT full-prefill FP8 GEMM was not chunked on every "
+                    f"rank: {chunked_ranks!r} != {expected_ranks!r}"
+                )
+            expected_chunks = (
+                expected_prefill_rows + fp8_gemm_limit - 1
+            ) // fp8_gemm_limit
+            invalid_chunk_rows = [
+                {
+                    "rank": row.get("rank"),
+                    "rows": row.get("rows"),
+                    "output_features": row.get("output_features"),
+                    "max_chunk_rows": row.get("max_chunk_rows"),
+                    "chunks": row.get("chunks"),
+                    "synchronized_chunks": row.get(
+                        "synchronized_chunks"
+                    ),
+                }
+                for row in full_prefill_rows
+                if int(row.get("output_features", -1)) <= 0
+                or int(row.get("max_chunk_rows", -1))
+                != fp8_gemm_limit
+                or int(row.get("chunks", -1)) != expected_chunks
+                or row.get("synchronized_chunks") is not True
+            ]
+            if invalid_chunk_rows:
+                raise RuntimeError(
+                    "TRT full-prefill FP8 GEMM chunking mismatch: "
+                    f"{invalid_chunk_rows}"
+                )
     expected_cache = os.getenv("CUTE_DSL_CACHE_DIR")
     if not expected_cache:
         raise RuntimeError("CUTE_DSL_CACHE_DIR is required")

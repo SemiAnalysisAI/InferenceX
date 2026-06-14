@@ -46,6 +46,12 @@ benchmark.
 - Keep the rank-local packed-FP8 guard at 32768 rows. It selects TRT's Triton
   quantizer only for large GBS64/128 prefill projections; measured decode has
   at most 16 rows and stays on the original fused path.
+- Keep `fp8SwapABGemmRunner` chunking at 65536 rows. Run `27492438399`
+  completed initialization and reached real GBS128 prefill, then failed after
+  launching the Triton quantizer on all 131072 rows. The hook allocates one
+  final output and writes two row chunks through the existing transformed
+  DeepGemm weights. Synchronize oversized chunks for precise failures.
+  Decode has at most 16 rows and must call the pinned runner unchanged.
 - `LLM.generate()` submits requests individually. The MPI entry shim patches
   TRT's idle request fetch so each warmup/measured pass waits for exactly one
   complete GBS before routing. Do not remove that barrier while claiming a

@@ -23,6 +23,7 @@ from trt_config import (
     CONTROLLED_ENVIRONMENT_VARIABLES,
     FIXED_BATCH_ARM_FILENAME,
     FIXED_BENCHMARK_CONFIG,
+    FP8_DEEP_GEMM_MAX_ROWS,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
     INPUT_TOKENS,
@@ -311,6 +312,7 @@ def main() -> int:
             "mtp_max_draft_len": MTP_DRAFT_TOKENS,
             "max_seq_len": MAX_SEQ_LEN,
             "attention_workspace_target_bytes": None,
+            "fp8_deep_gemm_max_rows": FP8_DEEP_GEMM_MAX_ROWS,
             "warmup_decode_rounds": HUAWEI_WARMUP_DECODE_ROUNDS,
             "measured_decode_rounds": HUAWEI_MEASURED_DECODE_ROUNDS,
             "sampling": {
@@ -452,6 +454,7 @@ def main() -> int:
             f"max_num_tokens={max_num_tokens(args.global_batch_size)} "
             "attention_workspace_bytes="
             f"{attention_workspace_target_bytes(args.global_batch_size)} "
+            f"fp8_deep_gemm_max_rows={FP8_DEEP_GEMM_MAX_ROWS} "
             f"fixed_batch_arm_file={fixed_batch_arm_path}"
         )
         started = time.perf_counter()
