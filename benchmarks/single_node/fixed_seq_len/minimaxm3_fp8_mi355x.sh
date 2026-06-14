@@ -56,7 +56,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --max-model-len "$MAX_MODEL_LEN" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
-    --enforce-eager \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
