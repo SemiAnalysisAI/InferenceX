@@ -3783,3 +3783,10 @@
     - "H200-aligned layouts and concurrency ranges: TP4 and TP8 latency, TP4/TP8 expert parallelism, and TP8 data-parallel attention across 1k1k and 8k1k"
     - "Route the MI325X Hugging Face cache and runtime compiler caches to node-local storage, and mount ROCm GPU devices explicitly"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1748
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Run the MiniMax-M3 MXFP8 MI355X EAGLE3 MTP recipe with CUDA graphs instead of --enforce-eager"
+    - "Drop --enforce-eager and set VLLM_USE_BREAKABLE_CUDAGRAPH=0, which avoids the M3-decode breakable-cudagraph path that previously forced eager execution (the non-MTP MI355X recipe already got this in #1754)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1755

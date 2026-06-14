@@ -5,8 +5,9 @@
 # minimaxm3_fp8_mi355x.sh. Adds the Inferact/MiniMax-M3-EAGLE3 draft head via
 # --speculative-config with 3 speculative tokens. Everything else mirrors the
 # non-MTP recipe: MXFP8 from TP=4 on gfx950, mandatory --block-size 128,
-# --language-model-only for the text-only benchmark, FP8 KV cache,
-# --attention-backend TRITON_ATTN, and --enforce-eager.
+# --language-model-only for the text-only benchmark, FP8 KV cache, and
+# --attention-backend TRITON_ATTN. Runs with CUDA graphs (no --enforce-eager);
+# VLLM_USE_BREAKABLE_CUDAGRAPH=0 avoids the M3-decode breakable-cudagraph path.
 #
 # Unlike the CUDA recipes, the drafter needs no attention_backend override:
 # the FlashInfer "page size 128 requires GQA/MQA" limitation that forced
@@ -57,6 +58,9 @@ fi
 
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+# Run with CUDA graphs (no --enforce-eager): VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# avoids the M3-decode breakable-cudagraph path that previously forced eager.
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -168,11 +172,11 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --block-size 128 \
+    --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
-    --enforce-eager \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
