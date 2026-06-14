@@ -22,35 +22,55 @@ def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
     from tensorrt_llm._torch.custom_ops import torch_custom_ops
 
     runner_class = torch_custom_ops.Fp8QuantKernelRunner
-    original = runner_class.get_valid_tactics
-    if getattr(original, "_offline_large_prefill_guard", False):
-        return {
-            "max_fused_rows": max_fused_rows,
-            "already_installed": True,
-        }
+    tactic_selector = runner_class.get_valid_tactics
+    tactic_filter_installed = getattr(
+        tactic_selector,
+        "_offline_large_prefill_guard",
+        False,
+    )
+    if not tactic_filter_installed:
 
-    def guarded_get_valid_tactics(
-        runner: Any,
-        inputs: list[Any],
-        profile: Any,
-        **kwargs: Any,
-    ) -> list[Any]:
-        tactics = original(runner, inputs, profile, **kwargs)
-        rows = int(inputs[0].shape[0])
-        if rows <= max_fused_rows:
-            return tactics
-        triton_tactic = runner.TACTIC_TRITON
-        if triton_tactic not in tactics:
-            raise RuntimeError(
-                "TRT large-prefill FP8 quantization has no Triton tactic"
-            )
-        return [triton_tactic]
+        def guarded_get_valid_tactics(
+            runner: Any,
+            inputs: list[Any],
+            profile: Any,
+            **kwargs: Any,
+        ) -> list[Any]:
+            tactics = tactic_selector(runner, inputs, profile, **kwargs)
+            rows = int(inputs[0].shape[0])
+            if rows <= max_fused_rows:
+                return tactics
+            triton_tactic = runner.TACTIC_TRITON
+            if triton_tactic not in tactics:
+                raise RuntimeError(
+                    "TRT large-prefill FP8 quantization has no Triton tactic"
+                )
+            return [triton_tactic]
 
-    guarded_get_valid_tactics._offline_large_prefill_guard = True
-    runner_class.get_valid_tactics = guarded_get_valid_tactics
+        guarded_get_valid_tactics._offline_large_prefill_guard = True
+        runner_class.get_valid_tactics = guarded_get_valid_tactics
+
+    quantize = torch_custom_ops._fp8_quantize_1x128_ue8m0
+    dispatch_guard_installed = getattr(
+        quantize,
+        "_offline_large_prefill_guard",
+        False,
+    )
+    if not dispatch_guard_installed:
+
+        def guarded_quantize(input_tensor: Any, tactic: int) -> Any:
+            if int(input_tensor.shape[0]) > max_fused_rows:
+                tactic = runner_class.TACTIC_TRITON
+            return quantize(input_tensor, tactic)
+
+        guarded_quantize._offline_large_prefill_guard = True
+        torch_custom_ops._fp8_quantize_1x128_ue8m0 = guarded_quantize
+
     return {
         "max_fused_rows": max_fused_rows,
-        "already_installed": False,
+        "already_installed": (
+            tactic_filter_installed and dispatch_guard_installed
+        ),
     }
 
 

@@ -139,6 +139,9 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         def get_valid_tactics(self, inputs, profile, **kwargs):
             return [0, self.TACTIC_TRITON]
 
+    def fake_fp8_quantize(input_tensor, tactic):
+        return input_tensor, tactic
+
     def fake_worker(*args, **kwargs):
         calls.append((args, kwargs))
         return "done"
@@ -146,6 +149,9 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     request_queue_module.ExecutorRequestQueue = FakeExecutorRequestQueue
     torch_custom_ops_module.Fp8QuantKernelRunner = (
         FakeFp8QuantKernelRunner
+    )
+    torch_custom_ops_module._fp8_quantize_1x128_ue8m0 = (
+        fake_fp8_quantize
     )
     custom_ops_package.torch_custom_ops = torch_custom_ops_module
     worker_module.worker_main = fake_worker
@@ -241,8 +247,17 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
         def get_valid_tactics(self, inputs, profile, **kwargs):
             return [0, self.TACTIC_TRITON]
 
+    quantize_calls = []
+
+    def fake_fp8_quantize(input_tensor, tactic):
+        quantize_calls.append((input_tensor.shape, tactic))
+        return input_tensor, tactic
+
     torch_custom_ops_module.Fp8QuantKernelRunner = (
         FakeFp8QuantKernelRunner
+    )
+    torch_custom_ops_module._fp8_quantize_1x128_ue8m0 = (
+        fake_fp8_quantize
     )
     custom_ops_package.torch_custom_ops = torch_custom_ops_module
     monkeypatch.setitem(
@@ -271,6 +286,16 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
     }
     assert runner.get_valid_tactics(small, None) == [0, 1]
     assert runner.get_valid_tactics(large, None) == [1]
+    assert torch_custom_ops_module._fp8_quantize_1x128_ue8m0(
+        small[0], 0
+    ) == (small[0], 0)
+    assert torch_custom_ops_module._fp8_quantize_1x128_ue8m0(
+        large[0], -1
+    ) == (large[0], 1)
+    assert quantize_calls == [
+        ((16, 7168), 0),
+        ((65536, 7168), 1),
+    ]
 
 
 def test_fixed_batch_barrier_waits_for_one_complete_global_batch(
