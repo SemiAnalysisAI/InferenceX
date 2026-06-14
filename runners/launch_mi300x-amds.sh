@@ -7,6 +7,10 @@ PARTITION="compute"
 SQUASH_FILE="/home/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
+# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
+# the h200 launchers, which have carried SPEC_SUFFIX since #392).
+SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+
 set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
@@ -37,6 +41,6 @@ srun --jobid=$JOB_ID \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x.sh
+bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x${SPEC_SUFFIX}.sh
 
 scancel $JOB_ID
