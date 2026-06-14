@@ -71,16 +71,18 @@ Pinned TRT:
 
 ## Capacity Table
 
-| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` |
-|---:|---:|---:|---:|---:|
-| 16 | 2 | 2 | 2 | 16384 |
-| 64 | 8 | 8 | 8 | 65536 |
-| 128 | 16 | 16 | 16 | 131072 |
+| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` | KV tokens |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 2 | 2 | 2 | 16384 | 18688 |
+| 64 | 8 | 8 | 8 | 65536 | 74752 |
+| 128 | 16 | 16 | 16 | 131072 | 149504 |
 
 `max_num_tokens` is intentionally much larger than the old recipe. It permits
-all local 8192-token prompts to prefill in the same iteration. If GBS 128
-cannot initialize or prefill at this capacity, record the failure; do not
-restore staggered prefill.
+all local 8192-token prompts to prefill in the same iteration. KV storage is
+bounded to the exact local batch times `max_seq_len`. TRT fused MoE is capped
+at 65536 tokens per internal invocation so its synthetic autotune and prefill
+tensors are chunked without splitting the executor-level prefill iteration.
+Measured decode is far below the cap.
 
 ## Schedule Gate
 

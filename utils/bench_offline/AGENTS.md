@@ -11,6 +11,10 @@ benchmark.
 - `global_batch_size` is authoritative. TRT `max_batch_size` and CUDA graph
   size are exactly `global_batch_size / 8`; `max_num_tokens` is exactly
   `local_batch_size * 8192` so every local prompt can prefill together.
+- KV storage is exactly `local_batch_size * 9344` tokens. The fixed
+  `moe_config.max_num_tokens=65536` cap chunks only oversized fused-MoE
+  tensors inside that one executor iteration; measured decode never reaches
+  the cap.
 - `LLM.generate()` submits requests individually. The MPI entry shim patches
   TRT's idle request fetch so each warmup/measured pass waits for exactly one
   complete GBS before routing. Do not remove that barrier while claiming a

@@ -10,9 +10,11 @@ from trt_config import (
     ITERATION_STATS_CAPACITY,
     MAX_SEQ_LEN,
     MEASURED_OUTPUT_TOKENS,
+    MOE_MAX_NUM_TOKENS,
     WARMUP_OUTPUT_TOKENS,
     build_llm_kwargs,
     fixed_environment,
+    kv_cache_max_tokens,
     local_batch_size,
     max_num_tokens,
     resolved_parallelism,
@@ -21,23 +23,31 @@ from trt_config import (
 
 
 @pytest.mark.parametrize(
-    ("global_batch_size", "expected_local", "expected_tokens"),
     (
-        (16, 2, 16384),
-        (64, 8, 65536),
-        (128, 16, 131072),
+        "global_batch_size",
+        "expected_local",
+        "expected_tokens",
+        "expected_kv_tokens",
+    ),
+    (
+        (16, 2, 16384, 18688),
+        (64, 8, 65536, 74752),
+        (128, 16, 131072, 149504),
     ),
 )
 def test_one_global_batch_derives_every_local_capacity(
     global_batch_size,
     expected_local,
     expected_tokens,
+    expected_kv_tokens,
 ):
     kwargs = build_llm_kwargs("/model", global_batch_size)
     assert local_batch_size(global_batch_size) == expected_local
     assert max_num_tokens(global_batch_size) == expected_tokens
+    assert kv_cache_max_tokens(global_batch_size) == expected_kv_tokens
     assert kwargs["max_batch_size"] == expected_local
     assert kwargs["max_num_tokens"] == expected_tokens
+    assert kwargs["kv_cache_config"]["max_tokens"] == expected_kv_tokens
     assert kwargs["cuda_graph_config"]["batch_sizes"] == [expected_local]
     assert kwargs["cuda_graph_config"]["max_batch_size"] == expected_local
 
@@ -63,6 +73,7 @@ def test_llm_kwargs_force_synchronized_dep8_iteration_stats():
     assert kwargs["print_iter_log"] is False
     assert kwargs["speculative_config"]["max_draft_len"] == 3
     assert kwargs["sparse_attention_config"]["enable_heuristic_topk"] is True
+    assert kwargs["moe_config"]["max_num_tokens"] == MOE_MAX_NUM_TOKENS
 
 
 def test_fixed_rank_environment_is_explicit():
@@ -107,7 +118,12 @@ def test_resolved_parallelism_validates_fixed_capacity(monkeypatch):
         speculative_config=SimpleNamespace(max_draft_len=3),
         moe_config=SimpleNamespace(
             backend="TRTLLM",
+            max_num_tokens=MOE_MAX_NUM_TOKENS,
             use_low_precision_moe_combine=True,
+        ),
+        kv_cache_config=SimpleNamespace(
+            max_tokens=74752,
+            free_gpu_memory_fraction=0.60,
         ),
         sparse_attention_config=SimpleNamespace(
             enable_heuristic_topk=True,
@@ -128,6 +144,8 @@ def test_resolved_parallelism_validates_fixed_capacity(monkeypatch):
     assert resolved["global_batch_size"] == 64
     assert resolved["local_batch_size"] == 8
     assert resolved["max_num_tokens"] == 65536
+    assert resolved["kv_cache_max_tokens"] == 74752
+    assert resolved["moe_max_num_tokens"] == MOE_MAX_NUM_TOKENS
     assert resolved["cuda_graph_batch_sizes"] == [8]
 
 
@@ -144,7 +162,12 @@ def test_resolved_parallelism_rejects_staggered_prefill_capacity():
         speculative_config=SimpleNamespace(max_draft_len=3),
         moe_config=SimpleNamespace(
             backend="TRTLLM",
+            max_num_tokens=MOE_MAX_NUM_TOKENS,
             use_low_precision_moe_combine=True,
+        ),
+        kv_cache_config=SimpleNamespace(
+            max_tokens=74752,
+            free_gpu_memory_fraction=0.60,
         ),
         sparse_attention_config=SimpleNamespace(
             enable_heuristic_topk=True,

@@ -291,6 +291,10 @@ def main() -> int:
             "engine initialization start "
             f"max_batch_size={llm_kwargs['max_batch_size']} "
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
+            "kv_cache_max_tokens="
+            f"{llm_kwargs['kv_cache_config']['max_tokens']} "
+            "moe_max_num_tokens="
+            f"{llm_kwargs['moe_config']['max_num_tokens']} "
             f"max_seq_len={llm_kwargs['max_seq_len']} "
             "overlap_scheduler=off iter_stats=on"
         )
@@ -306,7 +310,9 @@ def main() -> int:
                 f"elapsed={init_seconds:.1f}s "
                 f"local_batch={resolved['local_batch_size']} "
                 f"cuda_graph_batch={resolved['cuda_graph_batch_sizes']} "
-                f"max_num_tokens={resolved['max_num_tokens']}"
+                f"max_num_tokens={resolved['max_num_tokens']} "
+                f"kv_cache_max_tokens={resolved['kv_cache_max_tokens']} "
+                f"moe_max_num_tokens={resolved['moe_max_num_tokens']}"
             )
 
             phase = "warmup"

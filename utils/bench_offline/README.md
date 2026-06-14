@@ -64,13 +64,22 @@ local_batch_size = global_batch_size / 8
 max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
+kv_cache.max_tokens = local_batch_size * 9344
+moe.max_num_tokens = 65536
 ```
 
-| GBS | Local batch/rank | TRT max_num_tokens/rank |
-|---:|---:|---:|
-| 16 | 2 | 16384 |
-| 64 | 8 | 65536 |
-| 128 | 16 | 131072 |
+| GBS | Local batch/rank | TRT max_num_tokens/rank | KV max tokens/rank |
+|---:|---:|---:|---:|
+| 16 | 2 | 16384 | 18688 |
+| 64 | 8 | 65536 | 74752 |
+| 128 | 16 | 131072 | 149504 |
+
+The KV limit reserves only the exact fixed-batch sequence capacity instead of
+claiming 60% of every remaining byte. The fixed 65536-token MoE cap applies
+inside a fused-MoE invocation. It lets TRT internally chunk the very large
+prefill/autotune tensor while the executor still schedules the complete local
+batch in one prefill iteration. Decode has at most 128 tokens node-wide, so
+the measured decode rounds never hit this cap.
 
 The old harness used approximately one prompt's prefill token budget even for
 large global batches. TRT therefore queued and staggered requests. Dividing
@@ -279,6 +288,8 @@ Debug in this order:
    range.
 6. Confirm all rank markers are `0..7` with identical fixed environment.
 
-Do not fix failures by reducing the global batch, chunking/staggering prefill,
-enabling overlap scheduling, weakening schedule validation, reducing MTP
-depth, or reverting to per-request TPOT.
+Do not fix failures by reducing the global batch, splitting prefill across
+executor iterations, enabling overlap scheduling, weakening schedule
+validation, reducing MTP depth, or reverting to per-request TPOT. Internal
+fused-op chunking is allowed only when the schedule proof still shows one
+complete full-batch prefill iteration.

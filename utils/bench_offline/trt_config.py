@@ -28,6 +28,10 @@ MEASURED_OUTPUT_TOKENS = (
 # Huawei allocates 8192 + 256 * 4 + 2 positions for MTP3, then aligns the
 # paged-KV capacity to its 128-token block size.
 MAX_SEQ_LEN = 9344
+# Keep fused-MoE prefill/autotune tensors bounded without changing the
+# executor's one-iteration full-batch token budget. Decode is far below this
+# fixed cap for every supported GBS.
+MOE_MAX_NUM_TOKENS = WORLD_SIZE * INPUT_TOKENS
 SAMPLING_TEMPERATURE = 1.0
 SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
@@ -70,7 +74,9 @@ class FixedBenchmarkConfig:
     cuda_graph: bool = True
     enable_heuristic_topk: bool = True
     moe_backend: str = "TRTLLM"
+    moe_max_num_tokens: int = MOE_MAX_NUM_TOKENS
     use_low_precision_moe_combine: bool = True
+    kv_cache_free_gpu_memory_fraction: float = 0.60
     enable_configurable_moe: bool = True
     moe_autotune_dummy_distribution: str = "random"
     print_iter_log: bool = False
@@ -103,6 +109,11 @@ def local_batch_size(global_batch_size: int) -> int:
 def max_num_tokens(global_batch_size: int) -> int:
     """Allow every local-rank prompt to prefill in the same iteration."""
     return local_batch_size(global_batch_size) * INPUT_TOKENS
+
+
+def kv_cache_max_tokens(global_batch_size: int) -> int:
+    """Reserve KV storage for the exact fixed batch and sequence capacity."""
+    return local_batch_size(global_batch_size) * MAX_SEQ_LEN
 
 
 def build_llm_kwargs(
@@ -139,11 +150,15 @@ def build_llm_kwargs(
         "kv_cache_config": {
             "tokens_per_block": 128,
             "dtype": "fp8",
-            "free_gpu_memory_fraction": 0.60,
+            "max_tokens": kv_cache_max_tokens(global_batch_size),
+            "free_gpu_memory_fraction": (
+                config.kv_cache_free_gpu_memory_fraction
+            ),
             "enable_block_reuse": False,
         },
         "moe_config": {
             "backend": config.moe_backend,
+            "max_num_tokens": config.moe_max_num_tokens,
             "use_low_precision_moe_combine": (
                 config.use_low_precision_moe_combine
             ),
@@ -190,6 +205,7 @@ def resolved_parallelism(
     """Validate that TRT resolved the fixed recipe without silent changes."""
     config = FIXED_BENCHMARK_CONFIG
     parallel = llm_args.parallel_config
+    kv_cache = llm_args.kv_cache_config
     resolved = {
         "world_size": int(parallel.world_size),
         "tensor_parallel_size": int(parallel.tp_size),
@@ -205,6 +221,10 @@ def resolved_parallelism(
         "max_batch_size": int(llm_args.max_batch_size),
         "max_num_tokens": int(llm_args.max_num_tokens),
         "max_seq_len": int(llm_args.max_seq_len),
+        "kv_cache_max_tokens": int(kv_cache.max_tokens),
+        "kv_cache_free_gpu_memory_fraction": float(
+            kv_cache.free_gpu_memory_fraction
+        ),
         "enable_iter_perf_stats": bool(llm_args.enable_iter_perf_stats),
         "max_stats_len": int(llm_args.max_stats_len),
         "print_iter_log": bool(llm_args.print_iter_log),
@@ -222,6 +242,10 @@ def resolved_parallelism(
         "max_batch_size": local_batch_size(global_batch_size),
         "max_num_tokens": max_num_tokens(global_batch_size),
         "max_seq_len": MAX_SEQ_LEN,
+        "kv_cache_max_tokens": kv_cache_max_tokens(global_batch_size),
+        "kv_cache_free_gpu_memory_fraction": (
+            config.kv_cache_free_gpu_memory_fraction
+        ),
         "enable_iter_perf_stats": True,
         "max_stats_len": ITERATION_STATS_CAPACITY,
         "print_iter_log": config.print_iter_log,
@@ -244,6 +268,7 @@ def resolved_parallelism(
 
     moe = llm_args.moe_config
     resolved["moe_backend"] = str(moe.backend)
+    resolved["moe_max_num_tokens"] = int(moe.max_num_tokens)
     resolved["use_low_precision_moe_combine"] = bool(
         moe.use_low_precision_moe_combine
     )
@@ -251,6 +276,12 @@ def resolved_parallelism(
         raise RuntimeError(
             f"Resolved TRT MoE backend {resolved['moe_backend']!r} != "
             f"{config.moe_backend!r}"
+        )
+    if resolved["moe_max_num_tokens"] != config.moe_max_num_tokens:
+        raise RuntimeError(
+            "Resolved TRT MoE token cap mismatch: "
+            f"{resolved['moe_max_num_tokens']} != "
+            f"{config.moe_max_num_tokens}"
         )
     if (
         resolved["use_low_precision_moe_combine"]
