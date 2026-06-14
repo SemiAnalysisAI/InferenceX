@@ -1,38 +1,28 @@
-name: "minimax-m3-vllm-disagg-gb300-1p-dep16dec-5n-8k1k"
+name: "minimax-m3-vllm-disagg-gb300-1p4d-tp4ep1-8k1k"
 
-# Combined fix + scale-up: MNNVL KV transfer ON + wide-EP decode.
-# Iter 2 showed DP16 decode starved because cross-node KV ran on RDMA/TCP
-# (~40-120 MB/s, decode idle). Iter 3 showed UCX_CUDA_IPC_ENABLE_MNNVL=y +
-# --enable-cumem-allocator lifts 1P1D KV transfer 5-6x (+17-23% tok/s/gpu).
-# This recipe puts both together: 1 compact TP4 prefill -> NixlConnector
-# over multi-node NVLink -> wide DP16+EP decode (16 GPUs / 4 nodes). Tests
-# whether fast MNNVL KV transfer makes the wide decode pool (which B300
-# cannot build on one NVLink island) actually pay off.
-# --block-size 128 mandatory (MSA cache); text-only -> language-model-only.
+# MiniMax-M3 GB300 mid-curve disagg: 1 prefill + 4 decode, TP4 ep1, 5 nodes.
+# DSR1 low-latency pattern adapted for M3: multiple independent TP4 decode
+# workers instead of wide-EP decode (dep16dec). M3's MoE all-to-all overhead
+# makes wide EP slower than independent TP4 workers.
+# MNNVL KV transfer + cumem. --block-size 128 mandatory (MSA cache).
 
 model:
   path: "hf:MiniMaxAI/MiniMax-M3-MXFP8"
   container: "vllm/vllm-openai:minimax-m3"
   precision: "fp8"
-
 dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
-
 sbatch_directives:
   mem: "0"
   cpus-per-task: "72"
 srun_options:
   mem: "0"
-
-
 slurm:
   time_limit: "8:00:00"
-
 health_check:
   max_attempts: 720
   interval_seconds: 10
-
 extra_mount:
   - "__M3_HF_HOME__:__M3_HF_HOME__"
 
@@ -42,9 +32,9 @@ resources:
   prefill_nodes: 1
   decode_nodes: 4
   prefill_workers: 1
-  decode_workers: 1
+  decode_workers: 4
   gpus_per_prefill: 4
-  gpus_per_decode: 16
+  gpus_per_decode: 4
 
 frontend:
   type: dynamo
@@ -73,12 +63,11 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      enable-expert-parallel: true
       enable-cumem-allocator: true
       enforce-eager: true
-      max-model-len: 9472
       max-num-seqs: 16
       max-num-batched-tokens: 16384
+      max-model-len: 9472
       block-size: 128
       language-model-only: true
       gpu-memory-utilization: 0.9
@@ -88,16 +77,13 @@ backend:
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 1
+      tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      data-parallel-size: 16
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
       enable-cumem-allocator: true
-      max-model-len: 9472
       max-num-seqs: 256
       max-num-batched-tokens: 256
       max-cudagraph-capture-size: 512
+      max-model-len: 9472
       block-size: 128
       language-model-only: true
       gpu-memory-utilization: 0.9
@@ -109,4 +95,4 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "256x512x1024"
+  concurrencies: "32x64x128x256"
