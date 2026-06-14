@@ -1,0 +1,65 @@
+name: "minimax-m3-vllm-agg-gb200-tp8ep8-2n-1k1k"
+
+# MiniMax-M3 aggregated TEP8 recipe for GB200 (low-conc baseline).
+# Single engine TP8+EP8 on 2 nodes (8 GPU). 128 experts / EP8 =
+# 16 experts/rank. No disagg overhead — pure aggregated latency
+# reference at small concurrencies. block-size 128.
+
+model:
+  path: "minimax-m3-mxfp8"
+  container: "vllm/vllm-openai:minimax-m3"
+  precision: "fp8"
+
+dynamo:
+  install: true
+  wheel: "1.2.0.dev20260526"
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 720
+  interval_seconds: 10
+
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  agg_nodes: 2
+  agg_workers: 1
+  gpus_per_agg: 8
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+
+backend:
+  type: vllm
+  connector: null
+
+  aggregated_environment:
+    VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
+
+  vllm_config:
+    aggregated:
+      tensor-parallel-size: 8
+      pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      max-model-len: 2304
+      max-num-batched-tokens: 2048
+      max-cudagraph-capture-size: 128
+      block-size: 128
+      attention-backend: FLASH_ATTN
+      language-model-only: true
+      gpu-memory-utilization: 0.9
+      safetensors-load-strategy: "prefetch"
+      trust-remote-code: true
+      no-enable-prefix-caching: true
+      stream-interval: 1
+
+benchmark:
+  type: "sa-bench"
+  isl: 1024
+  osl: 1024
+  concurrencies: "1x2x4x8x16x32"

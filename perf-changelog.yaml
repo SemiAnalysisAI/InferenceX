@@ -3650,6 +3650,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1724
 
 - config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm-agg-lowconc
+  description:
+    - "Aggregated low-conc baseline for M3 GB200: TEP4 (TP4+EP4, 1n) and TEP8 (TP8+EP8, 2n) at conc 1-32"
+    - "FLASH_ATTN, stream-interval 1, cudagraph cap 128; no disagg overhead — pure aggregated latency reference"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
+
+- config-keys:
     - minimaxm3-fp8-gb200-dynamo-vllm
   description:
     - "Initial submission: MiniMax-M3 MXFP8 disaggregated rack-scale wide-EP vLLM sweep for GB200 via Dynamo"
