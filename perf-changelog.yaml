@@ -3761,3 +3761,9 @@
   description:
     - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI300X and set VLLM_USE_BREAKABLE_CUDAGRAPH=0 per AMD guidance"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1750
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI355X and set VLLM_USE_BREAKABLE_CUDAGRAPH=0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
