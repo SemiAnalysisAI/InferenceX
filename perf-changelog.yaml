@@ -3766,25 +3766,4 @@
     - minimaxm3-fp8-mi355x-vllm
   description:
     - "TEST/control: run the MiniMax-M3 MXFP8 MI355X non-MTP recipe with CUDA graphs by removing --enforce-eager, WITHOUT setting VLLM_USE_BREAKABLE_CUDAGRAPH=0 — isolates whether the env var is required for cudagraphs (matched control for #1755, which removes eager and sets the env var)"
-  pr-link: unknown flag: --jq
-
-Usage:  gh pr create [flags]
-
-Flags:
-  -a, --assignee login       Assign people by their login. Use "@me" to self-assign.
-  -B, --base branch          The branch into which you want your code merged
-  -b, --body string          Body for the pull request
-  -F, --body-file file       Read body text from file (use "-" to read from standard input)
-  -d, --draft                Mark pull request as a draft
-  -f, --fill                 Do not prompt for title/body and just use commit info
-  -H, --head branch          The branch that contains commits for your pull request (default: current branch)
-  -l, --label name           Add labels by name
-  -m, --milestone name       Add the pull request to a milestone by name
-      --no-maintainer-edit   Disable maintainer's ability to modify pull request
-  -p, --project name         Add the pull request to projects by name
-      --recover string       Recover input from a failed run of create
-  -r, --reviewer handle      Request reviews from people or teams by their handle
-  -t, --title string         Title for the pull request
-  -w, --web                  Open the web browser to create a pull request
-  
-https://github.com/SemiAnalysisAI/InferenceX/pull/1757
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1757
