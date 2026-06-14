@@ -1,4 +1,4 @@
-"""Metric extraction for TensorRT-LLM request performance telemetry."""
+"""Huawei-style decode-round and request diagnostics for TRT offline runs."""
 
 from __future__ import annotations
 
@@ -8,29 +8,34 @@ from datetime import timedelta
 from statistics import fmean
 from typing import Any, Iterable
 
+from trt_config import (
+    HUAWEI_MEASURED_DECODE_ROUNDS,
+    MTP_DRAFT_TOKENS,
+)
+
 
 HUAWEI_REFERENCE: dict[int, dict[str, float | int]] = {
     16: {
         "global_batch_size": 16,
         "chips": 16,
-        "step_tpot_ms": 17.64,
-        "step_tput_per_chip": 56.70,
+        "decode_round_tpot_ms": 17.64,
+        "decode_step_tput_per_chip": 56.70,
         "published_accepted_drafts_per_step": 1.44,
         "published_mtp_draft_tokens": 3,
     },
     64: {
         "global_batch_size": 64,
         "chips": 16,
-        "step_tpot_ms": 19.03,
-        "step_tput_per_chip": 210.16,
+        "decode_round_tpot_ms": 19.03,
+        "decode_step_tput_per_chip": 210.16,
         "published_accepted_drafts_per_step": 1.44,
         "published_mtp_draft_tokens": 3,
     },
     128: {
         "global_batch_size": 128,
         "chips": 16,
-        "step_tpot_ms": 20.61,
-        "step_tput_per_chip": 388.23,
+        "decode_round_tpot_ms": 20.61,
+        "decode_step_tput_per_chip": 388.23,
         "published_accepted_drafts_per_step": 1.44,
         "published_mtp_draft_tokens": 3,
     },
@@ -45,13 +50,14 @@ def _seconds(value: Any) -> float:
     return float(value)
 
 
-def _percentile(values: list[float], percentile: float) -> float:
+def percentile(values: list[float], value: float) -> float:
+    """Match NumPy's default linear percentile interpolation."""
     if not values:
         raise ValueError("Cannot calculate a percentile of an empty sequence")
     ordered = sorted(values)
     if len(ordered) == 1:
         return ordered[0]
-    position = (len(ordered) - 1) * percentile / 100.0
+    position = (len(ordered) - 1) * value / 100.0
     lower = math.floor(position)
     upper = math.ceil(position)
     if lower == upper:
@@ -69,17 +75,16 @@ def _token_sha256(token_ids: list[int]) -> str:
     return digest.hexdigest()
 
 
-def _sequence_sha256(request_metrics: list[dict[str, Any]]) -> str:
+def _sequence_sha256(requests: list[dict[str, Any]]) -> str:
     digest = hashlib.sha256()
-    for item in request_metrics:
-        digest.update(bytes.fromhex(str(item["output_token_sha256"])))
+    for request in requests:
+        digest.update(bytes.fromhex(str(request["output_token_sha256"])))
     return digest.hexdigest()
 
 
 def extract_request_metrics(
     request_output: Any,
     expected_output_tokens: int,
-    max_draft_tokens: int,
 ) -> dict[str, Any]:
     completions = getattr(request_output, "outputs", None)
     if not completions:
@@ -89,343 +94,389 @@ def extract_request_metrics(
     if raw_token_ids is None:
         raise RuntimeError("TRT completion did not return token IDs")
     token_ids = [int(token_id) for token_id in raw_token_ids]
-    output_tokens = len(token_ids)
-    if output_tokens != expected_output_tokens:
+    if len(token_ids) != expected_output_tokens:
         raise RuntimeError(
-            f"TRT generated {output_tokens} tokens; expected "
+            f"TRT generated {len(token_ids)} tokens; expected "
             f"{expected_output_tokens}"
         )
 
     perf = getattr(completion, "request_perf_metrics", None)
     if perf is None:
-        raise RuntimeError("TRT completion did not return request perf metrics")
+        raise RuntimeError("TRT completion did not return request metrics")
     timing = perf.timing_metrics
     arrival = _seconds(timing.arrival_time)
+    first_scheduled = _seconds(timing.first_scheduled_time)
     first_token = _seconds(timing.first_token_time)
     last_token = _seconds(timing.last_token_time)
-    first_scheduled = _seconds(timing.first_scheduled_time)
-
-    decode_window = last_token - first_token
-    decode_tokens = output_tokens - 1
-    if decode_window <= 0 or decode_tokens <= 0:
+    first_iter = int(perf.first_iter)
+    last_iter = int(perf.last_iter)
+    decode_iterations = last_iter - first_iter
+    decode_tokens = len(token_ids) - 1
+    if decode_iterations <= 0 or decode_tokens <= 0:
         raise RuntimeError(
-            f"Invalid decode telemetry: window={decode_window}, "
+            "Invalid TRT request telemetry: "
+            f"decode_iterations={decode_iterations}, "
             f"decode_tokens={decode_tokens}"
         )
-
-    first_iter = perf.first_iter
-    last_iter = perf.last_iter
-    if first_iter is None or last_iter is None:
-        raise RuntimeError("TRT request perf metrics omitted first/last iter")
-    decode_iterations = int(last_iter) - int(first_iter)
-    if decode_iterations <= 0:
-        raise RuntimeError(
-            f"Invalid TRT decode iteration count: {decode_iterations}"
-        )
-
-    if max_draft_tokens <= 0:
-        raise ValueError("max_draft_tokens must be positive")
-    observed_tokens_per_step = decode_tokens / decode_iterations
-    if not 1.0 <= observed_tokens_per_step <= max_draft_tokens + 1.0:
-        raise RuntimeError(
-            "TRT decode iteration telemetry is outside the MTP bounds: "
-            f"{observed_tokens_per_step} tokens/step for MTP"
-            f"{max_draft_tokens}"
-        )
-
-    speculative = getattr(perf, "speculative_decoding", None)
-    accepted = (
-        int(speculative.total_accepted_draft_tokens) if speculative else 0
-    )
-    drafted = int(speculative.total_draft_tokens) if speculative else 0
-    if accepted < 0 or drafted < 0 or accepted > drafted:
-        raise RuntimeError(
-            "Invalid TRT speculative counters: "
-            f"accepted={accepted}, drafted={drafted}"
-        )
-    raw_metrics_available = drafted > 0
-    effective_accepted_drafts = observed_tokens_per_step - 1.0
     return {
-        "output_tokens": output_tokens,
+        "output_tokens": len(token_ids),
         "output_token_sha256": _token_sha256(token_ids),
         "decode_tokens": decode_tokens,
-        "first_iter": int(first_iter),
-        "last_iter": int(last_iter),
+        "first_iter": first_iter,
+        "last_iter": last_iter,
         "decode_iterations": decode_iterations,
         "ttft_s": first_token - arrival,
         "queue_s": first_scheduled - arrival,
-        "decode_window_s": decode_window,
+        "decode_window_s": last_token - first_token,
         "e2e_s": last_token - arrival,
-        "token_tpot_s": decode_window / decode_tokens,
-        "step_tpot_s": decode_window / decode_iterations,
-        "mtp_max_draft_tokens": max_draft_tokens,
-        "observed_tokens_per_step": observed_tokens_per_step,
-        "effective_accepted_drafts_per_step": effective_accepted_drafts,
-        "effective_acceptance_rate": (
-            effective_accepted_drafts / max_draft_tokens
-        ),
-        "raw_speculative_metrics_available": raw_metrics_available,
-        "accepted_draft_tokens": accepted,
-        "proposed_draft_tokens": drafted,
-        "acceptance_rate": (
-            accepted / drafted if raw_metrics_available else None
+        "overall_observed_tokens_per_step": (
+            decode_tokens / decode_iterations
         ),
     }
 
 
-def aggregate_requests(
-    request_metrics: list[dict[str, Any]],
-    wall_seconds: float,
-    num_gpus: int,
-    concurrency: int | None = None,
-) -> dict[str, Any]:
-    if not request_metrics:
-        raise ValueError("No request metrics to aggregate")
-    if wall_seconds <= 0:
-        raise ValueError(f"Invalid measured wall time: {wall_seconds}")
-
-    token_tpots = [float(item["token_tpot_s"]) for item in request_metrics]
-    step_tpots = [float(item["step_tpot_s"]) for item in request_metrics]
-    ttfts = [float(item["ttft_s"]) for item in request_metrics]
-    e2els = [float(item["e2e_s"]) for item in request_metrics]
-    interactivities = [1.0 / value for value in token_tpots]
-    mean_tpot = fmean(token_tpots)
-    mean_step_tpot = fmean(step_tpots)
-    total_output_tokens = sum(
-        int(item["output_tokens"]) for item in request_metrics
-    )
-    total_decode_tokens = sum(
-        int(item["decode_tokens"]) for item in request_metrics
-    )
-    total_decode_iterations = sum(
-        int(item["decode_iterations"]) for item in request_metrics
-    )
-    total_accepted = sum(
-        int(item["accepted_draft_tokens"]) for item in request_metrics
-    )
-    total_drafted = sum(
-        int(item["proposed_draft_tokens"]) for item in request_metrics
-    )
-    raw_availability = {
-        bool(item["raw_speculative_metrics_available"])
-        for item in request_metrics
-    }
-    if len(raw_availability) != 1:
-        raise RuntimeError(
-            "TRT speculative counter availability changed within one pass"
-        )
-    raw_metrics_available = raw_availability.pop()
-    draft_limits = {
-        int(item["mtp_max_draft_tokens"]) for item in request_metrics
-    }
-    if len(draft_limits) != 1:
-        raise RuntimeError("Requests used different MTP draft limits")
-    max_draft_tokens = draft_limits.pop()
-    observed_tokens_per_step = total_decode_tokens / total_decode_iterations
-    effective_accepted_drafts = observed_tokens_per_step - 1.0
-    active_concurrency = concurrency or len(request_metrics)
-    return {
-        "request_samples": len(request_metrics),
-        "concurrency": active_concurrency,
-        "active_gpu_count": num_gpus,
-        "output_sequence_sha256": _sequence_sha256(request_metrics),
-        "wall_seconds": wall_seconds,
-        "mean_token_tpot_ms": mean_tpot * 1000.0,
-        "median_token_tpot_ms": _percentile(token_tpots, 50) * 1000.0,
-        "p90_token_tpot_ms": _percentile(token_tpots, 90) * 1000.0,
-        "p99_token_tpot_ms": _percentile(token_tpots, 99) * 1000.0,
-        "mean_step_tpot_ms": mean_step_tpot * 1000.0,
-        "median_step_tpot_ms": _percentile(step_tpots, 50) * 1000.0,
-        "p90_step_tpot_ms": _percentile(step_tpots, 90) * 1000.0,
-        "p99_step_tpot_ms": _percentile(step_tpots, 99) * 1000.0,
-        "mean_ttft_ms": fmean(ttfts) * 1000.0,
-        "median_ttft_ms": _percentile(ttfts, 50) * 1000.0,
-        "p90_ttft_ms": _percentile(ttfts, 90) * 1000.0,
-        "p99_ttft_ms": _percentile(ttfts, 99) * 1000.0,
-        "mean_e2e_ms": fmean(e2els) * 1000.0,
-        "median_e2e_ms": _percentile(e2els, 50) * 1000.0,
-        "p90_e2e_ms": _percentile(e2els, 90) * 1000.0,
-        "p99_e2e_ms": _percentile(e2els, 99) * 1000.0,
-        "mean_intvty": fmean(interactivities),
-        "median_intvty": _percentile(interactivities, 50),
-        "p90_intvty": _percentile(interactivities, 90),
-        "p99_intvty": _percentile(interactivities, 99),
-        "derived_output_tput_per_gpu": (
-            active_concurrency / mean_tpot / num_gpus
-        ),
-        "derived_step_tput_per_gpu": (
-            active_concurrency / mean_step_tpot / num_gpus
-        ),
-        "wall_output_tput_per_gpu": (
-            total_output_tokens / wall_seconds / num_gpus
-        ),
-        "mtp_max_draft_tokens": max_draft_tokens,
-        "raw_speculative_metrics_available": raw_metrics_available,
-        "acceptance_rate": (
-            total_accepted / total_drafted
-            if raw_metrics_available
-            else None
-        ),
-        "accepted_drafts_per_step": (
-            total_accepted / total_decode_iterations
-            if raw_metrics_available
-            else None
-        ),
-        "effective_accepted_drafts_per_step": effective_accepted_drafts,
-        "effective_acceptance_rate": (
-            effective_accepted_drafts / max_draft_tokens
-        ),
-        "observed_tokens_per_step": observed_tokens_per_step,
-        "total_output_tokens": total_output_tokens,
-        "total_decode_tokens": total_decode_tokens,
-        "total_decode_iterations": total_decode_iterations,
-        "total_accepted_draft_tokens": total_accepted,
-        "total_proposed_draft_tokens": total_drafted,
-    }
-
-
-def summarize_pass(
+def summarize_requests(
     outputs: Iterable[Any],
+    *,
     wall_seconds: float,
     expected_output_tokens: int,
     num_gpus: int,
-    max_draft_tokens: int,
 ) -> dict[str, Any]:
+    if wall_seconds <= 0:
+        raise ValueError(f"Invalid measured wall time: {wall_seconds}")
     requests = [
-        extract_request_metrics(
-            output,
-            expected_output_tokens,
-            max_draft_tokens,
-        )
+        extract_request_metrics(output, expected_output_tokens)
         for output in outputs
     ]
+    if not requests:
+        raise ValueError("No request outputs to summarize")
+    ttfts = [float(item["ttft_s"]) for item in requests]
+    e2els = [float(item["e2e_s"]) for item in requests]
+    total_output_tokens = sum(int(item["output_tokens"]) for item in requests)
+    total_decode_tokens = sum(int(item["decode_tokens"]) for item in requests)
+    total_decode_iterations = sum(
+        int(item["decode_iterations"]) for item in requests
+    )
     return {
         "requests": requests,
-        "aggregate": aggregate_requests(requests, wall_seconds, num_gpus),
+        "aggregate": {
+            "request_samples": len(requests),
+            "output_sequence_sha256": _sequence_sha256(requests),
+            "wall_seconds": wall_seconds,
+            "wall_output_tput_per_gpu": (
+                total_output_tokens / wall_seconds / num_gpus
+            ),
+            "mean_ttft_ms": fmean(ttfts) * 1000.0,
+            "median_ttft_ms": percentile(ttfts, 50) * 1000.0,
+            "p90_ttft_ms": percentile(ttfts, 90) * 1000.0,
+            "p99_ttft_ms": percentile(ttfts, 99) * 1000.0,
+            "mean_e2e_ms": fmean(e2els) * 1000.0,
+            "median_e2e_ms": percentile(e2els, 50) * 1000.0,
+            "p90_e2e_ms": percentile(e2els, 90) * 1000.0,
+            "p99_e2e_ms": percentile(e2els, 99) * 1000.0,
+            "overall_observed_tokens_per_step": (
+                total_decode_tokens / total_decode_iterations
+            ),
+            "total_output_tokens": total_output_tokens,
+            "total_decode_tokens": total_decode_tokens,
+            "total_decode_iterations": total_decode_iterations,
+        },
     }
 
 
-def aggregate_passes(
-    passes: list[dict[str, Any]],
-    num_gpus: int,
-) -> dict[str, Any]:
-    if not passes:
-        raise ValueError("No measured passes to aggregate")
-    concurrency = len(passes[0]["requests"])
-    requests: list[dict[str, Any]] = []
-    total_wall = 0.0
-    for measured_pass in passes:
-        if len(measured_pass["requests"]) != concurrency:
-            raise ValueError("Measured passes have different request counts")
-        requests.extend(measured_pass["requests"])
-        total_wall += float(measured_pass["aggregate"]["wall_seconds"])
-    aggregate = aggregate_requests(
-        requests,
-        total_wall,
-        num_gpus,
-        concurrency=concurrency,
+def _iteration_fields(stat: dict[str, Any]) -> dict[str, Any]:
+    inflight = stat.get("inflightBatchingStats") or {}
+    spec = stat.get("specDecodingStats") or {}
+    return {
+        "iter": int(stat.get("iter", -1)),
+        "latency_ms": float(stat.get("iterLatencyMS", 0.0)),
+        "active": int(stat.get("numActiveRequests", 0)),
+        "queued": int(stat.get("numQueuedRequests", 0)),
+        "scheduled": int(inflight.get("numScheduledRequests", 0)),
+        "context": int(inflight.get("numContextRequests", 0)),
+        "generation": int(inflight.get("numGenRequests", 0)),
+        "paused": int(inflight.get("numPausedRequests", 0)),
+        "drafted": int(spec.get("numDraftTokens", 0)),
+        "accepted": int(spec.get("numAcceptedTokens", 0)),
+        "requests_with_drafts": int(
+            spec.get("numRequestsWithDraftTokens", 0)
+        ),
+        "acceptance_length": float(spec.get("acceptanceLength", 0.0)),
+    }
+
+
+def _is_full_batch_decode(
+    item: dict[str, Any],
+    local_batch_size: int,
+) -> bool:
+    return (
+        item["latency_ms"] > 0
+        and item["context"] == 0
+        and item["generation"] == local_batch_size
+        and item["scheduled"] == local_batch_size
+        and item["active"] == local_batch_size
+        and item["queued"] == 0
+        and item["paused"] == 0
     )
-    aggregate["pass_count"] = len(passes)
-    aggregate["per_pass_derived_output_tput_per_gpu"] = [
-        item["aggregate"]["derived_output_tput_per_gpu"] for item in passes
+
+
+def _is_full_batch_prefill(
+    item: dict[str, Any],
+    local_batch_size: int,
+) -> bool:
+    return (
+        item["latency_ms"] > 0
+        and item["context"] == local_batch_size
+        and item["generation"] == 0
+        and item["scheduled"] == local_batch_size
+        and item["active"] == local_batch_size
+        and item["queued"] == 0
+        and item["paused"] == 0
+    )
+
+
+def select_full_batch_decode_rounds(
+    iteration_stats: list[dict[str, Any]],
+    *,
+    local_batch_size: int,
+    required_rounds: int,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Select one consecutive fixed-batch decode window or fail."""
+    normalized = [_iteration_fields(stat) for stat in iteration_stats]
+    scheduled = [item for item in normalized if item["scheduled"] > 0]
+    mixed = [
+        item
+        for item in scheduled
+        if item["context"] > 0 and item["generation"] > 0
     ]
-    aggregate["per_pass_derived_step_tput_per_gpu"] = [
-        item["aggregate"]["derived_step_tput_per_gpu"] for item in passes
+    if mixed:
+        raise RuntimeError(
+            "TRT mixed prefill and decode in the same iteration; the "
+            "benchmark did not establish Huawei's prefill/decode barrier"
+        )
+
+    first_generation_index = next(
+        (
+            index
+            for index, item in enumerate(scheduled)
+            if item["generation"] > 0
+        ),
+        None,
+    )
+    if first_generation_index is None:
+        raise RuntimeError("TRT iteration stats contain no decode rounds")
+    prefill = scheduled[:first_generation_index]
+    if (
+        len(prefill) != 1
+        or not _is_full_batch_prefill(prefill[0], local_batch_size)
+    ):
+        raise RuntimeError(
+            "TRT did not execute one full-local-batch prefill iteration "
+            f"before decode: {prefill}"
+        )
+    first_generation = scheduled[first_generation_index]
+    if not _is_full_batch_decode(first_generation, local_batch_size):
+        raise RuntimeError(
+            "TRT began decode before the fixed local batch was active: "
+            f"{first_generation}"
+        )
+
+    consecutive: list[dict[str, Any]] = []
+    previous_iter: int | None = None
+    for item in scheduled[first_generation_index:]:
+        if not _is_full_batch_decode(item, local_batch_size):
+            break
+        if previous_iter is not None and item["iter"] != previous_iter + 1:
+            break
+        consecutive.append(item)
+        previous_iter = item["iter"]
+    if len(consecutive) < required_rounds:
+        raise RuntimeError(
+            "TRT did not produce enough consecutive full-batch decode "
+            f"rounds: {len(consecutive)} < {required_rounds}"
+        )
+
+    selected = consecutive[:required_rounds]
+    diagnostics = {
+        "iteration_stats_count": len(iteration_stats),
+        "scheduled_iterations": len(scheduled),
+        "context_only_iterations": sum(
+            item["context"] > 0 and item["generation"] == 0
+            for item in scheduled
+        ),
+        "full_batch_prefill_iterations": 1,
+        "prefill_iter": prefill[0]["iter"],
+        "prefill_local_batch": prefill[0]["context"],
+        "mixed_context_generation_iterations": len(mixed),
+        "full_batch_decode_rounds_available": len(consecutive),
+        "selected_first_iter": selected[0]["iter"],
+        "selected_last_iter": selected[-1]["iter"],
+        "selected_local_batch_min": min(
+            item["generation"] for item in selected
+        ),
+        "selected_local_batch_max": max(
+            item["generation"] for item in selected
+        ),
+    }
+    return selected, diagnostics
+
+
+def huawei_filter_round_latencies(
+    latencies_ms: list[float],
+) -> dict[str, Any]:
+    """Apply CANN's first-round skip and upper-IQR outlier filter."""
+    if len(latencies_ms) < 2:
+        raise ValueError("Huawei timing requires at least two decode rounds")
+    after_first_skip = latencies_ms[1:]
+    q1 = percentile(after_first_skip, 25)
+    q3 = percentile(after_first_skip, 75)
+    upper_fence = q3 + 1.5 * (q3 - q1)
+    retained = [
+        latency
+        for latency in after_first_skip
+        if latency <= upper_fence
     ]
-    aggregate["per_pass_wall_output_tput_per_gpu"] = [
-        item["aggregate"]["wall_output_tput_per_gpu"] for item in passes
-    ]
-    aggregate["per_pass_output_sequence_sha256"] = [
-        item["aggregate"]["output_sequence_sha256"] for item in passes
-    ]
-    return aggregate
+    if not retained:
+        raise RuntimeError("Huawei outlier filtering removed every round")
+    return {
+        "first_round_skipped": True,
+        "q1_ms": q1,
+        "q3_ms": q3,
+        "upper_iqr_fence_ms": upper_fence,
+        "retained_rounds": len(retained),
+        "outlier_rounds": len(after_first_skip) - len(retained),
+        "retained_latencies_ms": retained,
+        "mean_ms": fmean(retained),
+        "median_ms": percentile(retained, 50),
+        "p90_ms": percentile(retained, 90),
+        "p99_ms": percentile(retained, 99),
+    }
+
+
+def summarize_decode_rounds(
+    iteration_stats: list[dict[str, Any]],
+    *,
+    global_batch_size: int,
+    local_batch_size: int,
+    num_gpus: int,
+    required_rounds: int = HUAWEI_MEASURED_DECODE_ROUNDS,
+) -> dict[str, Any]:
+    selected, diagnostics = select_full_batch_decode_rounds(
+        iteration_stats,
+        local_batch_size=local_batch_size,
+        required_rounds=required_rounds,
+    )
+    latencies = [float(item["latency_ms"]) for item in selected]
+    filtered = huawei_filter_round_latencies(latencies)
+    decode_round_tpot_ms = float(filtered["mean_ms"])
+    decode_step_tput_per_gpu = (
+        global_batch_size / (decode_round_tpot_ms / 1000.0) / num_gpus
+    )
+
+    drafted = sum(int(item["drafted"]) for item in selected)
+    accepted = sum(int(item["accepted"]) for item in selected)
+    generation_slots = sum(int(item["generation"]) for item in selected)
+    if drafted <= 0 or generation_slots <= 0:
+        raise RuntimeError(
+            "TRT iteration stats omitted speculative counters for the "
+            "validated 256-round window"
+        )
+    accepted_drafts_per_step = accepted / generation_slots
+    tokens_per_step = 1.0 + accepted_drafts_per_step
+    acceptance_rate = accepted / drafted
+    if not 1.0 <= tokens_per_step <= MTP_DRAFT_TOKENS + 1.0:
+        raise RuntimeError(
+            f"Observed MTP token yield is invalid: {tokens_per_step}"
+        )
+
+    output_tput_per_gpu = decode_step_tput_per_gpu * tokens_per_step
+    equivalent_output_tpot_ms = decode_round_tpot_ms / tokens_per_step
+    return {
+        "global_batch_size": global_batch_size,
+        "local_batch_size": local_batch_size,
+        "active_gpu_count": num_gpus,
+        "measured_decode_rounds": required_rounds,
+        "decode_round_tpot_ms": decode_round_tpot_ms,
+        "median_decode_round_tpot_ms": float(filtered["median_ms"]),
+        "p90_decode_round_tpot_ms": float(filtered["p90_ms"]),
+        "p99_decode_round_tpot_ms": float(filtered["p99_ms"]),
+        "decode_step_tput_per_gpu": decode_step_tput_per_gpu,
+        "decode_step_tput_total": decode_step_tput_per_gpu * num_gpus,
+        "observed_tokens_per_step": tokens_per_step,
+        "accepted_drafts_per_step": accepted_drafts_per_step,
+        "effective_acceptance_rate": (
+            accepted_drafts_per_step / MTP_DRAFT_TOKENS
+        ),
+        "raw_acceptance_rate": acceptance_rate,
+        "raw_accepted_draft_tokens": accepted,
+        "raw_proposed_draft_tokens": drafted,
+        "token_yield_source": "iteration_spec_decoding_stats",
+        "equivalent_output_tpot_ms": equivalent_output_tpot_ms,
+        "output_tput_per_gpu": output_tput_per_gpu,
+        "filter": {
+            key: value
+            for key, value in filtered.items()
+            if key != "retained_latencies_ms"
+        },
+        "schedule_validation": diagnostics,
+        "selected_round_latencies_ms": latencies,
+    }
 
 
 def huawei_comparison(
-    concurrency: int,
-    b300_output_tput_per_gpu: float,
-    b300_step_tput_per_gpu: float,
-    observed_tokens_per_step: float,
-    mtp_draft_tokens: int,
-    effective_parallelism: str = "DEP8",
-    active_gpu_count: int = 8,
-) -> dict[str, Any] | None:
-    reference = HUAWEI_REFERENCE.get(concurrency)
-    if reference is None:
-        return None
-    published_accepted = float(
+    global_batch_size: int,
+    decode_rounds: dict[str, Any],
+) -> dict[str, Any]:
+    reference = HUAWEI_REFERENCE[global_batch_size]
+    device_count_match = (
+        int(decode_rounds["active_gpu_count"])
+        == int(reference["chips"])
+    )
+    huawei_tokens_per_step = 1.0 + float(
         reference["published_accepted_drafts_per_step"]
     )
-    published_draft_tokens = int(reference["published_mtp_draft_tokens"])
-    published_tokens_per_step = 1.0 + published_accepted
-    published_token_tput = (
-        float(reference["step_tput_per_chip"]) * published_tokens_per_step
+    huawei_output_tput = (
+        float(reference["decode_step_tput_per_chip"])
+        * huawei_tokens_per_step
     )
-    converted = (
-        float(reference["step_tput_per_chip"]) * observed_tokens_per_step
-    )
-    comparable = mtp_draft_tokens == published_draft_tokens
-    step_tput = float(reference["step_tput_per_chip"])
-    output_ratio = (
-        b300_output_tput_per_gpu / published_token_tput
-        if comparable and published_token_tput
-        else None
-    )
-    step_ratio = (
-        b300_step_tput_per_gpu / step_tput
-        if comparable and step_tput
-        else None
-    )
+    b300_step_tput = float(decode_rounds["decode_step_tput_per_gpu"])
+    b300_output_tput = float(decode_rounds["output_tput_per_gpu"])
     return {
         **reference,
-        "mode": "offline_decode",
-        "comparable": comparable,
-        "comparison_reason": (
-            "matching global batch and MTP depth; per-active-GPU versus "
-            "per-chip comparison with different hardware topology"
-            if comparable
-            else "MTP depth differs from the Huawei reference"
-        ),
+        "mode": "fixed_global_batch_offline_decode",
         "global_batch_match": True,
-        "device_count_match": active_gpu_count == int(reference["chips"]),
+        "device_count_match": device_count_match,
         "hardware_topology_match": False,
-        "b300_effective_parallelism": effective_parallelism,
-        "b300_active_gpu_count": active_gpu_count,
-        "published_acceptance_rate": (
-            published_accepted / published_draft_tokens
+        "b300_active_gpu_count": int(
+            decode_rounds["active_gpu_count"]
         ),
-        "published_tokens_per_step": published_tokens_per_step,
-        "published_dataset_token_tput_per_chip": published_token_tput,
-        "conversion": (
-            "published_step_tput_per_chip * "
-            "trt_observed_tokens_per_step"
+        "b300_local_batch_size": int(
+            decode_rounds["local_batch_size"]
         ),
-        "estimated_token_tput_per_chip": converted,
-        "trt_normalized_token_tput_per_chip": converted,
-        "b300_derived_output_tput_per_gpu": b300_output_tput_per_gpu,
-        "b300_derived_step_tput_per_gpu": b300_step_tput_per_gpu,
-        "b300_to_huawei_published_output_ratio": output_ratio,
-        "b300_to_huawei_step_rate_ratio": step_ratio,
-        "beats_huawei_output_rate": (
-            output_ratio > 1.0 if output_ratio is not None else None
+        "huawei_local_batch_size": (
+            global_batch_size / int(reference["chips"])
         ),
-        "beats_huawei_step_rate": (
-            step_ratio > 1.0 if step_ratio is not None else None
+        "published_tokens_per_step": huawei_tokens_per_step,
+        "published_output_tput_per_chip": huawei_output_tput,
+        "b300_decode_round_tpot_ms": float(
+            decode_rounds["decode_round_tpot_ms"]
         ),
-        "huawei_gate_passed": (
-            output_ratio > 1.0 and step_ratio > 1.0
-            if output_ratio is not None and step_ratio is not None
-            else None
+        "b300_decode_step_tput_per_gpu": b300_step_tput,
+        "b300_observed_tokens_per_step": float(
+            decode_rounds["observed_tokens_per_step"]
         ),
-        "b300_to_huawei_trt_yield_normalized_ratio": (
-            b300_output_tput_per_gpu / converted
-            if comparable and converted
-            else None
+        "b300_output_tput_per_gpu": b300_output_tput,
+        "b300_to_huawei_decode_step_ratio": (
+            b300_step_tput
+            / float(reference["decode_step_tput_per_chip"])
         ),
-        "b300_to_huawei_ratio": (
-            b300_output_tput_per_gpu / converted
-            if comparable and converted
-            else None
+        "b300_to_huawei_output_ratio": (
+            b300_output_tput / huawei_output_tput
         ),
-        "normalized_estimate": True,
+        "comparison_note": (
+            "The global batch, sequence length, MTP depth, warmup count, "
+            "decode-round count, and timing filter match the Huawei code. "
+            "Hardware count and quantization differ: eight B300 GPUs versus "
+            "sixteen 950DT chips."
+        ),
     }

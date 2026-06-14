@@ -4,37 +4,30 @@ from types import SimpleNamespace
 import pytest
 
 from metrics import (
-    aggregate_passes,
     huawei_comparison,
-    summarize_pass,
+    huawei_filter_round_latencies,
+    select_full_batch_decode_rounds,
+    summarize_decode_rounds,
+    summarize_requests,
 )
 
 
 def request_output(
     *,
-    token_tpot_s: float = 0.02,
+    output_tokens: int = 1025,
     first_iter: int = 10,
-    last_iter: int = 266,
-    accepted: int = 300,
-    drafted: int = 600,
+    last_iter: int = 350,
 ):
-    output_tokens = 625
-    decode_window = token_tpot_s * (output_tokens - 1)
     timing = SimpleNamespace(
         arrival_time=timedelta(seconds=0),
         first_scheduled_time=timedelta(seconds=1),
         first_token_time=timedelta(seconds=5),
-        last_token_time=timedelta(seconds=5 + decode_window),
-    )
-    speculative = SimpleNamespace(
-        total_accepted_draft_tokens=accepted,
-        total_draft_tokens=drafted,
+        last_token_time=timedelta(seconds=25),
     )
     perf = SimpleNamespace(
         timing_metrics=timing,
         first_iter=first_iter,
         last_iter=last_iter,
-        speculative_decoding=speculative,
     )
     completion = SimpleNamespace(
         token_ids=list(range(output_tokens)),
@@ -43,149 +36,213 @@ def request_output(
     return SimpleNamespace(outputs=[completion])
 
 
-def test_token_tpot_and_derived_throughput():
-    measured = summarize_pass(
-        [request_output() for _ in range(8)],
-        wall_seconds=20.0,
-        expected_output_tokens=625,
+def iteration(
+    index: int,
+    *,
+    latency_ms: float = 20.0,
+    active: int = 8,
+    queued: int = 0,
+    scheduled: int = 8,
+    context: int = 0,
+    generation: int = 8,
+    paused: int = 0,
+    drafted: int = 24,
+    accepted: int = 12,
+):
+    return {
+        "iter": index,
+        "iterLatencyMS": latency_ms,
+        "numActiveRequests": active,
+        "numQueuedRequests": queued,
+        "inflightBatchingStats": {
+            "numScheduledRequests": scheduled,
+            "numContextRequests": context,
+            "numGenRequests": generation,
+            "numPausedRequests": paused,
+        },
+        "specDecodingStats": {
+            "numDraftTokens": drafted,
+            "numAcceptedTokens": accepted,
+            "numRequestsWithDraftTokens": generation,
+            "acceptanceLength": (
+                1.0 + accepted / generation if generation else 0.0
+            ),
+        },
+    }
+
+
+def fixed_batch_stats():
+    stats = [
+        iteration(
+            1,
+            latency_ms=50.0,
+            active=8,
+            scheduled=8,
+            context=8,
+            generation=0,
+            drafted=0,
+            accepted=0,
+        )
+    ]
+    stats.extend(
+        iteration(
+            index,
+            latency_ms=100.0 if index in {2, 257} else 20.0,
+        )
+        for index in range(2, 258)
+    )
+    return stats
+
+
+def test_request_summary_keeps_wall_and_latency_diagnostics():
+    summary = summarize_requests(
+        [request_output() for _ in range(64)],
+        wall_seconds=100.0,
+        expected_output_tokens=1025,
         num_gpus=8,
-        max_draft_tokens=3,
     )
-    aggregate = measured["aggregate"]
-    request = measured["requests"][0]
-    assert request["first_iter"] == 10
-    assert request["last_iter"] == 266
-    assert aggregate["mean_token_tpot_ms"] == pytest.approx(20.0)
-    assert aggregate["median_ttft_ms"] == pytest.approx(5000.0)
-    assert aggregate["median_e2e_ms"] == pytest.approx(17480.0)
-    assert aggregate["mean_intvty"] == pytest.approx(50.0)
-    assert aggregate["median_intvty"] == pytest.approx(50.0)
-    assert aggregate["mean_step_tpot_ms"] == pytest.approx(48.75)
-    assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)
-    assert aggregate["derived_step_tput_per_gpu"] == pytest.approx(
-        1 / 0.04875
-    )
-    assert aggregate["wall_output_tput_per_gpu"] == pytest.approx(31.25)
-    assert aggregate["acceptance_rate"] == pytest.approx(0.5)
-    assert aggregate["raw_speculative_metrics_available"] is True
-    assert aggregate["observed_tokens_per_step"] == pytest.approx(
-        624 / 256
-    )
-    assert aggregate["effective_accepted_drafts_per_step"] == pytest.approx(
-        624 / 256 - 1
-    )
-    assert aggregate["effective_acceptance_rate"] == pytest.approx(
-        (624 / 256 - 1) / 3
+    aggregate = summary["aggregate"]
+    assert aggregate["request_samples"] == 64
+    assert aggregate["wall_output_tput_per_gpu"] == pytest.approx(82.0)
+    assert aggregate["mean_ttft_ms"] == pytest.approx(5000.0)
+    assert aggregate["overall_observed_tokens_per_step"] == pytest.approx(
+        1024 / 340
     )
     assert len(aggregate["output_sequence_sha256"]) == 64
 
 
-def test_zero_trt_speculative_counters_are_unavailable():
-    measured = summarize_pass(
-        [request_output(accepted=0, drafted=0)],
-        wall_seconds=10.0,
-        expected_output_tokens=625,
+def test_huawei_filter_skips_first_and_drops_only_upper_outlier():
+    filtered = huawei_filter_round_latencies(
+        [100.0] + [20.0] * 254 + [100.0]
+    )
+    assert filtered["retained_rounds"] == 254
+    assert filtered["outlier_rounds"] == 1
+    assert filtered["mean_ms"] == pytest.approx(20.0)
+
+
+def test_fixed_batch_decode_round_summary_matches_huawei_arithmetic():
+    summary = summarize_decode_rounds(
+        fixed_batch_stats(),
+        global_batch_size=64,
+        local_batch_size=8,
         num_gpus=8,
-        max_draft_tokens=3,
     )
-    aggregate = measured["aggregate"]
-    assert aggregate["raw_speculative_metrics_available"] is False
-    assert aggregate["acceptance_rate"] is None
-    assert aggregate["accepted_drafts_per_step"] is None
-    assert aggregate["effective_acceptance_rate"] == pytest.approx(
-        (624 / 256 - 1) / 3
-    )
+    assert summary["measured_decode_rounds"] == 256
+    assert summary["decode_round_tpot_ms"] == pytest.approx(20.0)
+    assert summary["decode_step_tput_per_gpu"] == pytest.approx(400.0)
+    assert summary["observed_tokens_per_step"] == pytest.approx(2.5)
+    assert summary["raw_acceptance_rate"] == pytest.approx(0.5)
+    assert summary["effective_acceptance_rate"] == pytest.approx(0.5)
+    assert summary["output_tput_per_gpu"] == pytest.approx(1000.0)
+    assert summary["equivalent_output_tpot_ms"] == pytest.approx(8.0)
+    assert summary["filter"]["retained_rounds"] == 254
+    assert summary["schedule_validation"]["selected_first_iter"] == 2
+    assert summary["schedule_validation"]["selected_last_iter"] == 257
 
 
-def test_pooling_passes_does_not_multiply_active_concurrency():
-    passes = [
-        summarize_pass(
-            [request_output() for _ in range(8)],
-            wall_seconds=20.0,
-            expected_output_tokens=625,
+def test_decode_summary_requires_same_window_speculative_counters():
+    stats = fixed_batch_stats()
+    for item in stats:
+        item["specDecodingStats"] = {
+            "numDraftTokens": 0,
+            "numAcceptedTokens": 0,
+        }
+    with pytest.raises(RuntimeError, match="omitted speculative counters"):
+        summarize_decode_rounds(
+            stats,
+            global_batch_size=64,
+            local_batch_size=8,
             num_gpus=8,
-            max_draft_tokens=3,
         )
-        for _ in range(3)
+
+
+def test_decode_validation_rejects_staggered_first_generation_round():
+    stats = [
+        iteration(
+            1,
+            active=8,
+            scheduled=8,
+            context=8,
+            generation=0,
+            drafted=0,
+            accepted=0,
+        ),
+        iteration(
+            2,
+            active=4,
+            queued=4,
+            scheduled=4,
+            generation=4,
+        )
     ]
-    aggregate = aggregate_passes(passes, num_gpus=8)
-    assert aggregate["concurrency"] == 8
-    assert aggregate["request_samples"] == 24
-    assert aggregate["pass_count"] == 3
-    assert aggregate["derived_output_tput_per_gpu"] == pytest.approx(50.0)
-    assert aggregate["wall_output_tput_per_gpu"] == pytest.approx(31.25)
-    assert len(set(aggregate["per_pass_output_sequence_sha256"])) == 1
+    stats.extend(iteration(index) for index in range(3, 260))
+    with pytest.raises(RuntimeError, match="fixed local batch"):
+        select_full_batch_decode_rounds(
+            stats,
+            local_batch_size=8,
+            required_rounds=256,
+        )
 
 
-def test_huawei_conversion_uses_observed_tokens_per_step():
-    comparison = huawei_comparison(
-        concurrency=16,
-        b300_output_tput_per_gpu=200.0,
-        b300_step_tput_per_gpu=80.0,
-        observed_tokens_per_step=2.5,
-        mtp_draft_tokens=3,
-    )
-    assert comparison is not None
-    assert comparison["estimated_token_tput_per_chip"] == pytest.approx(
-        56.70 * 2.5
-    )
-    assert comparison["published_dataset_token_tput_per_chip"] == (
-        pytest.approx(56.70 * 2.44)
-    )
-    assert comparison["published_acceptance_rate"] == pytest.approx(0.48)
-    assert comparison["conversion"].endswith(
-        "trt_observed_tokens_per_step"
-    )
-    assert comparison["b300_to_huawei_published_output_ratio"] == (
-        pytest.approx(200.0 / (56.70 * 2.44))
-    )
-    assert comparison["b300_to_huawei_step_rate_ratio"] == pytest.approx(
-        80.0 / 56.70
-    )
+def test_decode_validation_rejects_staggered_prefill():
+    stats = [
+        iteration(
+            1,
+            active=4,
+            queued=4,
+            scheduled=4,
+            context=4,
+            generation=0,
+        ),
+        iteration(
+            2,
+            active=8,
+            scheduled=4,
+            context=4,
+            generation=0,
+        ),
+    ]
+    stats.extend(iteration(index) for index in range(3, 260))
+    with pytest.raises(RuntimeError, match="full-local-batch prefill"):
+        select_full_batch_decode_rounds(
+            stats,
+            local_batch_size=8,
+            required_rounds=256,
+        )
 
 
-def test_huawei_ratio_is_not_claimed_for_different_mtp_depth():
-    comparison = huawei_comparison(
-        concurrency=16,
-        b300_output_tput_per_gpu=200.0,
-        b300_step_tput_per_gpu=80.0,
-        observed_tokens_per_step=1.8,
-        mtp_draft_tokens=2,
-    )
-    assert comparison is not None
-    assert comparison["comparable"] is False
-    assert comparison["b300_to_huawei_published_output_ratio"] is None
-    assert comparison["b300_to_huawei_step_rate_ratio"] is None
+def test_decode_validation_rejects_mixed_prefill_and_decode():
+    stats = [
+        iteration(
+            1,
+            scheduled=8,
+            context=4,
+            generation=4,
+        )
+    ]
+    stats.extend(iteration(index) for index in range(2, 260))
+    with pytest.raises(RuntimeError, match="mixed prefill and decode"):
+        select_full_batch_decode_rounds(
+            stats,
+            local_batch_size=8,
+            required_rounds=256,
+        )
 
 
-def test_huawei_ratio_is_reported_for_exact_batch_tp4():
-    comparison = huawei_comparison(
-        concurrency=16,
-        b300_output_tput_per_gpu=200.0,
-        b300_step_tput_per_gpu=80.0,
-        observed_tokens_per_step=3.0,
-        mtp_draft_tokens=3,
-        effective_parallelism="TP4",
-        active_gpu_count=4,
+def test_huawei_comparison_uses_raw_step_rate_and_separate_yield():
+    decode = summarize_decode_rounds(
+        fixed_batch_stats(),
+        global_batch_size=64,
+        local_batch_size=8,
+        num_gpus=8,
     )
-    assert comparison is not None
+    comparison = huawei_comparison(64, decode)
     assert comparison["global_batch_match"] is True
     assert comparison["device_count_match"] is False
-    assert comparison["hardware_topology_match"] is False
-    assert comparison["b300_active_gpu_count"] == 4
-    assert comparison["huawei_gate_passed"] is True
-
-
-def test_huawei_ratio_is_not_reported_for_unpublished_global_batch():
-    assert (
-        huawei_comparison(
-            concurrency=32,
-            b300_output_tput_per_gpu=400.0,
-            b300_step_tput_per_gpu=120.0,
-            observed_tokens_per_step=3.0,
-            mtp_draft_tokens=3,
-            effective_parallelism="TP4",
-            active_gpu_count=4,
-        )
-        is None
+    assert comparison["huawei_local_batch_size"] == 4
+    assert comparison["b300_to_huawei_decode_step_ratio"] == pytest.approx(
+        400.0 / 210.16
+    )
+    assert comparison["published_output_tput_per_chip"] == pytest.approx(
+        210.16 * 2.44
     )

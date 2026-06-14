@@ -1,1233 +1,223 @@
 # TRT Bench Working Notes
 
-These notes are for the next agent running and debugging `trt-bench`.
+These are operational notes for running and debugging `trt-bench`.
 
-## Scope
+## Current Contract
 
-- Branch-only, never merge to `main`.
-- B300, one node, eight GPUs allocated. DEP8 uses all eight; TP4/DEP4
-  production-recipe experiments use four active GPUs.
-- TensorRT-LLM only.
-- Offline `LLM.generate()`, no server or generic InferenceX processing.
-- Optimization workflows may use up to ten parallel single-node B300 jobs.
-- Historical equal-batch-per-chip Huawei experiments use DEP8/MTP3 at c8,
-  c32, and c64. The current exact-global-batch gate uses TP4 at c16 and DEP4
-  at c64/c128; it matches global batch and MTP depth, not hardware topology.
+- Branch-only; never merge to `main`.
+- One B300 node, eight GPUs, DEP8.
+- DeepSeek-V4 Pro FP4, TRT commit `c185066`.
+- Exact GBS `16`, `64`, `128`.
+- Exact 8192-token prompts.
+- MTP3, temperature 1, engine-global seed 42, EOS ignored.
+- Perfect router, LM-head TP, heuristic sparse top-k, ConfigurableMoE.
+- Overlap scheduler disabled.
+- Two warmup decode rounds.
+- 256 measured full-batch decode rounds.
+- First measured round skipped and upper-IQR outliers removed.
+- Headline throughput is `GBS / decode-round TPOT / 8`.
+- MTP yield is separate.
 
-## Pinned TRT Facts
+## Why The Old Result Was Too High
 
-The image tag identifies TensorRT-LLM source commit `c185066`.
+Run `27483465692` used a request pool and mean per-request decode windows. At
+GBS 1024 it reported:
 
-- Tokenizer:
-  `from tensorrt_llm.tokenizer.deepseek_v4 import DeepseekV4Tokenizer`
-- Prompt fast path: `{"prompt_token_ids": ids}`
-- Per-request telemetry:
-  `completion.request_perf_metrics`
-- Timing fields:
-  `arrival_time`, `first_scheduled_time`, `first_token_time`,
-  `last_token_time`
-- Iteration fields: `first_iter`, `last_iter`
-- Spec fields:
-  `total_accepted_draft_tokens`, `total_draft_tokens`, `acceptance_rate`
-- In run `27461421427`, the pinned PyTorch MTP path left all three raw spec
-  values at zero while `last_iter - first_iter` showed 3.143 tokens/step.
-  Treat zero proposed drafts as unavailable telemetry, not 0% acceptance.
-- Effective MTP3 acceptance is derived as `(tokens_per_step - 1) / 3`.
-- MTP config:
-  `{"decoding_type": "MTP", "max_draft_len": 3}`
-- Perfect router is read from unprefixed `ENABLE_PERFECT_ROUTER` in
-  `tensorrt_llm._torch.modules.fused_moe.interface.MoE`.
-- `MpiPoolSession` explicitly forwards environment names beginning with
-  `TRTLLM` or `TLLM`.
-- `trt_mpi_entry.worker_main` is installed into the pinned IPC proxy before
-  `LLM` construction. It recreates `ENABLE_PERFECT_ROUTER` and marks every
-  rank before importing TRT's real worker entry.
-- The pinned PyTorch sampler does not apply request-level
-  `SamplingParams.seed`. It creates one engine-global CUDA generator with
-  seed `42` and advances it across requests and passes. CANN also globally
-  seeds to `42`, but uses a different temperature-1 sampling implementation.
-- Current optimization runs use one measured pass to reduce GPU time. Earlier
-  runs used three passes after one-pass tuning showed output-dependent MTP
-  variation; confirm any winner with a separate repeat before treating a
-  marginal difference as stable.
-- The c128 DEP4 profile reports `NVIDIA B300 SXM6 AC`, compute capability
-  `10.3`, and 148 SMs. `sm100f` kernel names are Blackwell-family names, not
-  proof of a B200 fallback; the same trace selects explicit `sm103` kernels.
-- Four-rank overlap-aware c128 DEP4 means are `46.01 ms` summed GPU events,
-  `38.24 ms` busy union, `48.41 ms` GPU window, `10.17 ms` idle in-window,
-  and `1.203x` overlap. MoE GEMM1+GEMM2 total about `18.02 ms/rank`.
-- The pinned TRT MoE autotuner defaults
-  `TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION` to `random`. Perfect routing
-  makes this workload balanced, so stage seven compares `random` and
-  `balanced` explicitly.
-- NVIDIA commit `f04f90e8b48641fc82f4e5db5bd608b7debbff55` landed after the
-  pinned image and removes a redundant DeepSeek-V4 pre-MoE allreduce. The
-  branch applies it only for explicit TP4 candidates after checking source
-  SHA256
-  `4f65eaefdb1cbdb20456415c55d041493d7e4f984cee74f5f91ebecb0e9d33f8`.
-  Patched SHA256 is
-  `09986ecbc71467325e668c59e61d790e120036e102eefe7c6eae9e671e0af18f`.
-  Every active rank marker must report that patched hash.
-- Fresh engine startup is dominated by model initialization plus CuTe DSL
-  compilation. The branch mounts the image-keyed path
-  `/data/trtllm-cache/dsv4-c185066-sm100a/cute-dsl`, and the direct
-  `CUTE_DSL_CACHE_DIR` variable plus its `TRTLLM_*` forwarding alias must
-  reach every active MPI rank marker. Cache-prime run `27475868179` created
-  zero files there, so propagation is proven but caching is not.
-- TRT's exact DeepSeek-V4 README defines ADP `max_batch_size` as per local
-  rank. `LLM.generate()` enqueues global requests individually, and
-  PyExecutor allows `tp_size * max_num_active_requests` total ADP requests.
-  The CUDA graph runner pads each local rank to a configured graph batch.
-  Therefore the legacy global graph sizes 8/32/64 can pad true local batches
-  1/4/8 by 8x.
-
-Do not assume a newer TRT release has the same field names. If the image
-changes, inspect the exact source first.
-
-## B300 Optimization Boundaries
-
-The normal B300 recipe is an optimization source, but comparison claims have
-stricter boundaries:
-
-- It must not reduce MTP3 to MTP2 at high concurrency.
-- LM-head TP in attention DP is now an explicit candidate because both the
-  Huawei guide and the checked-in B300 production recipe enable it.
-- It must not change to MegaMoe for this 8K matching workload unless that is
-  a separately labeled non-comparable experiment.
-- It must not substitute continuous batching or HTTP request timing.
-- TP4 and alternate MTP-depth tests can be useful second-stage optimization
-  work, but they do not have the same batch-per-chip/MTP3 Huawei match.
-
-## First-Run Risks
-
-1. Perfect-router alias propagation into all active MPI ranks. DEP8 must show
-   exactly ranks `0..7`; TP4/DEP4 must show exactly ranks `0..3`. Every rank
-   must record the same CuTe cache path, without assuming files are persisted.
-2. Exact 8192-token prompt construction with the staged model tokenizer.
-3. TRT argument names accepted by the pinned image.
-4. Exact-concurrency CUDA graph memory at 512/1024.
-5. One full-shape warmup plus one measured pass fitting the worker timeout.
-6. `/scratch/models/DeepSeek-V4-Pro` being staged on the selected node.
-7. Shared `/data/datasets` and `/data/squash` permissions.
-
-## Fast Debug Commands
-
-Dispatch only concurrency 8:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT offline bring-up c8' \
-  -f 'inputs[concurrencies]=8'
+```text
+derived output: 1582.72 tok/s/GPU
+wall output:     731.58 tok/s/GPU
 ```
 
-Dispatch an explicit set of rows:
+Those are not two measurements of the same schedule. The derived formula
+multiplied each request's active-window speed by all 1024 requests even though
+TRT queued and staggered them. The implied average active decode population
+was about 473 requests, not 1024.
 
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-CONCURRENCIES=32,64,128,256
-TEST_NAME='DSV4 B300 TRT offline tuned c32-c256'
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f "inputs[test-name]=$TEST_NAME" \
-  -f "inputs[concurrencies]=$CONCURRENCIES"
+That run and all deleted experiment matrices are historical optimization data,
+not Huawei-comparable benchmark rows.
+
+## Source Audit
+
+Huawei:
+
+```text
+/Users/bshan/Documents/cann-recipes-infer-master/
 ```
 
-The top-level `ref` selects the branch's workflow definition. `inputs[ref]`
-pins the checkout inside each benchmark job. Keep the top-level ref on
-`trt-bench` and set `inputs[ref]` to the pushed commit SHA.
-
-First bring-up dispatched with this command:
-
-- Run: `27461421427`
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27461421427`
-- Branch commit: `3c74b5048ffb4cdf3ad4867ae65d87171196452f`
-- Dispatched: `2026-06-13T08:17:24Z`
-
-List artifacts:
-
-```bash
-gh api /repos/SemiAnalysisAI/InferenceX/actions/runs/$RUN_ID/artifacts \
-  --jq '.artifacts[].name'
-```
-
-Download one failed row:
-
-```bash
-gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
-  -n offline-trt-conc-8 -D /tmp/offline-trt-c8
-tar -xzf /tmp/offline-trt-c8/offline_debug_conc8.tar.gz \
-  -C /tmp/offline-trt-c8/debug
-```
-
-Inspect concise failures without dumping all request samples:
-
-```bash
-jq '{
-  status,
-  phase,
-  failure_kind,
-  error,
-  candidate,
-  aggregate,
-  resolved_parallelism
-}' /tmp/offline-trt-c8/debug/*_worker.json
-```
-
-## Acceptance Criteria
-
-Do not call a row valid unless:
-
-- status is `success`
-- all prompts are exactly 8192 tokens
-- every request emits exactly 625 tokens
-- resolved shape matches the candidate and MTP3; LM-head TP matches the
-  candidate
-- perfect-router propagation validation passes for every active rank
-- a single-candidate experiment contains one warmup and one measured pass
-  from one fresh engine, with `concurrency` request samples
-- legacy tuning also contains one pass per successful candidate and a fresh
-  one-pass final engine
-- derived and wall throughput are both present
-- derived step throughput and step TPOT are present
-- token/step and effective acceptance are present
-- raw TRT acceptance is either populated or explicitly marked unavailable
-- Huawei output and step-rate ratios are present only for exact-global-batch
-  MTP3 references currently defined at c16, c64, and c128; other
-  concurrencies keep them null
-
-Capacity failures at 512/1024 remain useful rows. They are not successful
-performance measurements.
-
-## Runtime Logging
-
-- The launcher records allocation, timeout, telemetry start, controller start,
-  and artifact finalization.
-- The controller records corpus and tuning phases. While a worker is active,
-  it emits one heartbeat every 60 seconds with the latest explicit worker
-  phase and the worker-log filename.
-- Each worker records engine initialization, warmup, all measured passes,
-  perfect-router validation, aggregation, shutdown, and failure tracebacks.
-- Launcher finalization reports the persistent CuTe cache path and file count.
-- Native TRT output remains in the per-worker log and is not streamed into the
-  controller log. This keeps Actions readable while preserving full debug
-  detail in `offline_debug_concN.tar.gz`.
-- Each pass has one flushed line before its timer starts and one after metrics
-  extraction; neither line is included in the measured `LLM.generate()` wall
-  interval.
-- Profile rows also upload `offline_profile_summary_EXPERIMENT_ID.json` with
-  device properties, overlap-aware GPU busy/window/idle values,
-  kernel-family totals, stream totals, and architecture tags.
-
-## Parallel Optimization Matrix
-
-The first optimization matrix is checked in at
-`utils/bench_offline/b300_huawei_experiments.json`. It contains ten
-single-candidate jobs and is deliberately all DEP8/MTP3:
-
-- c8: prior wait30 control, wait30 plus LM-head TP, wait0 plus LM-head TP
-- c32: prior wait30/balance-off control, the same with LM-head TP, and the
-  production attention-DP wait30/balance-on/default-timeout knobs projected
-  onto DEP8
-- c64: prior wait0 control, wait0 plus LM-head TP, the production
-  attention-DP wait30/balance-on/default-timeout knobs projected onto DEP8,
-  and wait30/balance-off plus LM-head TP
-
-Each job creates one fresh engine, performs one full-shape warmup, and records
-one measured pass. The workflow fans out at most ten jobs, so it removes
-the seven-engine serial multiplier that made c512 take 4h19.
-
-Exact dispatch:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(jq -c . utils/bench_offline/b300_huawei_experiments.json)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT offline optimization' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-The collector keys rows by experiment ID, so repeated concurrencies are
-valid. Artifacts are named `offline-trt-job-EXPERIMENT_ID`.
-
-The checked-in second-stage matrix repeats the c32 DEP8 control and LM-head-TP
-candidate, then tests the production TP4 and DEP4 shapes:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(jq -c . utils/bench_offline/b300_stage2_experiments.json)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT offline stage2 one-pass' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-Run `27476355772` dispatched that exact stage-two matrix on
-`2026-06-13T19:11:30Z`, pinned to commit
-`781065563a87740a094e4d5e70f19b4786f87fe1`.
-
-The third-stage matrix tests TRT's documented per-local-rank ADP capacity
-against legacy global controls. It remains DEP8/MTP3 and Huawei-comparable:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_stage3_local_batch_experiments.json
-)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT offline local-rank batch' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-For DEP8 c8/c32/c64, `attention_dp_batch_mode=local-rank` resolves engine and
-CUDA graph capacity to 1/4/8. Results are rejected if TRT resolves different
-`max_batch_size`, `max_num_tokens`, or CUDA graph batch sizes.
-
-## Huawei Comparison Audit
-
-Huawei's c8/c32/c64-matched table is explicitly offline decode. Its published
-throughput is step throughput because every row equals
-`global_batch_size / step_tpot / chips`. Huawei also publishes 1.44 accepted
-drafts for MTP3, or 2.44 emitted tokens per step.
-
-Use two primary ratios:
-
-1. Step-rate ratio: B300 derived decode steps/GPU divided by Huawei's
-   published decode steps/chip. This isolates execution rate.
-2. Actual output ratio: B300 emitted output tokens/GPU divided by Huawei step
-   throughput times Huawei's own 2.44-token yield.
-
-The prior artifacts contain enough request telemetry to reconstruct direct
-step TPOT. The baseline was:
-
-| Conc | B300 step TPOT ms | B300 step/s/GPU | Huawei step TPOT ms | Huawei step/s/chip | B300/Huawei step |
-|---:|---:|---:|---:|---:|---:|
-| 8 | 30.026 | 33.305 | 17.64 | 56.70 | 0.587 |
-| 32 | 44.268 | 90.358 | 19.03 | 210.16 | 0.430 |
-| 64 | 66.065 | 121.094 | 20.61 | 388.23 | 0.312 |
-
-Based on the same prior final output-token results, B300/Huawei actual-output
-ratios were:
-
-- c8: `116.091 / (56.70 * 2.44) = 0.839`
-- c32: `286.253 / (210.16 * 2.44) = 0.558`
-- c64: `369.071 / (388.23 * 2.44) = 0.390`
-
-The old TRT-yield-normalized ratios were `0.587`, `0.431`, and `0.313`, close
-to the reconstructed direct step ratios because request-level token yield was
-fairly uniform within each run. New results record direct step TPOT and step
-throughput without relying on that approximation.
-
-The current B300 baseline is plausibly behind for two independent reasons:
-
-- Its decode-step rate is lower, increasingly so at the larger matched
-  batches.
-- Its observed MTP yield at c32/c64 is about 3.16/3.04 tokens per step, while
-  Huawei reports 2.44. B300's higher yield helps output throughput, but not
-  enough to overcome its slower step execution.
-
-The Huawei guide also describes LM-head TP during decode, forced EPLB,
-specialized fused SAS/LI/compressor/mHC kernels, and multiple streams
-overlapping attention, compressor, routed/shared experts, and scheduler
-metadata. The prior offline B300 baseline already used perfect routing and
-fused mHC, but incorrectly left LM-head TP disabled. The first matrix isolates
-that mismatch before exploring non-comparable TP4 or alternate-MTP shapes.
-
-## Run History
-
-### Run 27461421427
-
-- Dispatched `2026-06-13T08:17:24Z` from commit
-  `3c74b5048ffb4cdf3ad4867ae65d87171196452f`.
-- Concurrency 8 completed successfully on `b300-015`, Slurm job `20771`.
-- Six tuning attempts and one fresh three-pass final run completed.
-- Winner: `wait10`, balance on, overlap on, CUDA graph on.
-- Final mean token TPOT: `9.741 ms`.
-- Final derived output throughput: `102.658 tok/s/GPU`.
-- Final wall output throughput: `60.350 tok/s/GPU`.
-- Final observed token yield: `3.143 tokens/step`.
-- Effective MTP3 acceptance: `(3.143 - 1) / 3 = 71.4%`.
-- Perfect-router proof contained eight `trt_mpi_entry` rank processes.
-- All prompts were 8192 tokens and all outputs were 625 tokens.
-- The run exposed two bounded reporting bugs: raw zero draft counters were
-  shown as 0% instead of unavailable, and `provenance.git_revision` was null.
-
-### Run 27462769691
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27462769691`
-- Dispatched `2026-06-13T09:21:31Z`; completed
-  `2026-06-13T10:09:23Z`.
-- Ran commit `51c894535d8e780ac9561cf53872fb52ea8037ef`.
-- Concurrency 8 completed successfully on `b300-015`, Slurm job `20781`.
-- Winner: `wait60`, balance on, overlap on, CUDA graph on.
-- Final mean token TPOT: `8.857 ms`.
-- Final derived output throughput: `112.904 tok/s/GPU`.
-- Final wall output throughput: `84.634 tok/s/GPU`.
-- Final observed token yield: `3.459 tokens/step`.
-- Effective MTP3 acceptance: `82.0%`.
-- Commit provenance, null raw speculative counters, DEP8/MTP3 shape,
-  eight-rank perfect-router propagation, 8192-token prompts, 625-token
-  outputs, and three final passes all validated.
-- The winner differed from run `27461421427`, and derived throughput differed
-  by about 10%. Per-pass output digests also differed. Exact TRT source review
-  showed that the pinned PyTorch sampler ignores request-level seeds and
-  advances one engine-global seed-42 generator. The original one-pass tuning
-  was therefore not strong enough to call the scheduler choice verified.
-- Follow-up correction: pool three passes for every tuning candidate and
-  require a 3% improvement before replacing the earlier candidate.
-
-### Run 27463874862
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27463874862`
-- Dispatched `2026-06-13T10:13:58Z`.
-- Branch commit: `6c196d6b7f7cd10080c6f396bd9d43fcb4f7407b`.
-- Concurrency: `8`.
-- Purpose: verify three-pass candidate tuning and the 3% winner threshold
-  before dispatching broader B300 concurrency points.
-- Completed `2026-06-13T11:01:31Z` on `b300-015`, Slurm job `20789`.
-- The final measurement itself succeeded with `wait30`, `9.163 ms` token
-  TPOT, `109.130 tok/s/GPU` derived throughput, and `3.342 tokens/step`.
-- Tuning verification failed: metadata requested three tuning passes, but
-  every candidate artifact contained `pass_count=1` and `request_samples=8`.
-  `trt_worker.py` still forced tune mode to one pass after the controller
-  passed `--passes 3`.
-- This is a bounded harness bug. Fix the worker pass-count branch and rerun c8
-  before launching any broader concurrency points.
-
-### Run 27464928729
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27464928729`
-- Dispatched `2026-06-13T11:03:13Z`.
-- Branch commit: `404d87e69024eb0aac808bacaf8e498bf78a75dc`.
-- Concurrency: `8`.
-- Purpose: final c8 gate after fixing tune mode to honor `--passes 3`.
-- Required artifact proof: every successful tuning attempt must report
-  `pass_count=3` and `request_samples=24`.
-- Completed `2026-06-13T11:58:34Z` on `b300-016`, Slurm job `20800`.
-- All six tuning attempts reported `pass_count=3`,
-  `request_samples=24`, and three-element derived-throughput, wall-throughput,
-  and output-digest arrays.
-- Winner: `wait30`, balance on, overlap on, CUDA graph on.
-- Three-pass tuning result: `114.063 tok/s/GPU` derived throughput.
-- `wait10` reached `116.178 tok/s/GPU`, only `1.85%` above `wait30`;
-  balance-off reached `115.723 tok/s/GPU`, only `1.46%` above. Neither met
-  the 3% replacement threshold. Overlap-off was slower at
-  `105.151 tok/s/GPU`.
-- Fresh final result: `8.614 ms` token TPOT,
-  `116.091 tok/s/GPU` derived throughput,
-  `85.343 tok/s/GPU` wall throughput, and `3.486 tokens/step`.
-- The fresh final derived result was `1.78%` above its tuning result, within
-  the 3% stability threshold.
-- Commit provenance, temperature-1/global-seed-42 sampling metadata, null raw
-  counters, effective acceptance, DEP8/MTP3 shape, eight-rank perfect-router
-  propagation, exact 8192-token prompts, and exact 625-token outputs all
-  validated.
-- This run passes the c8 gate. Broader c32/c64/c128/c256 measurements may
-  proceed.
-
-### Run 27466148578
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27466148578`
-- Dispatched `2026-06-13T11:59:41Z`.
-- Branch commit: `35b71eed55694a9e5bd87babc39d9f9851c5eaf7`.
-- Concurrencies: `32,64,128,256`.
-- Purpose: collect tuned low/mid-concurrency B300 results after the c8
-  three-pass gate passed.
-- Completed `2026-06-13T13:01:25Z`. The workflow conclusion is `failure`
-  only because c128 and c256 hit the corpus-construction bug below. The c32
-  and c64 jobs and their artifacts are valid.
-- c32 ran on `b300-017`, Slurm job `20807`. Winner:
-  `wait30-balance-off`. Three-pass tuning was `290.065 tok/s/GPU`; the fresh
-  final was `286.253 tok/s/GPU`, a `-1.31%` drift.
-- c32 final: `13.974 ms` token TPOT, `175.470 tok/s/GPU` wall throughput,
-  `3.162 tokens/step`, `72.1%` effective MTP3 acceptance, and
-  `1967.12 ms` mean TTFT. Huawei normalized token throughput was
-  `664.630 tok/s/chip`, giving a B300/Huawei ratio of `0.431`.
-- c64 ran on `b300-016`, Slurm job `20806`. Winner: `wait0`. Three-pass
-  tuning was `371.771 tok/s/GPU`; the fresh final was
-  `369.071 tok/s/GPU`, a `-0.73%` drift.
-- c64 final: `21.676 ms` token TPOT, `216.654 tok/s/GPU` wall throughput,
-  `3.036 tokens/step`, `67.9%` effective MTP3 acceptance, and
-  `3533.63 ms` mean TTFT. Huawei normalized token throughput was
-  `1178.769 tok/s/chip`, giving a B300/Huawei ratio of `0.313`.
-- For both successful rows, all six tune workers and the fresh final worker
-  completed three measured passes. Every measured and warmup request emitted
-  exactly 625 tokens; DEP8/MTP3, LM-head TP off, exact 8192-token corpora,
-  eight-rank perfect-router propagation, null raw speculative metrics, and
-  commit provenance all validated.
-- c128 and c256 failed during corpus construction before TRT initialization:
-  some later InfiniteBench contexts rendered to 8191 or 8193 tokens but not
-  8192 when truncating only at source-token boundaries. c32 and c64 continued.
-- Bounded fix: when token-boundary truncation skips 8192, search recorded
-  whitespace adjustments at the context/suffix boundary, then a small
-  decoded context-tail trim. Never insert pad or synthetic token IDs.
-
-### Run 27466362872
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27466362872`
-- Dispatched `2026-06-13T12:09:22Z`.
-- Branch commit: `e82c9902269e186214b09ce744b258d4c4940b99`.
-- Concurrencies: `128,256`.
-- Purpose: retry the two corpus-construction failures with recorded exact
-  boundary/tail adjustment fallback.
-- c128 completed successfully `2026-06-13T13:28:27Z` on `b300-015`,
-  Slurm job `20811`.
-- Of 128 prompts, 20 required one recorded `space` boundary adjustment.
-  No prompt required context-tail trimming. All prompts encoded to exactly
-  8192 tokens.
-- c128 winner: `wait60`. Three-pass tuning was `634.922 tok/s/GPU`; the
-  fresh final was `629.687 tok/s/GPU`, a `-0.82%` drift.
-- c128 final: `25.409 ms` token TPOT, `105.283 tok/s/GPU` wall throughput,
-  `3.195 tokens/step`, `73.2%` effective MTP3 acceptance, and
-  `38404.93 ms` mean TTFT. The large TPOT/wall-throughput divergence is real:
-  this benchmark tunes decode-token TPOT, while `wait60` delays scheduling.
-- All six tune workers and the fresh final worker completed three measured
-  passes with 384 request samples each. Exact output counts, DEP8/MTP3,
-  LM-head TP off, eight-rank perfect-router propagation, null raw
-  speculative metrics, and commit provenance all validated.
-- c256 completed successfully `2026-06-13T14:15:22Z` on `b300-018`,
-  Slurm job `20812`.
-- Of 256 prompts, 25 required one recorded `space` boundary adjustment.
-  No prompt required context-tail trimming. All prompts encoded to exactly
-  8192 tokens.
-- c256 winner: `wait60`. Three-pass tuning was `949.853 tok/s/GPU`; the
-  fresh final was `926.062 tok/s/GPU`, a `-2.50%` drift and still within the
-  3% stability bound.
-- c256 final: `34.555 ms` token TPOT, `84.654 tok/s/GPU` wall throughput,
-  `3.191 tokens/step`, `73.0%` effective MTP3 acceptance, and
-  `105979.48 ms` mean TTFT. As at c128, the large decode-TPOT/wall divergence
-  is caused by the selected `wait60` scheduling delay.
-- All six c256 tune workers and the fresh final worker completed three
-  measured passes with 768 request samples each. Exact output counts,
-  DEP8/MTP3, LM-head TP off, eight-rank perfect-router propagation, null raw
-  speculative metrics, and commit provenance all validated.
-- The run and its collector completed successfully
-  `2026-06-13T14:15:36Z`.
-
-### Run 27467637477
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27467637477`
-- Dispatched `2026-06-13T13:07:05Z`.
-- Branch commit: `e82c9902269e186214b09ce744b258d4c4940b99`.
-- Concurrencies: `512,1024`.
-- Exact trigger:
-
-  ```bash
-  gh api -X POST \
-    /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-    -f ref='trt-bench' \
-    -f 'inputs[ref]=trt-bench' \
-    -f 'inputs[test-name]=DSV4 B300 TRT offline c512-c1024 capacity' \
-    -f 'inputs[concurrencies]=512,1024'
-  ```
-
-- Purpose: determine whether each high-concurrency row is measurable or an
-  explicit `capacity_failure`.
-- c1024 first attempt ran on `b300-019`, Slurm job `20820`, and is not a
-  capacity result. At `2026-06-13T13:45:05Z`, UCX reported RoCE GID-table
-  changes followed by `Transport retry count exceeded`; several MPI ranks
-  aborted. The parent did not exit cleanly, so the 3600-second worker guard
-  eventually recorded a timeout.
-- c1024 prompt construction itself passed: 90 of 1024 prompts used one
-  recorded `space` boundary adjustment, none used context-tail trimming, and
-  every prompt encoded to exactly 8192 tokens.
-- c512 completed successfully on `b300-016`, Slurm job `20821`.
-- All six c512 tune workers and the fresh final worker completed three
-  measured passes, with 1536 request samples and eight marked perfect-router
-  rank processes each.
-- Winner: `wait60`, balance on, overlap on, CUDA graph on.
-- Final c512 mean token TPOT: `56.142 ms`.
-- Final c512 derived output throughput: `1139.957 tok/s/GPU`.
-- Final c512 wall output throughput: `54.373 tok/s/GPU`.
-- Final c512 observed token yield: `3.196 tokens/step`.
-- Final c512 effective MTP3 acceptance: `73.2%`.
-- Final c512 mean TTFT: `346826.413 ms`.
-- The final c512 shape resolved to DEP8, LM-head TP off, and MTP3. All 512
-  prompts were exactly 8192 tokens; 55 used a recorded whitespace boundary
-  adjustment and none used synthetic padding.
-- `collect-results` completed and published both rows. The workflow conclusion
-  is failure only because c1024 timed out; the c512 performance row is valid.
-
-### Run 27469092334
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27469092334`
-- Dispatched `2026-06-13T14:11:06Z`.
-- Branch commit: `2e837d99f11cfa6bf99f338d571e6aec7880b0ed`.
-- Concurrency: `1024`.
-- Exact trigger:
-
-  ```bash
-  gh api -X POST \
-    /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-    -f ref='trt-bench' \
-    -f 'inputs[ref]=trt-bench' \
-    -f 'inputs[test-name]=DSV4 B300 TRT offline c1024 infra retry' \
-    -f 'inputs[concurrencies]=1024' \
-    -f 'inputs[worker-timeout]=5400'
-  ```
-
-- Purpose: retry c1024 on a fresh allocation after the `b300-019` RoCE/UCX
-  failure. The longer guard avoids confusing a legitimate slow full-shape
-  pass with the previous network-induced hang.
-- The retry ran on `b300-015`, Slurm job `20831`. It had no UCX, NCCL, OOM,
-  GPU, or capacity error. GPU telemetry showed all eight GPUs still near
-  100% utilization when the 5400-second guard terminated the first
-  `wait30` tune worker.
-- One required warmup-plus-three-pass candidate did not complete in 90
-  minutes. Six tuning candidates plus a fresh final engine therefore cannot
-  fit the current 500-minute workflow and Slurm allocation without changing
-  the benchmark method or making a much larger operational change.
-- Stop c1024 here. It is `unmeasured_runtime_limit`, not
-  `capacity_failure`, and must not be reported as a performance row.
-
-## Stage-Four Kernel Matrix
-
-`utils/bench_offline/b300_stage4_kernel_experiments.json` is the next bounded
-ten-job offline matrix. Every job creates one engine, runs one full-shape
-warmup, and records one measured pass.
-
-The source-backed candidates are:
-
-- CuTE DSL FP4 paged-MQA logits. TRT commit `c185066` contains the tuned
-  implementation from TensorRT-LLM changes `#13929` and `#14133`.
-- Tight `max_seq_len=8832`. The fixed workload needs 8817 committed sequence
-  tokens, and 8832 is the next 128-token KV-block boundary.
-- `print_iter_log=false`. This removes native TRT iteration printing only;
-  benchmark phase logs and 60-second heartbeats remain enabled.
-- DEP4 local-rank sizing. At global c64, engine and graph batch capacity is
-  16 per active attention-DP rank instead of the legacy global 64.
-
-Pinned TRT's DeepSeek-V4 config loader preserves checkpoint-derived sparse
-attention values when the CuTE DSL flag is supplied. It uses explicit-field
-checks for checkpoint `index_topk` and `window_size`, keeps the checkpoint's
-full compression-ratio list, and rebuilds
-`DeepSeekV4SparseAttentionConfig` with the requested DSL flag. The worker also
-requires `IS_CUTLASS_DSL_AVAILABLE=true` so a labeled DSL row cannot silently
-run the fallback kernel.
-
-Dispatch only after run `27476767599` releases all ten B300 slots:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_stage4_kernel_experiments.json
-)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT offline kernel optimization' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-## Run 27476767599
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27476767599`
-- Completed successfully `2026-06-13T19:41:30Z`.
-- Branch commit: `232c9dec42e16443c13e41926e4dc855e64686c9`.
-- All ten jobs used one warmup and one measured pass.
-- Runtime validation proved local DEP8 engine and CUDA graph batch capacities
-  `1`, `4`, and `8` at global concurrencies `8`, `32`, and `64`.
-- Local-rank sizing versus the matched legacy global control:
-
-  | Pair | Output tok/s/GPU | Step/s/GPU | Wall tok/s/GPU |
-  |---|---:|---:|---:|
-  | c8 base | +56.3% | +55.2% | +33.4% |
-  | c32 base | +63.9% | +56.3% | +45.7% |
-  | c32 LM-head TP | +62.9% | +60.0% | +68.2% |
-  | c64 base | +68.9% | +64.1% | +74.6% |
-
-- Best local rows:
-
-  | Conc | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Huawei output ratio | Huawei step ratio |
-  |---:|---:|---:|---:|---:|---:|---:|
-  | 8 | 5.62 ms | 19.17 ms | 178.08 | 52.17 | 1.287 | 0.920 |
-  | 32 | 8.37 ms | 27.24 ms | 477.76 | 146.86 | 0.932 | 0.699 |
-  | 64 | 12.54 ms | 39.11 ms | 638.12 | 204.57 | 0.674 | 0.527 |
-
-- Once local-rank sizing is correct, LM-head TP adds about `2-3%` derived
-  output and step throughput. The dominant issue was global CUDA graph
-  padding, not LM-head execution.
-- The remaining Huawei gap grows with per-chip batch: B300 reaches `92.0%`,
-  `69.9%`, and `52.7%` of Huawei's published decode-step rate at c8/c32/c64.
-  B300's higher observed MTP yield makes the emitted-output ratios better:
-  `128.7%`, `93.2%`, and `67.4%`.
-
-## Run 27477088665
-
-- URL: `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27477088665`
-- Completed `2026-06-13T19:54:49Z` in about 12.5 minutes.
-- Branch commit: `980614e56ee7a97c9c3b9ffacdc8139135049287`.
-- Seven candidates succeeded with one warmup and one measured pass. The
-  workflow conclusion is failure only because all three CuTE DSL rows failed.
-- Repeated DEP8 control decode-step rates were `52.35`, `146.70`, and
-  `204.53` steps/s/GPU at c8/c32/c64. They differ from run `27476767599` by
-  `+0.34%`, `-0.11%`, and `-0.02%`, respectively.
-- The c32 emitted-output rate moved by `-4.5%` because observed yield changed
-  from `3.243` to `3.086` tokens/step. This is the expected one-pass
-  output-dependent MTP variance; the decode-step rate remained stable.
-- `max_seq_len=8832` changed c64 step throughput by `-0.01%`. Disabling
-  native iteration logging changed it by `-1.02%`. Neither is an
-  optimization.
-- DEP4 local-rank sizing improved per-active-GPU step throughput by
-  `16.9-17.5%` over the stage-two global-sized DEP4 rows. It reached
-  `288.89` steps/s per active GPU, but only four GPUs participate; DEP8 still
-  produced about `41.6%` more total node decode-step throughput.
-- Every CuTE DSL row failed during TRT engine warmup with:
-
-  ```text
-  FP8 Paged MQA Logits dtype errors:
-    q must be float8_e4m3fn, got torch.int8
-  ```
-
-  The kernel exists and was selected, but it is incompatible with this FP4
-  checkpoint's query representation. Do not rerun it without a checkpoint or
-  TRT dtype-path change.
-- Successful DEP8 timing:
-
-  | Conc | Engine init | Warmup | Measured pass | Estimated saving vs 3 passes |
-  |---:|---:|---:|---:|---:|
-  | 8 | 482.6 s | 4.9 s | 4.9 s | 13.7 s |
-  | 32 | 502.4 s | 19.7 s | 10.4 s | 24.7 s |
-  | 64 | 492.3 s | 34.6 s | 14.8 s | 33.7 s |
-
-  The estimate includes the two removed measured passes and their two
-  inter-pass sleeps. One pass is now the right default, but fresh TRT engine
-  initialization remains the dominant runtime. Keep the warmup so TPOT is
-  not contaminated by cold CUDA graph/JIT work.
-
-## Exact-Global-Batch 16/64/128 Matrix
-
-Run `27477851766` uses
-`utils/bench_offline/b300_huawei_global_batch_experiments.json`.
-Every job is hard-limited to one full-shape warmup plus exactly one measured
-pass; `trt_worker.py` rejects `--passes` values other than `1`.
-
-The gate now follows the Huawei table's literal global batches:
-
-| GBS | Huawei chips | Huawei step TPOT | Huawei step/s/chip | Huawei output tok/s/chip at 2.44 |
+Relevant implementation:
+
+- `models/deepseek-v4/infer.py`: one warmup generation, then one measured
+  generation.
+- `models/deepseek-v4/models/model_infer.py`: warmup stops after two decode
+  rounds; measured decode runs `max_new_tokens=256` rounds; each recorded time
+  is main-model time plus all MTP model times.
+- `executor/utils/common_utils.py`: skips the first recorded decode round,
+  removes values above `Q3 + 1.5 * IQR`, and averages retained values.
+- The guide's throughput is exactly `GBS / TPOT / chips`.
+
+Pinned TRT:
+
+- `LLM.get_stats()` returns per-iteration `iterLatencyMS` and inflight batch
+  counts when `enable_iter_perf_stats=true`.
+- Set `max_stats_len=2048`. It keeps the history bounded while retaining
+  prefill plus the worst-case 1024 decode iterations. The pinned executor
+  treats `-1` as unbounded.
+- `max_batch_size` is per attention-DP rank.
+- `TLLM_METRICS_ALL_RANKS=1` adds a per-iteration collective and must remain
+  disabled for timing.
+- `iterLatencyMS` measures a complete TRT executor iteration. Huawei sums
+  main-model and MTP timing regions inside CANN. The workload, decode window,
+  and filtering match; the runtime instrumentation point does not.
+
+## Capacity Table
+
+| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` |
 |---:|---:|---:|---:|---:|
-| 16 | 16 | 17.64 ms | 56.70 | 138.35 |
-| 64 | 16 | 19.03 ms | 210.16 | 512.79 |
-| 128 | 16 | 20.61 ms | 388.23 | 947.28 |
+| 16 | 2 | 2 | 2 | 16384 |
+| 64 | 8 | 8 | 8 | 65536 |
+| 128 | 16 | 16 | 16 | 131072 |
 
-The B300 side uses TP4 at c16 and DEP4 at c64/c128. Ratios are per active
-B300 GPU versus per Huawei chip. This matches global batch, 8K sequence
-length, and MTP3, but not topology or total device count; do not claim total
-system throughput equivalence.
+`max_num_tokens` is intentionally much larger than the old recipe. It permits
+all local 8192-token prompts to prefill in the same iteration. If GBS 128
+cannot initialize or prefill at this capacity, record the failure; do not
+restore staggered prefill.
 
-Prior evidence:
+## Schedule Gate
 
-- c64 DEP4 local-rank already reached `286.82-288.89 steps/s/GPU`, above the
-  exact-c64 Huawei target `210.16`.
-- The old c128 DEP8/global-sized run reached only about `196.99 steps/s/GPU`.
-  The new c128 DEP4 local-rank graph batch is 32 and is the unresolved gate.
+The branch-local MPI entry shim waits at each idle pass boundary until exactly
+one complete GBS has been enqueued. This prevents the live TRT executor from
+starting prefill after only the first few `generate_async()` submissions.
 
-The eight c128 jobs test wait 0/30/60, balance off, CuTE DSL top-k, GVR
-heuristic top-k, both top-k paths together, and one explicit FP8-indexer
-candidate. The FP8 row is the only candidate enabling CuTE DSL paged MQA:
-run `27477088665` proved the default FP4 indexer emits `torch.int8` query
-storage that violates that kernel's `float8_e4m3fn` contract.
+There must be exactly one prefill iteration with:
 
-Dispatch:
+```text
+context == local_batch
+generation == 0
+scheduled == local_batch
+active == local_batch
+queued == 0
+paused == 0
+```
+
+The first decode iteration and the next 255 must all show:
+
+```text
+context == 0
+generation == local_batch
+scheduled == local_batch
+active == local_batch
+queued == 0
+paused == 0
+```
+
+Iteration IDs must be consecutive. Any mixed context/decode iteration or
+partial first decode batch is `fixed_batch_validation`.
+
+## Output Cap
+
+TRT stops by emitted tokens, while Huawei stops by decode rounds. The measured
+cap is:
+
+```text
+1 + 256 * (3 + 1) = 1025 tokens
+```
+
+Therefore no request can finish before 256 MTP3 rounds. The first 256 valid
+rounds are measured; later rounds only let lower-acceptance requests reach the
+common output cap.
+
+The warmup cap is six tokens, which guarantees at least two MTP3 rounds. Only
+the first two valid warmup rounds are required.
+
+## Dispatch
+
+Full sweep:
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_huawei_global_batch_experiments.json
-)"
 gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT exact GBS 16 64 128' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
+  -f 'inputs[test-name]=DSV4 B300 TRT Huawei fixed GBS' \
+  -f 'inputs[global_batch_sizes]=16,64,128' \
+  -f 'inputs[salloc-time]=150' \
+  -f 'inputs[worker-timeout]=7200'
+```
+
+Canary:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[test-name]=DSV4 B300 TRT fixed GBS16 canary' \
+  -f 'inputs[global_batch_sizes]=16' \
   -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-## Run 27477851766
-
-- URL:
-  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27477851766`
-- Completed successfully `2026-06-13T20:27:08Z` in about 13 minutes.
-- Branch commit: `5dcb554bf97f4b389853c270199d44adf2a98888`.
-- All ten jobs used one full-shape warmup and exactly one measured pass.
-- The requested per-request-TPOT gate passed at all three global batches:
-
-  | Conc | Candidate | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Huawei output ratio | Huawei step ratio |
-  |---:|---|---:|---:|---:|---:|---:|---:|
-  | 16 | TP4 wait 0 | 12.08 ms | 38.46 ms | 331.16 | 104.00 | 2.394 | 1.834 |
-  | 64 | DEP4 wait 30, balance off | 17.41 ms | 54.98 ms | 919.12 | 290.99 | 1.792 | 1.385 |
-  | 128 | DEP4 wait 60 | 13.74 ms | 45.15 ms | 2328.13 | 708.75 | 2.458 | 1.826 |
-
-- c128 wait 30 also passed: `597.83 steps/s/GPU`, Huawei step ratio
-  `1.540`, and Huawei-output ratio `2.033`.
-- All four sparse-indexer candidates initialized and completed. Runtime
-  validation recorded `index_topk=512`; the FP8 row resolved
-  `indexer_k_dtype=fp8` and enabled both CuTE DSL kernels. None improved the
-  wait-0 control's step rate enough to pass: they reached
-  `377.25-382.24 steps/s/GPU` versus Huawei's `388.23`.
-
-Important interpretation:
-
-- The c128 wait-30/60 gains are scheduler staggering. Wait 30 spreads TTFT
-  from about `0.6` to `55.5` seconds; wait 60 spreads it to `89.3` seconds.
-- Their measured wall output rates are only `308.10` and
-  `207.33 tok/s/GPU`, respectively, despite the much larger TPOT-derived
-  output rates.
-- A request-relative approximation of the full decode span gives about
-  `97.16` steps/s/GPU for wait 30 and `63.55` for wait 60. The wait-0 control
-  is about `204.83`.
-- Therefore the run satisfies the user's selected calculation,
-  `global concurrency / mean per-request decode TPOT / active GPUs`. It does
-  not prove higher whole-batch decode throughput or higher total-system
-  throughput than Huawei. Always present TTFT and wall throughput with the
-  TPOT gate.
-
-## Stage-Five MoE Profiling Matrix
-
-`utils/bench_offline/b300_stage5_moe_profile_experiments.json` targets the
-non-staggered c128 wait-0 result. The best genuine result from run
-`27477851766` was the GVR row at `382.24 steps/s/GPU`, about `1.54%` below
-Huawei's `388.23`.
-
-Source-backed candidates:
-
-- Repeat the GVR control to measure one-pass noise.
-- `MEGAMOE_DEEPGEMM`: commit `c185066` includes a fused
-  dispatch+MXFP4/MXFP8 GEMM+combine backend for SM100/SM103 and pure DEP.
-  It is labeled experimental and is not the production 8K recipe backend.
-- Force `NVLINK_TWO_SIDED` or `DEEPEP` instead of the default one-sided
-  NVLink communication selected by `ConfigurableMoE`.
-- The original dispatch also tested `DEEPEPLOWLATENCY`. It is now rejected
-  by this branch and removed from the checked-in matrix: the pinned source
-  describes it as a small-token path, recommends fewer than 256 dispatch
-  tokens per rank, and permanently falls back after an infeasible workload.
-  An 8192-token prefill therefore cannot reach a valid low-latency decode
-  comparison without either a huge buffer/hang or switching to AllGather.
-- Disable low-precision combine, disable post-quant dispatch, and disable
-  LM-head TP as bounded controls.
-
-The GVR control and forced two-sided-NVLink rows set
-`TLLM_PROFILE_START_STOP=50-51`. TRT starts the PyTorch/CUDA profiler before
-executor iteration 50 and stops it before iteration 51, so exactly one steady
-decode iteration from the required full-shape warmup is captured. It does not
-add a measured pass. The launcher stores per-rank traces separately in
-`offline_profiles_EXPERIMENT_ID.tar.gz`; raw traces are excluded from the
-normal debug archive.
-
-Candidate-controlled `TRTLLM_*` and `TLLM_*` settings are copied into every
-MPI rank marker and rejected if any rank sees a different value.
-
-Dispatch:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_stage5_moe_profile_experiments.json
-)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT c128 MoE profile' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-After completion:
-
-```bash
-gh run download "$RUN_ID" --repo SemiAnalysisAI/InferenceX \
-  -n offline-trt-job-c128-gvr-profile -D /tmp/c128-gvr-profile
-tar -xzf /tmp/c128-gvr-profile/offline_profiles_c128-gvr-profile.tar.gz \
-  -C /tmp/c128-gvr-profile
-python utils/bench_offline/summarize_profile.py /tmp/c128-gvr-profile \
-  --json-out /tmp/c128-gvr-profile/profile_summary.json
-```
-
-## Run 27478541655
-
-- URL:
-  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27478541655`
-- Completed `2026-06-13T21:44:23Z` on commit
-  `fb67c4d95f896a04448643b37d7bdde533509774`.
-- Nine rows succeeded with exactly one measured pass. The workflow failed
-  only because the original `c128-deepep-lowlatency` row timed out.
-- The non-profile GVR control reached `375.84 steps/s/GPU`; the profile GVR
-  row reached `388.72`, just above Huawei's `388.23`. Together with the prior
-  exact run's `382.24`, the same-config mean is `382.27 steps/s/GPU`.
-  Whole-batch output stayed much tighter at `622.53-625.41 tok/s/GPU`; the
-  step-rate spread is primarily one-pass MTP token-yield variation, so the
-  isolated profile-row crossing is not a stable win.
-- No candidate improved the current path:
-
-  | Candidate | Step/s/GPU | Wall output/GPU |
-  |---|---:|---:|
-  | GVR profile | 388.72 | 622.53 |
-  | Low-precision combine off | 383.32 | 628.21 |
-  | Pre-quant all-to-all | 380.48 | 626.76 |
-  | LM-head TP off | 378.00 | 626.92 |
-  | MegaMoE | 371.26 | 622.46 |
-  | NVLink two-sided | 356.71 | 593.40 |
-  | DeepEP | 310.05 | 506.75 |
-
-- Both completed profile artifacts contain four rank traces. They were
-  downloaded and summarized locally. Mean per-rank trace categories:
-
-  | Path | Trace span | GPU kernels | CUDA runtime | CPU ops |
-  |---|---:|---:|---:|---:|
-  | One-sided control | 71.99 ms | 45.96 ms | 43.98 ms | 3.89 ms |
-  | Two-sided NVLink | 79.87 ms | 49.49 ms | 45.48 ms | 3.18 ms |
-
-- One-sided MoE communication kernels total `3.834 ms/rank`; two-sided
-  communication totals `6.858 ms/rank`. MoE GEMM1/GEMM2 are nearly
-  unchanged (`11.66/5.95 ms` versus `11.34/5.83 ms`). The extra
-  communication cost explains the two-sided regression.
-- `c128-deepep-lowlatency` never completed engine initialization. All four
-  ranks entered NVSHMEM `3.2.5`, segfaulted in
-  `ibv_dealloc_pd`/`nvshmemt_init`, and remained at `0%` GPU utilization
-  until the controller emitted a `timeout` result after `3600 s`.
-  The checked-in matrix and validators now reject this path.
-
-## Stage-Six MoE Path Repeats
-
-`utils/bench_offline/b300_stage6_moe_path_experiments.json` tests the two
-remaining source-backed MoE execution choices at c128:
-
-- three current TRTLLM/ConfigurableMoE controls
-- four direct legacy TRTLLM rows with `ENABLE_CONFIGURABLE_MOE=0`
-- three CUTLASS rows, which are supported for the checkpoint's
-  W4A8-MXFP4-MXFP8 quantization on SM100/SM103
-
-Every job has one fresh engine, one full-shape warmup, and exactly one
-measured pass. The repeats are independent parallel jobs; do not change the
-worker back to three measured passes. `ENABLE_CONFIGURABLE_MOE` is unprefixed,
-so `TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE` carries it through TRT's MPI filter
-and the rank-entry shim restores and validates the real variable.
-
-Dispatch:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(
-  jq -c . utils/bench_offline/b300_stage6_moe_path_experiments.json
-)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT c128 MoE path repeats' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=3600'
-```
-
-## Run 27479121984
-
-- URL:
-  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27479121984`
-- Completed successfully `2026-06-13T21:20:03Z`.
-- Branch commit: `c467df4a549933d81ad424fbef2e28527fbde3f4`.
-- All ten jobs used one fresh engine, one full-shape warmup, and exactly one
-  measured pass. Every authoritative result has
-  `benchmark.final_measured_passes=1` and
-  `final.aggregate.pass_count=1`.
-- Group means:
-
-  | MoE path | N | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Wall output/GPU |
-  |---|---:|---:|---:|---:|---:|---:|
-  | TRTLLM configurable control | 3 | 25.62 ms | 83.05 ms | 1249.25 | 385.38 | 627.60 |
-  | TRTLLM legacy direct | 4 | 25.73 ms | 84.11 ms | 1243.86 | 380.49 | 625.27 |
-  | CUTLASS | 3 | 27.44 ms | 88.34 ms | 1166.45 | 362.28 | 570.09 |
-
-- Legacy direct is not an optimization: versus the control means it changes
-  token TPOT by `+0.43%`, step TPOT by `+1.27%`, derived step throughput by
-  `-1.27%`, and wall output throughput by `-0.37%`.
-- CUTLASS is materially slower: token TPOT `+7.11%`, step TPOT `+6.37%`,
-  derived step throughput `-6.00%`, and wall output throughput `-9.16%`.
-- Keep TRTLLM ConfigurableMoE with the default one-sided NVLink path.
-- Mean current/legacy timing was `416.5 s` engine initialization, `117.3 s`
-  warmup, and `31.9 s` for the measured pass. One pass instead of three
-  removes about `67.9 s` per c128 engine, including two inter-pass sleeps.
-  Do not remove the warmup: it protects the only measured pass from lazy
-  graph and kernel compilation.
-
-## Stage-Seven Profile Optimizations
-
-Matrix:
-`utils/bench_offline/b300_stage7_profile_optimizations.json`.
-
-- DEP4 has two explicit random-autotuner controls and three
-  balanced-autotuner rows.
-- TP4 has one c32 redundant-allreduce control and one c32 optimized row.
-- Both TP4 rows and one row in each DEP4 group profile warmup iteration
-  `50-51`.
-- Every row still uses exactly one measured pass.
-
-The backport is TP4-only. In pinned DeepSeek-V4 source, attention DP forces
-eager fusion off, so DEP4 cannot activate `PRE_MOE_FUSION` and would not
-exercise the removed allreduce.
-
-Run `27480420625` completed all five DEP4 rows and failed all five original
-c128 TP4 rows:
-
-- DEP4 random and balanced group means were `381.86` and
-  `381.27 steps/s/GPU`; balanced autotuning did not improve throughput.
-- TP4 engine initialization took about `498` seconds, then c128 exhausted
-  GPU memory during warmup after about `35` minutes total. The failure
-  occurred before the sole measured pass.
-- The failed profile traces nevertheless show the backport reducing
-  rank-mean collective time from `144.54 ms` to `89.95 ms` and GPU busy
-  union from `392.37 ms` to `340.21 ms`.
-
-The production B300 8K/MTP3 matrix caps TP4 at c32. `run.py` now rejects
-larger TP4 rows before corpus preparation or GPU-heavy engine work. Retry
-only the two c32 TP4 rows:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(
-  jq -c 'map(select(.candidate.parallelism == "tp4"))' \
-    utils/bench_offline/b300_stage7_profile_optimizations.json
-)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT c32 allreduce one-pass' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=40' \
-  -f 'inputs[worker-timeout]=1800'
-```
-
-Debug rules:
-
-- `phase=trt_backport` means the installed source did not match the pinned
-  hash or could not be atomically replaced.
-- TP4 rows are invalid unless every `trt_mpi_entry` marker contains the same
-  patched source hash and requested
-  `TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE` value.
-- Balanced-autotuner rows are invalid unless every rank marker records
-  `TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION=balanced`.
-- The c32 retry intentionally uses one row per setting for turnaround time.
-  Treat a marginal TPOT difference as inconclusive; the profile-level
-  collective reduction is the supporting signal.
-
-## Final C32 TP4 Comparison
-
-- URL:
-  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27481295672`
-- Completed successfully on commit
-  `b60b1f3f56fa559c2dc679886efa88bb3151b1b8`.
-- Both rows used one full-shape warmup and exactly one measured pass.
-- Results:
-
-  | c32 TP4 row | Token TPOT | Step TPOT | Output tok/s/GPU | Step/s/GPU | Wall output/GPU | Tok/step |
-  |---|---:|---:|---:|---:|---:|---:|
-  | allreduce control | 17.22 ms | 53.02 ms | 464.68 | 150.89 | 256.48 | 2.992 |
-  | skip redundant allreduce | 16.35 ms | 50.84 ms | 489.17 | 157.34 | 267.67 | 3.050 |
-
-- Backport deltas: token TPOT `-5.01%`, step TPOT `-4.10%`, derived step
-  throughput `+4.28%`, wall output throughput `+4.36%`, and derived output
-  throughput `+5.27%`.
-- The output-throughput delta includes a `1.94%` increase in observed
-  tokens/step. Step rate and wall throughput are the cleaner evidence.
-- The optimized trace removes all 64 Pattern-6 allreduce launches per rank.
-  In that one profiled iteration, ranks 0 and 1 wait longer in the remaining
-  Pattern-0 allreduce, so do not use aggregate collective milliseconds alone
-  as the result.
-- Job duration was `14m42s-15m02s`. Engine initialization was
-  `494-507 s`, warmup was `270-272 s`, and the measured pass was only
-  `18.7-19.5 s`. One measured pass is already the practical minimum; further
-  runtime work must target engine startup or lazy warmup.
-
-## Unofficial Renderer
-
-The original comparison run `27481295672` is not renderable because its
-immutable artifacts predate the renderer export: it has no `results_bmk`, its
-`offline_aggregate.json` is a custom wrapper rather than a flat row array, and
-the old app build did not recognize `8192/625`.
-
-Known-good end-to-end validation:
-
-- Benchmark run:
-  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27482213487`
-- Producer commit:
-  `8b55b2cd8a86cdbcb610984f021358e7ed8f299a`
-- InferenceX App PR 257 commit:
-  `7b4dc87b128ee237582bb0255c16c719570dc024`
-- Rendered preview:
-  `https://inferencemax-app-git-claude-huawei-950dt-0f2683-semianalysisai.vercel.app/inference?unofficialrun=27482213487`
-
-Run `27482213487` reran only the optimized c32 TP4 candidate. It uploaded
-byte-identical `agg_bmk.json` files in `offline-trt-summary` and the canonical
-`results_bmk` artifact. PR 257 fetched that artifact through
-`/api/unofficial-run?runId=27482213487`, normalized one row, selected the
-run's `8K / 625` sequence, and built one E2E plus one interactivity point.
-
-Renderer metric rules:
-
-- The top level must be a flat JSON array with one object per successful row.
-- `tput_per_gpu` and `output_tput_per_gpu` both contain TPOT-derived output
-  throughput for this offline comparison.
-- Latencies use seconds, not milliseconds.
-- `offline_aggregate.json` remains authoritative for wall throughput,
-  decode-step throughput, MTP yield, candidate labels, and Huawei ratios.
-- Dispatch `inputs[ref]` with a branch, tag, or full 40-character commit SHA;
-  a short SHA does not resolve in the workflow checkout.
-
-### Flat Benchmark Rows
-
-Exact `results_bmk/agg_bmk.json` from run `27482213487`:
-
-```json
-[
-  {
-    "conc": 32,
-    "decode_dp_attention": false,
-    "decode_ep": 1,
-    "decode_num_workers": 0,
-    "decode_tp": 4,
-    "disagg": false,
-    "framework": "trt",
-    "hw": "b300",
-    "image": "ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066",
-    "infmax_model_prefix": "dsv4",
-    "is_multinode": false,
-    "isl": 8192,
-    "mean_e2el": 15.44809818750582,
-    "mean_intvty": 65.54496134009257,
-    "mean_tpot": 0.01636564983976267,
-    "mean_ttft": 5.235932687493914,
-    "median_e2el": 15.208934499998577,
-    "median_intvty": 64.50887235293361,
-    "median_tpot": 0.015515080128235964,
-    "median_ttft": 5.242103500000667,
-    "model": "deepseek-ai/DeepSeek-V4-Pro",
-    "num_decode_gpu": 4,
-    "num_prefill_gpu": 4,
-    "osl": 625,
-    "output_tput_per_gpu": 488.8287405833934,
-    "p90_e2el": 16.66778830002295,
-    "p90_intvty": 88.56372053260684,
-    "p90_tpot": 0.02252680961539273,
-    "p90_ttft": 8.958986799954436,
-    "p99_e2el": 18.53384665003745,
-    "p99_intvty": 104.67613406750466,
-    "p99_tpot": 0.023902120032028344,
-    "p99_ttft": 9.595472099982434,
-    "precision": "fp4",
-    "prefill_dp_attention": false,
-    "prefill_ep": 1,
-    "prefill_num_workers": 0,
-    "prefill_tp": 4,
-    "spec_decoding": "mtp",
-    "tput_per_gpu": 488.8287405833934
-  }
-]
-```
-
-## Best-Config Sweep
-
-Matrix: `utils/bench_offline/b300_best_config_sweep.json`.
-
-The six independent one-engine rows cover c16, c32, c64, c128, c512, and
-c1024. They use one warmup and one measured pass, MTP3, wait 0, heuristic
-top-k, ConfigurableMoE, and the default one-sided NVLink path.
-
-| Concurrency | Topology | Local graph batch | Additional settings |
-|---:|---|---:|---|
-| 16 | TP4 | 16 | balanced MoE autotune, skip redundant pre-MoE allreduce |
-| 32 | TP4 | 32 | balanced MoE autotune, skip redundant pre-MoE allreduce |
-| 64 | DEP4 | 16 | LM-head TP, local-rank capacity |
-| 128 | DEP4 | 32 | LM-head TP, local-rank capacity |
-| 512 | DEP8 | 64 | LM-head TP, local-rank capacity |
-| 1024 | DEP8 | 128 | LM-head TP, local-rank capacity |
-
-Do not substitute the c128 wait-30/wait-60 scheduler rows: they improve the
-per-request TPOT calculation by staggering starts while worsening TTFT and
-whole-batch throughput. The c512/c1024 rows also must not use the old global
-graph sizes; c1024 previously exhausted 90 minutes on the first legacy tuning
-engine. This matrix runs only one fresh engine per point.
-
-Exact trigger:
-
-```bash
-BENCH_REF="$(git rev-parse HEAD)"
-EXPERIMENTS="$(jq -c . utils/bench_offline/b300_best_config_sweep.json)"
-gh api -X POST \
-  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
-  -f ref='trt-bench' \
-  -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT best-config c16-c1024' \
-  -f "inputs[experiments]=$EXPERIMENTS" \
-  -f 'inputs[salloc-time]=120' \
   -f 'inputs[worker-timeout]=5400'
 ```
 
-### Completed Best-Config Sweep
+Find and watch:
 
-- Run:
-  `https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27483465692`
-- Producer commit:
-  `c03246dcd87a05e56af06bbb933e32dea0e6f10d`
-- Started `2026-06-14T00:26:47Z`; completed `2026-06-14T00:45:54Z`.
-- All six benchmark jobs and `collect-results` succeeded. Individual job
-  durations ranged from `10m26s` at c64 to `18m41s` at c1024.
-- Every row used one fresh engine, one full-shape warmup, one measured pass,
-  exact 8192-token inputs, exact 625-token outputs, and MTP3.
+```bash
+RUN_ID=$(gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow e2e-tests.yml --event workflow_dispatch --limit 1 \
+  --json databaseId --jq '.[0].databaseId')
+gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --exit-status
+```
 
-| Conc | Topology | Token TPOT ms | Step TPOT ms | Derived output/GPU | Step/s/GPU | Wall output/GPU | Tok/step | Eff accept | Mean TTFT ms |
-|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| 16 | TP4 | 11.98 | 36.36 | 333.92 | 110.00 | 189.74 | 2.970 | 65.7% | 2807.27 |
-| 32 | TP4 | 16.38 | 49.89 | 488.44 | 160.35 | 270.56 | 3.008 | 66.9% | 5203.23 |
-| 64 | DEP4 | 17.16 | 54.98 | 932.20 | 291.03 | 482.11 | 3.157 | 71.9% | 5757.67 |
-| 128 | DEP4 | 25.11 | 81.98 | 1274.21 | 390.34 | 588.16 | 3.216 | 73.9% | 10543.52 |
-| 512 | DEP8 | 47.34 | 148.52 | 1351.94 | 430.93 | 625.39 | 3.091 | 69.7% | 21104.40 |
-| 1024 | DEP8 | 80.87 | 256.94 | 1582.72 | 498.17 | 731.58 | 3.123 | 70.8% | 41783.57 |
+## Result Interpretation
 
-The c16, c64, and c128 exact-global-batch rows passed both Huawei ratios:
+Authoritative offline row:
 
-| Conc | B300/Huawei output | B300/Huawei step |
-|---:|---:|---:|
-| 16 | 2.414 | 1.940 |
-| 64 | 1.818 | 1.385 |
-| 128 | 1.345 | 1.005 |
+- `decode_round_tpot_ms`: filtered full-batch TRT iteration latency
+- `decode_step_tput_per_gpu`: direct Huawei-comparable rate
+- `observed_tokens_per_step`: MTP output multiplier
+- `output_tput_per_gpu`: step rate times output multiplier
+- `wall_output_tput_per_gpu`: whole generation diagnostic
+- `filter`: first-round skip and retained/outlier counts
+- `schedule_validation`: exact selected iteration and local-batch proof
 
-The c128 step-rate margin is only `0.5%` from a one-pass measurement. Repeat
-that row before using the narrow step-rate win as a stable claim.
+Flat renderer row:
 
-The canonical `results_bmk/agg_bmk.json` contains six flat rows with
-concurrencies `16,32,64,128,512,1024`. InferenceX App PR 257 at commit
-`747f1ad41399f3593935aa49162e6bc7b8014014` returned HTTP 200 from
-`/api/unofficial-run?runId=27483465692` and normalized all six rows. The
-matching page route also returned HTTP 200 locally:
+- `tput_per_gpu` and `output_tput_per_gpu`: acceptance-adjusted output rate
+- `mean_tpot`: equivalent output-token TPOT
+- `decode_round_tpot_ms`: custom raw-round field
+- `decode_step_tput_per_gpu`: custom raw-step field
+- `global_batch_size`, `local_batch_size`, `measured_decode_rounds`: custom
+  workload proof
 
-`https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27483465692`
+Do not put the custom aggregate wrapper in `results_bmk`; the unofficial-run
+API expects every JSON object there to be a flat benchmark row.
 
-That Vercel preview requires authentication from an unauthenticated CLI, so a
-CLI HTTP 401 there is preview access control, not an artifact/schema failure.
+## Debug Checklist
+
+1. Inspect `Show result headline`.
+2. Download `offline-trt-job-gbsN`.
+3. Read `offline_controller_gbsN.log`.
+4. Extract `offline_debug_gbsN.tar.gz`.
+5. Inspect `worker_result.json` and `worker.log`.
+6. Query iteration stats:
+
+   ```bash
+   jq -r '
+     .[] |
+     [
+       .iter,
+       .iterLatencyMS,
+       .numActiveRequests,
+       .numQueuedRequests,
+       .inflightBatchingStats.numContextRequests,
+       .inflightBatchingStats.numGenRequests,
+       .inflightBatchingStats.numScheduledRequests
+     ] | @tsv
+   ' measured_iteration_stats.json | head -40
+   ```
+
+7. Confirm rank markers are exactly `0..7`.
+8. Check GPU telemetry for OOM, idle prefill gaps, or a hung rank.
+
+Do not weaken the fixed-batch gate. Infrastructure errors may be retried on a
+fresh node; capacity or schedule failures require an implementation fix.

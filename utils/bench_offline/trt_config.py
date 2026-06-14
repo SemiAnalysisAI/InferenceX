@@ -1,38 +1,48 @@
-"""Pure configuration helpers for the B300 TRT offline benchmark."""
+"""Fixed configuration for the Huawei-style B300 TRT offline benchmark."""
 
 from __future__ import annotations
 
-import math
-import os
-import re
-from dataclasses import asdict, dataclass, replace
-from typing import Any, Iterable, Optional
+from dataclasses import asdict, dataclass
+from typing import Any
 
 
 WORLD_SIZE = 8
 INPUT_TOKENS = 8192
-OUTPUT_TOKENS = 625
 MTP_DRAFT_TOKENS = 3
-MAX_SEQ_LEN = 9216
+HUAWEI_WARMUP_DECODE_ROUNDS = 2
+HUAWEI_MEASURED_DECODE_ROUNDS = 256
+MAX_OUTPUT_TOKENS_PER_ROUND = MTP_DRAFT_TOKENS + 1
+# The measured output cap can require 1024 decode iterations at zero draft
+# acceptance, plus prefill. Keep enough TRT history for the complete pass.
+ITERATION_STATS_CAPACITY = 2048
+# Five decode tokens cannot fit in one MTP3 round, so this guarantees at
+# least two warmup rounds while minimizing any extra low-acceptance rounds.
+WARMUP_OUTPUT_TOKENS = (
+    2
+    + (HUAWEI_WARMUP_DECODE_ROUNDS - 1)
+    * MAX_OUTPUT_TOKENS_PER_ROUND
+)
+MEASURED_OUTPUT_TOKENS = (
+    1 + HUAWEI_MEASURED_DECODE_ROUNDS * MAX_OUTPUT_TOKENS_PER_ROUND
+)
+# Huawei allocates 8192 + 256 * 4 + 2 positions for MTP3, then aligns the
+# paged-KV capacity to its 128-token block size.
+MAX_SEQ_LEN = 9344
 SAMPLING_TEMPERATURE = 1.0
 SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
 PINNED_TRT_GLOBAL_SEED = 42
-TUNING_MEASURED_PASSES = 1
-FINAL_MEASURED_PASSES = 1
-MAX_TP4_8K_CONCURRENCY = 32
-MIN_WINNER_IMPROVEMENT = 0.03
-MOE_BACKENDS = {"CUTLASS", "TRTLLM", "MEGAMOE_DEEPGEMM"}
-MOE_COMM_METHODS = {
-    "NVLINK_ONE_SIDED",
-    "NVLINK_TWO_SIDED",
-    "DEEPEP",
-    "ALLGATHER",
-}
-CANDIDATE_ENVIRONMENT_VARIABLES = {
+ALLOWED_GLOBAL_BATCH_SIZES = (16, 64, 128)
+CONTROLLED_ENVIRONMENT_VARIABLES = {
     "ENABLE_CONFIGURABLE_MOE",
-    "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
+    "TLLM_METRICS_ALL_RANKS",
+    "TLLM_PROFILE_LOG_RANKS",
+    "TLLM_PROFILE_START_STOP",
+    "TLLM_TORCH_PROFILE_TRACE",
     "TRTLLM_BENCH_DSV4_PATCHED_SHA256",
+    "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
+    "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
+    "TRTLLM_BENCH_GLOBAL_BATCH_SIZE",
     "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
     "TRTLLM_ENABLE_PDL",
     "TRTLLM_FORCE_COMM_METHOD",
@@ -43,503 +53,142 @@ CANDIDATE_ENVIRONMENT_VARIABLES = {
 
 
 @dataclass(frozen=True)
-class ParallelismConfig:
-    name: str
-    label: str
-    world_size: int
-    tensor_parallel_size: int
-    moe_expert_parallel_size: int
-    moe_tensor_parallel_size: int
-    enable_attention_dp: bool
+class FixedBenchmarkConfig:
+    """The single branch-only TRT recipe used for every global batch."""
 
-
-PARALLELISM_CONFIGS = {
-    "dep8": ParallelismConfig(
-        name="dep8",
-        label="DEP8",
-        world_size=8,
-        tensor_parallel_size=8,
-        moe_expert_parallel_size=8,
-        moe_tensor_parallel_size=1,
-        enable_attention_dp=True,
-    ),
-    "tp4": ParallelismConfig(
-        name="tp4",
-        label="TP4",
-        world_size=4,
-        tensor_parallel_size=4,
-        moe_expert_parallel_size=1,
-        moe_tensor_parallel_size=4,
-        enable_attention_dp=False,
-    ),
-    "dep4": ParallelismConfig(
-        name="dep4",
-        label="DEP4",
-        world_size=4,
-        tensor_parallel_size=4,
-        moe_expert_parallel_size=4,
-        moe_tensor_parallel_size=1,
-        enable_attention_dp=True,
-    ),
-}
-
-
-@dataclass(frozen=True)
-class CandidateConfig:
-    name: str
-    batching_wait_iters: int
+    name: str = "huawei-fixed-gbs-dep8"
+    parallelism: str = "DEP8"
+    active_gpu_count: int = WORLD_SIZE
+    tensor_parallel_size: int = WORLD_SIZE
+    moe_expert_parallel_size: int = WORLD_SIZE
+    moe_tensor_parallel_size: int = 1
+    enable_attention_dp: bool = True
+    enable_lm_head_tp_in_adp: bool = True
+    batching_wait_iters: int = 0
     attention_dp_balance: bool = True
-    attention_dp_timeout_iters: int | None = 60
-    overlap_scheduler: bool = True
+    overlap_scheduler: bool = False
     cuda_graph: bool = True
-    enable_lm_head_tp_in_adp: bool = False
-    attention_dp_batch_mode: str = "global"
-    use_cute_dsl_topk: bool = False
-    use_cute_dsl_paged_mqa_logits: bool = False
-    enable_heuristic_topk: bool = False
-    indexer_k_dtype: str | None = None
+    enable_heuristic_topk: bool = True
     moe_backend: str = "TRTLLM"
     use_low_precision_moe_combine: bool = True
-    enable_configurable_moe: bool | None = None
-    force_moe_comm_method: str | None = None
-    moe_post_quant_alltoall: bool | None = None
-    enable_pdl: bool | None = None
-    megamoe_fused_prepare: bool | None = None
-    moe_autotune_dummy_distribution: str | None = None
-    dsv4_skip_premoe_allreduce: bool | None = None
-    profile_iterations: str | None = None
-    print_iter_log: bool = True
-    max_seq_len: int = MAX_SEQ_LEN
-    mtp_draft_tokens: int = MTP_DRAFT_TOKENS
-    parallelism: str = "dep8"
-    kind: str = "scheduler"
-
-    def __post_init__(self) -> None:
-        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", self.name):
-            raise ValueError(f"Invalid candidate name: {self.name!r}")
-        if (
-            not isinstance(self.batching_wait_iters, int)
-            or isinstance(self.batching_wait_iters, bool)
-            or self.batching_wait_iters < 0
-        ):
-            raise ValueError("batching_wait_iters must be non-negative")
-        if (
-            self.attention_dp_timeout_iters is not None
-            and (
-                not isinstance(self.attention_dp_timeout_iters, int)
-                or isinstance(self.attention_dp_timeout_iters, bool)
-                or self.attention_dp_timeout_iters < 0
-            )
-        ):
-            raise ValueError(
-                "attention_dp_timeout_iters must be non-negative"
-            )
-        if (
-            not isinstance(self.mtp_draft_tokens, int)
-            or isinstance(self.mtp_draft_tokens, bool)
-            or not 1 <= self.mtp_draft_tokens <= MTP_DRAFT_TOKENS
-        ):
-            raise ValueError(
-                "mtp_draft_tokens must be between 1 and "
-                f"{MTP_DRAFT_TOKENS}"
-            )
-        for field_name in (
-            "attention_dp_balance",
-            "overlap_scheduler",
-            "cuda_graph",
-            "enable_lm_head_tp_in_adp",
-            "use_cute_dsl_topk",
-            "use_cute_dsl_paged_mqa_logits",
-            "enable_heuristic_topk",
-            "use_low_precision_moe_combine",
-            "print_iter_log",
-        ):
-            if not isinstance(getattr(self, field_name), bool):
-                raise ValueError(f"{field_name} must be boolean")
-        for field_name in (
-            "enable_configurable_moe",
-            "moe_post_quant_alltoall",
-            "enable_pdl",
-            "megamoe_fused_prepare",
-            "dsv4_skip_premoe_allreduce",
-        ):
-            value = getattr(self, field_name)
-            if value is not None and not isinstance(value, bool):
-                raise ValueError(f"{field_name} must be boolean or null")
-        if self.indexer_k_dtype not in {None, "fp4", "fp8"}:
-            raise ValueError("indexer_k_dtype must be fp4, fp8, or null")
-        if self.moe_autotune_dummy_distribution not in {
-            None,
-            "balanced",
-            "random",
-        }:
-            raise ValueError(
-                "moe_autotune_dummy_distribution must be balanced, "
-                "random, or null"
-            )
-        if self.moe_backend not in MOE_BACKENDS:
-            raise ValueError(
-                f"moe_backend must be one of {sorted(MOE_BACKENDS)}"
-            )
-        if (
-            self.force_moe_comm_method is not None
-            and self.force_moe_comm_method not in MOE_COMM_METHODS
-        ):
-            raise ValueError(
-                "force_moe_comm_method must be null or one of "
-                f"{sorted(MOE_COMM_METHODS)}"
-            )
-        if (
-            self.moe_backend == "MEGAMOE_DEEPGEMM"
-            and self.force_moe_comm_method is not None
-        ):
-            raise ValueError(
-                "force_moe_comm_method is invalid for fused-communication "
-                "MegaMoE"
-            )
-        if (
-            self.moe_backend != "MEGAMOE_DEEPGEMM"
-            and self.megamoe_fused_prepare is not None
-        ):
-            raise ValueError(
-                "megamoe_fused_prepare requires "
-                "moe_backend=MEGAMOE_DEEPGEMM"
-            )
-        if (
-            self.dsv4_skip_premoe_allreduce is not None
-            and self.parallelism != "tp4"
-        ):
-            raise ValueError(
-                "dsv4_skip_premoe_allreduce requires parallelism=tp4"
-            )
-        if self.profile_iterations is not None:
-            match = re.fullmatch(r"(\d+)-(\d+)", self.profile_iterations)
-            if match is None:
-                raise ValueError(
-                    "profile_iterations must be one start-stop range"
-                )
-            start, stop = (int(value) for value in match.groups())
-            if start >= stop:
-                raise ValueError(
-                    "profile_iterations stop must be greater than start"
-                )
-        minimum_seq_len = INPUT_TOKENS + OUTPUT_TOKENS + MTP_DRAFT_TOKENS
-        if (
-            not isinstance(self.max_seq_len, int)
-            or isinstance(self.max_seq_len, bool)
-            or self.max_seq_len < minimum_seq_len
-        ):
-            raise ValueError(
-                f"max_seq_len must be an integer >= {minimum_seq_len}"
-            )
-        if not isinstance(self.kind, str):
-            raise ValueError("kind must be a string")
-        if (
-            not isinstance(self.attention_dp_batch_mode, str)
-            or self.attention_dp_batch_mode not in {"global", "local-rank"}
-        ):
-            raise ValueError(
-                "attention_dp_batch_mode must be global or local-rank"
-            )
-        if (
-            not isinstance(self.parallelism, str)
-            or self.parallelism not in PARALLELISM_CONFIGS
-        ):
-            raise ValueError(
-                "parallelism must be one of "
-                f"{sorted(PARALLELISM_CONFIGS)}"
-            )
-        if (
-            self.enable_lm_head_tp_in_adp
-            and not self.parallelism_config.enable_attention_dp
-        ):
-            raise ValueError(
-                "enable_lm_head_tp_in_adp requires attention DP"
-            )
-        if (
-            self.attention_dp_batch_mode == "local-rank"
-            and not self.parallelism_config.enable_attention_dp
-        ):
-            raise ValueError(
-                "attention_dp_batch_mode=local-rank requires attention DP"
-            )
-
-    @property
-    def parallelism_config(self) -> ParallelismConfig:
-        return PARALLELISM_CONFIGS[self.parallelism]
-
-    @property
-    def active_gpu_count(self) -> int:
-        return self.parallelism_config.world_size
-
-    @property
-    def effective_parallelism(self) -> str:
-        return self.parallelism_config.label
+    enable_configurable_moe: bool = True
+    moe_autotune_dummy_distribution: str = "random"
+    print_iter_log: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
-    @classmethod
-    def from_dict(cls, value: dict[str, Any]) -> "CandidateConfig":
-        return cls(**value)
 
-    def without_cuda_graph(self) -> "CandidateConfig":
-        suffix = "" if self.name.endswith("-graph-off") else "-graph-off"
-        return replace(self, name=f"{self.name}{suffix}", cuda_graph=False)
+FIXED_BENCHMARK_CONFIG = FixedBenchmarkConfig()
 
 
-def scheduler_candidates() -> list[CandidateConfig]:
-    # Start from the existing B300 recipe's wait=30 default.
-    return [
-        CandidateConfig(name="wait30", batching_wait_iters=30),
-        CandidateConfig(name="wait0", batching_wait_iters=0),
-        CandidateConfig(name="wait10", batching_wait_iters=10),
-        CandidateConfig(name="wait60", batching_wait_iters=60),
-    ]
-
-
-def balance_candidate(base: CandidateConfig) -> CandidateConfig:
-    return replace(
-        base,
-        name=f"{base.name}-balance-off",
-        attention_dp_balance=False,
-        kind="balance",
-    )
-
-
-def overlap_candidate(base: CandidateConfig) -> CandidateConfig:
-    return replace(
-        base,
-        name=f"{base.name}-overlap-off",
-        overlap_scheduler=False,
-        kind="overlap",
-    )
-
-
-def local_attention_dp_batch_size(
-    concurrency: int,
-    candidate: CandidateConfig,
-) -> int:
-    return math.ceil(
-        concurrency / candidate.parallelism_config.tensor_parallel_size
-    )
-
-
-def max_batch_size(
-    concurrency: int,
-    candidate: CandidateConfig | None = None,
-) -> int:
-    if (
-        candidate is not None
-        and candidate.attention_dp_batch_mode == "local-rank"
-    ):
-        return local_attention_dp_batch_size(concurrency, candidate)
-    return max(16, concurrency)
-
-
-def cuda_graph_batch_size(
-    concurrency: int,
-    candidate: CandidateConfig,
-) -> int:
-    if candidate.attention_dp_batch_mode == "local-rank":
-        return local_attention_dp_batch_size(concurrency, candidate)
-    return concurrency
-
-
-def max_num_tokens(
-    concurrency: int,
-    mtp_draft_tokens: int = MTP_DRAFT_TOKENS,
-    candidate: CandidateConfig | None = None,
-) -> int:
-    # Mirrors the working B300 DeepSeek-V4 TRT MTP recipe.
-    return max(
-        INPUT_TOKENS
-        + (mtp_draft_tokens + 1) * max_batch_size(concurrency, candidate)
-        + 256,
-        INPUT_TOKENS,
-    )
-
-
-def validate_candidate_concurrency(
-    concurrency: int,
-    candidate: CandidateConfig,
-) -> None:
-    if (
-        candidate.parallelism == "tp4"
-        and concurrency > MAX_TP4_8K_CONCURRENCY
-    ):
+def validate_global_batch_size(global_batch_size: int) -> None:
+    if global_batch_size not in ALLOWED_GLOBAL_BATCH_SIZES:
         raise ValueError(
-            "TP4 is limited to concurrency 32 for the fixed 8K/MTP3 "
-            "workload by the checked-in B300 production recipe; use DEP4 "
-            f"for concurrency {concurrency}"
+            "Global batch size must be one of "
+            f"{ALLOWED_GLOBAL_BATCH_SIZES}, got {global_batch_size}"
         )
+    if global_batch_size % WORLD_SIZE != 0:
+        raise ValueError(
+            f"Global batch size {global_batch_size} is not divisible by "
+            f"the {WORLD_SIZE} attention-DP ranks"
+        )
+
+
+def local_batch_size(global_batch_size: int) -> int:
+    validate_global_batch_size(global_batch_size)
+    return global_batch_size // WORLD_SIZE
+
+
+def max_num_tokens(global_batch_size: int) -> int:
+    """Allow every local-rank prompt to prefill in the same iteration."""
+    return local_batch_size(global_batch_size) * INPUT_TOKENS
 
 
 def build_llm_kwargs(
     model_path: str,
-    concurrency: int,
-    candidate: CandidateConfig,
+    global_batch_size: int,
 ) -> dict[str, Any]:
-    parallelism = candidate.parallelism_config
-    graph_batch_size = cuda_graph_batch_size(concurrency, candidate)
-    kwargs: dict[str, Any] = {
+    """Build TRT arguments from one authoritative global batch size."""
+    config = FIXED_BENCHMARK_CONFIG
+    local_batch = local_batch_size(global_batch_size)
+    return {
         "model": model_path,
         "backend": "pytorch",
         "trust_remote_code": True,
-        "tensor_parallel_size": parallelism.tensor_parallel_size,
-        "moe_expert_parallel_size": (
-            parallelism.moe_expert_parallel_size
-        ),
-        "moe_tensor_parallel_size": parallelism.moe_tensor_parallel_size,
-        "enable_attention_dp": parallelism.enable_attention_dp,
-        "enable_lm_head_tp_in_adp": (
-            candidate.enable_lm_head_tp_in_adp
-            if parallelism.enable_attention_dp
-            else False
-        ),
-        "max_batch_size": max_batch_size(concurrency, candidate),
-        "max_seq_len": candidate.max_seq_len,
-        "max_num_tokens": max_num_tokens(
-            concurrency,
-            candidate.mtp_draft_tokens,
-            candidate,
-        ),
+        "tensor_parallel_size": config.tensor_parallel_size,
+        "moe_expert_parallel_size": config.moe_expert_parallel_size,
+        "moe_tensor_parallel_size": config.moe_tensor_parallel_size,
+        "enable_attention_dp": config.enable_attention_dp,
+        "enable_lm_head_tp_in_adp": config.enable_lm_head_tp_in_adp,
+        # TRT defines max_batch_size per local attention-DP rank.
+        "max_batch_size": local_batch,
+        # This is intentionally local_batch * 8192. The old harness admitted
+        # only one prompt's prefill tokens and therefore staggered the batch.
+        "max_num_tokens": max_num_tokens(global_batch_size),
+        "max_seq_len": MAX_SEQ_LEN,
         "custom_tokenizer": "deepseek_v4",
         "return_perf_metrics": True,
-        "print_iter_log": candidate.print_iter_log,
+        "enable_iter_perf_stats": True,
+        "max_stats_len": ITERATION_STATS_CAPACITY,
+        "print_iter_log": config.print_iter_log,
         "stream_interval": 100,
         "num_postprocess_workers": 4,
-        "disable_overlap_scheduler": not candidate.overlap_scheduler,
+        # Huawei synchronizes each decode round before timing the next one.
+        "disable_overlap_scheduler": not config.overlap_scheduler,
         "kv_cache_config": {
             "tokens_per_block": 128,
             "dtype": "fp8",
-            "free_gpu_memory_fraction": (
-                0.60 if parallelism.enable_attention_dp else 0.90
-            ),
+            "free_gpu_memory_fraction": 0.60,
             "enable_block_reuse": False,
         },
         "moe_config": {
-            "backend": candidate.moe_backend,
+            "backend": config.moe_backend,
             "use_low_precision_moe_combine": (
-                candidate.use_low_precision_moe_combine
+                config.use_low_precision_moe_combine
             ),
+        },
+        "sparse_attention_config": {
+            "algorithm": "deepseek_v4",
+            "enable_heuristic_topk": config.enable_heuristic_topk,
         },
         "speculative_config": {
             "decoding_type": "MTP",
-            "max_draft_len": candidate.mtp_draft_tokens,
+            "max_draft_len": MTP_DRAFT_TOKENS,
+        },
+        "attention_dp_config": {
+            "batching_wait_iters": config.batching_wait_iters,
+            "enable_balance": config.attention_dp_balance,
+        },
+        "cuda_graph_config": {
+            "batch_sizes": [local_batch],
+            "max_batch_size": local_batch,
+            "enable_padding": True,
         },
     }
-    sparse_attention_config: dict[str, Any] = {
-        "algorithm": "deepseek_v4",
+
+
+def fixed_environment(global_batch_size: int) -> dict[str, str]:
+    validate_global_batch_size(global_batch_size)
+    config = FIXED_BENCHMARK_CONFIG
+    configurable = "1" if config.enable_configurable_moe else "0"
+    return {
+        "ENABLE_CONFIGURABLE_MOE": configurable,
+        "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": configurable,
+        "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
+        "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": str(global_batch_size),
+        "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": (
+            config.moe_autotune_dummy_distribution
+        ),
     }
-    if candidate.use_cute_dsl_topk:
-        sparse_attention_config["use_cute_dsl_topk"] = True
-    if candidate.use_cute_dsl_paged_mqa_logits:
-        sparse_attention_config["use_cute_dsl_paged_mqa_logits"] = True
-    if candidate.enable_heuristic_topk:
-        sparse_attention_config["enable_heuristic_topk"] = True
-    if candidate.indexer_k_dtype is not None:
-        sparse_attention_config["indexer_k_dtype"] = (
-            candidate.indexer_k_dtype
-        )
-    if len(sparse_attention_config) > 1:
-        kwargs["sparse_attention_config"] = sparse_attention_config
-    if parallelism.enable_attention_dp:
-        kwargs["attention_dp_config"] = {
-            "batching_wait_iters": candidate.batching_wait_iters,
-            "enable_balance": candidate.attention_dp_balance,
-        }
-    if (
-        parallelism.enable_attention_dp
-        and candidate.attention_dp_timeout_iters is not None
-    ):
-        kwargs["attention_dp_config"]["timeout_iters"] = (
-            candidate.attention_dp_timeout_iters
-        )
-    if candidate.cuda_graph:
-        kwargs["cuda_graph_config"] = {
-            "batch_sizes": [graph_batch_size],
-            "max_batch_size": graph_batch_size,
-            "enable_padding": True,
-        }
-    else:
-        kwargs["cuda_graph_config"] = None
-    return kwargs
-
-
-def candidate_environment(candidate: CandidateConfig) -> dict[str, str]:
-    environment: dict[str, str] = {}
-    if candidate.enable_configurable_moe is not None:
-        value = "1" if candidate.enable_configurable_moe else "0"
-        environment["ENABLE_CONFIGURABLE_MOE"] = value
-        environment["TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"] = value
-    if candidate.force_moe_comm_method is not None:
-        environment["TRTLLM_FORCE_COMM_METHOD"] = (
-            candidate.force_moe_comm_method
-        )
-    if candidate.moe_post_quant_alltoall is not None:
-        environment["TRTLLM_MOE_POST_QUANT_ALLTOALLV"] = (
-            "1" if candidate.moe_post_quant_alltoall else "0"
-        )
-    if candidate.enable_pdl is not None:
-        environment["TRTLLM_ENABLE_PDL"] = (
-            "1" if candidate.enable_pdl else "0"
-        )
-    if candidate.megamoe_fused_prepare is not None:
-        environment["TRTLLM_MEGAMOE_FUSED_PREPARE"] = (
-            "1" if candidate.megamoe_fused_prepare else "0"
-        )
-    if candidate.moe_autotune_dummy_distribution is not None:
-        environment["TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION"] = (
-            candidate.moe_autotune_dummy_distribution
-        )
-    if candidate.dsv4_skip_premoe_allreduce is not None:
-        environment["TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE"] = (
-            "1" if candidate.dsv4_skip_premoe_allreduce else "0"
-        )
-    return environment
-
-
-def objective(result: dict[str, Any]) -> Optional[float]:
-    if result.get("status") != "success":
-        return None
-    aggregate = result.get("aggregate") or {}
-    value = aggregate.get("derived_output_tput_per_gpu")
-    if value is None:
-        return None
-    return float(value)
-
-
-def choose_winner(
-    results: Iterable[dict[str, Any]],
-    minimum_improvement: float = MIN_WINNER_IMPROVEMENT,
-) -> Optional[dict[str, Any]]:
-    """Choose the earliest result unless a later one is at least 3% faster."""
-    winner: Optional[dict[str, Any]] = None
-    winner_value: Optional[float] = None
-    for result in results:
-        value = objective(result)
-        if value is None:
-            continue
-        if winner is None:
-            winner = result
-            winner_value = value
-            continue
-        assert winner_value is not None
-        if value >= winner_value * (1.0 + minimum_improvement):
-            winner = result
-            winner_value = value
-    return winner
 
 
 def resolved_parallelism(
     llm_args: Any,
-    candidate: CandidateConfig | None = None,
-    concurrency: int | None = None,
+    global_batch_size: int,
 ) -> dict[str, Any]:
-    if candidate is None:
-        candidate = CandidateConfig(name="default", batching_wait_iters=30)
-    expected_parallelism = candidate.parallelism_config
+    """Validate that TRT resolved the fixed recipe without silent changes."""
+    config = FIXED_BENCHMARK_CONFIG
     parallel = llm_args.parallel_config
     resolved = {
         "world_size": int(parallel.world_size),
@@ -548,211 +197,99 @@ def resolved_parallelism(
         "moe_tensor_parallel_size": int(parallel.moe_tp_size),
         "enable_attention_dp": bool(parallel.enable_attention_dp),
         "enable_lm_head_tp_in_adp": bool(
-            getattr(parallel, "enable_lm_head_tp_in_adp", False)
+            parallel.enable_lm_head_tp_in_adp
         ),
-        "effective_parallelism": expected_parallelism.label,
+        "effective_parallelism": config.parallelism,
+        "global_batch_size": global_batch_size,
+        "local_batch_size": local_batch_size(global_batch_size),
+        "max_batch_size": int(llm_args.max_batch_size),
+        "max_num_tokens": int(llm_args.max_num_tokens),
+        "max_seq_len": int(llm_args.max_seq_len),
+        "enable_iter_perf_stats": bool(llm_args.enable_iter_perf_stats),
+        "max_stats_len": int(llm_args.max_stats_len),
+        "print_iter_log": bool(llm_args.print_iter_log),
+        "disable_overlap_scheduler": bool(
+            llm_args.disable_overlap_scheduler
+        ),
     }
     expected = {
-        "world_size": expected_parallelism.world_size,
-        "tensor_parallel_size": (
-            expected_parallelism.tensor_parallel_size
-        ),
-        "moe_expert_parallel_size": (
-            expected_parallelism.moe_expert_parallel_size
-        ),
-        "moe_tensor_parallel_size": (
-            expected_parallelism.moe_tensor_parallel_size
-        ),
-        "enable_attention_dp": expected_parallelism.enable_attention_dp,
-        "enable_lm_head_tp_in_adp": (
-            candidate.enable_lm_head_tp_in_adp
-            if expected_parallelism.enable_attention_dp
-            else False
-        ),
+        "world_size": config.active_gpu_count,
+        "tensor_parallel_size": config.tensor_parallel_size,
+        "moe_expert_parallel_size": config.moe_expert_parallel_size,
+        "moe_tensor_parallel_size": config.moe_tensor_parallel_size,
+        "enable_attention_dp": config.enable_attention_dp,
+        "enable_lm_head_tp_in_adp": config.enable_lm_head_tp_in_adp,
+        "max_batch_size": local_batch_size(global_batch_size),
+        "max_num_tokens": max_num_tokens(global_batch_size),
+        "max_seq_len": MAX_SEQ_LEN,
+        "enable_iter_perf_stats": True,
+        "max_stats_len": ITERATION_STATS_CAPACITY,
+        "print_iter_log": config.print_iter_log,
+        "disable_overlap_scheduler": True,
     }
     for key, expected_value in expected.items():
         if resolved[key] != expected_value:
             raise RuntimeError(
-                f"Resolved TRT parallelism mismatch for {key}: "
+                f"Resolved TRT setting mismatch for {key}: "
                 f"{resolved[key]!r} != {expected_value!r}"
             )
 
     speculative = llm_args.speculative_config
-    draft_len = int(speculative.max_draft_len)
-    if draft_len != candidate.mtp_draft_tokens:
+    resolved["mtp_max_draft_len"] = int(speculative.max_draft_len)
+    if resolved["mtp_max_draft_len"] != MTP_DRAFT_TOKENS:
         raise RuntimeError(
-            f"Resolved MTP draft length {draft_len} != "
-            f"{candidate.mtp_draft_tokens}"
+            "Resolved TRT MTP draft length mismatch: "
+            f"{resolved['mtp_max_draft_len']} != {MTP_DRAFT_TOKENS}"
         )
-    resolved["mtp_max_draft_len"] = draft_len
-    moe_config = llm_args.moe_config
-    resolved["moe_backend"] = str(moe_config.backend)
+
+    moe = llm_args.moe_config
+    resolved["moe_backend"] = str(moe.backend)
     resolved["use_low_precision_moe_combine"] = bool(
-        moe_config.use_low_precision_moe_combine
+        moe.use_low_precision_moe_combine
     )
-    resolved["enable_configurable_moe"] = (
-        os.environ.get("ENABLE_CONFIGURABLE_MOE", "1") == "1"
-    )
-    if resolved["moe_backend"] != candidate.moe_backend:
+    if resolved["moe_backend"] != config.moe_backend:
         raise RuntimeError(
-            "Resolved TRT MoE backend mismatch: "
-            f"{resolved['moe_backend']!r} != {candidate.moe_backend!r}"
+            f"Resolved TRT MoE backend {resolved['moe_backend']!r} != "
+            f"{config.moe_backend!r}"
         )
     if (
         resolved["use_low_precision_moe_combine"]
-        != candidate.use_low_precision_moe_combine
+        != config.use_low_precision_moe_combine
     ):
-        raise RuntimeError(
-            "Resolved TRT low-precision MoE combine mismatch: "
-            f"{resolved['use_low_precision_moe_combine']} != "
-            f"{candidate.use_low_precision_moe_combine}"
-        )
-    if (
-        candidate.enable_configurable_moe is not None
-        and resolved["enable_configurable_moe"]
-        != candidate.enable_configurable_moe
-    ):
-        raise RuntimeError(
-            "Resolved TRT configurable-MoE mismatch: "
-            f"{resolved['enable_configurable_moe']} != "
-            f"{candidate.enable_configurable_moe}"
-        )
-    resolved["attention_dp_batch_mode"] = (
-        candidate.attention_dp_batch_mode
-    )
-    resolved["max_seq_len"] = int(llm_args.max_seq_len)
-    if resolved["max_seq_len"] != candidate.max_seq_len:
-        raise RuntimeError(
-            "Resolved TRT max_seq_len mismatch: "
-            f"{resolved['max_seq_len']} != {candidate.max_seq_len}"
-        )
-    resolved["print_iter_log"] = bool(llm_args.print_iter_log)
-    if resolved["print_iter_log"] != candidate.print_iter_log:
-        raise RuntimeError(
-            "Resolved TRT print_iter_log mismatch: "
-            f"{resolved['print_iter_log']} != {candidate.print_iter_log}"
-        )
-    sparse_config = getattr(llm_args, "sparse_attention_config", None)
-    resolved["use_cute_dsl_topk"] = bool(
-        sparse_config is not None
-        and getattr(sparse_config, "use_cute_dsl_topk", False)
-    )
-    resolved["use_cute_dsl_paged_mqa_logits"] = bool(
-        sparse_config is not None
-        and getattr(
-            sparse_config,
-            "use_cute_dsl_paged_mqa_logits",
-            False,
-        )
-    )
+        raise RuntimeError("Resolved TRT low-precision MoE combine mismatch")
+
+    sparse = llm_args.sparse_attention_config
     resolved["enable_heuristic_topk"] = bool(
-        sparse_config is not None
-        and getattr(sparse_config, "enable_heuristic_topk", False)
+        sparse.enable_heuristic_topk
     )
-    resolved["indexer_k_dtype"] = (
-        getattr(sparse_config, "indexer_k_dtype", None)
-        if sparse_config is not None
-        else None
-    )
-    resolved["index_topk"] = (
-        getattr(sparse_config, "index_topk", None)
-        if sparse_config is not None
-        else None
-    )
-    sparse_flags = (
-        "use_cute_dsl_topk",
-        "use_cute_dsl_paged_mqa_logits",
-        "enable_heuristic_topk",
-    )
-    for field_name in sparse_flags:
-        expected_value = getattr(candidate, field_name)
-        if resolved[field_name] != expected_value:
-            raise RuntimeError(
-                f"Resolved TRT {field_name} mismatch: "
-                f"{resolved[field_name]} != {expected_value}"
-            )
-    if (
-        candidate.indexer_k_dtype is not None
-        and resolved["indexer_k_dtype"] != candidate.indexer_k_dtype
-    ):
-        raise RuntimeError(
-            "Resolved TRT indexer_k_dtype mismatch: "
-            f"{resolved['indexer_k_dtype']!r} != "
-            f"{candidate.indexer_k_dtype!r}"
-        )
-    if (
-        candidate.enable_heuristic_topk
-        and resolved["index_topk"] not in {512, 1024, 2048}
-    ):
-        raise RuntimeError(
-            "Resolved TRT heuristic top-k is unsupported: "
-            f"index_topk={resolved['index_topk']!r}"
-        )
+    if resolved["enable_heuristic_topk"] != config.enable_heuristic_topk:
+        raise RuntimeError("Resolved TRT heuristic top-k mismatch")
 
-    if concurrency is not None:
-        resolved["global_concurrency"] = concurrency
-        resolved["max_batch_size"] = int(llm_args.max_batch_size)
-        resolved["max_num_tokens"] = int(llm_args.max_num_tokens)
-        expected_max_batch_size = max_batch_size(concurrency, candidate)
-        expected_max_num_tokens = max_num_tokens(
-            concurrency,
-            candidate.mtp_draft_tokens,
-            candidate,
+    graph = llm_args.cuda_graph_config
+    if graph is None:
+        raise RuntimeError("Resolved TRT CUDA graph config is disabled")
+    graph_batch_sizes = (
+        graph["batch_sizes"] if isinstance(graph, dict) else graph.batch_sizes
+    )
+    graph_max_batch_size = (
+        graph["max_batch_size"]
+        if isinstance(graph, dict)
+        else graph.max_batch_size
+    )
+    resolved["cuda_graph_batch_sizes"] = [
+        int(value) for value in graph_batch_sizes
+    ]
+    resolved["cuda_graph_max_batch_size"] = int(graph_max_batch_size)
+    expected_graph = [local_batch_size(global_batch_size)]
+    if resolved["cuda_graph_batch_sizes"] != expected_graph:
+        raise RuntimeError(
+            "Resolved TRT CUDA graph batch sizes mismatch: "
+            f"{resolved['cuda_graph_batch_sizes']} != {expected_graph}"
         )
-        if resolved["max_batch_size"] != expected_max_batch_size:
-            raise RuntimeError(
-                "Resolved TRT max_batch_size mismatch: "
-                f"{resolved['max_batch_size']} != "
-                f"{expected_max_batch_size}"
-            )
-        if resolved["max_num_tokens"] != expected_max_num_tokens:
-            raise RuntimeError(
-                "Resolved TRT max_num_tokens mismatch: "
-                f"{resolved['max_num_tokens']} != "
-                f"{expected_max_num_tokens}"
-            )
-
-        graph_config = llm_args.cuda_graph_config
-        if candidate.cuda_graph:
-            if graph_config is None:
-                raise RuntimeError(
-                    "Resolved TRT cuda_graph_config is unexpectedly disabled"
-                )
-            if isinstance(graph_config, dict):
-                graph_batch_sizes = graph_config["batch_sizes"]
-                graph_max_batch_size = graph_config["max_batch_size"]
-            else:
-                graph_batch_sizes = graph_config.batch_sizes
-                graph_max_batch_size = graph_config.max_batch_size
-            resolved["cuda_graph_batch_sizes"] = [
-                int(value) for value in graph_batch_sizes
-            ]
-            resolved["cuda_graph_max_batch_size"] = int(
-                graph_max_batch_size
-            )
-            expected_graph_batch_size = cuda_graph_batch_size(
-                concurrency,
-                candidate,
-            )
-            if resolved["cuda_graph_batch_sizes"] != [
-                expected_graph_batch_size
-            ]:
-                raise RuntimeError(
-                    "Resolved TRT CUDA graph batch sizes mismatch: "
-                    f"{resolved['cuda_graph_batch_sizes']} != "
-                    f"{[expected_graph_batch_size]}"
-                )
-            if (
-                resolved["cuda_graph_max_batch_size"]
-                != expected_graph_batch_size
-            ):
-                raise RuntimeError(
-                    "Resolved TRT CUDA graph max batch size mismatch: "
-                    f"{resolved['cuda_graph_max_batch_size']} != "
-                    f"{expected_graph_batch_size}"
-                )
-        elif graph_config is not None:
-            raise RuntimeError(
-                "Resolved TRT cuda_graph_config is unexpectedly enabled"
-            )
+    if resolved["cuda_graph_max_batch_size"] != expected_graph[0]:
+        raise RuntimeError(
+            "Resolved TRT CUDA graph max batch size mismatch: "
+            f"{resolved['cuda_graph_max_batch_size']} != "
+            f"{expected_graph[0]}"
+        )
     return resolved

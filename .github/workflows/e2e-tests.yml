@@ -1,5 +1,5 @@
-name: B300 TRT Offline Benchmark
-run-name: ${{ inputs.test-name || 'DeepSeek-V4 B300 TRT offline' }}
+name: B300 TRT Fixed-GBS Offline Benchmark
+run-name: ${{ inputs.test-name || 'DeepSeek-V4 B300 TRT Huawei-style offline' }}
 
 on:
   workflow_dispatch:
@@ -13,27 +13,22 @@ on:
         description: Display name for this benchmark run
         required: false
         type: string
-        default: DeepSeek-V4 B300 TRT offline
-      concurrencies:
-        description: Comma-separated fixed offline batch sizes
+        default: DeepSeek-V4 B300 TRT Huawei-style offline
+      global_batch_sizes:
+        description: Comma-separated Huawei global batches (16,64,128)
         required: false
         type: string
         default: 16,64,128
-      experiments:
-        description: Optional JSON list of up to 10 single-candidate jobs
-        required: false
-        type: string
-        default: ""
       salloc-time:
         description: Slurm allocation time limit in minutes
         required: false
         type: string
-        default: "500"
+        default: "150"
       worker-timeout:
-        description: Timeout in seconds for each fresh TRT engine attempt
+        description: Timeout in seconds for the fresh TRT engine
         required: false
         type: string
-        default: "3600"
+        default: "7200"
 
 permissions:
   contents: read
@@ -45,378 +40,60 @@ jobs:
       matrix: ${{ steps.matrix.outputs.matrix }}
       expected: ${{ steps.matrix.outputs.expected }}
     steps:
-      - name: Validate concurrency matrix
+      - name: Validate fixed global batches
         id: matrix
         env:
-          CONCURRENCIES: ${{ inputs.concurrencies }}
-          EXPERIMENTS: ${{ inputs.experiments }}
+          GLOBAL_BATCH_SIZES: ${{ inputs.global_batch_sizes }}
         run: |
           python3 - <<'PY'
-          import base64
           import json
           import os
-          import re
 
-          allowed = {4, 8, 16, 32, 64, 128, 256, 512, 1024}
-          raw_experiments = os.environ.get("EXPERIMENTS", "").strip()
-          matrix = []
-          if raw_experiments:
-              experiments = json.loads(raw_experiments)
-              if not isinstance(experiments, list) or not experiments:
-                  raise SystemExit("experiments must be a non-empty JSON list")
-              if len(experiments) > 10:
-                  raise SystemExit("experiments is limited to 10 jobs")
-              ids = set()
-              allowed_candidate_keys = {
-                  "name",
-                  "batching_wait_iters",
-                  "attention_dp_balance",
-                  "attention_dp_timeout_iters",
-                  "overlap_scheduler",
-                  "cuda_graph",
-                  "enable_lm_head_tp_in_adp",
-                  "attention_dp_batch_mode",
-                  "use_cute_dsl_topk",
-                  "use_cute_dsl_paged_mqa_logits",
-                  "enable_heuristic_topk",
-                  "indexer_k_dtype",
-                  "moe_backend",
-                  "use_low_precision_moe_combine",
-                  "enable_configurable_moe",
-                  "force_moe_comm_method",
-                  "moe_post_quant_alltoall",
-                  "enable_pdl",
-                  "megamoe_fused_prepare",
-                  "moe_autotune_dummy_distribution",
-                  "dsv4_skip_premoe_allreduce",
-                  "profile_iterations",
-                  "print_iter_log",
-                  "max_seq_len",
-                  "mtp_draft_tokens",
-                  "parallelism",
-                  "kind",
+          allowed = {16, 64, 128}
+          values = [
+              int(item.strip())
+              for item in os.environ["GLOBAL_BATCH_SIZES"].split(",")
+              if item.strip()
+          ]
+          if not values:
+              raise SystemExit("At least one global batch size is required")
+          if len(values) != len(set(values)):
+              raise SystemExit(f"Duplicate global batch sizes: {values}")
+          invalid = sorted(set(values) - allowed)
+          if invalid:
+              raise SystemExit(
+                  f"Unsupported global batch sizes {invalid}; "
+                  f"allowed={sorted(allowed)}"
+              )
+          matrix = [
+              {
+                  "id": f"gbs{value}",
+                  "global_batch_size": value,
               }
-              for index, experiment in enumerate(experiments, start=1):
-                  if not isinstance(experiment, dict):
-                      raise SystemExit(
-                          f"experiment {index} must be a JSON object"
-                      )
-                  unknown = set(experiment) - {
-                      "id",
-                      "concurrency",
-                      "candidate",
-                  }
-                  if unknown:
-                      raise SystemExit(
-                          f"experiment {index} has unknown keys {sorted(unknown)}"
-                      )
-                  experiment_id = experiment.get("id")
-                  if not isinstance(experiment_id, str) or not re.fullmatch(
-                      r"[A-Za-z0-9][A-Za-z0-9._-]*", experiment_id
-                  ):
-                      raise SystemExit(
-                          f"experiment {index} has invalid id {experiment_id!r}"
-                      )
-                  if experiment_id in ids:
-                      raise SystemExit(
-                          f"duplicate experiment id {experiment_id!r}"
-                      )
-                  ids.add(experiment_id)
-                  concurrency = experiment.get("concurrency")
-                  if concurrency not in allowed:
-                      raise SystemExit(
-                          f"experiment {experiment_id} has unsupported "
-                          f"concurrency {concurrency}; allowed={sorted(allowed)}"
-                      )
-                  candidate = experiment.get("candidate")
-                  if not isinstance(candidate, dict):
-                      raise SystemExit(
-                          f"experiment {experiment_id} needs candidate object"
-                      )
-                  candidate_unknown = (
-                      set(candidate) - allowed_candidate_keys
-                  )
-                  if candidate_unknown:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate has unknown "
-                          f"keys {sorted(candidate_unknown)}"
-                      )
-                  candidate_name = candidate.get("name")
-                  if not isinstance(candidate_name, str) or not re.fullmatch(
-                      r"[A-Za-z0-9][A-Za-z0-9._-]*", candidate_name
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} has invalid "
-                          f"candidate.name {candidate_name!r}"
-                      )
-                  wait_iters = candidate.get("batching_wait_iters")
-                  if (
-                      not isinstance(wait_iters, int)
-                      or isinstance(wait_iters, bool)
-                      or wait_iters < 0
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} needs non-negative "
-                          "candidate.batching_wait_iters"
-                      )
-                  timeout_iters = candidate.get(
-                      "attention_dp_timeout_iters",
-                      60,
-                  )
-                  if (
-                      timeout_iters is not None
-                      and (
-                          not isinstance(timeout_iters, int)
-                          or isinstance(timeout_iters, bool)
-                          or timeout_iters < 0
-                      )
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} has invalid "
-                          "candidate.attention_dp_timeout_iters"
-                      )
-                  for bool_key in (
-                      "attention_dp_balance",
-                      "overlap_scheduler",
-                      "cuda_graph",
-                      "enable_lm_head_tp_in_adp",
-                      "use_cute_dsl_topk",
-                      "use_cute_dsl_paged_mqa_logits",
-                      "enable_heuristic_topk",
-                      "use_low_precision_moe_combine",
-                      "print_iter_log",
-                  ):
-                      if bool_key in candidate and not isinstance(
-                          candidate[bool_key],
-                          bool,
-                      ):
-                          raise SystemExit(
-                              f"experiment {experiment_id} candidate."
-                              f"{bool_key} must be boolean"
-                          )
-                  for optional_bool_key in (
-                      "enable_configurable_moe",
-                      "moe_post_quant_alltoall",
-                      "enable_pdl",
-                      "megamoe_fused_prepare",
-                      "dsv4_skip_premoe_allreduce",
-                  ):
-                      value = candidate.get(optional_bool_key)
-                      if value is not None and not isinstance(value, bool):
-                          raise SystemExit(
-                              f"experiment {experiment_id} candidate."
-                              f"{optional_bool_key} must be boolean or null"
-                          )
-                  indexer_k_dtype = candidate.get("indexer_k_dtype")
-                  if indexer_k_dtype not in {None, "fp4", "fp8"}:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "indexer_k_dtype must be fp4, fp8, or null"
-                      )
-                  moe_autotune_distribution = candidate.get(
-                      "moe_autotune_dummy_distribution"
-                  )
-                  if moe_autotune_distribution not in {
-                      None,
-                      "balanced",
-                      "random",
-                  }:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "moe_autotune_dummy_distribution must be "
-                          "balanced, random, or null"
-                      )
-                  moe_backend = candidate.get("moe_backend", "TRTLLM")
-                  if moe_backend not in {
-                      "CUTLASS",
-                      "TRTLLM",
-                      "MEGAMOE_DEEPGEMM",
-                  }:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "moe_backend must be CUTLASS, TRTLLM, or "
-                          "MEGAMOE_DEEPGEMM"
-                      )
-                  force_moe_comm_method = candidate.get(
-                      "force_moe_comm_method"
-                  )
-                  if force_moe_comm_method not in {
-                      None,
-                      "NVLINK_ONE_SIDED",
-                      "NVLINK_TWO_SIDED",
-                      "DEEPEP",
-                      "ALLGATHER",
-                  }:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "force_moe_comm_method is unsupported"
-                      )
-                  if (
-                      moe_backend == "MEGAMOE_DEEPGEMM"
-                      and force_moe_comm_method is not None
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} cannot force "
-                          "external MoE communication with MegaMoE"
-                      )
-                  if (
-                      moe_backend != "MEGAMOE_DEEPGEMM"
-                      and candidate.get("megamoe_fused_prepare") is not None
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "megamoe_fused_prepare requires MegaMoE"
-                      )
-                  profile_iterations = candidate.get(
-                      "profile_iterations"
-                  )
-                  if profile_iterations is not None:
-                      profile_match = re.fullmatch(
-                          r"(\d+)-(\d+)",
-                          profile_iterations,
-                      )
-                      if (
-                          profile_match is None
-                          or int(profile_match.group(1))
-                          >= int(profile_match.group(2))
-                      ):
-                          raise SystemExit(
-                              f"experiment {experiment_id} candidate."
-                              "profile_iterations must be an increasing "
-                              "start-stop range"
-                          )
-                  max_seq_len = candidate.get("max_seq_len", 9216)
-                  if (
-                      not isinstance(max_seq_len, int)
-                      or isinstance(max_seq_len, bool)
-                      or max_seq_len < 8820
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "max_seq_len must be an integer >= 8820"
-                      )
-                  mtp = candidate.get("mtp_draft_tokens", 3)
-                  if (
-                      not isinstance(mtp, int)
-                      or isinstance(mtp, bool)
-                      or not 1 <= mtp <= 3
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "mtp_draft_tokens must be 1, 2, or 3"
-                      )
-                  parallelism = candidate.get("parallelism", "dep8")
-                  if parallelism not in {"dep8", "tp4", "dep4"}:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "parallelism must be dep8, tp4, or dep4"
-                      )
-                  if (
-                      parallelism == "tp4"
-                      and candidate.get("enable_lm_head_tp_in_adp", False)
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} cannot enable "
-                          "LM-head TP without attention DP"
-                      )
-                  if (
-                      candidate.get("dsv4_skip_premoe_allreduce") is not None
-                      and parallelism != "tp4"
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "dsv4_skip_premoe_allreduce requires tp4"
-                      )
-                  batch_mode = candidate.get(
-                      "attention_dp_batch_mode",
-                      "global",
-                  )
-                  if batch_mode not in {"global", "local-rank"}:
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate."
-                          "attention_dp_batch_mode must be global or "
-                          "local-rank"
-                      )
-                  if parallelism == "tp4" and batch_mode == "local-rank":
-                      raise SystemExit(
-                          f"experiment {experiment_id} cannot use "
-                          "local-rank batch sizing without attention DP"
-                      )
-                  if "kind" in candidate and not isinstance(
-                      candidate["kind"],
-                      str,
-                  ):
-                      raise SystemExit(
-                          f"experiment {experiment_id} candidate.kind "
-                          "must be a string"
-                      )
-                  config = json.dumps(
-                      candidate,
-                      sort_keys=True,
-                      separators=(",", ":"),
-                  ).encode()
-                  matrix.append(
-                      {
-                          "id": experiment_id,
-                          "concurrency": concurrency,
-                          "experiment_config_b64": base64.b64encode(
-                              config
-                          ).decode(),
-                      }
-                  )
-          else:
-              values = [
-                  int(item.strip())
-                  for item in os.environ["CONCURRENCIES"].split(",")
-                  if item.strip()
-              ]
-              if not values:
-                  raise SystemExit("At least one concurrency is required")
-              if len(values) != len(set(values)):
-                  raise SystemExit(f"Duplicate concurrencies: {values}")
-              invalid = sorted(set(values) - allowed)
-              if invalid:
-                  raise SystemExit(
-                      f"Unsupported concurrencies {invalid}; "
-                      f"allowed={sorted(allowed)}"
-                  )
-              if len(values) > 10:
-                  raise SystemExit("concurrency matrix is limited to 10 jobs")
-              matrix = [
-                  {
-                      "id": f"conc{value}",
-                      "concurrency": value,
-                      "experiment_config_b64": "",
-                  }
-                  for value in values
-              ]
+              for value in values
+          ]
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(
-                  "matrix="
-                  + json.dumps(matrix, separators=(",", ":"))
-                  + "\n"
+                  "matrix=" + json.dumps(matrix, separators=(",", ":")) + "\n"
               )
               output.write(
-                  "expected="
-                  + ",".join(item["id"] for item in matrix)
-                  + "\n"
+                  "expected=" + ",".join(item["id"] for item in matrix) + "\n"
               )
           PY
 
   benchmark:
     needs: prepare
     runs-on: [self-hosted, b300]
-    timeout-minutes: 510
-    name: B300 TRT offline / ${{ matrix.id }} / conc ${{ matrix.concurrency }}
+    timeout-minutes: 210
+    name: B300 TRT offline / GBS ${{ matrix.global_batch_size }}
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 3
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
     env:
-      CONC: ${{ matrix.concurrency }}
+      GLOBAL_BATCH_SIZE: ${{ matrix.global_batch_size }}
       BENCH_ID: ${{ matrix.id }}
-      EXPERIMENT_CONFIG_B64: ${{ matrix.experiment_config_b64 }}
       IMAGE: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
       MODEL_PATH: /scratch/models/DeepSeek-V4-Pro
       DATASET_REVISION: 90f0394333616266d9fe85824ceaf505093cbaa5
@@ -440,8 +117,6 @@ jobs:
           rm -f "${{ github.workspace }}"/offline_controller_*.log
           rm -f "${{ github.workspace }}"/offline_gpu_metrics_*.csv
           rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
-          rm -f "${{ github.workspace }}"/offline_profiles_*.tar.gz
-          rm -f "${{ github.workspace }}"/offline_profile_summary_*.json
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -451,7 +126,7 @@ jobs:
           ref: ${{ inputs.ref || github.ref_name }}
           clean: true
 
-      - name: Run offline benchmark
+      - name: Run fixed-global-batch benchmark
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: |
@@ -464,17 +139,29 @@ jobs:
           if [[ -f "$result" ]]; then
             jq '{
               status,
-              concurrency: .benchmark.concurrency,
-              winner,
-              aggregate,
+              benchmark: {
+                global_batch_size: .benchmark.global_batch_size,
+                local_batch_size: .benchmark.local_batch_size,
+                active_gpu_count: .benchmark.active_gpu_count,
+                warmup_decode_rounds: .benchmark.warmup_decode_rounds,
+                measured_decode_rounds: .benchmark.measured_decode_rounds
+              },
+              aggregate: {
+                decode_round_tpot_ms: .aggregate.decode_round_tpot_ms,
+                decode_step_tput_per_gpu: .aggregate.decode_step_tput_per_gpu,
+                observed_tokens_per_step: .aggregate.observed_tokens_per_step,
+                output_tput_per_gpu: .aggregate.output_tput_per_gpu,
+                wall_output_tput_per_gpu: .aggregate.wall_output_tput_per_gpu,
+                filter: .aggregate.filter,
+                schedule_validation: .aggregate.schedule_validation
+              },
               huawei,
-              profile: .final.profile,
-              runtime_backports: .final.runtime_backports,
+              failure_kind,
               error
             }' "$result"
           fi
 
-      - name: Upload concurrency result
+      - name: Upload global-batch result
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -484,8 +171,6 @@ jobs:
             offline_controller_${{ matrix.id }}.log
             offline_gpu_metrics_${{ matrix.id }}.csv
             offline_debug_${{ matrix.id }}.tar.gz
-            offline_profiles_${{ matrix.id }}.tar.gz
-            offline_profile_summary_${{ matrix.id }}.json
           if-no-files-found: warn
           retention-days: 14
 
@@ -507,7 +192,7 @@ jobs:
           ref: ${{ inputs.ref || github.ref_name }}
           clean: true
 
-      - name: Download per-concurrency results
+      - name: Download per-global-batch results
         continue-on-error: true
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -517,7 +202,7 @@ jobs:
 
       - name: Build offline summary
         env:
-          EXPECTED: ${{ needs.prepare.outputs.expected || inputs.concurrencies }}
+          EXPECTED: ${{ needs.prepare.outputs.expected }}
         run: |
           mkdir -p downloaded-offline-results
           python3 utils/bench_offline/summarize.py \

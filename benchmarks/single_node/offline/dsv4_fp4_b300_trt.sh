@@ -2,7 +2,7 @@
 
 set -Eeuo pipefail
 
-: "${CONC:?CONC is required}"
+: "${GLOBAL_BATCH_SIZE:?GLOBAL_BATCH_SIZE is required}"
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 : "${RUNNER_NAME:?RUNNER_NAME is required}"
 
@@ -12,10 +12,9 @@ DATASET_REVISION="${DATASET_REVISION:-90f0394333616266d9fe85824ceaf505093cbaa5}"
 DATASET_FILE="longbook_qa_eng.jsonl"
 DATASET_ROOT="${DATASET_ROOT:-/data/datasets/inferencex/InfiniteBench/${DATASET_REVISION}}"
 DATASET_PATH="${DATASET_ROOT}/${DATASET_FILE}"
-SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-500}"
-WORKER_TIMEOUT="${WORKER_TIMEOUT:-3600}"
-BENCH_ID="${BENCH_ID:-conc${CONC}}"
-EXPERIMENT_CONFIG_B64="${EXPERIMENT_CONFIG_B64:-}"
+SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-150}"
+WORKER_TIMEOUT="${WORKER_TIMEOUT:-7200}"
+BENCH_ID="${BENCH_ID:-gbs${GLOBAL_BATCH_SIZE}}"
 TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
@@ -40,18 +39,19 @@ cleanup() {
         if [[ "$rc" -eq 0 ]]; then
             rc=1
         fi
-        python3 - "$RESULT_FILE" "$CONC" "$rc" "$BENCH_ID" <<'PY'
+        python3 - "$RESULT_FILE" "$GLOBAL_BATCH_SIZE" "$rc" "$BENCH_ID" <<'PY'
 import json
 import sys
 
-path, concurrency, return_code, experiment_id = sys.argv[1:]
+path, global_batch_size, return_code, experiment_id = sys.argv[1:]
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "status": "failed",
             "benchmark": {
-                "concurrency": int(concurrency),
+                "global_batch_size": int(global_batch_size),
+                "concurrency": int(global_batch_size),
                 "experiment_id": experiment_id,
             },
             "error": "Host launcher exited before the container wrote a result",
@@ -141,9 +141,9 @@ CONTAINER_MOUNTS="$GITHUB_WORKSPACE:/workspace"
 CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"
 CONTAINER_MOUNTS+=",/data/datasets:/data/datasets"
 CONTAINER_MOUNTS+=",$TRT_BENCH_CACHE_ROOT:$TRT_BENCH_CACHE_ROOT"
-SRUN_EXPORTS="ALL,GITHUB_WORKSPACE=/workspace,CONC=$CONC"
+SRUN_EXPORTS="ALL,GITHUB_WORKSPACE=/workspace"
+SRUN_EXPORTS+=",GLOBAL_BATCH_SIZE=$GLOBAL_BATCH_SIZE"
 SRUN_EXPORTS+=",BENCH_ID=$BENCH_ID"
-SRUN_EXPORTS+=",EXPERIMENT_CONFIG_B64=$EXPERIMENT_CONFIG_B64"
 SRUN_EXPORTS+=",MODEL_PATH=$MODEL_PATH,DATASET_PATH=$DATASET_PATH"
 SRUN_EXPORTS+=",DATASET_REVISION=$DATASET_REVISION"
 SRUN_EXPORTS+=",WORKER_TIMEOUT=$WORKER_TIMEOUT,IMAGE=$IMAGE"

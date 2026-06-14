@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
-"""Collect flat per-concurrency offline results into JSON and Markdown."""
+"""Collect fixed-global-batch TRT offline results."""
 
 from __future__ import annotations
 
 import argparse
-import json
-import re
 from pathlib import Path
 from typing import Any
 
 from io_utils import read_json, write_json
+
 
 RENDERER_MODEL = "deepseek-ai/DeepSeek-V4-Pro"
 RENDERER_MODEL_PREFIX = "dsv4"
@@ -22,28 +21,23 @@ def parse_expected(value: str) -> list[str]:
 
 
 def discover_results(root: Path) -> dict[str, tuple[Path, dict[str, Any]]]:
-    paths = list(root.rglob("offline_result_*.json"))
-    if not paths:
-        paths = [
-            path
-            for path in root.rglob("result.json")
-            if "bench_offline" in str(path) or "offline" in str(path)
-        ]
     discovered: dict[str, tuple[Path, dict[str, Any]]] = {}
-    for path in sorted(paths):
+    for path in sorted(root.rglob("offline_result_*.json")):
         result = read_json(path)
         benchmark = result.get("benchmark") or {}
-        concurrency = benchmark.get("concurrency")
-        if concurrency is None:
+        global_batch = benchmark.get(
+            "global_batch_size",
+            benchmark.get("concurrency"),
+        )
+        if global_batch is None:
             continue
         experiment_id = str(
-            benchmark.get("experiment_id") or f"conc{int(concurrency)}"
+            benchmark.get("experiment_id") or f"gbs{int(global_batch)}"
         )
         if experiment_id in discovered:
-            previous = discovered[experiment_id][0]
             raise RuntimeError(
-                f"Duplicate results for experiment {experiment_id}: "
-                f"{previous} and {path}"
+                f"Duplicate result for {experiment_id}: "
+                f"{discovered[experiment_id][0]} and {path}"
             )
         discovered[experiment_id] = (path, result)
     return discovered
@@ -55,46 +49,9 @@ def _fmt(value: Any, digits: int = 2) -> str:
     return f"{float(value):.{digits}f}"
 
 
-def _seconds(
-    aggregate: dict[str, Any],
-    key: str,
-) -> float | None:
+def _seconds(aggregate: dict[str, Any], key: str) -> float | None:
     value = aggregate.get(key)
     return float(value) / 1000.0 if value is not None else None
-
-
-def _interactivity(
-    aggregate: dict[str, Any],
-    key: str,
-) -> float | None:
-    value = aggregate.get(key)
-    return float(value) if value is not None else None
-
-
-def _parallelism_fields(result: dict[str, Any]) -> dict[str, Any] | None:
-    benchmark = result.get("benchmark") or {}
-    label = str(benchmark.get("effective_parallelism") or "")
-    match = re.fullmatch(r"(TP|DEP)(\d+)", label)
-    if not match:
-        return None
-    active_gpus = int(benchmark.get("active_gpu_count") or match.group(2))
-    width = int(match.group(2))
-    if active_gpus != width:
-        return None
-    dp_attention = match.group(1) == "DEP"
-    ep = width if dp_attention else 1
-    return {
-        "prefill_tp": width,
-        "prefill_ep": ep,
-        "prefill_dp_attention": dp_attention,
-        "prefill_num_workers": 0,
-        "decode_tp": width,
-        "decode_ep": ep,
-        "decode_dp_attention": dp_attention,
-        "decode_num_workers": 0,
-        "num_prefill_gpu": active_gpus,
-        "num_decode_gpu": active_gpus,
-    }
 
 
 def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
@@ -102,12 +59,35 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         return None
     benchmark = result.get("benchmark") or {}
     aggregate = result.get("aggregate") or {}
-    parallelism = _parallelism_fields(result)
-    concurrency = benchmark.get("concurrency")
-    output_tput = aggregate.get("derived_output_tput_per_gpu")
-    if parallelism is None or concurrency is None or output_tput is None:
+    global_batch = benchmark.get(
+        "global_batch_size",
+        benchmark.get("concurrency"),
+    )
+    output_tput = aggregate.get("output_tput_per_gpu")
+    if global_batch is None or output_tput is None:
         return None
 
+    tokens_per_step = float(aggregate["observed_tokens_per_step"])
+    equivalent_percentiles = {
+        "median_tpot": (
+            float(aggregate["median_decode_round_tpot_ms"])
+            / tokens_per_step
+            / 1000.0
+        ),
+        "p90_tpot": (
+            float(aggregate["p90_decode_round_tpot_ms"])
+            / tokens_per_step
+            / 1000.0
+        ),
+        "p99_tpot": (
+            float(aggregate["p99_decode_round_tpot_ms"])
+            / tokens_per_step
+            / 1000.0
+        ),
+    }
+    equivalent_tpot_s = (
+        float(aggregate["equivalent_output_tpot_ms"]) / 1000.0
+    )
     row: dict[str, Any] = {
         "hw": "b300",
         "model": RENDERER_MODEL,
@@ -115,43 +95,55 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         "framework": RENDERER_FRAMEWORK,
         "precision": RENDERER_PRECISION,
         "isl": int(benchmark.get("input_tokens") or 8192),
-        "osl": int(benchmark.get("generated_output_tokens") or 625),
-        "conc": int(concurrency),
+        "osl": int(benchmark.get("generated_output_tokens") or 1025),
+        "conc": int(global_batch),
         "image": (result.get("provenance") or {}).get("image"),
         "disagg": False,
         "is_multinode": False,
         "spec_decoding": "mtp",
-        # The offline comparison defines throughput from mean per-request TPOT.
-        # Whole-batch throughput remains available in offline_aggregate.json.
         "tput_per_gpu": float(output_tput),
         "output_tput_per_gpu": float(output_tput),
-        **parallelism,
+        "mean_tpot": equivalent_tpot_s,
+        "mean_intvty": 1.0 / equivalent_tpot_s,
+        "prefill_tp": 8,
+        "prefill_ep": 8,
+        "prefill_dp_attention": True,
+        "prefill_num_workers": 0,
+        "decode_tp": 8,
+        "decode_ep": 8,
+        "decode_dp_attention": True,
+        "decode_num_workers": 0,
+        "num_prefill_gpu": 8,
+        "num_decode_gpu": 8,
+        # Custom fields remain useful in downloaded flat rows. The standard
+        # renderer ignores fields it does not understand.
+        "global_batch_size": int(global_batch),
+        "local_batch_size": int(aggregate["local_batch_size"]),
+        "decode_round_tpot_ms": float(
+            aggregate["decode_round_tpot_ms"]
+        ),
+        "decode_step_tput_per_gpu": float(
+            aggregate["decode_step_tput_per_gpu"]
+        ),
+        "observed_tokens_per_step": tokens_per_step,
+        "measured_decode_rounds": int(
+            aggregate["measured_decode_rounds"]
+        ),
+        **equivalent_percentiles,
     }
-    metric_values = {
-        "mean_ttft": _seconds(aggregate, "mean_ttft_ms"),
-        "median_ttft": _seconds(aggregate, "median_ttft_ms"),
-        "p90_ttft": _seconds(aggregate, "p90_ttft_ms"),
-        "p99_ttft": _seconds(aggregate, "p99_ttft_ms"),
-        "mean_tpot": _seconds(aggregate, "mean_token_tpot_ms"),
-        "median_tpot": _seconds(aggregate, "median_token_tpot_ms"),
-        "p90_tpot": _seconds(aggregate, "p90_token_tpot_ms"),
-        "p99_tpot": _seconds(aggregate, "p99_token_tpot_ms"),
-        "mean_intvty": _interactivity(aggregate, "mean_intvty"),
-        "median_intvty": _interactivity(aggregate, "median_intvty"),
-        "p90_intvty": _interactivity(aggregate, "p90_intvty"),
-        "p99_intvty": _interactivity(aggregate, "p99_intvty"),
-        "mean_e2el": _seconds(aggregate, "mean_e2e_ms"),
-        "median_e2el": _seconds(aggregate, "median_e2e_ms"),
-        "p90_e2el": _seconds(aggregate, "p90_e2e_ms"),
-        "p99_e2el": _seconds(aggregate, "p99_e2e_ms"),
-    }
-    row.update(
-        {
-            key: value
-            for key, value in metric_values.items()
-            if value is not None
-        }
-    )
+    for renderer_key, aggregate_key in (
+        ("mean_ttft", "mean_ttft_ms"),
+        ("median_ttft", "median_ttft_ms"),
+        ("p90_ttft", "p90_ttft_ms"),
+        ("p99_ttft", "p99_ttft_ms"),
+        ("mean_e2el", "mean_e2e_ms"),
+        ("median_e2el", "median_e2e_ms"),
+        ("p90_e2el", "p90_e2e_ms"),
+        ("p99_e2el", "p99_e2e_ms"),
+    ):
+        value = _seconds(aggregate, aggregate_key)
+        if value is not None:
+            row[renderer_key] = value
     return row
 
 
@@ -169,7 +161,7 @@ def renderer_rows(
     return rows
 
 
-def _row(
+def result_row(
     experiment_id: str,
     source: Path | None,
     result: dict[str, Any] | None,
@@ -177,87 +169,69 @@ def _row(
     if result is None:
         return {
             "experiment_id": experiment_id,
-            "concurrency": None,
+            "global_batch_size": None,
             "status": "missing",
             "source": None,
         }
     benchmark = result.get("benchmark") or {}
-    concurrency = benchmark.get("concurrency")
     aggregate = result.get("aggregate") or {}
-    winner = result.get("winner") or {}
     huawei = result.get("huawei") or {}
-    final = result.get("final") or {}
-    dsv4_backport = (
-        (final.get("runtime_backports") or {}).get(
-            "dsv4_skip_premoe_allreduce"
-        )
-        or {}
-    )
     return {
         "experiment_id": experiment_id,
-        "concurrency": int(concurrency) if concurrency is not None else None,
+        "global_batch_size": benchmark.get(
+            "global_batch_size",
+            benchmark.get("concurrency"),
+        ),
+        "local_batch_size": benchmark.get("local_batch_size"),
+        "active_gpu_count": benchmark.get("active_gpu_count"),
         "status": result.get("status", "unknown"),
-        "candidate": winner.get("name"),
-        "candidate_kind": winner.get("kind"),
-        "moe_autotune_dummy_distribution": winner.get(
-            "moe_autotune_dummy_distribution"
+        "decode_round_tpot_ms": aggregate.get("decode_round_tpot_ms"),
+        "median_decode_round_tpot_ms": aggregate.get(
+            "median_decode_round_tpot_ms"
         ),
-        "dsv4_skip_premoe_allreduce": winner.get(
-            "dsv4_skip_premoe_allreduce"
+        "p90_decode_round_tpot_ms": aggregate.get(
+            "p90_decode_round_tpot_ms"
         ),
-        "dsv4_backport_status": dsv4_backport.get("status"),
-        "dsv4_backport_sha256": dsv4_backport.get("after_sha256"),
-        "active_gpu_count": benchmark.get("active_gpu_count", 8),
-        "effective_parallelism": benchmark.get(
-            "effective_parallelism",
-            "DEP8",
+        "p99_decode_round_tpot_ms": aggregate.get(
+            "p99_decode_round_tpot_ms"
         ),
-        "measured_passes": aggregate.get("pass_count"),
-        "mean_token_tpot_ms": aggregate.get("mean_token_tpot_ms"),
-        "mean_step_tpot_ms": aggregate.get("mean_step_tpot_ms"),
-        "derived_output_tput_per_gpu": aggregate.get(
-            "derived_output_tput_per_gpu"
+        "decode_step_tput_per_gpu": aggregate.get(
+            "decode_step_tput_per_gpu"
         ),
-        "derived_step_tput_per_gpu": aggregate.get(
-            "derived_step_tput_per_gpu"
-        ),
+        "output_tput_per_gpu": aggregate.get("output_tput_per_gpu"),
         "wall_output_tput_per_gpu": aggregate.get(
             "wall_output_tput_per_gpu"
         ),
         "observed_tokens_per_step": aggregate.get(
             "observed_tokens_per_step"
         ),
-        "effective_accepted_drafts_per_step": aggregate.get(
-            "effective_accepted_drafts_per_step"
-        ),
         "effective_acceptance_rate": aggregate.get(
             "effective_acceptance_rate"
         ),
-        "raw_speculative_metrics_available": aggregate.get(
-            "raw_speculative_metrics_available"
-        ),
-        "acceptance_rate": aggregate.get("acceptance_rate"),
+        "token_yield_source": aggregate.get("token_yield_source"),
         "mean_ttft_ms": aggregate.get("mean_ttft_ms"),
-        "p99_ttft_ms": aggregate.get("p99_ttft_ms"),
-        "huawei_published_dataset_token_tput_per_chip": huawei.get(
-            "published_dataset_token_tput_per_chip"
+        "measured_decode_rounds": aggregate.get(
+            "measured_decode_rounds"
         ),
-        "huawei_step_tput_per_chip": huawei.get("step_tput_per_chip"),
-        "huawei_estimated_token_tput_per_chip": huawei.get(
-            "estimated_token_tput_per_chip"
+        "retained_rounds": (aggregate.get("filter") or {}).get(
+            "retained_rounds"
         ),
-        "b300_to_huawei_ratio": huawei.get("b300_to_huawei_ratio"),
-        "b300_to_huawei_published_output_ratio": huawei.get(
-            "b300_to_huawei_published_output_ratio"
+        "outlier_rounds": (aggregate.get("filter") or {}).get(
+            "outlier_rounds"
         ),
-        "b300_to_huawei_step_rate_ratio": huawei.get(
-            "b300_to_huawei_step_rate_ratio"
+        "huawei_decode_round_tpot_ms": huawei.get(
+            "decode_round_tpot_ms"
         ),
-        "huawei_gate_passed": huawei.get("huawei_gate_passed"),
-        "failure_kind": (
-            result.get("failure_kind") or final.get("failure_kind")
+        "huawei_decode_step_tput_per_chip": huawei.get(
+            "decode_step_tput_per_chip"
         ),
-        "failure_kinds": result.get("failure_kinds"),
+        "b300_to_huawei_decode_step_ratio": huawei.get(
+            "b300_to_huawei_decode_step_ratio"
+        ),
+        "b300_to_huawei_output_ratio": huawei.get(
+            "b300_to_huawei_output_ratio"
+        ),
+        "failure_kind": result.get("failure_kind"),
         "error": result.get("error"),
         "source": str(source) if source else None,
     }
@@ -265,102 +239,74 @@ def _row(
 
 def markdown(rows: list[dict[str, Any]]) -> str:
     lines = [
-        "# DeepSeek-V4 B300 TRT Offline Benchmark",
+        "# DeepSeek-V4 B300 TRT Fixed-GBS Offline Benchmark",
         "",
-        "| Experiment | Conc | GPUs | Parallelism | Status | Candidate | Passes | Token TPOT ms | Step TPOT ms | Derived out tok/s/GPU | Derived step/s/GPU | Wall out tok/s/GPU | Tok/step | Eff accept | Mean TTFT ms | Huawei output tok/s/chip | Huawei step/s/chip | B300/Huawei output | B300/Huawei step | TPOT gate |",
-        "|---|---:|---:|---|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|",
+        "| GBS | Local/rank | GPUs | Status | Decode round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained rounds | Huawei TPOT ms | Huawei steps/s/chip | B300/Huawei step |",
+        "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
     ]
     for row in rows:
-        acceptance = row.get("effective_acceptance_rate")
+        retained = row.get("retained_rounds")
+        measured = row.get("measured_decode_rounds")
+        retained_label = (
+            f"{retained}/{int(measured) - 1}"
+            if retained is not None and measured is not None
+            else "-"
+        )
         lines.append(
-            "| {experiment_id} | {concurrency} | {active_gpus} | "
-            "{parallelism} | {status} | {candidate} | "
-            "{passes} | {tpot} | {step_tpot} | {derived} | "
-            "{derived_step} | {wall} | {tokens_per_step} | "
-            "{acceptance} | {ttft} | "
-            "{huawei_published} | {huawei_step} | {output_ratio} | "
-            "{step_ratio} | {gate} |".format(
-                experiment_id=row["experiment_id"],
-                concurrency=row.get("concurrency") or "-",
-                active_gpus=row.get("active_gpu_count") or "-",
-                parallelism=row.get("effective_parallelism") or "-",
+            "| {gbs} | {local} | {gpus} | {status} | {tpot} | "
+            "{step_tput} | {tokens_per_step} | {output_tput} | {wall} | "
+            "{retained} | {huawei_tpot} | {huawei_tput} | {ratio} |".format(
+                gbs=row.get("global_batch_size") or "-",
+                local=row.get("local_batch_size") or "-",
+                gpus=row.get("active_gpu_count") or "-",
                 status=row["status"],
-                candidate=row.get("candidate") or "-",
-                passes=row.get("measured_passes") or "-",
-                tpot=_fmt(row.get("mean_token_tpot_ms")),
-                step_tpot=_fmt(row.get("mean_step_tpot_ms")),
-                derived=_fmt(row.get("derived_output_tput_per_gpu")),
-                derived_step=_fmt(
-                    row.get("derived_step_tput_per_gpu")
+                tpot=_fmt(row.get("decode_round_tpot_ms"), 3),
+                step_tput=_fmt(
+                    row.get("decode_step_tput_per_gpu"),
+                    2,
                 ),
-                wall=_fmt(row.get("wall_output_tput_per_gpu")),
                 tokens_per_step=_fmt(
-                    row.get("observed_tokens_per_step"), digits=3
+                    row.get("observed_tokens_per_step"),
+                    3,
                 ),
-                acceptance=(
-                    f"{float(acceptance) * 100.0:.1f}%"
-                    if acceptance is not None
-                    else "-"
+                output_tput=_fmt(row.get("output_tput_per_gpu"), 2),
+                wall=_fmt(row.get("wall_output_tput_per_gpu"), 2),
+                retained=retained_label,
+                huawei_tpot=_fmt(
+                    row.get("huawei_decode_round_tpot_ms"),
+                    2,
                 ),
-                ttft=_fmt(row.get("mean_ttft_ms")),
-                huawei_published=_fmt(
-                    row.get(
-                        "huawei_published_dataset_token_tput_per_chip"
-                    )
+                huawei_tput=_fmt(
+                    row.get("huawei_decode_step_tput_per_chip"),
+                    2,
                 ),
-                huawei_step=_fmt(
-                    row.get("huawei_step_tput_per_chip")
-                ),
-                output_ratio=_fmt(
-                    row.get("b300_to_huawei_published_output_ratio"),
-                    digits=3,
-                ),
-                step_ratio=_fmt(
-                    row.get("b300_to_huawei_step_rate_ratio"),
-                    digits=3,
-                ),
-                gate=(
-                    "PASS"
-                    if row.get("huawei_gate_passed") is True
-                    else (
-                        "FAIL"
-                        if row.get("huawei_gate_passed") is False
-                        else "-"
-                    )
+                ratio=_fmt(
+                    row.get("b300_to_huawei_decode_step_ratio"),
+                    3,
                 ),
             )
         )
     lines.extend(
         [
             "",
-            "## Offline metric meanings",
+            "## Metric meanings",
             "",
-            "- `Passes`: measured generation passes aggregated into the row. This branch requires exactly one; the full-shape warmup is separate and is not counted.",
-            "- `Token TPOT ms`: arithmetic mean across requests in the measured pass of `(last token time - first token time) / 624`. It measures emitted decode tokens, not TRT decode iterations.",
-            "- `Step TPOT ms`: arithmetic mean of `(last token time - first token time) / (last iteration - first iteration)`. This is the direct counterpart to Huawei's published decode-step TPOT.",
-            "- `Derived out tok/s/GPU`: `concurrency / mean token TPOT seconds / active GPUs`. This is the latency-derived headline requested for the comparison.",
-            "- `Derived step/s/GPU`: `concurrency / mean step TPOT seconds / active GPUs`. At exact global batches 16, 64, and 128, compare it with Huawei's published step throughput per chip.",
-            "- `Wall out tok/s/GPU`: all 625 generated tokens per request divided by measured batch wall time and active GPUs.",
-            "- `Tok/step`: total 624-token decode outputs divided by TRT's total `last_iter - first_iter`. This is the observed MTP token multiplier.",
-            "- `Eff accept`: `(Tok/step - 1) / 3`, the effective MTP3 acceptance implied by emitted tokens. The pinned TRT PyTorch path leaves raw accepted/proposed counters at zero, so raw acceptance is recorded as unavailable instead of `0%`.",
-            "- `Huawei output tok/s/chip`: Huawei step throughput multiplied by its published `1 + 1.44 = 2.44` tokens/step.",
-            "- `B300/Huawei output`: B300's observed emitted-token rate divided by Huawei's output rate at Huawei's own published token yield.",
-            "- `B300/Huawei step`: B300's derived decode-step rate per active GPU divided by Huawei's published decode-step rate per chip.",
-            "- `TPOT gate`: both ratios calculated from mean per-request decode TPOT exceed `1.0`. Attention-DP scheduling can stagger request decode windows, so this is not a whole-batch or total-system-throughput claim; inspect TTFT and wall throughput for that distinction.",
+            "- `GBS` is the one authoritative global batch submitted to TRT. `Local/rank` is exactly `GBS / 8` for DEP8.",
+            "- `Decode round TPOT` is the mean `iterLatencyMS` for 256 consecutive full-local-batch decode iterations after skipping the first and removing only upper-IQR outliers, matching Huawei's `process_infer_time` path.",
+            "- `Decode steps/s/GPU` is `GBS / decode_round_TPOT / 8`. This is the direct comparison with Huawei's published table.",
+            "- `Tok/step` is MTP output yield and is reported separately. `Output tok/s/GPU` multiplies decode-step throughput by that yield.",
+            "- `Wall tok/s/GPU` covers the entire `LLM.generate()` call and remains diagnostic; it includes the deliberately longer output cap used to guarantee at least 256 decode rounds.",
+            "- The global batch and timing method match Huawei. The topology does not: this run uses eight B300 GPUs, while Huawei publishes sixteen 950DT chips.",
             "",
         ]
     )
-    failures = [
-        row
-        for row in rows
-        if row["status"] not in {"success", "capacity_failure"}
-    ]
+    failures = [row for row in rows if row["status"] != "success"]
     if failures:
         lines.extend(["## Missing Or Failed Rows", ""])
         for row in failures:
-            detail = row.get("error") or row.get("failure_kinds") or ""
+            detail = row.get("error") or ""
             failure_kind = row.get("failure_kind")
-            if failure_kind and failure_kind not in str(detail):
+            if failure_kind:
                 detail = f"{failure_kind}: {detail}".rstrip()
             lines.append(
                 f"- `{row['experiment_id']}`: "
@@ -386,7 +332,7 @@ def main() -> int:
     expected = parse_expected(args.expected)
     discovered = discover_results(args.results_dir)
     rows = [
-        _row(
+        result_row(
             experiment_id,
             discovered.get(experiment_id, (None, None))[0],
             discovered.get(experiment_id, (None, None))[1],
@@ -394,7 +340,7 @@ def main() -> int:
         for experiment_id in expected
     ]
     aggregate = {
-        "schema_version": 1,
+        "schema_version": 2,
         "expected_experiments": expected,
         "rows": rows,
         "results": {
@@ -408,9 +354,7 @@ def main() -> int:
     summary = markdown(rows)
     args.markdown_out.write_text(summary, encoding="utf-8")
     print(summary)
-    if args.strict and any(
-        row["status"] not in {"success", "capacity_failure"} for row in rows
-    ):
+    if args.strict and any(row["status"] != "success" for row in rows):
         return 1
     return 0
 

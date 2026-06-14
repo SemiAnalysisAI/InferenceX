@@ -309,7 +309,7 @@ def _write_uint32(path: Path, token_ids: Iterable[int]) -> None:
 def prepare_corpus(
     dataset_path: Path,
     model_path: str,
-    concurrency: int,
+    global_batch_size: int,
     output_dir: Path,
     dataset_revision: str = INFINITEBENCH_REVISION,
 ) -> dict[str, Any]:
@@ -323,7 +323,7 @@ def prepare_corpus(
         model_path,
         trust_remote_code=True,
     )
-    contexts = load_contexts(dataset_path, concurrency)
+    contexts = load_contexts(dataset_path, global_batch_size)
     cache: dict[str, tuple[list[int], dict[str, Any]]] = {}
     prompt_ids: list[list[int]] = []
     prompt_metadata: list[dict[str, Any]] = []
@@ -348,7 +348,8 @@ def prepare_corpus(
             "sha256": sha256_file(dataset_path),
         },
         "model_path": model_path,
-        "concurrency": concurrency,
+        "global_batch_size": global_batch_size,
+        "concurrency": global_batch_size,
         "prompt_tokens": INPUT_TOKENS,
         "prompt_count": len(prompt_ids),
         "unique_contexts": len(cache),
