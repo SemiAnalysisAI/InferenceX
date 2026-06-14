@@ -2846,3 +2846,28 @@ minimaxm3-fp8-mi355x-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+
+# MiniMax-M3 MXFP8 MI300X day-zero recipe. Reuse the dedicated ROCm image and
+# MI355X serving shape, but retain the default BF16 KV cache because this
+# checkpoint lacks calibrated ROCm FP8 attention scales. Use the TP8-only H100
+# search space: TP8 for latency and TP8+EP8 (TEP) at high concurrency.
+minimaxm3-fp8-mi300x-vllm:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }

@@ -10,8 +10,8 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
-#   chi-mi300x-049: drained (persistent /nvme_home disk-full)
-JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+#   chi-mi300x-049: persistent /nvme_home disk-full
+JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
@@ -31,7 +31,7 @@ srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
 "
 srun --jobid=$JOB_ID \
 --container-image=$SQUASH_FILE \
---container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE \
+--container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri \
 --container-mount-home \
 --container-writable \
 --container-remap-root \
