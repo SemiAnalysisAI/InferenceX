@@ -10,6 +10,7 @@ from run import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     classify_failure,
     git_revision,
+    latest_rank_progress,
     latest_worker_progress,
     wait_for_worker_process,
 )
@@ -87,6 +88,31 @@ def test_latest_worker_progress_surfaces_mpi_warmup_marker(tmp_path):
     )
 
 
+def test_latest_rank_progress_groups_each_ranks_latest_event(tmp_path):
+    marker = tmp_path / "perfect_router.jsonl"
+    rows = [
+        {"source": "trt_mpi_entry", "rank": "0", "event": "entry_ready"},
+        {
+            "source": "trt_mpi_entry",
+            "rank": "1",
+            "event": "engine_warmup_start",
+        },
+        {
+            "source": "trt_mpi_entry",
+            "rank": "0",
+            "event": "engine_warmup_complete",
+        },
+        {"source": "other", "rank": "7", "event": "ignored"},
+    ]
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    assert latest_rank_progress(marker) == (
+        "engine_warmup_complete:[0],engine_warmup_start:[1]"
+    )
+
+
 def test_wait_for_worker_process_reports_heartbeat(tmp_path, capsys):
     class FakeProcess:
         args = ["fake-worker"]
@@ -134,6 +160,9 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     torch_module.__path__ = []
     pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
     pyexecutor_module.__path__ = []
+    py_executor_impl_module = ModuleType(
+        "tensorrt_llm._torch.pyexecutor.py_executor"
+    )
     model_engine_module = ModuleType(
         "tensorrt_llm._torch.pyexecutor.model_engine"
     )
@@ -157,6 +186,13 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         def warmup(self, resource_manager):
             return None
 
+    class FakePyExecutor:
+        def _set_global_steady_clock_offset(self):
+            return None
+
+        def start_worker(self):
+            return None
+
     class FakeFp8QuantKernelRunner:
         TACTIC_TRITON = 1
 
@@ -173,6 +209,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     request_queue_module.ExecutorRequestQueue = FakeExecutorRequestQueue
     model_engine_module.ModelEngine = FakeModelEngine
     model_engine_module.PyTorchModelEngine = FakeModelEngine
+    py_executor_impl_module.PyExecutor = FakePyExecutor
     torch_custom_ops_module.Fp8QuantKernelRunner = (
         FakeFp8QuantKernelRunner
     )
@@ -187,6 +224,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     torch_module.custom_ops = custom_ops_package
     pyexecutor_module.executor_request_queue = request_queue_module
     pyexecutor_module.model_engine = model_engine_module
+    pyexecutor_module.py_executor = py_executor_impl_module
     executor_module.worker = worker_module
     for name, module in (
         ("tensorrt_llm", trt_module),
@@ -195,6 +233,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         (
             "tensorrt_llm._torch.pyexecutor.model_engine",
             model_engine_module,
+        ),
+        (
+            "tensorrt_llm._torch.pyexecutor.py_executor",
+            py_executor_impl_module,
         ),
         ("tensorrt_llm._torch.custom_ops", custom_ops_package),
         (

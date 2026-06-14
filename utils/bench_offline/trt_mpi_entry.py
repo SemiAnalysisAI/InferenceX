@@ -10,6 +10,19 @@ from pathlib import Path
 from typing import Any
 
 
+def _emit_rank_event(event: str, **details: Any) -> None:
+    rank = os.getenv("OMPI_COMM_WORLD_RANK", "unknown")
+    _write_marker(event=event, **details)
+    detail_text = " ".join(
+        f"{name}={value}" for name, value in details.items()
+    )
+    suffix = f" {detail_text}" if detail_text else ""
+    print(
+        f"[offline-trt-mpi] rank={rank} event={event}{suffix}",
+        flush=True,
+    )
+
+
 def _install_engine_warmup_token_cap() -> dict[str, Any]:
     max_warmup_tokens = int(
         os.environ["TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"]
@@ -45,21 +58,32 @@ def _install_engine_warmup_token_cap() -> dict[str, Any]:
         )
         engine.max_num_tokens = tuned_max_num_tokens
         started_at = time.monotonic()
-        print(
-            "[offline-trt-mpi] synthetic engine warmup start "
-            f"runtime_max_tokens={runtime_max_num_tokens} "
-            f"tuned_max_tokens={tuned_max_num_tokens}",
-            flush=True,
+        _emit_rank_event(
+            "engine_warmup_start",
+            runtime_max_tokens=runtime_max_num_tokens,
+            tuned_max_tokens=tuned_max_num_tokens,
         )
+        warmup_error: BaseException | None = None
         try:
             return original(engine, resource_manager, *args, **kwargs)
+        except BaseException as error:
+            warmup_error = error
+            raise
         finally:
             engine.max_num_tokens = runtime_max_num_tokens
-            print(
-                "[offline-trt-mpi] synthetic engine warmup complete "
-                f"elapsed_seconds={time.monotonic() - started_at:.3f} "
-                f"restored_max_tokens={runtime_max_num_tokens}",
-                flush=True,
+            _emit_rank_event(
+                (
+                    "engine_warmup_complete"
+                    if warmup_error is None
+                    else "engine_warmup_error"
+                ),
+                elapsed_seconds=f"{time.monotonic() - started_at:.3f}",
+                restored_max_tokens=runtime_max_num_tokens,
+                **(
+                    {}
+                    if warmup_error is None
+                    else {"error_type": type(warmup_error).__name__}
+                ),
             )
 
     bounded_warmup._offline_engine_warmup_token_cap = True
@@ -132,6 +156,50 @@ def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
         "already_installed": (
             tactic_filter_installed and dispatch_guard_installed
         ),
+    }
+
+
+def _install_executor_lifecycle_trace() -> dict[str, Any]:
+    from tensorrt_llm._torch.pyexecutor import py_executor
+
+    executor_class = py_executor.PyExecutor
+    installed: list[str] = []
+    already_installed: list[str] = []
+    for method_name, event_prefix in (
+        ("_set_global_steady_clock_offset", "clock_sync"),
+        ("start_worker", "executor_worker_start"),
+    ):
+        original = getattr(executor_class, method_name)
+        if getattr(original, "_offline_lifecycle_trace", False):
+            already_installed.append(method_name)
+            continue
+
+        def traced(
+            executor: Any,
+            *args: Any,
+            _original: Any = original,
+            _event_prefix: str = event_prefix,
+            **kwargs: Any,
+        ) -> Any:
+            _emit_rank_event(f"{_event_prefix}_enter")
+            try:
+                result = _original(executor, *args, **kwargs)
+            except BaseException as error:
+                _emit_rank_event(
+                    f"{_event_prefix}_error",
+                    error_type=type(error).__name__,
+                )
+                raise
+            _emit_rank_event(f"{_event_prefix}_exit")
+            return result
+
+        traced._offline_lifecycle_trace = True
+        setattr(executor_class, method_name, traced)
+        installed.append(method_name)
+    return {
+        "target": executor_class.__name__,
+        "installed": installed,
+        "already_installed": already_installed,
     }
 
 
@@ -209,7 +277,7 @@ def _install_fixed_batch_request_barrier() -> dict[str, Any]:
     }
 
 
-def _write_marker() -> None:
+def _write_marker(event: str = "entry_ready", **details: Any) -> None:
     marker = os.getenv("TRTLLM_PERFECT_ROUTER_MARKER")
     if not marker:
         return
@@ -241,8 +309,10 @@ def _write_marker() -> None:
         "fp8_fused_quant_max_rows": os.getenv(
             "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
         ),
+        "event": event,
         "source": "trt_mpi_entry",
     }
+    payload.update(details)
     path = Path(marker)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as stream:
@@ -263,6 +333,7 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
     warmup_cap = _install_engine_warmup_token_cap()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
+    lifecycle_trace = _install_executor_lifecycle_trace()
     _install_fixed_batch_request_barrier()
     _write_marker()
     print(
@@ -276,6 +347,13 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         "[offline-trt-mpi] large-prefill FP8 quant guard "
         f"max_fused_rows={fp8_guard['max_fused_rows']} "
         f"already_installed={fp8_guard['already_installed']}",
+        flush=True,
+    )
+    print(
+        "[offline-trt-mpi] executor lifecycle trace "
+        f"target={lifecycle_trace['target']} "
+        f"installed={lifecycle_trace['installed']} "
+        f"already_installed={lifecycle_trace['already_installed']}",
         flush=True,
     )
 

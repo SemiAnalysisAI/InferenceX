@@ -103,6 +103,13 @@ overridden `PyTorchModelEngine.warmup`. GPU activity stopped after initial
 setup and the job remained in engine initialization for 52 minutes. The shim
 and its unit test now target the concrete override explicitly.
 
+Run `27489466718` proved the concrete cap executes: rank output reported
+`runtime_max_tokens=131072`, `tuned_max_tokens=65536`, then completion after
+334.667 seconds with `restored_max_tokens=131072`. Engine initialization still
+did not return and all GPUs were idle afterward. Per-rank marker events now
+cover engine warmup, global clock synchronization, and executor worker start
+so a canceled canary identifies the exact rank lifecycle boundary.
+
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA
 quantizer rejected the 65536-row MTP `h_proj` launch during engine warmup.

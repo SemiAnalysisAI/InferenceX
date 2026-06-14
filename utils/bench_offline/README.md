@@ -308,6 +308,9 @@ Debug in this order:
 5. Confirm context-only iterations precede a consecutive full-batch decode
    range.
 6. Confirm all rank markers are `0..7` with identical fixed environment.
+7. For initialization stalls, use the controller heartbeat's `rank_progress`
+   to identify which ranks reached warmup completion, clock synchronization,
+   and executor worker start.
 
 Do not fix failures by reducing the global batch, splitting prefill across
 executor iterations, enabling overlap scheduling, weakening schedule

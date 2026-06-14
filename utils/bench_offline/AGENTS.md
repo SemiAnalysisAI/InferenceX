@@ -61,6 +61,9 @@ benchmark.
   TPOT for standard renderer fields, while retaining custom decode-round
   fields.
 - Keep launcher/controller/worker phase logs and 60-second heartbeats.
+  Heartbeats must retain the per-rank marker summary for warmup, clock sync,
+  and executor worker start; canceled Actions jobs may not preserve the
+  node-local worker log.
 - Verify with `python -m pytest utils/bench_offline -v`,
   `python -m compileall utils/bench_offline`, `bash -n` on both launchers, and
   YAML parsing of `.github/workflows/e2e-tests.yml`.

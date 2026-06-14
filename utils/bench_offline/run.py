@@ -89,11 +89,37 @@ def latest_worker_progress(worker_log: Path) -> str | None:
     return None
 
 
+def latest_rank_progress(marker_path: Path) -> str | None:
+    if not marker_path.exists():
+        return None
+    latest_by_rank: dict[int, str] = {}
+    for line in marker_path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+            if row.get("source") != "trt_mpi_entry":
+                continue
+            rank = int(row["rank"])
+            event = str(row["event"])
+        except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+            continue
+        latest_by_rank[rank] = event
+    if not latest_by_rank:
+        return None
+    ranks_by_event: dict[str, list[int]] = {}
+    for rank, event in latest_by_rank.items():
+        ranks_by_event.setdefault(event, []).append(rank)
+    return ",".join(
+        f"{event}:{sorted(ranks)}"
+        for event, ranks in sorted(ranks_by_event.items())
+    )
+
+
 def wait_for_worker_process(
     process: subprocess.Popen[Any],
     *,
     label: str,
     worker_log: Path,
+    marker_path: Path | None = None,
     started: float,
     timeout_seconds: int,
     heartbeat_seconds: float = PROGRESS_INTERVAL_SECONDS,
@@ -113,11 +139,17 @@ def wait_for_worker_process(
                     timeout_seconds,
                 ) from None
             latest = latest_worker_progress(worker_log)
-            detail = (
-                f"; last_worker_progress={latest}"
-                if latest is not None
-                else ""
+            details = []
+            if latest is not None:
+                details.append(f"last_worker_progress={latest}")
+            rank_progress = (
+                latest_rank_progress(marker_path)
+                if marker_path is not None
+                else None
             )
+            if rank_progress is not None:
+                details.append(f"rank_progress={rank_progress}")
+            detail = f"; {'; '.join(details)}" if details else ""
             log_progress(
                 f"{label}: still running elapsed={elapsed:.0f}s "
                 f"timeout={timeout_seconds}s{detail}; "
@@ -399,6 +431,7 @@ def main() -> int:
                     process,
                     label=experiment_id,
                     worker_log=worker_log,
+                    marker_path=marker_path,
                     started=started,
                     timeout_seconds=args.worker_timeout,
                 )
