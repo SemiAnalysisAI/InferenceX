@@ -3735,3 +3735,13 @@
     - "Layouts: TP8 / TP4 (latency), TP8+EP8 / TP4+EP4 (TEP), TP8+EP8 dp-attn (DEP) across 1k1k and 8k1k — non-MTP search space trimmed at the extreme-concurrency end, tp2-ep2 dropped, mirroring the minimaxm3-fp8-b300-vllm-mtp search space"
     - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, ported from nvidia/model.py) before serving — validates EAGLE3 on MI355X ahead of an image rebuild"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1745
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on MI300X / gfx942"
+    - "Image and serving shape reuse the MI355X recipe: vllm/vllm-openai-rocm:minimax-m3, block size 128, prefix caching disabled, TRITON_ATTN, language-model-only, and eager execution"
+    - "Use the default BF16 KV cache on MI300X because MiniMax-M3-MXFP8 lacks calibrated q/prob scales for ROCm FP8 attention; vLLM warns that its fallback scale of 1.0 may cause accuracy issues"
+    - "H100-aligned layouts and concurrency ranges: TP8 and TP8+EP8 across 1k1k and 8k1k"
+    - "Fix launch_mi300x-amds.sh node exclusion to use the current short Slurm node name"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1746
