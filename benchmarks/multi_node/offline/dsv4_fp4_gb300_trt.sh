@@ -42,15 +42,18 @@ RESULT_FILE="${GITHUB_WORKSPACE}/offline_result_${BENCH_ID}.json"
 RANK_MAP_FILE="${GITHUB_WORKSPACE}/offline_rank_map_${BENCH_ID}.tsv"
 TOPOLOGY_FILE="${GITHUB_WORKSPACE}/offline_topology_${BENCH_ID}.log"
 ALLOCATION_LOG="${GITHUB_WORKSPACE}/offline_allocation_${BENCH_ID}.log"
+COMPLETION_FILE="${GITHUB_WORKSPACE}/offline_completion_${BENCH_ID}.json"
 JOB_ID=""
 TELEMETRY_STEP_PID=""
 RANK_ENV_RECORDS=""
 SALLOC_PIPE_PID=""
+WORLD_STEP_PID=""
 rm -f \
     "$RESULT_FILE" \
     "$RANK_MAP_FILE" \
     "$TOPOLOGY_FILE" \
     "$ALLOCATION_LOG" \
+    "$COMPLETION_FILE" \
     "${GITHUB_WORKSPACE}/offline_gpu_metrics_${BENCH_ID}_"*.csv
 
 log() {
@@ -103,6 +106,13 @@ cleanup() {
     local rc=$?
     trap - EXIT
     set +e
+    if [[ -n "$JOB_ID" ]]; then
+        scancel "$JOB_ID" >/dev/null 2>&1 || true
+    fi
+    if [[ -n "$WORLD_STEP_PID" ]]; then
+        kill "$WORLD_STEP_PID" >/dev/null 2>&1 || true
+        wait "$WORLD_STEP_PID" >/dev/null 2>&1 || true
+    fi
     if [[ -n "$TELEMETRY_STEP_PID" ]]; then
         kill "$TELEMETRY_STEP_PID" >/dev/null 2>&1 || true
         wait "$TELEMETRY_STEP_PID" >/dev/null 2>&1 || true
@@ -113,9 +123,6 @@ cleanup() {
     if [[ -n "$SALLOC_PIPE_PID" ]]; then
         kill "$SALLOC_PIPE_PID" >/dev/null 2>&1 || true
         wait "$SALLOC_PIPE_PID" >/dev/null 2>&1 || true
-    fi
-    if [[ -n "$JOB_ID" ]]; then
-        scancel "$JOB_ID" >/dev/null 2>&1 || true
     fi
     if [[ ! -f "$RESULT_FILE" ]]; then
         if [[ "$rc" -eq 0 ]]; then
@@ -392,6 +399,8 @@ export TRT_BENCH_EXTERNAL_MPI="1"
 export TRT_BENCH_ALLOCATION_JOB_ID="$JOB_ID"
 export TRT_BENCH_ALLOCATION_NODE="${allocation_nodes[0]}"
 export TRT_BENCH_SLURM_NODELIST="$node_list"
+TRT_BENCH_COMPLETION_FILE="/workspace/$(basename "$COMPLETION_FILE")"
+export TRT_BENCH_COMPLETION_FILE
 TRT_BENCH_RANK_MAP_ARTIFACT="$(basename "$RANK_MAP_FILE")"
 TRT_BENCH_TOPOLOGY_ARTIFACT="$(basename "$TOPOLOGY_FILE")"
 export TRT_BENCH_RANK_MAP_ARTIFACT
@@ -465,6 +474,9 @@ CONTAINER_MOUNTS+=",${LOAD_BALANCER_ROOT}:/dsv4-eplb-configs"
 
 log "starting external TRT world with trtllm-llmapi-launch"
 log "image=$IMAGE model=$MODEL_PATH global_batch=$GLOBAL_BATCH_SIZE"
+world_started="$SECONDS"
+last_world_heartbeat=-1
+set +e
 srun \
     --jobid="$JOB_ID" \
     --overlap \
@@ -489,6 +501,91 @@ srun \
         fi
         exec trtllm-llmapi-launch \
             bash /workspace/benchmarks/single_node/offline/run_dsv4_trt_container.sh
-    '
+    ' &
+WORLD_STEP_PID=$!
+set -e
+
+while kill -0 "$WORLD_STEP_PID" >/dev/null 2>&1; do
+    if [[ -s "$COMPLETION_FILE" ]]; then
+        break
+    fi
+    world_elapsed=$((SECONDS - world_started))
+    if (( world_elapsed / 60 > last_world_heartbeat )); then
+        last_world_heartbeat=$((world_elapsed / 60))
+        rank_events=0
+        if [[ -s "$PERFECT_ROUTER_MARKER" ]]; then
+            rank_events="$(wc -l < "$PERFECT_ROUTER_MARKER")"
+        fi
+        result_ready=no
+        if [[ -s "$RESULT_FILE" ]]; then
+            result_ready=yes
+        fi
+        log "external TRT world active elapsed=${world_elapsed}s rank_events=$rank_events result_ready=$result_ready"
+    fi
+    sleep 1
+done
+
+if [[ ! -s "$COMPLETION_FILE" ]]; then
+    set +e
+    wait "$WORLD_STEP_PID"
+    world_rc=$?
+    set -e
+    WORLD_STEP_PID=""
+    for _ in 1 2 3 4 5; do
+        if [[ -s "$COMPLETION_FILE" ]]; then
+            break
+        fi
+        sleep 1
+    done
+    if [[ ! -s "$COMPLETION_FILE" ]]; then
+        log "external TRT world exited without controller completion return_code=$world_rc"
+        if [[ "$world_rc" -eq 0 ]]; then
+            exit 1
+        fi
+        exit "$world_rc"
+    fi
+fi
+
+read -r completion_rc completion_status result_status < <(
+    python3 - "$COMPLETION_FILE" "$RESULT_FILE" <<'PY'
+import json
+import sys
+
+completion_path, result_path = sys.argv[1:]
+with open(completion_path, encoding="utf-8") as stream:
+    completion = json.load(stream)
+return_code = int(completion["return_code"])
+completion_status = str(completion["result_status"])
+try:
+    with open(result_path, encoding="utf-8") as stream:
+        status = str(json.load(stream).get("status", "missing"))
+except FileNotFoundError:
+    status = "missing"
+print(return_code, completion_status, status)
+PY
+)
+world_elapsed=$((SECONDS - world_started))
+log "controller finalized elapsed=${world_elapsed}s return_code=$completion_rc completion_status=$completion_status result_status=$result_status"
+log "canceling Slurm allocation job=$JOB_ID to terminate external MPI management ranks"
+scancel "$JOB_ID" >/dev/null 2>&1 || true
+if [[ -n "$WORLD_STEP_PID" ]]; then
+    kill "$WORLD_STEP_PID" >/dev/null 2>&1 || true
+    set +e
+    wait "$WORLD_STEP_PID"
+    world_rc=$?
+    set -e
+    WORLD_STEP_PID=""
+else
+    world_rc="${world_rc:-0}"
+fi
+log "external TRT world stopped transport_return_code=$world_rc"
+
+if [[ "$completion_status" != "$result_status" ]]; then
+    log "completion/result status mismatch completion=$completion_status result=$result_status"
+    exit 1
+fi
+if [[ "$completion_rc" -ne 0 || "$result_status" != "success" ]]; then
+    exit 1
+fi
 
 log "GB300 benchmark command completed"

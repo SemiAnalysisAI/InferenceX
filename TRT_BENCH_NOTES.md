@@ -48,7 +48,9 @@ Fixed GB300 engine profile:
 - Load-balancer source is pinned to NVIDIA/srt-slurm
   `sa-submission-q2-2026`, SHA256
   `278da78f94be418d189015b18625ba2dbdfe03ee4be09e1a685f0e93708f681b`.
-- PDL enabled. ConfigurableMoE disabled to match the PR runtime path.
+- PDL and ConfigurableMoE enabled. The pinned TRT source defaults
+  `ENABLE_CONFIGURABLE_MOE` to `1`, and the PR recipe leaves that default
+  intact. `MEGAMOE_DEEPGEMM` needs the wrapper's concrete forward scheduler.
 - CUDA graph contains only the exact fixed local batch for each row.
 - Overlap remains disabled because this benchmark times synchronized decode
   rounds rather than the serving recipe's overlapped scheduler.
@@ -111,6 +113,7 @@ Artifacts unique to GB300:
 - `offline_rank_map_gbsN.tsv`
 - `offline_topology_gbsN.log`
 - `offline_gpu_metrics_gbsN_HOST.csv` for all four hosts
+- `offline_completion_gbsN.json`
 
 The topology log is proof that the allocation entered one 16-GPU NVLink
 Fabric domain before the measured engine was started. The result itself
@@ -159,6 +162,27 @@ The follow-up preseeds the rank environment on the host before
 controller now treats an `entry_failed` or `*_error` marker as terminal, so
 the same class of failure should stop on the next 60-second heartbeat instead
 of consuming the full timeout.
+
+Run `27508071804`, source
+`8ac00f61f2d48bf97b5c10c217d92d463da35e32`, reached Slurm allocation
+`8714` on `im-gb300-r01-c015` through `c018`. It proved the host-side
+environment propagation fix: all 16 ranks emitted `entry_ready` and reached
+engine warmup. About 24 seconds into warmup, every rank raised
+`NotImplementedError` from the abstract `MoE.forward_impl`. The profile had
+incorrectly forced `ENABLE_CONFIGURABLE_MOE=0`. At TRT source
+`34a563ac6d8cc0ca7068c7f619e869fb8a625333`, `create_moe()` defaults that
+variable to `1` and wraps `MegaMoEDeepGemm` in `ConfigurableMoE`; the
+successful PR #1689 run uses the same default. The controller wrote its failed
+result after roughly 189 seconds, but the outer `trtllm-llmapi-launch` rank
+world stayed alive until the Slurm allocation expired.
+
+The next canary enables ConfigurableMoE and adds an atomic completion record.
+Rank 0 publishes it only after copying `result.json` and creating the debug
+archive. The record contains the controller return code and copied result
+status. The host watches it, logs one-minute world progress, verifies that the
+statuses agree, and cancels the Slurm allocation immediately. Benchmark
+success comes from the controller result rather than the transport's expected
+post-cancel exit code.
 
 ## Why The Old Result Was Too High
 

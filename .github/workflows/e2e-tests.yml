@@ -148,6 +148,7 @@ jobs:
           rm -f "${{ github.workspace }}"/offline_rank_map_*.tsv
           rm -f "${{ github.workspace }}"/offline_topology_*.log
           rm -f "${{ github.workspace }}"/offline_allocation_*.log
+          rm -f "${{ github.workspace }}"/offline_completion_*.json
           rm -f "${{ github.workspace }}"/offline_debug_*.tar.gz
           rm -rf "${{ github.workspace }}"/.offline_work_*
 
@@ -214,6 +215,7 @@ jobs:
             offline_rank_map_${{ matrix.id }}.tsv
             offline_topology_${{ matrix.id }}.log
             offline_allocation_${{ matrix.id }}.log
+            offline_completion_${{ matrix.id }}.json
             offline_debug_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14

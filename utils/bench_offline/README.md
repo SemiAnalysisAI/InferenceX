@@ -51,13 +51,17 @@ NVL16 DEP16 target.
 | Profile | Nodes x GPUs | TRT image/source | Parallelism | MoE/KV |
 |---|---:|---|---|---|
 | `b300` | `1 x 8` | `ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066`, `c185066` | DEP8, TP8, EP8, attention DP | TRTLLM MoE, KV fraction `0.60` |
-| `gb300` | `4 x 4` in one NVLink domain | `nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1`, `34a563ac6d8cc0ca7068c7f619e869fb8a625333` | DEP16, TP16, EP16, attention DP | `MEGAMOE_DEEPGEMM`, EP16/384-slot load balancer, KV fraction `0.70` |
+| `gb300` | `4 x 4` in one NVLink domain | `nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1`, `34a563ac6d8cc0ca7068c7f619e869fb8a625333` | DEP16, TP16, EP16, attention DP | ConfigurableMoE + `MEGAMOE_DEEPGEMM`, EP16/384-slot load balancer, KV fraction `0.70` |
 
 The GB300 runtime/topology reference is
 [InferenceX PR #1689](https://github.com/SemiAnalysisAI/InferenceX/pull/1689).
 The offline path does not use Dynamo or srt-slurm; it reuses that PR's working
 image, four-node task layout, `trtllm-llmapi-launch`, and decode-engine
 configuration.
+
+The pinned TRT source defaults `ENABLE_CONFIGURABLE_MOE=1`, and the reference
+recipe leaves that default intact. The MegaMoE backend requires the
+`ConfigurableMoE` wrapper to provide the concrete forward scheduler.
 
 The prompt is built from pinned InfiniteBench `longbook_qa_eng.jsonl` data and
 DeepSeek-V4 chat formatting. Prompt construction fails instead of inserting
@@ -265,7 +269,7 @@ The headline fields are:
 ```text
 decode_round_tpot_ms
 decode_step_tput_per_gpu =
-    global_batch_size / decode_round_tpot_seconds / 8
+    global_batch_size / decode_round_tpot_seconds / active_gpu_count
 ```
 
 The generation output cap is 1025 tokens:
@@ -353,8 +357,11 @@ Artifacts:
 9. Run the short full-batch warmup.
 10. Run one measured generation.
 11. Validate and filter 256 iteration stats.
-12. Upload per-job result/debug/topology artifacts.
-13. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
+12. After result and debug files are finalized, atomically publish a
+    completion record and cancel the GB300 allocation to stop the external
+    MPI management ranks.
+13. Upload per-job result/debug/topology artifacts.
+14. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
 
 There is no HTTP server, request-rate generator, generic benchmark client,
 serial scheduler tuning, or normal InferenceX matrix processing.
@@ -424,6 +431,7 @@ Each job uploads:
 - `offline_allocation_gbsN.log` on GB300
 - `offline_rank_map_gbsN.tsv` on GB300
 - `offline_topology_gbsN.log` on GB300
+- `offline_completion_gbsN.json` on GB300
 - `offline_debug_gbsN.tar.gz`
 
 The debug archive contains the corpus manifest, worker log/result,
@@ -444,25 +452,29 @@ Debug in this order:
    and global ranks exactly `0..15`; confirm every fabric summary reports four
    GPUs, four `Completed` states, four `Success` statuses, and the same
    non-empty `ClusterUUID` and `CliqueId`.
-8. For initialization stalls, use the controller heartbeat's `rank_progress`
+8. Confirm `offline_completion_gbsN.json` has the same `result_status` as the
+   result and a matching return code. Its presence proves rank 0 finished
+   copying the result and creating the debug archive before the host canceled
+   the external MPI allocation.
+9. For initialization stalls, use the controller heartbeat's `rank_progress`
    to identify which ranks reached warmup completion, clock synchronization,
    and executor worker start.
-9. If ranks fail during shim installation, inspect `entry_failed` markers.
+10. If ranks fail during shim installation, inspect `entry_failed` markers.
    If there are only `sitecustomize` rows and no `entry_start`, confirm the
    host logged `preseeded external MPI rank environment` before
    `trtllm-llmapi-launch`.
-10. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
+11. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
    logged `engine initialization complete`.
-11. On B300 GBS128, confirm every rank emitted
+12. On B300 GBS128, confirm every rank emitted
    `attention_workspace_preallocated` with target and allocated bytes
    `27111981056`, and `cuda_graph_workspace_bytes=0`.
-12. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
+13. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
     reserve `12884901888`, minimum tokens `149504`, an exact
     configured-minus-adjusted delta, and adjusted bytes at least the reported
     minimum runtime KV bytes.
-13. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
+14. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
     exactly 131072 rows, two 65536-row chunks, and synchronized chunks.
-14. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
+15. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
     files around full prefill.
 
 Do not fix failures by reducing the global batch, splitting prefill across

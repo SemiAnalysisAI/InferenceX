@@ -127,8 +127,8 @@ def test_gb300_fixed_batches_do_not_need_b300_large_prefill_reserves():
 
 def test_gb300_rank_environment_enables_only_profile_runtime_flags():
     environment = fixed_environment(128, GB300_PROFILE)
-    assert environment["ENABLE_CONFIGURABLE_MOE"] == "0"
-    assert environment["TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"] == "0"
+    assert environment["ENABLE_CONFIGURABLE_MOE"] == "1"
+    assert environment["TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"] == "1"
     assert environment["TRTLLM_ENABLE_PDL"] == "1"
     assert environment[ATTENTION_WORKSPACE_ENV] == "0"
     assert environment[KV_PREFILL_RESERVE_ENV] == "0"

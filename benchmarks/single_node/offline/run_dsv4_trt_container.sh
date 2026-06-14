@@ -30,6 +30,7 @@ RESULT_FILE="/workspace/offline_result_${BENCH_ID}.json"
 CONTROLLER_LOG="/workspace/offline_controller_${BENCH_ID}.log"
 DEBUG_ARCHIVE="/workspace/offline_debug_${BENCH_ID}.tar.gz"
 GPU_METRICS="/workspace/offline_gpu_metrics_${BENCH_ID}.csv"
+COMPLETION_FILE="${TRT_BENCH_COMPLETION_FILE:-}"
 
 log() {
     printf '[offline-trt-launcher %s] %s\n' \
@@ -119,6 +120,36 @@ PY
         -czf "$DEBUG_ARCHIVE" \
         . 2>/dev/null || true
     log "artifacts finalized result=$RESULT_FILE debug=$DEBUG_ARCHIVE"
+    if [[ -n "$COMPLETION_FILE" ]]; then
+        completion_tmp="${COMPLETION_FILE}.tmp.$$"
+        result_status="$(
+            python3 - "$RESULT_FILE" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as stream:
+    print(str(json.load(stream).get("status", "missing")))
+PY
+        )"
+        log "publishing controller completion return_code=$rc result_status=$result_status path=$COMPLETION_FILE"
+        python3 - "$completion_tmp" "$rc" "$result_status" <<'PY'
+import json
+import sys
+
+path, return_code, result_status = sys.argv[1:]
+with open(path, "w", encoding="utf-8") as stream:
+    json.dump(
+        {
+            "return_code": int(return_code),
+            "result_status": result_status,
+        },
+        stream,
+        sort_keys=True,
+    )
+    stream.write("\n")
+PY
+        mv "$completion_tmp" "$COMPLETION_FILE"
+    fi
     exit "$rc"
 }
 trap finalize EXIT

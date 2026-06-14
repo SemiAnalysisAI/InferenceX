@@ -25,7 +25,9 @@ benchmark.
   topology/config reference is InferenceX PR #1689.
 - Keep TP16, EP16, attention DP, LM-head TP, MoE TP1,
   `MEGAMOE_DEEPGEMM`, the pinned EP16/384-slot load-balancer file, KV
-  fraction `0.70`, and PDL enabled.
+  fraction `0.70`, PDL, and ConfigurableMoE enabled. The pinned TRT source
+  defaults `ENABLE_CONFIGURABLE_MOE` to `1`; forcing it to `0` constructs the
+  MegaMoE base backend without the wrapper's concrete `forward_impl`.
 - GB300 local batches are `1`, `4`, and `8`; max token shapes are `8192`,
   `32768`, and `65536`. The B300-only attention workspace, 12 GiB KV reserve,
   FP8 quantizer guard, and oversized DeepGemm chunker must remain disabled.
@@ -44,7 +46,11 @@ benchmark.
   `offline_topology_gbsN.log`, `offline_allocation_gbsN.log`, and per-node
   GPU telemetry. The host launcher must stream `salloc` output and emit a
   one-minute pending-allocation heartbeat so queue time is not mistaken for
-  TRT initialization.
+  TRT initialization. After rank 0 has copied the result and archived debug
+  files, it must atomically publish `offline_completion_gbsN.json` with the
+  controller return code and result status; the host verifies both before
+  canceling the allocation so external MPI management ranks cannot hold the
+  job until its Slurm time limit.
 - The dispatchable workflow is `.github/workflows/e2e-tests.yml` with
   `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
   because every row consumes 16 GPUs.
@@ -123,7 +129,8 @@ benchmark.
   full-batch rounds are measured.
 - Preserve perfect routing, exact 8192-token real prompts, temperature 1,
   engine-global seed 42, LM-head TP, heuristic sparse top-k, and rank
-  environment validation. ConfigurableMoE remains enabled only on B300.
+  environment validation. ConfigurableMoE remains enabled on both profiles;
+  it is required by the GB300 `MEGAMOE_DEEPGEMM` path.
 - Do not enable `TLLM_METRICS_ALL_RANKS`; its per-iteration collective changes
   the timing path. Rank 0 stats are valid only after exact equal-length prompt
   routing and full-local-batch validation.
