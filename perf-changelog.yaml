@@ -3755,3 +3755,12 @@
     - "TP8-only search space (gfx942 192 GB is memory-tight, like H100): TP8 latency rows started at conc 1, TP8+EP8 (TEP) at high concurrency, across 1k1k and 8k1k"
     - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, upstream vllm-project/vllm#45546; validated green on MI355X) before serving — validates EAGLE3 on MI300X ahead of an image rebuild"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1749
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Replace the gfx942 BF16 MoE emulation path with a fused Triton MXFP8 backend that keeps expert weights compressed and applies 1x32 E8M0 scales in-kernel"
+    - "Normalize OCP E4M3FN checkpoint values to AMD E4M3FNUZ so the grouped expert GEMMs use native CDNA3 FP8 matrix cores"
+    - "Preserve the existing TP8 and TP8+EP8 search space, default BF16 KV cache, and BF16 dense-linear path"
+    - "Reduce model memory from 101.27 GiB to 53.18 GiB per GPU and increase available KV-cache memory from 69.35 GiB to 117.43 GiB"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753
