@@ -3764,3 +3764,9 @@
     - "Preserve the existing TP8 and TP8+EP8 search space, default BF16 KV cache, and BF16 dense-linear path"
     - "Reduce model memory from 101.27 GiB to 53.18 GiB per GPU and increase available KV-cache memory from 69.35 GiB to 117.43 GiB"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753
+  
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI300X and set VLLM_USE_BREAKABLE_CUDAGRAPH=0 per AMD guidance"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1750

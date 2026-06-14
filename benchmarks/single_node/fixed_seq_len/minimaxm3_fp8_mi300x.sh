@@ -49,6 +49,7 @@ fi
 
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -75,7 +76,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
-    --enforce-eager \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
