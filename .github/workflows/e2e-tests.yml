@@ -29,6 +29,11 @@ on:
         required: false
         type: string
         default: "7200"
+      worker-stack-period:
+        description: TRT all-thread stack dump period; -1 disables it
+        required: false
+        type: string
+        default: "-1"
 
 permissions:
   contents: read
@@ -100,6 +105,7 @@ jobs:
       TRT_BENCH_CACHE_ROOT: /data/trtllm-cache/dsv4-c185066-sm100a
       SALLOC_TIME_LIMIT: ${{ inputs.salloc-time }}
       WORKER_TIMEOUT: ${{ inputs.worker-timeout }}
+      TRTLLM_WORKER_PRINT_STACKS_PERIOD: ${{ inputs.worker-stack-period }}
       PYTHONDONTWRITEBYTECODE: "1"
       PYTHONPYCACHEPREFIX: /tmp/inferencex-offline-pycache
     steps:

@@ -203,6 +203,17 @@ RUN_ID=$(gh run list --repo SemiAnalysisAI/InferenceX \
 gh run watch "$RUN_ID" --repo SemiAnalysisAI/InferenceX --exit-status
 ```
 
+For an initialization hang, let the controller time out so the container
+finalizer preserves `worker.log`; do not cancel the Actions run externally.
+Enable TRT's built-in all-thread dumps:
+
+```bash
+-f 'inputs[worker-timeout]=900' \
+-f 'inputs[worker-stack-period]=120'
+```
+
+The normal benchmark default is `-1`, which disables stack dumps.
+
 ## Result Interpretation
 
 Authoritative offline row:

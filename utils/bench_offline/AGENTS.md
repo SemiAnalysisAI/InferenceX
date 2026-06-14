@@ -64,6 +64,10 @@ benchmark.
   Heartbeats must retain the per-rank marker summary for warmup, clock sync,
   and executor worker start; canceled Actions jobs may not preserve the
   node-local worker log.
+- For a readiness hang, dispatch with `worker-stack-period=120` and a short
+  controller timeout, then let the controller exit on its own so the debug
+  archive contains TRT's all-thread stack dumps. Keep the normal default at
+  `-1`; stack dumping changes logging overhead and is diagnostic only.
 - Verify with `python -m pytest utils/bench_offline -v`,
   `python -m compileall utils/bench_offline`, `bash -n` on both launchers, and
   YAML parsing of `.github/workflows/e2e-tests.yml`.
