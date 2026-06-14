@@ -137,6 +137,31 @@ expensive general/autotuner warmup shapes remain bounded. The run remains
 invalid unless schedule validation proves one local-batch-16 prefill and 256
 full-batch decode rounds.
 
+Run `27491160719` verified that correction: all eight ranks retained
+`runtime_max_tokens=131072`, capped only the synthetic context request, and
+completed engine warmup in about 335 seconds. After clock synchronization and
+executor-worker startup, TRT's 84087-token capacity probe tried to grow the
+non-graph MLA attention workspace from 12,953,234,944 to 16,600,658,432
+bytes. The pinned C++ op calls `resize_()` on that live CUDA tensor, and every
+rank then reported an illegal memory access. MPI stayed alive, so the old
+controller mislabeled the run as an 1800-second timeout.
+
+GBS128 now preallocates only the cached eager
+`TrtllmAttentionMetadata.workspace` before its first forward:
+
+```text
+200 KiB * 131072 runtime tokens + 256 MiB = 27111981056 bytes
+```
+
+That is above the observed approximately 192 KiB/token growth curve and
+includes fixed headroom. `cuda_graph_workspace` remains untouched because it
+is a separate small decode buffer. GBS16 and GBS64 set the reservation to
+zero. Every GBS128 rank must emit `attention_workspace_preallocated` with the
+exact target, an allocation at least that large, and zero CUDA-graph
+workspace bytes at hook time. The controller also treats TRT's native
+`Fatal error detected, initiating shutdown` line as terminal instead of
+waiting for a stuck MPI parent.
+
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA
 quantizer rejected the 65536-row MTP `h_proj` launch during engine warmup.

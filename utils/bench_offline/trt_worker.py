@@ -118,12 +118,21 @@ def arm_fixed_batch_request_barrier(
 
 
 def read_perfect_router_marker(path: Path) -> dict[str, Any]:
+    def rank_value(row: dict[str, Any]) -> int | None:
+        try:
+            return int(row["rank"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
     processes: dict[int, dict[str, Any]] = {}
+    events: dict[str, list[dict[str, Any]]] = {}
     if path.exists():
         for line in path.read_text(encoding="utf-8").splitlines():
             try:
                 row = json.loads(line)
                 processes[int(row["pid"])] = row
+                if row.get("source") == "trt_mpi_entry":
+                    events.setdefault(str(row.get("event")), []).append(row)
             except (KeyError, TypeError, ValueError, json.JSONDecodeError):
                 continue
     mpi_entries = [
@@ -151,6 +160,27 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
                 for row in mpi_entries_with_cache
             }
         ),
+        "event_ranks": {
+            event: sorted(
+                {
+                    rank
+                    for row in rows
+                    if (rank := rank_value(row)) is not None
+                }
+            )
+            for event, rows in sorted(events.items())
+        },
+        "events": {
+            event: sorted(
+                rows,
+                key=lambda row: (
+                    rank_value(row) is None,
+                    rank_value(row) or 0,
+                    int(row["pid"]),
+                ),
+            )
+            for event, rows in sorted(events.items())
+        },
         "processes": sorted(processes.values(), key=lambda row: row["pid"]),
     }
 
@@ -235,6 +265,36 @@ def validate_rank_propagation(
             "Benchmark environment did not reach every TRT rank: "
             f"{environment_mismatches}"
         )
+    workspace_target = int(
+        rank_environment["TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"]
+    )
+    if workspace_target > 0:
+        event_name = "attention_workspace_preallocated"
+        workspace_ranks = marker["event_ranks"].get(event_name, [])
+        if workspace_ranks != expected_ranks:
+            raise RuntimeError(
+                "TRT eager attention workspace was not reserved on every "
+                f"rank: {workspace_ranks!r} != {expected_ranks!r}"
+            )
+        invalid_workspace_rows = [
+            {
+                "rank": row.get("rank"),
+                "target_bytes": row.get("target_bytes"),
+                "allocated_bytes": row.get("allocated_bytes"),
+                "cuda_graph_workspace_bytes": row.get(
+                    "cuda_graph_workspace_bytes"
+                ),
+            }
+            for row in marker["events"][event_name]
+            if int(row.get("target_bytes", -1)) != workspace_target
+            or int(row.get("allocated_bytes", -1)) < workspace_target
+            or int(row.get("cuda_graph_workspace_bytes", -1)) != 0
+        ]
+        if invalid_workspace_rows:
+            raise RuntimeError(
+                "TRT eager attention workspace reservation mismatch: "
+                f"{invalid_workspace_rows}"
+            )
     expected_cache = os.getenv("CUTE_DSL_CACHE_DIR")
     if not expected_cache:
         raise RuntimeError("CUTE_DSL_CACHE_DIR is required")

@@ -38,6 +38,13 @@ MOE_MAX_NUM_TOKENS = WORLD_SIZE * INPUT_TOKENS
 # at runtime capacity because DeepSeek-V4 attention metadata allocates lazily
 # from it on the first forward pass.
 ENGINE_WARMUP_MAX_TOKENS = WORLD_SIZE * INPUT_TOKENS
+# The pinned TRT MLA context workspace grows by about 192 KiB per scheduled
+# context token. Reserve a slightly larger linear budget plus fixed headroom
+# before the first forward so the C++ attention op never resizes its live CUDA
+# tensor during GBS128 capacity calibration.
+ATTENTION_WORKSPACE_BYTES_PER_TOKEN = 200 * 1024
+ATTENTION_WORKSPACE_HEADROOM_BYTES = 256 * 1024 * 1024
+ATTENTION_WORKSPACE_ENV = "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"
 # The pinned fused packed-FP8 quantizer fails its CUDA launch for the
 # 65536-row MTP projection used by GBS64 prefill. Keep the fused decode path,
 # but select TRT's existing Triton quantizer for larger prefill matrices.
@@ -57,6 +64,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     "TLLM_TORCH_PROFILE_TRACE",
     "TRTLLM_BENCH_DSV4_PATCHED_SHA256",
     "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
+    ATTENTION_WORKSPACE_ENV,
     "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
     "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
     FIXED_BATCH_ARM_ENV,
@@ -124,6 +132,17 @@ def local_batch_size(global_batch_size: int) -> int:
 def max_num_tokens(global_batch_size: int) -> int:
     """Allow every local-rank prompt to prefill in the same iteration."""
     return local_batch_size(global_batch_size) * INPUT_TOKENS
+
+
+def attention_workspace_target_bytes(global_batch_size: int) -> int:
+    """Return the eager attention workspace reservation for this batch."""
+    runtime_tokens = max_num_tokens(global_batch_size)
+    if runtime_tokens <= ENGINE_WARMUP_MAX_TOKENS:
+        return 0
+    return (
+        runtime_tokens * ATTENTION_WORKSPACE_BYTES_PER_TOKEN
+        + ATTENTION_WORKSPACE_HEADROOM_BYTES
+    )
 
 
 def build_llm_kwargs(
@@ -199,6 +218,9 @@ def fixed_environment(global_batch_size: int) -> dict[str, str]:
     return {
         "ENABLE_CONFIGURABLE_MOE": configurable,
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": configurable,
+        ATTENTION_WORKSPACE_ENV: str(
+            attention_workspace_target_bytes(global_batch_size)
+        ),
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
             ENGINE_WARMUP_MAX_TOKENS
         ),

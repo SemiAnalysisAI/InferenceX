@@ -4,6 +4,9 @@ import pytest
 
 from trt_config import (
     ALLOWED_GLOBAL_BATCH_SIZES,
+    ATTENTION_WORKSPACE_BYTES_PER_TOKEN,
+    ATTENTION_WORKSPACE_ENV,
+    ATTENTION_WORKSPACE_HEADROOM_BYTES,
     CONTROLLED_ENVIRONMENT_VARIABLES,
     ENGINE_WARMUP_MAX_TOKENS,
     FIXED_BATCH_ARM_ENV,
@@ -15,6 +18,7 @@ from trt_config import (
     MEASURED_OUTPUT_TOKENS,
     MOE_MAX_NUM_TOKENS,
     WARMUP_OUTPUT_TOKENS,
+    attention_workspace_target_bytes,
     benchmark_environment,
     build_llm_kwargs,
     fixed_environment,
@@ -61,6 +65,16 @@ def test_huawei_round_and_sequence_capacity_is_fixed():
     assert MAX_SEQ_LEN == 9344
 
 
+def test_attention_workspace_reservation_only_applies_above_warmup_cap():
+    assert attention_workspace_target_bytes(16) == 0
+    assert attention_workspace_target_bytes(64) == 0
+    assert attention_workspace_target_bytes(128) == (
+        131072 * ATTENTION_WORKSPACE_BYTES_PER_TOKEN
+        + ATTENTION_WORKSPACE_HEADROOM_BYTES
+    )
+    assert attention_workspace_target_bytes(128) == 27_111_981_056
+
+
 def test_llm_kwargs_force_synchronized_dep8_iteration_stats():
     kwargs = build_llm_kwargs("/model", 64)
     assert kwargs["tensor_parallel_size"] == 8
@@ -81,6 +95,7 @@ def test_fixed_rank_environment_is_explicit():
     assert fixed_environment(64) == {
         "ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
+        ATTENTION_WORKSPACE_ENV: "0",
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
             ENGINE_WARMUP_MAX_TOKENS
         ),
@@ -105,6 +120,7 @@ def test_benchmark_environment_adds_absolute_barrier_arm_path(tmp_path):
 def test_old_tuning_environment_is_always_cleared():
     assert {
         "TLLM_METRICS_ALL_RANKS",
+        ATTENTION_WORKSPACE_ENV,
         FIXED_BATCH_ARM_ENV,
         "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
         "TRTLLM_ENABLE_PDL",

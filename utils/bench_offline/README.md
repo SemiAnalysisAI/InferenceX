@@ -65,6 +65,7 @@ max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
 synthetic pure-context warmup request = min(max_num_tokens, 65536)
+GBS128 eager attention workspace = 200 KiB * max_num_tokens + 256 MiB
 kv_cache.free_gpu_memory_fraction = 0.60
 moe.max_num_tokens = 65536
 fused FP8 quantizer max rows = 32768
@@ -97,6 +98,19 @@ allocated 65536-token buffers and made the later 84087-token KV-capacity probe
 fail in run `27490833024`. Runtime buffers now retain full capacity. A result
 is still accepted only if the schedule proof shows one complete
 local-batch-16 prefill and 256 consecutive local-batch-16 decode iterations.
+
+Run `27491160719` proved the runtime metadata fix and completed all-rank engine
+warmup in about 335 seconds. It then exposed a separate pinned TRT defect:
+the non-graph MLA attention workspace had been sized to 12,953,234,944 bytes
+by the capped 65536-token warmup. The later 84087-token capacity probe tried
+to resize that live CUDA tensor to 16,600,658,432 bytes and all ranks reported
+an illegal memory access. GBS128 now reserves 27,111,981,056 bytes on
+`TrtllmAttentionMetadata.workspace` immediately after the full-capacity
+metadata object is created. This is the 131072-token runtime budget at
+200 KiB/token plus 256 MiB headroom. The separate
+`cuda_graph_workspace` remains untouched; it is small and decode-specific.
+GBS16 and GBS64 reserve nothing because their full runtime shape is already
+covered by the 65536-token warmup.
 
 The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
 65536-row MTP projection produced by GBS64 prefill. Every rank installs a
@@ -241,8 +255,9 @@ using each stack's observed or published MTP yield.
 4. Build the exact 8192-token corpus.
 5. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
    GBS-derived value while synthetic pure-context warmup requests are capped
-   at 65536 tokens. TRT's internal capacity probes run while the benchmark
-   request gate is disarmed.
+   at 65536 tokens. At GBS128, reserve the full-runtime non-graph attention
+   workspace before the first forward. TRT's internal capacity probes run
+   while the benchmark request gate is disarmed.
 6. Atomically arm the fixed-batch request gate after engine initialization.
 7. Run the short full-batch warmup.
 8. Run one measured generation.
@@ -333,6 +348,9 @@ Debug in this order:
    and executor worker start.
 8. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
    logged `engine initialization complete`.
+9. At GBS128, confirm every rank emitted
+   `attention_workspace_preallocated` with target and allocated bytes
+   `27111981056`, and `cuda_graph_workspace_bytes=0`.
 
 Do not fix failures by reducing the global batch, splitting prefill across
 executor iterations, enabling overlap scheduling, weakening schedule

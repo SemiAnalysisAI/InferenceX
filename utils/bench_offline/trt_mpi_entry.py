@@ -133,6 +133,114 @@ def _install_engine_warmup_shape_cap() -> dict[str, Any]:
     }
 
 
+def _install_attention_workspace_preallocation() -> dict[str, Any]:
+    target_bytes = int(
+        os.environ["TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"]
+    )
+    if target_bytes < 0:
+        raise RuntimeError(
+            "TRT attention workspace reservation cannot be negative"
+        )
+    if target_bytes == 0:
+        return {
+            "enabled": False,
+            "target_bytes": 0,
+            "target": None,
+            "already_installed": False,
+        }
+
+    from tensorrt_llm._torch.pyexecutor import model_engine
+
+    model_engine_class = model_engine.PyTorchModelEngine
+    set_up_metadata = model_engine_class._set_up_attn_metadata
+    installed_target = getattr(
+        set_up_metadata,
+        "_offline_attention_workspace_target_bytes",
+        None,
+    )
+    if installed_target is not None:
+        if int(installed_target) != target_bytes:
+            raise RuntimeError(
+                "TRT attention workspace hook already has target "
+                f"{installed_target}, requested {target_bytes}"
+            )
+        return {
+            "enabled": True,
+            "target_bytes": target_bytes,
+            "target": (
+                f"{model_engine_class.__name__}._set_up_attn_metadata"
+            ),
+            "already_installed": True,
+        }
+
+    def set_up_metadata_with_reserved_workspace(
+        engine: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        metadata = set_up_metadata(engine, *args, **kwargs)
+        # No-cache metadata is transient. Reserve the large buffer only on the
+        # cached runtime metadata used by context prefill and calibration.
+        if getattr(engine, "attn_metadata", None) is not metadata:
+            return metadata
+        workspace = getattr(metadata, "workspace", None)
+        if workspace is None:
+            raise RuntimeError(
+                "TRT attention metadata did not create an eager workspace"
+            )
+        element_size = int(workspace.element_size())
+        if element_size <= 0:
+            raise RuntimeError(
+                "TRT attention workspace has an invalid element size"
+            )
+        previous_bytes = int(workspace.numel()) * element_size
+        if previous_bytes >= target_bytes:
+            return metadata
+        target_elements = (
+            target_bytes + element_size - 1
+        ) // element_size
+        reserved = workspace.new_empty((target_elements,))
+        allocated_bytes = int(reserved.numel()) * int(
+            reserved.element_size()
+        )
+        metadata.workspace = reserved
+        cuda_graph_workspace = getattr(
+            metadata,
+            "cuda_graph_workspace",
+            None,
+        )
+        cuda_graph_workspace_bytes = (
+            0
+            if cuda_graph_workspace is None
+            else int(cuda_graph_workspace.numel())
+            * int(cuda_graph_workspace.element_size())
+        )
+        _emit_rank_event(
+            "attention_workspace_preallocated",
+            runtime_max_tokens=int(engine.max_num_tokens),
+            previous_bytes=previous_bytes,
+            target_bytes=target_bytes,
+            allocated_bytes=allocated_bytes,
+            cuda_graph_workspace_bytes=cuda_graph_workspace_bytes,
+        )
+        return metadata
+
+    setattr(
+        set_up_metadata_with_reserved_workspace,
+        "_offline_attention_workspace_target_bytes",
+        target_bytes,
+    )
+    model_engine_class._set_up_attn_metadata = (
+        set_up_metadata_with_reserved_workspace
+    )
+    return {
+        "enabled": True,
+        "target_bytes": target_bytes,
+        "target": f"{model_engine_class.__name__}._set_up_attn_metadata",
+        "already_installed": False,
+    }
+
+
 def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
     max_fused_rows = int(
         os.environ["TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"]
@@ -381,6 +489,9 @@ def _write_marker(event: str = "entry_ready", **details: Any) -> None:
         "engine_warmup_max_tokens": os.getenv(
             "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"
         ),
+        "attention_workspace_target_bytes": os.getenv(
+            "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES"
+        ),
         "fp8_fused_quant_max_rows": os.getenv(
             "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
         ),
@@ -407,6 +518,7 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     if cute_cache_dir:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
     warmup_cap = _install_engine_warmup_shape_cap()
+    attention_workspace = _install_attention_workspace_preallocation()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
     lifecycle_trace = _install_executor_lifecycle_trace()
     fixed_batch_barrier = _install_fixed_batch_request_barrier()
@@ -425,6 +537,14 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
         f"target={warmup_cap['target']} "
         f"trace_target={warmup_cap['trace_target']} "
         f"already_installed={warmup_cap['already_installed']}",
+        flush=True,
+    )
+    print(
+        "[offline-trt-mpi] eager attention workspace reservation "
+        f"enabled={attention_workspace['enabled']} "
+        f"target_bytes={attention_workspace['target_bytes']} "
+        f"target={attention_workspace['target']} "
+        f"already_installed={attention_workspace['already_installed']}",
         flush=True,
     )
     print(

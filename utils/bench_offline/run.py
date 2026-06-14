@@ -34,6 +34,7 @@ from trt_config import (
     SAMPLING_TOP_K,
     SAMPLING_TOP_P,
     WORLD_SIZE,
+    attention_workspace_target_bytes,
     benchmark_environment,
     local_batch_size,
     max_num_tokens,
@@ -49,6 +50,13 @@ DEFAULT_IMAGE = (
 PROGRESS_INTERVAL_SECONDS = 60.0
 WORKER_PROGRESS_PREFIX = "[offline-trt-worker "
 MPI_PROGRESS_PREFIX = "[offline-trt-mpi] "
+WORKER_FATAL_LOG_MARKERS = (
+    "Fatal error detected, initiating shutdown",
+)
+
+
+class WorkerFatalLogError(RuntimeError):
+    """A native TRT rank failed while its parent process remained alive."""
 
 
 def utc_now() -> str:
@@ -115,6 +123,13 @@ def latest_rank_progress(marker_path: Path) -> str | None:
     )
 
 
+def latest_worker_fatal(worker_log: Path) -> str | None:
+    for line in reversed(tail_text(worker_log).splitlines()):
+        if any(marker in line for marker in WORKER_FATAL_LOG_MARKERS):
+            return line.strip()
+    return None
+
+
 def wait_for_worker_process(
     process: subprocess.Popen[Any],
     *,
@@ -139,6 +154,9 @@ def wait_for_worker_process(
                     process.args,
                     timeout_seconds,
                 ) from None
+            fatal_line = latest_worker_fatal(worker_log)
+            if fatal_line is not None:
+                raise WorkerFatalLogError(fatal_line)
             latest = latest_worker_progress(worker_log)
             details = []
             if latest is not None:
@@ -229,6 +247,11 @@ def classify_failure(
     if "out of memory" in text or "cuda_error_out_of_memory" in text:
         return "oom"
     if (
+        "illegal memory access" in text
+        or "cuda_error_illegal_address" in text
+    ):
+        return "cuda_illegal_address"
+    if (
         "exceeds max_batch_size" in text
         or "exceeds max_num_tokens" in text
         or "kv cache" in text
@@ -287,6 +310,7 @@ def main() -> int:
             "generated_output_tokens": MEASURED_OUTPUT_TOKENS,
             "mtp_max_draft_len": MTP_DRAFT_TOKENS,
             "max_seq_len": MAX_SEQ_LEN,
+            "attention_workspace_target_bytes": None,
             "warmup_decode_rounds": HUAWEI_WARMUP_DECODE_ROUNDS,
             "measured_decode_rounds": HUAWEI_MEASURED_DECODE_ROUNDS,
             "sampling": {
@@ -344,6 +368,9 @@ def main() -> int:
         base_result["benchmark"]["local_batch_size"] = local_batch
         base_result["benchmark"]["max_num_tokens"] = max_num_tokens(
             args.global_batch_size
+        )
+        base_result["benchmark"]["attention_workspace_target_bytes"] = (
+            attention_workspace_target_bytes(args.global_batch_size)
         )
         write_json(result_path, base_result)
 
@@ -423,10 +450,13 @@ def main() -> int:
             f"global_batch={args.global_batch_size} "
             f"local_batch={local_batch} "
             f"max_num_tokens={max_num_tokens(args.global_batch_size)} "
+            "attention_workspace_bytes="
+            f"{attention_workspace_target_bytes(args.global_batch_size)} "
             f"fixed_batch_arm_file={fixed_batch_arm_path}"
         )
         started = time.perf_counter()
         timed_out = False
+        fatal_log_error: str | None = None
         with worker_log.open("w", encoding="utf-8") as log_stream:
             process = subprocess.Popen(
                 command,
@@ -448,6 +478,14 @@ def main() -> int:
                 timed_out = True
                 terminate_process_group(process)
                 return_code = process.returncode
+            except WorkerFatalLogError as error:
+                fatal_log_error = str(error)
+                log_progress(
+                    f"{experiment_id}: fatal TRT worker log detected; "
+                    "terminating process group"
+                )
+                terminate_process_group(process)
+                return_code = process.returncode
         elapsed = time.perf_counter() - started
 
         if worker_output.exists():
@@ -457,12 +495,20 @@ def main() -> int:
                 "schema_version": 2,
                 "status": "failed",
                 "phase": "worker_process",
-                "error_type": "WorkerProcessError",
+                "error_type": (
+                    "WorkerFatalLogError"
+                    if fatal_log_error
+                    else "WorkerProcessError"
+                ),
                 "error": (
-                    f"Worker timed out after {args.worker_timeout}s"
-                    if timed_out
-                    else (
-                        f"Worker exited {return_code} without an output file"
+                    fatal_log_error
+                    or (
+                        f"Worker timed out after {args.worker_timeout}s"
+                        if timed_out
+                        else (
+                            "Worker exited "
+                            f"{return_code} without an output file"
+                        )
                     )
                 ),
             }
@@ -471,6 +517,7 @@ def main() -> int:
             {
                 "return_code": return_code,
                 "timed_out": timed_out,
+                "fatal_log_error": fatal_log_error,
                 "elapsed_seconds": elapsed,
                 "worker_output": worker_output.name,
                 "worker_log": worker_log.name,

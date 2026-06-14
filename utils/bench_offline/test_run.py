@@ -13,10 +13,13 @@ from run import (
     classify_failure,
     git_revision,
     latest_rank_progress,
+    latest_worker_fatal,
     latest_worker_progress,
+    WorkerFatalLogError,
     wait_for_worker_process,
 )
 from trt_mpi_entry import (
+    _install_attention_workspace_preallocation,
     _install_engine_warmup_shape_cap,
     _install_fixed_batch_request_barrier,
     _install_large_prefill_fp8_quant_guard,
@@ -25,6 +28,7 @@ from trt_mpi_entry import (
 from trt_worker import (
     arm_fixed_batch_request_barrier,
     read_perfect_router_marker,
+    validate_rank_propagation,
 )
 
 
@@ -54,6 +58,13 @@ def test_classify_capacity_failure():
 
 def test_classify_timeout():
     assert classify_failure({}, "", timed_out=True) == "timeout"
+
+
+def test_classify_cuda_illegal_address():
+    assert (
+        classify_failure({}, "CUDA error: an illegal memory access")
+        == "cuda_illegal_address"
+    )
 
 
 def test_git_revision_prefers_explicit_benchmark_revision(monkeypatch):
@@ -152,6 +163,32 @@ def test_wait_for_worker_process_reports_heartbeat(tmp_path, capsys):
     output = capsys.readouterr().out
     assert "gbs16: still running" in output
     assert "last_worker_progress=engine initialization start" in output
+
+
+def test_wait_for_worker_process_stops_on_native_fatal_log(tmp_path):
+    class FakeProcess:
+        args = ["fake-worker"]
+
+        def wait(self, timeout):
+            raise subprocess.TimeoutExpired(self.args, timeout)
+
+    worker_log = tmp_path / "worker.log"
+    fatal_line = (
+        "[TRT-LLM] Fatal error detected, initiating shutdown: "
+        "CUDA error: an illegal memory access was encountered"
+    )
+    worker_log.write_text(fatal_line + "\n", encoding="utf-8")
+
+    assert latest_worker_fatal(worker_log) == fatal_line
+    with pytest.raises(WorkerFatalLogError, match="initiating shutdown"):
+        wait_for_worker_process(
+            FakeProcess(),
+            label="gbs128",
+            worker_log=worker_log,
+            started=time.perf_counter(),
+            timeout_seconds=10,
+            heartbeat_seconds=0.01,
+        )
 
 
 def test_mpi_entry_sets_fixed_environment_before_real_worker(
@@ -274,6 +311,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     expected = {
         "ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "0",
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": "65536",
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": "32768",
         "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE": str(fixed_batch_arm_file),
@@ -306,6 +344,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     )
     monkeypatch.setenv("TRTLLM_BENCH_GLOBAL_BATCH_SIZE", "64")
     monkeypatch.setenv(
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES",
+        "0",
+    )
+    monkeypatch.setenv(
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
         "65536",
     )
@@ -327,6 +369,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["fixed_batch_arm_file"] == str(fixed_batch_arm_file)
     assert row["fixed_batch_barrier_armed"] is False
     assert row["engine_warmup_max_tokens"] == "65536"
+    assert row["attention_workspace_target_bytes"] == "0"
     assert row["fp8_fused_quant_max_rows"] == "32768"
     assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "1"
     assert row["source"] == "trt_mpi_entry"
@@ -412,6 +455,96 @@ def test_engine_warmup_shape_cap_preserves_runtime_capacity(monkeypatch):
         (16384, 0),
         (16, 16),
     ]
+
+
+def test_attention_workspace_preallocation_keeps_graph_workspace(
+    tmp_path,
+    monkeypatch,
+):
+    allocations = []
+
+    class FakeTensor:
+        def __init__(self, elements, element_bytes=1):
+            self.elements = elements
+            self.element_bytes = element_bytes
+
+        def numel(self):
+            return self.elements
+
+        def element_size(self):
+            return self.element_bytes
+
+        def new_empty(self, shape):
+            tensor = FakeTensor(shape[0], self.element_bytes)
+            allocations.append(tensor)
+            return tensor
+
+    eager_workspace = FakeTensor(4)
+    graph_workspace = FakeTensor(7)
+
+    class FakePyTorchModelEngine:
+        def __init__(self):
+            self.max_num_tokens = 131072
+            self.attn_metadata = None
+
+        def _set_up_attn_metadata(self, kv_cache_manager):
+            if self.attn_metadata is None:
+                self.attn_metadata = SimpleNamespace(
+                    workspace=eager_workspace,
+                    cuda_graph_workspace=graph_workspace,
+                )
+            return self.attn_metadata
+
+    model_engine_module = ModuleType(
+        "tensorrt_llm._torch.pyexecutor.model_engine"
+    )
+    model_engine_module.PyTorchModelEngine = FakePyTorchModelEngine
+    pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
+    pyexecutor_module.__path__ = []
+    pyexecutor_module.model_engine = model_engine_module
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor",
+        pyexecutor_module,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor.model_engine",
+        model_engine_module,
+    )
+    marker = tmp_path / "marker.jsonl"
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES",
+        "100",
+    )
+    monkeypatch.setenv("TRTLLM_PERFECT_ROUTER_MARKER", str(marker))
+    monkeypatch.setenv("OMPI_COMM_WORLD_RANK", "3")
+
+    installed = _install_attention_workspace_preallocation()
+    engine = FakePyTorchModelEngine()
+    first = engine._set_up_attn_metadata(object())
+    first_reserved = first.workspace
+    second = engine._set_up_attn_metadata(object())
+
+    assert installed == {
+        "enabled": True,
+        "target_bytes": 100,
+        "target": "FakePyTorchModelEngine._set_up_attn_metadata",
+        "already_installed": False,
+    }
+    assert first is second
+    assert first_reserved.numel() == 100
+    assert second.workspace is first_reserved
+    assert second.cuda_graph_workspace is graph_workspace
+    assert allocations == [first_reserved]
+    event = json.loads(marker.read_text(encoding="utf-8"))
+    assert event["event"] == "attention_workspace_preallocated"
+    assert event["rank"] == "3"
+    assert event["runtime_max_tokens"] == 131072
+    assert event["previous_bytes"] == 4
+    assert event["target_bytes"] == 100
+    assert event["allocated_bytes"] == 100
+    assert event["cuda_graph_workspace_bytes"] == 7
 
 
 def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
@@ -561,6 +694,7 @@ def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
             "rank": str(rank),
             "perfect_router": "1",
             "cute_dsl_cache_dir": "/cache",
+            "event": "entry_ready",
             "source": "trt_mpi_entry",
         }
         for rank in range(8)
@@ -574,3 +708,47 @@ def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
     assert parsed["mpi_entry_ranks"] == list(range(8))
     assert parsed["mpi_entry_cute_cache_processes"] == 8
     assert parsed["mpi_entry_cute_cache_paths"] == ["/cache"]
+    assert parsed["event_ranks"]["entry_ready"] == list(range(8))
+
+
+def test_rank_validation_requires_exact_attention_workspace_events(
+    tmp_path,
+    monkeypatch,
+):
+    marker = tmp_path / "marker.jsonl"
+    rank_environment = {
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "100",
+    }
+    rows = [
+        {
+            "pid": 100 + rank,
+            "rank": str(rank),
+            "perfect_router": "1",
+            "cute_dsl_cache_dir": "/cache",
+            "benchmark_environment": rank_environment,
+            "event": "attention_workspace_preallocated",
+            "target_bytes": 100,
+            "allocated_bytes": 100,
+            "cuda_graph_workspace_bytes": 0,
+            "source": "trt_mpi_entry",
+        }
+        for rank in range(8)
+    ]
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CUTE_DSL_CACHE_DIR", "/cache")
+
+    parsed = validate_rank_propagation(marker, rank_environment)
+    assert parsed["event_ranks"][
+        "attention_workspace_preallocated"
+    ] == list(range(8))
+
+    rows[-1]["cuda_graph_workspace_bytes"] = 1
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="reservation mismatch"):
+        validate_rank_propagation(marker, rank_environment)

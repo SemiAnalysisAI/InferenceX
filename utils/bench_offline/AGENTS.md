@@ -25,6 +25,13 @@ benchmark.
   that failed on the 84087-token KV-capacity probe. The runtime field must stay
   131072 for GBS128. Never treat the synthetic request cap as permission to
   split or shrink the validated full-batch prefill.
+- Keep the GBS128 eager attention workspace reservation at
+  `200 KiB * 131072 + 256 MiB = 27111981056` bytes. Run `27491160719` showed
+  the capped warmup allocate 12953234944 bytes, then TRT attempted an in-place
+  resize to 16600658432 bytes for its 84087-token capacity probe and hit an
+  illegal memory access on every rank. Reserve only
+  `TrtllmAttentionMetadata.workspace` when the cached runtime metadata is
+  created. Do not preallocate or replace `cuda_graph_workspace`.
 - Keep the rank-local packed-FP8 guard at 32768 rows. It selects TRT's Triton
   quantizer only for large GBS64/128 prefill projections; measured decode has
   at most 16 rows and stays on the original fused path.
@@ -70,6 +77,9 @@ benchmark.
   Heartbeats must retain the per-rank marker summary for warmup, clock sync,
   and executor worker start; canceled Actions jobs may not preserve the
   node-local worker log.
+- Treat TRT's `Fatal error detected, initiating shutdown` line as terminal.
+  The MPI parent can remain alive after all ranks fail, so waiting for the
+  full controller timeout only hides the real error and wastes the node.
 - For a readiness hang, dispatch with `worker-stack-period=120` and a short
   controller timeout, then let the controller exit on its own so the debug
   archive contains TRT's all-thread stack dumps. Keep the normal default at
