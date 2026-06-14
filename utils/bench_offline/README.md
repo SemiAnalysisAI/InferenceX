@@ -64,6 +64,7 @@ local_batch_size = global_batch_size / 8
 max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
+synthetic engine warmup max_num_tokens = min(max_num_tokens, 65536)
 kv_cache.free_gpu_memory_fraction = 0.60
 moe.max_num_tokens = 65536
 fused FP8 quantizer max rows = 32768
@@ -83,6 +84,16 @@ into prefill. The fixed 65536-token MoE cap applies inside a fused-MoE
 invocation. It lets TRT internally chunk the very large prefill/autotune
 tensor while the executor still schedules the complete local batch in one
 prefill iteration.
+
+TRT's internal `ModelEngine.warmup()` otherwise profiles tunable operators
+with the full runtime `max_num_tokens`. At GBS128 that means a synthetic
+131072-token prefill shape and can spend hours in initialization. The
+branch-local MPI shim temporarily caps only this synthetic engine warmup at
+65536 tokens, then restores `max_num_tokens=131072` before the benchmark's
+real warmup and measured generations. This is not a runtime capacity
+reduction: a result is accepted only if the later schedule proof shows one
+complete local-batch-16 prefill and 256 consecutive local-batch-16 decode
+iterations.
 
 The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
 65536-row MTP projection produced by GBS64 prefill. Every rank installs a
@@ -213,7 +224,8 @@ using each stack's observed or published MTP yield.
 2. Fan out one job per requested global batch.
 3. Allocate one exclusive eight-GPU B300 Slurm node per job.
 4. Build the exact 8192-token corpus.
-5. Start one fresh TensorRT-LLM engine.
+5. Start one fresh TensorRT-LLM engine, with synthetic tuning capped at 65536
+   tokens and runtime capacity restored afterward.
 6. Run the short full-batch warmup.
 7. Run one measured generation.
 8. Validate and filter 256 iteration stats.

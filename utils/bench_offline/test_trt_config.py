@@ -5,6 +5,7 @@ import pytest
 from trt_config import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     CONTROLLED_ENVIRONMENT_VARIABLES,
+    ENGINE_WARMUP_MAX_TOKENS,
     FP8_FUSED_QUANT_MAX_ROWS,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
@@ -78,6 +79,9 @@ def test_fixed_rank_environment_is_explicit():
     assert fixed_environment(64) == {
         "ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
+        "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
+            ENGINE_WARMUP_MAX_TOKENS
+        ),
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": str(
             FP8_FUSED_QUANT_MAX_ROWS
         ),

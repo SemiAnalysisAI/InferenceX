@@ -14,6 +14,7 @@ from run import (
     wait_for_worker_process,
 )
 from trt_mpi_entry import (
+    _install_engine_warmup_token_cap,
     _install_fixed_batch_request_barrier,
     _install_large_prefill_fp8_quant_guard,
     worker_main,
@@ -117,6 +118,9 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     torch_module.__path__ = []
     pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
     pyexecutor_module.__path__ = []
+    model_engine_module = ModuleType(
+        "tensorrt_llm._torch.pyexecutor.model_engine"
+    )
     request_queue_module = ModuleType(
         "tensorrt_llm._torch.pyexecutor.executor_request_queue"
     )
@@ -133,6 +137,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         def get_from_request_queue(self, timeout):
             return []
 
+    class FakeModelEngine:
+        def warmup(self, resource_manager):
+            return None
+
     class FakeFp8QuantKernelRunner:
         TACTIC_TRITON = 1
 
@@ -147,6 +155,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         return "done"
 
     request_queue_module.ExecutorRequestQueue = FakeExecutorRequestQueue
+    model_engine_module.ModelEngine = FakeModelEngine
     torch_custom_ops_module.Fp8QuantKernelRunner = (
         FakeFp8QuantKernelRunner
     )
@@ -160,11 +169,16 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     torch_module.pyexecutor = pyexecutor_module
     torch_module.custom_ops = custom_ops_package
     pyexecutor_module.executor_request_queue = request_queue_module
+    pyexecutor_module.model_engine = model_engine_module
     executor_module.worker = worker_module
     for name, module in (
         ("tensorrt_llm", trt_module),
         ("tensorrt_llm._torch", torch_module),
         ("tensorrt_llm._torch.pyexecutor", pyexecutor_module),
+        (
+            "tensorrt_llm._torch.pyexecutor.model_engine",
+            model_engine_module,
+        ),
         ("tensorrt_llm._torch.custom_ops", custom_ops_package),
         (
             "tensorrt_llm._torch.custom_ops.torch_custom_ops",
@@ -187,6 +201,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     expected = {
         "ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
+        "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": "65536",
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": "32768",
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": "64",
@@ -213,6 +228,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     )
     monkeypatch.setenv("TRTLLM_BENCH_GLOBAL_BATCH_SIZE", "64")
     monkeypatch.setenv(
+        "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
+        "65536",
+    )
+    monkeypatch.setenv(
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
         "32768",
     )
@@ -227,9 +246,58 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["benchmark_environment"] == expected
     assert row["fixed_batch_global_size"] == "64"
+    assert row["engine_warmup_max_tokens"] == "65536"
     assert row["fp8_fused_quant_max_rows"] == "32768"
     assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "1"
     assert row["source"] == "trt_mpi_entry"
+
+
+def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
+    seen = []
+    model_engine_module = ModuleType(
+        "tensorrt_llm._torch.pyexecutor.model_engine"
+    )
+
+    class FakeModelEngine:
+        def __init__(self, max_num_tokens):
+            self.max_num_tokens = max_num_tokens
+
+        def warmup(self, resource_manager):
+            seen.append(self.max_num_tokens)
+            return resource_manager
+
+    model_engine_module.ModelEngine = FakeModelEngine
+    pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
+    pyexecutor_module.__path__ = []
+    pyexecutor_module.model_engine = model_engine_module
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor",
+        pyexecutor_module,
+    )
+    monkeypatch.setitem(
+        sys.modules,
+        "tensorrt_llm._torch.pyexecutor.model_engine",
+        model_engine_module,
+    )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
+        "65536",
+    )
+
+    installed = _install_engine_warmup_token_cap()
+    large = FakeModelEngine(131072)
+    small = FakeModelEngine(16384)
+
+    assert installed == {
+        "max_warmup_tokens": 65536,
+        "already_installed": False,
+    }
+    assert large.warmup("large") == "large"
+    assert large.max_num_tokens == 131072
+    assert small.warmup("small") == "small"
+    assert small.max_num_tokens == 16384
+    assert seen == [65536, 16384]
 
 
 def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(

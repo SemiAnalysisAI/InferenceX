@@ -87,6 +87,15 @@ TRT fused MoE is capped at 65536 tokens per internal invocation so its
 synthetic autotune and prefill tensors are chunked without splitting the
 executor-level prefill iteration. Measured decode is far below the cap.
 
+The pinned engine also uses `max_num_tokens` to build synthetic shapes during
+`ModelEngine.warmup()`. GBS128 run `27487131935` completed GBS16 and GBS64,
+but spent 62 minutes in GBS128 initialization before cancellation because it
+was tuning a synthetic 131072-token prefill shape. The MPI shim now
+temporarily limits only this internal warmup to 65536 tokens. It restores
+`max_num_tokens=131072` in a `finally` block before the benchmark's real
+warmup and measured generations. The run remains invalid unless schedule
+validation proves one local-batch-16 prefill and 256 full-batch decode rounds.
+
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA
 quantizer rejected the 65536-row MTP `h_proj` launch during engine warmup.

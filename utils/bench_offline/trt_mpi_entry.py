@@ -10,6 +10,63 @@ from pathlib import Path
 from typing import Any
 
 
+def _install_engine_warmup_token_cap() -> dict[str, Any]:
+    max_warmup_tokens = int(
+        os.environ["TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"]
+    )
+    if max_warmup_tokens <= 0:
+        raise RuntimeError(
+            "TRT engine warmup token cap needs a positive limit"
+        )
+
+    from tensorrt_llm._torch.pyexecutor import model_engine
+
+    model_engine_class = model_engine.ModelEngine
+    original = model_engine_class.warmup
+    if getattr(original, "_offline_engine_warmup_token_cap", False):
+        return {
+            "max_warmup_tokens": max_warmup_tokens,
+            "already_installed": True,
+        }
+
+    def bounded_warmup(
+        engine: Any,
+        resource_manager: Any,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        runtime_max_num_tokens = int(engine.max_num_tokens)
+        tuned_max_num_tokens = min(
+            runtime_max_num_tokens,
+            max_warmup_tokens,
+        )
+        engine.max_num_tokens = tuned_max_num_tokens
+        started_at = time.monotonic()
+        print(
+            "[offline-trt-mpi] synthetic engine warmup start "
+            f"runtime_max_tokens={runtime_max_num_tokens} "
+            f"tuned_max_tokens={tuned_max_num_tokens}",
+            flush=True,
+        )
+        try:
+            return original(engine, resource_manager, *args, **kwargs)
+        finally:
+            engine.max_num_tokens = runtime_max_num_tokens
+            print(
+                "[offline-trt-mpi] synthetic engine warmup complete "
+                f"elapsed_seconds={time.monotonic() - started_at:.3f} "
+                f"restored_max_tokens={runtime_max_num_tokens}",
+                flush=True,
+            )
+
+    bounded_warmup._offline_engine_warmup_token_cap = True
+    model_engine_class.warmup = bounded_warmup
+    return {
+        "max_warmup_tokens": max_warmup_tokens,
+        "already_installed": False,
+    }
+
+
 def _install_large_prefill_fp8_quant_guard() -> dict[str, Any]:
     max_fused_rows = int(
         os.environ["TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"]
@@ -174,6 +231,9 @@ def _write_marker() -> None:
         "fixed_batch_global_size": os.getenv(
             "TRTLLM_BENCH_GLOBAL_BATCH_SIZE"
         ),
+        "engine_warmup_max_tokens": os.getenv(
+            "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"
+        ),
         "fp8_fused_quant_max_rows": os.getenv(
             "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
         ),
@@ -197,9 +257,16 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     cute_cache_dir = os.getenv("TRTLLM_BENCH_CUTE_DSL_CACHE_DIR")
     if cute_cache_dir:
         os.environ["CUTE_DSL_CACHE_DIR"] = cute_cache_dir
+    warmup_cap = _install_engine_warmup_token_cap()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
     _install_fixed_batch_request_barrier()
     _write_marker()
+    print(
+        "[offline-trt-mpi] synthetic engine warmup token cap "
+        f"max_tokens={warmup_cap['max_warmup_tokens']} "
+        f"already_installed={warmup_cap['already_installed']}",
+        flush=True,
+    )
     print(
         "[offline-trt-mpi] large-prefill FP8 quant guard "
         f"max_fused_rows={fp8_guard['max_fused_rows']} "

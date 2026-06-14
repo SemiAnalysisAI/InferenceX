@@ -32,6 +32,11 @@ MAX_SEQ_LEN = 9344
 # executor's one-iteration full-batch token budget. Decode is far below this
 # fixed cap for every supported GBS.
 MOE_MAX_NUM_TOKENS = WORLD_SIZE * INPUT_TOKENS
+# TRT's synthetic engine warmup profiles every tunable op at max_num_tokens.
+# GBS128 would therefore spend hours profiling a 131072-token prefill shape
+# that never enters the decode metric. Real warmup and measured generations
+# retain the full runtime token limit and validate the complete fixed batch.
+ENGINE_WARMUP_MAX_TOKENS = WORLD_SIZE * INPUT_TOKENS
 # The pinned fused packed-FP8 quantizer fails its CUDA launch for the
 # 65536-row MTP projection used by GBS64 prefill. Keep the fused decode path,
 # but select TRT's existing Triton quantizer for larger prefill matrices.
@@ -49,6 +54,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     "TLLM_TORCH_PROFILE_TRACE",
     "TRTLLM_BENCH_DSV4_PATCHED_SHA256",
     "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
+    "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
     "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
     "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
     "TRTLLM_BENCH_GLOBAL_BATCH_SIZE",
@@ -189,6 +195,9 @@ def fixed_environment(global_batch_size: int) -> dict[str, str]:
     return {
         "ENABLE_CONFIGURABLE_MOE": configurable,
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": configurable,
+        "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
+            ENGINE_WARMUP_MAX_TOKENS
+        ),
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": str(
             FP8_FUSED_QUANT_MAX_ROWS
         ),
