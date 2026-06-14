@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_HUB_CACHE_MOUNT="/nfsdata/sa/gharunner/gharunners/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/local-nvme/hf-hub-cache/"
 
 PARTITION="compute"
 SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -17,6 +17,8 @@ if [ -z "$JOB_ID" ]; then
 fi
 
 export PORT=$(( 40000 + (JOB_ID % 10000) ))
+export XDG_CACHE_HOME="/tmp/xdg-cache-$JOB_ID"
+export TRITON_CACHE_DIR="/tmp/triton-cache-$JOB_ID"
 
 trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
@@ -34,7 +36,7 @@ srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" bash -c "
 "
 srun --jobid="$JOB_ID" \
 --container-image="$SQUASH_FILE" \
---container-mounts="$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE" \
+--container-mounts="$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
 --container-mount-home \
 --container-writable \
 --container-remap-root \
