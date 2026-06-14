@@ -47,6 +47,7 @@ DEFAULT_IMAGE = (
 )
 PROGRESS_INTERVAL_SECONDS = 60.0
 WORKER_PROGRESS_PREFIX = "[offline-trt-worker "
+MPI_PROGRESS_PREFIX = "[offline-trt-mpi] "
 
 
 def utc_now() -> str:
@@ -83,6 +84,8 @@ def latest_worker_progress(worker_log: Path) -> str | None:
         if line.startswith(WORKER_PROGRESS_PREFIX):
             _, separator, message = line.partition("] ")
             return message if separator else line
+        if line.startswith(MPI_PROGRESS_PREFIX):
+            return line
     return None
 
 

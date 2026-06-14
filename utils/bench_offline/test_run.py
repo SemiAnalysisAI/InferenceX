@@ -71,6 +71,22 @@ def test_latest_worker_progress_ignores_native_trt_lines(tmp_path):
     )
 
 
+def test_latest_worker_progress_surfaces_mpi_warmup_marker(tmp_path):
+    worker_log = tmp_path / "worker.log"
+    worker_log.write_text(
+        "[offline-trt-worker 2026-06-13T12:00:00+00:00] "
+        "engine initialization start\n"
+        "[offline-trt-mpi] synthetic engine warmup start "
+        "runtime_max_tokens=131072 tuned_max_tokens=65536\n"
+        "native TRT output\n",
+        encoding="utf-8",
+    )
+    assert latest_worker_progress(worker_log) == (
+        "[offline-trt-mpi] synthetic engine warmup start "
+        "runtime_max_tokens=131072 tuned_max_tokens=65536"
+    )
+
+
 def test_wait_for_worker_process_reports_heartbeat(tmp_path, capsys):
     class FakeProcess:
         args = ["fake-worker"]
@@ -156,6 +172,7 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
 
     request_queue_module.ExecutorRequestQueue = FakeExecutorRequestQueue
     model_engine_module.ModelEngine = FakeModelEngine
+    model_engine_module.PyTorchModelEngine = FakeModelEngine
     torch_custom_ops_module.Fp8QuantKernelRunner = (
         FakeFp8QuantKernelRunner
     )
@@ -259,6 +276,10 @@ def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
     )
 
     class FakeModelEngine:
+        def warmup(self, resource_manager):
+            raise AssertionError("abstract base warmup must not be patched")
+
+    class FakePyTorchModelEngine(FakeModelEngine):
         def __init__(self, max_num_tokens):
             self.max_num_tokens = max_num_tokens
 
@@ -267,6 +288,7 @@ def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
             return resource_manager
 
     model_engine_module.ModelEngine = FakeModelEngine
+    model_engine_module.PyTorchModelEngine = FakePyTorchModelEngine
     pyexecutor_module = ModuleType("tensorrt_llm._torch.pyexecutor")
     pyexecutor_module.__path__ = []
     pyexecutor_module.model_engine = model_engine_module
@@ -286,13 +308,19 @@ def test_engine_warmup_token_cap_restores_runtime_capacity(monkeypatch):
     )
 
     installed = _install_engine_warmup_token_cap()
-    large = FakeModelEngine(131072)
-    small = FakeModelEngine(16384)
+    large = FakePyTorchModelEngine(131072)
+    small = FakePyTorchModelEngine(16384)
 
     assert installed == {
         "max_warmup_tokens": 65536,
+        "target": "FakePyTorchModelEngine",
         "already_installed": False,
     }
+    assert not getattr(
+        FakeModelEngine.warmup,
+        "_offline_engine_warmup_token_cap",
+        False,
+    )
     assert large.warmup("large") == "large"
     assert large.max_num_tokens == 131072
     assert small.warmup("small") == "small"

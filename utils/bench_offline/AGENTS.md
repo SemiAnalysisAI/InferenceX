@@ -18,11 +18,12 @@ benchmark.
   `moe_config.max_num_tokens=65536` cap chunks only oversized fused-MoE
   tensors inside that one executor iteration; measured decode never reaches
   the cap.
-- Keep the synthetic `ModelEngine.warmup()` cap at 65536 tokens. It prevents
-  GBS128 from spending hours tuning a synthetic 131072-token prefill shape.
-  The shim must restore runtime `max_num_tokens=131072` before the real
-  warmup and measured generations. Never treat this synthetic cap as
-  permission to split or shrink the validated full-batch prefill.
+- Keep the synthetic `PyTorchModelEngine.warmup()` cap at 65536 tokens. The
+  concrete class overrides `ModelEngine.warmup`, so patching only the abstract
+  base method is ineffective. The shim must restore runtime
+  `max_num_tokens=131072` before the real warmup and measured generations.
+  Never treat this synthetic cap as permission to split or shrink the
+  validated full-batch prefill.
 - Keep the rank-local packed-FP8 guard at 32768 rows. It selects TRT's Triton
   quantizer only for large GBS64/128 prefill projections; measured decode has
   at most 16 rows and stays on the original fused path.

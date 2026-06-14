@@ -85,15 +85,14 @@ invocation. It lets TRT internally chunk the very large prefill/autotune
 tensor while the executor still schedules the complete local batch in one
 prefill iteration.
 
-TRT's internal `ModelEngine.warmup()` otherwise profiles tunable operators
-with the full runtime `max_num_tokens`. At GBS128 that means a synthetic
-131072-token prefill shape and can spend hours in initialization. The
-branch-local MPI shim temporarily caps only this synthetic engine warmup at
-65536 tokens, then restores `max_num_tokens=131072` before the benchmark's
-real warmup and measured generations. This is not a runtime capacity
-reduction: a result is accepted only if the later schedule proof shows one
-complete local-batch-16 prefill and 256 consecutive local-batch-16 decode
-iterations.
+TRT's internal `PyTorchModelEngine.warmup()` otherwise profiles tunable
+operators with the full runtime `max_num_tokens`. At GBS128 that means a
+synthetic 131072-token prefill shape and can spend hours in initialization.
+The branch-local MPI shim temporarily caps only this synthetic engine warmup
+at 65536 tokens, then restores `max_num_tokens=131072` before the benchmark's
+real warmup and measured generations. This is not a runtime capacity reduction:
+a result is accepted only if the later schedule proof shows one complete
+local-batch-16 prefill and 256 consecutive local-batch-16 decode iterations.
 
 The pinned packed-FP8 CUDA quantizer also fails its kernel launch for the
 65536-row MTP projection produced by GBS64 prefill. Every rank installs a

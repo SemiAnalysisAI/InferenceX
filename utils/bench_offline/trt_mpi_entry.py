@@ -21,11 +21,14 @@ def _install_engine_warmup_token_cap() -> dict[str, Any]:
 
     from tensorrt_llm._torch.pyexecutor import model_engine
 
-    model_engine_class = model_engine.ModelEngine
+    # PyTorchModelEngine overrides the abstract ModelEngine.warmup method.
+    # Patching the base method does not intercept the runtime call.
+    model_engine_class = model_engine.PyTorchModelEngine
     original = model_engine_class.warmup
     if getattr(original, "_offline_engine_warmup_token_cap", False):
         return {
             "max_warmup_tokens": max_warmup_tokens,
+            "target": model_engine_class.__name__,
             "already_installed": True,
         }
 
@@ -63,6 +66,7 @@ def _install_engine_warmup_token_cap() -> dict[str, Any]:
     model_engine_class.warmup = bounded_warmup
     return {
         "max_warmup_tokens": max_warmup_tokens,
+        "target": model_engine_class.__name__,
         "already_installed": False,
     }
 
@@ -264,6 +268,7 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     print(
         "[offline-trt-mpi] synthetic engine warmup token cap "
         f"max_tokens={warmup_cap['max_warmup_tokens']} "
+        f"target={warmup_cap['target']} "
         f"already_installed={warmup_cap['already_installed']}",
         flush=True,
     )
