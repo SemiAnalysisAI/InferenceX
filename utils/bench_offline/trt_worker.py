@@ -291,8 +291,8 @@ def main() -> int:
             "engine initialization start "
             f"max_batch_size={llm_kwargs['max_batch_size']} "
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
-            "kv_cache_max_tokens="
-            f"{llm_kwargs['kv_cache_config']['max_tokens']} "
+            "kv_cache_fraction="
+            f"{llm_kwargs['kv_cache_config']['free_gpu_memory_fraction']} "
             "moe_max_num_tokens="
             f"{llm_kwargs['moe_config']['max_num_tokens']} "
             f"max_seq_len={llm_kwargs['max_seq_len']} "
@@ -311,7 +311,8 @@ def main() -> int:
                 f"local_batch={resolved['local_batch_size']} "
                 f"cuda_graph_batch={resolved['cuda_graph_batch_sizes']} "
                 f"max_num_tokens={resolved['max_num_tokens']} "
-                f"kv_cache_max_tokens={resolved['kv_cache_max_tokens']} "
+                "kv_cache_fraction="
+                f"{resolved['kv_cache_free_gpu_memory_fraction']} "
                 f"moe_max_num_tokens={resolved['moe_max_num_tokens']}"
             )
 
@@ -321,6 +322,10 @@ def main() -> int:
                 inputs,
                 label="warmup",
                 max_tokens=WARMUP_OUTPUT_TOKENS,
+            )
+            write_json(
+                args.output.parent / "warmup_iteration_stats.json",
+                warmup_stats,
             )
             warmup_requests = summarize_requests(
                 warmup_outputs,
@@ -334,10 +339,6 @@ def main() -> int:
                     local_batch_size=local_batch,
                     required_rounds=HUAWEI_WARMUP_DECODE_ROUNDS,
                 )
-            )
-            write_json(
-                args.output.parent / "warmup_iteration_stats.json",
-                warmup_stats,
             )
             log_progress(
                 "warmup validated "
@@ -355,6 +356,10 @@ def main() -> int:
                 label="measured",
                 max_tokens=MEASURED_OUTPUT_TOKENS,
             )
+            write_json(
+                args.output.parent / "measured_iteration_stats.json",
+                measured_stats,
+            )
             request_summary = summarize_requests(
                 measured_outputs,
                 wall_seconds=measured_wall,
@@ -367,10 +372,6 @@ def main() -> int:
                 global_batch_size=args.global_batch_size,
                 local_batch_size=local_batch,
                 num_gpus=WORLD_SIZE,
-            )
-            write_json(
-                args.output.parent / "measured_iteration_stats.json",
-                measured_stats,
             )
             log_progress(
                 "measured decode window validated "

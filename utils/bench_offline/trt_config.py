@@ -111,11 +111,6 @@ def max_num_tokens(global_batch_size: int) -> int:
     return local_batch_size(global_batch_size) * INPUT_TOKENS
 
 
-def kv_cache_max_tokens(global_batch_size: int) -> int:
-    """Reserve KV storage for the exact fixed batch and sequence capacity."""
-    return local_batch_size(global_batch_size) * MAX_SEQ_LEN
-
-
 def build_llm_kwargs(
     model_path: str,
     global_batch_size: int,
@@ -150,7 +145,6 @@ def build_llm_kwargs(
         "kv_cache_config": {
             "tokens_per_block": 128,
             "dtype": "fp8",
-            "max_tokens": kv_cache_max_tokens(global_batch_size),
             "free_gpu_memory_fraction": (
                 config.kv_cache_free_gpu_memory_fraction
             ),
@@ -221,7 +215,6 @@ def resolved_parallelism(
         "max_batch_size": int(llm_args.max_batch_size),
         "max_num_tokens": int(llm_args.max_num_tokens),
         "max_seq_len": int(llm_args.max_seq_len),
-        "kv_cache_max_tokens": int(kv_cache.max_tokens),
         "kv_cache_free_gpu_memory_fraction": float(
             kv_cache.free_gpu_memory_fraction
         ),
@@ -242,7 +235,6 @@ def resolved_parallelism(
         "max_batch_size": local_batch_size(global_batch_size),
         "max_num_tokens": max_num_tokens(global_batch_size),
         "max_seq_len": MAX_SEQ_LEN,
-        "kv_cache_max_tokens": kv_cache_max_tokens(global_batch_size),
         "kv_cache_free_gpu_memory_fraction": (
             config.kv_cache_free_gpu_memory_fraction
         ),

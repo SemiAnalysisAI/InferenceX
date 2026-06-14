@@ -11,7 +11,10 @@ benchmark.
 - `global_batch_size` is authoritative. TRT `max_batch_size` and CUDA graph
   size are exactly `global_batch_size / 8`; `max_num_tokens` is exactly
   `local_batch_size * 8192` so every local prompt can prefill together.
-- KV storage is exactly `local_batch_size * 9344` tokens. The fixed
+- Leave KV capacity memory-derived with
+  `kv_cache_config.free_gpu_memory_fraction=0.60`. An explicit KV token cap
+  underprovisions this pinned one-model MTP schedule because target and draft
+  KV are accounted separately. The fixed
   `moe_config.max_num_tokens=65536` cap chunks only oversized fused-MoE
   tensors inside that one executor iteration; measured decode never reaches
   the cap.

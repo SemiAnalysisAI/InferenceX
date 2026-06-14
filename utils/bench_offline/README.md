@@ -64,22 +64,25 @@ local_batch_size = global_batch_size / 8
 max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
-kv_cache.max_tokens = local_batch_size * 9344
+kv_cache.free_gpu_memory_fraction = 0.60
 moe.max_num_tokens = 65536
 ```
 
-| GBS | Local batch/rank | TRT max_num_tokens/rank | KV max tokens/rank |
-|---:|---:|---:|---:|
-| 16 | 2 | 16384 | 18688 |
-| 64 | 8 | 65536 | 74752 |
-| 128 | 16 | 131072 | 149504 |
+| GBS | Local batch/rank | TRT max_num_tokens/rank |
+|---:|---:|---:|
+| 16 | 2 | 16384 |
+| 64 | 8 | 65536 |
+| 128 | 16 | 131072 |
 
-The KV limit reserves only the exact fixed-batch sequence capacity instead of
-claiming 60% of every remaining byte. The fixed 65536-token MoE cap applies
-inside a fused-MoE invocation. It lets TRT internally chunk the very large
-prefill/autotune tensor while the executor still schedules the complete local
-batch in one prefill iteration. Decode has at most 128 tokens node-wide, so
-the measured decode rounds never hit this cap.
+KV capacity remains memory-derived at a fixed 60% fraction. Do not set
+`kv_cache.max_tokens`: this pinned one-model MTP implementation accounts for
+target and draft KV separately, and an explicit exact-sequence cap
+underprovisions the target schedule and staggers prefill. The fixed
+65536-token MoE cap applies inside a fused-MoE invocation. It lets TRT
+internally chunk the very large prefill/autotune tensor while the executor
+still schedules the complete local batch in one prefill iteration. Decode has
+at most 128 tokens node-wide, so the measured decode rounds never hit this
+cap.
 
 The old harness used approximately one prompt's prefill token budget even for
 large global batches. TRT therefore queued and staggered requests. Dividing
