@@ -11827,6 +11827,23 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 16
           dp-attn: true
 
+      # Rack-saturating max throughput: 5 prefill + 12 decode, TP4 ep1 (17 nodes).
+      # Balanced prefill:decode ratio (single prefill starved the decode pool)
+      # + TP-only decode (Qwen3.5-A17B pattern; M3 wide-EP all-to-all was slower).
+      - conc-list: [2048, 4096, 8192]
+        prefill:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-5p12d-tp4ep1-17n.yaml"
+        decode:
+          num-worker: 12
+          tp: 4
+          ep: 1
+          dp-attn: false
+
     - isl: 8192
       osl: 1024
       search-space:
@@ -11861,6 +11878,23 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           tp: 1
           ep: 16
           dp-attn: true
+
+      # Rack-saturating max throughput: 5 prefill + 12 decode, TP4 ep1 (17 nodes).
+      # Balanced prefill:decode ratio (single prefill starved the decode pool)
+      # + TP-only decode (Qwen3.5-A17B pattern; M3 wide-EP all-to-all was slower).
+      - conc-list: [1024, 2048, 4096]
+        prefill:
+          num-worker: 5
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-5p12d-tp4ep1-17n.yaml"
+        decode:
+          num-worker: 12
+          tp: 4
+          ep: 1
+          dp-attn: false
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
