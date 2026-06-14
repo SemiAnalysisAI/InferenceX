@@ -6,6 +6,8 @@ import sys
 import time
 from types import ModuleType, SimpleNamespace
 
+import pytest
+
 from run import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     classify_failure,
@@ -20,7 +22,10 @@ from trt_mpi_entry import (
     _install_large_prefill_fp8_quant_guard,
     worker_main,
 )
-from trt_worker import read_perfect_router_marker
+from trt_worker import (
+    arm_fixed_batch_request_barrier,
+    read_perfect_router_marker,
+)
 
 
 def test_controller_accepts_only_huawei_global_batches():
@@ -256,12 +261,14 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         worker_module,
     )
     marker = tmp_path / "marker.jsonl"
+    fixed_batch_arm_file = tmp_path / "fixed-batch.armed.json"
     cache_dir = tmp_path / "cute-cache"
     expected = {
         "ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE": "1",
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": "65536",
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": "32768",
+        "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE": str(fixed_batch_arm_file),
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": "64",
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": "random",
@@ -285,6 +292,10 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
         "120",
     )
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE",
+        str(fixed_batch_arm_file),
+    )
     monkeypatch.setenv("TRTLLM_BENCH_GLOBAL_BATCH_SIZE", "64")
     monkeypatch.setenv(
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
@@ -305,6 +316,8 @@ def test_mpi_entry_sets_fixed_environment_before_real_worker(
     assert row["cute_dsl_cache_dir"] == str(cache_dir)
     assert row["benchmark_environment"] == expected
     assert row["fixed_batch_global_size"] == "64"
+    assert row["fixed_batch_arm_file"] == str(fixed_batch_arm_file)
+    assert row["fixed_batch_barrier_armed"] is False
     assert row["engine_warmup_max_tokens"] == "65536"
     assert row["fp8_fused_quant_max_rows"] == "32768"
     assert os.environ["ENABLE_CONFIGURABLE_MOE"] == "1"
@@ -436,7 +449,8 @@ def test_large_prefill_fp8_guard_keeps_decode_and_routes_prefill(
     ]
 
 
-def test_fixed_batch_barrier_waits_for_one_complete_global_batch(
+def test_fixed_batch_barrier_bypasses_init_then_waits_for_global_batch(
+    tmp_path,
     monkeypatch,
 ):
     class Item:
@@ -477,14 +491,35 @@ def test_fixed_batch_barrier_waits_for_one_complete_global_batch(
         "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
         "1",
     )
+    arm_file = tmp_path / "fixed-batch.armed.json"
+    monkeypatch.setenv(
+        "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE",
+        str(arm_file),
+    )
 
     installed = _install_fixed_batch_request_barrier()
     request_queue = FakeExecutorRequestQueue()
+    request_queue.request_queue.put(Item())
+    assert len(request_queue.get_from_request_queue(None)) == 1
+
+    arm_file.write_text("{}\n", encoding="utf-8")
     for _ in range(3):
         request_queue.request_queue.put(Item())
 
     assert installed["global_batch_size"] == 3
+    assert installed["arm_file"] == str(arm_file)
+    assert installed["armed_at_install"] is False
     assert len(request_queue.get_from_request_queue(None)) == 3
+
+
+def test_arm_fixed_batch_request_barrier_is_single_use(tmp_path):
+    arm_file = tmp_path / "fixed-batch.armed.json"
+    marker = arm_fixed_batch_request_barrier(arm_file, 128)
+
+    assert marker["global_batch_size"] == 128
+    assert json.loads(arm_file.read_text(encoding="utf-8")) == marker
+    with pytest.raises(RuntimeError, match="already exists"):
+        arm_fixed_batch_request_barrier(arm_file, 128)
 
 
 def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):

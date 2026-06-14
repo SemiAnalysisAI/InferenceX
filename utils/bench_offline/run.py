@@ -21,6 +21,7 @@ from prompts import INFINITEBENCH_REVISION, prepare_corpus, sha256_file
 from trt_config import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     CONTROLLED_ENVIRONMENT_VARIABLES,
+    FIXED_BATCH_ARM_FILENAME,
     FIXED_BENCHMARK_CONFIG,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
@@ -33,7 +34,7 @@ from trt_config import (
     SAMPLING_TOP_K,
     SAMPLING_TOP_P,
     WORLD_SIZE,
-    fixed_environment,
+    benchmark_environment,
     local_batch_size,
     max_num_tokens,
     validate_global_batch_size,
@@ -375,6 +376,10 @@ def main() -> int:
         worker_output = args.output_dir / "worker_result.json"
         worker_log = args.output_dir / "worker.log"
         marker_path = args.output_dir / "perfect_router.jsonl"
+        fixed_batch_arm_path = (
+            args.output_dir / FIXED_BATCH_ARM_FILENAME
+        ).resolve()
+        fixed_batch_arm_path.unlink(missing_ok=True)
         worker_script = Path(__file__).with_name("trt_worker.py")
         command = [
             sys.executable,
@@ -402,7 +407,10 @@ def main() -> int:
         environment["TRTLLM_PERFECT_ROUTER_MARKER"] = str(marker_path)
         for name in CONTROLLED_ENVIRONMENT_VARIABLES:
             environment.pop(name, None)
-        configured_environment = fixed_environment(args.global_batch_size)
+        configured_environment = benchmark_environment(
+            args.global_batch_size,
+            fixed_batch_arm_path,
+        )
         environment.update(configured_environment)
         environment["TRTLLM_BENCH_EXPECTED_RANK_ENV"] = json.dumps(
             configured_environment,
@@ -414,7 +422,8 @@ def main() -> int:
             "worker launch "
             f"global_batch={args.global_batch_size} "
             f"local_batch={local_batch} "
-            f"max_num_tokens={max_num_tokens(args.global_batch_size)}"
+            f"max_num_tokens={max_num_tokens(args.global_batch_size)} "
+            f"fixed_batch_arm_file={fixed_batch_arm_path}"
         )
         started = time.perf_counter()
         timed_out = False

@@ -31,6 +31,11 @@ benchmark.
   TRT's idle request fetch so each warmup/measured pass waits for exactly one
   complete GBS before routing. Do not remove that barrier while claiming a
   fixed-batch result.
+- Keep the request barrier disarmed throughout `LLM` construction. TRT's
+  GBS128 KV-capacity calibration submits 120 internal dummy requests, which
+  must pass through normally. The parent atomically creates the shared arm
+  file only after initialization returns and before the first real warmup
+  `generate()` call. Do not arm at MPI entry or weaken the post-arm gate.
 - A successful result must prove one full-local-batch prefill iteration,
   followed by decode at the same exact local batch for 256 consecutive
   iterations, with no queued or paused requests. Never weaken this validation

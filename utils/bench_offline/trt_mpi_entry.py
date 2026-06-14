@@ -205,6 +205,16 @@ def _install_executor_lifecycle_trace() -> dict[str, Any]:
 
 def _install_fixed_batch_request_barrier() -> dict[str, Any]:
     expected = int(os.environ["TRTLLM_BENCH_GLOBAL_BATCH_SIZE"])
+    arm_file_raw = os.getenv("TRTLLM_BENCH_FIXED_BATCH_ARM_FILE")
+    if not arm_file_raw:
+        raise RuntimeError(
+            "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE is required"
+        )
+    arm_file = Path(arm_file_raw)
+    if not arm_file.is_absolute():
+        raise RuntimeError(
+            "Fixed-batch barrier arm file must use an absolute path"
+        )
     timeout_seconds = float(
         os.getenv("TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS", "120")
     )
@@ -221,18 +231,35 @@ def _install_fixed_batch_request_barrier() -> dict[str, Any]:
         return {
             "global_batch_size": expected,
             "timeout_seconds": timeout_seconds,
+            "arm_file": str(arm_file),
+            "armed_at_install": arm_file.is_file(),
             "already_installed": True,
         }
+
+    armed = arm_file.is_file()
 
     def fixed_batch_get_from_request_queue(
         request_queue: Any,
         timeout: Any,
     ) -> list[Any]:
+        nonlocal armed
         items = original(request_queue, timeout)
         # The MPI executor passes timeout=None only when there are no active or
         # waiting requests. That is the boundary between benchmark passes.
         if timeout is not None or not items:
             return items
+        # TRT submits internal dummy requests while sizing the KV cache. The
+        # parent creates this file only after LLM initialization has completed,
+        # immediately before the benchmark's first real generate() call.
+        if not armed:
+            if not arm_file.is_file():
+                return items
+            armed = True
+            _emit_rank_event(
+                "fixed_batch_barrier_armed",
+                arm_file=str(arm_file),
+                global_batch_size=expected,
+            )
         if any(not item.is_normal_request for item in items):
             return items
         if len(items) > expected:
@@ -273,6 +300,8 @@ def _install_fixed_batch_request_barrier() -> dict[str, Any]:
     return {
         "global_batch_size": expected,
         "timeout_seconds": timeout_seconds,
+        "arm_file": str(arm_file),
+        "armed_at_install": armed,
         "already_installed": False,
     }
 
@@ -302,6 +331,14 @@ def _write_marker(event: str = "entry_ready", **details: Any) -> None:
         },
         "fixed_batch_global_size": os.getenv(
             "TRTLLM_BENCH_GLOBAL_BATCH_SIZE"
+        ),
+        "fixed_batch_arm_file": os.getenv(
+            "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE"
+        ),
+        "fixed_batch_barrier_armed": (
+            Path(os.environ["TRTLLM_BENCH_FIXED_BATCH_ARM_FILE"]).is_file()
+            if os.getenv("TRTLLM_BENCH_FIXED_BATCH_ARM_FILE")
+            else False
         ),
         "engine_warmup_max_tokens": os.getenv(
             "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"
@@ -334,8 +371,16 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     warmup_cap = _install_engine_warmup_token_cap()
     fp8_guard = _install_large_prefill_fp8_quant_guard()
     lifecycle_trace = _install_executor_lifecycle_trace()
-    _install_fixed_batch_request_barrier()
+    fixed_batch_barrier = _install_fixed_batch_request_barrier()
     _write_marker()
+    print(
+        "[offline-trt-mpi] fixed-batch request barrier "
+        f"global_batch={fixed_batch_barrier['global_batch_size']} "
+        f"arm_file={fixed_batch_barrier['arm_file']} "
+        f"armed_at_install={fixed_batch_barrier['armed_at_install']} "
+        f"already_installed={fixed_batch_barrier['already_installed']}",
+        flush=True,
+    )
     print(
         "[offline-trt-mpi] synthetic engine warmup token cap "
         f"max_tokens={warmup_cap['max_warmup_tokens']} "

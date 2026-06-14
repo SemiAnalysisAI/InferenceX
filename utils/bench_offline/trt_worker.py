@@ -22,6 +22,7 @@ from metrics import (
 from prompts import load_corpus
 from trt_config import (
     FIXED_BENCHMARK_CONFIG,
+    FIXED_BATCH_ARM_ENV,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
     MEASURED_OUTPUT_TOKENS,
@@ -30,8 +31,8 @@ from trt_config import (
     SAMPLING_TOP_P,
     WARMUP_OUTPUT_TOKENS,
     WORLD_SIZE,
+    benchmark_environment,
     build_llm_kwargs,
-    fixed_environment,
     local_batch_size,
     resolved_parallelism,
     validate_global_batch_size,
@@ -95,6 +96,25 @@ def expected_rank_environment() -> dict[str, str]:
             f"{mismatches}"
         )
     return expected
+
+
+def arm_fixed_batch_request_barrier(
+    arm_path: Path,
+    global_batch_size: int,
+) -> dict[str, Any]:
+    """Atomically arm the rank-local request gate after TRT initialization."""
+    if arm_path.exists():
+        raise RuntimeError(
+            "Fixed-batch barrier arm file already exists before arming: "
+            f"{arm_path}"
+        )
+    marker = {
+        "armed_at": utc_now(),
+        "global_batch_size": global_batch_size,
+        "parent_pid": os.getpid(),
+    }
+    write_json(arm_path, marker)
+    return marker
 
 
 def read_perfect_router_marker(path: Path) -> dict[str, Any]:
@@ -253,8 +273,27 @@ def main() -> int:
     }
     try:
         validate_global_batch_size(args.global_batch_size)
-        configured_environment = fixed_environment(args.global_batch_size)
+        phase = "fixed_batch_barrier_setup"
+        arm_path_raw = os.getenv(FIXED_BATCH_ARM_ENV)
+        if not arm_path_raw:
+            raise RuntimeError(f"{FIXED_BATCH_ARM_ENV} is required")
+        fixed_batch_arm_path = Path(arm_path_raw)
+        configured_environment = benchmark_environment(
+            args.global_batch_size,
+            fixed_batch_arm_path,
+        )
         rank_environment = expected_rank_environment()
+        if rank_environment != configured_environment:
+            raise RuntimeError(
+                "Configured benchmark environment does not match the "
+                f"rank contract: {rank_environment!r} != "
+                f"{configured_environment!r}"
+            )
+        if fixed_batch_arm_path.exists():
+            raise RuntimeError(
+                "Fixed-batch barrier must be disarmed before TRT "
+                f"initialization: {fixed_batch_arm_path}"
+            )
         prompts, corpus_manifest = load_corpus(args.corpus, args.manifest)
         if len(prompts) != args.global_batch_size:
             raise RuntimeError(
@@ -314,6 +353,17 @@ def main() -> int:
                 "kv_cache_fraction="
                 f"{resolved['kv_cache_free_gpu_memory_fraction']} "
                 f"moe_max_num_tokens={resolved['moe_max_num_tokens']}"
+            )
+
+            phase = "fixed_batch_barrier_arm"
+            fixed_batch_barrier = arm_fixed_batch_request_barrier(
+                fixed_batch_arm_path,
+                args.global_batch_size,
+            )
+            log_progress(
+                "fixed-batch request barrier armed "
+                f"path={fixed_batch_arm_path} "
+                f"global_batch={args.global_batch_size}"
             )
 
             phase = "warmup"
@@ -446,6 +496,7 @@ def main() -> int:
                 "runtime_environment": {
                     "configured": configured_environment,
                     "rank_expected": rank_environment,
+                    "fixed_batch_barrier": fixed_batch_barrier,
                 },
                 "corpus": corpus_manifest,
             }

@@ -110,7 +110,19 @@ roughly twice wall throughput.
 `LLM.generate()` also enqueues the batch request by request while the executor
 is live. The branch-local MPI entry shim therefore holds the idle executor
 until exactly one complete global batch is present, then releases all requests
-to attention-DP routing together. Each pass must show one prefill iteration:
+to attention-DP routing together.
+
+The request gate is installed but deliberately disarmed during `LLM`
+construction. TRT's KV-capacity calibration sends its own dummy requests
+(120 at GBS128 in run `27490378501`); those are engine-initialization work, not
+the benchmark batch. The controller removes any stale arm file before launch.
+After `LLM(...)` returns, the parent worker atomically creates the shared arm
+file and only then calls the real warmup `generate()`. Every rank validates the
+same absolute arm path and permanently latches the gate on when it observes
+the file. Arming the gate at MPI entry deadlocks GBS128 waiting for
+`120/128` calibration requests.
+
+Each real pass must show one prefill iteration:
 
 ```text
 numContextRequests = local_batch_size
@@ -224,12 +236,14 @@ using each stack's observed or published MTP yield.
 3. Allocate one exclusive eight-GPU B300 Slurm node per job.
 4. Build the exact 8192-token corpus.
 5. Start one fresh TensorRT-LLM engine, with synthetic tuning capped at 65536
-   tokens and runtime capacity restored afterward.
-6. Run the short full-batch warmup.
-7. Run one measured generation.
-8. Validate and filter 256 iteration stats.
-9. Upload per-job result/debug artifacts.
-10. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
+   tokens and runtime capacity restored afterward. TRT's internal capacity
+   probes run while the benchmark request gate is disarmed.
+6. Atomically arm the fixed-batch request gate after engine initialization.
+7. Run the short full-batch warmup.
+8. Run one measured generation.
+9. Validate and filter 256 iteration stats.
+10. Upload per-job result/debug artifacts.
+11. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
 
 There is no HTTP server, request-rate generator, generic benchmark client,
 serial scheduler tuning, or normal InferenceX matrix processing.
@@ -265,7 +279,8 @@ gh api -X POST \
   -f 'inputs[test-name]=DSV4 B300 TRT Huawei fixed GBS' \
   -f 'inputs[global_batch_sizes]=16,64,128' \
   -f 'inputs[salloc-time]=150' \
-  -f 'inputs[worker-timeout]=7200'
+  -f 'inputs[worker-timeout]=7200' \
+  -f 'inputs[worker-stack-period]=-1'
 ```
 
 Monitor:
@@ -311,6 +326,8 @@ Debug in this order:
 7. For initialization stalls, use the controller heartbeat's `rank_progress`
    to identify which ranks reached warmup completion, clock synchronization,
    and executor worker start.
+8. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
+   logged `engine initialization complete`.
 
 Do not fix failures by reducing the global batch, splitting prefill across
 executor iterations, enabling overlap scheduling, weakening schedule

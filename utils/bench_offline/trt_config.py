@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any
 
 
@@ -46,6 +47,8 @@ SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
 PINNED_TRT_GLOBAL_SEED = 42
 ALLOWED_GLOBAL_BATCH_SIZES = (16, 64, 128)
+FIXED_BATCH_ARM_ENV = "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE"
+FIXED_BATCH_ARM_FILENAME = "fixed_batch_barrier.armed.json"
 CONTROLLED_ENVIRONMENT_VARIABLES = {
     "ENABLE_CONFIGURABLE_MOE",
     "TLLM_METRICS_ALL_RANKS",
@@ -56,6 +59,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE",
     "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS",
     "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS",
+    FIXED_BATCH_ARM_ENV,
     "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
     "TRTLLM_BENCH_GLOBAL_BATCH_SIZE",
     "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
@@ -206,6 +210,22 @@ def fixed_environment(global_batch_size: int) -> dict[str, str]:
         "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": (
             config.moe_autotune_dummy_distribution
         ),
+    }
+
+
+def benchmark_environment(
+    global_batch_size: int,
+    fixed_batch_arm_file: str | Path,
+) -> dict[str, str]:
+    """Build the complete environment inherited by every TRT rank."""
+    arm_path = Path(fixed_batch_arm_file)
+    if not arm_path.is_absolute():
+        raise ValueError(
+            "Fixed-batch barrier arm file must use an absolute path"
+        )
+    return {
+        **fixed_environment(global_batch_size),
+        FIXED_BATCH_ARM_ENV: str(arm_path),
     }
 
 

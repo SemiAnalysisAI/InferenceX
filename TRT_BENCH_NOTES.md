@@ -110,6 +110,20 @@ did not return and all GPUs were idle afterward. Per-rank marker events now
 cover engine warmup, global clock synchronization, and executor worker start
 so a canceled canary identifies the exact rank lifecycle boundary.
 
+Run `27490077837` showed every rank completed executor worker startup. Run
+`27490378501` then preserved all-thread dumps and exposed the actual blocker:
+rank 0's event loop raised `Fixed-batch barrier timed out after 120.0s with
+120/128 requests` inside TRT's KV-cache capacity calibration. The other ranks
+were waiting for rank 0's broadcast, so the parent remained blocked in
+`configure_kv_cache_capacity()`.
+
+Those 120 requests are TRT-generated calibration dummies, not the benchmark
+batch. The MPI request shim is now installed but disarmed while `LLM(...)`
+initializes. The controller clears a unique arm file before launch; the parent
+worker atomically creates it only after `LLM(...)` returns and immediately
+before real warmup generation. Rank 0 then latches the gate on for both the
+warmup and measured passes. A stale or early arm file is a hard error.
+
 Run `27486396235` proved memory-derived KV restores a full GBS16 prefill, but
 GBS64 then exposed a separate pinned-kernel limit: the packed-FP8 CUDA
 quantizer rejected the 65536-row MTP `h_proj` launch during engine warmup.
@@ -119,9 +133,12 @@ local batch 2/8/16, so headline timing remains on the original fused path.
 
 ## Schedule Gate
 
-The branch-local MPI entry shim waits at each idle pass boundary until exactly
-one complete GBS has been enqueued. This prevents the live TRT executor from
-starting prefill after only the first few `generate_async()` submissions.
+After engine initialization, the branch-local MPI entry shim waits at each
+idle pass boundary until exactly one complete GBS has been enqueued. Before
+the arm file exists, it passes TRT's internal initialization requests through
+unchanged. This prevents the live executor from starting benchmark prefill
+after only the first few `generate_async()` submissions without intercepting
+TRT's own capacity probes.
 
 There must be exactly one prefill iteration with:
 
@@ -177,7 +194,8 @@ gh api -X POST \
   -f 'inputs[test-name]=DSV4 B300 TRT Huawei fixed GBS' \
   -f 'inputs[global_batch_sizes]=16,64,128' \
   -f 'inputs[salloc-time]=150' \
-  -f 'inputs[worker-timeout]=7200'
+  -f 'inputs[worker-timeout]=7200' \
+  -f 'inputs[worker-stack-period]=-1'
 ```
 
 Canary:
@@ -188,10 +206,11 @@ gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
-  -f 'inputs[test-name]=DSV4 B300 TRT fixed GBS16 canary' \
-  -f 'inputs[global_batch_sizes]=16' \
-  -f 'inputs[salloc-time]=90' \
-  -f 'inputs[worker-timeout]=5400'
+  -f 'inputs[test-name]=DSV4 B300 TRT fixed GBS128 canary' \
+  -f 'inputs[global_batch_sizes]=128' \
+  -f 'inputs[salloc-time]=45' \
+  -f 'inputs[worker-timeout]=1800' \
+  -f 'inputs[worker-stack-period]=-1'
 ```
 
 Find and watch:

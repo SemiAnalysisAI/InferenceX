@@ -6,6 +6,7 @@ from trt_config import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     CONTROLLED_ENVIRONMENT_VARIABLES,
     ENGINE_WARMUP_MAX_TOKENS,
+    FIXED_BATCH_ARM_ENV,
     FP8_FUSED_QUANT_MAX_ROWS,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
@@ -14,6 +15,7 @@ from trt_config import (
     MEASURED_OUTPUT_TOKENS,
     MOE_MAX_NUM_TOKENS,
     WARMUP_OUTPUT_TOKENS,
+    benchmark_environment,
     build_llm_kwargs,
     fixed_environment,
     local_batch_size,
@@ -91,9 +93,19 @@ def test_fixed_rank_environment_is_explicit():
     }
 
 
+def test_benchmark_environment_adds_absolute_barrier_arm_path(tmp_path):
+    arm_file = tmp_path / "fixed-batch.armed.json"
+    environment = benchmark_environment(64, arm_file)
+
+    assert environment[FIXED_BATCH_ARM_ENV] == str(arm_file)
+    with pytest.raises(ValueError, match="absolute path"):
+        benchmark_environment(64, "relative-arm-file")
+
+
 def test_old_tuning_environment_is_always_cleared():
     assert {
         "TLLM_METRICS_ALL_RANKS",
+        FIXED_BATCH_ARM_ENV,
         "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
         "TRTLLM_ENABLE_PDL",
         "TRTLLM_FORCE_COMM_METHOD",
