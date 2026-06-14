@@ -3765,5 +3765,5 @@
 - config-keys:
     - minimaxm3-fp8-mi355x-vllm
   description:
-    - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI355X and set VLLM_USE_BREAKABLE_CUDAGRAPH=0"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/TBD
+    - "Enable CUDA graphs for MiniMax-M3 MXFP8 on MI355X, set VLLM_USE_BREAKABLE_CUDAGRAPH=0, and disable prefix caching"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1754
