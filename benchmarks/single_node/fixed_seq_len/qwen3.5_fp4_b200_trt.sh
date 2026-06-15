@@ -88,9 +88,6 @@ cat "$EXTRA_CONFIG_FILE"
 
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
 
-# Max number of tokens per sequence-length config, matching the reference
-# configs. Fall back to deriving it from the sequence lengths for any other
-# combination.
 case "${ISL}_${OSL}" in
     8192_1024) MAX_NUM_TOKENS=32768 ;;
     1024_1024) MAX_NUM_TOKENS=16384 ;;
