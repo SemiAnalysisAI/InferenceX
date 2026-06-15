@@ -171,6 +171,10 @@ SGLANG_CMD=(
     --reasoning-parser deepseek-v4
     --chat-template "$SCRIPT_DIR/../chat_templates/deepseek_v4_thinking.jinja"
     --watchdog-timeout 1800
+    # The B200 checkpoint lives on Lustre. Partition sequential prefetching
+    # across local ranks so post-load weight repacking reads from page cache
+    # instead of issuing redundant fragmented mmap faults from every rank.
+    --weight-loader-prefetch-checkpoints
     "${MODEL_ARGS[@]}"
     "${METRICS_ARGS[@]}"
     "${CACHE_ARGS[@]}"
