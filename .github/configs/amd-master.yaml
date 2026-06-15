@@ -2766,15 +2766,15 @@ minimaxm3-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-    # 8k1k conc-16 row (same 1P TP8 + 1D TP8 layout) exists so the multi-node
-    # eval policy (8k1k + conc >= MIN_EVAL_CONC=16) marks an lm-eval — validates
-    # the M3 MoRI-IO disagg pipeline's correctness end-to-end. The conc-1 1k1k
-    # row above stays the latency smoke test.
+    # 8k1k disagg sweep (same 1P TP8 + 1D TP8 layout) across conc 1,2,4,8,16. The
+    # conc-16 point also makes the multi-node eval policy (8k1k + conc >= 16) mark
+    # an lm-eval (eval-conc=16) — validating the M3 MoRI-IO disagg pipeline's
+    # correctness end-to-end.
     - isl: 8192
       osl: 1024
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 16 ]
+        conc-list: [ 1, 2, 4, 8, 16 ]
         prefill:
           num-worker: 1
           tp: 8
