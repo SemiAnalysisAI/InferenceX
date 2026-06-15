@@ -42,6 +42,7 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --disable-radix-cache \
 --enable-aiter-allreduce-fusion --max-running-requests $CONC \
 --page-size 16 \
+--kv-cache-dtype fp8_e4m3 \
 > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
