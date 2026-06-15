@@ -3855,3 +3855,11 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
     - "Runner script updated to support dsv4 model prefix with dynamo-trt framework on GB300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+
+- config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Fix MNNVL fused allreduce correctness bug for TEP8 multi-node decode (gsm8k=0.0000 → expect passing)"
+    - "Root cause: fused_allreduce_gemma_rms_norm passed norm_out=separate buffer, triggering the residual_out←allreduce_in aliasing path which produces wrong results on the MNNVL backend across NVL72 node boundaries"
+    - "Fix: pass norm_out=None to match the compile-time AllReduceFusedAddGemmaRMSNormPattern aliasing (norm_out←allreduce_in, residual_out←residual) — commit 66a43ba on cleanup/m3-mi300x-mxfp8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
