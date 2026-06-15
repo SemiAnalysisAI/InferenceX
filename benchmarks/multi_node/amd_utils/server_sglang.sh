@@ -419,6 +419,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "================================================"
 
+    # Install LAUNCH_PREFIX dependencies if needed (e.g. numactl missing in container)
+    if [[ "${LAUNCH_PREFIX:-}" == *numactl* ]] && ! command -v numactl &>/dev/null; then
+        echo "[server_sglang] Installing numactl (required by LAUNCH_PREFIX)..."
+        apt-get install -y -q numactl >/dev/null 2>&1 || { echo "[server_sglang] WARNING: numactl install failed"; }
+    fi
+
     # start the head prefill server
     PREFILL_MORI_MOE_ENV=""
     set -x
@@ -426,7 +432,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
     fi
     set +x
-    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/$MODEL_NAME \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -520,11 +526,24 @@ if [ "$NODE_RANK" -eq 0 ]; then
         export IS_MTP=false
     fi
 
-    # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
-    BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
-        ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
-        ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+    # Select the benchmark runner.
+    # IS_AGENTIC=1/true  → agentic trace replay (trace_replay.sh)
+    # IS_AGENTIC unset/0 → fixed-seq-len throughput benchmark (bench.sh)
+    if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        # trace_replay.sh signature: model_path model_name concurrency_list log_path
+        BENCH_CMD="bash $SGLANG_WS_PATH/trace_replay.sh \
+            $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
+        echo "Benchmark runner: trace_replay.sh (agentic, OFFLOADING=${OFFLOADING:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
+    else
+        # bench.sh signature:
+        # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path
+        # isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
+        BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
+            $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+            ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
+            ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+        echo "Benchmark runner: bench.sh (fixed-seq-len)"
+    fi
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -658,7 +677,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
     fi
     set +x
-    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/${MODEL_NAME} \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -720,13 +739,19 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
+    # Install LAUNCH_PREFIX dependencies if needed (e.g. numactl missing in container)
+    if [[ "${LAUNCH_PREFIX:-}" == *numactl* ]] && ! command -v numactl &>/dev/null; then
+        echo "[server_sglang] Installing numactl (required by LAUNCH_PREFIX)..."
+        apt-get install -y -q numactl >/dev/null 2>&1 || { echo "[server_sglang] WARNING: numactl install failed"; }
+    fi
+
     DECODE_MORI_MOE_ENV=""
     set -x
     if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_DECODE" ]]; then
         DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
     fi
     set +x
-    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} python3 -m sglang.launch_server \
+    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} MORI_IO_SQ_BACKOFF_TIMEOUT_US=${MORI_IO_SQ_BACKOFF_TIMEOUT_US} MORI_IO_QP_MAX_SEND_WR=${MORI_IO_QP_MAX_SEND_WR} ${LAUNCH_PREFIX:-} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \

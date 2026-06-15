@@ -180,6 +180,9 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: int
+    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
+        default="none", alias=Fields.OFFLOADING.value
+    )
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
