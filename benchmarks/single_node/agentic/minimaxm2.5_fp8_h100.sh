@@ -33,10 +33,10 @@ fi
 nvidia-smi
 
 # ---- Resolve traces and install deps ----------------------------------------
-# MiniMax-M2.5 servers run at max_model_len ~256k; the unfiltered 052726
+# MiniMax-M2.5 servers run at max_model_len ~256k; the unfiltered 061526
 # corpus has requests up to ~1M proxy tokens that would be rejected.
-# Switch to the 256k-capped variant (470 traces, max in+out <= 256k).
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060826_256k
+# Switch to the 256k-capped variant (232 traces, max in+out <= 256k).
+export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_061526_256k
 
 resolve_trace_source
 install_agentic_deps

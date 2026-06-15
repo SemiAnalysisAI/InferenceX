@@ -27,7 +27,7 @@ name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 # Standard agentic deltas (see the gb300 agentic recipes):
 #   - benchmark.type custom -> agentic_srt.sh
 #   - prefix caching ON (no no-enable-prefix-caching)
-#   - max-model-len 262144 + 060826 256k-capped corpus (GB200 cannot serve
+#   - max-model-len 262144 + 061526 256k-capped corpus (GB200 cannot serve
 #     the full 1M DSv4 context, mirroring the minimaxm2.5 agentic configs)
 #   - infra.nats_max_payload_mb 32 (long agentic prompts exceed NATS' 1 MiB)
 #   - srun_options.container-remap-root (apt-get git in agentic_srt.sh)
@@ -201,5 +201,5 @@ benchmark:
     # The server runs at max-model-len 262144 (see header comment) — replay
     # the 256k-capped corpus and tell aiperf to filter inputs to the served
     # window, mirroring the minimaxm2.5 agentic configs.
-    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_with_subagents_060826_256k"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526_256k"
     MAX_MODEL_LEN: "262144"
