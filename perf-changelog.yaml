@@ -3613,6 +3613,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
 
 - config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604 to lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612"
+    - "Enable AITER_FLYDSL_FORCE=1 in both non-MTP and MTP benchmark scripts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1716
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612."
@@ -3829,3 +3837,15 @@
     - "Switch fixed-seq-len search space from TP8 to TP4 for both isl=1024 and isl=8192 scenarios"
     - "Expand isl=8192 coverage: add TP4 dp-attn sweep (conc 32–2048) and TP4 TP-only sweep (conc 1–32)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
+  
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt
+    - dsv4-fp4-gb300-dynamo-trt-mtp
+  description:
+    - "Add DeepSeek-V4-Pro MXFP4 GB300 disaggregated TRT-LLM benchmarks via Dynamo (27 STP + 27 MTP configs)"
+    - "New configs: dsv4-fp4-gb300-dynamo-trt (STP) and dsv4-fp4-gb300-dynamo-trt-mtp (MTP)"
+    - "Covers ISL 1024/OSL 1024 (14 STP + 14 MTP) and ISL 8192/OSL 1024 (13 STP + 13 MTP)"
+    - "Container: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
+    - "Runner script updated to support dsv4 model prefix with dynamo-trt framework on GB300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
