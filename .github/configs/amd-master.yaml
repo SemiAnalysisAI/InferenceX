@@ -2926,7 +2926,7 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
         #DPA, conc>=64
       #- { tp: 8, dp-attn: false, offloading: none, conc-list: [4, 8, 16, 32, 48, 64, 128, 196, 256]  }
       #- { tp: 8, dp-attn: false, offloading: hicache, conc-list: [4, 8, 16, 32, 48, 64, 128, 196, 256]  }
-      - { tp: 8, dp-attn: false, offloading: none, conc-list: [64]  }
+      #- { tp: 8, dp-attn: false, offloading: none, conc-list: [64]  }
       - { tp: 8, dp-attn: false, offloading: hicache, conc-list: [64]  }
 
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
