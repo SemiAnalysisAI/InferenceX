@@ -3842,3 +3842,10 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
     - "Runner script updated to support dsv4 model prefix with dynamo-trt framework on GB300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Enable fp8 (fp8_e4m3) KV cache by adding --kv-cache-dtype fp8_e4m3 to the qwen3.5-mxfp4 MI355X non-MTP and MTP benchmark scripts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1776
