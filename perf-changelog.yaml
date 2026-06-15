@@ -3611,6 +3611,22 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604 to lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612"
+    - "Enable AITER_FLYDSL_FORCE=1 in both non-MTP and MTP benchmark scripts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1716
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612."
+    - "Fix the intermediate_pad setting in the MoE computation in sglang PR#27858. This avoids the unnecessary overhead of computing useless padding."
+    - "Correct the chunk prefill setting size under tp8/dp8 config."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1715
   
 
 - config-keys:
