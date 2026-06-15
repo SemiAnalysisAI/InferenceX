@@ -112,6 +112,13 @@ case "$M3_AITER_AR_RMS_MODE" in
         export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
         export VLLM_ROCM_USE_AITER_TRITON_GEMM=0
 
+        if [ "$M3_AITER_AR_RMS_MODE" = "fused" ]; then
+            # The image's amd-aiter 0.1.13.post1 has incorrect memory ordering
+            # in the two-stage fused allreduce+RMSNorm kernel. Install the
+            # checksummed ROCm 7.2 wheel containing ROCm/aiter#2890.
+            python3 /workspace/utils/install_minimaxm3_aiter.py
+        fi
+
         python3 /workspace/utils/patch_minimaxm3_aiter_ar_rms.py
 
         DEFERRED_FFN_AR_PATCH="$(dirname "$0")/minimaxm3_mi300x_deferred_ffn_ar.patch"
