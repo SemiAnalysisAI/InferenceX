@@ -202,9 +202,10 @@ jobs:
           export SGLANG_TORCH_PROFILER_DIR="$VLLM_TORCH_PROFILER_DIR"
           echo "RESULT_FILENAME=$res_name" >> "$GITHUB_ENV"
 
-          rm -rf "$VLLM_TORCH_PROFILER_DIR"
+          host_trace_dir="${GITHUB_WORKSPACE}/profile_traces/${res_name}"
+          rm -rf "$host_trace_dir"
           rm -f "$trace_path" "$summary_path"
-          mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+          mkdir -p "$host_trace_dir"
 
           bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
 
@@ -214,7 +215,7 @@ jobs:
           fi
           if [ ! -s "$trace_path" ]; then
             echo "Run failed: profile trace $trace_path not found or empty" >&2
-            find "$VLLM_TORCH_PROFILER_DIR" -maxdepth 2 -type f -printf '%p %s bytes\n' || true
+            find "$host_trace_dir" -maxdepth 2 -type f -printf '%p %s bytes\n' || true
             exit 1
           fi
 
