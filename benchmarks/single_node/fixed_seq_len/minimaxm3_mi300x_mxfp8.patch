@@ -126,7 +126,7 @@ index 71dd7634a..63500487d 100644
 
  import torch
 diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
-index 33851fdc8..815d8ef94 100644
+index 33851fdc8..50554b98c 100644
 --- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 +++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 @@ -1,28 +1,35 @@
@@ -173,12 +173,14 @@ index 33851fdc8..815d8ef94 100644
  from vllm.model_executor.layers.fused_moe.moe_align_block_size import (
      moe_align_block_size,
  )
-@@ -34,9 +41,33 @@ from vllm.triton_utils import tl, triton
+@@ -34,9 +41,46 @@ from vllm.triton_utils import tl, triton
 
  logger = init_logger(__name__)
 
 +_BF16_DECODE_TOKEN_THRESHOLD = 8
-+_BF16_PREFILL_TOKEN_THRESHOLD = 1024
++# MiniMax-M3 eager refill shapes cross over to the retained BF16 experts
++# between 827 and 843 tokens on MI300X. Keep the cutoff tile-aligned.
++_BF16_PREFILL_TOKEN_THRESHOLD = 832
 +_LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE = 5
 +
 +
@@ -201,6 +203,17 @@ index 33851fdc8..815d8ef94 100644
 +        max_model_len > 4096 and layer_index % _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE == 0
 +    )
 +
++
++def _should_use_bf16_experts(
++    num_tokens: int,
++    native_weights_available: bool,
++) -> bool:
++    return (
++        not native_weights_available
++        or num_tokens >= _BF16_PREFILL_TOKEN_THRESHOLD
++        or num_tokens <= _BF16_DECODE_TOKEN_THRESHOLD
++    )
++
 
  @triton.jit
 -def _mxfp8_grouped_gemm_kernel(
@@ -208,7 +221,7 @@ index 33851fdc8..815d8ef94 100644
      a_ptr,
      a_scale_ptr,
      b_ptr,
-@@ -125,6 +156,116 @@ def _mxfp8_grouped_gemm_kernel(
+@@ -125,6 +169,116 @@ def _mxfp8_grouped_gemm_kernel(
      )
 
 
@@ -325,7 +338,7 @@ index 33851fdc8..815d8ef94 100644
  def _grouped_gemm_mxfp8(
      a_q: torch.Tensor,  # [M, K] fp8 e4m3
      a_scale: torch.Tensor,  # [M, K//32] uint8 (E8M0)
-@@ -143,16 +284,71 @@ def _grouped_gemm_mxfp8(
+@@ -143,16 +297,71 @@ def _grouped_gemm_mxfp8(
  ) -> torch.Tensor:
      M_routed = num_valid_tokens
      E, N, K = w.shape
@@ -403,7 +416,7 @@ index 33851fdc8..815d8ef94 100644
          a_q,
          a_scale,
          w,
-@@ -173,9 +369,9 @@ def _grouped_gemm_mxfp8(
+@@ -173,9 +382,9 @@ def _grouped_gemm_mxfp8(
          w.stride(0),
          w.stride(1),
          w.stride(2),
@@ -416,7 +429,7 @@ index 33851fdc8..815d8ef94 100644
          out.stride(0),
          out.stride(1),
          A_DIV=a_div,
-@@ -183,7 +379,7 @@ def _grouped_gemm_mxfp8(
+@@ -183,7 +392,7 @@ def _grouped_gemm_mxfp8(
          BLOCK_M=block_m,
          BLOCK_N=BLOCK_N,
          BLOCK_K=BLOCK_K,
@@ -425,7 +438,7 @@ index 33851fdc8..815d8ef94 100644
      )
      return out
 
-@@ -202,12 +398,20 @@ def fused_moe_mxfp8_native(
+@@ -202,12 +411,20 @@ def fused_moe_mxfp8_native(
      limit: float | None,
      global_num_experts: int,
      expert_map: torch.Tensor | None,
@@ -447,7 +460,7 @@ index 33851fdc8..815d8ef94 100644
      sorted_ids, expert_ids, num_post = moe_align_block_size(
          topk_ids,
          block_m,
-@@ -256,17 +460,74 @@ def fused_moe_mxfp8_native(
+@@ -256,17 +473,74 @@ def fused_moe_mxfp8_native(
          M,
          top_k,
          block_m,
@@ -525,7 +538,7 @@ index 33851fdc8..815d8ef94 100644
 
      @property
      def quant_dtype(self) -> torch.dtype | str | None:
-@@ -283,7 +544,9 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -283,7 +557,9 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
 
      @staticmethod
      def _supports_current_device() -> bool:
@@ -536,16 +549,15 @@ index 33851fdc8..815d8ef94 100644
 
      def apply(
          self,
-@@ -303,6 +566,36 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -303,6 +579,35 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
          expert_tokens_meta: mk.ExpertTokensMetadata | None,
          apply_router_weight_on_input: bool,
      ):
 +        num_tokens = hidden_states.shape[0]
 +        bf16_experts = self.bf16_experts
-+        if bf16_experts is not None and (
-+            not self.native_weights_available
-+            or num_tokens >= _BF16_PREFILL_TOKEN_THRESHOLD
-+            or num_tokens <= _BF16_DECODE_TOKEN_THRESHOLD
++        if bf16_experts is not None and _should_use_bf16_experts(
++            num_tokens,
++            self.native_weights_available,
 +        ):
 +            if self.w1_bf16 is None or self.w2_bf16 is None:
 +                raise RuntimeError(
@@ -573,7 +585,7 @@ index 33851fdc8..815d8ef94 100644
          alpha = self.quant_config.gemm1_alpha
          alpha = 1.702 if alpha is None else float(alpha)
          beta = self.quant_config.gemm1_beta
-@@ -322,5 +615,6 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -322,5 +627,6 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
              limit=limit,
              global_num_experts=global_num_experts,
              expert_map=expert_map,
