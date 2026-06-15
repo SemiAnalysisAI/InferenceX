@@ -12776,9 +12776,9 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/disagg-gb200-4p1d-dep8-dep16-12n.yaml"
         decode:
           num-worker: 1
-      #      tp: 16
-      #      ep: 16
-      #      dp-attn: true
+          tp: 16
+          ep: 16
+          dp-attn: true
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
