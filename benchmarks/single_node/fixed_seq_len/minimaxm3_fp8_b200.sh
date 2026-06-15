@@ -62,7 +62,6 @@ $PARALLEL_ARGS \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --language-model-only \
---kv-cache-dtype fp8 \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --stream-interval 20 --no-enable-prefix-caching \
