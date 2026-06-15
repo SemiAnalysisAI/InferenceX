@@ -2154,14 +2154,16 @@ dsv4-fp4-mi355x-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-      #- { tp: 4, dp-attn: true, conc-start: 64, conc-end: 2048 }
-      #- { tp: 4, dp-attn: false, conc-start: 1 , conc-end: 32 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
+      - { tp: 4, dp-attn: true, conc-start: 16, conc-end: 128 }
+      - { tp: 4, dp-attn: false, conc-start: 1 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, dp-attn: true, conc-start: 512, conc-end: 512 }
-    #  - { tp: 4, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
+      - { tp: 4, dp-attn: true, conc-start: 16, conc-end: 128 }
+      - { tp: 4, dp-attn: false, conc-start: 1, conc-end: 32 }
+
 
 # MTP variant of dsv4-fp4-mi355x-sglang. Mirrors the base search space and adds
 # spec-decoding: mtp, which routes to dsv4_fp4_mi355x_sglang_mtp.sh (EAGLE
