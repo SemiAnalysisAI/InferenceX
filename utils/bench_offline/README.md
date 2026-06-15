@@ -363,6 +363,69 @@ GB300 artifacts:
 - [GitHub Actions run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27517035480)
 - [InferenceMAX unofficial run](https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27517035480)
 
+### PR #1689 Serving Comparison
+
+[PR #1689 attempt 13](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/13)
+does not contain an equivalent GBS128 offline result. The same-width TP16
+decode row used:
+
+- 24 dedicated prefill GPUs plus 16 decode GPUs
+- serving concurrency 666
+- decode `max_batch_size=32` per attention-DP rank, or global capacity 512
+- overlap scheduling and continuous batching
+- random input/output lengths averaging about 7378/922 tokens
+
+It completed 33154.54 output tok/s. InferenceX reports
+`output_tput_per_gpu=2072.16` by dividing only by the 16 decode GPUs. Dividing
+by all 40 GPUs gives 828.86 output tok/s/GPU, only 2.80% above this benchmark's
+GBS128 result of 806.32 output tok/s/GPU.
+
+The attempt's three final 8k/1k rows also use materially different operating
+points:
+
+| Decode topology | Prefill + decode GPUs | Concurrency | Output tok/s/decode-GPU | Output tok/s/all-GPU |
+|---|---:|---:|---:|---:|
+| TP32/EP32, MTP3 | 16 + 32 | 333 | 676.76 | 451.18 |
+| TP16/EP16, MTP3 | 24 + 16 | 666 | 2072.16 | 828.86 |
+| TP8/EP8, MTP1 | 48 + 8 | 4301 | 9686.74 | 1383.82 |
+
+The TP8 headline uses `max_batch_size=512` per decode rank and
+`max_draft_len=1`, not this benchmark's local batch 8 and MTP3. Its client TPOT
+implies roughly 430 active requests per decode rank. It is a high-batch serving
+saturation point, not evidence that fixed GBS128 should produce 9686.74
+tok/s/GPU.
+
+The TP16 serving row also maintained about 401 active decode requests by
+Little's law (`33154.54 * 0.012107`), or about 25 per attention-DP rank. This
+benchmark holds exactly 8 per rank. At the offline row's measured round latency
+and MTP yield, reaching 2072.16 output tok/s/decode-GPU would require
+approximately GBS329, not GBS128.
+
+The decoder log independently reconstructs the headline number. Its steady
+batch-32-graph rows with 24-30 actual scheduled requests averaged 27.73
+requests/rank and 32.49 ms device step time:
+
+```text
+27.73 / 0.03249 = 853.3 request-rounds/s/decode-GPU
+2072.16 / 853.3 = 2.428 output tokens/request-round
+```
+
+The PR gets 2072 mainly by running about 3.47 times the local decode batch,
+not by making a local-batch-8 round 2.57 times faster.
+
+There is still a smaller runtime-timing clue, but the PR does not contain an
+exact fixed-batch comparison. Iterations selecting its batch-8 CUDA graph,
+usually with only 6-8 real scheduled requests because graph padding was
+enabled, averaged about 27.67 ms of reported device step time. The 13 rows
+with exactly 8 scheduled requests and that graph averaged 28.29 ms. The
+offline GBS128 row averages 34.23 ms of complete non-overlapped executor
+iteration time. These scopes are not interchangeable: the latter includes TRT
+scheduler, sampler, request-state, and stats work, while Huawei times
+synchronized model decode calls. A future forward-only fixed-batch diagnostic
+would help isolate that difference, but it must remain separate from the
+validated headline metric. Increasing GBS or enabling overlap would reproduce
+a serving saturation experiment, not correct this offline result.
+
 ## Execution Chain
 
 1. Dispatch `.github/workflows/e2e-tests.yml`.

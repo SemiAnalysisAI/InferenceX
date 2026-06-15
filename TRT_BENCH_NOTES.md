@@ -727,6 +727,85 @@ occur after the successful result/completion pair is published and the host
 intentionally terminates the remaining external MPI management world; they
 are not benchmark failures.
 
+### Why PR #1689 Reports 2072 tok/s/GPU
+
+Reference:
+
+```text
+PR: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/13
+row: D(tp16/ep16/dptrue/nw1), P(tp4/ep4/dptrue/nw6), conc=666
+recipe: ctx6dep4_gen1dep16_batch32_eplb384_mtp3.yaml
+```
+
+The PR row and fixed GBS128 row use the same image, TP16/EP16 decode topology,
+MTP3, load balancer, and GB300 fabric, but they do not measure the same
+operating point:
+
+| Property | Offline GBS128 | PR #1689 TP16 serving |
+|---|---:|---:|
+| Prefill GPUs | 0 separate | 24 |
+| Decode GPUs | 16 | 16 |
+| Local decode batch | exactly 8 | mostly 24-32 |
+| Global decode population | exactly 128 | about 401 active, capacity 512 |
+| Scheduler | non-overlap, fixed batch | overlap, continuous batch |
+| Input/output lengths | exactly 8192 / 256 measured rounds | average 7378 / 922 tokens |
+| Reported output tok/s/decode-GPU | 806.32 | 2072.16 |
+| Output tok/s across all allocated GPUs | 806.32 | 828.86 |
+
+The PR produced 33154.54 output tok/s. `utils/process_result.py` divides
+disaggregated output throughput by `decode_gpus`, so its public 2072.16 value
+does not charge the 24 prefill GPUs. Charging all 40 GPUs gives 828.86
+tok/s/GPU, 1.02796x the offline GBS128 value.
+
+The other final 8k/1k PR rows are not closer comparisons:
+
+| Decode topology | Prefill + decode GPUs | Concurrency | Output/decode-GPU | Output/all-GPU |
+|---|---:|---:|---:|---:|
+| TP32/EP32, MTP3 | 16 + 32 | 333 | 676.76 | 451.18 |
+| TP16/EP16, MTP3 | 24 + 16 | 666 | 2072.16 | 828.86 |
+| TP8/EP8, MTP1 | 48 + 8 | 4301 | 9686.74 | 1383.82 |
+
+The TP8 row's resolved config has `max_batch_size=512` per attention-DP rank,
+CUDA graphs through batch 512, and `max_draft_len=1`. Its client TPOT implies
+about 3438 active decode requests globally, or 430/rank. Do not compare its
+9686.74 output tok/s/decode-GPU with local-batch-8 MTP3.
+
+The TP16 row's client mean TPOT was 12.107 ms/output token. Little's law
+therefore gives about 401 active decode requests, or 25.1 per attention-DP
+rank, which agrees with the engine log spending most measured iterations in
+its batch-32 CUDA graph. The offline equivalent output TPOT is lower at 9.922
+ms/output token, but it has only 128 active requests. At the offline round
+latency and MTP yield, matching 2072.16 output tok/s/decode-GPU requires about
+GBS329.
+
+The steady engine rows with 24-30 actual scheduled requests averaged 27.73
+requests/rank and 32.49 ms device step time. They reconstruct the serving
+headline:
+
+```text
+27.73 / 0.03249 = 853.3 request-rounds/s/decode-GPU
+2072.16 / 853.3 = 2.428 output tokens/request-round
+```
+
+The offline row is `8 / 0.03423 = 233.7` request-rounds/s/GPU and then
+multiplies by its observed 3.450 tokens/round to produce 806.32. The PR's
+2.57x output-throughput lead is therefore primarily its 3.47x larger local
+decode population, partly offset by lower output yield.
+
+The engine log exposes one smaller timing clue that deserves a separate
+diagnostic, but not an apples-to-apples result. Iterations selecting the
+batch-8 CUDA graph averaged 27.67 ms of device step time, but graph padding was
+enabled and most had only 6-8 real scheduled requests. The 13 measured rows
+with exactly 8 scheduled requests and that graph averaged 28.29 ms. The
+offline row reports 34.23 ms `iterLatencyMS`. Overlap-mode device step time is
+GPU forward timing, while non-overlap `iterLatencyMS` covers the complete
+executor loop, so these values cannot establish a fixed-batch performance
+gap. Huawei synchronizes and times only its model decode calls. If the pinned
+TRT image can expose per-iteration GPU-forward timing without changing the
+schedule, record it as a secondary `gpu_forward_round_tpot_ms`; do not replace
+the validated full-loop headline or enable overlap in the Huawei-style path.
+
 Exact flat renderer rows, sorted by GBS for readability:
 
 ```json
