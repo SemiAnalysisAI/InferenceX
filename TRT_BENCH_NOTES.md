@@ -934,6 +934,7 @@ gh api -X POST \
   /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
   -f ref='trt-bench' \
   -f 'inputs[diagnostic-only]=true' \
+  -f 'inputs[diagnostic-job-name]=gb300-nv_1' \
   -f 'inputs[test-name]=GB300 Slurm status'
 ```
 
@@ -947,6 +948,11 @@ begun. The matrix is sequential. It does not fail fast, so one copied PR
 profile failing does not suppress the other topology results. It runs TP32,
 then TP16, then TP8 so launch/config errors surface on the shortest copied
 engine before the multi-hour TP8 graph initialization.
+
+Set `diagnostic-job-name` to the runner name shown on the target Actions job.
+The diagnostic prints the matching Slurm allocation and steps, then tails the
+top-level rack controller/world logs and all visible child
+`host_launcher.log` files without modifying the allocation.
 
 For an initialization hang, let the controller time out so the container
 finalizer preserves `worker.log`; do not cancel the Actions run externally.

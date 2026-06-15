@@ -60,6 +60,11 @@ on:
         required: false
         type: boolean
         default: false
+      diagnostic-job-name:
+        description: Slurm job name to inspect in diagnostic-only mode
+        required: false
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -426,17 +431,20 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Show GB300 Slurm state
+        env:
+          TARGET_JOB_NAME: ${{ inputs.diagnostic-job-name || runner.name }}
         run: |
           set -Eeuo pipefail
           date -u '+timestamp=%Y-%m-%dT%H:%M:%SZ'
-          printf 'runner=%s host=%s\n' '${{ runner.name }}' "$(hostname)"
+          printf 'runner=%s host=%s target=%s\n' \
+            '${{ runner.name }}' "$(hostname)" "$TARGET_JOB_NAME"
           echo '--- target offline job ---'
           squeue \
-            --name=gb300-nv_2 \
+            --name="$TARGET_JOB_NAME" \
             --format='%.18i %.10T %.10M %.10l %.6D %.30R %.40j'
           job_id="$(
             squeue \
-              --name=gb300-nv_2 \
+              --name="$TARGET_JOB_NAME" \
               --noheader \
               --format='%i' \
               | head -n 1
@@ -461,23 +469,30 @@ jobs:
             work_dir="$(
               sed -n 's/.* WorkDir=\([^ ]*\).*/\1/p' <<<"$job_record"
             )"
-            if [[ -n "$work_dir" && -d "$work_dir" ]]; then
-              echo "--- shared artifacts: $work_dir ---"
-              find "$work_dir" \
-                -maxdepth 2 \
+            benchmark_dir="$work_dir"
+            if [[ -d "${work_dir}/offline-bench" ]]; then
+              benchmark_dir="${work_dir}/offline-bench"
+            fi
+            if [[ -n "$work_dir" && -d "$benchmark_dir" ]]; then
+              echo "--- shared artifacts: $benchmark_dir ---"
+              find "$benchmark_dir" \
+                -maxdepth 6 \
                 -type f \
                 \( -name 'offline_*' -o -name 'worker.log' \
-                   -o -name 'perfect_router.jsonl' \) \
+                   -o -name 'perfect_router.jsonl' \
+                   -o -name 'host_launcher.log' \
+                   -o -name 'release.json' \
+                   -o -name 'replica_*.ready.json' \) \
                 -printf '%TY-%Tm-%TdT%TH:%TM:%TS %12s %p\n' \
                 | sort
               for log_path in \
-                "$work_dir/offline_controller_gbs16.log" \
-                "$work_dir/.offline_work_gbs16_${job_id}/worker.log" \
-                "$work_dir/.offline_work_gbs16_${job_id}/perfect_router.jsonl"
+                "$benchmark_dir"/offline_controller_*.log \
+                "$benchmark_dir"/offline_world_*.log \
+                "$benchmark_dir"/.offline_rack_*/replicas/*/host_launcher.log
               do
                 if [[ -f "$log_path" ]]; then
                   echo "--- tail: $log_path ---"
-                  tail -n 120 "$log_path"
+                  tail -n 80 "$log_path"
                 fi
               done
             fi
