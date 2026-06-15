@@ -553,6 +553,8 @@ FIXED_BATCH_ARM_FILE="${EXTERNAL_WORK_DIR}/fixed_batch_barrier.armed.json"
 PERFECT_ROUTER_MARKER="${EXTERNAL_WORK_DIR}/perfect_router.jsonl"
 HOST_PERFECT_ROUTER_MARKER="${HOST_EXTERNAL_WORK_DIR}/perfect_router.jsonl"
 CUTE_CACHE_DIR="${TRT_BENCH_CACHE_ROOT}/cute-dsl"
+rm -rf "$HOST_EXTERNAL_WORK_DIR"
+mkdir -p "$HOST_EXTERNAL_WORK_DIR"
 RANK_ENV_RECORDS="$(mktemp /tmp/offline-trt-rank-env.XXXXXX)"
 python3 \
     "$TRT_BENCH_WORKSPACE/utils/bench_offline/emit_rank_environment.py" \

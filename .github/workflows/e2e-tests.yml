@@ -34,7 +34,7 @@ on:
         type: string
         default: DeepSeek-V4 GB300 TRT Huawei-style offline
       global_batch_sizes:
-        description: auto, or comma-separated Huawei batches (16,64,128)
+        description: auto, or a validated comma-separated profile subset
         required: false
         type: string
         default: auto
@@ -124,12 +124,11 @@ jobs:
                   raise SystemExit(
                       f"{benchmark_profile} requires hardware-profile=gb300"
                   )
-              if requested != "auto":
-                  raise SystemExit(
-                      "PR recipe profiles derive their exact fixed global "
-                      "batch; set global_batch_sizes=auto"
-                  )
               if benchmark_profile == "pr-max-sweep":
+                  if requested != "auto":
+                      raise SystemExit(
+                          "pr-max-sweep requires global_batch_sizes=auto"
+                      )
                   order = (
                       "pr-tp32-mtp3",
                       "pr-tp16-mtp3",
@@ -141,9 +140,33 @@ jobs:
                       for global_batch in pr_profiles[profile]
                   ]
               elif benchmark_profile in pr_profiles:
+                  allowed = set(pr_profiles[benchmark_profile])
+                  values = (
+                      list(pr_profiles[benchmark_profile])
+                      if requested == "auto"
+                      else [
+                          int(item.strip())
+                          for item in requested.split(",")
+                          if item.strip()
+                      ]
+                  )
+                  if not values:
+                      raise SystemExit(
+                          "At least one global batch size is required"
+                      )
+                  if len(values) != len(set(values)):
+                      raise SystemExit(
+                          f"Duplicate global batch sizes: {values}"
+                      )
+                  invalid = sorted(set(values) - allowed)
+                  if invalid:
+                      raise SystemExit(
+                          f"Unsupported {benchmark_profile} global batch "
+                          f"sizes {invalid}; allowed={sorted(allowed)}"
+                      )
                   entries = [
                       (benchmark_profile, global_batch)
-                      for global_batch in pr_profiles[benchmark_profile]
+                      for global_batch in values
                   ]
               else:
                   raise SystemExit(

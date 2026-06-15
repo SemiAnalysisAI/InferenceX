@@ -220,6 +220,15 @@ host-appended file stopped at iteration `131`; the controller timed out after
 as the controller, while a separate follower mirrors that file to the
 all-rank console stream.
 
+Run `27525200755`, source
+`d8abc002a59d930987870c2ca0682f77b2fbb589`, validated the direct rank-0
+timing path at TP16 GBS400. GBS512 then exposed an independent startup race:
+MPI rank-entry hooks created marker files in the shared work directory while
+the rank-0 container script was deleting that directory. Rank 0 exited on
+`rm: Directory not empty` before model loading; GPU telemetry remained idle.
+The host now removes and creates the unique work directory before `srun`,
+and external-MPI rank 0 only reuses it.
+
 Run `27502789238`, source
 `3ca9a9febe452918641fc842e5e425553cf035a2`, reached Slurm allocation
 `8707` on `im-gb300-r01-c011` through `c014`. Its rank artifact proves global
@@ -690,7 +699,9 @@ gh api -X POST \
 
 Single PR profile: replace `pr-max-sweep` with `pr-tp32-mtp3`,
 `pr-tp16-mtp3`, or `pr-tp8-mtp1`. Keep
-`inputs[global_batch_sizes]=auto`.
+`inputs[global_batch_sizes]=auto` for both copied points, or pass a validated
+subset such as `512` for a targeted capacity rerun. `pr-max-sweep` always
+requires `auto`.
 
 Attempt 13's final copied jobs took about 38 minutes for TP32, 80 minutes for
 TP16, and 216 minutes for TP8. The TP8 cost is dominated by initializing the

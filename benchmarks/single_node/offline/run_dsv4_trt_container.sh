@@ -53,7 +53,9 @@ start_offline_gpu_monitor() {
     log "GPU telemetry started pid=$GPU_MONITOR_PID output=$GPU_METRICS"
 }
 
-rm -rf "$WORK_DIR"
+if [[ "$TRT_BENCH_EXTERNAL_MPI" != "1" ]]; then
+    rm -rf "$WORK_DIR"
+fi
 mkdir -p "$WORK_DIR"
 
 finalize() {

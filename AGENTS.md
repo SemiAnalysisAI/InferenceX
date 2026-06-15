@@ -149,6 +149,9 @@ Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generat
   `offline_world_ID.log`. TRT resets iteration IDs after engine warmup; use
   the final rank-0 `print_iter_log` occurrence for each selected measured
   iteration.
+- For external MPI, clean `.offline_work_ID_JOB` in the host launcher before
+  `srun`. Do not delete it from the rank-0 container script because rank-entry
+  hooks may already be writing marker files there.
 
 ## Fetching GitHub Actions Benchmark Results
 
