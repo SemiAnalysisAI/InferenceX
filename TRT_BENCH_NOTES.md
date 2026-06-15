@@ -179,6 +179,15 @@ to accommodate retries. This changes startup reliability only; the measured
 pass still releases all nine engines together and preserves the 72-GPU
 fixed-global-batch contract.
 
+Run `27539161854`, source `58062832`, proved the retry path and completed all
+nine child measurements. `r03` and `r04` succeeded on attempt 2; every other
+replica succeeded on attempt 1. Final aggregation exposed two controller-only
+issues: the parent rack profile leaked into the shared metric import, and NFS
+release-file visibility produced 32.357 seconds of measured-start skew. The
+aggregator now imports under the TP8 engine profile. Replica 0 also publishes
+a common measured start 90 seconds in the future; every child waits against
+that timestamp after seeing the release file, absorbing the observed NFS lag.
+
 The direct offline engine keeps the documented `max_num_tokens=32768`
 adaptation because it must admit its own 8K prompts. The serving decode worker
 in the PR receives transferred KV and uses `max_num_tokens=1024`.
@@ -196,10 +205,11 @@ Rack batches:
 Every child independently proves 256 consecutive exact fixed-batch decode
 iterations. Immediately before its measured `generate()` call, each child
 writes `replica_NN.ready.json` and waits. Replica 0 publishes the release only
-after all nine ready files are visible. This barrier synchronizes the
-measured passes, not engine initialization. Children may wait up to two hours
-for the slowest engine to finish initialization. Aggregation rejects a
-measured-pass start skew above 10 seconds.
+after all nine ready files are visible, with one common start timestamp 90
+seconds later. This barrier synchronizes the measured passes, not engine
+initialization. Children may wait up to two hours for the slowest engine to
+finish initialization. Aggregation rejects a measured-pass start skew above
+10 seconds.
 
 For logical rack round `i`, aggregation takes:
 

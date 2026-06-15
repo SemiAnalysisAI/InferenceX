@@ -29,6 +29,7 @@ from trt_config import (
     MOE_MAX_NUM_TOKENS,
     RACK_BARRIER_DIR_ENV,
     RACK_BARRIER_TIMEOUT_ENV,
+    RACK_RELEASE_DELAY_ENV,
     RACK_REPLICA_COUNT_ENV,
     RACK_REPLICA_INDEX_ENV,
     WARMUP_OUTPUT_TOKENS,
@@ -488,6 +489,7 @@ def test_rack_synchronization_config_parses_complete_environment():
             RACK_REPLICA_COUNT_ENV: "9",
             RACK_REPLICA_INDEX_ENV: "8",
             RACK_BARRIER_TIMEOUT_ENV: "3600",
+            RACK_RELEASE_DELAY_ENV: "90",
         }
     )
     assert config == {
@@ -496,6 +498,7 @@ def test_rack_synchronization_config_parses_complete_environment():
         "replica_count": 9,
         "replica_index": 8,
         "timeout_seconds": 3600,
+        "release_delay_seconds": 90,
     }
 
 
@@ -539,10 +542,12 @@ def test_rack_parent_limits_concurrent_engine_initialization():
     assert 'TRT_BENCH_RACK_MODEL_LOAD_RETRY_DELAY_SECONDS:-15' in source
     assert 'TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS:-1800' in source
     assert 'TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS:-7200' in source
+    assert 'TRT_BENCH_RACK_RELEASE_DELAY_SECONDS:-90' in source
     assert 'row.get("event") == "engine_warmup_start"' in source
     assert "model-load admission gate complete" in source
     assert "retry_replica" in source
     assert "current_model_loaders < RACK_MODEL_LOAD_CONCURRENCY" in source
+    assert 'TRT_BENCH_CONFIG_PROFILE="rack-tp8-mtp1-engine"' in source
     assert "replica_$(printf '%02d' \"$replica_index\").ready.json" in source
 
 

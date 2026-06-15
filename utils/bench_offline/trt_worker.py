@@ -9,7 +9,7 @@ import json
 import os
 import time
 import traceback
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -128,6 +128,7 @@ def synchronize_rack_replicas() -> dict[str, Any]:
     replica_count = int(config["replica_count"])
     replica_index = int(config["replica_index"])
     timeout_seconds = int(config["timeout_seconds"])
+    release_delay_seconds = int(config["release_delay_seconds"])
     barrier_dir = Path(str(config["barrier_dir"]))
     barrier_dir.mkdir(parents=True, exist_ok=True)
     ready_path = barrier_dir / f"replica_{replica_index:02d}.ready.json"
@@ -154,10 +155,16 @@ def synchronize_rack_replicas() -> dict[str, Any]:
     while True:
         missing = [path.name for path in expected_paths if not path.is_file()]
         if replica_index == 0 and not missing and not release_path.exists():
+            released_at = datetime.now(timezone.utc)
             write_json(
                 release_path,
                 {
-                    "released_at": utc_now(),
+                    "released_at": released_at.isoformat(),
+                    "start_at": (
+                        released_at
+                        + timedelta(seconds=release_delay_seconds)
+                    ).isoformat(),
+                    "release_delay_seconds": release_delay_seconds,
                     "replica_count": replica_count,
                     "ready_files": [path.name for path in expected_paths],
                 },
@@ -169,10 +176,39 @@ def synchronize_rack_replicas() -> dict[str, Any]:
                     "Rack barrier release replica count does not match"
                 )
             elapsed = time.monotonic() - started
+            release_seen_at = datetime.now(timezone.utc)
+            start_at = datetime.fromisoformat(
+                str(release["start_at"]).replace("Z", "+00:00")
+            )
+            if start_at.tzinfo is None:
+                raise RuntimeError("Rack scheduled start lacks a timezone")
+            scheduled_wait_seconds = max(
+                0.0,
+                (start_at - release_seen_at).total_seconds(),
+            )
             log_progress(
-                "rack measured-pass barrier released "
+                "rack measured-pass release visible "
                 f"replica={replica_index + 1}/{replica_count} "
-                f"wait={elapsed:.1f}s"
+                f"barrier_wait={elapsed:.1f}s "
+                f"scheduled_start={start_at.isoformat()} "
+                f"scheduled_wait={scheduled_wait_seconds:.1f}s"
+            )
+            while True:
+                remaining = (
+                    start_at - datetime.now(timezone.utc)
+                ).total_seconds()
+                if remaining <= 0:
+                    break
+                time.sleep(min(remaining, 0.5))
+            started_at = datetime.now(timezone.utc)
+            start_lateness_seconds = max(
+                0.0,
+                (started_at - start_at).total_seconds(),
+            )
+            log_progress(
+                "rack measured-pass scheduled start reached "
+                f"replica={replica_index + 1}/{replica_count} "
+                f"lateness={start_lateness_seconds:.3f}s"
             )
             return {
                 "enabled": True,
@@ -181,6 +217,10 @@ def synchronize_rack_replicas() -> dict[str, Any]:
                 "replica_index": replica_index,
                 "ready": ready,
                 "release": release,
+                "release_seen_at": release_seen_at.isoformat(),
+                "scheduled_start_at": start_at.isoformat(),
+                "scheduled_wait_seconds": scheduled_wait_seconds,
+                "start_lateness_seconds": start_lateness_seconds,
                 "wait_seconds": elapsed,
             }
         elapsed = time.monotonic() - started

@@ -98,6 +98,7 @@ RACK_BARRIER_DIR_ENV = "TRT_BENCH_RACK_BARRIER_DIR"
 RACK_REPLICA_COUNT_ENV = "TRT_BENCH_RACK_REPLICA_COUNT"
 RACK_REPLICA_INDEX_ENV = "TRT_BENCH_RACK_REPLICA_INDEX"
 RACK_BARRIER_TIMEOUT_ENV = "TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS"
+RACK_RELEASE_DELAY_ENV = "TRT_BENCH_RACK_RELEASE_DELAY_SECONDS"
 CONTROLLED_ENVIRONMENT_VARIABLES = {
     "ENABLE_CONFIGURABLE_MOE",
     "ENABLE_PERFECT_ROUTER",
@@ -882,15 +883,18 @@ def rack_synchronization_config(
             RACK_BARRIER_TIMEOUT_ENV,
             "900",
         ),
+        RACK_RELEASE_DELAY_ENV: source.get(RACK_RELEASE_DELAY_ENV, "90"),
     }
     try:
         replica_count = int(raw_values[RACK_REPLICA_COUNT_ENV])
         replica_index = int(raw_values[RACK_REPLICA_INDEX_ENV])
         timeout_seconds = int(raw_values[RACK_BARRIER_TIMEOUT_ENV])
+        release_delay_seconds = int(raw_values[RACK_RELEASE_DELAY_ENV])
     except (TypeError, ValueError) as error:
         raise RuntimeError(
             "Rack synchronization requires integer replica count, index, "
-            f"and timeout values; received={raw_values}"
+            "timeout, and release delay values; "
+            f"received={raw_values}"
         ) from error
     if replica_count <= 1:
         raise RuntimeError("Rack synchronization requires multiple replicas")
@@ -901,12 +905,15 @@ def rack_synchronization_config(
         )
     if timeout_seconds <= 0:
         raise RuntimeError("Rack barrier timeout must be positive")
+    if release_delay_seconds < 0:
+        raise RuntimeError("Rack release delay must be non-negative")
     return {
         "enabled": True,
         "barrier_dir": barrier_dir,
         "replica_count": replica_count,
         "replica_index": replica_index,
         "timeout_seconds": timeout_seconds,
+        "release_delay_seconds": release_delay_seconds,
     }
 
 

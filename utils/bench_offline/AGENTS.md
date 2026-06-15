@@ -165,8 +165,10 @@ benchmark.
   must reach one shared measured-pass barrier. For logical rack round `i`,
   use the maximum rank-0 `host_step_time` across the nine child round-`i`
   values, then skip eight logical rounds and apply the upper-IQR filter.
-  Reject measured-pass start skew above 10 seconds; the initialization
-  barrier timeout is two hours.
+  Replica 0 must schedule one common future start after publishing the release
+  file; do not start immediately because run `27539161854` measured 32.357
+  seconds of cross-node NFS visibility lag. Reject measured-pass start skew
+  above 10 seconds; the initialization barrier timeout is two hours.
 - Child results and logs must remain under
   `.offline_rack_ID_JOB/replicas/rNN` and enter the uploaded debug archive
   only. Publish exactly one top-level `offline_result_ID.json`, so

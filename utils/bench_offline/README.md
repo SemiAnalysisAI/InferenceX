@@ -175,8 +175,9 @@ all 72 ranks together can block one rank; run `27535038325` reproduced the
 same shard-43 stall with three concurrent engines. Run `27537092211` then
 stalled one serialized engine at shard 31, so each child gets up to three
 bounded model-load attempts without restarting engines already at warmup or
-the barrier. The measured pass is unchanged: all nine engines release
-together.
+the barrier. Replica 0 publishes a common start 90 seconds after the release
+file, so NFS metadata visibility cannot stagger the measured calls. The
+measured pass remains one synchronized nine-engine release.
 
 Logical rack decode round `i` uses the maximum rank-0 `host_step_time` for
 round `i` across the nine engines. The rack result then skips the first eight

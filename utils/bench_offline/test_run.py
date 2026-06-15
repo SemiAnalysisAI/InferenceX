@@ -35,12 +35,43 @@ from trt_mpi_entry import (
 from trt_worker import (
     arm_fixed_batch_request_barrier,
     read_perfect_router_marker,
+    synchronize_rack_replicas,
     validate_rank_propagation,
 )
 
 
 def test_controller_accepts_only_huawei_global_batches():
     assert ALLOWED_GLOBAL_BATCH_SIZES == (16, 64, 128)
+
+
+def test_rack_barrier_publishes_common_scheduled_start(
+    tmp_path,
+    monkeypatch,
+):
+    barrier_dir = tmp_path / "barrier"
+    barrier_dir.mkdir()
+    (barrier_dir / "replica_01.ready.json").write_text(
+        "{}\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        trt_worker,
+        "rack_synchronization_config",
+        lambda: {
+            "enabled": True,
+            "barrier_dir": str(barrier_dir),
+            "replica_count": 2,
+            "replica_index": 0,
+            "timeout_seconds": 10,
+            "release_delay_seconds": 0,
+        },
+    )
+
+    result = synchronize_rack_replicas()
+
+    assert result["release"]["start_at"] == result["scheduled_start_at"]
+    assert result["release"]["release_delay_seconds"] == 0
+    assert result["start_lateness_seconds"] < 1.0
 
 
 def test_controller_routing_environment_matches_profile():

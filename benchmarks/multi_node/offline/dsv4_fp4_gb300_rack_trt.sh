@@ -51,6 +51,9 @@ RACK_ENGINE_READY_TIMEOUT_SECONDS="$(
 RACK_BARRIER_TIMEOUT_SECONDS="$(
     printf '%s' "${TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS:-7200}"
 )"
+RACK_RELEASE_DELAY_SECONDS="$(
+    printf '%s' "${TRT_BENCH_RACK_RELEASE_DELAY_SECONDS:-90}"
+)"
 TRT_BENCH_GIT_REVISION="$(git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD)"
 export TRT_BENCH_GIT_REVISION
 
@@ -100,6 +103,12 @@ fi
 if [[ ! "$RACK_BARRIER_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
     echo \
         "TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS must be positive: ${RACK_BARRIER_TIMEOUT_SECONDS}" \
+        >&2
+    exit 1
+fi
+if [[ ! "$RACK_RELEASE_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
+    echo \
+        "TRT_BENCH_RACK_RELEASE_DELAY_SECONDS must be non-negative: ${RACK_RELEASE_DELAY_SECONDS}" \
         >&2
     exit 1
 fi
@@ -563,6 +572,7 @@ export TRT_BENCH_WORKSPACE
 export TRT_BENCH_RACK_REPLICA_COUNT="$REPLICA_COUNT"
 export TRT_BENCH_RACK_GLOBAL_BATCH_SIZE="$GLOBAL_BATCH_SIZE"
 export TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS="$RACK_BARRIER_TIMEOUT_SECONDS"
+export TRT_BENCH_RACK_RELEASE_DELAY_SECONDS="$RACK_RELEASE_DELAY_SECONDS"
 export TRT_BENCH_FABRIC_CLUSTER_UUID="$FABRIC_CLUSTER_UUID"
 export TRT_BENCH_FABRIC_CLIQUE_ID="$FABRIC_CLIQUE_ID"
 
@@ -665,7 +675,7 @@ raise SystemExit(0 if ranks == set(range(world_size)) else 1)
 PY
 }
 
-log "initializing nine TP8/EP8 MTP1 engines with model-load admission concurrency=$RACK_MODEL_LOAD_CONCURRENCY load_timeout=${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s max_attempts=$RACK_MODEL_LOAD_MAX_ATTEMPTS retry_delay=${RACK_MODEL_LOAD_RETRY_DELAY_SECONDS}s ready_timeout=${RACK_ENGINE_READY_TIMEOUT_SECONDS}s barrier_timeout=${RACK_BARRIER_TIMEOUT_SECONDS}s"
+log "initializing nine TP8/EP8 MTP1 engines with model-load admission concurrency=$RACK_MODEL_LOAD_CONCURRENCY load_timeout=${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s max_attempts=$RACK_MODEL_LOAD_MAX_ATTEMPTS retry_delay=${RACK_MODEL_LOAD_RETRY_DELAY_SECONDS}s ready_timeout=${RACK_ENGINE_READY_TIMEOUT_SECONDS}s barrier_timeout=${RACK_BARRIER_TIMEOUT_SECONDS}s release_delay=${RACK_RELEASE_DELAY_SECONDS}s"
 replica_started="$SECONDS"
 replica_failure=0
 replica_failure_message=""
@@ -836,6 +846,7 @@ fi
 REPLICA_PIDS=()
 
 log "all replicas succeeded; aggregating one rack fixed-GBS result"
+TRT_BENCH_CONFIG_PROFILE="rack-tp8-mtp1-engine" \
 PYTHONPATH="$TRT_BENCH_WORKSPACE/utils/bench_offline" \
 python3 \
     "$TRT_BENCH_WORKSPACE/utils/bench_offline/aggregate_rack.py" \
