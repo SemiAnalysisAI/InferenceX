@@ -12625,40 +12625,9 @@ minimaxm3-fp8-gb200-dynamo-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      # Low latency: 1P+1D TP4 (pure TP, no EP), 2 nodes (4 GPU each). Wide EP
-      # would idle DP ranks at small concurrencies, so stay narrow here.
-      - conc-list: [1, 2, 4, 8, 16, 32, 64]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p1d-tp4-2n.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-
-      # Low latency: 1P+2D TP4, 3 nodes. Two decode workers halve
-      # the per-worker batch, reducing ITL at low concurrency.
-      - conc-list: [1, 2, 4, 8, 16, 32, 64]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-1p2d-tp4-3n.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-
-      # Low latency: 1P+1D TP4 prefill -> TEP8 decode (TP8+EP8, wider
-      # decode + expert parallel), 3 nodes. Matches B200 TEP8 topology.
+      # Low latency: 1P+1D TP4 prefill -> TEP8 decode (TP8+EP8), 3 nodes.
+      # EP splits 128 MoE experts across 8 decode ranks (16 each), cutting
+      # per-step latency ~19% vs pure TP8.  Matches B200 TEP8 topology.
       - conc-list: [1, 2, 4, 8, 16, 32, 64]
         prefill:
           num-worker: 1
@@ -12742,22 +12711,6 @@ minimaxm3-fp8-gb200-dynamo-vllm:
     - isl: 8192
       osl: 1024
       search-space:
-      # Low latency 8k1k: 1P+1D TP4, 2 nodes. stream-interval 1 + cudagraph
-      # cap 128 for best interactivity at small concurrencies.
-      - conc-list: [1, 2, 4, 8, 16]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/disagg-gb200-1p1d-tp4-2n.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-
       # Low latency 8k1k: 1P+1D TP4 prefill -> TEP8 decode (TP8+EP8),
       # 3 nodes. Matches B200 TEP8 topology for 8k ISL.
       - conc-list: [1, 2, 4, 8, 16]
