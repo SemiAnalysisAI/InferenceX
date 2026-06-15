@@ -517,7 +517,7 @@ for replica_index in $(seq 0 $((REPLICA_COUNT - 1))); do
     GLOBAL_BATCH_SIZE="$ENGINE_GLOBAL_BATCH_SIZE" \
     TRT_BENCH_ALLOCATION_JOB_ID="$JOB_ID" \
     TRT_BENCH_REPLICA_NODELIST="$replica_nodes" \
-    TRT_BENCH_REPLICA_INDEX="$replica_index" \
+    TRT_BENCH_RACK_REPLICA_INDEX="$replica_index" \
     TRT_BENCH_RACK_ID="$BENCH_ID" \
     TRT_BENCH_RACK_ROOT_REL="$RACK_ROOT_REL" \
     bash \

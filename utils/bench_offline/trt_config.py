@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import math
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -93,6 +94,10 @@ RACK_TP8_ENGINE_GLOBAL_BATCH_SIZES = (8, 32, 64, 3440, 4096)
 FIXED_BATCH_ARM_ENV = "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE"
 FIXED_BATCH_ARM_FILENAME = "fixed_batch_barrier.armed.json"
 BENCHMARK_PROFILE_ENV = "TRT_BENCH_CONFIG_PROFILE"
+RACK_BARRIER_DIR_ENV = "TRT_BENCH_RACK_BARRIER_DIR"
+RACK_REPLICA_COUNT_ENV = "TRT_BENCH_RACK_REPLICA_COUNT"
+RACK_REPLICA_INDEX_ENV = "TRT_BENCH_RACK_REPLICA_INDEX"
+RACK_BARRIER_TIMEOUT_ENV = "TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS"
 CONTROLLED_ENVIRONMENT_VARIABLES = {
     "ENABLE_CONFIGURABLE_MOE",
     "ENABLE_PERFECT_ROUTER",
@@ -859,6 +864,50 @@ def external_mpi_rank_environment(
             }
         )
     return environment
+
+
+def rack_synchronization_config(
+    environment: Mapping[str, str] | None = None,
+) -> dict[str, Any]:
+    """Parse and validate the optional rack measured-pass barrier."""
+    source = os.environ if environment is None else environment
+    barrier_dir = source.get(RACK_BARRIER_DIR_ENV)
+    if not barrier_dir:
+        return {"enabled": False}
+
+    raw_values = {
+        RACK_REPLICA_COUNT_ENV: source.get(RACK_REPLICA_COUNT_ENV),
+        RACK_REPLICA_INDEX_ENV: source.get(RACK_REPLICA_INDEX_ENV),
+        RACK_BARRIER_TIMEOUT_ENV: source.get(
+            RACK_BARRIER_TIMEOUT_ENV,
+            "900",
+        ),
+    }
+    try:
+        replica_count = int(raw_values[RACK_REPLICA_COUNT_ENV])
+        replica_index = int(raw_values[RACK_REPLICA_INDEX_ENV])
+        timeout_seconds = int(raw_values[RACK_BARRIER_TIMEOUT_ENV])
+    except (TypeError, ValueError) as error:
+        raise RuntimeError(
+            "Rack synchronization requires integer replica count, index, "
+            f"and timeout values; received={raw_values}"
+        ) from error
+    if replica_count <= 1:
+        raise RuntimeError("Rack synchronization requires multiple replicas")
+    if not 0 <= replica_index < replica_count:
+        raise RuntimeError(
+            f"Replica index {replica_index} is outside 0.."
+            f"{replica_count - 1}"
+        )
+    if timeout_seconds <= 0:
+        raise RuntimeError("Rack barrier timeout must be positive")
+    return {
+        "enabled": True,
+        "barrier_dir": barrier_dir,
+        "replica_count": replica_count,
+        "replica_index": replica_index,
+        "timeout_seconds": timeout_seconds,
+    }
 
 
 def resolved_parallelism(

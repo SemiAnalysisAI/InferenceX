@@ -26,6 +26,10 @@ from trt_config import (
     MEASURED_OUTPUT_TOKENS,
     MIN_RUNTIME_KV_TOKENS_ENV,
     MOE_MAX_NUM_TOKENS,
+    RACK_BARRIER_DIR_ENV,
+    RACK_BARRIER_TIMEOUT_ENV,
+    RACK_REPLICA_COUNT_ENV,
+    RACK_REPLICA_INDEX_ENV,
     WARMUP_OUTPUT_TOKENS,
     attention_workspace_target_bytes,
     benchmark_environment,
@@ -40,6 +44,7 @@ from trt_config import (
     max_num_tokens,
     measured_output_tokens,
     minimum_runtime_kv_tokens,
+    rack_synchronization_config,
     resolved_parallelism,
     setup_prefill_iterations,
     validate_global_batch_size,
@@ -469,6 +474,42 @@ def test_rack_replica_profile_keeps_attempt14_tp8_engine_capacity():
     assert kwargs["speculative_config"]["max_draft_len"] == 1
     assert kwargs["disable_overlap_scheduler"] is False
     assert kwargs["kv_cache_config"]["free_gpu_memory_fraction"] == 0.80
+
+
+def test_rack_synchronization_config_is_disabled_without_barrier():
+    assert rack_synchronization_config({}) == {"enabled": False}
+
+
+def test_rack_synchronization_config_parses_complete_environment():
+    config = rack_synchronization_config(
+        {
+            RACK_BARRIER_DIR_ENV: "/workspace/barrier",
+            RACK_REPLICA_COUNT_ENV: "9",
+            RACK_REPLICA_INDEX_ENV: "8",
+            RACK_BARRIER_TIMEOUT_ENV: "3600",
+        }
+    )
+    assert config == {
+        "enabled": True,
+        "barrier_dir": "/workspace/barrier",
+        "replica_count": 9,
+        "replica_index": 8,
+        "timeout_seconds": 3600,
+    }
+
+
+def test_rack_synchronization_config_reports_missing_index():
+    with pytest.raises(
+        RuntimeError,
+        match=r"TRT_BENCH_RACK_REPLICA_INDEX.*None",
+    ):
+        rack_synchronization_config(
+            {
+                RACK_BARRIER_DIR_ENV: "/workspace/barrier",
+                RACK_REPLICA_COUNT_ENV: "9",
+                RACK_BARRIER_TIMEOUT_ENV: "3600",
+            }
+        )
 
 
 @pytest.mark.parametrize(

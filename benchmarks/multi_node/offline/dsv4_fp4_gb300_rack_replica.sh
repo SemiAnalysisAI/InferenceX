@@ -6,7 +6,9 @@ set -Eeuo pipefail
 : "${TRT_BENCH_WORKSPACE:?TRT_BENCH_WORKSPACE is required}"
 : "${TRT_BENCH_ALLOCATION_JOB_ID:?Allocation job ID is required}"
 : "${TRT_BENCH_REPLICA_NODELIST:?Replica node list is required}"
-: "${TRT_BENCH_REPLICA_INDEX:?Replica index is required}"
+: "${TRT_BENCH_RACK_REPLICA_COUNT:?Rack replica count is required}"
+: "${TRT_BENCH_RACK_REPLICA_INDEX:?Rack replica index is required}"
+: "${TRT_BENCH_RACK_GLOBAL_BATCH_SIZE:?Rack global batch size is required}"
 : "${TRT_BENCH_RACK_ID:?Rack benchmark ID is required}"
 : "${TRT_BENCH_RACK_ROOT_REL:?Rack work root is required}"
 : "${TRT_BENCH_FABRIC_CLUSTER_UUID:?Fabric UUID is required}"
@@ -22,13 +24,16 @@ LOAD_BALANCER_ROOT="${LOAD_BALANCER_ROOT:?LOAD_BALANCER_ROOT is required}"
 SQUASH_FILE="${SQUASH_FILE:?SQUASH_FILE is required}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-18000}"
 COMPLETION_VISIBILITY_TIMEOUT="${TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT:-180}"
-REPLICA_COUNT="${TRT_BENCH_RACK_REPLICA_COUNT:-9}"
+REPLICA_COUNT="$TRT_BENCH_RACK_REPLICA_COUNT"
+REPLICA_INDEX="$TRT_BENCH_RACK_REPLICA_INDEX"
+RACK_GLOBAL_BATCH_SIZE="$TRT_BENCH_RACK_GLOBAL_BATCH_SIZE"
+RACK_BARRIER_TIMEOUT_SECONDS="${TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS:-3600}"
 REPLICA_WORLD_SIZE=8
 REPLICA_PHYSICAL_NODES=2
 GPUS_PER_NODE=4
 JOB_ID="$TRT_BENCH_ALLOCATION_JOB_ID"
-REPLICA_LABEL="$(printf 'r%02d' "$TRT_BENCH_REPLICA_INDEX")"
-BENCH_ID="${TRT_BENCH_RACK_ID}-replica$(printf '%02d' "$TRT_BENCH_REPLICA_INDEX")"
+REPLICA_LABEL="$(printf 'r%02d' "$REPLICA_INDEX")"
+BENCH_ID="${TRT_BENCH_RACK_ID}-replica$(printf '%02d' "$REPLICA_INDEX")"
 HOST_OUTPUT_ROOT="${TRT_BENCH_WORKSPACE}/${TRT_BENCH_RACK_ROOT_REL}/replicas/${REPLICA_LABEL}"
 CONTAINER_OUTPUT_ROOT="/workspace/${TRT_BENCH_RACK_ROOT_REL}/replicas/${REPLICA_LABEL}"
 RESULT_FILE="${HOST_OUTPUT_ROOT}/offline_result_${BENCH_ID}.json"
@@ -211,9 +216,9 @@ export TRT_BENCH_RANK_MAP_ARTIFACT
 export TRT_BENCH_TOPOLOGY_ARTIFACT="offline_topology_${TRT_BENCH_RACK_ID}.log"
 export TRT_BENCH_RACK_BARRIER_DIR="/workspace/${TRT_BENCH_RACK_ROOT_REL}/barrier"
 export TRT_BENCH_RACK_REPLICA_COUNT="$REPLICA_COUNT"
-export TRT_BENCH_RACK_REPLICA_INDEX
-export TRT_BENCH_RACK_GLOBAL_BATCH_SIZE
-export TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS="${TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS:-3600}"
+export TRT_BENCH_RACK_REPLICA_INDEX="$REPLICA_INDEX"
+export TRT_BENCH_RACK_GLOBAL_BATCH_SIZE="$RACK_GLOBAL_BATCH_SIZE"
+export TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS="$RACK_BARRIER_TIMEOUT_SECONDS"
 export UCX_TLS="cuda_ipc,cuda_copy,sm,self,tcp"
 export PYTHONUNBUFFERED=1
 export PYTHONDONTWRITEBYTECODE=1
@@ -277,6 +282,38 @@ done < "$RANK_ENV_RECORDS"
 rm -f "$RANK_ENV_RECORDS"
 RANK_ENV_RECORDS=""
 log "preseeded rank environment exports=$rank_env_exports cleared=$rank_env_unsets"
+
+for rack_integer_name in \
+    REPLICA_COUNT \
+    REPLICA_INDEX \
+    RACK_GLOBAL_BATCH_SIZE \
+    RACK_BARRIER_TIMEOUT_SECONDS
+do
+    rack_integer_value="${!rack_integer_name}"
+    if [[ ! "$rack_integer_value" =~ ^[0-9]+$ ]]; then
+        echo \
+            "Invalid rack synchronization integer ${rack_integer_name}=${rack_integer_value@Q}" \
+            >&2
+        exit 1
+    fi
+done
+if (( REPLICA_COUNT <= 1 )); then
+    echo "Rack replica count must be greater than one: $REPLICA_COUNT" >&2
+    exit 1
+fi
+if (( REPLICA_INDEX < 0 || REPLICA_INDEX >= REPLICA_COUNT )); then
+    echo \
+        "Rack replica index $REPLICA_INDEX is outside 0..$((REPLICA_COUNT - 1))" \
+        >&2
+    exit 1
+fi
+if (( RACK_GLOBAL_BATCH_SIZE <= 0 || RACK_BARRIER_TIMEOUT_SECONDS <= 0 )); then
+    echo \
+        "Rack global batch and barrier timeout must be positive: global_batch=$RACK_GLOBAL_BATCH_SIZE timeout=$RACK_BARRIER_TIMEOUT_SECONDS" \
+        >&2
+    exit 1
+fi
+log "validated rack synchronization environment replica=$REPLICA_INDEX/$REPLICA_COUNT rack_global_batch=$RACK_GLOBAL_BATCH_SIZE engine_global_batch=$GLOBAL_BATCH_SIZE timeout=${RACK_BARRIER_TIMEOUT_SECONDS}s barrier=$TRT_BENCH_RACK_BARRIER_DIR"
 
 CONTAINER_MOUNTS="${TRT_BENCH_WORKSPACE}:/workspace"
 CONTAINER_MOUNTS+=",/scratch/models:/scratch/models"
@@ -345,7 +382,7 @@ while kill -0 "$WORLD_STEP_PID" >/dev/null 2>&1; do
             rank_events="$(wc -l < "$HOST_PERFECT_ROUTER_MARKER")"
         fi
         barrier_ready=no
-        if [[ -s "${TRT_BENCH_WORKSPACE}/${TRT_BENCH_RACK_ROOT_REL}/barrier/replica_$(printf '%02d' "$TRT_BENCH_REPLICA_INDEX").ready.json" ]]; then
+        if [[ -s "${TRT_BENCH_WORKSPACE}/${TRT_BENCH_RACK_ROOT_REL}/barrier/replica_$(printf '%02d' "$REPLICA_INDEX").ready.json" ]]; then
             barrier_ready=yes
         fi
         log "engine active elapsed=${world_elapsed}s rank_events=$rank_events barrier_ready=$barrier_ready"

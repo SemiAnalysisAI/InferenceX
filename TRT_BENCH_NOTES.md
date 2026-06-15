@@ -306,6 +306,18 @@ and flat renderer row. See `Final Validated GB300 Run`.
 
 ### GB300 Canary History
 
+Run `27529535864`, source
+`2976c179449641fa2b09b6f470bdd3cf86c1288a`, was the first 72-GPU rack
+canary. Slurm job `8799` allocated all 18 nodes, validated all 72 GPUs under
+Fabric `ClusterUUID 8fe56262-d2bb-4602-b338-8898d34c4731` and
+`CliqueId 32766`, launched nine disjoint TP8/EP8 engines, and completed both
+TRT engine warmup phases on replica `r00`. The run then failed before measured
+generation because the parent passed `TRT_BENCH_REPLICA_INDEX` while
+`trt_worker.py` consumes `TRT_BENCH_RACK_REPLICA_INDEX`; the child exported
+the latter without assigning it. The rack launch now uses the exact worker
+variable name end to end and validates/logs replica count, index, timeout, and
+barrier path in the controller before TensorRT initialization.
+
 Run `27520024692`, source
 `9d8c85b4093a7754eb87f20819ec0d7f845e15d5`, was the first copied PR-max
 TP32 run. Its GBS192 worker completed successfully on 32 ranks, selected
@@ -1468,6 +1480,9 @@ Exact flat renderer rows, sorted by GBS for readability:
    `0..8`, one release record, matching child fabric UUID/clique values, and
    top-level timing source
    `slowest_replica_trt_print_iter_log_host_step_time`.
+   Each child must log `validated rack synchronization environment` before
+   engine start, and each controller must log the same validation before
+   spawning `trt_worker.py`.
 7. Query iteration stats:
 
    ```bash

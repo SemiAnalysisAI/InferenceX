@@ -43,6 +43,7 @@ from trt_config import (
     local_batch_size,
     max_num_tokens,
     measured_output_tokens,
+    rack_synchronization_config,
     setup_prefill_iterations,
     validate_global_batch_size,
     warmup_output_tokens,
@@ -685,6 +686,15 @@ def main() -> int:
             sort_keys=True,
             separators=(",", ":"),
         )
+        rack_config = rack_synchronization_config(environment)
+        if rack_config["enabled"]:
+            log_progress(
+                "validated rack synchronization environment "
+                f"replica={rack_config['replica_index'] + 1}/"
+                f"{rack_config['replica_count']} "
+                f"timeout={rack_config['timeout_seconds']}s "
+                f"barrier={rack_config['barrier_dir']}"
+            )
 
         log_progress(
             "worker launch "

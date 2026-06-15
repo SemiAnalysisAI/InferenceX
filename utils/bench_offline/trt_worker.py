@@ -34,15 +34,11 @@ from trt_config import (
     build_llm_kwargs,
     local_batch_size,
     measured_output_tokens,
+    rack_synchronization_config,
     resolved_parallelism,
     validate_global_batch_size,
     warmup_output_tokens,
 )
-
-RACK_BARRIER_DIR_ENV = "TRT_BENCH_RACK_BARRIER_DIR"
-RACK_REPLICA_COUNT_ENV = "TRT_BENCH_RACK_REPLICA_COUNT"
-RACK_REPLICA_INDEX_ENV = "TRT_BENCH_RACK_REPLICA_INDEX"
-RACK_BARRIER_TIMEOUT_ENV = "TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS"
 
 
 def utc_now() -> str:
@@ -125,32 +121,14 @@ def arm_fixed_batch_request_barrier(
 
 def synchronize_rack_replicas() -> dict[str, Any]:
     """Release every initialized replica into the measured pass together."""
-    barrier_dir_raw = os.getenv(RACK_BARRIER_DIR_ENV)
-    if not barrier_dir_raw:
-        return {"enabled": False}
+    config = rack_synchronization_config()
+    if not config["enabled"]:
+        return config
 
-    try:
-        replica_count = int(os.environ[RACK_REPLICA_COUNT_ENV])
-        replica_index = int(os.environ[RACK_REPLICA_INDEX_ENV])
-        timeout_seconds = int(
-            os.getenv(RACK_BARRIER_TIMEOUT_ENV, "900")
-        )
-    except (KeyError, ValueError) as error:
-        raise RuntimeError(
-            "Rack synchronization requires integer replica count, index, "
-            "and timeout values"
-        ) from error
-    if replica_count <= 1:
-        raise RuntimeError("Rack synchronization requires multiple replicas")
-    if not 0 <= replica_index < replica_count:
-        raise RuntimeError(
-            f"Replica index {replica_index} is outside 0.."
-            f"{replica_count - 1}"
-        )
-    if timeout_seconds <= 0:
-        raise RuntimeError("Rack barrier timeout must be positive")
-
-    barrier_dir = Path(barrier_dir_raw)
+    replica_count = int(config["replica_count"])
+    replica_index = int(config["replica_index"])
+    timeout_seconds = int(config["timeout_seconds"])
+    barrier_dir = Path(str(config["barrier_dir"]))
     barrier_dir.mkdir(parents=True, exist_ok=True)
     ready_path = barrier_dir / f"replica_{replica_index:02d}.ready.json"
     release_path = barrier_dir / "release.json"
