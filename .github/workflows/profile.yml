@@ -13,10 +13,15 @@ on:
         type: string
         default: '.github/configs/nvidia-master.yaml'
       conc:
-        description: "Concurrency value (must exist in config's conc-range/list)"
+        description: "Space-separated concurrency values"
         required: false
         type: string
         default: '64'
+      seq-lens:
+        description: "Space-separated sequence lengths (1k1k and/or 8k1k)"
+        required: false
+        type: string
+        default: '1k1k'
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -44,58 +49,89 @@ jobs:
     outputs:
       filtered-matrix: ${{ steps.filter.outputs.filtered }}
       count: ${{ steps.filter.outputs.count }}
+      source-sha: ${{ steps.source.outputs.sha }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ inputs.ref || github.sha }}
 
+      - id: source
+        name: Record source revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - id: gen
-        name: Generate matrix via script
+        name: Generate profile matrix
+        env:
+          CONFIG_FILE: ${{ inputs.config-file }}
+          CONFIG_KEY: ${{ inputs.config-key }}
+          CONC_VALUES: ${{ inputs.conc }}
+          SEQ_LENS: ${{ inputs.seq-lens }}
+        shell: bash
         run: |
+          set -euo pipefail
           pip install pydantic
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
-          CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
-          echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
+
+          read -r -a conc_values <<< "$CONC_VALUES"
+          read -r -a seq_lens <<< "$SEQ_LENS"
+          cmd=(
+            python3 "${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py"
+            test-config
+            --config-files "$CONFIG_FILE"
+            --config-keys "$CONFIG_KEY"
+          )
+          if [ "${#conc_values[@]}" -gt 0 ]; then
+            cmd+=(--conc "${conc_values[@]}")
+          fi
+          if [ "${#seq_lens[@]}" -gt 0 ]; then
+            cmd+=(--seq-lens "${seq_lens[@]}")
+          fi
+
+          config_json="$("${cmd[@]}")"
+          echo "raw=$config_json" >> "$GITHUB_OUTPUT"
 
       - id: filter
-        name: Take first generated job
+        name: Validate generated jobs
+        env:
+          RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
         run: |
-          import json, os, sys
-          raw = '${{ steps.gen.outputs.raw }}'
-          try:
-            data = json.loads(raw)
-          except Exception as e:
-            print('Invalid generator output:', e, file=sys.stderr)
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write("filtered=[]\ncount=0\n")
-            raise
+          import json
+          import os
 
+          data = json.loads(os.environ["RAW_MATRIX"])
           if not isinstance(data, list):
-            print('Generator output is not a list.', file=sys.stderr)
-            with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-              f.write("filtered=[]\ncount=0\n")
-            raise SystemExit(1)
+              raise SystemExit("Generator output is not a list")
+          if not data:
+              raise SystemExit("No profile entries matched the requested filters")
+          if len(data) > 24:
+              raise SystemExit(f"Refusing to profile {len(data)} entries; maximum is 24")
 
-          filt = data[:1]
+          identities = {
+              (
+                  item["runner"],
+                  item["exp-name"],
+                  item["tp"],
+                  item.get("ep", 1),
+                  item["conc"],
+              )
+              for item in data
+          }
+          if len(identities) != len(data):
+              raise SystemExit("Generated profile matrix contains duplicate jobs")
 
-          out = json.dumps(filt)
-          print(out)
-          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
-            f.write(f"filtered={out}\n")
-            f.write(f"count={len(filt)}\n")
-
-      - name: Fail if no matching entries
-        if: ${{ steps.filter.outputs.count == '0' }}
-        run: |
-          echo "No entries produced for config-key=${{ inputs.config-key }}, conc=${{ inputs.conc }}." >&2
-          exit 1
+          output = json.dumps(data, separators=(",", ":"))
+          print(json.dumps(data, indent=2))
+          with open(os.environ["GITHUB_OUTPUT"], "a") as f:
+              f.write(f"filtered={output}\n")
+              f.write(f"count={len(data)}\n")
 
   profile:
     needs: get-jobs
+    timeout-minutes: 500
     strategy:
       fail-fast: false
+      max-parallel: 4
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     runs-on: ${{ matrix.config.runner }}
@@ -115,14 +151,15 @@ jobs:
       CONC: ${{ matrix.config.conc }}
       SPEC_DECODING: ${{ matrix.config.spec-decoding }}
       DISAGG: ${{ matrix.config.disagg }}
+      RUN_EVAL: 'false'
+      EVAL_ONLY: 'false'
+      SCENARIO_SUBDIR: ${{ matrix.config['scenario-type'] == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
       MOE_DEBUG: '0'
-      MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
+      MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
       - name: Resource cleanup
         run: |
-          # Cleanup Docker resources
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-            echo "[Docker] Cleaning up resources ..."
             docker ps -aq | xargs -r docker rm -f
             docker network prune -f
             while [ -n "$(docker ps -aq)" ]; do
@@ -131,9 +168,7 @@ jobs:
             done
           fi
 
-          # Cleanup SLURM resources
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
             scancel --name="${{ runner.name }}" || true
             while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
               squeue --name="${{ runner.name }}"
@@ -146,95 +181,109 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ inputs.ref || github.sha }}
-          clean: false
+          clean: true
 
-      - name: Launch + Profile (single-node sglang/vllm)
+      - name: Launch and profile
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
           PROFILE: '1'
-          SGLANG_TORCH_PROFILER_DIR: /workspace/
-          VLLM_TORCH_PROFILER_DIR: /workspace/
           VLLM_RPC_TIMEOUT: '1800000'
         shell: bash
         run: |
           set -euo pipefail
           ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa_${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
-          export RESULT_FILENAME="${res_name}"
-          echo "RESULT_FILENAME=${res_name}" >> "$GITHUB_ENV"
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          trace_path="profile_${res_name}.trace.json.gz"
+          summary_path="profile_summary_${res_name}.json"
 
-          bash ./runners/launch_${RUNNER_NAME%%_*}.sh
+          export RESULT_FILENAME="$res_name"
+          export VLLM_TORCH_PROFILER_DIR="/workspace/profile_traces/${res_name}"
+          export SGLANG_TORCH_PROFILER_DIR="$VLLM_TORCH_PROFILER_DIR"
+          echo "RESULT_FILENAME=$res_name" >> "$GITHUB_ENV"
+
+          rm -rf "$VLLM_TORCH_PROFILER_DIR"
+          rm -f "$trace_path" "$summary_path"
+          mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+
+          bash "./runners/launch_${RUNNER_NAME%%_*}.sh"
 
           if [ ! -f "${res_name}.json" ]; then
-            echo "Run failed: Benchmark result ${res_name}.json not found." >&2
+            echo "Run failed: benchmark result ${res_name}.json not found" >&2
+            exit 1
+          fi
+          if [ ! -s "$trace_path" ]; then
+            echo "Run failed: profile trace $trace_path not found or empty" >&2
+            find "$VLLM_TORCH_PROFILER_DIR" -maxdepth 2 -type f -printf '%p %s bytes\n' || true
             exit 1
           fi
 
-          trace_path="profile_${res_name}.trace.json.gz"
-          if [ -f "$trace_path" ]; then
-            echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
-            if [ "${FRAMEWORK}" = "sglang" ]; then
-              # Try to locate corresponding TP-0 traces produced by SGLang profiler
-              merged_latest=$(ls -t profiles/merged-*.trace.json.gz 2>/dev/null | head -n1 || true)
-              if [ -n "${merged_latest}" ] && [ -f "${merged_latest}" ]; then
-                ts_name="${merged_latest##*/}"
-                ts_name="${ts_name#merged-}"
-                ts_name="${ts_name%.trace.json.gz}"
-                tp0_decode="profiles/${ts_name}-TP-0-DECODE.trace.json.gz"
-                tp0_extend="profiles/${ts_name}-TP-0-EXTEND.trace.json.gz"
-                if [ -f "${tp0_decode}" ]; then
-                  echo "tp0_decode=${tp0_decode}" >> "$GITHUB_OUTPUT"
-                fi
-                if [ -f "${tp0_extend}" ]; then
-                  echo "tp0_extend=${tp0_extend}" >> "$GITHUB_OUTPUT"
-                fi
-              fi
-            fi
-          else
-            echo "Profile trace not found: $trace_path" >&2
-          fi
+          python3 utils/analyze_profile_trace.py \
+            "$trace_path" \
+            --expected-concurrency "$CONC" \
+            --output "$summary_path"
 
-      - name: Process result (json -> agg)
+          echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
+          echo "summary=$summary_path" >> "$GITHUB_OUTPUT"
+
+      - name: Process result
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
-        run: |
-          python3 utils/process_result.py
+        run: python3 utils/process_result.py
 
-      - name: Upload profile as artifact
-        if: ${{ steps.run.outputs.trace != '' }}
+      - name: Upload profile trace
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: profile_${{ env.RESULT_FILENAME }}
-          path: profile_${{ env.RESULT_FILENAME }}.trace.json.gz
-          if-no-files-found: ignore
+          name: profile_trace_${{ env.RESULT_FILENAME }}
+          path: ${{ steps.run.outputs.trace }}
+          if-no-files-found: error
 
-      - name: Upload TP-0-DECODE trace as artifact
-        if: ${{ steps.run.outputs.tp0_decode != '' }}
+      - name: Upload profile analysis
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: profile_${{ env.RESULT_FILENAME }}_TP0_DECODE
-          path: ${{ steps.run.outputs.tp0_decode }}
-          if-no-files-found: ignore
+          name: profile_analysis_${{ env.RESULT_FILENAME }}
+          path: |
+            ${{ steps.run.outputs.summary }}
+            agg_${{ env.RESULT_FILENAME }}.json
+          if-no-files-found: error
 
-      - name: Upload TP-0-EXTEND trace as artifact
-        if: ${{ steps.run.outputs.tp0_extend != '' }}
+      - name: Upload server log
+        if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: profile_${{ env.RESULT_FILENAME }}_TP0_EXTEND
-          path: ${{ steps.run.outputs.tp0_extend }}
+          name: profile_server_logs_${{ env.RESULT_FILENAME }}
+          path: server.log
           if-no-files-found: ignore
 
-      - name: Upload MoE debug log as artifact
+      - name: Upload GPU metrics
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: profile_gpu_metrics_${{ env.RESULT_FILENAME }}
+          path: gpu_metrics.csv
+          if-no-files-found: ignore
+
+      - name: Upload MoE debug log
         if: ${{ env.MOE_DEBUG == '1' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: moe_debug_${{ env.RESULT_FILENAME }}
-          path: "moe_debug.tp0.log"
+          path: moe_debug.tp0.log
           if-no-files-found: ignore
 
+  publish:
+    needs: [get-jobs, profile]
+    if: ${{ needs.profile.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download profile traces
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: profile_trace_*
+          path: downloaded
+          merge-multiple: true
+
       - name: Checkout storage repo
-        if: ${{ steps.run.outputs.trace != '' }}
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           repository: SemiAnalysisAI/InferenceX-trace-storage
@@ -243,48 +292,68 @@ jobs:
           ssh-key: ${{ secrets.PROFILER_STORAGE_DEPLOY_KEY }}
           fetch-depth: 0
 
-      - name: Push profile to storage repo
-        if: ${{ steps.run.outputs.trace != '' }}
-        id: push
+      - name: Publish traces and Perfetto links
         env:
-          TRACE_LOCAL: ${{ steps.run.outputs.trace }}
+          SOURCE_SHA: ${{ needs.get-jobs.outputs.source-sha }}
         shell: bash
         run: |
           set -euo pipefail
+          shopt -s nullglob
+          traces=(downloaded/profile_*.trace.json.gz)
+          if [ "${#traces[@]}" -eq 0 ]; then
+            echo "No downloaded traces found" >&2
+            exit 1
+          fi
 
-          dest_dir="storage/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
-          mkdir -p "$dest_dir"
-          cp "$TRACE_LOCAL" "$dest_dir/trace.json.gz"
+          for trace in "${traces[@]}"; do
+            filename="$(basename "$trace")"
+            result_name="${filename#profile_}"
+            result_name="${result_name%.trace.json.gz}"
+            dest_dir="storage/profiles/${SOURCE_SHA}/${result_name}"
+            mkdir -p "$dest_dir"
+            cp "$trace" "$dest_dir/trace.json.gz"
+          done
 
           pushd storage >/dev/null
-          git config user.name "github-actions"
-          git config user.email "github-actions@github.com"
-          git add -A
-          git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
-          git push
-          STORAGE_SHA="$(git rev-parse HEAD)"
+          git config user.name github-actions
+          git config user.email github-actions@github.com
+          git add profiles
+          git commit -m "Add MI300X profiles for ${SOURCE_SHA}" || true
+
+          pushed=0
+          for attempt in 1 2 3; do
+            git fetch origin master
+            git rebase origin/master
+            if git push origin HEAD:master; then
+              pushed=1
+              break
+            fi
+            sleep $((attempt * 5))
+          done
+          if [ "$pushed" -ne 1 ]; then
+            echo "Failed to push profile traces after three attempts" >&2
+            exit 1
+          fi
+          storage_sha="$(git rev-parse HEAD)"
           popd >/dev/null
 
-          export RAW_URL="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${STORAGE_SHA}/profiles/${GITHUB_SHA}/${{ matrix.config.runner }}/${{ matrix.config.framework }}/${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}/trace.json.gz"
-          export TITLE="${{ matrix.config['exp-name'] }}_${{ matrix.config.precision }}_tp${{ matrix.config.tp }}_ep${{ matrix.config.ep || 1 }}_conc${{ matrix.config.conc }}"
+          echo "## Perfetto profiles" >> "$GITHUB_STEP_SUMMARY"
+          for trace in "${traces[@]}"; do
+            filename="$(basename "$trace")"
+            result_name="${filename#profile_}"
+            result_name="${result_name%.trace.json.gz}"
+            raw_url="https://raw.githubusercontent.com/SemiAnalysisAI/InferenceX-trace-storage/${storage_sha}/profiles/${SOURCE_SHA}/${result_name}/trace.json.gz"
+            relay_url="$(python3 - "$raw_url" "$result_name" <<'PY'
+          import sys
+          import urllib.parse
 
-          enc_src="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["RAW_URL"], safe=""))')"
-          enc_title="$(python3 -c 'import os,urllib.parse; print(urllib.parse.quote(os.environ["TITLE"], safe=""))')"
-
-          relay="${PERFETTO_RELAY_URL%/}"
-          RELAY_URL="${relay}/?src=${enc_src}&title=${enc_title}"
-
-          echo "raw_url=$RAW_URL" >> "$GITHUB_OUTPUT"
-          echo "relay_url=$RELAY_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Print Perfetto link (relay)
-        if: ${{ steps.push.outputs.relay_url != '' }}
-        env:
-          RELAY_URL: ${{ steps.push.outputs.relay_url }}
-          RAW_URL: ${{ steps.push.outputs.raw_url }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "RAW trace URL: $RAW_URL"
-          echo "Perfetto Relay URL: $RELAY_URL"
-          printf "\n**Perfetto (Relay):** %s\n" "$RELAY_URL" >> "$GITHUB_STEP_SUMMARY"
+          raw_url, title = sys.argv[1:]
+          print(
+              "https://semianalysisai.github.io/InferenceX-trace-storage/"
+              f"?src={urllib.parse.quote(raw_url, safe='')}"
+              f"&title={urllib.parse.quote(title, safe='')}"
+          )
+          PY
+          )"
+            printf -- "- [%s](%s)\n" "$result_name" "$relay_url" >> "$GITHUB_STEP_SUMMARY"
+          done

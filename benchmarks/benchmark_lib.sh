@@ -445,6 +445,7 @@ run_benchmark_serving() {
 
 _find_latest_profile_trace() {
     local latest=""
+    local latest_rank0=""
     local dir="" candidate="" base=""
     local -a search_roots=()
 
@@ -468,14 +469,19 @@ _find_latest_profile_trace() {
             if [[ -z "$latest" || "$candidate" -nt "$latest" ]]; then
                 latest="$candidate"
             fi
+            if [[ "$base" == *tp0*rank0* || "$base" == *rank0* ]]; then
+                if [[ -z "$latest_rank0" || "$candidate" -nt "$latest_rank0" ]]; then
+                    latest_rank0="$candidate"
+                fi
+            fi
         done < <(
-            find "${search_roots[@]}" -maxdepth 1 -type f \
+            find "${search_roots[@]}" -maxdepth 2 -type f \
                 \( -name "*.trace.json" -o -name "*.trace.json.gz" -o -name "*trace*.json" -o -name "*trace*.json.gz" -o -name "*profile*.json" -o -name "*profile*.json.gz" \) \
                 -print0 2>/dev/null
         )
     done
 
-    printf '%s' "$latest"
+    printf '%s' "${latest_rank0:-$latest}"
 }
 
 # Move profiler trace into a stable workspace path for workflow relay/upload.
@@ -523,10 +529,10 @@ move_profile_trace_for_relay() {
 
     if [[ -z "$trace_file" ]]; then
         echo "[PROFILE] No trace found for relay under: ${search_dirs[*]}" >&2
-        return 0
+        return 1
     fi
 
-    local dest_trace="/workspace/profile_${RESULT_FILENAME}.trace.json.gz"
+    local dest_trace="$PWD/profile_${RESULT_FILENAME}.trace.json.gz"
     if [[ "$trace_file" == *.gz ]]; then
         cp -f "$trace_file" "$dest_trace"
     else
