@@ -3802,6 +3802,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1759
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+    - minimaxm3-fp8-mi325x-vllm
+  description:
+    - "Extend the MiniMax-M3 MXFP8 MI300X and MI325X non-MTP sweeps down to concurrency 1 on the TP-only latency rows (was conc 4), to capture the single-request latency point; TEP/DEP rows keep their higher concurrency starts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1760
+
+- config-keys:
     - minimaxm3-fp8-h100-vllm
     - minimaxm3-fp8-h200-vllm
   description:
