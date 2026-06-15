@@ -27,7 +27,23 @@ nvidia-smi
 SERVER_LOG=/workspace/server.log
 EXTRA_CONFIG_FILE="qwen3.5-fp4-trt.yml"
 
-MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    case "$TP" in
+        4) MAX_BATCH_SIZE=256 ;;   # tp4 / ep4 with attention DP
+        8) MAX_BATCH_SIZE=128 ;;   # tp8 / ep8 with attention DP
+        *) MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 )) ;;
+    esac
+elif [[ "$TP" == "2" ]]; then
+    if [[ "$EP_SIZE" == "2" && "$CONC" -ge 32 ]]; then
+        MAX_BATCH_SIZE=32          # tp2 / ep2 at high concurrency
+    else
+        MAX_BATCH_SIZE=256         # tp2 / ep1, or tp2 / ep2 at low concurrency
+    fi
+elif [[ "$TP" -ge 4 ]]; then
+    MAX_BATCH_SIZE=512             # tp>=4 without attention DP
+else
+    MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
+fi
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
     MOE_BACKEND="CUTEDSL"

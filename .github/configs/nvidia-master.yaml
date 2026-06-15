@@ -11695,6 +11695,7 @@ qwen3.5-fp4-b200-trt:
       - { tp: 4, ep: 1, conc-list: [8, 16] }
       - { tp: 4, ep: 4, conc-list: [64, 128] }
       - { tp: 8, ep: 8, conc-list: [4, 64] }
+      - { tp: 4, ep: 4, dp-attn: true, conc-list: [1024] }
       - { tp: 8, ep: 8, dp-attn: true, conc-list: [512, 1024] }
     - isl: 8192
       osl: 1024
@@ -11703,4 +11704,5 @@ qwen3.5-fp4-b200-trt:
       - { tp: 4, ep: 1, conc-list: [4] }
       - { tp: 2, ep: 2, conc-list: [8, 32] }
       - { tp: 8, ep: 8, conc-list: [4] }
+      - { tp: 4, ep: 4, dp-attn: true, conc-list: [1024] }
       - { tp: 8, ep: 8, dp-attn: true, conc-list: [256, 512, 1024] }
