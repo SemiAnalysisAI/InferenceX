@@ -3842,3 +3842,11 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
     - "Runner script updated to support dsv4 model prefix with dynamo-trt framework on GB300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Replace triton w4a16 MoE with FlyDSL w4a16 MoE"
+    - "Image: vllm/vllm-openai-rocm:nightly"
+    - "Add more sweep points"
+  pr-link:
