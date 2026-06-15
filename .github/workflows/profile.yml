@@ -107,7 +107,7 @@ jobs:
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
-        name: Take first generated job
+        name: Select one job per concurrency
         shell: python
         run: |
           import json, os, sys
@@ -126,7 +126,15 @@ jobs:
               f.write("filtered=[]\ncount=0\n")
             raise SystemExit(1)
 
-          filt = data[:1]
+          # One job per concurrency: the first config generated for each conc
+          # (the leading search-space row), ordered by conc. A single conc value
+          # yields one job, matching the prior behaviour.
+          by_conc = {}
+          for job in data:
+            c = job.get("conc")
+            if c not in by_conc:
+              by_conc[c] = job
+          filt = [by_conc[c] for c in sorted(by_conc)]
 
           out = json.dumps(filt)
           print(out)
