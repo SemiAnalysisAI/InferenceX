@@ -197,7 +197,11 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
             flock -w 10800 9 || { echo "FATAL: timed out waiting for model-stage lock"; exit 1; }
             if [[ ! -d "${MODEL_DIR}/${DISK_DIR_NAME}/snapshots" ]]; then
                 for attempt in 1 2 3; do
+                    # --entrypoint "" so bash runs hf download; the vllm-openai
+                    # image's default entrypoint is the API server, which would
+                    # otherwise try (and fail) to infer a GPU device here.
                     $DK run --rm --network host \
+                        --entrypoint "" \
                         -v "${MODEL_DIR}:${MODEL_DIR}" \
                         -e HF_HUB_CACHE="${MODEL_DIR}" \
                         -e HF_TOKEN="${HF_TOKEN:-}" \
