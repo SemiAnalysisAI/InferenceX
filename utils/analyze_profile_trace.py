@@ -145,6 +145,209 @@ def _merged_interval_duration(
     return merged_duration + current_end - current_start
 
 
+def _kernel_stream(event: dict[str, Any]) -> tuple[str, str]:
+    args = event.get("args", {})
+    if not isinstance(args, dict):
+        args = {}
+    return (
+        str(args.get("device", "<unknown>")),
+        str(args.get("stream", event.get("tid", "<unknown>"))),
+    )
+
+
+def _cross_stream_overlap(
+    events: list[dict[str, Any]],
+) -> tuple[float, int]:
+    points: list[tuple[float, int, tuple[str, str]]] = []
+    for event in events:
+        start = float(event.get("ts", 0))
+        end = start + _duration(event)
+        stream = _kernel_stream(event)
+        points.append((start, 1, stream))
+        points.append((end, -1, stream))
+    if not points:
+        return 0.0, 0
+
+    # Process ends before starts at the same timestamp so back-to-back kernels
+    # on different streams do not count as overlapping.
+    points.sort(key=lambda item: (item[0], item[1]))
+    active: dict[tuple[str, str], int] = defaultdict(int)
+    active_streams = 0
+    max_active_streams = 0
+    overlap_us = 0.0
+    previous_ts = points[0][0]
+    for timestamp, delta, stream in points:
+        if timestamp > previous_ts and active_streams >= 2:
+            overlap_us += timestamp - previous_ts
+
+        previous_count = active[stream]
+        active[stream] += delta
+        if previous_count == 0 and active[stream] > 0:
+            active_streams += 1
+        elif previous_count > 0 and active[stream] == 0:
+            active_streams -= 1
+        max_active_streams = max(max_active_streams, active_streams)
+        previous_ts = timestamp
+
+    return overlap_us, max_active_streams
+
+
+def _stream_summary(
+    kernels: list[dict[str, Any]],
+) -> list[dict[str, float | int | str]]:
+    by_stream: dict[tuple[str, str], list[dict[str, Any]]] = defaultdict(list)
+    for event in kernels:
+        by_stream[_kernel_stream(event)].append(event)
+
+    summaries: list[dict[str, float | int | str]] = []
+    for (device, stream), events in by_stream.items():
+        start = min(float(event["ts"]) for event in events)
+        end = max(float(event["ts"]) + _duration(event) for event in events)
+        summaries.append(
+            {
+                "device": device,
+                "stream": stream,
+                "count": len(events),
+                "duration_us": sum(_duration(event) for event in events),
+                "busy_us": _merged_interval_duration(events),
+                "span_us": end - start,
+            }
+        )
+    return sorted(
+        summaries,
+        key=lambda item: float(item["duration_us"]),
+        reverse=True,
+    )
+
+
+def _is_kernel_launch(event: dict[str, Any]) -> bool:
+    if event.get("ph") != "X" or _duration(event) <= 0:
+        return False
+    category = str(event.get("cat", "")).lower()
+    if category not in {"cuda_runtime", "hip_runtime"}:
+        return False
+    normalized = re.sub(r"[^a-z0-9]", "", str(event.get("name", "")).lower())
+    return normalized.startswith("hip") and "launchkernel" in normalized
+
+
+def _kernel_launch_analysis(
+    events: list[dict[str, Any]],
+    kernels: list[dict[str, Any]],
+) -> dict[str, Any]:
+    launches_by_correlation: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for event in events:
+        if not isinstance(event, dict) or not _is_kernel_launch(event):
+            continue
+        args = event.get("args", {})
+        if not isinstance(args, dict) or "correlation" not in args:
+            continue
+        launches_by_correlation[str(args["correlation"])].append(event)
+
+    correlated: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for kernel in kernels:
+        args = kernel.get("args", {})
+        if not isinstance(args, dict) or "correlation" not in args:
+            continue
+        candidates = launches_by_correlation.get(str(args["correlation"]), [])
+        if not candidates:
+            continue
+        kernel_start = float(kernel.get("ts", 0))
+        launch = min(
+            candidates,
+            key=lambda candidate: (
+                float(candidate.get("ts", 0)) > kernel_start,
+                abs(float(candidate.get("ts", 0)) - kernel_start),
+            ),
+        )
+        correlated.append((kernel, launch))
+
+    if not correlated:
+        return {
+            "correlated_kernel_count": 0,
+            "correlated_kernel_percent": 0.0,
+        }
+
+    launch_durations = [_duration(launch) for _, launch in correlated]
+    queue_delays = [
+        max(
+            0.0,
+            float(kernel.get("ts", 0))
+            - (float(launch.get("ts", 0)) + _duration(launch)),
+        )
+        for kernel, launch in correlated
+    ]
+    launch_starts = [float(launch.get("ts", 0)) for _, launch in correlated]
+    launch_ends = [
+        float(launch.get("ts", 0)) + _duration(launch)
+        for _, launch in correlated
+    ]
+
+    previous_end_by_stream: dict[tuple[str, str], float] = {}
+    same_stream_gap_us = 0.0
+    definite_host_starvation_us = 0.0
+    launch_call_in_gap_us = 0.0
+    post_launch_device_gap_us = 0.0
+    host_late_launch_count = 0
+    gap_count = 0
+    for kernel, launch in sorted(
+        correlated,
+        key=lambda item: float(item[0].get("ts", 0)),
+    ):
+        kernel_start = float(kernel.get("ts", 0))
+        kernel_end = kernel_start + _duration(kernel)
+        stream = _kernel_stream(kernel)
+        previous_end = previous_end_by_stream.get(stream)
+        previous_end_by_stream[stream] = max(
+            kernel_end,
+            previous_end if previous_end is not None else kernel_end,
+        )
+        if previous_end is None or kernel_start <= previous_end:
+            continue
+
+        gap_count += 1
+        gap = kernel_start - previous_end
+        same_stream_gap_us += gap
+        launch_start = float(launch.get("ts", 0))
+        launch_end = launch_start + _duration(launch)
+        if launch_start > previous_end:
+            host_late_launch_count += 1
+        definite_host_starvation_us += max(
+            0.0,
+            min(kernel_start, launch_start) - previous_end,
+        )
+        launch_call_in_gap_us += max(
+            0.0,
+            min(kernel_start, launch_end) - max(previous_end, launch_start),
+        )
+        post_launch_device_gap_us += max(
+            0.0,
+            kernel_start - max(previous_end, launch_end),
+        )
+
+    return {
+        "correlated_kernel_count": len(correlated),
+        "correlated_kernel_percent": 100.0 * len(correlated) / len(kernels),
+        "launch_submission_span_us": max(launch_ends) - min(launch_starts),
+        "launch_api_duration_us": {
+            "total": sum(launch_durations),
+            "p50": _percentile(launch_durations, 0.50),
+            "p95": _percentile(launch_durations, 0.95),
+            "max": max(launch_durations),
+        },
+        "launch_to_kernel_start_us": {
+            "p50": _percentile(queue_delays, 0.50),
+            "p95": _percentile(queue_delays, 0.95),
+            "max": max(queue_delays),
+        },
+        "same_stream_gap_count": gap_count,
+        "same_stream_gap_us": same_stream_gap_us,
+        "host_late_launch_count": host_late_launch_count,
+        "definite_host_starvation_us": definite_host_starvation_us,
+        "launch_call_in_gap_us": launch_call_in_gap_us,
+        "post_launch_device_gap_us": post_launch_device_gap_us,
+    }
+
+
 def _percentile(values: list[float], percentile: float) -> float:
     if not values:
         return 0.0
@@ -182,13 +385,21 @@ def _phase_summary(
     kernels: list[dict[str, Any]],
     phases: dict[int, str],
     total_kernel_us: float,
-) -> tuple[dict[str, dict[str, Any]], list[dict[str, float | str]]]:
+) -> tuple[
+    dict[str, dict[str, Any]],
+    list[dict[str, float | str]],
+    list[dict[str, float | int | str]],
+]:
     by_phase: dict[str, dict[str, float | int]] = defaultdict(
         lambda: {"duration_us": 0.0, "count": 0, "preceding_gap_us": 0.0}
     )
     phase_events: dict[str, list[dict[str, Any]]] = defaultdict(list)
     largest_gaps: list[dict[str, float | str]] = []
+    gap_transitions: dict[tuple[str, str], dict[str, float | int]] = defaultdict(
+        lambda: {"duration_us": 0.0, "count": 0, "max_us": 0.0}
+    )
     cursor = min(float(event["ts"]) for event in kernels)
+    cursor_index: int | None = None
     for index, event in enumerate(kernels):
         phase = phases[index]
         event_start = float(event["ts"])
@@ -198,15 +409,35 @@ def _phase_summary(
         values["count"] = int(values["count"]) + 1
         values["preceding_gap_us"] = float(values["preceding_gap_us"]) + gap
         phase_events[phase].append(event)
-        if gap > 0:
+        if gap > 0 and cursor_index is not None:
+            previous_event = kernels[cursor_index]
+            previous_phase = phases[cursor_index]
+            previous_device, previous_stream = _kernel_stream(previous_event)
+            next_device, next_stream = _kernel_stream(event)
             largest_gaps.append(
                 {
                     "duration_us": gap,
+                    "previous_phase": previous_phase,
+                    "previous_kernel": str(
+                        previous_event.get("name", "<unnamed>")
+                    ),
+                    "previous_device": previous_device,
+                    "previous_stream": previous_stream,
                     "next_phase": phase,
                     "next_kernel": str(event.get("name", "<unnamed>")),
+                    "next_device": next_device,
+                    "next_stream": next_stream,
                 }
             )
-        cursor = max(cursor, event_start + _duration(event))
+            transition = gap_transitions[(previous_phase, phase)]
+            transition["duration_us"] = float(transition["duration_us"]) + gap
+            transition["count"] = int(transition["count"]) + 1
+            transition["max_us"] = max(float(transition["max_us"]), gap)
+
+        event_end = event_start + _duration(event)
+        if event_end > cursor:
+            cursor = event_end
+            cursor_index = index
 
     summary: dict[str, dict[str, Any]] = {}
     for phase, values in sorted(
@@ -222,6 +453,23 @@ def _phase_summary(
             ),
             "top_kernels": _summarize_events_by_name(phase_events[phase], 5),
         }
+    transitions = sorted(
+        (
+            {
+                "previous_phase": previous_phase,
+                "next_phase": next_phase,
+                **values,
+                "mean_us": (
+                    float(values["duration_us"]) / int(values["count"])
+                    if values["count"]
+                    else 0.0
+                ),
+            }
+            for (previous_phase, next_phase), values in gap_transitions.items()
+        ),
+        key=lambda item: float(item["duration_us"]),
+        reverse=True,
+    )
     return (
         summary,
         sorted(
@@ -229,6 +477,7 @@ def _phase_summary(
             key=lambda item: float(item["duration_us"]),
             reverse=True,
         )[:20],
+        transitions,
     )
 
 
@@ -443,7 +692,9 @@ def _analyze_m3(
     for index in range(len(kernels)):
         phases.setdefault(index, "other")
 
-    phase_summary, largest_gaps = _phase_summary(kernels, phases, total_kernel_us)
+    phase_summary, largest_gaps, gap_transitions = _phase_summary(
+        kernels, phases, total_kernel_us
+    )
     layer_spans = [float(layer["span_us"]) for layer in layers]
     dense_spans = [
         float(layer["span_us"]) for layer in layers if layer["kind"] == "dense"
@@ -459,6 +710,7 @@ def _analyze_m3(
         "qk_norm_rope_cache_count": len(qk_norm_indices),
         "phases": phase_summary,
         "largest_kernel_gaps": largest_gaps,
+        "kernel_gap_transitions": gap_transitions,
         "layer_span_us": {
             "min": min(layer_spans),
             "p50": _percentile(layer_spans, 0.50),
@@ -576,6 +828,11 @@ def analyze_trace(
 
     total_kernel_us = sum(_duration(event) for event in kernels)
     kernel_busy_us = _merged_interval_duration(kernels)
+    kernel_streams = _stream_summary(kernels)
+    cross_stream_overlap_us, max_concurrent_kernel_streams = _cross_stream_overlap(
+        kernels
+    )
+    kernel_launch_analysis = _kernel_launch_analysis(events, kernels)
     categories = {}
     for name, values in sorted(by_category.items()):
         duration_us = float(values["duration_us"])
@@ -664,6 +921,11 @@ def analyze_trace(
         "total_kernel_duration_us": total_kernel_us,
         "kernel_busy_time_us": kernel_busy_us,
         "kernel_idle_time_us": max(0.0, kernel_end - kernel_start - kernel_busy_us),
+        "kernel_stream_count": len(kernel_streams),
+        "kernel_streams": kernel_streams,
+        "cross_stream_overlap_us": cross_stream_overlap_us,
+        "max_concurrent_kernel_streams": max_concurrent_kernel_streams,
+        "kernel_launch_analysis": kernel_launch_analysis,
         "kernel_busy_percent": (
             100.0 * kernel_busy_us / (kernel_end - kernel_start)
             if kernel_end > kernel_start
@@ -708,6 +970,18 @@ def validate_kernel_count(summary: dict[str, Any], minimum: int | None) -> None:
         )
 
 
+def validate_kernel_stream_count(
+    summary: dict[str, Any],
+    minimum: int | None,
+) -> None:
+    """Require an experiment to expose the expected number of GPU streams."""
+    if minimum is not None and summary["kernel_stream_count"] < minimum:
+        raise ValueError(
+            f"kernel stream count {summary['kernel_stream_count']} "
+            f"is below required minimum {minimum}"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("trace", type=Path)
@@ -719,6 +993,7 @@ def main() -> None:
     )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--min-kernel-count", type=int)
+    parser.add_argument("--min-kernel-stream-count", type=int)
     parser.add_argument("--require-category", action="append", default=[])
     parser.add_argument("--forbid-category", action="append", default=[])
     args = parser.parse_args()
@@ -730,6 +1005,7 @@ def main() -> None:
     )
     try:
         validate_kernel_count(summary, args.min_kernel_count)
+        validate_kernel_stream_count(summary, args.min_kernel_stream_count)
         validate_categories(
             summary,
             required=args.require_category,

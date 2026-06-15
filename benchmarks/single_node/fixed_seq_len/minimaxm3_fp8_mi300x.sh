@@ -73,6 +73,25 @@ if [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
 fi
 echo "MI300X index top-k patch ready: $index_topk_sha256"
 
+M3_SHARED_EXPERT_STREAM_MODE="${M3_SHARED_EXPERT_STREAM_MODE:-off}"
+export M3_SHARED_EXPERT_STREAM_MODE
+case "$M3_SHARED_EXPERT_STREAM_MODE" in
+    off)
+        ;;
+    on)
+        # vLLM already implements shared/routed expert overlap with an
+        # auxiliary stream. Enable the existing path on ROCm using the
+        # one-line platform guard change from vLLM PR #38665.
+        export VLLM_DISABLE_SHARED_EXPERTS_STREAM=0
+        python3 /workspace/utils/patch_vllm_rocm_shared_experts_stream.py
+        echo "M3 shared-expert stream experiment mode: on"
+        ;;
+    *)
+        echo "Invalid M3_SHARED_EXPERT_STREAM_MODE: $M3_SHARED_EXPERT_STREAM_MODE" >&2
+        exit 2
+        ;;
+esac
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then

@@ -7,6 +7,7 @@ from utils.analyze_profile_trace import (
     analyze_trace,
     validate_categories,
     validate_kernel_count,
+    validate_kernel_stream_count,
 )
 
 
@@ -50,8 +51,118 @@ def test_analyze_trace_selects_steady_state_decode(tmp_path):
     assert summary["decode_kernel_span_us"] == 60
     assert summary["kernel_busy_time_us"] == 50
     assert summary["kernel_idle_time_us"] == 10
+    assert summary["kernel_stream_count"] == 1
+    assert summary["cross_stream_overlap_us"] == 0
+    assert summary["max_concurrent_kernel_streams"] == 1
     assert summary["categories"]["gemma_rmsnorm"]["duration_us"] == 20
     assert summary["categories"]["allreduce"]["duration_us"] == 30
+
+
+def test_analyze_trace_reports_cross_stream_overlap(tmp_path):
+    trace = _write_trace(
+        tmp_path,
+        [
+            {
+                "name": "execute_context_0(0)_generation_16(16)",
+                "cat": "gpu_user_annotation",
+                "ph": "X",
+                "ts": 100,
+                "dur": 200,
+            },
+            {
+                "name": "main_stream_kernel",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 110,
+                "dur": 40,
+                "args": {"device": 0, "stream": 4},
+            },
+            {
+                "name": "aux_stream_kernel",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 130,
+                "dur": 40,
+                "args": {"device": 0, "stream": 7},
+            },
+            {
+                "name": "main_stream_tail",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 180,
+                "dur": 10,
+                "args": {"device": 0, "stream": 4},
+            },
+        ],
+    )
+
+    summary = analyze_trace(trace, expected_concurrency=16)
+
+    assert summary["kernel_stream_count"] == 2
+    assert summary["cross_stream_overlap_us"] == 20
+    assert summary["max_concurrent_kernel_streams"] == 2
+    assert [
+        (item["stream"], item["count"]) for item in summary["kernel_streams"]
+    ] == [("4", 2), ("7", 1)]
+
+
+def test_analyze_trace_reports_kernel_launch_starvation(tmp_path):
+    trace = _write_trace(
+        tmp_path,
+        [
+            {
+                "name": "execute_context_0(0)_generation_16(16)",
+                "cat": "gpu_user_annotation",
+                "ph": "X",
+                "ts": 100,
+                "dur": 200,
+            },
+            {
+                "name": "hipLaunchKernel",
+                "cat": "cuda_runtime",
+                "ph": "X",
+                "ts": 110,
+                "dur": 5,
+                "args": {"correlation": 1},
+            },
+            {
+                "name": "first_kernel",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 120,
+                "dur": 20,
+                "args": {"device": 0, "stream": 4, "correlation": 1},
+            },
+            {
+                "name": "hipModuleLaunchKernel",
+                "cat": "cuda_runtime",
+                "ph": "X",
+                "ts": 150,
+                "dur": 5,
+                "args": {"correlation": 2},
+            },
+            {
+                "name": "second_kernel",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 160,
+                "dur": 10,
+                "args": {"device": 0, "stream": 4, "correlation": 2},
+            },
+        ],
+    )
+
+    launch = analyze_trace(trace, expected_concurrency=16)["kernel_launch_analysis"]
+
+    assert launch["correlated_kernel_count"] == 2
+    assert launch["correlated_kernel_percent"] == 100
+    assert launch["launch_submission_span_us"] == 45
+    assert launch["launch_to_kernel_start_us"]["p50"] == 5
+    assert launch["same_stream_gap_us"] == 20
+    assert launch["host_late_launch_count"] == 1
+    assert launch["definite_host_starvation_us"] == 10
+    assert launch["launch_call_in_gap_us"] == 5
+    assert launch["post_launch_device_gap_us"] == 5
 
 
 def test_analyze_trace_prefers_gpu_annotation_window(tmp_path):
@@ -283,6 +394,14 @@ def test_kernel_count_validation_rejects_partial_trace():
     validate_kernel_count({"kernel_count": 0}, minimum=None)
 
 
+def test_kernel_stream_count_validation_rejects_single_stream_trace():
+    with pytest.raises(ValueError, match="kernel stream count 1"):
+        validate_kernel_stream_count({"kernel_stream_count": 1}, minimum=2)
+
+    validate_kernel_stream_count({"kernel_stream_count": 2}, minimum=2)
+    validate_kernel_stream_count({"kernel_stream_count": 0}, minimum=None)
+
+
 def test_analyze_trace_segments_minimax_m3_layers(tmp_path):
     kernel_names = [
         "decode_setup",
@@ -362,6 +481,9 @@ def test_analyze_trace_segments_minimax_m3_layers(tmp_path):
     assert m3["phases"]["moe_expert_gemm_2"]["count"] == 1
     assert m3["phases"]["logits_projection"]["count"] == 1
     assert m3["phases"]["logits_all_gather"]["count"] == 1
+    assert m3["largest_kernel_gaps"][0]["previous_phase"] == "decode_setup"
+    assert m3["largest_kernel_gaps"][0]["next_phase"] == "attention_qkv_projection"
+    assert m3["kernel_gap_transitions"][0]["duration_us"] > 0
     assert (
         m3["phases"]["sparse_index_score"]["top_kernels"][0]["name"]
         == "_decode_index_score_kernel"

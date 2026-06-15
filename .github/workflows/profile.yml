@@ -31,6 +31,14 @@ on:
           - control
           - fused
         default: 'off'
+      m3-shared-expert-stream-mode:
+        description: "MiniMax M3 MI300X shared-expert stream experiment mode"
+        required: false
+        type: choice
+        options:
+          - 'off'
+          - 'on'
+        default: 'off'
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -103,6 +111,7 @@ jobs:
         name: Validate generated jobs
         env:
           M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+          M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
           RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
         run: |
@@ -120,7 +129,12 @@ jobs:
           mode = os.environ["M3_AITER_AR_RMS_MODE"]
           if mode not in {"off", "control", "fused"}:
               raise SystemExit(f"Invalid M3 AITER AR+RMS mode: {mode}")
-          if mode != "off":
+          shared_mode = os.environ["M3_SHARED_EXPERT_STREAM_MODE"]
+          if shared_mode not in {"off", "on"}:
+              raise SystemExit(
+                  f"Invalid M3 shared-expert stream mode: {shared_mode}"
+              )
+          if mode != "off" or shared_mode != "off":
               invalid = [
                   item
                   for item in data
@@ -130,8 +144,8 @@ jobs:
               ]
               if invalid:
                   raise SystemExit(
-                      "M3 AITER AR+RMS mode only supports MiniMax M3 "
-                      "vLLM jobs on MI300X"
+                      "M3 experiments only support MiniMax M3 vLLM jobs "
+                      "on MI300X"
                   )
 
           identities = {
@@ -182,6 +196,7 @@ jobs:
       EVAL_ONLY: 'false'
       SCENARIO_SUBDIR: ${{ matrix.config['scenario-type'] == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
       M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+      M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
@@ -225,6 +240,9 @@ jobs:
           if [ "$M3_AITER_AR_RMS_MODE" != "off" ]; then
             mode_suffix="_m3ar-${M3_AITER_AR_RMS_MODE}"
           fi
+          if [ "$M3_SHARED_EXPERT_STREAM_MODE" = "on" ]; then
+            mode_suffix="${mode_suffix}_m3se-on"
+          fi
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
           summary_path="profile_summary_${res_name}.json"
@@ -267,6 +285,11 @@ jobs:
           elif [ "$M3_AITER_AR_RMS_MODE" = "control" ]; then
             analysis_args+=(
               --forbid-category aiter_fused_allreduce_rmsnorm
+            )
+          fi
+          if [ "$M3_SHARED_EXPERT_STREAM_MODE" = "on" ]; then
+            analysis_args+=(
+              --min-kernel-stream-count 2
             )
           fi
           python3 utils/analyze_profile_trace.py "${analysis_args[@]}"

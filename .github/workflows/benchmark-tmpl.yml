@@ -92,6 +92,11 @@ on:
         required: false
         type: string
         default: 'off'
+      m3-shared-expert-stream-mode:
+        description: "MiniMax M3 MI300X shared-expert stream experiment mode"
+        required: false
+        type: string
+        default: 'off'
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -120,7 +125,8 @@ env:
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
   M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
-  EXPERIMENT_SUFFIX: ${{ inputs.m3-aiter-ar-rms-mode != 'off' && format('_m3ar-{0}', inputs.m3-aiter-ar-rms-mode) || '' }}
+  M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
+  EXPERIMENT_SUFFIX: ${{ inputs.m3-aiter-ar-rms-mode != 'off' && format('_m3ar-{0}', inputs.m3-aiter-ar-rms-mode) || '' }}${{ inputs.m3-shared-expert-stream-mode == 'on' && '_m3se-on' || '' }}
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
@@ -132,7 +138,7 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 500
-    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.m3-aiter-ar-rms-mode != 'off' && format(' | m3ar-{0}', inputs.m3-aiter-ar-rms-mode) || '' }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
+    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | tp=${{ inputs.tp }} ep=${{ inputs.ep }} dpa=${{ inputs.dp-attn }} | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ inputs.conc }}${{ inputs.m3-aiter-ar-rms-mode != 'off' && format(' | m3ar-{0}', inputs.m3-aiter-ar-rms-mode) || '' }}${{ inputs.m3-shared-expert-stream-mode == 'on' && ' | m3se-on' || '' }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |

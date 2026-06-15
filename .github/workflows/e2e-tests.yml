@@ -30,6 +30,14 @@ on:
                     - control
                     - fused
                 default: "off"
+            m3-shared-expert-stream-mode:
+                description: "MiniMax M3 MI300X shared-expert stream experiment mode"
+                required: false
+                type: choice
+                options:
+                    - "off"
+                    - "on"
+                default: "off"
     workflow_call:
         inputs:
             generate-cli-command:
@@ -51,6 +59,11 @@ on:
                 default: ""
             m3-aiter-ar-rms-mode:
                 description: "MiniMax M3 MI300X AITER AR+RMS experiment mode"
+                required: false
+                type: string
+                default: "off"
+            m3-shared-expert-stream-mode:
+                description: "MiniMax M3 MI300X shared-expert stream experiment mode"
                 required: false
                 type: string
                 default: "off"
@@ -81,16 +94,29 @@ jobs:
             - id: get-jobs
               env:
                   M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+                  M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
               run: |
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
-                  if [ "$M3_AITER_AR_RMS_MODE" != "off" ]; then
+                  if [ "$M3_AITER_AR_RMS_MODE" != "off" ] \
+                    || [ "$M3_SHARED_EXPERT_STREAM_MODE" != "off" ]; then
                     python3 -c '
                   import json
+                  import os
                   import sys
 
                   data = json.load(sys.stdin)
+                  aiter_mode = os.environ["M3_AITER_AR_RMS_MODE"]
+                  shared_mode = os.environ["M3_SHARED_EXPERT_STREAM_MODE"]
+                  if aiter_mode not in {"off", "control", "fused"}:
+                      raise SystemExit(
+                          f"Invalid M3 AITER AR+RMS mode: {aiter_mode}"
+                      )
+                  if shared_mode not in {"off", "on"}:
+                      raise SystemExit(
+                          f"Invalid M3 shared-expert stream mode: {shared_mode}"
+                      )
                   invalid = [
                       item
                       for item in data
@@ -100,8 +126,8 @@ jobs:
                   ]
                   if invalid:
                       raise SystemExit(
-                          "M3 AITER AR+RMS mode only supports MiniMax M3 "
-                          "vLLM jobs on MI300X"
+                          "M3 experiments only support MiniMax M3 vLLM "
+                          "jobs on MI300X"
                       )
                   ' <<< "$CONFIG_JSON"
                   fi
@@ -300,6 +326,7 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: false
             m3-aiter-ar-rms-mode: ${{ inputs.m3-aiter-ar-rms-mode }}
+            m3-shared-expert-stream-mode: ${{ inputs.m3-shared-expert-stream-mode }}
             ref: ${{ inputs.ref }}
 
     test-sweep-evals:
@@ -332,6 +359,7 @@ jobs:
             run-eval: true
             eval-only: true
             m3-aiter-ar-rms-mode: ${{ inputs.m3-aiter-ar-rms-mode }}
+            m3-shared-expert-stream-mode: ${{ inputs.m3-shared-expert-stream-mode }}
             ref: ${{ inputs.ref }}
 
     collect-results:
