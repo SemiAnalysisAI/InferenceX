@@ -1,19 +1,14 @@
 diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
-index 9e0145ff9..244065006 100644
+index 9e0145ff9..21187a2ac 100644
 --- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 +++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
-@@ -46,13 +46,16 @@ _BF16_DECODE_TOKEN_THRESHOLD = 8
- # between 827 and 843 tokens on MI300X. Keep the cutoff tile-aligned.
- _BF16_PREFILL_TOKEN_THRESHOLD = 832
+@@ -48,11 +48,10 @@ _BF16_PREFILL_TOKEN_THRESHOLD = 832
  _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE = 5
-+_WEIGHT_STORAGE_DUAL = "dual"
-+_WEIGHT_STORAGE_BF16_ONLY = "bf16_only"
-+_WEIGHT_STORAGE_NATIVE_ONLY = "native_only"
  
  
- def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
+-def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
 -    """Limit BF16 fallback weights to the exact MiniMax-M3 TP shape."""
-+    """Limit mixed BF16/native storage to profiled MiniMax-M3 shapes."""
++def _is_profiled_minimax_m3_config(moe_config: FusedMoEConfig) -> bool:
      return (
          current_platform.is_fp8_fnuz()
 -        and moe_config.ep_size == 1
@@ -21,26 +16,24 @@ index 9e0145ff9..244065006 100644
          and moe_config.has_shared_experts
          and moe_config.num_experts == 128
          and moe_config.experts_per_token == 4
-@@ -62,23 +65,45 @@ def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
+@@ -62,6 +61,16 @@ def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
      )
  
  
--def _should_store_bf16_only(max_model_len: int, layer_index: int) -> bool:
--    return (
--        max_model_len > 4096 and layer_index % _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE == 0
--    )
-+def _mxfp8_weight_storage_policy(
-+    max_model_len: int,
-+    layer_index: int,
-+    ep_size: int,
-+) -> str:
-+    if max_model_len <= 4096 or layer_index % _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE != 0:
-+        return _WEIGHT_STORAGE_DUAL
-+    if ep_size > 1:
-+        return _WEIGHT_STORAGE_NATIVE_ONLY
-+    return _WEIGHT_STORAGE_BF16_ONLY
- 
- 
++def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
++    """Retain mixed BF16/native weights only for MiniMax-M3 tensor parallelism."""
++    return _is_profiled_minimax_m3_config(moe_config) and moe_config.ep_size == 1
++
++
++def _should_use_native_ep(moe_config: FusedMoEConfig) -> bool:
++    """Use compressed native weights for the profiled MiniMax-M3 EP8 shape."""
++    return _is_profiled_minimax_m3_config(moe_config) and moe_config.ep_size == 8
++
++
+ def _should_store_bf16_only(max_model_len: int, layer_index: int) -> bool:
+     return (
+         max_model_len > 4096 and layer_index % _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE == 0
+@@ -71,14 +80,30 @@ def _should_store_bf16_only(max_model_len: int, layer_index: int) -> bool:
  def _should_use_bf16_experts(
      num_tokens: int,
      native_weights_available: bool,
@@ -315,97 +308,28 @@ index 9e0145ff9..244065006 100644
              if self.w1_bf16 is None or self.w2_bf16 is None:
                  raise RuntimeError(
 diff --git a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
-index bc00da41e..e7c2c26b0 100644
+index bc00da41e..13db06d37 100644
 --- a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
 +++ b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
-@@ -82,6 +82,19 @@ def _select_rocm_mxfp8_backend(
+@@ -82,6 +82,18 @@ def _select_rocm_mxfp8_backend(
      """ROCm fallback when vendor MXFP8 backends are unavailable."""
  
      if current_platform.is_fp8_fnuz() and config.ep_size > 1:
 +        from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
 +            Mxfp8NativeTritonExperts,
-+            _should_use_bf16_decode_fallback,
++            _should_use_native_ep,
 +        )
 +
-+        if _should_use_bf16_decode_fallback(config):
++        if _should_use_native_ep(config):
 +            logger.info_once(
 +                "Using the profiled gfx94x MiniMax-M3 EP8 MXFP8 backend: "
-+                "native local-route kernels for decode and retained BF16 "
-+                "experts for large prefill."
++                "native local-route kernels with compressed-only expert weights."
 +            )
 +            return Fp8MoeBackend.NATIVE_MXFP8, Mxfp8NativeTritonExperts
 +
          from vllm.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
              Mxfp8EmulationTritonExperts,
          )
-diff --git a/vllm/model_executor/layers/quantization/modelopt.py b/vllm/model_executor/layers/quantization/modelopt.py
-index 1a4049d3f..9417f2ebd 100644
---- a/vllm/model_executor/layers/quantization/modelopt.py
-+++ b/vllm/model_executor/layers/quantization/modelopt.py
-@@ -2132,10 +2132,12 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
-         )
- 
-     def _retain_bf16_fallback_weights(self, layer: RoutedExperts) -> None:
--        """Keep the BF16 weights selected by the gfx94x TP dispatch policy."""
-+        """Configure profiled gfx94x MiniMax-M3 native/BF16 weight storage."""
-         from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
-+            _WEIGHT_STORAGE_BF16_ONLY,
-+            _WEIGHT_STORAGE_NATIVE_ONLY,
-             Mxfp8NativeTritonExperts,
--            _should_store_bf16_only,
-+            _mxfp8_weight_storage_policy,
-         )
-         from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
-             dequant_mxfp8_to_bf16,
-@@ -2150,6 +2152,20 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
-                 "Expected Mxfp8NativeTritonExperts for the gfx94x native backend."
-             )
- 
-+        layer_index = extract_layer_index(layer.layer_name)
-+        storage_policy = _mxfp8_weight_storage_policy(
-+            self.moe.max_model_len,
-+            layer_index,
-+            self.moe.ep_size,
-+        )
-+        if storage_policy == _WEIGHT_STORAGE_NATIVE_ONLY:
-+            logger.info_once(
-+                "Using native-only MXFP8 storage for one-fifth of long-context "
-+                "gfx94x EP MoE layers; the remaining layers retain BF16 for "
-+                "large-prefill dispatch."
-+            )
-+            return
-+
-         target_dtype = getattr(layer, "orig_dtype", torch.bfloat16)
-         w13_bf16 = dequant_mxfp8_to_bf16(layer.w13_weight, layer.w13_weight_scale).to(
-             target_dtype
-@@ -2157,12 +2173,8 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
-         w2_bf16 = dequant_mxfp8_to_bf16(layer.w2_weight, layer.w2_weight_scale).to(
-             target_dtype
-         )
--        layer_index = extract_layer_index(layer.layer_name)
--        store_bf16_only = _should_store_bf16_only(
--            self.moe.max_model_len,
--            layer_index,
--        )
- 
-+        store_bf16_only = storage_policy == _WEIGHT_STORAGE_BF16_ONLY
-         if store_bf16_only:
-             replace_parameter(layer, "w13_weight", w13_bf16)
-             replace_parameter(layer, "w2_weight", w2_bf16)
-@@ -2177,10 +2189,10 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
- 
-         if self.moe.max_model_len <= 4096:
-             logger.info_once(
--                "Retaining BF16 MXFP8 MoE weights for gfx94x TP decode and "
--                "prefill dispatch."
-+                "Retaining native MXFP8 and BF16 MoE weights for profiled "
-+                "gfx94x MiniMax-M3 dispatch."
-             )
--        else:
-+        elif self.moe.ep_size == 1:
-             logger.info_once(
-                 "Using BF16-only storage for one-fifth of gfx94x TP MoE "
-                 "layers and retaining both MXFP8 and BF16 weights for the "
 diff --git a/vllm/models/minimax_m3/amd/ops/__init__.py b/vllm/models/minimax_m3/amd/ops/__init__.py
 index 22d96f9de..a2672b05d 100644
 --- a/vllm/models/minimax_m3/amd/ops/__init__.py
