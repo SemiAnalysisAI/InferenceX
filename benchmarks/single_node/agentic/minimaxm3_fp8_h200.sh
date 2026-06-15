@@ -38,7 +38,7 @@ fi
 
 nvidia-smi
 
-# ---- Resolve traces and install deps ----------------------------------------
+# ---- Trace corpus selection + model download --------------------------------
 # M3 serves at max_model_len up to ~250k; use the 256k-capped trace corpus
 # (470 traces, max in+out <= 256k) so requests aren't rejected at the cap.
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
@@ -58,8 +58,9 @@ if [[ "$MODEL" != /* ]]; then
   SERVE_OFFLINE=(env HF_HUB_OFFLINE=1)
 fi
 
-resolve_trace_source
-install_agentic_deps
+# NOTE: install_agentic_deps is intentionally deferred until AFTER the server is
+# healthy (see below) — installing the aiperf client deps first breaks vLLM's
+# API server on the minimax-m3 image.
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -109,6 +110,19 @@ SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+# ---- Install agentic client deps AFTER the server is healthy ----------------
+# The aiperf editable install perturbs the shared site-packages (it upgrades
+# starlette/fastapi/etc.). On the minimax-m3 image that breaks vLLM's running
+# API server: prometheus_fastapi_instrumentator can no longer resolve route
+# names ("AttributeError: '_IncludedRouter' object has no attribute 'path'") and
+# every request — including /health — returns HTTP 500, so wait_for_server_ready
+# would hang until timeout. Booting the server first lets it build its ASGI app
+# from the image's pristine deps; the client-side dep mutation that follows only
+# affects the (separate) aiperf process. (The M3 fixed-seq-len recipe passes on
+# this same image precisely because it never runs install_agentic_deps.)
+resolve_trace_source
+install_agentic_deps
 
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
