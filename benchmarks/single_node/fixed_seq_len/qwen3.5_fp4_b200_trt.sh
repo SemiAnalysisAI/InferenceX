@@ -87,8 +87,18 @@ echo "Generated config file contents:"
 cat "$EXTRA_CONFIG_FILE"
 
 MAX_MODEL_LEN=$(( MAX_MODEL_LEN > 8192 ? MAX_MODEL_LEN : 8192 ))
-MAX_NUM_TOKENS=$(( ISL + OSL + 256 ))
-MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
+
+# Max number of tokens per sequence-length config, matching the reference
+# configs. Fall back to deriving it from the sequence lengths for any other
+# combination.
+case "${ISL}_${OSL}" in
+    8192_1024) MAX_NUM_TOKENS=32768 ;;
+    1024_1024) MAX_NUM_TOKENS=16384 ;;
+    *)
+        MAX_NUM_TOKENS=$(( ISL + OSL + 256 ))
+        MAX_NUM_TOKENS=$(( MAX_NUM_TOKENS > 8192 ? MAX_NUM_TOKENS : 8192 ))
+        ;;
+esac
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
