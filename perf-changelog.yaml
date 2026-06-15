@@ -3893,4 +3893,4 @@
   description:
     - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k STP."
     - "Add six local srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b300-fp8/1k1k and wire the B300 launcher to overlay them into srt-slurm."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1787
