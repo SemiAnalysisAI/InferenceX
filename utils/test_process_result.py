@@ -207,6 +207,17 @@ class TestProcessResultScript:
         output_file = tmp_path / "agg_benchmark_result.json"
         assert output_file.exists()
 
+    def test_zero_tpot_statistic(self, tmp_path, sample_benchmark_result, single_node_env_vars):
+        """A one-sample TPOT statistic should not fail result processing."""
+        sample_benchmark_result["std_tpot_ms"] = 0.0
+
+        result = run_script(tmp_path, single_node_env_vars, sample_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["std_intvty"] == 0.0
+        assert output_data["intvty_p50"] == pytest.approx(1000.0 / 25.0)
+
     def test_multinode_processing(self, tmp_path, sample_benchmark_result, multinode_env_vars):
         """Test multinode result processing."""
         result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)
