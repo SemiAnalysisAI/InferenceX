@@ -2135,12 +2135,6 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
-#TP4: 288*0.9 - (745+49)/4 - 10 = 50 GB 
-#ISL+OSL 2048: fp8 kv total = 14,082,048 B ≈ 13.43 MiB
-# batch: 3723
-
-#ISL+OSL 9216: fp8 kv total = 49,377,280 B ≈ 47.1 MiB
-# batch: 1061
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
   model: deepseek-ai/DeepSeek-V4-Pro
