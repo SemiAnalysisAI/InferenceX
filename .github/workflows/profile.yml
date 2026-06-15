@@ -163,6 +163,12 @@ jobs:
       CONC: ${{ matrix.config.conc }}
       SPEC_DECODING: ${{ matrix.config.spec-decoding }}
       DISAGG: ${{ matrix.config.disagg }}
+      # The single-node launchers resolve the recipe path as
+      # benchmarks/single_node/${SCENARIO_SUBDIR}<exp>_<prec>_<hw>.sh and run
+      # under `set -u`; the sweep's benchmark-tmpl.yml sets this, so profile.yml
+      # must too. Profiling is fixed-seq-len (mi325x/mi300x launchers don't
+      # default it the way mi355x does).
+      SCENARIO_SUBDIR: fixed_seq_len/
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ needs.get-jobs.outputs.moe-debug == 'true' && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
