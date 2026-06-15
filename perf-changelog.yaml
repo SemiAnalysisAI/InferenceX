@@ -3822,4 +3822,4 @@
   description:
     - "Initial submission (test): MiniMax-M3 MXFP8 H200 agentic-coding (Claude Code trace replay) with CPU KV-cache offloading — tests vLLM v1's native KV-offloading connector on M3 at a single large concurrency (TEP8: TP8 + expert parallel, offloading: cpu, conc 64, duration 1800s)"
     - "New agentic recipe benchmarks/single_node/agentic/minimaxm3_fp8_h200.sh: --block-size 128 (MSA), --language-model-only, BF16 KV (no --kv-cache-dtype fp8 — MXFP8 lacks calibrated KV scales, vllm-project/vllm#45381), prefix caching enabled; CPU offload via --kv-offloading-backend native --kv-offloading-size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager (default 600 GB), matching the M2.5 H200 agentic recipe"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1763
