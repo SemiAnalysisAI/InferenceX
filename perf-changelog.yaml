@@ -3674,8 +3674,8 @@
     - "FLASHINFER (trtllm-gen) attention on Blackwell + block-size 128 (MSA index-cache alignment); --language-model-only for text-only benchmarks"
     - "Disaggregated prefill/decode over NixlConnector on the NVL72 NVLink fabric (UCX_CUDA_IPC_ENABLE_MNNVL=y, cuda_ipc UCX_TLS, NCCL_CUMEM_ENABLE=1 + enable-sleep-mode cuMem allocator, numa-bind)"
     - "Rack-scale wide expert-parallel (deepseek-v4 megamoe style; DEP = DP-attn + EP): EP8/EP16 spans multiple GB200 nodes vs B200's 8-GPU NVLink island"
-    - "5 topologies: 1P1D TP4 (2n, low-lat), 1P1D DEP8 (4n), 1P1D DEP8->DEP16 (6n, wide decode), 2P1D DEP8->DEP16 (8n), 4P1D DEP8->DEP16 (12n, max tput)"
-    - "TEP4 decode test: 1P1D TP4 prefill -> TEP4 decode (TP4+EP4, 2n) at conc 1-32. All other entries temporarily commented out."
+    - "5 topologies, 1k1k + 8k1k: 1P1D TEP8 decode (3n, low-lat conc 1-64), 1P1D DEP8 (4n, conc 128-512), 1P1D DEP8->DEP16 (6n, conc 512-2048), 2P1D (8n, conc 2048-4096), 4P1D (12n, conc 4096-8192)"
+    - "TEP8 decode (enable-expert-parallel on TP8): 128 experts / 8 ranks = 16 experts/rank, ~19% lower ITL than pure TP8 at low conc; stream-interval 1 + max-cudagraph-capture-size 128 for interactivity"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
 
 - config-keys:
