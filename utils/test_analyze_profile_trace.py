@@ -163,6 +163,70 @@ def test_analyze_trace_reports_kernel_launch_starvation(tmp_path):
     assert launch["definite_host_starvation_us"] == 10
     assert launch["launch_call_in_gap_us"] == 5
     assert launch["post_launch_device_gap_us"] == 5
+    assert launch["global_gap_count"] == 1
+    assert launch["global_gap_us"] == 20
+    assert launch["global_host_late_launch_count"] == 1
+    assert launch["global_definite_host_starvation_us"] == 10
+    assert launch["global_launch_call_in_gap_us"] == 5
+    assert launch["global_post_launch_device_gap_us"] == 5
+    assert launch["global_unattributed_gap_count"] == 0
+
+
+def test_analyze_trace_reports_global_multistream_idle_without_double_counting(
+    tmp_path,
+):
+    events = [
+        {
+            "name": "execute_context_0(0)_generation_16(16)",
+            "cat": "gpu_user_annotation",
+            "ph": "X",
+            "ts": 0,
+            "dur": 300,
+        }
+    ]
+    kernels = [
+        ("stream4_first", 20, 20, 4, 1),
+        ("stream7_first", 45, 20, 7, 2),
+        ("stream7_second", 70, 5, 7, 3),
+        ("stream4_second", 80, 10, 4, 4),
+    ]
+    for name, timestamp, duration, stream, correlation in kernels:
+        events.extend(
+            [
+                {
+                    "name": "hipLaunchKernel",
+                    "cat": "cuda_runtime",
+                    "ph": "X",
+                    "ts": timestamp - 4,
+                    "dur": 2,
+                    "args": {"correlation": correlation},
+                },
+                {
+                    "name": name,
+                    "cat": "kernel",
+                    "ph": "X",
+                    "ts": timestamp,
+                    "dur": duration,
+                    "args": {
+                        "device": 0,
+                        "stream": stream,
+                        "correlation": correlation,
+                    },
+                },
+            ]
+        )
+    trace = _write_trace(tmp_path, events)
+
+    summary = analyze_trace(trace, expected_concurrency=16)
+    launch = summary["kernel_launch_analysis"]
+
+    assert summary["kernel_idle_time_us"] == 15
+    assert launch["same_stream_gap_us"] == 45
+    assert launch["global_gap_count"] == 3
+    assert launch["global_gap_us"] == 15
+    assert launch["global_definite_host_starvation_us"] == 3
+    assert launch["global_launch_call_in_gap_us"] == 6
+    assert launch["global_post_launch_device_gap_us"] == 6
 
 
 def test_analyze_trace_prefers_gpu_annotation_window(tmp_path):
@@ -488,3 +552,94 @@ def test_analyze_trace_segments_minimax_m3_layers(tmp_path):
         m3["phases"]["sparse_index_score"]["top_kernels"][0]["name"]
         == "_decode_index_score_kernel"
     )
+
+
+def test_analyze_trace_sorts_multistream_m3_kernels_by_timestamp(tmp_path):
+    main_stream = {"device": 0, "stream": 4}
+    aux_stream = {"device": 0, "stream": 12}
+    main_kernel_names = [
+        "Cijk_sparse_qkv",
+        "fusedMiniMaxM3QNormRopeKVInsertKernel<c10::BFloat16, true, true>",
+        "_decode_index_score_kernel",
+        "_topk_index_partial_kernel",
+        "_topk_index_merge_kernel",
+        "_gqa_sparse_decode_kernel",
+        "_merge_topk_attn_out_kernel",
+        "Cijk_sparse_o",
+        "cross_device_reduce_1stage",
+        "_gemma_fused_add_rmsnorm_kernel",
+        "bfloat16tofloat32_copy_kernel_cuda",
+        "Cijk_router",
+        "topkGating",
+        "moe_align_block_size_kernel",
+        "count_and_sort_expert_tokens_kernel",
+        "fused_moe_kernel",
+        "_swiglu_oai_quant_kernel",
+        "fused_moe_kernel",
+        "moe_sum_kernel",
+        "vectorized_elementwise_add",
+        "cross_device_reduce_1stage",
+        "_gemma_fused_add_rmsnorm_kernel",
+        "Cijk_logits",
+    ]
+    main_events = [
+        {
+            "name": name,
+            "cat": "kernel",
+            "ph": "X",
+            "ts": 10 + index * 10,
+            "dur": 5,
+            "args": main_stream,
+        }
+        for index, name in enumerate(main_kernel_names)
+    ]
+    aux_events = [
+        {
+            "name": "Cijk_shared_gate_up",
+            "cat": "kernel",
+            "ph": "X",
+            "ts": 185,
+            "dur": 4,
+            "args": aux_stream,
+        },
+        {
+            "name": "_swiglu_oai_kernel",
+            "cat": "kernel",
+            "ph": "X",
+            "ts": 191,
+            "dur": 2,
+            "args": aux_stream,
+        },
+        {
+            "name": "Cijk_shared_down",
+            "cat": "kernel",
+            "ph": "X",
+            "ts": 195,
+            "dur": 4,
+            "args": aux_stream,
+        },
+    ]
+    events = [
+        {
+            "name": "execute_context_0(0)_generation_16(16)",
+            "cat": "gpu_user_annotation",
+            "ph": "X",
+            "ts": 0,
+            "dur": 1000,
+        },
+        *main_events,
+        # Perfetto may append an auxiliary stream after later main-stream
+        # events even when its timestamps belong in the middle.
+        *aux_events,
+    ]
+    trace = _write_trace(tmp_path, events)
+
+    summary = analyze_trace(trace, expected_concurrency=16)
+
+    m3 = summary["minimax_m3"]
+    assert m3["recognized"]
+    assert summary["kernel_stream_count"] == 2
+    assert m3["phases"]["moe_shared_gate_up_projection"]["count"] == 1
+    assert m3["phases"]["moe_shared_activation"]["count"] == 1
+    assert m3["phases"]["moe_shared_down_projection"]["count"] == 1
+    assert m3["phases"]["logits_projection"]["count"] == 1

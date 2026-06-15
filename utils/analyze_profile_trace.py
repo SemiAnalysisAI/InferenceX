@@ -324,6 +324,51 @@ def _kernel_launch_analysis(
             kernel_start - max(previous_end, launch_end),
         )
 
+    launch_by_kernel_id = {id(kernel): launch for kernel, launch in correlated}
+    global_gap_count = 0
+    global_gap_us = 0.0
+    global_host_late_launch_count = 0
+    global_definite_host_starvation_us = 0.0
+    global_launch_call_in_gap_us = 0.0
+    global_post_launch_device_gap_us = 0.0
+    global_unattributed_gap_count = 0
+    global_cursor: float | None = None
+    for kernel in sorted(kernels, key=lambda event: float(event.get("ts", 0))):
+        kernel_start = float(kernel.get("ts", 0))
+        kernel_end = kernel_start + _duration(kernel)
+        if global_cursor is None:
+            global_cursor = kernel_end
+            continue
+        if kernel_start <= global_cursor:
+            global_cursor = max(global_cursor, kernel_end)
+            continue
+
+        global_gap_count += 1
+        global_gap_us += kernel_start - global_cursor
+        launch = launch_by_kernel_id.get(id(kernel))
+        if launch is None:
+            global_unattributed_gap_count += 1
+            global_cursor = kernel_end
+            continue
+
+        launch_start = float(launch.get("ts", 0))
+        launch_end = launch_start + _duration(launch)
+        if launch_start > global_cursor:
+            global_host_late_launch_count += 1
+        global_definite_host_starvation_us += max(
+            0.0,
+            min(kernel_start, launch_start) - global_cursor,
+        )
+        global_launch_call_in_gap_us += max(
+            0.0,
+            min(kernel_start, launch_end) - max(global_cursor, launch_start),
+        )
+        global_post_launch_device_gap_us += max(
+            0.0,
+            kernel_start - max(global_cursor, launch_end),
+        )
+        global_cursor = kernel_end
+
     return {
         "correlated_kernel_count": len(correlated),
         "correlated_kernel_percent": 100.0 * len(correlated) / len(kernels),
@@ -345,6 +390,13 @@ def _kernel_launch_analysis(
         "definite_host_starvation_us": definite_host_starvation_us,
         "launch_call_in_gap_us": launch_call_in_gap_us,
         "post_launch_device_gap_us": post_launch_device_gap_us,
+        "global_gap_count": global_gap_count,
+        "global_gap_us": global_gap_us,
+        "global_host_late_launch_count": global_host_late_launch_count,
+        "global_definite_host_starvation_us": global_definite_host_starvation_us,
+        "global_launch_call_in_gap_us": global_launch_call_in_gap_us,
+        "global_post_launch_device_gap_us": global_post_launch_device_gap_us,
+        "global_unattributed_gap_count": global_unattributed_gap_count,
     }
 
 
@@ -564,6 +616,15 @@ def _analyze_m3(
             tail_start = gemm_indices[expected_gemms]
             segment_end = tail_start
             gemm_indices = gemm_indices[:expected_gemms]
+        elif len(gemm_indices) > expected_gemms:
+            return {
+                "recognized": False,
+                "reason": (
+                    f"layer {layer_id} has {len(gemm_indices)} GEMMs, "
+                    f"expected {expected_gemms}"
+                ),
+                "qk_norm_count": len(qk_norm_indices),
+            }
 
         gemm_roles = (
             [
@@ -804,6 +865,15 @@ def analyze_trace(
         used_annotation_window = False
     if not kernels:
         raise ValueError("no GPU kernel events found")
+    # Perfetto can emit each HIP stream in order without globally merging the
+    # streams. M3 phase segmentation depends on timestamp order.
+    kernels.sort(
+        key=lambda event: (
+            float(event.get("ts", 0)),
+            float(event.get("ts", 0)) + _duration(event),
+            str(event.get("name", "")),
+        )
+    )
 
     by_name: dict[str, dict[str, float | int]] = defaultdict(
         lambda: {"duration_us": 0.0, "count": 0}
