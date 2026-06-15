@@ -1,10 +1,10 @@
 name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-tp8-1k1k"
 
 # MiniMax-M3 disaggregated 1P+1D recipe for GB200 (low-latency, wider
-# decode). Prefill TP4 (1 node) -> NixlConnector -> Decode TP8
-# (2 nodes) = 3 nodes. Wider decode TP reduces per-step latency by
-# spreading the forward pass across 8 GPU over NVL72 NVLink.
-# FLASHINFER, block-size 128.
+# decode). Prefill TP4 (1 node) -> NixlConnector -> Decode TEP8
+# (TP8+EP8, 2 nodes) = 3 nodes. Wider decode TP + expert parallelism
+# reduces per-step latency by spreading both attention and MoE across
+# 8 GPU over NVL72 NVLink.  FLASHINFER, block-size 128.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -83,6 +83,7 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
+      enable-expert-parallel: true
       max-model-len: 2304
       max-num-seqs: 256
       max-num-batched-tokens: 256
