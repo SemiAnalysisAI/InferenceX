@@ -121,7 +121,10 @@ PARALLEL_ARGS+=(
 MODEL_ARGS=()
 # The B200-specialized image deadlocks immediately after weight loading when
 # forced through the B300 compressed-attention/page-size overrides.
-MEM_FRACTION_STATIC=0.90
+# DeepGEMM's DSv4 indexer needs a multi-GiB temporary allocation at long
+# contexts. Leave the same HBM headroom used by the B300 recipe so a nearly
+# full GPU KV cache does not OOM while HiCache is spilling to host memory.
+MEM_FRACTION_STATIC=0.88
 
 PER_ENGINE_MAX_RUNNING=$CONC
 [ "$PER_ENGINE_MAX_RUNNING" -lt 1 ] && PER_ENGINE_MAX_RUNNING=1
