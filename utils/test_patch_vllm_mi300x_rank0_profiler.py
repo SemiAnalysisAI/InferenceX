@@ -1,6 +1,11 @@
+from pathlib import Path
+
 import pytest
 
 import utils.patch_vllm_mi300x_rank0_profiler as profiler_patch
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
 SAMPLE_SOURCE = '''class GPUWorker:
@@ -58,3 +63,18 @@ def test_apply_runtime_patch_rejects_source_drift(tmp_path, monkeypatch):
 
     with pytest.raises(RuntimeError, match="source fingerprint mismatch"):
         profiler_patch.apply_runtime_patch(tmp_path, check_only=True)
+
+
+def test_mi300x_profile_scratch_does_not_create_workspace_directories():
+    workflow = (REPO_ROOT / ".github/workflows/profile.yml").read_text(
+        encoding="utf-8"
+    )
+    recipe = (
+        REPO_ROOT
+        / "benchmarks/single_node/fixed_seq_len/minimaxm3_fp8_mi300x.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "/workspace/profile_traces" not in workflow
+    assert "/workspace/profile_traces" not in recipe
+    assert "/tmp/inferencex-profile/${res_name}" in workflow
+    assert "/tmp/inferencex-profile/${RESULT_FILENAME}" in recipe

@@ -97,7 +97,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
     profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
     profile_delay=$((profile_prefill_iterations + 16))
     benchmark_num_prompts="$CONC"
-    export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/workspace/profile_traces/${RESULT_FILENAME}}"
+    export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/tmp/inferencex-profile/${RESULT_FILENAME}}"
     rm -rf "$VLLM_TORCH_PROFILER_DIR"
     mkdir -p "$VLLM_TORCH_PROFILER_DIR"
 
