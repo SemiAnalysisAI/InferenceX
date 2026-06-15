@@ -183,6 +183,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget=8192
     profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
     profile_delay=$((profile_prefill_iterations + 16))
+    benchmark_num_prompts="$CONC"
     export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/workspace/profile_traces/${RESULT_FILENAME}}"
     rm -rf "$VLLM_TORCH_PROFILER_DIR"
     mkdir -p "$VLLM_TORCH_PROFILER_DIR"
@@ -198,6 +199,8 @@ if [ "${PROFILE:-0}" = "1" ]; then
     )
     # ROCTracer does not expose every kernel launched inside a HIP graph.
     echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
+else
+    benchmark_num_prompts="$((CONC * 10))"
 fi
 
 start_gpu_monitor
@@ -225,7 +228,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$benchmark_num_prompts" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
