@@ -26,6 +26,12 @@ on:
         description: "Ref (branch/sha) to checkout"
         required: false
         type: string
+  # Label-triggered profiling: add the 'profile-enabled' label to a PR and this
+  # workflow profiles the target declared in .github/profile-target.env
+  # (CONFIG_KEY / CONFIG_FILE / CONC), emitting a Perfetto trace as an artifact
+  # plus a relay link. Gated in the get-jobs `if` below so only labelled PRs run.
+  pull_request:
+    types: [labeled, synchronize, reopened]
 
 permissions:
   contents: read
@@ -40,26 +46,68 @@ env:
 
 jobs:
   get-jobs:
+    # Run for manual dispatch, or for a PR carrying the 'profile-enabled' label.
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' ||
+          (github.event_name == 'pull_request' &&
+           contains(github.event.pull_request.labels.*.name, 'profile-enabled')) }}
     runs-on: ubuntu-latest
     outputs:
       filtered-matrix: ${{ steps.filter.outputs.filtered }}
       count: ${{ steps.filter.outputs.count }}
+      ref: ${{ steps.preref.outputs.ref }}
+      moe-debug: ${{ steps.target.outputs.moe_debug }}
     steps:
+      - name: Resolve checkout ref
+        id: preref
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "ref=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ inputs.ref || github.sha }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ steps.preref.outputs.ref }}
+
+      - name: Resolve profile target (dispatch inputs or PR target file)
+        id: target
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            f=.github/profile-target.env
+            if [ ! -f "$f" ]; then
+              echo "::error::$f is required for label-triggered profiling" >&2
+              exit 1
+            fi
+            ck=$(grep -E '^CONFIG_KEY=' "$f" | head -1 | cut -d= -f2-)
+            cf=$(grep -E '^CONFIG_FILE=' "$f" | head -1 | cut -d= -f2-)
+            cc=$(grep -E '^CONC=' "$f" | head -1 | cut -d= -f2-)
+            md=$(grep -E '^MOE_DEBUG=' "$f" | head -1 | cut -d= -f2- || true)
+            if [ -z "$ck" ]; then echo "::error::CONFIG_KEY missing in $f" >&2; exit 1; fi
+            echo "config_key=${ck}" >> "$GITHUB_OUTPUT"
+            echo "config_file=${cf:-.github/configs/nvidia-master.yaml}" >> "$GITHUB_OUTPUT"
+            echo "conc=${cc:-64}" >> "$GITHUB_OUTPUT"
+            echo "moe_debug=${md:-false}" >> "$GITHUB_OUTPUT"
+          else
+            echo "config_key=${{ inputs.config-key }}" >> "$GITHUB_OUTPUT"
+            echo "config_file=${{ inputs.config-file }}" >> "$GITHUB_OUTPUT"
+            echo "conc=${{ inputs.conc }}" >> "$GITHUB_OUTPUT"
+            echo "moe_debug=${{ inputs.moe-debug }}" >> "$GITHUB_OUTPUT"
+          fi
 
       - id: gen
         name: Generate matrix via script
         run: |
           pip install pydantic
-          CLI_ARGS="test-config --config-files ${{ inputs.config-file }} --config-keys ${{ inputs.config-key }} --conc ${{ inputs.conc }}"
+          CLI_ARGS="test-config --config-files ${{ steps.target.outputs.config_file }} --config-keys ${{ steps.target.outputs.config_key }} --conc ${{ steps.target.outputs.conc }}"
           CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py $CLI_ARGS)
           echo "raw=$CONFIG_JSON" >> $GITHUB_OUTPUT
 
       - id: filter
-        name: Take first generated job
+        name: Select one job per concurrency
         shell: python
         run: |
           import json, os, sys
@@ -78,7 +126,16 @@ jobs:
               f.write("filtered=[]\ncount=0\n")
             raise SystemExit(1)
 
-          filt = data[:1]
+          # One job per (concurrency, tp): the first config generated for each
+          # (conc, tp) pair — i.e. the leading 1k1k search-space row of each TP —
+          # ordered by (conc, tp). This profiles both TP4 and TP8 at every conc.
+          # A single conc/tp still yields one job (backward compatible).
+          by_key = {}
+          for job in data:
+            k = (job.get("conc"), job.get("tp"))
+            if k not in by_key:
+              by_key[k] = job
+          filt = [by_key[k] for k in sorted(by_key)]
 
           out = json.dumps(filt)
           print(out)
@@ -115,8 +172,14 @@ jobs:
       CONC: ${{ matrix.config.conc }}
       SPEC_DECODING: ${{ matrix.config.spec-decoding }}
       DISAGG: ${{ matrix.config.disagg }}
+      # The single-node launchers resolve the recipe path as
+      # benchmarks/single_node/${SCENARIO_SUBDIR}<exp>_<prec>_<hw>.sh and run
+      # under `set -u`; the sweep's benchmark-tmpl.yml sets this, so profile.yml
+      # must too. Profiling is fixed-seq-len (mi325x/mi300x launchers don't
+      # default it the way mi355x does).
+      SCENARIO_SUBDIR: fixed_seq_len/
       MOE_DEBUG: '0'
-      MOE_DEBUG_LOG: ${{ (inputs.moe-debug) && '/workspace/moe_debug.tp0.log' || '' }}
+      MOE_DEBUG_LOG: ${{ needs.get-jobs.outputs.moe-debug == 'true' && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
       - name: Resource cleanup
         run: |
@@ -145,7 +208,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ needs.get-jobs.outputs.ref }}
           clean: false
 
       - name: Launch + Profile (single-node sglang/vllm)
@@ -261,7 +324,17 @@ jobs:
           git config user.email "github-actions@github.com"
           git add -A
           git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
-          git push
+          # Parallel matrix jobs (one per conc) all push to this same repo, so a
+          # plain push races and is rejected non-fast-forward. Rebase onto the
+          # latest remote and retry with jitter until it lands.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if git push; then break; fi
+            echo "push rejected (attempt ${attempt}); rebasing on origin/master"
+            git fetch origin master --quiet
+            git rebase origin/master
+            if [ "$attempt" = 8 ]; then echo "push failed after ${attempt} attempts" >&2; exit 1; fi
+            sleep $(( (RANDOM % 6) + 2 ))
+          done
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
