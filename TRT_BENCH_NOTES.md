@@ -156,12 +156,21 @@ ranks 4/6/7 in MoE finalization, and rank 5 stationary since 08:34 UTC while
 opening `model-00043-of-00064.safetensors`. There was no TensorRT fatal
 record. The run was canceled after all other replicas proved ready.
 
-This isolates the remaining fault to simultaneous 72-rank model loading, not
-the copied TP8 decode configuration. Rack initialization now runs in three
-waves of three engines. Every wave must reach the pre-measurement barrier
-within 1500 seconds before the next wave starts, limiting concurrent model
-loading to 24 ranks. The measured pass still releases all nine engines
-together and therefore preserves the 72-GPU fixed-global-batch contract.
+This isolates the remaining fault to simultaneous model loading, not the
+copied TP8 decode configuration. Run `27535038325`, source `83faa270`, then
+tested three-engine waves. Wave 1 initialized `r00-r02` successfully in about
+16 minutes. In wave 2, `r03` and `r04` reached the barrier while `r05` rank 5
+remained stationary opening shard 43, proving that even 24 loading ranks can
+hit the same shared-storage stall.
+
+Rack startup therefore admits only one model-loading engine at a time. The
+next replica launches as soon as all eight ranks of the current replica emit
+`engine_warmup_start`; CUDA graph capture continues in parallel on already
+loaded replicas. A model load has 900 seconds to reach that gate and each
+engine has 1800 seconds to reach the pre-measurement barrier. This serializes
+only safetensor loading, not graph capture or the benchmark. The measured pass
+still releases all nine engines together and preserves the 72-GPU
+fixed-global-batch contract.
 
 The direct offline engine keeps the documented `max_num_tokens=32768`
 adaptation because it must admit its own 8K prompts. The serving decode worker

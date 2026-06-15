@@ -30,11 +30,17 @@ SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 RACK_PHYSICAL_NODES=18
 RACK_WORLD_SIZE=72
 REPLICA_COUNT=9
+REPLICA_WORLD_SIZE=8
 REPLICA_PHYSICAL_NODES=2
 GPUS_PER_NODE=4
-RACK_INIT_WAVE_SIZE="${TRT_BENCH_RACK_INIT_WAVE_SIZE:-3}"
-RACK_INIT_WAVE_TIMEOUT_SECONDS="$(
-    printf '%s' "${TRT_BENCH_RACK_INIT_WAVE_TIMEOUT_SECONDS:-1500}"
+RACK_MODEL_LOAD_CONCURRENCY="$(
+    printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_CONCURRENCY:-1}"
+)"
+RACK_MODEL_LOAD_TIMEOUT_SECONDS="$(
+    printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS:-900}"
+)"
+RACK_ENGINE_READY_TIMEOUT_SECONDS="$(
+    printf '%s' "${TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS:-1800}"
 )"
 TRT_BENCH_GIT_REVISION="$(git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD)"
 export TRT_BENCH_GIT_REVISION
@@ -51,16 +57,22 @@ if (( GLOBAL_BATCH_SIZE % REPLICA_COUNT != 0 )); then
     echo "Rack global batch must divide across $REPLICA_COUNT replicas" >&2
     exit 1
 fi
-if [[ ! "$RACK_INIT_WAVE_SIZE" =~ ^[1-9][0-9]*$ ]] \
-    || (( RACK_INIT_WAVE_SIZE > REPLICA_COUNT )); then
+if [[ ! "$RACK_MODEL_LOAD_CONCURRENCY" =~ ^[1-9][0-9]*$ ]] \
+    || (( RACK_MODEL_LOAD_CONCURRENCY > REPLICA_COUNT )); then
     echo \
-        "TRT_BENCH_RACK_INIT_WAVE_SIZE must be in 1..${REPLICA_COUNT}: ${RACK_INIT_WAVE_SIZE}" \
+        "TRT_BENCH_RACK_MODEL_LOAD_CONCURRENCY must be in 1..${REPLICA_COUNT}: ${RACK_MODEL_LOAD_CONCURRENCY}" \
         >&2
     exit 1
 fi
-if [[ ! "$RACK_INIT_WAVE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+if [[ ! "$RACK_MODEL_LOAD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
     echo \
-        "TRT_BENCH_RACK_INIT_WAVE_TIMEOUT_SECONDS must be positive: ${RACK_INIT_WAVE_TIMEOUT_SECONDS}" \
+        "TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS must be positive: ${RACK_MODEL_LOAD_TIMEOUT_SECONDS}" \
+        >&2
+    exit 1
+fi
+if [[ ! "$RACK_ENGINE_READY_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo \
+        "TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS must be positive: ${RACK_ENGINE_READY_TIMEOUT_SECONDS}" \
         >&2
     exit 1
 fi
@@ -80,6 +92,9 @@ RACK_ROOT_REL=""
 TELEMETRY_STEP_PID=""
 SALLOC_PIPE_PID=""
 declare -a REPLICA_PIDS=()
+declare -a REPLICA_LAUNCHED_AT=()
+declare -a REPLICA_MODEL_LOAD_DONE=()
+declare -a REPLICA_READY=()
 
 rm -f \
     "$RESULT_FILE" \
@@ -547,70 +562,128 @@ launch_replica() {
         "$TRT_BENCH_WORKSPACE/benchmarks/multi_node/offline/dsv4_fp4_gb300_rack_replica.sh" \
         > "${replica_root}/host_launcher.log" 2>&1 &
     REPLICA_PIDS[replica_index]=$!
+    REPLICA_LAUNCHED_AT[replica_index]="$SECONDS"
 }
 
-wave_count=$(((REPLICA_COUNT + RACK_INIT_WAVE_SIZE - 1) / RACK_INIT_WAVE_SIZE))
-log "initializing nine TP8/EP8 MTP1 engines in waves size=$RACK_INIT_WAVE_SIZE waves=$wave_count timeout=${RACK_INIT_WAVE_TIMEOUT_SECONDS}s"
+replica_marker_path() {
+    local replica_index="$1"
+    printf '%s/.offline_work_%s-replica%02d_%s/perfect_router.jsonl' \
+        "$TRT_BENCH_WORKSPACE" \
+        "$BENCH_ID" \
+        "$replica_index" \
+        "$JOB_ID"
+}
+
+replica_model_load_complete() {
+    local marker_path
+    marker_path="$(replica_marker_path "$1")"
+    [[ -s "$marker_path" ]] || return 1
+    PYTHONPATH="$TRT_BENCH_WORKSPACE/utils/bench_offline" \
+    python3 - "$marker_path" "$REPLICA_WORLD_SIZE" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+from io_utils import read_locked_text
+
+path = Path(sys.argv[1])
+world_size = int(sys.argv[2])
+ranks = set()
+for line in read_locked_text(path).splitlines():
+    try:
+        row = json.loads(line)
+        if (
+            row.get("source") == "trt_mpi_entry"
+            and row.get("event") == "engine_warmup_start"
+        ):
+            ranks.add(int(row["rank"]))
+    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+        continue
+raise SystemExit(0 if ranks == set(range(world_size)) else 1)
+PY
+}
+
+log "initializing nine TP8/EP8 MTP1 engines with model-load admission concurrency=$RACK_MODEL_LOAD_CONCURRENCY load_timeout=${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s ready_timeout=${RACK_ENGINE_READY_TIMEOUT_SECONDS}s"
 replica_started="$SECONDS"
 replica_failure=0
 replica_failure_message=""
-for ((wave_start = 0; wave_start < REPLICA_COUNT; wave_start += RACK_INIT_WAVE_SIZE)); do
-    wave_end=$((wave_start + RACK_INIT_WAVE_SIZE - 1))
-    if (( wave_end >= REPLICA_COUNT )); then
-        wave_end=$((REPLICA_COUNT - 1))
-    fi
-    wave_number=$((wave_start / RACK_INIT_WAVE_SIZE + 1))
-    wave_size=$((wave_end - wave_start + 1))
-    log "launching initialization wave=$wave_number/$wave_count replicas=$(printf 'r%02d' "$wave_start")-$(printf 'r%02d' "$wave_end")"
-    for ((replica_index = wave_start; replica_index <= wave_end; replica_index += 1)); do
-        launch_replica "$replica_index"
-    done
+next_replica=0
+last_init_heartbeat=-1
+while true; do
+    current_model_loaders=0
+    model_load_complete=0
+    barrier_ready=0
+    for ((replica_index = 0; replica_index < next_replica; replica_index += 1)); do
+        replica_label="$(printf 'r%02d' "$replica_index")"
+        ready_path="${RACK_ROOT}/barrier/replica_$(printf '%02d' "$replica_index").ready.json"
+        if [[ -s "$ready_path" ]]; then
+            if [[ "${REPLICA_READY[$replica_index]:-0}" != "1" ]]; then
+                log "engine ready replica=$replica_label"
+            fi
+            REPLICA_READY[replica_index]=1
+            REPLICA_MODEL_LOAD_DONE[replica_index]=1
+            ((barrier_ready += 1))
+            ((model_load_complete += 1))
+            continue
+        fi
 
-    wave_started="$SECONDS"
-    last_wave_heartbeat=-1
-    while true; do
-        wave_ready=0
-        for ((replica_index = wave_start; replica_index <= wave_end; replica_index += 1)); do
-            ready_path="${RACK_ROOT}/barrier/replica_$(printf '%02d' "$replica_index").ready.json"
-            if [[ -s "$ready_path" ]]; then
-                ((wave_ready += 1))
-                continue
-            fi
-            pid="${REPLICA_PIDS[$replica_index]}"
-            if ! kill -0 "$pid" >/dev/null 2>&1; then
-                set +e
-                wait "$pid"
-                replica_rc=$?
-                set -e
-                REPLICA_PIDS[replica_index]=""
-                replica_label="$(printf 'r%02d' "$replica_index")"
-                replica_failure=1
-                replica_failure_message="Replica ${replica_label} exited with return code ${replica_rc} before its initialization wave reached the rack barrier"
-                break
-            fi
-        done
-        if [[ "$replica_failure" -eq 1 ]]; then
-            break
-        fi
-        if (( wave_ready == wave_size )); then
-            log "initialization wave complete wave=$wave_number/$wave_count ready=$wave_ready/$wave_size"
-            break
-        fi
-        wave_elapsed=$((SECONDS - wave_started))
-        if (( wave_elapsed >= RACK_INIT_WAVE_TIMEOUT_SECONDS )); then
+        pid="${REPLICA_PIDS[$replica_index]}"
+        if ! kill -0 "$pid" >/dev/null 2>&1; then
+            set +e
+            wait "$pid"
+            replica_rc=$?
+            set -e
+            REPLICA_PIDS[replica_index]=""
             replica_failure=1
-            replica_failure_message="Initialization wave ${wave_number}/${wave_count} timed out after ${wave_elapsed}s with ${wave_ready}/${wave_size} replicas at the rack barrier"
+            replica_failure_message="Replica ${replica_label} exited with return code ${replica_rc} before rack initialization completed"
             break
         fi
-        if (( wave_elapsed / 60 > last_wave_heartbeat )); then
-            last_wave_heartbeat=$((wave_elapsed / 60))
-            log "initialization wave active wave=$wave_number/$wave_count elapsed=${wave_elapsed}s ready=$wave_ready/$wave_size"
+
+        replica_init_elapsed=$((SECONDS - REPLICA_LAUNCHED_AT[replica_index]))
+        if [[ "${REPLICA_MODEL_LOAD_DONE[$replica_index]:-0}" != "1" ]]; then
+            if replica_model_load_complete "$replica_index"; then
+                REPLICA_MODEL_LOAD_DONE[replica_index]=1
+                log "model-load admission gate complete replica=$replica_label elapsed=${replica_init_elapsed}s; CUDA graph warmup continues"
+            else
+                ((current_model_loaders += 1))
+                if (( replica_init_elapsed >= RACK_MODEL_LOAD_TIMEOUT_SECONDS )); then
+                    replica_failure=1
+                    replica_failure_message="Replica ${replica_label} did not finish model loading within ${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s"
+                    break
+                fi
+            fi
         fi
-        sleep 1
+        if [[ "${REPLICA_MODEL_LOAD_DONE[$replica_index]:-0}" == "1" ]]; then
+            ((model_load_complete += 1))
+        fi
+        if (( replica_init_elapsed >= RACK_ENGINE_READY_TIMEOUT_SECONDS )); then
+            replica_failure=1
+            replica_failure_message="Replica ${replica_label} did not reach the rack barrier within ${RACK_ENGINE_READY_TIMEOUT_SECONDS}s"
+            break
+        fi
     done
     if [[ "$replica_failure" -eq 1 ]]; then
         break
     fi
+
+    while (( next_replica < REPLICA_COUNT \
+        && current_model_loaders < RACK_MODEL_LOAD_CONCURRENCY )); do
+        launch_replica "$next_replica"
+        ((next_replica += 1))
+        ((current_model_loaders += 1))
+    done
+
+    if (( next_replica == REPLICA_COUNT \
+        && barrier_ready == REPLICA_COUNT )); then
+        log "all rack engines initialized and waiting at the measured-pass barrier"
+        break
+    fi
+    init_elapsed=$((SECONDS - replica_started))
+    if (( init_elapsed / 60 > last_init_heartbeat )); then
+        last_init_heartbeat=$((init_elapsed / 60))
+        log "rack initialization active elapsed=${init_elapsed}s launched=$next_replica/$REPLICA_COUNT model_load_complete=$model_load_complete/$REPLICA_COUNT loading=$current_model_loaders/$RACK_MODEL_LOAD_CONCURRENCY barrier_ready=$barrier_ready/$REPLICA_COUNT"
+    fi
+    sleep 1
 done
 
 if [[ "$replica_failure" -eq 1 ]]; then

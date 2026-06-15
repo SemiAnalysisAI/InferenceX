@@ -533,10 +533,12 @@ def test_rack_parent_limits_concurrent_engine_initialization():
         / "benchmarks/multi_node/offline/dsv4_fp4_gb300_rack_trt.sh"
     ).read_text(encoding="utf-8")
 
-    assert 'TRT_BENCH_RACK_INIT_WAVE_SIZE:-3' in source
-    assert 'TRT_BENCH_RACK_INIT_WAVE_TIMEOUT_SECONDS:-1500' in source
-    assert "for ((wave_start = 0;" in source
-    assert "initialization wave complete" in source
+    assert 'TRT_BENCH_RACK_MODEL_LOAD_CONCURRENCY:-1' in source
+    assert 'TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS:-900' in source
+    assert 'TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS:-1800' in source
+    assert 'row.get("event") == "engine_warmup_start"' in source
+    assert "model-load admission gate complete" in source
+    assert "current_model_loaders < RACK_MODEL_LOAD_CONCURRENCY" in source
     assert "replica_$(printf '%02d' \"$replica_index\").ready.json" in source
 
 

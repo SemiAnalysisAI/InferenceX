@@ -167,12 +167,13 @@ made into a 72-rank engine by changing MoE cluster settings.
 | 30960 | 3440 | 430 | 9x attempt-14 active decode population |
 | 36864 | 4096 | 512 | 9x copied engine capacity |
 
-The engines initialize in three waves of three. A wave must finish
-initialization and reach the shared pre-measurement barrier before the next
-wave starts. This limits concurrent safetensor loading to 24 ranks; run
-`27533885582` proved that launching all 72 ranks together can leave one rank
-blocked in model loading after the other eight engines are ready. The
-measured pass is unchanged: all nine engines release together.
+Model loading is admission-controlled to one engine at a time. The next
+replica starts after all eight ranks of the current replica emit
+`engine_warmup_start`, so CUDA graph capture overlaps across replicas while
+safetensor reads remain serialized. Run `27533885582` proved that launching
+all 72 ranks together can block one rank; run `27535038325` reproduced the
+same shard-43 stall with three concurrent engines. The measured pass is
+unchanged: all nine engines release together.
 
 Logical rack decode round `i` uses the maximum rank-0 `host_step_time` for
 round `i` across the nine engines. The rack result then skips the first eight
