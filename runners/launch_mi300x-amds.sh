@@ -10,6 +10,7 @@ LOCK_FILE="${SQUASH_FILE}.lock"
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+BENCHMARK_SCRIPT="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x${SPEC_SUFFIX}.sh"
 
 set -x
 
@@ -41,6 +42,11 @@ srun --jobid=$JOB_ID \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi300x${SPEC_SUFFIX}.sh
+bash -c '
+    if [[ "${PROFILE:-0}" == "1" && "${MODEL_PREFIX:-}" == "minimaxm3" && "${FRAMEWORK:-}" == "vllm" ]]; then
+        python3 /workspace/utils/patch_vllm_mi300x_rank0_profiler.py
+    fi
+    exec bash "$1"
+' _ "$BENCHMARK_SCRIPT"
 
 scancel $JOB_ID
