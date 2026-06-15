@@ -173,6 +173,12 @@ elif [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 PROFILE_ARGS=()
+if [ "$M3_AITER_AR_RMS_MODE" != "off" ]; then
+    # AITER custom allreduce corrupts memory when this eager M3 helper is
+    # captured and replayed by HIP graphs. Keep both experiment arms eager so
+    # control and fused differ only at the allreduce+Gemma RMSNorm boundary.
+    PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
+fi
 if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget=8192
     profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
@@ -190,7 +196,9 @@ if [ "${PROFILE:-0}" = "1" ]; then
         --profiler-config "$profiler_config"
     )
     # ROCTracer does not expose every kernel launched inside a HIP graph.
-    PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
+    if [ "$M3_AITER_AR_RMS_MODE" = "off" ]; then
+        PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
+    fi
     echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
 fi
 
