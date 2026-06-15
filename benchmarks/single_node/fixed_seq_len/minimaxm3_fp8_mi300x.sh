@@ -62,12 +62,9 @@ if [ "${PROFILE:-0}" = "1" ]; then
     PROFILE_ARGS=(
         --max-num-batched-tokens "$profile_token_budget"
         --profiler-config "$profiler_config"
+        --compilation-config '{"cudagraph_mode":"NONE"}'
     )
-    if [ "${M3_AITER_AR_RMS_MODE:-off}" = "off" ]; then
-        # ROCTracer does not expose every kernel launched inside a HIP graph.
-        # Keep torch.compile enabled, but execute compiled decode without graphs.
-        PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
-    fi
+    # ROCTracer does not expose every kernel launched inside a HIP graph.
     echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
 fi
 
