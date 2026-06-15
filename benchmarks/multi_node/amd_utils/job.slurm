@@ -165,61 +165,9 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     done
 
     if [[ -z "$MODEL_PATH" ]]; then
-        # Not pre-staged. Unlike the single-node recipes (which hf-download inside
-        # the serving container), the disagg path historically required ops to
-        # pre-stage checkpoints, so day-zero models (e.g. MiniMax-M3) FATAL here.
-        # Auto-stage on demand into MODEL_DIR — the dir mounted into the serving
-        # container as /models — so the resolved MODEL_PATH stays under MODEL_DIR
-        # and both the `-v ${MODEL_DIR}:/models` mount and the DOCKER_MODEL_PATH
-        # (/models) remap resolve. Pre-staged models never reach this branch.
-        # The host has no hf CLI, so the download runs in a one-shot container of
-        # the serving image (which ships huggingface_hub). A flock serializes the
-        # prefill/decode nodes; the re-check under the lock makes it idempotent.
-        repo_id="$DISK_DIR_NAME"
-        if [[ "$repo_id" == models--* ]]; then
-            repo_id="${repo_id#models--}"; repo_id="${repo_id/--//}"
-        fi
-        if [[ "$repo_id" != */* ]]; then
-            echo "FATAL: Model '$MODEL_NAME' not found and cannot derive an HF repo"
-            echo "       id from hf_dir '$DISK_DIR_NAME' to auto-download. Searched:"
-            for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
-            exit 1
-        fi
-        if ! mkdir -p "$MODEL_DIR" 2>/dev/null || [[ ! -w "$MODEL_DIR" ]]; then
-            echo "FATAL: Model '$MODEL_NAME' not pre-staged and MODEL_DIR"
-            echo "       '$MODEL_DIR' is not writable for auto-download."
-            exit 1
-        fi
-        echo "Model '$MODEL_NAME' not pre-staged; auto-downloading '$repo_id' into $MODEL_DIR (HF cache layout)"
-        if docker ps >/dev/null 2>&1; then DK=docker; else DK="sudo docker"; fi
-        (
-            exec 9>"${MODEL_DIR}/.stage-${DISK_DIR_NAME}.lock"
-            flock -w 10800 9 || { echo "FATAL: timed out waiting for model-stage lock"; exit 1; }
-            if [[ ! -d "${MODEL_DIR}/${DISK_DIR_NAME}/snapshots" ]]; then
-                for attempt in 1 2 3; do
-                    # --entrypoint "" so bash runs hf download; the vllm-openai
-                    # image's default entrypoint is the API server, which would
-                    # otherwise try (and fail) to infer a GPU device here.
-                    $DK run --rm --network host \
-                        --entrypoint "" \
-                        -v "${MODEL_DIR}:${MODEL_DIR}" \
-                        -e HF_HUB_CACHE="${MODEL_DIR}" \
-                        -e HF_TOKEN="${HF_TOKEN:-}" \
-                        "$DOCKER_IMAGE_NAME" \
-                        bash -lc "hf download '$repo_id' || huggingface-cli download '$repo_id'" && break
-                    [[ $attempt == 3 ]] && { echo "FATAL: hf download failed after $attempt attempts"; exit 1; }
-                    echo "hf download attempt $attempt failed; retrying in 60s"; sleep 60
-                done
-            fi
-        ) || exit 1
-        RESOLVED=$(resolve_hf_cache_path "${MODEL_DIR}/${DISK_DIR_NAME}")
-        if [[ -d "$RESOLVED" ]]; then
-            MODEL_PATH="$RESOLVED"
-            echo "Auto-staged MODEL_PATH: $MODEL_PATH"
-        else
-            echo "FATAL: '$MODEL_NAME' still not found after auto-download at ${MODEL_DIR}/${DISK_DIR_NAME}"
-            exit 1
-        fi
+        echo "FATAL: Model '$MODEL_NAME' not found. Searched:"
+        for p in "${SEARCH_PATHS[@]}"; do echo "  - $p"; done
+        exit 1
     fi
     echo "Final MODEL_PATH: $MODEL_PATH"
 else

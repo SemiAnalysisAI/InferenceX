@@ -31,7 +31,12 @@ set -x
 cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
 export TIME_LIMIT="08:00:00"
-export MODEL_PATH=$MODEL_PATH
+# MiniMax-M3 MXFP8 (~414 GB) is pre-staged in this cluster's shared HF cache
+# (/it-share/hf-hub-cache/models--MiniMaxAI--MiniMax-M3-MXFP8), not the default
+# /it-share/data the launcher sets. Point the disagg model dir there for M3 only;
+# submit.sh exports MODEL_DIR=$MODEL_PATH and job.slurm resolves the snapshot under
+# it and bind-mounts MODEL_DIR into the prefill/decode serving containers.
+export MODEL_PATH=/it-share/hf-hub-cache
 export MODEL_NAME=$MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
