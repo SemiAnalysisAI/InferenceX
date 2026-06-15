@@ -595,6 +595,70 @@ jobs:
                   "${latest_event:-none in last 4000 normalized lines}"
                 printf 'latest_fatal=%s\n' \
                   "${latest_fatal:-none in last 4000 normalized lines}"
+                echo 'latest_trt_by_rank:'
+                python3 - "$normalized_log" <<'PY'
+          import re
+          import sys
+
+          ansi = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
+          rank_pattern = re.compile(r"\[RANK\s+([0-9]+)\]")
+          latest = {}
+          with open(
+              sys.argv[1],
+              encoding="utf-8",
+              errors="replace",
+          ) as stream:
+              for raw_line in stream:
+                  if "[TRT-LLM]" not in raw_line:
+                      continue
+                  line = ansi.sub("", raw_line).strip()
+                  match = rank_pattern.search(line)
+                  if match:
+                      latest[int(match.group(1))] = line
+          if not latest:
+              print("  none in last 4000 normalized lines")
+          for rank, line in sorted(latest.items()):
+              print(f"  rank={rank} {line[-500:]}")
+          PY
+                marker_path="$(
+                  find "$benchmark_dir" \
+                    -maxdepth 2 \
+                    -type f \
+                    -path \
+                    "*/.offline_work_*-replica${replica_label#r}_*/perfect_router.jsonl" \
+                    -print \
+                    -quit \
+                    2>/dev/null \
+                    || true
+                )"
+                if [[ -n "$marker_path" ]]; then
+                  echo 'latest_marker_by_rank:'
+                  python3 - "$marker_path" <<'PY'
+          import json
+          import sys
+
+          latest = {}
+          malformed = 0
+          with open(
+              sys.argv[1],
+              encoding="utf-8",
+              errors="replace",
+          ) as stream:
+              for line in stream:
+                  try:
+                      row = json.loads(line)
+                      if row.get("source") != "trt_mpi_entry":
+                          continue
+                      latest[int(row["rank"])] = str(row["event"])
+                  except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                      malformed += 1
+          print(f"  malformed={malformed}")
+          if not latest:
+              print("  none")
+          for rank, event in sorted(latest.items()):
+              print(f"  rank={rank} event={event}")
+          PY
+                fi
                 rm -f "$normalized_log"
               done
               for metrics_path in \
