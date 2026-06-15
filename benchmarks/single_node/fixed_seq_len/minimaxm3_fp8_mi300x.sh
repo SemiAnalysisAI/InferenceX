@@ -91,7 +91,9 @@ case "$M3_AITER_AR_RMS_MODE" in
     control|fused)
         # Enable AITER only to make the eager fused allreduce+RMSNorm op
         # available. M3 does not support torch.compile, so the runtime patch
-        # calls this one op directly from its existing eager helper.
+        # calls this one op directly from its existing eager helper. The model
+        # patch also defers FFN/MoE output reductions into the following Gemma
+        # norm so the same helper covers both transformer residual boundaries.
         # Keep every independently selectable AITER path disabled so the
         # control and fused runs differ only at that helper call.
         export VLLM_ROCM_USE_AITER=1
@@ -111,6 +113,34 @@ case "$M3_AITER_AR_RMS_MODE" in
         export VLLM_ROCM_USE_AITER_TRITON_GEMM=0
 
         python3 /workspace/utils/patch_minimaxm3_aiter_ar_rms.py
+
+        DEFERRED_FFN_AR_PATCH="$(dirname "$0")/minimaxm3_mi300x_deferred_ffn_ar.patch"
+        M3_MODEL_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
+        M3_MODEL_SOURCE_SHA256="91d81f8613e32f7afbd65c289f7885c5371263f70503bd053f97880989bf7536"
+        M3_MODEL_PATCHED_SHA256="1d59c18a84c64cf383380718bec33e7785cbc5b9bd8fcf68436a2d1107637ca3"
+        m3_model_sha256="$(sha256sum "$M3_MODEL_SOURCE" | awk '{print $1}')"
+        if [ "$m3_model_sha256" = "$M3_MODEL_SOURCE_SHA256" ]; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$DEFERRED_FFN_AR_PATCH"; then
+                echo "Failed to validate the M3 deferred FFN allreduce patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$DEFERRED_FFN_AR_PATCH"; then
+                echo "Failed to apply the M3 deferred FFN allreduce patch" >&2
+                exit 1
+            fi
+        elif [ "$m3_model_sha256" != "$M3_MODEL_PATCHED_SHA256" ]; then
+            echo "M3 model source fingerprint mismatch: $m3_model_sha256" >&2
+            exit 1
+        fi
+        python3 -m py_compile "$M3_MODEL_SOURCE"
+        m3_model_sha256="$(sha256sum "$M3_MODEL_SOURCE" | awk '{print $1}')"
+        if [ "$m3_model_sha256" != "$M3_MODEL_PATCHED_SHA256" ]; then
+            echo "M3 model patched fingerprint mismatch: $m3_model_sha256" >&2
+            exit 1
+        fi
+        echo "M3 deferred FFN allreduce patch ready: $m3_model_sha256"
 
         echo "M3 AITER AR+RMS experiment mode: $M3_AITER_AR_RMS_MODE"
         ;;
