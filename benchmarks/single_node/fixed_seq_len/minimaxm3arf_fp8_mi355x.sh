@@ -62,6 +62,10 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # #45639: AITER fused all-reduce + Gemma-RMSNorm.
 export VLLM_ROCM_USE_AITER=1
+# DEBUG so the server log carries the fusion-pass match/replace counts
+# ("RocmAiterAllReduceFusionPass Replaced N patterns", "fusion pass matches: {}")
+# in addition to the (default-level) registration bail warnings.
+export VLLM_LOGGING_LEVEL=DEBUG
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -96,6 +100,28 @@ vllm serve "$MODEL" --port "$PORT" \
 
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+# ---- #45639 AITER AR + Gemma-RMS fusion diagnostics (definitive) ----------
+# Engine init (incl. torch.compile fusion passes) has finished by now, so the
+# fusion-pass logging is in the server log. Two questions, answered from the log:
+#   1) Did the pass REGISTER? Any of these warning_once strings => it registered
+#      ZERO patterns (match count is 0 by construction):
+#        "AllReduce fusion pass is disabled", "AITER allreduce fusion must be
+#        initialized", "AITER allreduce-rmsnorm fusion disabled: aiter<0.1.12"
+#        (the M3/6144 one), "Custom Allreduce is required".
+#   2) Did it MATCH+REPLACE? "RocmAiterAllReduceFusionPass Replaced N patterns"
+#      (N>0 => matched & replaced; N==0 => matched nothing) and the per-pass
+#      "fusion pass matches: {...}" table.
+set +x
+echo "================ #45639 fusion-pass verdict ================"
+echo "--- [1] registration bail warnings (presence => registered 0 patterns) ---"
+grep -nE "AllReduce fusion pass is disabled|AITER allreduce fusion must be initialized|AITER allreduce-rmsnorm fusion disabled|Custom Allreduce is required" "$SERVER_LOG" \
+    || echo "  (none — no registration bail)"
+echo "--- [2] match / replace counts ---"
+grep -nE "RocmAiterAllReduceFusionPass Replaced [0-9]+ patterns|fusion pass matches:" "$SERVER_LOG" \
+    || echo "  (no 'Replaced N patterns' / 'fusion pass matches' line found)"
+echo "==========================================================="
+set -x
 
 run_benchmark_serving \
     --model "$MODEL" \
