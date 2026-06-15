@@ -3847,4 +3847,4 @@
     - minimaxm3arf-fp8-mi355x-vllm
   description:
     - "[DO NOT MERGE — experimental] MiniMax-M3 MXFP8 MI355X smoke test (conc 4, 8; TP8) validating vllm-project/vllm#45639 (AITER fused all-reduce + Gemma-RMSNorm for M3): applies the PR diff in-place to the shipped minimax-m3 image before serving, then enables it via VLLM_ROCM_USE_AITER=1 + --compilation-config (custom_ops -minimax_gemma_rms_norm, pass_config.fuse_allreduce_rms). The recipe hard-fails if the patch neither applies cleanly nor is already applied (image drifted)"
-  pr-link: TBD
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1770
