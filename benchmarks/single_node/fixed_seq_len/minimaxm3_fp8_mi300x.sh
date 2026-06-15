@@ -2,7 +2,8 @@
 
 # MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe.
 # Reuses the dedicated ROCm image and applies the checked-in hybrid gfx94x
-# MXFP8 MoE patch plus the EP8 local-route optimization before starting vLLM.
+# MXFP8 MoE patch. Short-context EP8 uses the measured native/BF16 policy;
+# long-context EP8 uses sparse local-route BF16 GEMMs with fused SwiGLU.
 # Block size 128 is mandatory for MSA sparse attention. Keep the default BF16
 # KV cache on gfx942: the checkpoint has no calibrated q/prob scales for ROCm
 # FP8 attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
