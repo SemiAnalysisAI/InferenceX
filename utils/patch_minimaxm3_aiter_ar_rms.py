@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the pinned vLLM runtime patch for the M3 AITER AR+RMS experiment."""
+"""Apply the pinned vLLM eager-path patch for the M3 AITER AR+RMS experiment."""
 
 from __future__ import annotations
 
@@ -18,16 +18,10 @@ EXPECTED_SOURCE_SHA256 = {
     "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py": (
         "0169300358b731605508407ff39e9376497866b102b105f1e96113b80a658eac"
     ),
-    "vllm/compilation/passes/fusion/allreduce_rms_fusion.py": (
-        "4c34948c820c514d20a85f8d06fdff62ffa4601e62feef61e80c1fab57c2ed39"
-    ),
 }
 EXPECTED_PATCHED_SHA256 = {
     "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py": (
-        "bd40e3470a0b07dacc630eec788d84cf14ca4b761e6f4832a16c719a2f8fe7a1"
-    ),
-    "vllm/compilation/passes/fusion/allreduce_rms_fusion.py": (
-        "70b86423139ca96c498b807086ff142197300c7ae240a6172fc4e92daf62c43f"
+        "9f7abdad7f49dd0e99b7b76164987fc748fcbc33015391e7dfdc3bc07097006e"
     ),
 }
 
@@ -44,14 +38,14 @@ def _replace_once(text: str, old: str, new: str, label: str) -> str:
 
 
 def patch_helper_source(source: str) -> str:
-    """Expose the M3 post-attention Gemma norm as vLLM IR."""
+    """Use AITER directly from M3's eager allreduce+Gemma RMSNorm helper."""
     if PATCH_MARKER in source:
         return source
 
     source = _replace_once(
         source,
         "import torch\n\nfrom vllm.distributed.communication_op",
-        "import torch\n\nimport vllm.ir.ops\nfrom vllm.distributed.communication_op",
+        "import os\n\nimport torch\n\nfrom vllm.distributed.communication_op",
         "fused_allreduce_gemma_rms_norm import",
     )
     return _replace_once(
@@ -60,114 +54,68 @@ def patch_helper_source(source: str) -> str:
     reduced = tensor_model_parallel_all_reduce(hidden_states)
     return norm(reduced, residual)
 """,
-        """    # Fallback: explicit all-reduce + GemmaRMSNorm (matches the unfused model).
-    reduced = tensor_model_parallel_all_reduce(hidden_states)
-    if (
+        """    is_m3_rocm_norm = (
         type(norm).__module__ == "vllm.models.minimax_m3.amd.model"
         and type(norm).__name__ == "MiniMAXGemmaRMSNorm"
-    ):
-        # InferenceX M3 AITER AR+RMS experiment: expose the post-attention
-        # operation to the compiler while preserving Gemma's (1 + weight).
-        weight = norm.weight.data.to(reduced.dtype) + 1.0
-        return vllm.ir.ops.fused_add_rms_norm(
-            reduced, residual, weight, norm.variance_epsilon
+    )
+    use_m3_aiter = (
+        os.getenv("M3_AITER_AR_RMS_MODE") == "fused"
+        and is_m3_rocm_norm
+        and hidden_states.dim() == 2
+        and hidden_states.is_contiguous()
+        and hidden_states.dtype in (torch.bfloat16, torch.float16)
+        and hidden_states.shape[0] <= 512
+    )
+    if use_m3_aiter:
+        # InferenceX M3 AITER AR+RMS experiment: M3 runs eager, so invoke
+        # AITER directly instead of relying on a torch.compile fusion pass.
+        from vllm._aiter_ops import rocm_aiter_ops
+
+        aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
+        if aiter_ar is None:
+            rocm_aiter_ops.initialize_aiter_allreduce(
+                get_tp_group().cpu_group, hidden_states.device
+            )
+            aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
+        if aiter_ar is None:
+            raise RuntimeError("AITER custom allreduce initialization failed")
+        if not hasattr(aiter_ar, "_pool") and hidden_states.shape[-1] not in (
+            512,
+            1024,
+            2048,
+            4096,
+        ):
+            raise RuntimeError(
+                "AITER <0.1.12 does not support M3's allreduce hidden size"
+            )
+
+        gamma = getattr(norm, "_inferencex_aiter_gamma", None)
+        if (
+            gamma is None
+            or gamma.device != hidden_states.device
+            or gamma.dtype != hidden_states.dtype
+        ):
+            gamma = (
+                norm.weight.detach().to(
+                    device=hidden_states.device, dtype=hidden_states.dtype
+                )
+                + 1.0
+            ).contiguous()
+            norm._inferencex_aiter_gamma = gamma
+
+        fused_op = rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()
+        return fused_op(
+            input_=hidden_states,
+            residual=residual,
+            weight=gamma,
+            epsilon=norm.variance_epsilon,
         )
+
+    # Fallback: explicit all-reduce + GemmaRMSNorm (matches the unfused model).
+    reduced = tensor_model_parallel_all_reduce(hidden_states)
     return norm(reduced, residual)
 """,
         "fused_allreduce_gemma_rms_norm fallback",
-    )
-
-
-def patch_fusion_source(source: str) -> str:
-    """Add PR #43953's copy-aware AITER pattern and decode-only guard."""
-    if PATCH_MARKER in source:
-        return source
-
-    copy_aware_pattern = '''
-
-class AiterAllreduceFusedAddRMSNormWithCopyPattern(
-    BasePattern, VllmPatternReplacement
-):
-    """Non-quant AR+RMS fusion for all_reduce with an external copy_ user."""
-
-    def __init__(self, epsilon, dtype, device):
-        super().__init__(dtype, device)
-        self.epsilon = epsilon
-        self.FUSED_OP = rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()
-
-    def get_inputs(self):
-        return [self.empty(5, 16), self.empty(5, 16), self.empty(16)]
-
-    @property
-    def pattern(self):
-        eps = self.epsilon
-
-        def _pattern(residual, input_, weight):
-            ar_out = tensor_model_parallel_all_reduce(input_)
-            rms, res_out = vllm.ir.ops.fused_add_rms_norm(
-                ar_out, residual, weight, eps
-            )
-            return rms, res_out, ar_out
-
-        return _pattern
-
-    @property
-    def replacement(self):
-        eps = self.epsilon
-
-        def _replacement(residual, input_, weight):
-            fused = self.FUSED_OP(
-                input_=input_,
-                residual=residual,
-                weight=weight.to(input_.dtype),
-                epsilon=eps,
-            )
-            return fused[0], fused[1], fused[1]
-
-        return _replacement
-'''
-    source = _replace_once(
-        source,
-        "\n\nclass RocmAiterAllReduceFusionPass(VllmFusionPatternMatcherPass):",
-        copy_aware_pattern
-        + "\n\nclass RocmAiterAllReduceFusionPass(VllmFusionPatternMatcherPass):",
-        "copy-aware AITER pattern insertion",
-    )
-    source = _replace_once(
-        source,
-        """        self.max_token_num = min(
-            max_token_num,
-            config.scheduler_config.max_num_batched_tokens,
-        )
-""",
-        """        # InferenceX M3 AITER AR+RMS experiment: keep the fusion on
-        # cudagraph decode ranges; prefill retains quick-reduce + Triton norm.
-        max_cg = config.compilation_config.max_cudagraph_capture_size or 512
-        self.max_token_num = min(
-            max_token_num,
-            config.scheduler_config.max_num_batched_tokens,
-            max_cg,
-        )
-""",
-        "AITER allreduce decode range guard",
-    )
-    return _replace_once(
-        source,
-        """        for epsilon in [1e-5, 1e-6]:
-            # Quant-fused variants must register first so the pattern matcher
-""",
-        """        for epsilon in [1e-5, 1e-6]:
-            self.register(
-                AiterAllreduceFusedAddRMSNormWithCopyPattern(
-                    epsilon, self.model_dtype, self.device
-                )
-            )
-            torch._inductor.pattern_matcher._seen_patterns.clear()
-
-        for epsilon in [1e-5, 1e-6]:
-            # Quant-fused variants must register first so the pattern matcher
-""",
-        "copy-aware AITER pattern registration",
     )
 
 
@@ -197,9 +145,6 @@ def apply_runtime_patch(vllm_root: Path, check_only: bool = False) -> None:
     transforms = {
         "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py": (
             patch_helper_source
-        ),
-        "vllm/compilation/passes/fusion/allreduce_rms_fusion.py": (
-            patch_fusion_source
         ),
     }
     originals: dict[Path, str] = {}

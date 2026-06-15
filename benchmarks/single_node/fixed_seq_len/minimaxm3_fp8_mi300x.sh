@@ -35,14 +35,16 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 M3_AITER_AR_RMS_MODE="${M3_AITER_AR_RMS_MODE:-off}"
-M3_AITER_AR_RMS_ARGS=()
+export M3_AITER_AR_RMS_MODE
 case "$M3_AITER_AR_RMS_MODE" in
     off)
         ;;
     control|fused)
-        # Enable AITER only to make the allreduce+RMSNorm pass available.
+        # Enable AITER only to make the eager fused allreduce+RMSNorm op
+        # available. M3 does not support torch.compile, so the runtime patch
+        # calls this one op directly from its existing eager helper.
         # Keep every independently selectable AITER path disabled so the
-        # control and fused runs differ only by fuse_allreduce_rms.
+        # control and fused runs differ only at that helper call.
         export VLLM_ROCM_USE_AITER=1
         export VLLM_ROCM_USE_AITER_PAGED_ATTN=0
         export VLLM_ROCM_USE_AITER_LINEAR=0
@@ -61,29 +63,6 @@ case "$M3_AITER_AR_RMS_MODE" in
 
         python3 /workspace/utils/patch_minimaxm3_aiter_ar_rms.py
 
-        fuse_allreduce_rms=false
-        if [ "$M3_AITER_AR_RMS_MODE" = "fused" ]; then
-            fuse_allreduce_rms=true
-        fi
-        compilation_config='{"compile_ranges_endpoints":[512,4096],'
-        if [ "${PROFILE:-0}" = "1" ]; then
-            # Expose compiled kernels to ROCTracer during profile runs.
-            compilation_config+='"cudagraph_mode":"NONE",'
-        fi
-        compilation_config+='"pass_config":{'
-        compilation_config+='"eliminate_noops":true,'
-        compilation_config+='"fuse_norm_quant":false,'
-        compilation_config+='"fuse_act_quant":false,'
-        compilation_config+='"fuse_attn_quant":false,'
-        compilation_config+='"enable_sp":false,'
-        compilation_config+='"fuse_gemm_comms":false,'
-        compilation_config+='"enable_qk_norm_rope_fusion":false,'
-        compilation_config+='"fuse_rope_kvcache_cat_mla":false,'
-        compilation_config+='"fuse_act_padding":false,'
-        compilation_config+='"fuse_mla_dual_rms_norm":false,'
-        compilation_config+='"fuse_rope_kvcache":false,'
-        compilation_config+="\"fuse_allreduce_rms\":${fuse_allreduce_rms}}}"
-        M3_AITER_AR_RMS_ARGS=(--compilation-config "$compilation_config")
         echo "M3 AITER AR+RMS experiment mode: $M3_AITER_AR_RMS_MODE"
         ;;
     *)
@@ -124,11 +103,8 @@ if [ "${PROFILE:-0}" = "1" ]; then
         --max-num-batched-tokens "$profile_token_budget"
         --profiler-config "$profiler_config"
     )
-    if [ "${M3_AITER_AR_RMS_MODE:-off}" = "off" ]; then
-        # ROCTracer does not expose every kernel launched inside a HIP graph.
-        # Keep torch.compile enabled, but execute compiled decode without graphs.
-        PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
-    fi
+    # ROCTracer does not expose every kernel launched inside a HIP graph.
+    PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
     echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
 fi
 
@@ -138,7 +114,6 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
-    "${M3_AITER_AR_RMS_ARGS[@]}" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
