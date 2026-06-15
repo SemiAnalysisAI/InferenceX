@@ -158,13 +158,15 @@ benchmark.
   shared safetensor reads. Do not restore concurrent loading: run
   `27533885582` stalled one of nine simultaneous engines, and run
   `27535038325` stalled one of three concurrent engines at the same rank-5
-  shard-43 load.
+  shard-43 load. Run `27537092211` also stalled one serialized engine, so
+  retain bounded per-child model-load retries; retries must not tear down
+  already initialized replicas or change their TRT runtime configuration.
 - Each child proves its own 256-round exact fixed-batch window. All children
   must reach one shared measured-pass barrier. For logical rack round `i`,
   use the maximum rank-0 `host_step_time` across the nine child round-`i`
   values, then skip eight logical rounds and apply the upper-IQR filter.
   Reject measured-pass start skew above 10 seconds; the initialization
-  barrier timeout is one hour.
+  barrier timeout is two hours.
 - Child results and logs must remain under
   `.offline_rack_ID_JOB/replicas/rNN` and enter the uploaded debug archive
   only. Publish exactly one top-level `offline_result_ID.json`, so

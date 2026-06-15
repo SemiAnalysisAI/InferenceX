@@ -534,10 +534,14 @@ def test_rack_parent_limits_concurrent_engine_initialization():
     ).read_text(encoding="utf-8")
 
     assert 'TRT_BENCH_RACK_MODEL_LOAD_CONCURRENCY:-1' in source
-    assert 'TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS:-900' in source
+    assert 'TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS:-600' in source
+    assert 'TRT_BENCH_RACK_MODEL_LOAD_MAX_ATTEMPTS:-3' in source
+    assert 'TRT_BENCH_RACK_MODEL_LOAD_RETRY_DELAY_SECONDS:-15' in source
     assert 'TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS:-1800' in source
+    assert 'TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS:-7200' in source
     assert 'row.get("event") == "engine_warmup_start"' in source
     assert "model-load admission gate complete" in source
+    assert "retry_replica" in source
     assert "current_model_loaders < RACK_MODEL_LOAD_CONCURRENCY" in source
     assert "replica_$(printf '%02d' \"$replica_index\").ready.json" in source
 

@@ -166,10 +166,17 @@ hit the same shared-storage stall.
 Rack startup therefore admits only one model-loading engine at a time. The
 next replica launches as soon as all eight ranks of the current replica emit
 `engine_warmup_start`; CUDA graph capture continues in parallel on already
-loaded replicas. A model load has 900 seconds to reach that gate and each
-engine has 1800 seconds to reach the pre-measurement barrier. This serializes
-only safetensor loading, not graph capture or the benchmark. The measured pass
-still releases all nine engines together and preserves the 72-GPU
+loaded replicas. Run `27537092211`, source `e4a3a21a`, validated the gate:
+`r00-r05` loaded in 212-252 seconds each, but `r06` then stalled alone with
+rank 4 opening shard 31. This proves that the shared model path can also fail
+transiently without cross-engine load contention.
+
+Each model load now has a 600-second deadline and up to three attempts, with a
+15-second delay before relaunching only the failed two-node child. Already
+loaded engines and their graph captures stay alive. Each attempt has 1800
+seconds to reach the pre-measurement barrier, whose child wait is 7200 seconds
+to accommodate retries. This changes startup reliability only; the measured
+pass still releases all nine engines together and preserves the 72-GPU
 fixed-global-batch contract.
 
 The direct offline engine keeps the documented `max_num_tokens=32768`
@@ -190,7 +197,7 @@ Every child independently proves 256 consecutive exact fixed-batch decode
 iterations. Immediately before its measured `generate()` call, each child
 writes `replica_NN.ready.json` and waits. Replica 0 publishes the release only
 after all nine ready files are visible. This barrier synchronizes the
-measured passes, not engine initialization. Children may wait up to one hour
+measured passes, not engine initialization. Children may wait up to two hours
 for the slowest engine to finish initialization. Aggregation rejects a
 measured-pass start skew above 10 seconds.
 

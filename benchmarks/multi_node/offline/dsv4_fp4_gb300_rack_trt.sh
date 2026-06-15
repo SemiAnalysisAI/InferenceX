@@ -37,10 +37,19 @@ RACK_MODEL_LOAD_CONCURRENCY="$(
     printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_CONCURRENCY:-1}"
 )"
 RACK_MODEL_LOAD_TIMEOUT_SECONDS="$(
-    printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS:-900}"
+    printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_TIMEOUT_SECONDS:-600}"
+)"
+RACK_MODEL_LOAD_MAX_ATTEMPTS="$(
+    printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_MAX_ATTEMPTS:-3}"
+)"
+RACK_MODEL_LOAD_RETRY_DELAY_SECONDS="$(
+    printf '%s' "${TRT_BENCH_RACK_MODEL_LOAD_RETRY_DELAY_SECONDS:-15}"
 )"
 RACK_ENGINE_READY_TIMEOUT_SECONDS="$(
     printf '%s' "${TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS:-1800}"
+)"
+RACK_BARRIER_TIMEOUT_SECONDS="$(
+    printf '%s' "${TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS:-7200}"
 )"
 TRT_BENCH_GIT_REVISION="$(git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD)"
 export TRT_BENCH_GIT_REVISION
@@ -70,9 +79,27 @@ if [[ ! "$RACK_MODEL_LOAD_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
         >&2
     exit 1
 fi
+if [[ ! "$RACK_MODEL_LOAD_MAX_ATTEMPTS" =~ ^[1-9][0-9]*$ ]]; then
+    echo \
+        "TRT_BENCH_RACK_MODEL_LOAD_MAX_ATTEMPTS must be positive: ${RACK_MODEL_LOAD_MAX_ATTEMPTS}" \
+        >&2
+    exit 1
+fi
+if [[ ! "$RACK_MODEL_LOAD_RETRY_DELAY_SECONDS" =~ ^[0-9]+$ ]]; then
+    echo \
+        "TRT_BENCH_RACK_MODEL_LOAD_RETRY_DELAY_SECONDS must be non-negative: ${RACK_MODEL_LOAD_RETRY_DELAY_SECONDS}" \
+        >&2
+    exit 1
+fi
 if [[ ! "$RACK_ENGINE_READY_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
     echo \
         "TRT_BENCH_RACK_ENGINE_READY_TIMEOUT_SECONDS must be positive: ${RACK_ENGINE_READY_TIMEOUT_SECONDS}" \
+        >&2
+    exit 1
+fi
+if [[ ! "$RACK_BARRIER_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo \
+        "TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS must be positive: ${RACK_BARRIER_TIMEOUT_SECONDS}" \
         >&2
     exit 1
 fi
@@ -93,6 +120,7 @@ TELEMETRY_STEP_PID=""
 SALLOC_PIPE_PID=""
 declare -a REPLICA_PIDS=()
 declare -a REPLICA_LAUNCHED_AT=()
+declare -a REPLICA_ATTEMPTS=()
 declare -a REPLICA_MODEL_LOAD_DONE=()
 declare -a REPLICA_READY=()
 
@@ -534,6 +562,7 @@ export WORKER_TIMEOUT
 export TRT_BENCH_WORKSPACE
 export TRT_BENCH_RACK_REPLICA_COUNT="$REPLICA_COUNT"
 export TRT_BENCH_RACK_GLOBAL_BATCH_SIZE="$GLOBAL_BATCH_SIZE"
+export TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS="$RACK_BARRIER_TIMEOUT_SECONDS"
 export TRT_BENCH_FABRIC_CLUSTER_UUID="$FABRIC_CLUSTER_UUID"
 export TRT_BENCH_FABRIC_CLIQUE_ID="$FABRIC_CLIQUE_ID"
 
@@ -544,14 +573,21 @@ launch_replica() {
     local replica_nodes
     local replica_label
     local replica_root
+    local attempt
 
     first_node="${allocation_nodes[$((replica_index * REPLICA_PHYSICAL_NODES))]}"
     second_node="${allocation_nodes[$((replica_index * REPLICA_PHYSICAL_NODES + 1))]}"
     replica_nodes="${first_node},${second_node}"
     replica_label="$(printf 'r%02d' "$replica_index")"
     replica_root="${RACK_ROOT}/replicas/${replica_label}"
+    attempt=$((${REPLICA_ATTEMPTS[$replica_index]:-0} + 1))
+    REPLICA_ATTEMPTS[replica_index]="$attempt"
+    REPLICA_MODEL_LOAD_DONE[replica_index]=0
+    REPLICA_READY[replica_index]=0
     mkdir -p "$replica_root"
-    log "launch replica=$replica_label nodes=$replica_nodes engine_gbs=$ENGINE_GLOBAL_BATCH_SIZE"
+    rm -f \
+        "${RACK_ROOT}/barrier/replica_$(printf '%02d' "$replica_index").ready.json"
+    log "launch replica=$replica_label attempt=$attempt/$RACK_MODEL_LOAD_MAX_ATTEMPTS nodes=$replica_nodes engine_gbs=$ENGINE_GLOBAL_BATCH_SIZE"
     GLOBAL_BATCH_SIZE="$ENGINE_GLOBAL_BATCH_SIZE" \
     TRT_BENCH_ALLOCATION_JOB_ID="$JOB_ID" \
     TRT_BENCH_REPLICA_NODELIST="$replica_nodes" \
@@ -563,6 +599,32 @@ launch_replica() {
         > "${replica_root}/host_launcher.log" 2>&1 &
     REPLICA_PIDS[replica_index]=$!
     REPLICA_LAUNCHED_AT[replica_index]="$SECONDS"
+}
+
+retry_replica() {
+    local replica_index="$1"
+    local reason="$2"
+    local replica_label
+    local pid
+    local replica_rc
+
+    replica_label="$(printf 'r%02d' "$replica_index")"
+    pid="${REPLICA_PIDS[$replica_index]:-}"
+    log "retry replica=$replica_label attempt=${REPLICA_ATTEMPTS[$replica_index]} reason=$reason"
+    if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+        kill "$pid" >/dev/null 2>&1 || true
+    fi
+    replica_rc=0
+    if [[ -n "$pid" ]]; then
+        set +e
+        wait "$pid"
+        replica_rc=$?
+        set -e
+    fi
+    REPLICA_PIDS[replica_index]=""
+    log "retry cleanup complete replica=$replica_label return_code=$replica_rc delay=${RACK_MODEL_LOAD_RETRY_DELAY_SECONDS}s"
+    sleep "$RACK_MODEL_LOAD_RETRY_DELAY_SECONDS"
+    launch_replica "$replica_index"
 }
 
 replica_marker_path() {
@@ -603,7 +665,7 @@ raise SystemExit(0 if ranks == set(range(world_size)) else 1)
 PY
 }
 
-log "initializing nine TP8/EP8 MTP1 engines with model-load admission concurrency=$RACK_MODEL_LOAD_CONCURRENCY load_timeout=${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s ready_timeout=${RACK_ENGINE_READY_TIMEOUT_SECONDS}s"
+log "initializing nine TP8/EP8 MTP1 engines with model-load admission concurrency=$RACK_MODEL_LOAD_CONCURRENCY load_timeout=${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s max_attempts=$RACK_MODEL_LOAD_MAX_ATTEMPTS retry_delay=${RACK_MODEL_LOAD_RETRY_DELAY_SECONDS}s ready_timeout=${RACK_ENGINE_READY_TIMEOUT_SECONDS}s barrier_timeout=${RACK_BARRIER_TIMEOUT_SECONDS}s"
 replica_started="$SECONDS"
 replica_failure=0
 replica_failure_message=""
@@ -629,14 +691,23 @@ while true; do
 
         pid="${REPLICA_PIDS[$replica_index]}"
         if ! kill -0 "$pid" >/dev/null 2>&1; then
-            set +e
-            wait "$pid"
-            replica_rc=$?
-            set -e
-            REPLICA_PIDS[replica_index]=""
-            replica_failure=1
-            replica_failure_message="Replica ${replica_label} exited with return code ${replica_rc} before rack initialization completed"
-            break
+            if [[ "${REPLICA_MODEL_LOAD_DONE[$replica_index]:-0}" != "1" ]] \
+                && (( REPLICA_ATTEMPTS[replica_index] \
+                    < RACK_MODEL_LOAD_MAX_ATTEMPTS )); then
+                retry_replica "$replica_index" \
+                    "process exited before model-load admission gate"
+                ((current_model_loaders += 1))
+                continue
+            else
+                set +e
+                wait "$pid"
+                replica_rc=$?
+                set -e
+                REPLICA_PIDS[replica_index]=""
+                replica_failure=1
+                replica_failure_message="Replica ${replica_label} exited with return code ${replica_rc} before rack initialization completed"
+                break
+            fi
         fi
 
         replica_init_elapsed=$((SECONDS - REPLICA_LAUNCHED_AT[replica_index]))
@@ -645,12 +716,20 @@ while true; do
                 REPLICA_MODEL_LOAD_DONE[replica_index]=1
                 log "model-load admission gate complete replica=$replica_label elapsed=${replica_init_elapsed}s; CUDA graph warmup continues"
             else
-                ((current_model_loaders += 1))
                 if (( replica_init_elapsed >= RACK_MODEL_LOAD_TIMEOUT_SECONDS )); then
-                    replica_failure=1
-                    replica_failure_message="Replica ${replica_label} did not finish model loading within ${RACK_MODEL_LOAD_TIMEOUT_SECONDS}s"
-                    break
+                    if (( REPLICA_ATTEMPTS[replica_index] \
+                        < RACK_MODEL_LOAD_MAX_ATTEMPTS )); then
+                        retry_replica "$replica_index" \
+                            "model-load admission gate timed out after ${replica_init_elapsed}s"
+                        ((current_model_loaders += 1))
+                        continue
+                    else
+                        replica_failure=1
+                        replica_failure_message="Replica ${replica_label} did not finish model loading after ${RACK_MODEL_LOAD_MAX_ATTEMPTS} attempts"
+                        break
+                    fi
                 fi
+                ((current_model_loaders += 1))
             fi
         fi
         if [[ "${REPLICA_MODEL_LOAD_DONE[$replica_index]:-0}" == "1" ]]; then
