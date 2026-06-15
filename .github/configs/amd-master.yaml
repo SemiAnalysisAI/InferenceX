@@ -2848,10 +2848,11 @@ minimaxm3-fp8-mi355x-vllm-mtp:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # MiniMax-M3 MXFP8 MI300X recipe. Apply the checked-in hybrid gfx94x MXFP8 MoE
-# patch to the dedicated ROCm image: BF16 for small TP batches and EP, native
-# compressed MXFP8 for larger TP batches and long context. Retain the default
-# BF16 KV cache because this checkpoint lacks calibrated ROCm FP8 attention
-# scales. Use TP8 for latency and TP8+EP8 at high concurrency.
+# and single-chunk index top-k patches to the dedicated ROCm image: BF16 for
+# small TP batches and EP, native compressed MXFP8 for larger TP batches and
+# long context. Retain the default BF16 KV cache because this checkpoint lacks
+# calibrated ROCm FP8 attention scales. Use TP8 for latency and TP8+EP8 at high
+# concurrency.
 minimaxm3-fp8-mi300x-vllm:
   image: vllm/vllm-openai-rocm:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8

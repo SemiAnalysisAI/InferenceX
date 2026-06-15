@@ -1,0 +1,145 @@
+diff --git a/vllm/models/minimax_m3/common/ops/index_topk.py b/vllm/models/minimax_m3/common/ops/index_topk.py
+index c32ff38d9..33d95b3cf 100644
+--- a/vllm/models/minimax_m3/common/ops/index_topk.py
++++ b/vllm/models/minimax_m3/common/ops/index_topk.py
+@@ -419,9 +419,14 @@ def _topk_index_partial_kernel(
+     stride_ti_h,
+     stride_ti_b,
+     stride_ti_t,
++    ti_final_ptr,  # final idx: [num_idx_heads, total_q, topk]
++    stride_tif_h,
++    stride_tif_b,
++    stride_tif_t,
+     BLOCK_SIZE_K: tl.constexpr,
+     BLOCK_SIZE_T: tl.constexpr,
+     USE_PDL: tl.constexpr,
++    WRITE_FINAL: tl.constexpr,
+ ):
+     tl.static_assert(topk < BLOCK_SIZE_K)
+     pid_b = tl.program_id(0)  # flattened query-token id
+@@ -510,24 +515,42 @@ def _topk_index_partial_kernel(
+         axis=0,
+     )
+ 
+-    # Always write all BLOCK_SIZE_T slots — invalid slots carry -1e30 / 0
+-    # sentinels and lose to real scores in the merge stage.
+-    ts_ptrs = (
+-        ts_partial_ptr
+-        + pid_chunk * stride_ts_c
+-        + pid_b * stride_ts_b
+-        + pid_h * stride_ts_h
+-        + off_t * stride_ts_t
+-    )
+-    ti_ptrs = (
+-        ti_partial_ptr
+-        + pid_chunk * stride_ti_c
+-        + pid_b * stride_ti_b
+-        + pid_h * stride_ti_h
+-        + off_t * stride_ti_t
+-    )
+-    tl.store(ts_ptrs, final_score)
+-    tl.store(ti_ptrs, final_idx)
++    if WRITE_FINAL:
++        # With one chunk, this is already the global top-k. Convert the
++        # 1-indexed partial ids directly to the public 0-indexed/-1 format.
++        tif_ptrs = (
++            ti_final_ptr
++            + pid_h * stride_tif_h
++            + pid_b * stride_tif_b
++            + off_t * stride_tif_t
++        )
++        topk_idx_final = tl.where(
++            off_t < tl.minimum(topk, num_blocks), final_idx - 1, -1
++        )
++        tl.store(
++            tif_ptrs,
++            topk_idx_final.to(ti_final_ptr.dtype.element_ty),
++            mask=off_t < topk,
++        )
++    else:
++        # Always write all BLOCK_SIZE_T slots — invalid slots carry -1e30 / 0
++        # sentinels and lose to real scores in the merge stage.
++        ts_ptrs = (
++            ts_partial_ptr
++            + pid_chunk * stride_ts_c
++            + pid_b * stride_ts_b
++            + pid_h * stride_ts_h
++            + off_t * stride_ts_t
++        )
++        ti_ptrs = (
++            ti_partial_ptr
++            + pid_chunk * stride_ti_c
++            + pid_b * stride_ti_b
++            + pid_h * stride_ti_h
++            + off_t * stride_ti_t
++        )
++        tl.store(ts_ptrs, final_score)
++        tl.store(ti_ptrs, final_idx)
+ 
+ 
+ @triton.heuristics(
+@@ -833,22 +856,30 @@ def minimax_m3_index_decode(
+     num_topk_chunks = 1 << (topk_target.bit_length() - 1)
+     block_size_t = triton.next_power_of_2(topk)
+     chunk_blocks = (max_block + num_topk_chunks - 1) // num_topk_chunks
+-    topk_score_partial = torch.empty(
+-        num_topk_chunks,
+-        num_idx_heads,
+-        batch,
+-        block_size_t,
+-        dtype=torch.float32,
+-        device=idx_q.device,
+-    )
+-    topk_idx_partial = torch.empty(
+-        num_topk_chunks,
+-        num_idx_heads,
+-        batch,
+-        block_size_t,
+-        dtype=torch.int32,
+-        device=idx_q.device,
+-    )
++    write_final = num_topk_chunks == 1
++    if write_final:
++        # The partial kernel owns every visible block, so its top-k is final.
++        # Reuse a view of the output as an unused placeholder for the partial
++        # pointers and skip their allocations plus the merge launch.
++        topk_score_partial = topk_idx.unsqueeze(0)
++        topk_idx_partial = topk_score_partial
++    else:
++        topk_score_partial = torch.empty(
++            num_topk_chunks,
++            num_idx_heads,
++            batch,
++            block_size_t,
++            dtype=torch.float32,
++            device=idx_q.device,
++        )
++        topk_idx_partial = torch.empty(
++            num_topk_chunks,
++            num_idx_heads,
++            batch,
++            block_size_t,
++            dtype=torch.int32,
++            device=idx_q.device,
++        )
+     _topk_index_partial_kernel[(batch, num_idx_heads, num_topk_chunks)](
+         score,
+         topk_score_partial,
+@@ -869,9 +900,17 @@ def minimax_m3_index_decode(
+         topk_idx_partial.stride(1),
+         topk_idx_partial.stride(2),
+         topk_idx_partial.stride(3),
++        topk_idx,
++        topk_idx.stride(0),
++        topk_idx.stride(1),
++        topk_idx.stride(2),
+         USE_PDL=use_pdl,
++        WRITE_FINAL=write_final,
+         **pdl_launch,
+     )
++    if write_final:
++        return topk_idx
++
+     _topk_index_merge_kernel[(batch, num_idx_heads)](
+         topk_score_partial,
+         topk_idx_partial,

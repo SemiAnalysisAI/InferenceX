@@ -2,10 +2,10 @@
 
 # MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe.
 # Reuses the dedicated ROCm image and applies the checked-in hybrid gfx94x
-# MXFP8 MoE patch before starting vLLM. Block size 128 is mandatory for MSA
-# sparse attention. Keep the default BF16 KV cache on gfx942: the checkpoint
-# has no calibrated q/prob scales for ROCm FP8 attention, and vLLM's fallback
-# scale of 1.0 corrupts model accuracy.
+# MXFP8 MoE and single-chunk index top-k patches before starting vLLM. Block
+# size 128 is mandatory for MSA sparse attention. Keep the default BF16 KV
+# cache on gfx942: the checkpoint has no calibrated q/prob scales for ROCm FP8
+# attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
 # Target image vLLM revision: 4a560dd8db67c270f5e2afb614558271b76f2294.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -47,6 +47,31 @@ if ! grep -q "Using fused CDNA3 (gfx94x)" "$MXFP8_ORACLE"; then
     echo "MI300X MXFP8 backend marker is missing after patching" >&2
     exit 1
 fi
+
+INDEX_TOPK_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_topk.patch"
+INDEX_TOPK_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"
+INDEX_TOPK_SOURCE_SHA256="20351dd410d409c2c779d1d05d3d715633323f6b0e022e3ae6fae1c487ab5888"
+INDEX_TOPK_PATCHED_SHA256="954f08ea4df094895e45433ba842409e348315a2c9c431e7231c80d7e7d5d1dc"
+index_topk_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
+if [ "$index_topk_sha256" = "$INDEX_TOPK_SOURCE_SHA256" ]; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_TOPK_PATCH"; then
+        echo "Failed to validate the MI300X index top-k patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_TOPK_PATCH"; then
+        echo "Failed to apply the MI300X index top-k patch" >&2
+        exit 1
+    fi
+elif [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
+    echo "MI300X index top-k source fingerprint mismatch: $index_topk_sha256" >&2
+    exit 1
+fi
+index_topk_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
+if [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
+    echo "MI300X index top-k patched fingerprint mismatch: $index_topk_sha256" >&2
+    exit 1
+fi
+echo "MI300X single-chunk index top-k patch ready: $index_topk_sha256"
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
