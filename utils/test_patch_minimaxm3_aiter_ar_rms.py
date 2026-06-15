@@ -29,7 +29,10 @@ def helper(hidden_states, residual, norm):
     assert 'os.getenv("M3_AITER_AR_RMS_MODE") == "fused"' in patched
     assert "hidden_states.shape[0] <= 512" in patched
     assert "rocm_aiter_ops.initialize_aiter_allreduce" in patched
-    assert "rocm_aiter_ops.get_fused_allreduce_rmsnorm_op" in patched
+    assert "aiter_ar.fused_ar_rms" in patched
+    assert "registered=torch.cuda.is_current_stream_capturing()" in patched
+    assert "use_1stage=False" in patched
+    assert "get_fused_allreduce_rmsnorm_op" not in patched
     assert "norm._inferencex_aiter_gamma = gamma" in patched
     assert "return norm(reduced, residual)" in patched
     assert patch_helper_source(patched) == patched

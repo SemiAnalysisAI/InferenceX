@@ -21,7 +21,7 @@ EXPECTED_SOURCE_SHA256 = {
 }
 EXPECTED_PATCHED_SHA256 = {
     "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py": (
-        "9f7abdad7f49dd0e99b7b76164987fc748fcbc33015391e7dfdc3bc07097006e"
+        "fc018fb9e89af9f734e7f7c0f5618f3d280bd83fd004781fd9dfd2665559eec6"
     ),
 }
 
@@ -103,13 +103,19 @@ def patch_helper_source(source: str) -> str:
             ).contiguous()
             norm._inferencex_aiter_gamma = gamma
 
-        fused_op = rocm_aiter_ops.get_fused_allreduce_rmsnorm_op()
-        return fused_op(
-            input_=hidden_states,
-            residual=residual,
-            weight=gamma,
-            epsilon=norm.variance_epsilon,
+        # amd-aiter 0.1.13.post1's one-stage kernel lacks the exit barrier
+        # fixed by ROCm/aiter#3514 and is unsafe under HIP graph replay.
+        result = aiter_ar.fused_ar_rms(
+            hidden_states,
+            residual,
+            w=gamma,
+            eps=norm.variance_epsilon,
+            registered=torch.cuda.is_current_stream_capturing(),
+            use_1stage=False,
         )
+        if result is None:
+            raise RuntimeError("AITER fused allreduce RMSNorm returned no result")
+        return result[0], result[1]
 
     # Fallback: explicit all-reduce + GemmaRMSNorm (matches the unfused model).
     reduced = tensor_model_parallel_all_reduce(hidden_states)
