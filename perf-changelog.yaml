@@ -3856,4 +3856,4 @@
   description:
     - "Align MiniMax-M3 B200/B300 EAGLE3 MTP serving with the MiniMax-M2.5 FP8 serving settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and using max cudagraph capture size 2048."
     - "Add TP4+EP4 MTP coverage: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1784
