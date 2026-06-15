@@ -63,6 +63,11 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
     export SRT_SLURM_MODEL_PREFIX="gptoss"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    # Day-zero: MiniMax-M3-MXFP8 is not in the SRE-staged /lustre/fsw/models
+    # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
+    export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"
