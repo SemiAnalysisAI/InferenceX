@@ -67,6 +67,19 @@ def test_m3_model_patch_initializes_aiter_before_graph_capture():
     assert "+            initialize_m3_aiter_allreduce()" in patch
 
 
+def test_mi300x_recipe_keeps_graph_concurrency_one_off_aiter():
+    recipe = (
+        Path(__file__).resolve().parents[1]
+        / "benchmarks/single_node/fixed_seq_len"
+        / "minimaxm3_fp8_mi300x.sh"
+    ).read_text(encoding="utf-8")
+
+    assert 'M3_AITER_AR_RMS_REQUESTED_MODE="$M3_AITER_AR_RMS_MODE"' in recipe
+    assert '[ "${PROFILE:-0}" != "1" ]' in recipe
+    assert '[ "$CONC" -eq 1 ]' in recipe
+    assert "M3_AITER_AR_RMS_MODE=off" in recipe
+
+
 def test_apply_runtime_patch_rejects_patched_source_drift(tmp_path, monkeypatch):
     helper_relative = (
         "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py"

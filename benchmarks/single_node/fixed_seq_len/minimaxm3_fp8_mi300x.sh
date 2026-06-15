@@ -84,6 +84,17 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 M3_AITER_AR_RMS_MODE="${M3_AITER_AR_RMS_MODE:-off}"
+M3_AITER_AR_RMS_REQUESTED_MODE="$M3_AITER_AR_RMS_MODE"
+if [ "$M3_AITER_AR_RMS_MODE" = "fused" ] \
+    && [ "${PROFILE:-0}" != "1" ] \
+    && [ "$CONC" -eq 1 ]; then
+    # Same-node graph benchmarks regress 2.2% at c1 with the two-stage AITER
+    # primitive. Keep eager profiling available, but use the proven graph path
+    # for production c1 runs.
+    M3_AITER_AR_RMS_MODE=off
+    echo "M3 AITER AR+RMS graph policy: using off for concurrency 1"
+fi
+export M3_AITER_AR_RMS_REQUESTED_MODE
 export M3_AITER_AR_RMS_MODE
 case "$M3_AITER_AR_RMS_MODE" in
     off)
