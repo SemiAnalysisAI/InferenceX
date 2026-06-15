@@ -614,7 +614,16 @@ jobs:
 
     reuse-ingest-artifacts:
         needs: setup
-        if: ${{ needs.setup.outputs.reuse-enabled == 'true' }}
+        # `setup` runs via always() and depends on `reuse-sweep-gate`, which is
+        # skipped on every push-to-main. Without always() here, that skipped
+        # gate poisons this job's implicit success() check and it is skipped
+        # even when setup succeeded with reuse-enabled=true — silently breaking
+        # the merge-time ingest. Guard explicitly on setup success instead
+        # (same pattern as comment-unofficial-run-visualizer).
+        if: >-
+            always() &&
+            needs.setup.result == 'success' &&
+            needs.setup.outputs.reuse-enabled == 'true'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

@@ -153,7 +153,7 @@ side of each is defined in that cluster's `runners/launch_<cluster>.sh`:
    cluster means staging the weights there first.
 4. **Squash images** — launch scripts `enroot import` each Docker image once into a
    `.sqsh` file under a shared `SQUASH_DIR` (e.g. `/home/sa-shared/containers` on
-   b200-dgxc, `/mnt/vast/squash_dupe` on gb300-cw, `/mnt/lustre01/users-public/sa-shared`
+   b200-dgxc, `/mnt/lustre01/users-public/sa-shared`
    on gb200), then launch with `--container-image=<file>.sqsh`. This must be on shared
    storage because pyxis reads the file on the **compute** node, and it lets concurrent
    jobs reuse one import instead of each pulling the registry image. Note
