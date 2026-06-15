@@ -188,6 +188,71 @@ aggregator now imports under the TP8 engine profile. Replica 0 also publishes
 a common measured start 90 seconds in the future; every child waits against
 that timestamp after seeing the release file, absorbing the observed NFS lag.
 
+Run `27543065270`, source `ccddb60b`, validated the complete fix:
+
+```text
+run: 27543065270
+url: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27543065270
+renderer: https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27543065270
+Slurm job: 8811
+```
+
+All nine engines initialized without a retry. The release file took up to
+48.533 seconds to become visible on every node, but the common future
+timestamp reduced measured-pass start skew to 0.000370 seconds.
+
+| Rack GBS | Engine GBS | Local/GPU | Step ms | Steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU |
+|---:|---:|---:|---:|---:|---:|---:|---:|
+| 72 | 8 | 1 | 18.490630 | 54.081444 | 1.769965 | 95.722279 | 64.404869 |
+
+Exact flat renderer row:
+
+```json
+[
+  {
+    "benchmark_profile": "rack-tp8x9-mtp1",
+    "conc": 72,
+    "decode_dp_attention": true,
+    "decode_ep": 8,
+    "decode_num_workers": 9,
+    "decode_round_tpot_ms": 18.49063041762178,
+    "decode_step_tput_per_gpu": 54.081444353946345,
+    "decode_tp": 8,
+    "disagg": false,
+    "engine_max_batch_size": 512,
+    "framework": "trt",
+    "global_batch_size": 72,
+    "hw": "gb300-nv",
+    "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": true,
+    "isl": 8192,
+    "local_batch_size": 1,
+    "mean_intvty": 95.72227867855608,
+    "mean_tpot": 0.010446888789161496,
+    "measured_decode_rounds": 256,
+    "median_tpot": 0.010240615612739088,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 72,
+    "num_prefill_gpu": 72,
+    "observed_tokens_per_step": 1.7699652777777777,
+    "osl": 1024,
+    "output_tput_per_gpu": 95.72227867855607,
+    "p90_tpot": 0.011143148664518453,
+    "p99_tpot": 0.01276792098752069,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 8,
+    "prefill_num_workers": 9,
+    "prefill_tp": 8,
+    "replica_count": 9,
+    "spec_decoding": "mtp",
+    "timing_source": "slowest_replica_trt_print_iter_log_host_step_time",
+    "tput_per_gpu": 95.72227867855607
+  }
+]
+```
+
 The direct offline engine keeps the documented `max_num_tokens=32768`
 adaptation because it must admit its own 8K prompts. The serving decode worker
 in the PR receives transferred KV and uses `max_num_tokens=1024`.
