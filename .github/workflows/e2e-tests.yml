@@ -493,6 +493,15 @@ jobs:
                 fi
                 replica_label="$(basename "$replica_dir")"
                 log_path="${replica_dir}/host_launcher.log"
+                timing_path="$(
+                  find "$replica_dir" \
+                    -maxdepth 1 \
+                    -name 'offline_timing_*.log' \
+                    -print \
+                    -quit \
+                    2>/dev/null \
+                    || true
+                )"
                 ready_path="$(
                   find "$(dirname "$(dirname "$replica_dir")")/barrier" \
                     -maxdepth 1 \
@@ -523,13 +532,35 @@ jobs:
                   "$(stat -c '%s' "$log_path")" \
                   "$(stat -c '%y' "$log_path")"
                 normalized_log="$(mktemp)"
-                tr '\r' '\n' < "$log_path" | tail -n 4000 \
-                  > "$normalized_log"
+                if [[ -n "$timing_path" ]]; then
+                  tr '\r' '\n' < "$timing_path" | tail -n 4000 \
+                    > "$normalized_log"
+                else
+                  tr '\r' '\n' < "$log_path" | tail -n 4000 \
+                    > "$normalized_log"
+                fi
                 latest_weight="$(
                   grep -a 'Loading weights:' "$normalized_log" \
                     | tail -n 1 \
                     || true
                 )"
+                latest_trt="$(
+                  grep -a '\[TRT-LLM\]' "$normalized_log" \
+                    | tail -n 1 \
+                    || true
+                )"
+                latest_runtime="$(
+                  grep -aE \
+                    'Loading weights:|\\[TRT-LLM\\]|Warmup|CUDA graph|capture|tuning' \
+                    "$normalized_log" \
+                    | tail -n 3 \
+                    | tr '\n' ' ' \
+                    || true
+                )"
+                rm -f "$normalized_log"
+                normalized_log="$(mktemp)"
+                tr '\r' '\n' < "$log_path" | tail -n 4000 \
+                  > "$normalized_log"
                 latest_phase="$(
                   grep -aE \
                     'engine initialization|warmup|CUDA graph|capture|rack measured-pass barrier' \
@@ -548,11 +579,16 @@ jobs:
                   grep -aE \
                     'Traceback|Fatal error|ERROR|entry_failed|_error|timed out' \
                     "$normalized_log" \
+                    | grep -av 'Fallback to regular model init: Traceback' \
                     | tail -n 1 \
                     || true
                 )"
                 printf 'latest_weight=%s\n' \
                   "${latest_weight:-none in last 4000 normalized lines}"
+                printf 'latest_trt=%s\n' \
+                  "${latest_trt:-none in last 4000 normalized lines}"
+                printf 'runtime_tail=%s\n' \
+                  "${latest_runtime:-none in last 4000 normalized lines}"
                 printf 'latest_phase=%s\n' \
                   "${latest_phase:-none in last 4000 normalized lines}"
                 printf 'latest_event=%s\n' \
@@ -560,6 +596,16 @@ jobs:
                 printf 'latest_fatal=%s\n' \
                   "${latest_fatal:-none in last 4000 normalized lines}"
                 rm -f "$normalized_log"
+              done
+              for metrics_path in \
+                "$benchmark_dir"/offline_gpu_metrics_*.csv
+              do
+                if [[ ! -f "$metrics_path" ]]; then
+                  continue
+                fi
+                echo "--- current GPU telemetry: $(basename "$metrics_path") ---"
+                head -n 1 "$metrics_path"
+                tail -n 4 "$metrics_path"
               done
               for log_path in \
                 "$benchmark_dir"/offline_controller_*.log \
