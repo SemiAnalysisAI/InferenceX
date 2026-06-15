@@ -3863,3 +3863,10 @@
     - "Root cause: fused_allreduce_gemma_rms_norm passed norm_out=separate buffer, triggering the residual_out←allreduce_in aliasing path which produces wrong results on the MNNVL backend across NVL72 node boundaries"
     - "Fix: pass norm_out=None to match the compile-time AllReduceFusedAddGemmaRMSNormPattern aliasing (norm_out←allreduce_in, residual_out←residual) — commit 66a43ba on cleanup/m3-mi300x-mxfp8"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
