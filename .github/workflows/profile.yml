@@ -258,6 +258,12 @@ jobs:
           fi
 
       - name: Process result (json -> agg)
+        # Non-fatal: the profiling deliverable is the trace (already captured
+        # above), not the agg JSON. process_result.py divides by tpot and hits a
+        # ZeroDivisionError on degenerate single-request runs (conc 1, where the
+        # profile path caps num_prompts to 1), which must not block the trace
+        # upload / storage push / relay link.
+        continue-on-error: true
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
         run: |
@@ -323,7 +329,17 @@ jobs:
           git config user.email "github-actions@github.com"
           git add -A
           git commit -m "Add profile: ${GITHUB_SHA} ${{ matrix.config['exp-name'] }} tp${{ matrix.config.tp }} ep${{ matrix.config.ep || 1 }} conc${{ matrix.config.conc }}" || echo "Nothing to commit"
-          git push
+          # Parallel matrix jobs (one per conc) all push to this same repo, so a
+          # plain push races and is rejected non-fast-forward. Rebase onto the
+          # latest remote and retry with jitter until it lands.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            if git push; then break; fi
+            echo "push rejected (attempt ${attempt}); rebasing on origin/master"
+            git fetch origin master --quiet
+            git rebase origin/master
+            if [ "$attempt" = 8 ]; then echo "push failed after ${attempt} attempts" >&2; exit 1; fi
+            sleep $(( (RANDOM % 6) + 2 ))
+          done
           STORAGE_SHA="$(git rev-parse HEAD)"
           popd >/dev/null
 
