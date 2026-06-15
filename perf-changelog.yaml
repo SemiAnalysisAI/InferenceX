@@ -3803,9 +3803,16 @@
 
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm
+    - minimaxm3-fp8-mi325x-vllm
+  description:
+    - "Extend the MiniMax-M3 MXFP8 MI300X and MI325X non-MTP sweeps down to concurrency 1 on the TP-only latency rows (was conc 4), to capture the single-request latency point; TEP/DEP rows keep their higher concurrency starts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1760
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
   description:
     - "Add a fused gfx942 MXFP8 MoE kernel, normalize OCP E4M3FN weights to AMD E4M3FNUZ, and reconstruct E8M0 scales with the Marlin-style BF16 exponent bitcast"
-    - "Use BF16 experts for TP decode batches up to 8 tokens and prefill batches from 1024 tokens, native W8A8 MXFP8 between those thresholds, and load-time BF16 dequantization under expert parallelism"
-    - "For long-context TP, store one-fifth of MoE layers in BF16 only and retain both BF16 and compressed MXFP8 weights for the remaining layers to recover the serving curve within MI300X memory limits"
-    - "Tune the MiniMax-M3 MI300X BF16 MoE tiles without changing the TP8 and TP8+EP8 parallelism or concurrency matrix from main"
+    - "Use BF16 experts for TP decode batches up to 8 tokens and eager refill batches from 832 tokens, native W8A8 MXFP8 between those thresholds, and load-time BF16 dequantization under expert parallelism"
+    - "Pack gfx942 weight scales as [expert, K/32, N] for contiguous output-column scale loads; exact InferenceX graph replay shows 9.5-17.0% lower native MoE latency"
+    - "For long-context TP, store one-fifth of MoE layers in BF16 only and retain both BF16 and compressed MXFP8 weights for the remaining layers without changing the TP8 and TP8+EP8 parallelism matrix"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753
