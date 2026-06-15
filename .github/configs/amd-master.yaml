@@ -2966,3 +2966,24 @@ minimaxm3-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+
+# [DO NOT MERGE — experimental] Validates vllm-project/vllm#45639 (AITER fused
+# all-reduce + Gemma-RMSNorm for MiniMax-M3 on MI355X) by applying that PR's diff
+# in-place to the shipped minimax-m3 image before serving (recipe
+# benchmarks/single_node/fixed_seq_len/minimaxm3arf_fp8_mi355x.sh). The distinct
+# model-prefix (minimaxm3arf) routes to that recipe instead of the prod one.
+# Smoke test at conc 4 and 8, TP8 (the AR+RMS fusion needs TP>1).
+minimaxm3arf-fp8-mi355x-vllm:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3arf
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-list: [ 4, 8 ] }
