@@ -18,9 +18,10 @@ These are operational notes for running and debugging `trt-bench`.
   `GBS / decode-round TPOT / active_gpu_count`.
 - MTP yield is separate.
 
-The validated baseline is B300 DEP8 at TRT `c185066`. The current target is
-GB300 NVL16 DEP16 using the DeepSeek-V4 development image from InferenceX
-PR #1689.
+The validated baselines are B300 DEP8 at TRT `c185066` and GB300 NVL16
+DEP16 using the DeepSeek-V4 development image from InferenceX PR #1689.
+The final GB300 sweep is Actions run `27517035480` at
+`c0a845521b51e5fb5eca5f9bb4ac2e3a6c60b43d`.
 
 ## GB300 NVL16 Implementation
 
@@ -123,10 +124,10 @@ Fabric domain before the measured engine was started. The result itself
 records the Slurm node list, Fabric `ClusterUUID`, `CliqueId`, and artifact
 names.
 
-GBS16 has completed end to end. The final 16/64/128 sweep remains pending.
-Every final row still needs an Actions artifact proving the exact 16-rank
-set, fabric checks, fixed-batch schedule, 256-round window, and flat renderer
-row.
+The final GBS16/64/128 sweep completed end to end in run `27517035480`.
+Every row has an Actions artifact proving the exact 16-rank set, fabric
+checks, fixed-batch schedule, 256-round window, matching completion record,
+and flat renderer row. See `Final Validated GB300 Run`.
 
 ### GB300 Canary History
 
@@ -306,6 +307,23 @@ The follow-up retains `max_num_tokens=65536`, local batch 8, minimum KV
 capacity 74752, and the real one-iteration 65536-token prefill. It changes
 only `_create_warmup_request()`'s pure-context tuning shape to 32768 tokens,
 which is already proven by the successful GBS64 row on the same image.
+
+Run `27516584571`, source
+`c0a845521b51e5fb5eca5f9bb4ac2e3a6c60b43d`, was the successful GBS128
+canary for that change. It kept runtime `max_num_tokens=65536`, capped only
+the synthetic tuning request at 32768 tokens, initialized in about 625
+seconds, and completed the exact local-batch-8 schedule. It measured
+`34.319116 ms` round TPOT, `233.106236` decode steps/s/GPU,
+`3.310059` output tokens/step, and `771.595299` output tok/s/GPU. All 339
+marker records parsed, all 16 ranks reached warmup and executor start, and
+the minimum observed free memory was 7932 MiB.
+
+Run `27517035480`, at the same source revision, is the final sequential
+GBS16/64/128 sweep. All three jobs and `collect-results` succeeded. The
+aggregate and `results_bmk` copies of `agg_bmk.json` are byte-identical,
+contain exactly three flat rows, and use `conc=global_batch_size` only as the
+renderer compatibility alias. See `Final Validated GB300 Run` for the exact
+rows and validation details.
 
 ## Why The Old Result Was Too High
 
@@ -656,9 +674,200 @@ Flat renderer row:
 - `decode_step_tput_per_gpu`: custom raw-step field
 - `global_batch_size`, `local_batch_size`, `measured_decode_rounds`: custom
   workload proof
+- `conc`: renderer compatibility alias for `global_batch_size`; it is not
+  HTTP serving concurrency and did not control scheduling
 
 Do not put the custom aggregate wrapper in `results_bmk`; the unofficial-run
 API expects every JSON object there to be a flat benchmark row.
+
+## Final Validated GB300 Run
+
+Workflow:
+
+```text
+run: 27517035480
+url: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27517035480
+git: c0a845521b51e5fb5eca5f9bb4ac2e3a6c60b43d
+TRT source: 34a563ac6d8cc0ca7068c7f619e869fb8a625333
+image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
+```
+
+Renderer:
+
+```text
+https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27517035480
+```
+
+| GBS | Local/rank | Round TPOT ms | Steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained | Step/Huawei | Output/Huawei |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 1 | 25.921265 | 38.578364 | 3.003906 | 115.885788 | 90.025851 | 213/255 | 0.680394 | 0.837640 |
+| 64 | 4 | 32.375174 | 123.551461 | 3.509766 | 433.636669 | 212.253702 | 237/255 | 0.587892 | 0.845641 |
+| 128 | 8 | 34.231453 | 233.703196 | 3.450195 | 806.321670 | 367.156113 | 223/255 | 0.601971 | 0.851196 |
+
+The jobs ran sequentially in `13m42s`, `13m58s`, and `15m22s`. Engine
+initialization took `614.525s`, `612.818s`, and `642.487s`. Every row proved:
+
+- Global ranks exactly `0..15`, four local ranks on each of four nodes.
+- Fabric `ClusterUUID`
+  `8fe56262-d2bb-4602-b338-8898d34c4731`, `CliqueId` `32766`, and
+  `Completed`/`Success` on all 16 GPUs.
+- One context-only full-local-batch prefill, zero mixed iterations, and 256
+  consecutive full-local-batch decode rounds.
+- Matching successful controller result and atomic completion record.
+- Strict marker parsing with zero malformed records. GBS16/64/128 contained
+  256, 244, and 352 valid marker records, and all required lifecycle events
+  covered ranks `0..15`.
+- Runtime `max_num_tokens` of 8192, 32768, and 65536. GBS128 alone capped
+  TRT's synthetic context tuning request to 32768 while preserving its real
+  local-batch-8, 65536-token prefill.
+
+Minimum observed free memory was 51980 MiB at GBS16, 34114 MiB at GBS64, and
+7932 MiB at GBS128. Cleanup-time TCPStore and Slurm cancellation warnings
+occur after the successful result/completion pair is published and the host
+intentionally terminates the remaining external MPI management world; they
+are not benchmark failures.
+
+Exact flat renderer rows, sorted by GBS for readability:
+
+```json
+[
+  {
+    "conc": 16,
+    "decode_dp_attention": true,
+    "decode_ep": 16,
+    "decode_num_workers": 0,
+    "decode_round_tpot_ms": 25.92126528422038,
+    "decode_step_tput_per_gpu": 38.57836371161835,
+    "decode_tp": 16,
+    "disagg": false,
+    "framework": "trt",
+    "global_batch_size": 16,
+    "hw": "gb300-nv",
+    "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": true,
+    "isl": 8192,
+    "local_batch_size": 1,
+    "mean_e2el": 9.530830375020741,
+    "mean_intvty": 115.88578786810356,
+    "mean_tpot": 0.008629185842341245,
+    "mean_ttft": 0.5109100000117905,
+    "measured_decode_rounds": 256,
+    "median_e2el": 9.67358000006061,
+    "median_tpot": 0.008602623511662874,
+    "median_ttft": 0.5085340000223368,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 16,
+    "num_prefill_gpu": 16,
+    "observed_tokens_per_step": 3.00390625,
+    "osl": 1025,
+    "output_tput_per_gpu": 115.88578786810356,
+    "p90_e2el": 11.246076000039466,
+    "p90_tpot": 0.008787840209484721,
+    "p90_ttft": 0.5087775000138208,
+    "p99_e2el": 11.329238049976993,
+    "p99_tpot": 0.00907306566970091,
+    "p99_ttft": 0.5418207500479184,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 16,
+    "prefill_num_workers": 0,
+    "prefill_tp": 16,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 115.88578786810356
+  },
+  {
+    "conc": 64,
+    "decode_dp_attention": true,
+    "decode_ep": 16,
+    "decode_num_workers": 0,
+    "decode_round_tpot_ms": 32.375173729683276,
+    "decode_step_tput_per_gpu": 123.5514605542514,
+    "decode_tp": 16,
+    "disagg": false,
+    "framework": "trt",
+    "global_batch_size": 64,
+    "hw": "gb300-nv",
+    "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": true,
+    "isl": 8192,
+    "local_batch_size": 4,
+    "mean_e2el": 12.287708937481511,
+    "mean_intvty": 108.40916729296376,
+    "mean_tpot": 0.00922431215893035,
+    "mean_ttft": 1.9545068906263623,
+    "measured_decode_rounds": 256,
+    "median_e2el": 11.869209499913268,
+    "median_tpot": 0.009235091254521426,
+    "median_ttft": 1.9454935000976548,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 16,
+    "num_prefill_gpu": 16,
+    "observed_tokens_per_step": 3.509765625,
+    "osl": 1025,
+    "output_tput_per_gpu": 433.63666917185503,
+    "p90_e2el": 14.759949199971743,
+    "p90_tpot": 0.009364104018850863,
+    "p90_ttft": 1.9460564998677001,
+    "p99_e2el": 18.62660663995193,
+    "p99_tpot": 0.009456872021946299,
+    "p99_ttft": 2.092686970019713,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 16,
+    "prefill_num_workers": 0,
+    "prefill_tp": 16,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 433.63666917185503
+  },
+  {
+    "conc": 128,
+    "decode_dp_attention": true,
+    "decode_ep": 16,
+    "decode_num_workers": 0,
+    "decode_round_tpot_ms": 34.231453198488516,
+    "decode_step_tput_per_gpu": 233.70319552642417,
+    "decode_tp": 16,
+    "disagg": false,
+    "framework": "trt",
+    "global_batch_size": 128,
+    "hw": "gb300-nv",
+    "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": true,
+    "isl": 8192,
+    "local_batch_size": 8,
+    "mean_e2el": 14.699438031249883,
+    "mean_intvty": 100.79020871519246,
+    "mean_tpot": 0.009921598662681075,
+    "mean_ttft": 4.08818702345161,
+    "measured_decode_rounds": 256,
+    "median_e2el": 14.431192999938503,
+    "median_tpot": 0.009928362382359184,
+    "median_ttft": 4.070200000074692,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 16,
+    "num_prefill_gpu": 16,
+    "observed_tokens_per_step": 3.4501953125,
+    "osl": 1025,
+    "output_tput_per_gpu": 806.3216697215396,
+    "p90_e2el": 16.88335309997201,
+    "p90_tpot": 0.01001901159602321,
+    "p90_ttft": 4.072401500120759,
+    "p99_e2el": 17.906867700079456,
+    "p99_tpot": 0.010085205285433767,
+    "p99_ttft": 4.3624957999400795,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 16,
+    "prefill_num_workers": 0,
+    "prefill_tp": 16,
+    "spec_decoding": "mtp",
+    "tput_per_gpu": 806.3216697215396
+  }
+]
+```
 
 ## Final Validated B300 Run
 

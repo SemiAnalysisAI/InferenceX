@@ -339,10 +339,29 @@ The final validated B300 baseline is run `27493336994` at git revision
 | 64 | 32.140069 | 248.910481 | 3.507324 | 873.009760 |
 | 128 | 36.831497 | 434.410801 | 3.298096 | 1432.728396 |
 
-Artifacts:
+B300 artifacts:
 
 - [GitHub Actions run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27493336994)
 - [InferenceMAX unofficial run](https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27493336994)
+
+The final validated GB300 NVL16 sweep is run `27517035480` at git revision
+`c0a845521b51e5fb5eca5f9bb4ac2e3a6c60b43d`:
+
+| GBS | Round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Step/Huawei | Output/Huawei |
+|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 25.921265 | 38.578364 | 3.003906 | 115.885788 | 0.680394 | 0.837640 |
+| 64 | 32.375174 | 123.551461 | 3.509766 | 433.636669 | 0.587892 | 0.845641 |
+| 128 | 34.231453 | 233.703196 | 3.450195 | 806.321670 | 0.601971 | 0.851196 |
+
+All three rows proved ranks `0..15`, one shared 16-GPU NVLink Fabric domain,
+one full-batch prefill, zero mixed iterations, and 256 consecutive
+full-local-batch decode rounds. The complete flat renderer rows are recorded
+in [TRT_BENCH_NOTES.md](../../TRT_BENCH_NOTES.md).
+
+GB300 artifacts:
+
+- [GitHub Actions run](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27517035480)
+- [InferenceMAX unofficial run](https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27517035480)
 
 ## Execution Chain
 
@@ -401,7 +420,9 @@ serial scheduler tuning, or normal InferenceX matrix processing.
 `results_bmk/agg_bmk.json` remains renderer-compatible. Standard throughput
 and TPOT fields use acceptance-adjusted output-token metrics. Custom flat
 fields retain raw decode-round TPOT, decode-step throughput, GBS, local batch,
-token yield, and measured round count.
+token yield, and measured round count. Its `conc` field is only a compatibility
+alias for `global_batch_size`; this offline path does not use serving
+concurrency.
 
 ## Dispatch
 

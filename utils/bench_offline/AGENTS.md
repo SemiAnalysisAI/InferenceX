@@ -172,19 +172,22 @@ benchmark.
 - The comparison is methodological, not identical hardware: this branch uses
   B300 or GB300 FP4 GPUs, while Huawei publishes 950DT chips with hybrid
   MXFP8/MXFP4.
-- Final known-good full sweep is Actions run `27493336994` at
+- Final known-good B300 sweep is Actions run `27493336994` at
   `9796f5d17c96ab56136b8b9b1e196b6e6db84426`. Its GBS16/64/128 raw
   decode-step rates are `90.621203`, `248.910481`, and `434.410801`
-  steps/s/GPU. Use it as the regression baseline when debugging later runs.
-- First successful GB300 canary is Actions run `27511242827` at
-  `dc671ab6098f0b7176d65377f8b80fbb176d1f07`. GBS16 measured
-  `38.544908` decode steps/s/GPU and `121.055103` output tok/s/GPU. Its
-  concurrent marker corruption is fixed after that SHA, so use the later
-  full sweep for the final GB300 renderer row.
+  steps/s/GPU. Use it as the B300 regression baseline.
+- Final known-good GB300 sweep is Actions run `27517035480` at
+  `c0a845521b51e5fb5eca5f9bb4ac2e3a6c60b43d`. Its GBS16/64/128 raw
+  decode-step rates are `38.578364`, `123.551461`, and `233.703196`
+  steps/s/GPU; output rates are `115.885788`, `433.636669`, and
+  `806.321670` tok/s/GPU. All rows passed exact rank, fabric, fixed-prefill,
+  256-round, marker, completion, aggregate, and renderer validation. Use it
+  as the GB300 regression baseline.
 - `offline_aggregate.json` is authoritative. `results_bmk/agg_bmk.json` uses
   acceptance-adjusted output-token throughput and equivalent output-token
   TPOT for standard renderer fields, while retaining custom decode-round
-  fields.
+  fields. The flat `conc` field aliases `global_batch_size` for renderer
+  compatibility; it is not serving concurrency.
 - Keep launcher/controller/worker phase logs and 60-second heartbeats.
   Heartbeats must retain the per-rank marker summary for warmup, clock sync,
   and executor worker start; canceled Actions jobs may not preserve the
