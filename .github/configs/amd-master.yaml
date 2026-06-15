@@ -2147,7 +2147,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 # client uses --dsv4 framing (amd_utils/bench.sh). STP only for now (reference recipe has
 # no spec decoding); MTP is a follow-up.
 dsv4-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260614
+  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260615
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x-disagg
@@ -2239,7 +2239,8 @@ dsv4-fp4-mi355x-sglang-disagg:
           - "DECODE_MTP_SIZE=0"
 
 
-      # 1P1D DEP8  (mori KV transfer + mori MoE a2a, dp-attention)
+      # 1P1D dp-attention + TP-MoE  (mori KV transfer; ep=1 -> MoE tensor-parallel,
+      # no MoE a2a / deepep / ep-dispatch — see amd_utils ep_flags decoupling)
       - spec-decoding: "none"
         conc-list: [ 512, 768, 1024 ]
         prefill:
