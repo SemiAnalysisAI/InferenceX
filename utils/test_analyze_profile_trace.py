@@ -48,6 +48,8 @@ def test_analyze_trace_selects_steady_state_decode(tmp_path):
 
     assert summary["generation_requests"] == 16
     assert summary["decode_kernel_span_us"] == 60
+    assert summary["kernel_busy_time_us"] == 50
+    assert summary["kernel_idle_time_us"] == 10
     assert summary["categories"]["gemma_rmsnorm"]["duration_us"] == 20
     assert summary["categories"]["allreduce"]["duration_us"] == 30
 
@@ -279,3 +281,88 @@ def test_kernel_count_validation_rejects_partial_trace():
 
     validate_kernel_count({"kernel_count": 1000}, minimum=1000)
     validate_kernel_count({"kernel_count": 0}, minimum=None)
+
+
+def test_analyze_trace_segments_minimax_m3_layers(tmp_path):
+    kernel_names = [
+        "decode_setup",
+        "Cijk_dense_qkv",
+        "fusedMiniMaxM3QNormRopeKVInsertKernel<c10::BFloat16, false, false>",
+        "reshape_and_cache_kernel_flash",
+        "kernel_unified_attention",
+        "reduce_segments",
+        "Cijk_dense_o",
+        "cross_device_reduce_1stage",
+        "_gemma_fused_add_rmsnorm_kernel",
+        "Cijk_dense_gate_up",
+        "_swiglu_oai_kernel",
+        "Cijk_dense_down",
+        "cross_device_reduce_1stage",
+        "_gemma_fused_add_rmsnorm_kernel",
+        "Cijk_sparse_qkv",
+        "fusedMiniMaxM3QNormRopeKVInsertKernel<c10::BFloat16, true, true>",
+        "_decode_index_score_kernel",
+        "_topk_index_partial_kernel",
+        "_topk_index_merge_kernel",
+        "_gqa_sparse_decode_kernel",
+        "_merge_topk_attn_out_kernel",
+        "Cijk_sparse_o",
+        "reduce_scatter_cross_device_store",
+        "local_device_load_rmsnorm_512n",
+        "bfloat16tofloat32_copy_kernel_cuda",
+        "Cijk_router",
+        "Cijk_shared_gate_up",
+        "_swiglu_oai_kernel",
+        "Cijk_shared_down",
+        "topkGating",
+        "moe_align_block_size_kernel",
+        "count_and_sort_expert_tokens_kernel",
+        "_kernel",
+        "fused_moe_kernel",
+        "_swiglu_oai_quant_kernel",
+        "fused_moe_kernel",
+        "moe_sum_kernel",
+        "vectorized_elementwise_mul",
+        "vectorized_elementwise_add",
+        "reduce_scatter_cross_device_store",
+        "local_device_load_rmsnorm_512n",
+        "Cijk_logits",
+        "ncclDevKernel_Generic",
+    ]
+    events = [
+        {
+            "name": "execute_context_0(0)_generation_16(16)",
+            "cat": "gpu_user_annotation",
+            "ph": "X",
+            "ts": 0,
+            "dur": 1000,
+        }
+    ]
+    events.extend(
+        {
+            "name": name,
+            "cat": "kernel",
+            "ph": "X",
+            "ts": 10 + index * 10,
+            "dur": 5,
+        }
+        for index, name in enumerate(kernel_names)
+    )
+    trace = _write_trace(tmp_path, events)
+
+    summary = analyze_trace(trace, expected_concurrency=16)
+
+    m3 = summary["minimax_m3"]
+    assert m3["recognized"]
+    assert m3["layer_count"] == 2
+    assert m3["dense_layer_count"] == 1
+    assert m3["sparse_moe_layer_count"] == 1
+    assert m3["phases"]["attention_qkv_projection"]["count"] == 2
+    assert m3["phases"]["moe_expert_gemm_1"]["count"] == 1
+    assert m3["phases"]["moe_expert_gemm_2"]["count"] == 1
+    assert m3["phases"]["logits_projection"]["count"] == 1
+    assert m3["phases"]["logits_all_gather"]["count"] == 1
+    assert (
+        m3["phases"]["sparse_index_score"]["top_kernels"][0]["name"]
+        == "_decode_index_score_kernel"
+    )
