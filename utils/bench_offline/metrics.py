@@ -639,11 +639,8 @@ def parse_trt_iteration_log(log_text: str) -> dict[int, dict[str, float]]:
                 match.group("device")
             ),
         }
-        previous = parsed.get(iteration)
-        if previous is not None and previous != row:
-            raise RuntimeError(
-                f"Conflicting rank-0 TRT timing rows for iter {iteration}"
-            )
+        # TRT resets iteration IDs for the measured executor pass after
+        # engine warmup. The final occurrence is therefore authoritative.
         parsed[iteration] = row
     return parsed
 
@@ -657,18 +654,11 @@ def apply_trt_host_step_timing(
     skip_rounds: int,
 ) -> dict[str, Any]:
     """Replace overlap-invalid iterLatencyMS with TRT host-step timing."""
-    measured_marker = "measured: generation start"
-    marker_index = log_text.rfind(measured_marker)
-    if marker_index < 0:
-        raise RuntimeError(
-            "Worker log is missing the measured-generation start marker"
-        )
-    measured_log = log_text[marker_index:]
     schedule = aggregate["schedule_validation"]
     first_iter = int(schedule["selected_first_iter"])
     last_iter = int(schedule["selected_last_iter"])
     iteration_ids = list(range(first_iter, last_iter + 1))
-    parsed = parse_trt_iteration_log(measured_log)
+    parsed = parse_trt_iteration_log(log_text)
     missing = [
         iteration
         for iteration in iteration_ids

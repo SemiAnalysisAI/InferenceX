@@ -7,6 +7,7 @@ from metrics import (
     apply_trt_host_step_timing,
     huawei_comparison,
     huawei_filter_round_latencies,
+    parse_trt_iteration_log,
     pr_reference_comparison,
     select_full_batch_decode_rounds,
     summarize_decode_rounds,
@@ -372,8 +373,6 @@ def test_overlap_host_step_timing_replaces_double_iter_latency():
     log_lines = [
         "[TRT-LLM] [RANK 0] iter = 2, global_rank = 0, rank = 0, "
         "host_step_time = 999.0ms, prev_device_step_time = 999.0ms",
-        "[offline-trt-worker 2026-06-14T00:00:00+00:00] "
-        "measured: generation start global_batch=64 max_output_tokens=1025",
     ]
     for index in range(2, 259):
         host = 100.0 if index < 10 else 20.0
@@ -399,6 +398,25 @@ def test_overlap_host_step_timing_replaces_double_iter_latency():
     assert updated["stats_iter_latency_diagnostic"][
         "decode_round_tpot_ms"
     ] == pytest.approx(40.0)
+
+
+def test_trt_iteration_log_uses_final_executor_pass():
+    parsed = parse_trt_iteration_log(
+        "\n".join(
+            [
+                "[TRT-LLM] [RANK 0] iter = 2, global_rank = 0, "
+                "rank = 0, host_step_time = 999.0ms, "
+                "prev_device_step_time = 999.0ms",
+                "[TRT-LLM] [RANK 0] iter = 2, global_rank = 0, "
+                "rank = 0, host_step_time = 20.0ms, "
+                "prev_device_step_time = 19.0ms",
+            ]
+        )
+    )
+    assert parsed[2] == {
+        "host_step_time_ms": 20.0,
+        "previous_device_step_time_ms": 19.0,
+    }
 
 
 def test_pr_reference_comparison_reports_decode_and_fleet_denominators():

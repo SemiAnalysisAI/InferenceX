@@ -69,7 +69,9 @@ cannot finish before 256 exact full-batch decode rounds.
 
 Do not use overlap `iterLatencyMS` as the result. The controller aligns
 selected iteration IDs with rank-0 `print_iter_log`, filters
-`host_step_time`, and stores the original stats timing only as a diagnostic.
+`host_step_time` from `offline_world_ID.log`, and stores the original stats
+timing only as a diagnostic. TRT resets iteration IDs after engine warmup, so
+the final occurrence of each selected ID is the measured executor pass.
 The result's `pr_reference` object reports:
 
 - output tok/s per decode GPU, matching InferenceX's serving denominator
@@ -169,14 +171,15 @@ too late for external ranks.
 
 Artifacts unique to GB300:
 
-- `offline_allocation_gbsN.log`
-- `offline_rank_map_gbsN.tsv`
-- `offline_topology_gbsN.log`
-- `offline_gpu_metrics_gbsN_HOST.csv` for all four hosts
-- `offline_completion_gbsN.json`
+- `offline_allocation_ID.log`
+- `offline_rank_map_ID.tsv`
+- `offline_topology_ID.log`
+- `offline_gpu_metrics_ID_HOST.csv` for every allocated host
+- `offline_completion_ID.json`
+- `offline_world_ID.log`
 
-The topology log is proof that the allocation entered one 16-GPU NVLink
-Fabric domain before the measured engine was started. The result itself
+The topology log proves that the expected profile-sized rank set entered the
+GB300 NVLink Fabric before the measured engine was started. The result itself
 records the Slurm node list, Fabric `ClusterUUID`, `CliqueId`, and artifact
 names.
 
@@ -186,6 +189,22 @@ checks, fixed-batch schedule, 256-round window, matching completion record,
 and flat renderer row. See `Final Validated GB300 Run`.
 
 ### GB300 Canary History
+
+Run `27520024692`, source
+`9d8c85b4093a7754eb87f20819ec0d7f845e15d5`, was the first copied PR-max
+TP32 run. Its GBS192 worker completed successfully on 32 ranks, selected
+iterations `3..258`, and observed `3.202474` output tokens per decode step.
+The controller failed only because TRT emitted rank-0 `print_iter_log` rows
+to the outer `srun` stream rather than `worker.log`; the remaining matrix was
+canceled before spending GPU time on the same postprocessing failure.
+
+Reconstructing the final occurrence of each selected iteration from the
+Actions log gives a provisional `23.579741 ms` round TPOT,
+`254.455724` decode steps/s/GPU, and `814.887830` output tok/s/GPU after the
+normal startup skip and upper-IQR filter (`233/255` rows retained). This is a
+plumbing validation, not an official benchmark row. The follow-up captures
+the same outer stream in `offline_world_ID.log` and requires the controller
+to publish the successful result before collection.
 
 Run `27502789238`, source
 `3ca9a9febe452918641fc842e5e425553cf035a2`, reached Slurm allocation
@@ -724,9 +743,11 @@ gh api -X POST \
 ```
 
 Normal launches stream `salloc` output, print one queue heartbeat per minute,
-and preserve `offline_allocation_ID.log`. A `PENDING` heartbeat means TRT has
-not started and the worker timeout has not begun. The matrix is sequential.
-It does not fail fast, so one copied PR profile failing does not suppress the
+and preserve `offline_allocation_ID.log`. The external `srun`/MPI stream is
+both shown live and preserved as `offline_world_ID.log`; PR-max headline
+timing is parsed from that file. A `PENDING` heartbeat means TRT has not
+started and the worker timeout has not begun. The matrix is sequential. It
+does not fail fast, so one copied PR profile failing does not suppress the
 other topology results. It runs TP32, then TP16, then TP8 so launch/config
 errors surface on the shortest copied engine before the multi-hour TP8 graph
 initialization.
@@ -1225,8 +1246,10 @@ Exact flat renderer rows, sorted by GBS for readability:
 1. Inspect `Show result headline`.
 2. Download `offline-trt-job-ID`.
 3. Read `offline_controller_ID.log`.
-4. Extract `offline_debug_ID.tar.gz`.
-5. Inspect `worker_result.json` and `worker.log`.
+4. For PR-max, read `offline_world_ID.log` and confirm the selected rank-0
+   host-step rows are present.
+5. Extract `offline_debug_ID.tar.gz`, then inspect `worker_result.json` and
+   `worker.log`.
 6. Query iteration stats:
 
    ```bash

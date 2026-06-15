@@ -50,6 +50,7 @@ from trt_config import (
 
 
 PROGRESS_INTERVAL_SECONDS = 60.0
+TIMING_LOG_VISIBILITY_TIMEOUT_SECONDS = 10.0
 WORKER_PROGRESS_PREFIX = "[offline-trt-worker "
 MPI_PROGRESS_PREFIX = "[offline-trt-mpi] "
 WORKER_FATAL_LOG_MARKERS = (
@@ -82,6 +83,46 @@ def configure_perfect_router_environment(
     else:
         environment.pop("ENABLE_PERFECT_ROUTER", None)
         environment.pop("TRTLLM_ENABLE_PERFECT_ROUTER", None)
+
+
+def apply_external_trt_timing(
+    aggregate: dict[str, Any],
+    timing_log_path: Path,
+    *,
+    global_batch_size: int,
+    num_gpus: int,
+    skip_rounds: int,
+    timeout_seconds: float = TIMING_LOG_VISIBILITY_TIMEOUT_SECONDS,
+) -> dict[str, Any]:
+    """Read the external MPI log once all selected timing rows are visible."""
+    deadline = time.monotonic() + timeout_seconds
+    last_error: BaseException | None = None
+    while True:
+        try:
+            log_text = timing_log_path.read_text(
+                encoding="utf-8",
+                errors="replace",
+            )
+            return apply_trt_host_step_timing(
+                aggregate,
+                log_text,
+                global_batch_size=global_batch_size,
+                num_gpus=num_gpus,
+                skip_rounds=skip_rounds,
+            )
+        except FileNotFoundError as error:
+            last_error = error
+        except RuntimeError as error:
+            if "missing selected host-step rows" not in str(error):
+                raise
+            last_error = error
+        if time.monotonic() >= deadline:
+            raise RuntimeError(
+                "TRT timing log did not expose every selected host-step "
+                f"row within {timeout_seconds:.1f}s: {timing_log_path}: "
+                f"{last_error}"
+            ) from last_error
+        time.sleep(0.25)
 
 
 def aggregate_progress(aggregate: dict[str, Any]) -> str:
@@ -426,6 +467,11 @@ def main() -> int:
             "topology_artifact": os.getenv(
                 "TRT_BENCH_TOPOLOGY_ARTIFACT"
             ),
+            "external_world_log_artifact": (
+                Path(os.environ["TRT_BENCH_EXTERNAL_WORLD_LOG"]).name
+                if os.getenv("TRT_BENCH_EXTERNAL_WORLD_LOG")
+                else None
+            ),
             "fabric_cluster_uuid": os.getenv(
                 "TRT_BENCH_FABRIC_CLUSTER_UUID"
             ),
@@ -749,20 +795,24 @@ def main() -> int:
 
         aggregate = worker_result["aggregate"]
         if config.overlap_scheduler:
+            timing_log_path = Path(
+                os.getenv(
+                    "TRT_BENCH_EXTERNAL_WORLD_LOG",
+                    str(worker_log),
+                )
+            )
             log_progress(
                 "parsing rank-0 TRT iteration log for overlap-safe "
-                "host-step timing"
+                f"host-step timing path={timing_log_path}"
             )
-            aggregate = apply_trt_host_step_timing(
+            aggregate = apply_external_trt_timing(
                 aggregate,
-                worker_log.read_text(
-                    encoding="utf-8",
-                    errors="replace",
-                ),
+                timing_log_path,
                 global_batch_size=args.global_batch_size,
                 num_gpus=WORLD_SIZE,
                 skip_rounds=config.latency_rounds_to_skip,
             )
+            aggregate["timing_log_file"] = timing_log_path.name
             worker_result["aggregate"] = aggregate
             write_json(worker_output, worker_result)
         base_result.update(

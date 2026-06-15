@@ -144,6 +144,10 @@ Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generat
 
 - No new directories in `/workspace` during a benchmark (files are fine).
 - **Never delete or modify whitespace in `perf-changelog.yaml`** - CI depends on exact whitespace (including trailing spaces on blank separator lines). Altering it breaks CI.
+- Branch-local GB300 offline TRT overlap timing comes from
+  `offline_world_ID.log`, not `worker.log`. TRT resets iteration IDs after
+  engine warmup; use the final rank-0 `print_iter_log` occurrence for each
+  selected measured iteration.
 
 ## Fetching GitHub Actions Benchmark Results
 

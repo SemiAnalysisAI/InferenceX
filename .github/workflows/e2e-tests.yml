@@ -212,6 +212,7 @@ jobs:
           rm -f "$TRT_BENCH_WORKSPACE"/offline_topology_*.log
           rm -f "$TRT_BENCH_WORKSPACE"/offline_allocation_*.log
           rm -f "$TRT_BENCH_WORKSPACE"/offline_completion_*.json
+          rm -f "$TRT_BENCH_WORKSPACE"/offline_world_*.log
           rm -f "$TRT_BENCH_WORKSPACE"/offline_debug_*.tar.gz
           rm -rf "$TRT_BENCH_WORKSPACE"/.offline_work_*
 
@@ -288,6 +289,7 @@ jobs:
             ${{ env.TRT_BENCH_WORKSPACE }}/offline_topology_${{ matrix.id }}.log
             ${{ env.TRT_BENCH_WORKSPACE }}/offline_allocation_${{ matrix.id }}.log
             ${{ env.TRT_BENCH_WORKSPACE }}/offline_completion_${{ matrix.id }}.json
+            ${{ env.TRT_BENCH_WORKSPACE }}/offline_world_${{ matrix.id }}.log
             ${{ env.TRT_BENCH_WORKSPACE }}/offline_debug_${{ matrix.id }}.tar.gz
           if-no-files-found: warn
           retention-days: 14
