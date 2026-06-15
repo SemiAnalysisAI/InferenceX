@@ -3846,5 +3846,5 @@
 - config-keys:
     - minimaxm3arf-fp8-mi325x-vllm
   description:
-    - "[DO NOT MERGE — experimental] MiniMax-M3 MXFP8 MI325X (gfx942) smoke test (conc 4, 8; TP8) validating vllm-project/vllm#45639 (AITER fused all-reduce + Gemma-RMSNorm for M3): applies the PR diff in-place to the shipped minimax-m3 image before serving (BF16 KV on gfx942), then enables it via VLLM_ROCM_USE_AITER=1 + --compilation-config (custom_ops -minimax_gemma_rms_norm, pass_config.fuse_allreduce_rms). Hard-fails if the patch neither applies cleanly nor is already applied (image drifted)"
+    - "[DO NOT MERGE — experimental] MiniMax-M3 MXFP8 MI325X (gfx942) smoke test (perf at conc 4, 8 TP8 1k1k; plus an 8k1k conc-16 row so the eval policy marks an lm-eval, and VLLM_LOGGING_LEVEL=DEBUG + a fusion-pass verdict grep) validating vllm-project/vllm#45639 (AITER fused all-reduce + Gemma-RMSNorm for M3): applies the PR diff in-place to the shipped minimax-m3 image before serving (BF16 KV on gfx942), then enables it via VLLM_ROCM_USE_AITER=1 + --compilation-config (custom_ops -minimax_gemma_rms_norm, pass_config.fuse_allreduce_rms). Hard-fails if the patch neither applies cleanly nor is already applied (image drifted)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1772

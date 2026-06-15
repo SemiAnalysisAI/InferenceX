@@ -2987,3 +2987,10 @@ minimaxm3arf-fp8-mi325x-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-list: [ 4, 8 ] }
+    # 8k1k conc-16 row exists solely so the eval policy (8k1k + conc >= 16) marks
+    # an lm-eval entry — validates #45639 fused-kernel correctness. (Evals can't
+    # run at the conc 4/8 perf points; MIN_EVAL_CONC=16.)
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-list: [ 16 ] }
