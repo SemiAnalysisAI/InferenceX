@@ -5,16 +5,16 @@ benchmark.
 
 - This branch is disposable and must remain isolated from the normal serving
   sweep. Never edit `nvidia-master.yaml` or `perf-changelog.yaml`.
-- The benchmark has one measurement contract and two hardware profiles:
-  validated B300 DEP8 and current GB300 NVL16 DEP16. Both use DeepSeek-V4 Pro,
-  exact global batches `16`, `64`, and `128`, 8192 input tokens, MTP3, two
-  warmup decode rounds, and 256 measured decode rounds.
-- `global_batch_size` is authoritative. TRT `max_batch_size` and CUDA graph
-  size are exactly `global_batch_size / active_gpu_count`; `max_num_tokens`
-  is exactly `local_batch_size * 8192` so every local prompt can prefill
-  together.
+- There are two isolated contracts. `huawei` is the validated B300/GB300
+  fixed-GBS comparison. The three `pr-*` profiles copy PR #1689's GB300
+  decode recipes for maximum offline decode saturation.
+- `global_batch_size` is authoritative. In `huawei`, `max_num_tokens` is
+  `local_batch_size * 8192` and prefill must be one exact iteration. In
+  PR-max, fixed GBS is the copied decode capacity and
+  `max_num_tokens=32768` permits staged local prefill before the exact
+  full-batch decode window.
 
-## GB300 Profile
+## Huawei GB300 Profile
 
 - Select with `TRT_BENCH_HARDWARE_PROFILE=gb300`. It is four physical nodes,
   four GPUs/tasks per node, and one external 16-rank
@@ -61,9 +61,8 @@ benchmark.
   canceling the allocation so external MPI management ranks cannot hold the
   job until its Slurm time limit.
 - The dispatchable workflow is `.github/workflows/e2e-tests.yml` with
-  `inputs[hardware-profile]=gb300`; matrix concurrency is intentionally one
-  because every row consumes 16 GPUs. It is fail-fast so a broken smaller
-  shape does not consume the later rack allocations.
+  `inputs[hardware-profile]=gb300` and
+  `inputs[benchmark-profile]=huawei`; matrix concurrency is intentionally one.
 - Keep the self-hosted checkout isolated under
   `${GITHUB_WORKSPACE}/offline-bench` and use `TRT_BENCH_WORKSPACE` for
   source, output, mounts, and artifacts. Do not clean the runner's repository
@@ -89,6 +88,43 @@ benchmark.
   failure. Do not restore plain text append: run `27511242827` produced 12
   corrupted records from concurrent writes. Host-side progress must inspect
   the `${GITHUB_WORKSPACE}` path, not the container-only `/workspace` alias.
+
+## PR-Max GB300 Profiles
+
+- Select `TRT_BENCH_CONFIG_PROFILE=pr-tp32-mtp3`,
+  `pr-tp16-mtp3`, or `pr-tp8-mtp1`. Workflow alias `pr-max-sweep` runs all
+  three sequentially and does not fail fast.
+- Run both PR-active and capacity points: TP32 GBS192/256 (local6/8),
+  TP16 GBS400/512 (local25/32), and TP8 GBS3440/4096 (local430/512).
+  Engine `max_batch_size` remains 8/32/512 and the full copied graph list is
+  preserved at both points.
+- Preserve each PR recipe's full CUDA graph list, KV fraction, EPLB map,
+  overlap scheduler, `print_iter_log`, PDL, LM-head TP, attention DP,
+  `MEGAMOE_DEEPGEMM`, and low-precision combine.
+- Preserve the learned model router and omit `attention_dp_config`, matching
+  the resolved PR engines. Never enable either perfect-router alias in a
+  `pr-*` profile.
+- Do not add heuristic sparse attention. The resolved PR decode configs have
+  no `sparse_attention_config`.
+- PR decode-only `max_num_tokens` is 32/128/1024 because those workers receive
+  transferred KV. Direct offline prefill uses the explicit 32768-token
+  adaptation. Every result must record both values.
+- PR-max skips the separate request warmup. Engine graph warmup runs during
+  initialization. The measured request pass permits staged/mixed setup, then
+  requires 256 consecutive exact full-batch decode iterations and discards
+  the first eight.
+- Under overlap, `iterLatencyMS` is diagnostic only. The controller must use
+  rank-0 TRT `host_step_time` for the selected IDs. Never publish overlap
+  `iterLatencyMS` as PR-max TPOT.
+- The PR disables iteration perf stats. Offline PR-max intentionally enables
+  a bounded 2048-row history only for exact-window proof and MTP yield; this
+  instrumentation must not become the headline timing source.
+- Within the selected window, context is zero and active, scheduled, and
+  generation counts equal the exact local batch with no queued or paused
+  requests.
+- Dispatch with `inputs[benchmark-profile]=pr-max-sweep` and
+  `inputs[global_batch_sizes]=auto`. Experiment IDs include profile and GBS,
+  for example `pr-tp8-mtp1-gbs4096`.
 
 ## B300 Baseline Constraints
 
@@ -143,29 +179,27 @@ benchmark.
 - Keep the request barrier disarmed throughout `LLM` construction. TRT's
   GBS128 KV-capacity calibration submits 120 internal dummy requests, which
   must pass through normally. The parent atomically creates the shared arm
-  file only after initialization returns and before the first real warmup
+  file only after initialization returns and before the first real benchmark
   `generate()` call. Do not arm at MPI entry or weaken the post-arm gate.
-- A successful result must prove one full-local-batch prefill iteration,
-  followed by decode at the same exact local batch for 256 consecutive
-  iterations, with no queued or paused requests. Never weaken this validation
-  to make a run pass.
+- Huawei success proves one full-local-batch prefill followed by 256 exact
+  decode iterations. PR-max success permits setup prefill staging but proves
+  the same 256-iteration exact decode window. Never weaken either proof.
 - Keep `max_stats_len=2048`. It bounds the stats history while covering the
   zero-acceptance worst case of 1024 decode iterations.
-- Timing uses TRT `iterLatencyMS` with overlap scheduling disabled. It covers
-  a complete TRT executor iteration, while Huawei sums internal main/MTP CANN
-  timing regions. Match Huawei's aggregation: skip the first measured round,
-  calculate the 25th/75th percentiles, and discard only values above
-  `Q3 + 1.5 * IQR`.
+- Huawei timing uses TRT `iterLatencyMS` with overlap disabled and skips one
+  round. PR-max timing uses rank-0 `host_step_time` with overlap enabled and
+  skips eight. Both discard only values above `Q3 + 1.5 * IQR`.
 - The headline metric is raw decode-round throughput:
   `GBS / decode_round_TPOT / active_gpu_count`. MTP output yield and
   acceptance are separate.
-- The 1025-token measured output cap guarantees at least 256 MTP3 decode
-  iterations even if every round emits four tokens. Only the first 256 valid
-  full-batch rounds are measured.
-- Preserve perfect routing, exact 8192-token real prompts, temperature 1,
-  engine-global seed 42, LM-head TP, heuristic sparse top-k, and rank
-  environment validation. ConfigurableMoE remains enabled on both profiles;
-  it is required by the GB300 `MEGAMOE_DEEPGEMM` path.
+- Huawei uses a 1025-token cap. PR-max computes a profile-specific cap that
+  keeps the earliest requests alive through staged setup and 256 full-batch
+  rounds without exceeding `max_seq_len=9256`.
+- Preserve exact 8192-token real prompts, temperature 1, engine-global seed
+  42, LM-head TP, and rank environment validation. Huawei uses perfect
+  routing; PR-max uses the learned router. Heuristic sparse top-k belongs only
+  to Huawei. ConfigurableMoE remains enabled where required by the GB300
+  `MEGAMOE_DEEPGEMM` path.
 - Do not enable `TLLM_METRICS_ALL_RANKS`; its per-iteration collective changes
   the timing path. Rank 0 stats are valid only after exact equal-length prompt
   routing and full-local-batch validation.

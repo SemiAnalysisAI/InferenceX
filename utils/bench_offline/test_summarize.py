@@ -24,6 +24,7 @@ def successful_result(global_batch_size=64, hardware_profile="b300"):
             "active_gpu_count": active_gpu_count,
             "hardware": hardware,
             "hardware_profile": hardware_profile,
+            "benchmark_profile": "huawei",
             "renderer_hw": (
                 "gb300-nv" if is_gb300 else hardware_profile
             ),
@@ -55,9 +56,11 @@ def successful_result(global_batch_size=64, hardware_profile="b300"):
             "measured_decode_rounds": 256,
             "effective_acceptance_rate": 0.5,
             "token_yield_source": "iteration_spec_decoding_stats",
+            "timing_source": "iter_latency_ms",
             "filter": {
                 "retained_rounds": 254,
                 "outlier_rounds": 1,
+                "rounds_skipped": 1,
             },
             "mean_ttft_ms": 5000.0,
             "median_ttft_ms": 4900.0,
@@ -166,3 +169,69 @@ def test_gb300_summary_uses_sixteen_gpu_formula():
     assert "GBS / decode_round_TPOT / 16" in rendered
     assert "16 GB300 NVL16 GPUs" in rendered
     assert "GB300/Huawei step" in rendered
+
+
+def test_pr_max_summary_uses_decode_and_reference_denominators():
+    result = successful_result(
+        global_batch_size=4096,
+        hardware_profile="gb300",
+    )
+    result["benchmark"].update(
+        {
+            "experiment_id": "pr-tp8-mtp1-gbs4096",
+            "benchmark_profile": "pr-tp8-mtp1",
+            "hardware": "GB300 NVL8",
+            "active_gpu_count": 8,
+            "local_batch_size": 512,
+            "physical_nodes": 2,
+            "effective_parallelism": "DEP8",
+            "generated_output_tokens": 1024,
+        }
+    )
+    result["config"].update(
+        {
+            "active_gpu_count": 8,
+            "tensor_parallel_size": 8,
+            "moe_expert_parallel_size": 8,
+        }
+    )
+    result["aggregate"].update(
+        {
+            "local_batch_size": 512,
+            "output_tput_per_gpu": 10000.0,
+            "timing_source": "trt_print_iter_log_host_step_time",
+            "filter": {
+                "retained_rounds": 248,
+                "outlier_rounds": 0,
+                "rounds_skipped": 8,
+            },
+        }
+    )
+    result.pop("huawei")
+    result["pr_reference"] = {
+        "reference_concurrency": 4301,
+        "reference_active_global_batch": 3440,
+        "reference_prefill_gpu_count": 48,
+        "reference_decode_gpu_count": 8,
+        "reference_total_gpu_count": 56,
+        "reference_output_tput_per_decode_gpu": 9686.735,
+        "reference_output_tput_per_total_gpu": 1383.8193,
+        "measured_output_tput_per_reference_total_gpu": 1428.571,
+        "offline_to_reference_decode_gpu_ratio": 1.03234,
+        "offline_to_reference_total_gpu_ratio": 1.03234,
+        "reference_recipe_url": "https://example.test/recipe.yaml",
+    }
+
+    row = result_row("pr-tp8-mtp1-gbs4096", None, result)
+    rendered = markdown([row])
+    assert "PR-Config Offline Decode Saturation" in rendered
+    assert "| pr-tp8-mtp1 | 4096 | 512 | 8 | success |" in rendered
+    assert "full-batch decode iterations under overlap scheduling" in rendered
+    assert "PR-fleet-normalized" in rendered
+
+    flat = renderer_row(result)
+    assert flat is not None
+    assert flat["benchmark_profile"] == "pr-tp8-mtp1"
+    assert flat["pr_reference_concurrency"] == 4301
+    assert flat["pr_reference_active_global_batch"] == 3440
+    assert flat["pr_offline_to_reference_decode_gpu_ratio"] == 1.03234

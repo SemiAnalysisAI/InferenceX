@@ -22,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--marker-file", type=Path, required=True)
     parser.add_argument("--cute-cache-dir", type=Path, required=True)
     parser.add_argument("--hardware-profile", required=True)
+    parser.add_argument("--config-profile", required=True)
     parser.add_argument(
         "--format",
         choices=("json", "nul"),
@@ -40,7 +41,10 @@ def write_nul_record(*fields: str) -> None:
 
 def main() -> int:
     args = parse_args()
-    profile = hardware_profile(args.hardware_profile)
+    profile = hardware_profile(
+        args.hardware_profile,
+        args.config_profile,
+    )
     environment = external_mpi_rank_environment(
         args.global_batch_size,
         args.fixed_batch_arm_file,

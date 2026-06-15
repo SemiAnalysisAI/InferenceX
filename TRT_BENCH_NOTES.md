@@ -5,23 +5,79 @@ These are operational notes for running and debugging `trt-bench`.
 ## Current Contract
 
 - Branch-only; never merge to `main`.
-- DeepSeek-V4 Pro FP4 with `b300` and `gb300` hardware profiles.
-- Exact GBS `16`, `64`, `128`.
 - Exact 8192-token prompts.
-- MTP3, temperature 1, engine-global seed 42, EOS ignored.
-- Perfect router, LM-head TP, and heuristic sparse top-k.
-- Overlap scheduler disabled.
-- Two warmup decode rounds.
 - 256 measured full-batch decode rounds.
-- First measured round skipped and upper-IQR outliers removed.
 - Headline throughput is
   `GBS / decode-round TPOT / active_gpu_count`.
 - MTP yield is separate.
+
+Two benchmark-profile families share that outer contract:
+
+- `huawei`: B300 DEP8 or GB300 DEP16, GBS16/64/128, MTP3, one exact
+  full-batch prefill, non-overlap `iterLatencyMS`, two request-warmup rounds,
+  one measured round skipped, and heuristic sparse top-k.
+- PR-max: GB300 profiles `pr-tp32-mtp3`, `pr-tp16-mtp3`, and
+  `pr-tp8-mtp1`; PR-active/capacity GBS pairs 192/256, 400/512, and
+  3440/4096; overlap scheduler; staged prefill setup; no separate request
+  warmup; rank-0 TRT `host_step_time`; eight measured rounds skipped; no
+  sparse-attention config; learned model router; default
+  `attention_dp_config=None`.
 
 The validated baselines are B300 DEP8 at TRT `c185066` and GB300 NVL16
 DEP16 using the DeepSeek-V4 development image from InferenceX PR #1689.
 The final GB300 sweep is Actions run `27517035480` at
 `c0a845521b51e5fb5eca5f9bb4ac2e3a6c60b43d`.
+
+## PR #1689 Max-Throughput Profiles
+
+Source:
+
+```text
+PR: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/13
+srt-slurm branch: sa-submission-q2-2026
+image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
+```
+
+| Profile | Decode topology | Nodes | Offline GBS/local (active, capacity) | MTP | KV | PR output/decode-GPU | PR output/all-GPU |
+|---|---|---:|---:|---:|---:|---:|---:|
+| `pr-tp32-mtp3` | TP32/EP32 | 8 | 192/6, 256/8 | 3 | 0.70 | 676.763 | 451.175 |
+| `pr-tp16-mtp3` | TP16/EP16 | 4 | 400/25, 512/32 | 3 | 0.70 | 2072.1585 | 828.8634 |
+| `pr-tp8-mtp1` | TP8/EP8 | 2 | 3440/430, 4096/512 | 1 | 0.80 | 9686.735 | 1383.8193 |
+
+The launcher dynamically allocates 32, 16, or 8 decode GPUs and downloads the
+matching EP32, EP16, or EP8 384-slot EPLB map. The CUDA graph lists are copied
+exactly from the recipes. Attempt 13's output throughput times mean TPOT gives
+active decode populations 189.65, 401.41, and 3437.66; the first point in
+each pair is the nearest rank-divisible fixed batch. The second is the copied
+engine capacity.
+
+The exact PR engine logs show `attention_dp_config=None`,
+`disable_overlap_scheduler=False`, `return_perf_metrics=False`, and
+`enable_iter_perf_stats=False`. PR-max preserves the first three and uses the
+learned model router, as the recipes do. It enables
+`enable_iter_perf_stats=True` with `max_stats_len=2048` only to prove the
+offline fixed-batch window and derive MTP yield. Timing still comes from
+rank-0 `host_step_time`.
+
+PR decode workers receive KV from dedicated prefill workers, so their
+`max_num_tokens` values are 32, 128, and 1024. The monolithic offline worker
+must admit 8192-token prompts itself. It records those reference values but
+uses `max_num_tokens=32768`, which takes 2, 8, or 128 conservative setup
+iterations. The output cap is extended when needed so the earliest request
+cannot finish before 256 exact full-batch decode rounds.
+
+Do not use overlap `iterLatencyMS` as the result. The controller aligns
+selected iteration IDs with rank-0 `print_iter_log`, filters
+`host_step_time`, and stores the original stats timing only as a diagnostic.
+The result's `pr_reference` object reports:
+
+- output tok/s per decode GPU, matching InferenceX's serving denominator
+- output tok/s normalized by the PR's decode plus prefill GPUs
+- ratios to attempt 13 under both denominators
+
+The total-fleet number is a comparison normalization. The offline allocation
+contains only the decode GPUs and performs prefill on them before timing.
 
 ## GB300 NVL16 Implementation
 
@@ -582,7 +638,7 @@ the first two valid warmup rounds are required.
 
 ## Dispatch
 
-GB300 full sweep:
+GB300 PR-max sweep:
 
 ```bash
 BENCH_REF="$(git rev-parse HEAD)"
@@ -591,6 +647,35 @@ gh api -X POST \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
   -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=pr-max-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 TRT PR max offline' \
+  -f 'inputs[global_batch_sizes]=auto' \
+  -f 'inputs[salloc-time]=300' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
+
+Single PR profile: replace `pr-max-sweep` with `pr-tp32-mtp3`,
+`pr-tp16-mtp3`, or `pr-tp8-mtp1`. Keep
+`inputs[global_batch_sizes]=auto`.
+
+Attempt 13's final copied jobs took about 38 minutes for TP32, 80 minutes for
+TP16, and 216 minutes for TP8. The TP8 cost is dominated by initializing the
+complete CUDA graph list through batch 512, so reducing the benchmark to one
+request pass does not remove it. Keep the PR-max 300-minute Slurm limit,
+18000-second worker timeout, and 420-minute Actions job timeout unless a later
+run proves a tighter bound.
+
+GB300 Huawei full sweep:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=huawei' \
   -f 'inputs[test-name]=DSV4 GB300 TRT Huawei fixed GBS' \
   -f 'inputs[global_batch_sizes]=16,64,128' \
   -f 'inputs[salloc-time]=180' \
@@ -607,6 +692,7 @@ gh api -X POST \
   -f ref='trt-bench' \
   -f "inputs[ref]=$BENCH_REF" \
   -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=huawei' \
   -f 'inputs[test-name]=DSV4 GB300 TRT fixed GBS16 canary' \
   -f 'inputs[global_batch_sizes]=16' \
   -f 'inputs[salloc-time]=120' \
@@ -638,10 +724,12 @@ gh api -X POST \
 ```
 
 Normal launches stream `salloc` output, print one queue heartbeat per minute,
-and preserve `offline_allocation_gbsN.log`. A `PENDING` heartbeat means TRT
-has not started and the worker timeout has not begun. The GBS matrix is
-sequential and fail-fast: a failed smaller row prevents later rack
-allocations.
+and preserve `offline_allocation_ID.log`. A `PENDING` heartbeat means TRT has
+not started and the worker timeout has not begun. The matrix is sequential.
+It does not fail fast, so one copied PR profile failing does not suppress the
+other topology results. It runs TP32, then TP16, then TP8 so launch/config
+errors surface on the shortest copied engine before the multi-hour TP8 graph
+initialization.
 
 For an initialization hang, let the controller time out so the container
 finalizer preserves `worker.log`; do not cancel the Actions run externally.
@@ -658,13 +746,18 @@ The normal benchmark default is `-1`, which disables stack dumps.
 
 Authoritative offline row:
 
-- `decode_round_tpot_ms`: filtered full-batch TRT iteration latency
-- `decode_step_tput_per_gpu`: direct Huawei-comparable rate
+- `decode_round_tpot_ms`: filtered full-batch timing from `timing_source`
+- `timing_source`: Huawei `iter_latency_ms` or PR-max
+  `trt_print_iter_log_host_step_time`
+- `decode_step_tput_per_gpu`: full-batch step rate per active decode GPU
 - `observed_tokens_per_step`: MTP output multiplier
 - `output_tput_per_gpu`: step rate times output multiplier
 - `wall_output_tput_per_gpu`: whole generation diagnostic
 - `filter`: first-round skip and retained/outlier counts
 - `schedule_validation`: exact selected iteration and local-batch proof
+- `stats_iter_latency_diagnostic`: overlap iteration timing retained only for
+  PR-max diagnosis
+- `pr_reference`: attempt-13 reference values and decode/fleet ratios
 
 Flat renderer row:
 
@@ -676,6 +769,8 @@ Flat renderer row:
   workload proof
 - `conc`: renderer compatibility alias for `global_batch_size`; it is not
   HTTP serving concurrency and did not control scheduling
+- `benchmark_profile` and `timing_source`: required to distinguish Huawei
+  rows from PR-max rows
 
 Do not put the custom aggregate wrapper in `results_bmk`; the unofficial-run
 API expects every JSON object there to be a flat benchmark row.
@@ -1128,9 +1223,9 @@ Exact flat renderer rows, sorted by GBS for readability:
 ## Debug Checklist
 
 1. Inspect `Show result headline`.
-2. Download `offline-trt-job-gbsN`.
-3. Read `offline_controller_gbsN.log`.
-4. Extract `offline_debug_gbsN.tar.gz`.
+2. Download `offline-trt-job-ID`.
+3. Read `offline_controller_ID.log`.
+4. Extract `offline_debug_ID.tar.gz`.
 5. Inspect `worker_result.json` and `worker.log`.
 6. Query iteration stats:
 
@@ -1149,13 +1244,19 @@ Exact flat renderer rows, sorted by GBS for readability:
    ' measured_iteration_stats.json | head -40
    ```
 
-7. Confirm rank markers are exactly `0..7` on B300 or `0..15` on GB300.
-8. On GB300, inspect `offline_rank_map_gbsN.tsv` and
-   `offline_topology_gbsN.log` before debugging TRT. A rank-placement or
-   fabric failure is infrastructure, not a benchmark result.
-9. On B300 GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for
+7. Confirm rank markers are exactly `0..world_size-1`.
+8. On GB300, inspect `offline_rank_map_ID.tsv` and
+   `offline_topology_ID.log` before debugging TRT. PR-max expects 8, 16, or
+   32 ranks according to profile. A rank-placement or fabric failure is
+   infrastructure, not a benchmark result.
+9. For PR-max, require
+   `timing_source=trt_print_iter_log_host_step_time`, inspect setup counts,
+   and verify the selected range is 256 consecutive full-batch rows. Also
+   require `perfect_router.enabled=false`, no perfect-router alias on any
+   rank, and `resolved_parallelism.attention_dp_configured=false`.
+10. On B300 GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for
    131072 rows, two 65536-row chunks, and synchronized chunks.
-10. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
+11. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
    idle prefill gaps, or a hung rank.
 
 Do not weaken the fixed-batch gate. Infrastructure errors may be retried on a

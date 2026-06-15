@@ -13,6 +13,7 @@ source /workspace/benchmarks/benchmark_lib.sh
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-7200}"
 BENCH_ID="${BENCH_ID:-gbs${GLOBAL_BATCH_SIZE}}"
 TRT_BENCH_HARDWARE_PROFILE="${TRT_BENCH_HARDWARE_PROFILE:-b300}"
+TRT_BENCH_CONFIG_PROFILE="${TRT_BENCH_CONFIG_PROFILE:-huawei}"
 TRT_BENCH_EXTERNAL_MPI="${TRT_BENCH_EXTERNAL_MPI:-0}"
 TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
@@ -78,7 +79,8 @@ finalize() {
             "$GLOBAL_BATCH_SIZE" \
             "$rc" \
             "$BENCH_ID" \
-            "$TRT_BENCH_HARDWARE_PROFILE" <<'PY'
+            "$TRT_BENCH_HARDWARE_PROFILE" \
+            "$TRT_BENCH_CONFIG_PROFILE" <<'PY'
 import json
 import sys
 
@@ -88,9 +90,20 @@ import sys
     return_code,
     experiment_id,
     hardware_profile,
+    benchmark_profile,
 ) = sys.argv[1:]
-world_size = 16 if hardware_profile == "gb300" else 8
-hardware = "GB300 NVL16" if hardware_profile == "gb300" else "B300"
+world_sizes = {
+    "huawei": 16 if hardware_profile == "gb300" else 8,
+    "pr-tp32-mtp3": 32,
+    "pr-tp16-mtp3": 16,
+    "pr-tp8-mtp1": 8,
+}
+world_size = world_sizes.get(benchmark_profile, 0)
+hardware = (
+    f"GB300 NVL{world_size}"
+    if hardware_profile == "gb300"
+    else "B300"
+)
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
@@ -102,6 +115,7 @@ with open(path, "w", encoding="utf-8") as stream:
                 "experiment_id": experiment_id,
                 "hardware": hardware,
                 "hardware_profile": hardware_profile,
+                "benchmark_profile": benchmark_profile,
                 "active_gpu_count": world_size,
             },
             "error": "Container benchmark exited before result.json was written",
@@ -184,8 +198,13 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
 export TRTLLM_MHC_ENABLE_FUSED_HC=1
-export ENABLE_PERFECT_ROUTER=1
-export TRTLLM_ENABLE_PERFECT_ROUTER=1
+if [[ "$TRT_BENCH_CONFIG_PROFILE" == "huawei" ]]; then
+    export ENABLE_PERFECT_ROUTER=1
+    export TRTLLM_ENABLE_PERFECT_ROUTER=1
+else
+    unset ENABLE_PERFECT_ROUTER
+    unset TRTLLM_ENABLE_PERFECT_ROUTER
+fi
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX=/tmp/inferencex-offline-pycache
 export PYTHONPATH="/workspace/utils/bench_offline:${PYTHONPATH:-}"
@@ -195,7 +214,7 @@ export CUTE_DSL_CACHE_DIR="$TRT_BENCH_CACHE_ROOT/cute-dsl"
 export TRTLLM_BENCH_CUTE_DSL_CACHE_DIR="$CUTE_DSL_CACHE_DIR"
 mkdir -p "$CUTE_DSL_CACHE_DIR"
 
-log "benchmark start hardware_profile=$TRT_BENCH_HARDWARE_PROFILE global_batch=$GLOBAL_BATCH_SIZE model=$MODEL_PATH"
+log "benchmark start hardware_profile=$TRT_BENCH_HARDWARE_PROFILE config_profile=$TRT_BENCH_CONFIG_PROFILE global_batch=$GLOBAL_BATCH_SIZE model=$MODEL_PATH"
 log "benchmark id=$BENCH_ID execution=fixed-global-batch"
 log "dataset revision=$DATASET_REVISION path=$DATASET_PATH"
 log "allocation job=$ALLOCATION_JOB_ID node=$ALLOCATION_NODE nodes=${TRT_BENCH_SLURM_NODELIST:-$ALLOCATION_NODE}"

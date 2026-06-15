@@ -6,6 +6,7 @@ set -Eeuo pipefail
 : "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE is required}"
 : "${RUNNER_NAME:?RUNNER_NAME is required}"
 
+TRT_BENCH_CONFIG_PROFILE="${TRT_BENCH_CONFIG_PROFILE:-huawei}"
 TRT_BENCH_WORKSPACE="${TRT_BENCH_WORKSPACE:-$GITHUB_WORKSPACE}"
 IMAGE="${IMAGE:-nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1}"
 MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
@@ -16,21 +17,51 @@ DATASET_ROOT="${DATASET_ROOT:-${SHARED_ROOT}/datasets/InfiniteBench/${DATASET_RE
 DATASET_PATH="${DATASET_ROOT}/${DATASET_FILE}"
 TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-${SHARED_ROOT}/cache/dsv4-1.3.0-deepseek-v4-dev.1-sm100a}"
 LOAD_BALANCER_ROOT="${LOAD_BALANCER_ROOT:-${SHARED_ROOT}/configs/dsv4-eplb}"
-LOAD_BALANCER_FILE="moe_load_balancer_gen_ep16_slots384.yaml"
+case "$TRT_BENCH_CONFIG_PROFILE" in
+    huawei)
+        PHYSICAL_NODES=4
+        WORLD_SIZE=16
+        EFFECTIVE_PARALLELISM=DEP16
+        LOAD_BALANCER_FILE="moe_load_balancer_gen_ep16_slots384.yaml"
+        LOAD_BALANCER_SHA256="278da78f94be418d189015b18625ba2dbdfe03ee4be09e1a685f0e93708f681b"
+        ;;
+    pr-tp32-mtp3)
+        PHYSICAL_NODES=8
+        WORLD_SIZE=32
+        EFFECTIVE_PARALLELISM=DEP32
+        LOAD_BALANCER_FILE="moe_load_balancer_gen_ep32_slots384.yaml"
+        LOAD_BALANCER_SHA256="e1eae3fa733ad29d7a7f637fffaa4534a2825ce02a23bb83f445dffd5d88d212"
+        ;;
+    pr-tp16-mtp3)
+        PHYSICAL_NODES=4
+        WORLD_SIZE=16
+        EFFECTIVE_PARALLELISM=DEP16
+        LOAD_BALANCER_FILE="moe_load_balancer_gen_ep16_slots384.yaml"
+        LOAD_BALANCER_SHA256="278da78f94be418d189015b18625ba2dbdfe03ee4be09e1a685f0e93708f681b"
+        ;;
+    pr-tp8-mtp1)
+        PHYSICAL_NODES=2
+        WORLD_SIZE=8
+        EFFECTIVE_PARALLELISM=DEP8
+        LOAD_BALANCER_FILE="moe_load_balancer_gen_ep8_slots384.yaml"
+        LOAD_BALANCER_SHA256="279558557f3983ebd957d7c5578ce0d61c05f6ab72cda28fb31f0d1c2ef734b5"
+        ;;
+    *)
+        echo "Unsupported TRT_BENCH_CONFIG_PROFILE: $TRT_BENCH_CONFIG_PROFILE" >&2
+        exit 1
+        ;;
+esac
 LOAD_BALANCER_PATH="${LOAD_BALANCER_ROOT}/${LOAD_BALANCER_FILE}"
 LOAD_BALANCER_URL="https://raw.githubusercontent.com/NVIDIA/srt-slurm/sa-submission-q2-2026/configs/dsv4-moe-load-balancer-configs/${LOAD_BALANCER_FILE}"
-LOAD_BALANCER_SHA256="278da78f94be418d189015b18625ba2dbdfe03ee4be09e1a685f0e93708f681b"
 SQUASH_ROOT="${SQUASH_ROOT:-/data/home/sa-shared/gharunners/squash}"
 SQUASH_FILE="${SQUASH_ROOT}/$(printf '%s' "$IMAGE" | sed 's|[/:@#]|_|g').sqsh"
 SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-180}"
 WORKER_TIMEOUT="${WORKER_TIMEOUT:-7200}"
 COMPLETION_VISIBILITY_TIMEOUT="${TRT_BENCH_COMPLETION_VISIBILITY_TIMEOUT:-120}"
-BENCH_ID="${BENCH_ID:-gbs${GLOBAL_BATCH_SIZE}}"
+BENCH_ID="${BENCH_ID:-${TRT_BENCH_CONFIG_PROFILE}-gbs${GLOBAL_BATCH_SIZE}}"
 SLURM_PARTITION="${SLURM_PARTITION:-batch_1}"
 SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
-PHYSICAL_NODES=4
 GPUS_PER_NODE=4
-WORLD_SIZE=16
 BENCH_GIT_REVISION="$(
     git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD
 )"
@@ -107,11 +138,24 @@ write_host_failure() {
         "$RESULT_FILE" \
         "$GLOBAL_BATCH_SIZE" \
         "$return_code" \
-        "$BENCH_ID" <<'PY'
+        "$BENCH_ID" \
+        "$TRT_BENCH_CONFIG_PROFILE" \
+        "$WORLD_SIZE" \
+        "$PHYSICAL_NODES" \
+        "$EFFECTIVE_PARALLELISM" <<'PY'
 import json
 import sys
 
-path, global_batch_size, return_code, experiment_id = sys.argv[1:]
+(
+    path,
+    global_batch_size,
+    return_code,
+    experiment_id,
+    benchmark_profile,
+    world_size,
+    physical_nodes,
+    effective_parallelism,
+) = sys.argv[1:]
 with open(path, "w", encoding="utf-8") as stream:
     json.dump(
         {
@@ -121,15 +165,16 @@ with open(path, "w", encoding="utf-8") as stream:
                 "global_batch_size": int(global_batch_size),
                 "concurrency": int(global_batch_size),
                 "experiment_id": experiment_id,
-                "hardware": "GB300 NVL16",
+                "hardware": f"GB300 NVL{world_size}",
                 "hardware_profile": "gb300",
+                "benchmark_profile": benchmark_profile,
                 "renderer_hw": "gb300-nv",
-                "world_size": 16,
-                "active_gpu_count": 16,
-                "physical_nodes": 4,
+                "world_size": int(world_size),
+                "active_gpu_count": int(world_size),
+                "physical_nodes": int(physical_nodes),
                 "gpus_per_node": 4,
                 "is_multinode": True,
-                "effective_parallelism": "DEP16",
+                "effective_parallelism": effective_parallelism,
             },
             "error": "GB300 host launcher exited before the container wrote a result",
             "return_code": int(return_code),
@@ -238,6 +283,16 @@ BASH
 }
 
 mkdir -p "$DATASET_ROOT" "$TRT_BENCH_CACHE_ROOT/cute-dsl"
+PYTHONPATH="$TRT_BENCH_WORKSPACE/utils/bench_offline" \
+TRT_BENCH_HARDWARE_PROFILE=gb300 \
+TRT_BENCH_CONFIG_PROFILE="$TRT_BENCH_CONFIG_PROFILE" \
+python3 - "$GLOBAL_BATCH_SIZE" <<'PY'
+import sys
+
+from trt_config import validate_global_batch_size
+
+validate_global_batch_size(int(sys.argv[1]))
+PY
 download_locked \
     "$DATASET_PATH" \
     "https://huggingface.co/datasets/xinrongzhang2022/InfiniteBench/resolve/${DATASET_REVISION}/${DATASET_FILE}?download=true" \
@@ -248,7 +303,7 @@ download_locked \
     "$LOAD_BALANCER_SHA256"
 import_squash_on_arm_compute
 
-log "requesting ${PHYSICAL_NODES} GB300 nodes and ${WORLD_SIZE} GPUs"
+log "requesting ${PHYSICAL_NODES} GB300 nodes and ${WORLD_SIZE} GPUs profile=${TRT_BENCH_CONFIG_PROFILE}"
 set +e
 salloc \
     --partition="$SLURM_PARTITION" \
@@ -331,7 +386,7 @@ node_list="$(
 )"
 log "allocation job=$JOB_ID nodes=$node_list"
 
-log "capturing and validating the 16-rank task map"
+log "capturing and validating the ${WORLD_SIZE}-rank task map"
 # shellcheck disable=SC2016
 srun \
     --jobid="$JOB_ID" \
@@ -346,28 +401,48 @@ srun \
     bash -c \
         'printf "%s\t%s\t%s\t%s\n" "$SLURM_PROCID" "$(hostname)" "$SLURM_LOCALID" "${CUDA_VISIBLE_DEVICES:-unset}"' \
     | sort -n -k1,1 > "$RANK_MAP_FILE"
-python3 - "$RANK_MAP_FILE" <<'PY'
+python3 - \
+    "$RANK_MAP_FILE" \
+    "$WORLD_SIZE" \
+    "$PHYSICAL_NODES" \
+    "$GPUS_PER_NODE" <<'PY'
 import collections
 import csv
 import sys
 
-path = sys.argv[1]
+path, world_size, physical_nodes, gpus_per_node = sys.argv[1:]
+world_size = int(world_size)
+physical_nodes = int(physical_nodes)
+gpus_per_node = int(gpus_per_node)
 with open(path, encoding="utf-8") as stream:
     rows = list(csv.reader(stream, delimiter="\t"))
-if len(rows) != 16:
-    raise SystemExit(f"rank map has {len(rows)} rows, expected 16")
+if len(rows) != world_size:
+    raise SystemExit(
+        f"rank map has {len(rows)} rows, expected {world_size}"
+    )
 ranks = [int(row[0]) for row in rows]
-if ranks != list(range(16)):
-    raise SystemExit(f"rank map is not exactly 0..15: {ranks}")
+if ranks != list(range(world_size)):
+    raise SystemExit(
+        f"rank map is not exactly 0..{world_size - 1}: {ranks}"
+    )
 hosts = collections.Counter(row[1] for row in rows)
-if len(hosts) != 4 or set(hosts.values()) != {4}:
-    raise SystemExit(f"expected four hosts with four ranks each: {hosts}")
+if (
+    len(hosts) != physical_nodes
+    or set(hosts.values()) != {gpus_per_node}
+):
+    raise SystemExit(
+        f"expected {physical_nodes} hosts with {gpus_per_node} "
+        f"ranks each: {hosts}"
+    )
 local_ranks = collections.defaultdict(list)
 for row in rows:
     local_ranks[row[1]].append(int(row[2]))
 for host, values in local_ranks.items():
-    if sorted(values) != list(range(4)):
-        raise SystemExit(f"{host} local ranks are not 0..3: {values}")
+    if sorted(values) != list(range(gpus_per_node)):
+        raise SystemExit(
+            f"{host} local ranks are not 0..{gpus_per_node - 1}: "
+            f"{values}"
+        )
 print(f"validated rank map: {dict(hosts)}")
 PY
 cat "$RANK_MAP_FILE"
@@ -403,7 +478,7 @@ FABRIC_CLIQUE_ID="$(
         'import json, sys; print(json.load(sys.stdin)["clique_id"])' \
         <<<"$fabric_validation"
 )"
-log "validated one 16-GPU NVLink fabric cluster_uuid=$FABRIC_CLUSTER_UUID clique_id=$FABRIC_CLIQUE_ID"
+log "validated one ${WORLD_SIZE}-GPU NVLink fabric cluster_uuid=$FABRIC_CLUSTER_UUID clique_id=$FABRIC_CLIQUE_ID"
 
 export BENCH_ID
 export TRT_BENCH_TELEMETRY_DIR="$TRT_BENCH_WORKSPACE"
@@ -435,6 +510,7 @@ export IMAGE
 export TRT_BENCH_CACHE_ROOT
 export TRT_BENCH_GIT_REVISION="$BENCH_GIT_REVISION"
 export TRT_BENCH_HARDWARE_PROFILE="gb300"
+export TRT_BENCH_CONFIG_PROFILE
 export TRT_BENCH_EXTERNAL_MPI="1"
 export TRT_BENCH_ALLOCATION_JOB_ID="$JOB_ID"
 export TRT_BENCH_ALLOCATION_NODE="${allocation_nodes[0]}"
@@ -477,6 +553,7 @@ python3 \
     --marker-file "$PERFECT_ROUTER_MARKER" \
     --cute-cache-dir "$CUTE_CACHE_DIR" \
     --hardware-profile gb300 \
+    --config-profile "$TRT_BENCH_CONFIG_PROFILE" \
     --format nul > "$RANK_ENV_RECORDS"
 rank_env_exports=0
 rank_env_unsets=0
@@ -515,7 +592,7 @@ CONTAINER_MOUNTS+=",${TRT_BENCH_CACHE_ROOT}:${TRT_BENCH_CACHE_ROOT}"
 CONTAINER_MOUNTS+=",${LOAD_BALANCER_ROOT}:/dsv4-eplb-configs"
 
 log "starting external TRT world with trtllm-llmapi-launch"
-log "image=$IMAGE model=$MODEL_PATH global_batch=$GLOBAL_BATCH_SIZE"
+log "image=$IMAGE model=$MODEL_PATH profile=$TRT_BENCH_CONFIG_PROFILE global_batch=$GLOBAL_BATCH_SIZE"
 world_started="$SECONDS"
 last_world_heartbeat=-1
 set +e

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from datetime import timedelta
 from statistics import fmean
 from typing import Any, Iterable
@@ -40,6 +41,12 @@ HUAWEI_REFERENCE: dict[int, dict[str, float | int]] = {
         "published_mtp_draft_tokens": 3,
     },
 }
+TRT_ITER_LOG_PATTERN = re.compile(
+    r"\[RANK\s+(?P<rank>\d+)\].*?"
+    r"\biter\s*=\s*(?P<iter>\d+).*?"
+    r"host_step_time\s*=\s*(?P<host>[0-9.eE+-]+)ms,\s*"
+    r"prev_device_step_time\s*=\s*(?P<device>[0-9.eE+-]+)ms"
+)
 
 
 def _seconds(value: Any) -> float:
@@ -184,6 +191,56 @@ def summarize_requests(
     }
 
 
+def summarize_outputs(
+    outputs: Iterable[Any],
+    *,
+    wall_seconds: float,
+    expected_output_tokens: int,
+    num_gpus: int,
+) -> dict[str, Any]:
+    """Summarize fixed-length outputs without request performance telemetry."""
+    if wall_seconds <= 0:
+        raise ValueError(f"Invalid measured wall time: {wall_seconds}")
+    requests: list[dict[str, Any]] = []
+    for request_output in outputs:
+        completions = getattr(request_output, "outputs", None)
+        if not completions:
+            raise RuntimeError("TRT request returned no completion outputs")
+        raw_token_ids = getattr(completions[0], "token_ids", None)
+        if raw_token_ids is None:
+            raise RuntimeError("TRT completion did not return token IDs")
+        token_ids = [int(token_id) for token_id in raw_token_ids]
+        if len(token_ids) != expected_output_tokens:
+            raise RuntimeError(
+                f"TRT generated {len(token_ids)} tokens; expected "
+                f"{expected_output_tokens}"
+            )
+        requests.append(
+            {
+                "output_tokens": len(token_ids),
+                "output_token_sha256": _token_sha256(token_ids),
+            }
+        )
+    if not requests:
+        raise ValueError("No request outputs to summarize")
+    total_output_tokens = sum(
+        int(item["output_tokens"]) for item in requests
+    )
+    return {
+        "requests": requests,
+        "aggregate": {
+            "request_samples": len(requests),
+            "output_sequence_sha256": _sequence_sha256(requests),
+            "wall_seconds": wall_seconds,
+            "wall_output_tput_per_gpu": (
+                total_output_tokens / wall_seconds / num_gpus
+            ),
+            "total_output_tokens": total_output_tokens,
+            "request_perf_metrics_collected": False,
+        },
+    }
+
+
 def _iteration_fields(stat: dict[str, Any]) -> dict[str, Any]:
     inflight = stat.get("inflightBatchingStats") or {}
     spec = stat.get("specDecodingStats") or {}
@@ -255,6 +312,7 @@ def select_full_batch_decode_rounds(
     *,
     local_batch_size: int,
     required_rounds: int,
+    allow_staged_prefill: bool = False,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Select one consecutive fixed-batch decode window or fail."""
     normalized = [_iteration_fields(stat) for stat in iteration_stats]
@@ -265,6 +323,98 @@ def select_full_batch_decode_rounds(
             break
         leading_inactive.append(item)
     scheduled = raw_scheduled[len(leading_inactive) :]
+    if allow_staged_prefill:
+        runs: list[list[dict[str, Any]]] = []
+        current: list[dict[str, Any]] = []
+        previous_iter: int | None = None
+        for item in scheduled:
+            is_consecutive = (
+                previous_iter is None
+                or item["iter"] == previous_iter + 1
+            )
+            if _is_full_batch_decode(item, local_batch_size):
+                if not is_consecutive:
+                    if current:
+                        runs.append(current)
+                    current = []
+                current.append(item)
+            elif current:
+                runs.append(current)
+                current = []
+            previous_iter = item["iter"]
+        if current:
+            runs.append(current)
+        usable = next(
+            (run for run in runs if len(run) >= required_rounds),
+            None,
+        )
+        if usable is None:
+            longest = max((len(run) for run in runs), default=0)
+            raise RuntimeError(
+                "TRT did not produce enough consecutive full-batch "
+                f"decode rounds after staged prefill: "
+                f"{longest} < {required_rounds}"
+            )
+        selected = usable[:required_rounds]
+        selected_start = scheduled.index(selected[0])
+        setup = scheduled[:selected_start]
+        first_generation = next(
+            (
+                item["iter"]
+                for item in scheduled
+                if item["generation"] > 0
+            ),
+            None,
+        )
+        diagnostics = {
+            "schedule_mode": "staged_prefill_then_full_decode",
+            "iteration_stats_count": len(iteration_stats),
+            "scheduled_iterations": len(raw_scheduled),
+            "pass_scheduled_iterations": len(scheduled),
+            "leading_inactive_iterations_ignored": len(leading_inactive),
+            "leading_inactive_first_iter": (
+                leading_inactive[0]["iter"]
+                if leading_inactive
+                else None
+            ),
+            "leading_inactive_last_iter": (
+                leading_inactive[-1]["iter"]
+                if leading_inactive
+                else None
+            ),
+            "setup_iterations": len(setup),
+            "context_only_iterations": sum(
+                item["context"] > 0 and item["generation"] == 0
+                for item in setup
+            ),
+            "mixed_context_generation_iterations": sum(
+                item["context"] > 0 and item["generation"] > 0
+                for item in setup
+            ),
+            "partial_decode_iterations": sum(
+                item["generation"] > 0
+                and not _is_full_batch_decode(item, local_batch_size)
+                for item in setup
+            ),
+            "full_batch_prefill_iterations": sum(
+                _is_full_batch_prefill(item, local_batch_size)
+                for item in setup
+            ),
+            "prefill_iter": None,
+            "prefill_local_batch": None,
+            "first_generation_iter": first_generation,
+            "full_batch_decode_rounds_available": len(usable),
+            "selected_first_iter": selected[0]["iter"],
+            "selected_last_iter": selected[-1]["iter"],
+            "selected_local_batch_min": min(
+                item["generation"] for item in selected
+            ),
+            "selected_local_batch_max": max(
+                item["generation"] for item in selected
+            ),
+        }
+        return selected, diagnostics
+
     mixed = [
         item
         for item in scheduled
@@ -319,6 +469,7 @@ def select_full_batch_decode_rounds(
 
     selected = consecutive[:required_rounds]
     diagnostics = {
+        "schedule_mode": "huawei_prefill_barrier",
         "iteration_stats_count": len(iteration_stats),
         "scheduled_iterations": len(raw_scheduled),
         "pass_scheduled_iterations": len(scheduled),
@@ -354,26 +505,40 @@ def huawei_filter_round_latencies(
     latencies_ms: list[float],
 ) -> dict[str, Any]:
     """Apply CANN's first-round skip and upper-IQR outlier filter."""
-    if len(latencies_ms) < 2:
-        raise ValueError("Huawei timing requires at least two decode rounds")
-    after_first_skip = latencies_ms[1:]
-    q1 = percentile(after_first_skip, 25)
-    q3 = percentile(after_first_skip, 75)
+    return filter_round_latencies(latencies_ms, skip_rounds=1)
+
+
+def filter_round_latencies(
+    latencies_ms: list[float],
+    *,
+    skip_rounds: int,
+) -> dict[str, Any]:
+    """Skip startup rounds, then remove only upper-IQR outliers."""
+    if skip_rounds < 0:
+        raise ValueError("Round skip count cannot be negative")
+    if len(latencies_ms) <= skip_rounds:
+        raise ValueError(
+            f"Timing needs more than {skip_rounds} decode rounds"
+        )
+    after_skip = latencies_ms[skip_rounds:]
+    q1 = percentile(after_skip, 25)
+    q3 = percentile(after_skip, 75)
     upper_fence = q3 + 1.5 * (q3 - q1)
     retained = [
         latency
-        for latency in after_first_skip
+        for latency in after_skip
         if latency <= upper_fence
     ]
     if not retained:
-        raise RuntimeError("Huawei outlier filtering removed every round")
+        raise RuntimeError("Upper-IQR filtering removed every round")
     return {
-        "first_round_skipped": True,
+        "first_round_skipped": skip_rounds > 0,
+        "rounds_skipped": skip_rounds,
         "q1_ms": q1,
         "q3_ms": q3,
         "upper_iqr_fence_ms": upper_fence,
         "retained_rounds": len(retained),
-        "outlier_rounds": len(after_first_skip) - len(retained),
+        "outlier_rounds": len(after_skip) - len(retained),
         "retained_latencies_ms": retained,
         "mean_ms": fmean(retained),
         "median_ms": percentile(retained, 50),
@@ -389,14 +554,22 @@ def summarize_decode_rounds(
     local_batch_size: int,
     num_gpus: int,
     required_rounds: int = HUAWEI_MEASURED_DECODE_ROUNDS,
+    mtp_draft_tokens: int = MTP_DRAFT_TOKENS,
+    allow_staged_prefill: bool = False,
+    latency_rounds_to_skip: int = 1,
+    timing_source: str = "iter_latency_ms",
 ) -> dict[str, Any]:
     selected, diagnostics = select_full_batch_decode_rounds(
         iteration_stats,
         local_batch_size=local_batch_size,
         required_rounds=required_rounds,
+        allow_staged_prefill=allow_staged_prefill,
     )
     latencies = [float(item["latency_ms"]) for item in selected]
-    filtered = huawei_filter_round_latencies(latencies)
+    filtered = filter_round_latencies(
+        latencies,
+        skip_rounds=latency_rounds_to_skip,
+    )
     decode_round_tpot_ms = float(filtered["mean_ms"])
     decode_step_tput_per_gpu = (
         global_batch_size / (decode_round_tpot_ms / 1000.0) / num_gpus
@@ -413,7 +586,7 @@ def summarize_decode_rounds(
     accepted_drafts_per_step = accepted / generation_slots
     tokens_per_step = 1.0 + accepted_drafts_per_step
     acceptance_rate = accepted / drafted
-    if not 1.0 <= tokens_per_step <= MTP_DRAFT_TOKENS + 1.0:
+    if not 1.0 <= tokens_per_step <= mtp_draft_tokens + 1.0:
         raise RuntimeError(
             f"Observed MTP token yield is invalid: {tokens_per_step}"
         )
@@ -434,7 +607,7 @@ def summarize_decode_rounds(
         "observed_tokens_per_step": tokens_per_step,
         "accepted_drafts_per_step": accepted_drafts_per_step,
         "effective_acceptance_rate": (
-            accepted_drafts_per_step / MTP_DRAFT_TOKENS
+            accepted_drafts_per_step / mtp_draft_tokens
         ),
         "raw_acceptance_rate": acceptance_rate,
         "raw_accepted_draft_tokens": accepted,
@@ -442,6 +615,7 @@ def summarize_decode_rounds(
         "token_yield_source": "iteration_spec_decoding_stats",
         "equivalent_output_tpot_ms": equivalent_output_tpot_ms,
         "output_tput_per_gpu": output_tput_per_gpu,
+        "timing_source": timing_source,
         "filter": {
             key: value
             for key, value in filtered.items()
@@ -449,6 +623,185 @@ def summarize_decode_rounds(
         },
         "schedule_validation": diagnostics,
         "selected_round_latencies_ms": latencies,
+    }
+
+
+def parse_trt_iteration_log(log_text: str) -> dict[int, dict[str, float]]:
+    """Parse rank-0 TRT iteration timing rows."""
+    parsed: dict[int, dict[str, float]] = {}
+    for match in TRT_ITER_LOG_PATTERN.finditer(log_text):
+        if int(match.group("rank")) != 0:
+            continue
+        iteration = int(match.group("iter"))
+        row = {
+            "host_step_time_ms": float(match.group("host")),
+            "previous_device_step_time_ms": float(
+                match.group("device")
+            ),
+        }
+        previous = parsed.get(iteration)
+        if previous is not None and previous != row:
+            raise RuntimeError(
+                f"Conflicting rank-0 TRT timing rows for iter {iteration}"
+            )
+        parsed[iteration] = row
+    return parsed
+
+
+def apply_trt_host_step_timing(
+    aggregate: dict[str, Any],
+    log_text: str,
+    *,
+    global_batch_size: int,
+    num_gpus: int,
+    skip_rounds: int,
+) -> dict[str, Any]:
+    """Replace overlap-invalid iterLatencyMS with TRT host-step timing."""
+    measured_marker = "measured: generation start"
+    marker_index = log_text.rfind(measured_marker)
+    if marker_index < 0:
+        raise RuntimeError(
+            "Worker log is missing the measured-generation start marker"
+        )
+    measured_log = log_text[marker_index:]
+    schedule = aggregate["schedule_validation"]
+    first_iter = int(schedule["selected_first_iter"])
+    last_iter = int(schedule["selected_last_iter"])
+    iteration_ids = list(range(first_iter, last_iter + 1))
+    parsed = parse_trt_iteration_log(measured_log)
+    missing = [
+        iteration
+        for iteration in iteration_ids
+        if iteration not in parsed
+    ]
+    if missing:
+        raise RuntimeError(
+            "TRT iteration log is missing selected host-step rows: "
+            f"{missing[:12]}"
+        )
+    host_latencies = [
+        parsed[iteration]["host_step_time_ms"]
+        for iteration in iteration_ids
+    ]
+    filtered = filter_round_latencies(
+        host_latencies,
+        skip_rounds=skip_rounds,
+    )
+    decode_round_tpot_ms = float(filtered["mean_ms"])
+    decode_step_tput_per_gpu = (
+        global_batch_size / (decode_round_tpot_ms / 1000.0) / num_gpus
+    )
+    tokens_per_step = float(aggregate["observed_tokens_per_step"])
+    updated = dict(aggregate)
+    updated["stats_iter_latency_diagnostic"] = {
+        "decode_round_tpot_ms": aggregate["decode_round_tpot_ms"],
+        "median_decode_round_tpot_ms": aggregate[
+            "median_decode_round_tpot_ms"
+        ],
+        "p90_decode_round_tpot_ms": aggregate[
+            "p90_decode_round_tpot_ms"
+        ],
+        "p99_decode_round_tpot_ms": aggregate[
+            "p99_decode_round_tpot_ms"
+        ],
+        "decode_step_tput_per_gpu": aggregate[
+            "decode_step_tput_per_gpu"
+        ],
+        "timing_source": aggregate.get("timing_source"),
+    }
+    updated.update(
+        {
+            "decode_round_tpot_ms": decode_round_tpot_ms,
+            "median_decode_round_tpot_ms": float(
+                filtered["median_ms"]
+            ),
+            "p90_decode_round_tpot_ms": float(filtered["p90_ms"]),
+            "p99_decode_round_tpot_ms": float(filtered["p99_ms"]),
+            "decode_step_tput_per_gpu": decode_step_tput_per_gpu,
+            "decode_step_tput_total": (
+                decode_step_tput_per_gpu * num_gpus
+            ),
+            "equivalent_output_tpot_ms": (
+                decode_round_tpot_ms / tokens_per_step
+            ),
+            "output_tput_per_gpu": (
+                decode_step_tput_per_gpu * tokens_per_step
+            ),
+            "filter": {
+                key: value
+                for key, value in filtered.items()
+                if key != "retained_latencies_ms"
+            },
+            "selected_round_latencies_ms": host_latencies,
+            "timing_source": "trt_print_iter_log_host_step_time",
+        }
+    )
+    device_latencies = [
+        parsed[iteration + 1]["previous_device_step_time_ms"]
+        for iteration in iteration_ids
+        if iteration + 1 in parsed
+    ]
+    if len(device_latencies) > skip_rounds:
+        device = filter_round_latencies(
+            device_latencies,
+            skip_rounds=skip_rounds,
+        )
+        updated["device_forward_timing_diagnostic"] = {
+            "samples": len(device_latencies),
+            "mean_ms": float(device["mean_ms"]),
+            "median_ms": float(device["median_ms"]),
+            "p90_ms": float(device["p90_ms"]),
+            "p99_ms": float(device["p99_ms"]),
+        }
+    return updated
+
+
+def pr_reference_comparison(
+    decode_rounds: dict[str, Any],
+    *,
+    profile_name: str,
+    reference_concurrency: int,
+    reference_active_global_batch: int,
+    reference_prefill_gpu_count: int,
+    reference_output_tput_per_decode_gpu: float,
+    reference_output_tput_per_total_gpu: float,
+    reference_recipe_url: str,
+) -> dict[str, Any]:
+    decode_gpus = int(decode_rounds["active_gpu_count"])
+    measured = float(decode_rounds["output_tput_per_gpu"])
+    total_output = measured * decode_gpus
+    reference_total_gpus = decode_gpus + reference_prefill_gpu_count
+    normalized_total = total_output / reference_total_gpus
+    return {
+        "profile": profile_name,
+        "mode": "offline_decode_saturation_vs_disaggregated_serving",
+        "reference_concurrency": reference_concurrency,
+        "reference_active_global_batch": reference_active_global_batch,
+        "reference_prefill_gpu_count": reference_prefill_gpu_count,
+        "reference_decode_gpu_count": decode_gpus,
+        "reference_total_gpu_count": reference_total_gpus,
+        "reference_output_tput_per_decode_gpu": (
+            reference_output_tput_per_decode_gpu
+        ),
+        "reference_output_tput_per_total_gpu": (
+            reference_output_tput_per_total_gpu
+        ),
+        "measured_output_tput_per_decode_gpu": measured,
+        "measured_output_tput_total": total_output,
+        "measured_output_tput_per_reference_total_gpu": normalized_total,
+        "offline_to_reference_decode_gpu_ratio": (
+            measured / reference_output_tput_per_decode_gpu
+        ),
+        "offline_to_reference_total_gpu_ratio": (
+            normalized_total / reference_output_tput_per_total_gpu
+        ),
+        "reference_recipe_url": reference_recipe_url,
+        "comparison_note": (
+            "The offline run copies the PR decode topology and kernels, "
+            "but performs 8K prefill on the same decode GPUs before timing "
+            "a saturated decode-only window. The total-fleet normalization "
+            "uses the PR's prefill GPU count only as a comparison denominator."
+        ),
     }
 
 

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import math
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -76,10 +77,24 @@ SAMPLING_TOP_P = 1.0
 SAMPLING_TOP_K = 0
 PINNED_TRT_GLOBAL_SEED = 42
 ALLOWED_GLOBAL_BATCH_SIZES = (16, 64, 128)
+PR_TP32_GRAPH_BATCH_SIZES = (1, 2, 4, 8)
+PR_TP16_GRAPH_BATCH_SIZES = (1, 2, 4, 8, 16, 24, 32)
+PR_TP8_GRAPH_BATCH_SIZES = (
+    1,
+    2,
+    4,
+    8,
+    16,
+    24,
+    32,
+    *range(40, 513, 8),
+)
 FIXED_BATCH_ARM_ENV = "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE"
 FIXED_BATCH_ARM_FILENAME = "fixed_batch_barrier.armed.json"
+BENCHMARK_PROFILE_ENV = "TRT_BENCH_CONFIG_PROFILE"
 CONTROLLED_ENVIRONMENT_VARIABLES = {
     "ENABLE_CONFIGURABLE_MOE",
+    "ENABLE_PERFECT_ROUTER",
     "TLLM_METRICS_ALL_RANKS",
     "TLLM_PROFILE_LOG_RANKS",
     "TLLM_PROFILE_START_STOP",
@@ -93,6 +108,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     FIXED_BATCH_ARM_ENV,
     "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS",
     "TRTLLM_BENCH_GLOBAL_BATCH_SIZE",
+    BENCHMARK_PROFILE_ENV,
     KV_PREFILL_RESERVE_ENV,
     MIN_RUNTIME_KV_TOKENS_ENV,
     "TRTLLM_DSV4_SKIP_PREMOE_ALLREDUCE",
@@ -101,6 +117,7 @@ CONTROLLED_ENVIRONMENT_VARIABLES = {
     "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION",
     "TRTLLM_MEGAMOE_FUSED_PREPARE",
     "TRTLLM_MOE_POST_QUANT_ALLTOALLV",
+    "TRTLLM_ENABLE_PERFECT_ROUTER",
 }
 
 
@@ -113,11 +130,36 @@ class FixedBenchmarkConfig:
     active_gpu_count: int
     tensor_parallel_size: int
     moe_expert_parallel_size: int
+    profile_key: str = "huawei"
+    benchmark_mode: str = "huawei"
+    allowed_global_batch_sizes: tuple[int, ...] = (
+        ALLOWED_GLOBAL_BATCH_SIZES
+    )
+    mtp_draft_tokens: int = MTP_DRAFT_TOKENS
+    max_seq_len: int = MAX_SEQ_LEN
+    measured_decode_rounds: int = HUAWEI_MEASURED_DECODE_ROUNDS
+    warmup_decode_rounds: int = HUAWEI_WARMUP_DECODE_ROUNDS
+    run_request_warmup: bool = True
+    latency_rounds_to_skip: int = 1
+    timing_source: str = "iter_latency_ms"
+    collect_request_perf_metrics: bool = True
+    engine_max_batch_size: int | None = None
+    runtime_max_num_tokens: int | None = None
+    reference_decode_max_num_tokens: int | None = None
+    cuda_graph_batch_sizes: tuple[int, ...] | None = None
+    enable_sparse_attention: bool = True
+    fixed_batch_timeout_seconds: int = 120
+    reference_concurrency: int | None = None
+    reference_active_global_batch: int | None = None
+    reference_prefill_gpu_count: int = 0
+    reference_output_tput_per_decode_gpu: float | None = None
+    reference_output_tput_per_total_gpu: float | None = None
+    reference_recipe_url: str | None = None
     moe_tensor_parallel_size: int = 1
     enable_attention_dp: bool = True
     enable_lm_head_tp_in_adp: bool = True
-    batching_wait_iters: int = 0
-    attention_dp_balance: bool = True
+    batching_wait_iters: int | None = 0
+    attention_dp_balance: bool | None = True
     overlap_scheduler: bool = False
     cuda_graph: bool = True
     enable_heuristic_topk: bool = True
@@ -128,7 +170,8 @@ class FixedBenchmarkConfig:
     use_low_precision_moe_combine: bool = True
     kv_cache_free_gpu_memory_fraction: float = 0.60
     enable_configurable_moe: bool = True
-    moe_autotune_dummy_distribution: str = "random"
+    enable_perfect_router: bool = True
+    moe_autotune_dummy_distribution: str | None = "random"
     print_iter_log: bool = False
     enable_pdl: bool = False
     fp8_fused_quant_max_rows: int | None = FP8_FUSED_QUANT_MAX_ROWS
@@ -217,6 +260,183 @@ GB300_PROFILE = HardwareProfile(
     reference_pr="https://github.com/SemiAnalysisAI/InferenceX/pull/1689",
 )
 
+GB300_HUAWEI_CONFIG = GB300_PROFILE.config
+GB300_PR_CONFIGS = {
+    "pr-tp32-mtp3": FixedBenchmarkConfig(
+        name="pr-1689-tp32-ep32-batch8-mtp3",
+        profile_key="pr-tp32-mtp3",
+        benchmark_mode="pr_max_decode",
+        parallelism="DEP32",
+        active_gpu_count=32,
+        tensor_parallel_size=32,
+        moe_expert_parallel_size=32,
+        allowed_global_batch_sizes=(192, 256),
+        mtp_draft_tokens=3,
+        max_seq_len=9256,
+        warmup_decode_rounds=0,
+        run_request_warmup=False,
+        latency_rounds_to_skip=8,
+        timing_source="trt_print_iter_log_host_step_time",
+        collect_request_perf_metrics=False,
+        engine_max_batch_size=8,
+        runtime_max_num_tokens=32768,
+        reference_decode_max_num_tokens=32,
+        cuda_graph_batch_sizes=PR_TP32_GRAPH_BATCH_SIZES,
+        enable_sparse_attention=False,
+        fixed_batch_timeout_seconds=600,
+        reference_concurrency=333,
+        reference_active_global_batch=192,
+        reference_prefill_gpu_count=16,
+        reference_output_tput_per_decode_gpu=676.763,
+        reference_output_tput_per_total_gpu=451.175,
+        reference_recipe_url=(
+            "https://github.com/NVIDIA/srt-slurm/blob/"
+            "sa-submission-q2-2026/recipes/DeepSeek-V4-Pro/disagg/"
+            "trtllm_dynamo/gb300_mxfp4/ISL8K_OSL1K/MTP/"
+            "ctx4dep4_gen1dep32_batch8_eplb384_mtp3.yaml"
+        ),
+        overlap_scheduler=True,
+        batching_wait_iters=None,
+        attention_dp_balance=None,
+        cuda_graph=True,
+        enable_heuristic_topk=False,
+        moe_backend="MEGAMOE_DEEPGEMM",
+        moe_load_balancer=(
+            "/dsv4-eplb-configs/"
+            "moe_load_balancer_gen_ep32_slots384.yaml"
+        ),
+        moe_load_balancer_slots=384,
+        moe_max_num_tokens=None,
+        kv_cache_free_gpu_memory_fraction=0.70,
+        enable_configurable_moe=True,
+        enable_perfect_router=False,
+        moe_autotune_dummy_distribution=None,
+        print_iter_log=True,
+        enable_pdl=True,
+        fp8_fused_quant_max_rows=None,
+        fp8_deep_gemm_max_rows=None,
+    ),
+    "pr-tp16-mtp3": FixedBenchmarkConfig(
+        name="pr-1689-tp16-ep16-batch32-mtp3",
+        profile_key="pr-tp16-mtp3",
+        benchmark_mode="pr_max_decode",
+        parallelism="DEP16",
+        active_gpu_count=16,
+        tensor_parallel_size=16,
+        moe_expert_parallel_size=16,
+        allowed_global_batch_sizes=(400, 512),
+        mtp_draft_tokens=3,
+        max_seq_len=9256,
+        warmup_decode_rounds=0,
+        run_request_warmup=False,
+        latency_rounds_to_skip=8,
+        timing_source="trt_print_iter_log_host_step_time",
+        collect_request_perf_metrics=False,
+        engine_max_batch_size=32,
+        runtime_max_num_tokens=32768,
+        reference_decode_max_num_tokens=128,
+        cuda_graph_batch_sizes=PR_TP16_GRAPH_BATCH_SIZES,
+        enable_sparse_attention=False,
+        fixed_batch_timeout_seconds=600,
+        reference_concurrency=666,
+        reference_active_global_batch=400,
+        reference_prefill_gpu_count=24,
+        reference_output_tput_per_decode_gpu=2072.1585,
+        reference_output_tput_per_total_gpu=828.8634,
+        reference_recipe_url=(
+            "https://github.com/NVIDIA/srt-slurm/blob/"
+            "sa-submission-q2-2026/recipes/DeepSeek-V4-Pro/disagg/"
+            "trtllm_dynamo/gb300_mxfp4/ISL8K_OSL1K/MTP/"
+            "ctx6dep4_gen1dep16_batch32_eplb384_mtp3.yaml"
+        ),
+        overlap_scheduler=True,
+        batching_wait_iters=None,
+        attention_dp_balance=None,
+        cuda_graph=True,
+        enable_heuristic_topk=False,
+        moe_backend="MEGAMOE_DEEPGEMM",
+        moe_load_balancer=(
+            "/dsv4-eplb-configs/"
+            "moe_load_balancer_gen_ep16_slots384.yaml"
+        ),
+        moe_load_balancer_slots=384,
+        moe_max_num_tokens=None,
+        kv_cache_free_gpu_memory_fraction=0.70,
+        enable_configurable_moe=True,
+        enable_perfect_router=False,
+        moe_autotune_dummy_distribution=None,
+        print_iter_log=True,
+        enable_pdl=True,
+        fp8_fused_quant_max_rows=None,
+        fp8_deep_gemm_max_rows=None,
+    ),
+    "pr-tp8-mtp1": FixedBenchmarkConfig(
+        name="pr-1689-tp8-ep8-batch512-mtp1",
+        profile_key="pr-tp8-mtp1",
+        benchmark_mode="pr_max_decode",
+        parallelism="DEP8",
+        active_gpu_count=8,
+        tensor_parallel_size=8,
+        moe_expert_parallel_size=8,
+        allowed_global_batch_sizes=(3440, 4096),
+        mtp_draft_tokens=1,
+        max_seq_len=9256,
+        warmup_decode_rounds=0,
+        run_request_warmup=False,
+        latency_rounds_to_skip=8,
+        timing_source="trt_print_iter_log_host_step_time",
+        collect_request_perf_metrics=False,
+        engine_max_batch_size=512,
+        runtime_max_num_tokens=32768,
+        reference_decode_max_num_tokens=1024,
+        cuda_graph_batch_sizes=PR_TP8_GRAPH_BATCH_SIZES,
+        enable_sparse_attention=False,
+        fixed_batch_timeout_seconds=600,
+        reference_concurrency=4301,
+        reference_active_global_batch=3440,
+        reference_prefill_gpu_count=48,
+        reference_output_tput_per_decode_gpu=9686.735,
+        reference_output_tput_per_total_gpu=1383.8193,
+        reference_recipe_url=(
+            "https://github.com/NVIDIA/srt-slurm/blob/"
+            "sa-submission-q2-2026/recipes/DeepSeek-V4-Pro/disagg/"
+            "trtllm_dynamo/gb300_mxfp4/ISL8K_OSL1K/MTP/"
+            "ctx12dep4_gen1dep8_batch512_eplb384_mtp1.yaml"
+        ),
+        overlap_scheduler=True,
+        batching_wait_iters=None,
+        attention_dp_balance=None,
+        cuda_graph=True,
+        enable_heuristic_topk=False,
+        moe_backend="MEGAMOE_DEEPGEMM",
+        moe_load_balancer=(
+            "/dsv4-eplb-configs/"
+            "moe_load_balancer_gen_ep8_slots384.yaml"
+        ),
+        moe_load_balancer_slots=384,
+        moe_max_num_tokens=None,
+        kv_cache_free_gpu_memory_fraction=0.80,
+        enable_configurable_moe=True,
+        enable_perfect_router=False,
+        moe_autotune_dummy_distribution=None,
+        print_iter_log=True,
+        enable_pdl=True,
+        fp8_fused_quant_max_rows=None,
+        fp8_deep_gemm_max_rows=None,
+    ),
+}
+BENCHMARK_PROFILES = {
+    "huawei": GB300_HUAWEI_CONFIG,
+    **GB300_PR_CONFIGS,
+}
+
+
+def benchmark_profile_key(
+    profile: HardwareProfile | None = None,
+) -> str:
+    selected = profile or HARDWARE_PROFILE
+    return selected.config.profile_key
+
 HARDWARE_PROFILES = {
     profile.key: profile
     for profile in (B300_PROFILE, GB300_PROFILE)
@@ -224,16 +444,45 @@ HARDWARE_PROFILES = {
 HARDWARE_PROFILE_ENV = "TRT_BENCH_HARDWARE_PROFILE"
 
 
-def hardware_profile(name: str | None = None) -> HardwareProfile:
+def hardware_profile(
+    name: str | None = None,
+    benchmark_profile_name: str | None = None,
+) -> HardwareProfile:
     """Resolve one supported hardware profile."""
     key = (name or os.getenv(HARDWARE_PROFILE_ENV, "b300")).lower()
     try:
-        return HARDWARE_PROFILES[key]
+        base = HARDWARE_PROFILES[key]
     except KeyError as error:
         raise ValueError(
             f"Unsupported {HARDWARE_PROFILE_ENV}={key!r}; "
             f"expected one of {tuple(HARDWARE_PROFILES)}"
         ) from error
+    config_key = (
+        benchmark_profile_name
+        or os.getenv(BENCHMARK_PROFILE_ENV, "huawei")
+    ).lower()
+    if config_key == "huawei":
+        return base
+    if key != "gb300":
+        raise ValueError(
+            f"{BENCHMARK_PROFILE_ENV}={config_key!r} requires gb300"
+        )
+    try:
+        config = GB300_PR_CONFIGS[config_key]
+    except KeyError as error:
+        raise ValueError(
+            f"Unsupported {BENCHMARK_PROFILE_ENV}={config_key!r}; "
+            f"expected one of {tuple(BENCHMARK_PROFILES)}"
+        ) from error
+    physical_nodes = math.ceil(
+        config.active_gpu_count / base.gpus_per_node
+    )
+    return replace(
+        base,
+        hardware=f"GB300 NVL{config.active_gpu_count}",
+        physical_nodes=physical_nodes,
+        config=config,
+    )
 
 
 HARDWARE_PROFILE = hardware_profile()
@@ -246,10 +495,11 @@ def validate_global_batch_size(
     profile: HardwareProfile | None = None,
 ) -> None:
     selected = profile or HARDWARE_PROFILE
-    if global_batch_size not in ALLOWED_GLOBAL_BATCH_SIZES:
+    allowed = selected.config.allowed_global_batch_sizes
+    if global_batch_size not in allowed:
         raise ValueError(
             "Global batch size must be one of "
-            f"{ALLOWED_GLOBAL_BATCH_SIZES}, got {global_batch_size}"
+            f"{allowed}, got {global_batch_size}"
         )
     if global_batch_size % selected.world_size != 0:
         raise ValueError(
@@ -267,12 +517,76 @@ def local_batch_size(
     return global_batch_size // selected.world_size
 
 
+def engine_max_batch_size(
+    global_batch_size: int,
+    profile: HardwareProfile | None = None,
+) -> int:
+    selected = profile or HARDWARE_PROFILE
+    validate_global_batch_size(global_batch_size, selected)
+    configured = selected.config.engine_max_batch_size
+    if configured is not None:
+        return configured
+    return local_batch_size(global_batch_size, selected)
+
+
 def max_num_tokens(
     global_batch_size: int,
     profile: HardwareProfile | None = None,
 ) -> int:
-    """Allow every local-rank prompt to prefill in the same iteration."""
-    return local_batch_size(global_batch_size, profile) * INPUT_TOKENS
+    """Return the monolithic offline prefill/decode token budget."""
+    selected = profile or HARDWARE_PROFILE
+    configured = selected.config.runtime_max_num_tokens
+    if configured is not None:
+        return configured
+    return local_batch_size(global_batch_size, selected) * INPUT_TOKENS
+
+
+def setup_prefill_iterations(
+    global_batch_size: int,
+    profile: HardwareProfile | None = None,
+) -> int:
+    """Conservative number of iterations needed to admit every 8K prompt."""
+    selected = profile or HARDWARE_PROFILE
+    local_tokens = (
+        local_batch_size(global_batch_size, selected) * INPUT_TOKENS
+    )
+    return math.ceil(
+        local_tokens / max_num_tokens(global_batch_size, selected)
+    )
+
+
+def warmup_output_tokens(
+    global_batch_size: int,
+    profile: HardwareProfile | None = None,
+) -> int:
+    selected = profile or HARDWARE_PROFILE
+    if not selected.config.run_request_warmup:
+        return 0
+    return WARMUP_OUTPUT_TOKENS
+
+
+def measured_output_tokens(
+    global_batch_size: int,
+    profile: HardwareProfile | None = None,
+) -> int:
+    selected = profile or HARDWARE_PROFILE
+    config = selected.config
+    if config.benchmark_mode == "huawei":
+        return MEASURED_OUTPUT_TOKENS
+    per_round = config.mtp_draft_tokens + 1
+    output_tokens = 1 + (
+        setup_prefill_iterations(global_batch_size, selected)
+        - 1
+        + config.measured_decode_rounds
+    ) * per_round
+    available = config.max_seq_len - INPUT_TOKENS
+    if output_tokens > available:
+        raise ValueError(
+            f"Profile {config.name} needs {output_tokens} output tokens "
+            f"to preserve its decode window, but max_seq_len leaves "
+            f"only {available}"
+        )
+    return max(1024, output_tokens)
 
 
 def engine_warmup_max_tokens(
@@ -282,8 +596,14 @@ def engine_warmup_max_tokens(
     """Bound TRT's synthetic context-only tuning shape."""
     selected = profile or HARDWARE_PROFILE
     validate_global_batch_size(global_batch_size, selected)
-    if selected.key == "gb300" and global_batch_size == 128:
+    if (
+        selected.config.benchmark_mode == "huawei"
+        and selected.key == "gb300"
+        and global_batch_size == 128
+    ):
         return GB300_GBS128_ENGINE_WARMUP_MAX_TOKENS
+    if selected.config.benchmark_mode != "huawei":
+        return max_num_tokens(global_batch_size, selected)
     return ENGINE_WARMUP_MAX_TOKENS
 
 
@@ -319,7 +639,11 @@ def minimum_runtime_kv_tokens(
     profile: HardwareProfile | None = None,
 ) -> int:
     """Return the KV capacity required for every fixed-batch sequence."""
-    return local_batch_size(global_batch_size, profile) * MAX_SEQ_LEN
+    selected = profile or HARDWARE_PROFILE
+    return (
+        local_batch_size(global_batch_size, selected)
+        * selected.config.max_seq_len
+    )
 
 
 def build_llm_kwargs(
@@ -340,14 +664,18 @@ def build_llm_kwargs(
         "moe_tensor_parallel_size": config.moe_tensor_parallel_size,
         "enable_attention_dp": config.enable_attention_dp,
         "enable_lm_head_tp_in_adp": config.enable_lm_head_tp_in_adp,
-        # TRT defines max_batch_size per local attention-DP rank.
-        "max_batch_size": local_batch,
-        # This is intentionally local_batch * 8192. The old harness admitted
-        # only one prompt's prefill tokens and therefore staggered the batch.
+        # TRT defines max_batch_size per local attention-DP rank. PR-active
+        # points retain the copied engine capacity above their active batch.
+        "max_batch_size": engine_max_batch_size(
+            global_batch_size,
+            selected,
+        ),
+        # Huawei admits every local 8K prompt together. PR-max intentionally
+        # uses its recorded 32K monolithic-offline adaptation.
         "max_num_tokens": max_num_tokens(global_batch_size, selected),
-        "max_seq_len": MAX_SEQ_LEN,
+        "max_seq_len": config.max_seq_len,
         "custom_tokenizer": "deepseek_v4",
-        "return_perf_metrics": True,
+        "return_perf_metrics": config.collect_request_perf_metrics,
         "enable_iter_perf_stats": True,
         "max_stats_len": ITERATION_STATS_CAPACITY,
         "print_iter_log": config.print_iter_log,
@@ -369,24 +697,39 @@ def build_llm_kwargs(
                 config.use_low_precision_moe_combine
             ),
         },
-        "sparse_attention_config": {
-            "algorithm": "deepseek_v4",
-            "enable_heuristic_topk": config.enable_heuristic_topk,
-        },
         "speculative_config": {
             "decoding_type": "MTP",
-            "max_draft_len": MTP_DRAFT_TOKENS,
-        },
-        "attention_dp_config": {
-            "batching_wait_iters": config.batching_wait_iters,
-            "enable_balance": config.attention_dp_balance,
+            "max_draft_len": config.mtp_draft_tokens,
         },
         "cuda_graph_config": {
-            "batch_sizes": [local_batch],
-            "max_batch_size": local_batch,
+            "batch_sizes": list(
+                config.cuda_graph_batch_sizes or (local_batch,)
+            ),
             "enable_padding": True,
         },
     }
+    if (
+        config.batching_wait_iters is None
+        or config.attention_dp_balance is None
+    ):
+        if not (
+            config.batching_wait_iters is None
+            and config.attention_dp_balance is None
+        ):
+            raise ValueError(
+                "attention-DP batching and balance must both be set or "
+                "both be omitted"
+            )
+    else:
+        kwargs["attention_dp_config"] = {
+            "batching_wait_iters": config.batching_wait_iters,
+            "enable_balance": config.attention_dp_balance,
+        }
+    if config.enable_sparse_attention:
+        kwargs["sparse_attention_config"] = {
+            "algorithm": "deepseek_v4",
+            "enable_heuristic_topk": config.enable_heuristic_topk,
+        }
     if config.moe_load_balancer is not None:
         kwargs["moe_config"]["load_balancer"] = (
             config.moe_load_balancer
@@ -426,18 +769,22 @@ def fixed_environment(
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS": str(
             config.fp8_fused_quant_max_rows or 0
         ),
-        "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": "120",
+        "TRTLLM_BENCH_FIXED_BATCH_TIMEOUT_SECONDS": str(
+            config.fixed_batch_timeout_seconds
+        ),
         "TRTLLM_BENCH_GLOBAL_BATCH_SIZE": str(global_batch_size),
+        BENCHMARK_PROFILE_ENV: benchmark_profile_key(selected),
         KV_PREFILL_RESERVE_ENV: str(
             kv_prefill_reserve_bytes(global_batch_size, selected)
         ),
         MIN_RUNTIME_KV_TOKENS_ENV: str(
             minimum_runtime_kv_tokens(global_batch_size, selected)
         ),
-        "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION": (
-            config.moe_autotune_dummy_distribution
-        ),
     }
+    if config.moe_autotune_dummy_distribution is not None:
+        environment[
+            "TRTLLM_GEN_MOE_AUTOTUNE_DUMMY_DISTRIBUTION"
+        ] = config.moe_autotune_dummy_distribution
     if config.enable_pdl:
         environment["TRTLLM_ENABLE_PDL"] = "1"
     return environment
@@ -468,6 +815,7 @@ def external_mpi_rank_environment(
     profile: HardwareProfile | None = None,
 ) -> dict[str, str]:
     """Build the environment required before external MPI ranks start."""
+    selected = profile or HARDWARE_PROFILE
     marker_path = Path(marker_file)
     cache_path = Path(cute_cache_dir)
     for label, path in (
@@ -480,12 +828,10 @@ def external_mpi_rank_environment(
     configured = benchmark_environment(
         global_batch_size,
         fixed_batch_arm_file,
-        profile,
+        selected,
     )
-    return {
+    environment = {
         **configured,
-        "ENABLE_PERFECT_ROUTER": "1",
-        "TRTLLM_ENABLE_PERFECT_ROUTER": "1",
         "TRTLLM_PERFECT_ROUTER_MARKER": str(marker_path),
         "CUTE_DSL_CACHE_DIR": str(cache_path),
         "TRTLLM_BENCH_CUTE_DSL_CACHE_DIR": str(cache_path),
@@ -495,6 +841,14 @@ def external_mpi_rank_environment(
             separators=(",", ":"),
         ),
     }
+    if selected.config.enable_perfect_router:
+        environment.update(
+            {
+                "ENABLE_PERFECT_ROUTER": "1",
+                "TRTLLM_ENABLE_PERFECT_ROUTER": "1",
+            }
+        )
+    return environment
 
 
 def resolved_parallelism(
@@ -542,16 +896,19 @@ def resolved_parallelism(
         "moe_tensor_parallel_size": config.moe_tensor_parallel_size,
         "enable_attention_dp": config.enable_attention_dp,
         "enable_lm_head_tp_in_adp": config.enable_lm_head_tp_in_adp,
-        "max_batch_size": local_batch_size(global_batch_size, selected),
+        "max_batch_size": engine_max_batch_size(
+            global_batch_size,
+            selected,
+        ),
         "max_num_tokens": max_num_tokens(global_batch_size, selected),
-        "max_seq_len": MAX_SEQ_LEN,
+        "max_seq_len": config.max_seq_len,
         "kv_cache_free_gpu_memory_fraction": (
             config.kv_cache_free_gpu_memory_fraction
         ),
         "enable_iter_perf_stats": True,
         "max_stats_len": ITERATION_STATS_CAPACITY,
         "print_iter_log": config.print_iter_log,
-        "disable_overlap_scheduler": True,
+        "disable_overlap_scheduler": not config.overlap_scheduler,
     }
     for key, expected_value in expected.items():
         if resolved[key] != expected_value:
@@ -560,12 +917,53 @@ def resolved_parallelism(
                 f"{resolved[key]!r} != {expected_value!r}"
             )
 
+    attention_dp = llm_args.attention_dp_config
+    resolved["attention_dp_configured"] = attention_dp is not None
+    if config.batching_wait_iters is None:
+        if attention_dp is not None:
+            raise RuntimeError(
+                "Resolved TRT attention-DP config should use the PR "
+                "default None"
+            )
+        resolved["attention_dp_batching_wait_iters"] = None
+        resolved["attention_dp_enable_balance"] = None
+    else:
+        if attention_dp is None:
+            raise RuntimeError(
+                "Resolved TRT attention-DP config is unexpectedly absent"
+            )
+        resolved["attention_dp_batching_wait_iters"] = int(
+            attention_dp.batching_wait_iters
+        )
+        resolved["attention_dp_enable_balance"] = bool(
+            attention_dp.enable_balance
+        )
+        if (
+            resolved["attention_dp_batching_wait_iters"]
+            != config.batching_wait_iters
+        ):
+            raise RuntimeError(
+                "Resolved TRT attention-DP batching wait mismatch: "
+                f"{resolved['attention_dp_batching_wait_iters']} != "
+                f"{config.batching_wait_iters}"
+            )
+        if (
+            resolved["attention_dp_enable_balance"]
+            != config.attention_dp_balance
+        ):
+            raise RuntimeError(
+                "Resolved TRT attention-DP balance mismatch: "
+                f"{resolved['attention_dp_enable_balance']} != "
+                f"{config.attention_dp_balance}"
+            )
+
     speculative = llm_args.speculative_config
     resolved["mtp_max_draft_len"] = int(speculative.max_draft_len)
-    if resolved["mtp_max_draft_len"] != MTP_DRAFT_TOKENS:
+    if resolved["mtp_max_draft_len"] != config.mtp_draft_tokens:
         raise RuntimeError(
             "Resolved TRT MTP draft length mismatch: "
-            f"{resolved['mtp_max_draft_len']} != {MTP_DRAFT_TOKENS}"
+            f"{resolved['mtp_max_draft_len']} != "
+            f"{config.mtp_draft_tokens}"
         )
 
     moe = llm_args.moe_config
@@ -625,11 +1023,18 @@ def resolved_parallelism(
             )
 
     sparse = llm_args.sparse_attention_config
-    resolved["enable_heuristic_topk"] = bool(
-        sparse.enable_heuristic_topk
-    )
-    if resolved["enable_heuristic_topk"] != config.enable_heuristic_topk:
-        raise RuntimeError("Resolved TRT heuristic top-k mismatch")
+    resolved["enable_sparse_attention"] = sparse is not None
+    if resolved["enable_sparse_attention"] != config.enable_sparse_attention:
+        raise RuntimeError("Resolved TRT sparse-attention mode mismatch")
+    if sparse is not None:
+        resolved["enable_heuristic_topk"] = bool(
+            sparse.enable_heuristic_topk
+        )
+        if (
+            resolved["enable_heuristic_topk"]
+            != config.enable_heuristic_topk
+        ):
+            raise RuntimeError("Resolved TRT heuristic top-k mismatch")
 
     graph = llm_args.cuda_graph_config
     if graph is None:
@@ -646,17 +1051,20 @@ def resolved_parallelism(
         int(value) for value in graph_batch_sizes
     ]
     resolved["cuda_graph_max_batch_size"] = int(graph_max_batch_size)
-    expected_graph = [local_batch_size(global_batch_size, selected)]
+    expected_graph = list(
+        config.cuda_graph_batch_sizes
+        or (local_batch_size(global_batch_size, selected),)
+    )
     if resolved["cuda_graph_batch_sizes"] != expected_graph:
         raise RuntimeError(
             "Resolved TRT CUDA graph batch sizes mismatch: "
             f"{resolved['cuda_graph_batch_sizes']} != {expected_graph}"
         )
-    if resolved["cuda_graph_max_batch_size"] != expected_graph[0]:
+    if resolved["cuda_graph_max_batch_size"] != max(expected_graph):
         raise RuntimeError(
             "Resolved TRT CUDA graph max batch size mismatch: "
             f"{resolved['cuda_graph_max_batch_size']} != "
-            f"{expected_graph[0]}"
+            f"{max(expected_graph)}"
         )
     if selected.is_multinode:
         resolved["gpus_per_node"] = int(llm_args.gpus_per_node)

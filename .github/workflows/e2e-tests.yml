@@ -17,26 +17,37 @@ on:
           - gb300
           - b300
         default: gb300
+      benchmark-profile:
+        description: Offline recipe profile
+        required: false
+        type: choice
+        options:
+          - huawei
+          - pr-max-sweep
+          - pr-tp32-mtp3
+          - pr-tp16-mtp3
+          - pr-tp8-mtp1
+        default: huawei
       test-name:
         description: Display name for this benchmark run
         required: false
         type: string
         default: DeepSeek-V4 GB300 TRT Huawei-style offline
       global_batch_sizes:
-        description: Comma-separated Huawei global batches (16,64,128)
+        description: auto, or comma-separated Huawei batches (16,64,128)
         required: false
         type: string
-        default: 16,64,128
+        default: auto
       salloc-time:
         description: Slurm allocation time limit in minutes
         required: false
         type: string
-        default: "180"
+        default: "300"
       worker-timeout:
         description: Timeout in seconds for the fresh TRT engine
         required: false
         type: string
-        default: "7200"
+        default: "18000"
       worker-stack-period:
         description: TRT all-thread stack dump period; -1 disables it
         required: false
@@ -64,38 +75,87 @@ jobs:
         env:
           GLOBAL_BATCH_SIZES: ${{ inputs.global_batch_sizes }}
           HARDWARE_PROFILE: ${{ inputs.hardware-profile }}
+          BENCHMARK_PROFILE: ${{ inputs.benchmark-profile }}
         run: |
           python3 - <<'PY'
           import json
           import os
 
           hardware_profile = os.environ["HARDWARE_PROFILE"]
+          benchmark_profile = os.environ["BENCHMARK_PROFILE"]
           if hardware_profile not in {"b300", "gb300"}:
               raise SystemExit(
                   f"Unsupported hardware profile: {hardware_profile}"
               )
-          allowed = {16, 64, 128}
-          values = [
-              int(item.strip())
-              for item in os.environ["GLOBAL_BATCH_SIZES"].split(",")
-              if item.strip()
-          ]
-          if not values:
-              raise SystemExit("At least one global batch size is required")
-          if len(values) != len(set(values)):
-              raise SystemExit(f"Duplicate global batch sizes: {values}")
-          invalid = sorted(set(values) - allowed)
-          if invalid:
-              raise SystemExit(
-                  f"Unsupported global batch sizes {invalid}; "
-                  f"allowed={sorted(allowed)}"
+          requested = os.environ["GLOBAL_BATCH_SIZES"].strip()
+          pr_profiles = {
+              "pr-tp32-mtp3": (192, 256),
+              "pr-tp16-mtp3": (400, 512),
+              "pr-tp8-mtp1": (3440, 4096),
+          }
+          if benchmark_profile == "huawei":
+              allowed = {16, 64, 128}
+              values = (
+                  [16, 64, 128]
+                  if requested == "auto"
+                  else [
+                      int(item.strip())
+                      for item in requested.split(",")
+                      if item.strip()
+                  ]
               )
+              if not values:
+                  raise SystemExit(
+                      "At least one global batch size is required"
+                  )
+              if len(values) != len(set(values)):
+                  raise SystemExit(
+                      f"Duplicate global batch sizes: {values}"
+                  )
+              invalid = sorted(set(values) - allowed)
+              if invalid:
+                  raise SystemExit(
+                      f"Unsupported global batch sizes {invalid}; "
+                      f"allowed={sorted(allowed)}"
+                  )
+              entries = [("huawei", value) for value in values]
+          else:
+              if hardware_profile != "gb300":
+                  raise SystemExit(
+                      f"{benchmark_profile} requires hardware-profile=gb300"
+                  )
+              if requested != "auto":
+                  raise SystemExit(
+                      "PR recipe profiles derive their exact fixed global "
+                      "batch; set global_batch_sizes=auto"
+                  )
+              if benchmark_profile == "pr-max-sweep":
+                  order = (
+                      "pr-tp32-mtp3",
+                      "pr-tp16-mtp3",
+                      "pr-tp8-mtp1",
+                  )
+                  entries = [
+                      (profile, global_batch)
+                      for profile in order
+                      for global_batch in pr_profiles[profile]
+                  ]
+              elif benchmark_profile in pr_profiles:
+                  entries = [
+                      (benchmark_profile, global_batch)
+                      for global_batch in pr_profiles[benchmark_profile]
+                  ]
+              else:
+                  raise SystemExit(
+                      f"Unsupported benchmark profile: {benchmark_profile}"
+                  )
           matrix = [
               {
-                  "id": f"gbs{value}",
+                  "id": f"{profile}-gbs{value}",
+                  "config_profile": profile,
                   "global_batch_size": value,
               }
-              for value in values
+              for profile, value in entries
           ]
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
               output.write(
@@ -111,10 +171,10 @@ jobs:
     runs-on:
       - self-hosted
       - ${{ inputs.hardware-profile == 'gb300' && 'gb300-nv' || 'b300' }}
-    timeout-minutes: 240
-    name: ${{ inputs.hardware-profile }} TRT offline / GBS ${{ matrix.global_batch_size }}
+    timeout-minutes: 420
+    name: ${{ inputs.hardware-profile }} TRT offline / ${{ matrix.config_profile }} / GBS ${{ matrix.global_batch_size }}
     strategy:
-      fail-fast: true
+      fail-fast: false
       max-parallel: 1
       matrix:
         include: ${{ fromJson(needs.prepare.outputs.matrix) }}
@@ -122,6 +182,7 @@ jobs:
       GLOBAL_BATCH_SIZE: ${{ matrix.global_batch_size }}
       BENCH_ID: ${{ matrix.id }}
       TRT_BENCH_HARDWARE_PROFILE: ${{ inputs.hardware-profile }}
+      TRT_BENCH_CONFIG_PROFILE: ${{ matrix.config_profile }}
       IMAGE: ${{ inputs.hardware-profile == 'gb300' && 'nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1' || 'ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066' }}
       MODEL_PATH: /scratch/models/DeepSeek-V4-Pro
       DATASET_REVISION: 90f0394333616266d9fe85824ceaf505093cbaa5
@@ -185,9 +246,11 @@ jobs:
               benchmark: {
                 hardware: .benchmark.hardware,
                 hardware_profile: .benchmark.hardware_profile,
+                benchmark_profile: .benchmark.benchmark_profile,
                 effective_parallelism: .benchmark.effective_parallelism,
                 global_batch_size: .benchmark.global_batch_size,
                 local_batch_size: .benchmark.local_batch_size,
+                engine_max_batch_size: .benchmark.engine_max_batch_size,
                 active_gpu_count: .benchmark.active_gpu_count,
                 max_num_tokens: .benchmark.max_num_tokens,
                 engine_warmup_max_tokens: .benchmark.engine_warmup_max_tokens,
@@ -200,10 +263,12 @@ jobs:
                 observed_tokens_per_step: .aggregate.observed_tokens_per_step,
                 output_tput_per_gpu: .aggregate.output_tput_per_gpu,
                 wall_output_tput_per_gpu: .aggregate.wall_output_tput_per_gpu,
+                timing_source: .aggregate.timing_source,
                 filter: .aggregate.filter,
                 schedule_validation: .aggregate.schedule_validation
               },
               huawei,
+              pr_reference,
               failure_kind,
               error
             }' "$result"

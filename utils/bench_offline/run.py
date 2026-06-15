@@ -16,7 +16,11 @@ from pathlib import Path
 from typing import Any
 
 from io_utils import read_json, read_locked_text, tail_text, write_json
-from metrics import huawei_comparison
+from metrics import (
+    apply_trt_host_step_timing,
+    huawei_comparison,
+    pr_reference_comparison,
+)
 from prompts import INFINITEBENCH_REVISION, prepare_corpus, sha256_file
 from trt_config import (
     ALLOWED_GLOBAL_BATCH_SIZES,
@@ -24,24 +28,24 @@ from trt_config import (
     FIXED_BATCH_ARM_FILENAME,
     FIXED_BENCHMARK_CONFIG,
     HARDWARE_PROFILE,
-    HUAWEI_MEASURED_DECODE_ROUNDS,
-    HUAWEI_WARMUP_DECODE_ROUNDS,
     INPUT_TOKENS,
-    MAX_SEQ_LEN,
-    MEASURED_OUTPUT_TOKENS,
-    MTP_DRAFT_TOKENS,
     PINNED_TRT_GLOBAL_SEED,
     SAMPLING_TEMPERATURE,
     SAMPLING_TOP_K,
     SAMPLING_TOP_P,
     WORLD_SIZE,
     attention_workspace_target_bytes,
+    benchmark_profile_key,
     benchmark_environment,
+    engine_max_batch_size,
     engine_warmup_max_tokens,
     external_mpi_rank_environment,
     local_batch_size,
     max_num_tokens,
+    measured_output_tokens,
+    setup_prefill_iterations,
     validate_global_batch_size,
+    warmup_output_tokens,
 )
 
 
@@ -64,6 +68,20 @@ def utc_now() -> str:
 def log_progress(message: str) -> None:
     timestamp = datetime.now(timezone.utc).isoformat(timespec="seconds")
     print(f"[offline-trt-controller {timestamp}] {message}", flush=True)
+
+
+def configure_perfect_router_environment(
+    environment: dict[str, str],
+    *,
+    enabled: bool,
+) -> None:
+    """Set or remove both perfect-router aliases for the worker process."""
+    if enabled:
+        environment["ENABLE_PERFECT_ROUTER"] = "1"
+        environment["TRTLLM_ENABLE_PERFECT_ROUTER"] = "1"
+    else:
+        environment.pop("ENABLE_PERFECT_ROUTER", None)
+        environment.pop("TRTLLM_ENABLE_PERFECT_ROUTER", None)
 
 
 def aggregate_progress(aggregate: dict[str, Any]) -> str:
@@ -311,18 +329,25 @@ def main() -> int:
     args.output_dir.mkdir(parents=True, exist_ok=True)
     result_path = args.output_dir / "result.json"
     experiment_id = args.experiment_id or f"gbs{args.global_batch_size}"
+    config = FIXED_BENCHMARK_CONFIG
+    is_huawei = config.benchmark_mode == "huawei"
     base_result: dict[str, Any] = {
         "schema_version": 2,
         "status": "running",
         "started_at": utc_now(),
         "benchmark": {
-            "mode": "offline_fixed_global_batch_decode",
+            "mode": (
+                "offline_fixed_global_batch_decode"
+                if is_huawei
+                else "offline_pr_config_decode_saturation"
+            ),
             "execution": "one_fresh_engine_one_measured_pass",
             "experiment_id": experiment_id,
             "engine": "TensorRT-LLM PyTorch backend",
             "request_path": "direct LLM.generate; no server or HTTP",
             "hardware": HARDWARE_PROFILE.hardware,
             "hardware_profile": HARDWARE_PROFILE.key,
+            "benchmark_profile": benchmark_profile_key(),
             "renderer_hw": HARDWARE_PROFILE.renderer_hw,
             "world_size": WORLD_SIZE,
             "active_gpu_count": WORLD_SIZE,
@@ -340,17 +365,22 @@ def main() -> int:
                 if args.global_batch_size % WORLD_SIZE == 0
                 else None
             ),
+            "engine_max_batch_size": None,
             "input_tokens": INPUT_TOKENS,
-            "generated_output_tokens": MEASURED_OUTPUT_TOKENS,
-            "mtp_max_draft_len": MTP_DRAFT_TOKENS,
-            "max_seq_len": MAX_SEQ_LEN,
+            "generated_output_tokens": None,
+            "mtp_max_draft_len": config.mtp_draft_tokens,
+            "max_seq_len": config.max_seq_len,
             "engine_warmup_max_tokens": None,
             "attention_workspace_target_bytes": None,
             "fp8_deep_gemm_max_rows": (
                 FIXED_BENCHMARK_CONFIG.fp8_deep_gemm_max_rows
             ),
-            "warmup_decode_rounds": HUAWEI_WARMUP_DECODE_ROUNDS,
-            "measured_decode_rounds": HUAWEI_MEASURED_DECODE_ROUNDS,
+            "warmup_decode_rounds": config.warmup_decode_rounds,
+            "measured_decode_rounds": config.measured_decode_rounds,
+            "request_warmup_enabled": config.run_request_warmup,
+            "perfect_router_enabled": config.enable_perfect_router,
+            "timing_source": config.timing_source,
+            "latency_rounds_to_skip": config.latency_rounds_to_skip,
             "sampling": {
                 "temperature": SAMPLING_TEMPERATURE,
                 "top_p": SAMPLING_TOP_P,
@@ -358,22 +388,20 @@ def main() -> int:
                 "engine_global_seed": PINNED_TRT_GLOBAL_SEED,
             },
             "headline_tpot": (
-                "mean TRT full-local-batch decode iteration latency after "
-                "skipping the first round and removing upper-IQR outliers"
+                (
+                    "mean TRT full-local-batch decode iteration latency"
+                    if is_huawei
+                    else (
+                        "mean rank-0 TRT host_step_time for saturated "
+                        "full-local-batch decode iterations"
+                    )
+                )
+                + " after startup-round skip and upper-IQR filtering"
             ),
             "headline_throughput": (
                 "global_batch_size / decode_round_tpot_seconds / "
                 "active_gpu_count"
             ),
-            "huawei_method_match": {
-                "fixed_global_batch": True,
-                "prefill_decode_barrier_required": True,
-                "warmup_decode_rounds": HUAWEI_WARMUP_DECODE_ROUNDS,
-                "measured_decode_rounds": HUAWEI_MEASURED_DECODE_ROUNDS,
-                "skip_first_measured_round": True,
-                "upper_iqr_outlier_filter": True,
-                "mtp_yield_reported_separately": True,
-            },
         },
         "config": FIXED_BENCHMARK_CONFIG.to_dict(),
         "provenance": {
@@ -384,6 +412,10 @@ def main() -> int:
                 HARDWARE_PROFILE.trt_source_commit,
             ),
             "reference_pr": HARDWARE_PROFILE.reference_pr,
+            "reference_recipe_url": config.reference_recipe_url,
+            "reference_active_global_batch": (
+                config.reference_active_global_batch
+            ),
             "model": model_manifest(args.model_path),
             "slurm_job_id": os.getenv("TRT_BENCH_SLURM_JOB_ID"),
             "slurm_node": os.getenv("TRT_BENCH_SLURM_NODE"),
@@ -402,14 +434,54 @@ def main() -> int:
             ),
         },
     }
+    if is_huawei:
+        base_result["benchmark"]["huawei_method_match"] = {
+            "fixed_global_batch": True,
+            "prefill_decode_barrier_required": True,
+            "warmup_decode_rounds": config.warmup_decode_rounds,
+            "measured_decode_rounds": config.measured_decode_rounds,
+            "skip_first_measured_round": True,
+            "upper_iqr_outlier_filter": True,
+            "mtp_yield_reported_separately": True,
+        }
+    else:
+        base_result["benchmark"]["pr_decode_config_match"] = {
+            "decode_topology": True,
+            "cuda_graph_batches": True,
+            "kv_cache_fraction": True,
+            "moe_backend_and_eplb": True,
+            "overlap_scheduler": True,
+            "mtp_depth": True,
+            "attention_dp_config_default_none": True,
+            "learned_model_router": not config.enable_perfect_router,
+            "reference_decode_max_num_tokens": (
+                config.reference_decode_max_num_tokens
+            ),
+            "offline_runtime_max_num_tokens": (
+                config.runtime_max_num_tokens
+            ),
+            "offline_adaptation": (
+                "The PR decode worker receives prefilled KV. This direct "
+                "offline worker uses a 32768-token context budget to admit "
+                "8K prompts in stages, then times only the saturated "
+                "decode-only window."
+            ),
+            "measurement_instrumentation": (
+                "enable_iter_perf_stats=True and max_stats_len=2048 are "
+                "enabled only to prove the fixed decode window and measure "
+                "MTP acceptance. The PR serving worker leaves iteration "
+                "stats disabled."
+            ),
+        }
     write_json(result_path, base_result)
     log_progress(
         f"benchmark start hardware={HARDWARE_PROFILE.hardware} "
+        f"profile={config.profile_key} "
         f"topology={FIXED_BENCHMARK_CONFIG.parallelism} "
         f"global_batch={args.global_batch_size} "
         f"experiment_id={experiment_id} input_tokens={INPUT_TOKENS} "
-        f"warmup_rounds={HUAWEI_WARMUP_DECODE_ROUNDS} "
-        f"measured_rounds={HUAWEI_MEASURED_DECODE_ROUNDS} "
+        f"warmup_rounds={config.warmup_decode_rounds} "
+        f"measured_rounds={config.measured_decode_rounds} "
         f"worker_timeout={args.worker_timeout}s"
     )
 
@@ -423,8 +495,20 @@ def main() -> int:
             raise FileNotFoundError(f"Dataset does not exist: {args.dataset}")
         local_batch = local_batch_size(args.global_batch_size)
         base_result["benchmark"]["local_batch_size"] = local_batch
+        base_result["benchmark"]["engine_max_batch_size"] = (
+            engine_max_batch_size(args.global_batch_size)
+        )
         base_result["benchmark"]["max_num_tokens"] = max_num_tokens(
             args.global_batch_size
+        )
+        base_result["benchmark"]["generated_output_tokens"] = (
+            measured_output_tokens(args.global_batch_size)
+        )
+        base_result["benchmark"]["warmup_output_tokens"] = (
+            warmup_output_tokens(args.global_batch_size)
+        )
+        base_result["benchmark"]["setup_prefill_iterations"] = (
+            setup_prefill_iterations(args.global_batch_size)
         )
         base_result["benchmark"]["engine_warmup_max_tokens"] = (
             engine_warmup_max_tokens(args.global_batch_size)
@@ -489,8 +573,6 @@ def main() -> int:
             for item in (bench_dir, environment.get("PYTHONPATH"))
             if item
         )
-        environment["ENABLE_PERFECT_ROUTER"] = "1"
-        environment["TRTLLM_ENABLE_PERFECT_ROUTER"] = "1"
         environment["TRTLLM_PERFECT_ROUTER_MARKER"] = str(marker_path)
         configured_environment = benchmark_environment(
             args.global_batch_size,
@@ -524,6 +606,18 @@ def main() -> int:
                     "External MPI rank environment was not preseeded "
                     f"before trtllm-llmapi-launch: {launch_mismatches}"
                 )
+            unexpected_launch_environment = {
+                name: environment[name]
+                for name in CONTROLLED_ENVIRONMENT_VARIABLES
+                if name not in expected_launch_environment
+                and name in environment
+            }
+            if unexpected_launch_environment:
+                raise RuntimeError(
+                    "External MPI launch retained profile-incompatible "
+                    "environment variables: "
+                    f"{unexpected_launch_environment}"
+                )
             log_progress(
                 "validated preseeded external MPI rank environment "
                 f"keys={len(expected_launch_environment)}"
@@ -531,6 +625,10 @@ def main() -> int:
         for name in CONTROLLED_ENVIRONMENT_VARIABLES:
             environment.pop(name, None)
         environment.update(configured_environment)
+        configure_perfect_router_environment(
+            environment,
+            enabled=config.enable_perfect_router,
+        )
         environment["TRTLLM_BENCH_EXPECTED_RANK_ENV"] = json.dumps(
             configured_environment,
             sort_keys=True,
@@ -542,6 +640,10 @@ def main() -> int:
             f"global_batch={args.global_batch_size} "
             f"local_batch={local_batch} "
             f"max_num_tokens={max_num_tokens(args.global_batch_size)} "
+            "setup_prefill_iterations="
+            f"{setup_prefill_iterations(args.global_batch_size)} "
+            "measured_output_tokens="
+            f"{measured_output_tokens(args.global_batch_size)} "
             "engine_warmup_max_tokens="
             f"{engine_warmup_max_tokens(args.global_batch_size)} "
             "attention_workspace_bytes="
@@ -646,20 +748,70 @@ def main() -> int:
             return 1
 
         aggregate = worker_result["aggregate"]
+        if config.overlap_scheduler:
+            log_progress(
+                "parsing rank-0 TRT iteration log for overlap-safe "
+                "host-step timing"
+            )
+            aggregate = apply_trt_host_step_timing(
+                aggregate,
+                worker_log.read_text(
+                    encoding="utf-8",
+                    errors="replace",
+                ),
+                global_batch_size=args.global_batch_size,
+                num_gpus=WORLD_SIZE,
+                skip_rounds=config.latency_rounds_to_skip,
+            )
+            worker_result["aggregate"] = aggregate
+            write_json(worker_output, worker_result)
         base_result.update(
             {
                 "status": "success",
                 "finished_at": utc_now(),
                 "final": worker_result,
                 "aggregate": aggregate,
-                "huawei": huawei_comparison(
-                    args.global_batch_size,
-                    aggregate,
-                    hardware_key=HARDWARE_PROFILE.key,
-                    hardware_label=HARDWARE_PROFILE.hardware,
-                ),
             }
         )
+        if is_huawei:
+            base_result["huawei"] = huawei_comparison(
+                args.global_batch_size,
+                aggregate,
+                hardware_key=HARDWARE_PROFILE.key,
+                hardware_label=HARDWARE_PROFILE.hardware,
+            )
+        else:
+            reference_fields = (
+                config.reference_concurrency,
+                config.reference_active_global_batch,
+                config.reference_output_tput_per_decode_gpu,
+                config.reference_output_tput_per_total_gpu,
+                config.reference_recipe_url,
+            )
+            if any(value is None for value in reference_fields):
+                raise RuntimeError(
+                    f"Profile {config.profile_key} lacks PR reference data"
+                )
+            base_result["pr_reference"] = pr_reference_comparison(
+                aggregate,
+                profile_name=config.profile_key,
+                reference_concurrency=int(
+                    config.reference_concurrency
+                ),
+                reference_active_global_batch=int(
+                    config.reference_active_global_batch
+                ),
+                reference_prefill_gpu_count=(
+                    config.reference_prefill_gpu_count
+                ),
+                reference_output_tput_per_decode_gpu=float(
+                    config.reference_output_tput_per_decode_gpu
+                ),
+                reference_output_tput_per_total_gpu=float(
+                    config.reference_output_tput_per_total_gpu
+                ),
+                reference_recipe_url=str(config.reference_recipe_url),
+            )
         write_json(result_path, base_result)
         log_progress(
             "benchmark complete status=success "

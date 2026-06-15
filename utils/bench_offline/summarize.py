@@ -140,7 +140,11 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         # Custom fields remain useful in downloaded flat rows. The standard
         # renderer ignores fields it does not understand.
         "global_batch_size": int(global_batch),
+        "benchmark_profile": benchmark.get("benchmark_profile"),
         "local_batch_size": int(aggregate["local_batch_size"]),
+        "engine_max_batch_size": benchmark.get(
+            "engine_max_batch_size"
+        ),
         "decode_round_tpot_ms": float(
             aggregate["decode_round_tpot_ms"]
         ),
@@ -151,8 +155,25 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         "measured_decode_rounds": int(
             aggregate["measured_decode_rounds"]
         ),
+        "timing_source": aggregate.get("timing_source"),
         **equivalent_percentiles,
     }
+    pr_reference = result.get("pr_reference") or {}
+    for key in (
+        "reference_concurrency",
+        "reference_active_global_batch",
+        "reference_prefill_gpu_count",
+        "reference_decode_gpu_count",
+        "reference_total_gpu_count",
+        "reference_output_tput_per_decode_gpu",
+        "reference_output_tput_per_total_gpu",
+        "measured_output_tput_per_reference_total_gpu",
+        "offline_to_reference_decode_gpu_ratio",
+        "offline_to_reference_total_gpu_ratio",
+        "reference_recipe_url",
+    ):
+        if key in pr_reference:
+            row[f"pr_{key}"] = pr_reference[key]
     for renderer_key, aggregate_key in (
         ("mean_ttft", "mean_ttft_ms"),
         ("median_ttft", "median_ttft_ms"),
@@ -198,6 +219,7 @@ def result_row(
     benchmark = result.get("benchmark") or {}
     aggregate = result.get("aggregate") or {}
     huawei = result.get("huawei") or {}
+    pr_reference = result.get("pr_reference") or {}
     hardware_profile = str(
         benchmark.get("hardware_profile")
         or huawei.get("hardware_key")
@@ -223,6 +245,7 @@ def result_row(
         "experiment_id": experiment_id,
         "hardware": benchmark.get("hardware"),
         "hardware_profile": hardware_profile,
+        "benchmark_profile": benchmark.get("benchmark_profile"),
         "effective_parallelism": benchmark.get("effective_parallelism"),
         "physical_nodes": benchmark.get("physical_nodes"),
         "global_batch_size": benchmark.get(
@@ -230,6 +253,9 @@ def result_row(
             benchmark.get("concurrency"),
         ),
         "local_batch_size": benchmark.get("local_batch_size"),
+        "engine_max_batch_size": benchmark.get(
+            "engine_max_batch_size"
+        ),
         "active_gpu_count": benchmark.get("active_gpu_count"),
         "status": result.get("status", "unknown"),
         "decode_round_tpot_ms": aggregate.get("decode_round_tpot_ms"),
@@ -256,6 +282,7 @@ def result_row(
             "effective_acceptance_rate"
         ),
         "token_yield_source": aggregate.get("token_yield_source"),
+        "timing_source": aggregate.get("timing_source"),
         "mean_ttft_ms": aggregate.get("mean_ttft_ms"),
         "measured_decode_rounds": aggregate.get(
             "measured_decode_rounds"
@@ -266,6 +293,9 @@ def result_row(
         "outlier_rounds": (aggregate.get("filter") or {}).get(
             "outlier_rounds"
         ),
+        "skipped_rounds": (aggregate.get("filter") or {}).get(
+            "rounds_skipped"
+        ),
         "huawei_decode_round_tpot_ms": huawei.get(
             "decode_round_tpot_ms"
         ),
@@ -274,6 +304,29 @@ def result_row(
         ),
         "hardware_to_huawei_decode_step_ratio": step_ratio,
         "hardware_to_huawei_output_ratio": output_ratio,
+        "pr_reference_concurrency": pr_reference.get(
+            "reference_concurrency"
+        ),
+        "pr_reference_active_global_batch": pr_reference.get(
+            "reference_active_global_batch"
+        ),
+        "pr_reference_output_tput_per_decode_gpu": pr_reference.get(
+            "reference_output_tput_per_decode_gpu"
+        ),
+        "pr_reference_output_tput_per_total_gpu": pr_reference.get(
+            "reference_output_tput_per_total_gpu"
+        ),
+        "pr_measured_output_tput_per_reference_total_gpu": (
+            pr_reference.get(
+                "measured_output_tput_per_reference_total_gpu"
+            )
+        ),
+        "offline_to_pr_decode_gpu_ratio": pr_reference.get(
+            "offline_to_reference_decode_gpu_ratio"
+        ),
+        "offline_to_pr_total_gpu_ratio": pr_reference.get(
+            "offline_to_reference_total_gpu_ratio"
+        ),
         "failure_kind": result.get("failure_kind"),
         "error": result.get("error"),
         "source": str(source) if source else None,
@@ -313,95 +366,166 @@ def markdown(rows: list[dict[str, Any]]) -> str:
         ),
         None,
     )
-    lines = [
-        f"# DeepSeek-V4 {hardware} TRT Fixed-GBS Offline Benchmark",
-        "",
-        f"| GBS | Local/rank | GPUs | Status | Decode round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained rounds | Huawei TPOT ms | Huawei steps/s/chip | {hardware_profile}/Huawei step |",
-        "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
-    ]
-    for row in rows:
-        retained = row.get("retained_rounds")
-        measured = row.get("measured_decode_rounds")
-        retained_label = (
-            f"{retained}/{int(measured) - 1}"
-            if retained is not None and measured is not None
-            else "-"
-        )
-        lines.append(
-            "| {gbs} | {local} | {gpus} | {status} | {tpot} | "
-            "{step_tput} | {tokens_per_step} | {output_tput} | {wall} | "
-            "{retained} | {huawei_tpot} | {huawei_tput} | {ratio} |".format(
-                gbs=row.get("global_batch_size") or "-",
-                local=row.get("local_batch_size") or "-",
-                gpus=row.get("active_gpu_count") or "-",
-                status=row["status"],
-                tpot=_fmt(row.get("decode_round_tpot_ms"), 3),
-                step_tput=_fmt(
-                    row.get("decode_step_tput_per_gpu"),
-                    2,
-                ),
-                tokens_per_step=_fmt(
-                    row.get("observed_tokens_per_step"),
-                    3,
-                ),
-                output_tput=_fmt(row.get("output_tput_per_gpu"), 2),
-                wall=_fmt(row.get("wall_output_tput_per_gpu"), 2),
-                retained=retained_label,
-                huawei_tpot=_fmt(
-                    row.get("huawei_decode_round_tpot_ms"),
-                    2,
-                ),
-                huawei_tput=_fmt(
-                    row.get("huawei_decode_step_tput_per_chip"),
-                    2,
-                ),
-                ratio=_fmt(
-                    row.get("hardware_to_huawei_decode_step_ratio"),
-                    3,
-                ),
-            )
-        )
-    lines.extend(
-        [
-            "",
-            "## Metric meanings",
-            "",
-            (
-                "- `GBS` is the one authoritative global batch submitted "
-                f"to TRT. `Local/rank` is exactly `GBS / {gpu_count}`"
-                + (f" for {topology}." if topology else ".")
-                if gpu_count is not None
-                else (
-                    "- `GBS` is the one authoritative global batch "
-                    "submitted to TRT."
-                )
-            ),
-            "- `Decode round TPOT` is the mean `iterLatencyMS` for 256 consecutive full-local-batch decode iterations after skipping the first and removing only upper-IQR outliers, matching Huawei's `process_infer_time` path.",
-            (
-                "- `Decode steps/s/GPU` is "
-                f"`GBS / decode_round_TPOT / {gpu_count}`. This is the "
-                "direct comparison with Huawei's published table."
-                if gpu_count is not None
-                else (
-                    "- `Decode steps/s/GPU` divides the full-batch "
-                    "decode-step rate by active GPUs."
-                )
-            ),
-            "- `Tok/step` is MTP output yield and is reported separately. `Output tok/s/GPU` multiplies decode-step throughput by that yield.",
-            "- `Wall tok/s/GPU` covers the entire `LLM.generate()` call and remains diagnostic; it includes the deliberately longer output cap used to guarantee at least 256 decode rounds.",
-            (
-                "- The global batch and timing method match Huawei. "
-                f"The hardware does not: this run uses {gpu_count} "
-                f"{hardware} GPUs, while Huawei publishes 16 950DT chips."
-                if gpu_count is not None
-                else (
-                    "- The global batch and timing method match Huawei; "
-                    "the hardware does not."
-                )
-            ),
-            "",
-        ]
+    is_pr_max = any(
+        str(row.get("benchmark_profile") or "").startswith("pr-")
+        for row in rows
     )
+    if is_pr_max:
+        lines = [
+            "# DeepSeek-V4 GB300 TRT PR-Config Offline Decode Saturation",
+            "",
+            "| Profile | GBS | Local/rank | Decode GPUs | Status | Host-step ms | Decode steps/s/GPU | Tok/step | Output tok/s/decode-GPU | PR output tok/s/decode-GPU | Offline/PR decode | PR-fleet-normalized tok/s/GPU |",
+            "|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for row in rows:
+            lines.append(
+                "| {profile} | {gbs} | {local} | {gpus} | {status} | "
+                "{tpot} | {step_tput} | {tokens_per_step} | "
+                "{output_tput} | {pr_output} | {ratio} | "
+                "{fleet_output} |".format(
+                    profile=row.get("benchmark_profile") or "-",
+                    gbs=row.get("global_batch_size") or "-",
+                    local=row.get("local_batch_size") or "-",
+                    gpus=row.get("active_gpu_count") or "-",
+                    status=row["status"],
+                    tpot=_fmt(row.get("decode_round_tpot_ms"), 3),
+                    step_tput=_fmt(
+                        row.get("decode_step_tput_per_gpu"),
+                        2,
+                    ),
+                    tokens_per_step=_fmt(
+                        row.get("observed_tokens_per_step"),
+                        3,
+                    ),
+                    output_tput=_fmt(
+                        row.get("output_tput_per_gpu"),
+                        2,
+                    ),
+                    pr_output=_fmt(
+                        row.get(
+                            "pr_reference_output_tput_per_decode_gpu"
+                        ),
+                        2,
+                    ),
+                    ratio=_fmt(
+                        row.get("offline_to_pr_decode_gpu_ratio"),
+                        3,
+                    ),
+                    fleet_output=_fmt(
+                        row.get(
+                            "pr_measured_output_tput_per_reference_total_gpu"
+                        ),
+                        2,
+                    ),
+                )
+            )
+        lines.extend(
+            [
+                "",
+                "## Metric meanings",
+                "",
+                "- `GBS` is a fixed decode population. Each copied recipe runs its attempt-13 active estimate and engine-capacity endpoint: TP32=192/256, TP16=400/512, TP8=3440/4096. It is not HTTP concurrency.",
+                "- `Host-step ms` is rank-0 TRT `host_step_time` for 256 consecutive full-batch decode iterations under overlap scheduling, after discarding eight startup rounds and upper-IQR outliers.",
+                "- `Output tok/s/decode-GPU` multiplies full-batch decode-step rate by the measured MTP token yield.",
+                "- `PR output tok/s/decode-GPU` is attempt 13's serving result for the copied recipe. `Offline/PR decode` compares the same decode-GPU denominator.",
+                "- `PR-fleet-normalized` divides offline total output throughput by the PR's decode plus prefill GPU count. It is a comparison normalization, not the offline run's actual allocation.",
+                "- The offline adaptation performs 8K prefill on the decode GPUs with `max_num_tokens=32768`; the PR worker receives transferred KV and uses its smaller decode-only token cap.",
+                "",
+            ]
+        )
+    else:
+        lines = [
+            f"# DeepSeek-V4 {hardware} TRT Fixed-GBS Offline Benchmark",
+            "",
+            f"| GBS | Local/rank | GPUs | Status | Decode round TPOT ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Retained rounds | Huawei TPOT ms | Huawei steps/s/chip | {hardware_profile}/Huawei step |",
+            "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for row in rows:
+            retained = row.get("retained_rounds")
+            measured = row.get("measured_decode_rounds")
+            skipped = int(row.get("skipped_rounds") or 0)
+            retained_label = (
+                f"{retained}/{int(measured) - skipped}"
+                if retained is not None and measured is not None
+                else "-"
+            )
+            lines.append(
+                "| {gbs} | {local} | {gpus} | {status} | {tpot} | "
+                "{step_tput} | {tokens_per_step} | {output_tput} | {wall} | "
+                "{retained} | {huawei_tpot} | {huawei_tput} | {ratio} |".format(
+                    gbs=row.get("global_batch_size") or "-",
+                    local=row.get("local_batch_size") or "-",
+                    gpus=row.get("active_gpu_count") or "-",
+                    status=row["status"],
+                    tpot=_fmt(row.get("decode_round_tpot_ms"), 3),
+                    step_tput=_fmt(
+                        row.get("decode_step_tput_per_gpu"),
+                        2,
+                    ),
+                    tokens_per_step=_fmt(
+                        row.get("observed_tokens_per_step"),
+                        3,
+                    ),
+                    output_tput=_fmt(row.get("output_tput_per_gpu"), 2),
+                    wall=_fmt(row.get("wall_output_tput_per_gpu"), 2),
+                    retained=retained_label,
+                    huawei_tpot=_fmt(
+                        row.get("huawei_decode_round_tpot_ms"),
+                        2,
+                    ),
+                    huawei_tput=_fmt(
+                        row.get("huawei_decode_step_tput_per_chip"),
+                        2,
+                    ),
+                    ratio=_fmt(
+                        row.get(
+                            "hardware_to_huawei_decode_step_ratio"
+                        ),
+                        3,
+                    ),
+                )
+            )
+        lines.extend(
+            [
+                "",
+                "## Metric meanings",
+                "",
+                (
+                    "- `GBS` is the one authoritative global batch submitted "
+                    f"to TRT. `Local/rank` is exactly `GBS / {gpu_count}`"
+                    + (f" for {topology}." if topology else ".")
+                    if gpu_count is not None
+                    else (
+                        "- `GBS` is the one authoritative global batch "
+                        "submitted to TRT."
+                    )
+                ),
+                "- `Decode round TPOT` is the mean `iterLatencyMS` for 256 consecutive full-local-batch decode iterations after skipping the first and removing only upper-IQR outliers, matching Huawei's `process_infer_time` path.",
+                (
+                    "- `Decode steps/s/GPU` is "
+                    f"`GBS / decode_round_TPOT / {gpu_count}`. This is the "
+                    "direct comparison with Huawei's published table."
+                    if gpu_count is not None
+                    else (
+                        "- `Decode steps/s/GPU` divides the full-batch "
+                        "decode-step rate by active GPUs."
+                    )
+                ),
+                "- `Tok/step` is MTP output yield and is reported separately. `Output tok/s/GPU` multiplies decode-step throughput by that yield.",
+                "- `Wall tok/s/GPU` covers the entire `LLM.generate()` call and remains diagnostic; it includes the deliberately longer output cap used to guarantee at least 256 decode rounds.",
+                (
+                    "- The global batch and timing method match Huawei. "
+                    f"The hardware does not: this run uses {gpu_count} "
+                    f"{hardware} GPUs, while Huawei publishes 16 950DT chips."
+                    if gpu_count is not None
+                    else (
+                        "- The global batch and timing method match Huawei; "
+                        "the hardware does not."
+                    )
+                ),
+                "",
+            ]
+        )
     failures = [row for row in rows if row["status"] != "success"]
     if failures:
         lines.extend(["## Missing Or Failed Rows", ""])

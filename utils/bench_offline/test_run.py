@@ -9,9 +9,12 @@ from types import ModuleType, SimpleNamespace
 import pytest
 
 import trt_mpi_entry
+import trt_worker
+from sitecustomize import apply_trtllm_env_aliases
 from run import (
     ALLOWED_GLOBAL_BATCH_SIZES,
     classify_failure,
+    configure_perfect_router_environment,
     git_revision,
     latest_rank_fatal,
     latest_rank_progress,
@@ -38,6 +41,27 @@ from trt_worker import (
 
 def test_controller_accepts_only_huawei_global_batches():
     assert ALLOWED_GLOBAL_BATCH_SIZES == (16, 64, 128)
+
+
+def test_controller_routing_environment_matches_profile():
+    environment = {
+        "ENABLE_PERFECT_ROUTER": "stale",
+        "TRTLLM_ENABLE_PERFECT_ROUTER": "stale",
+    }
+    configure_perfect_router_environment(environment, enabled=False)
+    assert "ENABLE_PERFECT_ROUTER" not in environment
+    assert "TRTLLM_ENABLE_PERFECT_ROUTER" not in environment
+
+    configure_perfect_router_environment(environment, enabled=True)
+    assert environment["ENABLE_PERFECT_ROUTER"] == "1"
+    assert environment["TRTLLM_ENABLE_PERFECT_ROUTER"] == "1"
+
+
+def test_sitecustomize_removes_stale_perfect_router_alias(monkeypatch):
+    monkeypatch.setenv("ENABLE_PERFECT_ROUTER", "1")
+    monkeypatch.delenv("TRTLLM_ENABLE_PERFECT_ROUTER", raising=False)
+    apply_trtllm_env_aliases()
+    assert "ENABLE_PERFECT_ROUTER" not in os.environ
 
 
 def test_classify_fixed_batch_validation_before_runtime():
@@ -1144,6 +1168,46 @@ def test_marker_reports_exact_rank_and_cache_coverage(tmp_path):
     assert parsed["mpi_entry_cute_cache_processes"] == 8
     assert parsed["mpi_entry_cute_cache_paths"] == ["/cache"]
     assert parsed["event_ranks"]["entry_ready"] == list(range(8))
+
+
+def test_rank_validation_accepts_learned_router_profile(
+    tmp_path,
+    monkeypatch,
+):
+    marker = tmp_path / "marker.jsonl"
+    rank_environment = {
+        "TRTLLM_BENCH_ATTENTION_WORKSPACE_BYTES": "0",
+        "TRTLLM_BENCH_KV_PREFILL_RESERVE_BYTES": "0",
+        "TRTLLM_BENCH_MIN_RUNTIME_KV_TOKENS": "100",
+    }
+    rows = [
+        {
+            "pid": 100 + rank,
+            "rank": str(rank),
+            "perfect_router": None,
+            "cute_dsl_cache_dir": "/cache",
+            "benchmark_environment": rank_environment,
+            "event": "entry_ready",
+            "source": "trt_mpi_entry",
+        }
+        for rank in range(8)
+    ]
+    marker.write_text(
+        "".join(json.dumps(row) + "\n" for row in rows),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        trt_worker,
+        "FIXED_BENCHMARK_CONFIG",
+        SimpleNamespace(
+            enable_perfect_router=False,
+            parallelism="DEP8",
+        ),
+    )
+    monkeypatch.setenv("CUTE_DSL_CACHE_DIR", "/cache")
+
+    parsed = validate_rank_propagation(marker, rank_environment)
+    assert parsed["mpi_entry_perfect_router_values"] == [None]
 
 
 def test_rank_validation_rejects_malformed_marker_records(tmp_path):

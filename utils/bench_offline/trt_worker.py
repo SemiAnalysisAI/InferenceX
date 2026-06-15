@@ -17,6 +17,7 @@ from io_utils import read_locked_text, write_json
 from metrics import (
     select_full_batch_decode_rounds,
     summarize_decode_rounds,
+    summarize_outputs,
     summarize_requests,
 )
 from prompts import load_corpus
@@ -24,20 +25,18 @@ from trt_config import (
     FIXED_BENCHMARK_CONFIG,
     FIXED_BATCH_ARM_ENV,
     HARDWARE_PROFILE,
-    HUAWEI_MEASURED_DECODE_ROUNDS,
-    HUAWEI_WARMUP_DECODE_ROUNDS,
     INPUT_TOKENS,
-    MEASURED_OUTPUT_TOKENS,
     SAMPLING_TEMPERATURE,
     SAMPLING_TOP_K,
     SAMPLING_TOP_P,
-    WARMUP_OUTPUT_TOKENS,
     WORLD_SIZE,
     benchmark_environment,
     build_llm_kwargs,
     local_batch_size,
+    measured_output_tokens,
     resolved_parallelism,
     validate_global_batch_size,
+    warmup_output_tokens,
 )
 
 
@@ -159,7 +158,6 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
         row
         for row in processes.values()
         if row.get("source") == "trt_mpi_entry"
-        and row.get("perfect_router") == "1"
     ]
     mpi_entries_with_cache = [
         row for row in mpi_entries if row.get("cute_dsl_cache_dir")
@@ -176,6 +174,13 @@ def read_perfect_router_marker(path: Path) -> dict[str, Any]:
             int(row["rank"])
             for row in mpi_entries
             if row.get("rank") is not None
+        ),
+        "mpi_entry_perfect_router_values": sorted(
+            {
+                row.get("perfect_router")
+                for row in mpi_entries
+            },
+            key=lambda value: "" if value is None else str(value),
         ),
         "mpi_entry_cute_cache_processes": len(mpi_entries_with_cache),
         "mpi_entry_cute_cache_paths": sorted(
@@ -219,7 +224,9 @@ def sampling_params(count: int, max_tokens: int) -> list[Any]:
             top_k=SAMPLING_TOP_K,
             max_tokens=max_tokens,
             ignore_eos=True,
-            return_perf_metrics=True,
+            return_perf_metrics=(
+                FIXED_BENCHMARK_CONFIG.collect_request_perf_metrics
+            ),
             detokenize=False,
             add_special_tokens=False,
         )
@@ -280,6 +287,21 @@ def validate_rank_propagation(
             "TRT active ranks do not match "
             f"{FIXED_BENCHMARK_CONFIG.parallelism}: "
             f"{marker['mpi_entry_ranks']!r} != {expected_ranks!r}"
+        )
+    expected_perfect_router = (
+        "1" if FIXED_BENCHMARK_CONFIG.enable_perfect_router else None
+    )
+    router_mismatches = {
+        str(row.get("rank")): row.get("perfect_router")
+        for row in marker["processes"]
+        if row.get("source") == "trt_mpi_entry"
+        and row.get("perfect_router") != expected_perfect_router
+    }
+    if router_mismatches:
+        raise RuntimeError(
+            "TRT perfect-router mode did not match the benchmark profile: "
+            f"expected={expected_perfect_router!r} "
+            f"actual={router_mismatches}"
         )
     environment_mismatches = {}
     for row in marker["processes"]:
@@ -492,23 +514,36 @@ def main() -> int:
             )
         inputs = [{"prompt_token_ids": prompt} for prompt in prompts]
         local_batch = local_batch_size(args.global_batch_size)
+        config = FIXED_BENCHMARK_CONFIG
+        warmup_tokens = warmup_output_tokens(args.global_batch_size)
+        measured_tokens = measured_output_tokens(args.global_batch_size)
         log_progress(
             f"worker start global_batch={args.global_batch_size} "
             f"local_batch={local_batch} "
             f"hardware={HARDWARE_PROFILE.hardware} "
-            f"topology={FIXED_BENCHMARK_CONFIG.parallelism} "
-            f"warmup_rounds={HUAWEI_WARMUP_DECODE_ROUNDS} "
-            f"measured_rounds={HUAWEI_MEASURED_DECODE_ROUNDS}"
+            f"profile={config.profile_key} "
+            f"topology={config.parallelism} "
+            f"warmup_rounds={config.warmup_decode_rounds} "
+            f"measured_rounds={config.measured_decode_rounds}"
         )
 
-        phase = "perfect_router_source"
+        phase = "routing_mode_validation"
         router_source = perfect_router_source()
-        if not router_source["supported"]:
+        if config.enable_perfect_router:
+            if not router_source["supported"]:
+                raise RuntimeError(
+                    "Pinned TRT image does not expose ENABLE_PERFECT_ROUTER"
+                )
+            if os.getenv("ENABLE_PERFECT_ROUTER") != "1":
+                raise RuntimeError("ENABLE_PERFECT_ROUTER is not set")
+        elif (
+            os.getenv("ENABLE_PERFECT_ROUTER") == "1"
+            or os.getenv("TRTLLM_ENABLE_PERFECT_ROUTER") == "1"
+        ):
             raise RuntimeError(
-                "Pinned TRT image does not expose ENABLE_PERFECT_ROUTER"
+                "PR-max must use the learned router, but perfect routing "
+                "is enabled"
             )
-        if os.getenv("ENABLE_PERFECT_ROUTER") != "1":
-            raise RuntimeError("ENABLE_PERFECT_ROUTER is not set")
         mpi_worker_entry = install_mpi_worker_entry()
 
         from tensorrt_llm import LLM
@@ -529,7 +564,9 @@ def main() -> int:
             "moe_max_num_tokens="
             f"{llm_kwargs['moe_config'].get('max_num_tokens')} "
             f"max_seq_len={llm_kwargs['max_seq_len']} "
-            "overlap_scheduler=off iter_stats=on"
+            f"overlap_scheduler={'on' if config.overlap_scheduler else 'off'} "
+            f"perfect_router={'on' if config.enable_perfect_router else 'off'} "
+            "iter_stats=on"
         )
         init_started = time.perf_counter()
         with LLM(**llm_kwargs) as llm:
@@ -560,54 +597,84 @@ def main() -> int:
                 f"global_batch={args.global_batch_size}"
             )
 
-            phase = "warmup"
-            warmup_outputs, warmup_wall, warmup_stats = generate(
-                llm,
-                inputs,
-                label="warmup",
-                max_tokens=WARMUP_OUTPUT_TOKENS,
-            )
-            write_json(
-                args.output.parent / "warmup_iteration_stats.json",
-                warmup_stats,
-            )
-            warmup_requests = summarize_requests(
-                warmup_outputs,
-                wall_seconds=warmup_wall,
-                expected_output_tokens=WARMUP_OUTPUT_TOKENS,
-                num_gpus=WORLD_SIZE,
-            )
-            warmup_rounds, warmup_schedule = (
-                select_full_batch_decode_rounds(
-                    warmup_stats,
-                    local_batch_size=local_batch,
-                    required_rounds=HUAWEI_WARMUP_DECODE_ROUNDS,
+            warmup_result: dict[str, Any]
+            if config.run_request_warmup:
+                phase = "warmup"
+                warmup_outputs, warmup_wall, warmup_stats = generate(
+                    llm,
+                    inputs,
+                    label="warmup",
+                    max_tokens=warmup_tokens,
                 )
-            )
-            log_progress(
-                "warmup validated "
-                f"full_batch_rounds="
-                f"{warmup_schedule['full_batch_decode_rounds_available']} "
-                f"selected_iters={warmup_rounds[0]['iter']}-"
-                f"{warmup_rounds[-1]['iter']}"
-            )
-            time.sleep(2.0)
+                write_json(
+                    args.output.parent / "warmup_iteration_stats.json",
+                    warmup_stats,
+                )
+                warmup_requests = summarize_requests(
+                    warmup_outputs,
+                    wall_seconds=warmup_wall,
+                    expected_output_tokens=warmup_tokens,
+                    num_gpus=WORLD_SIZE,
+                )
+                warmup_rounds, warmup_schedule = (
+                    select_full_batch_decode_rounds(
+                        warmup_stats,
+                        local_batch_size=local_batch,
+                        required_rounds=config.warmup_decode_rounds,
+                    )
+                )
+                log_progress(
+                    "warmup validated "
+                    f"full_batch_rounds="
+                    f"{warmup_schedule['full_batch_decode_rounds_available']} "
+                    f"selected_iters={warmup_rounds[0]['iter']}-"
+                    f"{warmup_rounds[-1]['iter']}"
+                )
+                warmup_result = {
+                    "skipped": False,
+                    "decode_rounds_required": (
+                        config.warmup_decode_rounds
+                    ),
+                    "output_tokens_per_request": warmup_tokens,
+                    "wall_seconds": warmup_wall,
+                    "request_aggregate": warmup_requests["aggregate"],
+                    "schedule_validation": warmup_schedule,
+                }
+                time.sleep(2.0)
+            else:
+                log_progress(
+                    "request warmup skipped; engine graph warmup and "
+                    f"{config.latency_rounds_to_skip} measured startup "
+                    "rounds provide settling"
+                )
+                warmup_result = {
+                    "skipped": True,
+                    "reason": (
+                        "PR-max profile uses one request pass and discards "
+                        "initial full-batch decode rounds"
+                    ),
+                }
 
             phase = "measured_generation"
             measured_outputs, measured_wall, measured_stats = generate(
                 llm,
                 inputs,
                 label="measured",
-                max_tokens=MEASURED_OUTPUT_TOKENS,
+                max_tokens=measured_tokens,
             )
             write_json(
                 args.output.parent / "measured_iteration_stats.json",
                 measured_stats,
             )
-            request_summary = summarize_requests(
+            summary_function = (
+                summarize_requests
+                if config.collect_request_perf_metrics
+                else summarize_outputs
+            )
+            request_summary = summary_function(
                 measured_outputs,
                 wall_seconds=measured_wall,
-                expected_output_tokens=MEASURED_OUTPUT_TOKENS,
+                expected_output_tokens=measured_tokens,
                 num_gpus=WORLD_SIZE,
             )
             request_aggregate = request_summary["aggregate"]
@@ -616,6 +683,17 @@ def main() -> int:
                 global_batch_size=args.global_batch_size,
                 local_batch_size=local_batch,
                 num_gpus=WORLD_SIZE,
+                required_rounds=config.measured_decode_rounds,
+                mtp_draft_tokens=config.mtp_draft_tokens,
+                allow_staged_prefill=(
+                    config.benchmark_mode == "pr_max_decode"
+                ),
+                latency_rounds_to_skip=config.latency_rounds_to_skip,
+                timing_source=(
+                    "iter_latency_ms_overlap_diagnostic"
+                    if config.overlap_scheduler
+                    else config.timing_source
+                ),
             )
             schedule_validation = decode_rounds["schedule_validation"]
             log_progress(
@@ -626,6 +704,7 @@ def main() -> int:
                 f"{schedule_validation['selected_last_iter']} "
                 "leading_inactive_stats_ignored="
                 f"{schedule_validation['leading_inactive_iterations_ignored']} "
+                f"timing_source={decode_rounds['timing_source']} "
                 f"round_tpot={decode_rounds['decode_round_tpot_ms']:.3f}ms "
                 "step_tput_per_gpu="
                 f"{decode_rounds['decode_step_tput_per_gpu']:.2f} "
@@ -633,7 +712,7 @@ def main() -> int:
                 f"{decode_rounds['observed_tokens_per_step']:.3f}"
             )
 
-            phase = "perfect_router_validation"
+            phase = "rank_environment_validation"
             marker_path = Path(
                 os.environ["TRTLLM_PERFECT_ROUTER_MARKER"]
             )
@@ -664,20 +743,12 @@ def main() -> int:
                 "llm_kwargs": llm_kwargs,
                 "resolved_parallelism": resolved,
                 "engine_init_seconds": init_seconds,
-                "warmup": {
-                    "decode_rounds_required": (
-                        HUAWEI_WARMUP_DECODE_ROUNDS
-                    ),
-                    "output_tokens_per_request": WARMUP_OUTPUT_TOKENS,
-                    "wall_seconds": warmup_wall,
-                    "request_aggregate": warmup_requests["aggregate"],
-                    "schedule_validation": warmup_schedule,
-                },
+                "warmup": warmup_result,
                 "measured_pass": {
                     "decode_rounds_required": (
-                        HUAWEI_MEASURED_DECODE_ROUNDS
+                        config.measured_decode_rounds
                     ),
-                    "output_tokens_per_request": MEASURED_OUTPUT_TOKENS,
+                    "output_tokens_per_request": measured_tokens,
                     "wall_seconds": measured_wall,
                     "requests": request_summary["requests"],
                     "iteration_stats_file": (
@@ -686,6 +757,12 @@ def main() -> int:
                 },
                 "aggregate": aggregate,
                 "perfect_router": {
+                    "enabled": config.enable_perfect_router,
+                    "mode": (
+                        "idealized_upper_bound"
+                        if config.enable_perfect_router
+                        else "learned_model_router"
+                    ),
                     "source": router_source,
                     "mpi_worker_entry": mpi_worker_entry,
                     "propagation": marker,

@@ -1,4 +1,4 @@
-"""MPI worker entry shim for the pinned TRT perfect-router environment."""
+"""MPI worker entry shim for the pinned offline TRT environment."""
 
 from __future__ import annotations
 
@@ -791,6 +791,8 @@ def worker_main(*args: Any, **kwargs: Any) -> Any:
     """Restore benchmark aliases before importing TRT's real worker entry."""
     if os.getenv("TRTLLM_ENABLE_PERFECT_ROUTER") == "1":
         os.environ["ENABLE_PERFECT_ROUTER"] = "1"
+    else:
+        os.environ.pop("ENABLE_PERFECT_ROUTER", None)
     configurable_moe = os.getenv(
         "TRTLLM_BENCH_ENABLE_CONFIGURABLE_MOE"
     )

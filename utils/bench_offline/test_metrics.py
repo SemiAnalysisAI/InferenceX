@@ -4,10 +4,13 @@ from types import SimpleNamespace
 import pytest
 
 from metrics import (
+    apply_trt_host_step_timing,
     huawei_comparison,
     huawei_filter_round_latencies,
+    pr_reference_comparison,
     select_full_batch_decode_rounds,
     summarize_decode_rounds,
+    summarize_outputs,
     summarize_requests,
 )
 
@@ -114,6 +117,30 @@ def test_request_summary_keeps_wall_and_latency_diagnostics():
         1024 / 340
     )
     assert len(aggregate["output_sequence_sha256"]) == 64
+
+
+def test_output_summary_does_not_require_request_perf_metrics():
+    outputs = [
+        SimpleNamespace(
+            outputs=[
+                SimpleNamespace(
+                    token_ids=list(range(32)),
+                    request_perf_metrics=None,
+                )
+            ]
+        )
+        for _ in range(8)
+    ]
+    summary = summarize_outputs(
+        outputs,
+        wall_seconds=2.0,
+        expected_output_tokens=32,
+        num_gpus=8,
+    )
+    aggregate = summary["aggregate"]
+    assert aggregate["request_samples"] == 8
+    assert aggregate["wall_output_tput_per_gpu"] == 16.0
+    assert aggregate["request_perf_metrics_collected"] is False
 
 
 def test_huawei_filter_skips_first_and_drops_only_upper_outlier():
@@ -275,6 +302,127 @@ def test_decode_validation_rejects_mixed_prefill_and_decode():
             local_batch_size=8,
             required_rounds=256,
         )
+
+
+def test_pr_decode_validation_allows_staged_prefill_then_full_batch():
+    stats = [
+        iteration(
+            1,
+            active=4,
+            queued=4,
+            scheduled=4,
+            context=4,
+            generation=0,
+            drafted=0,
+            accepted=0,
+        ),
+        iteration(
+            2,
+            active=8,
+            queued=0,
+            scheduled=8,
+            context=4,
+            generation=4,
+            drafted=12,
+            accepted=6,
+        ),
+    ]
+    stats.extend(iteration(index) for index in range(3, 259))
+    selected, diagnostics = select_full_batch_decode_rounds(
+        stats,
+        local_batch_size=8,
+        required_rounds=256,
+        allow_staged_prefill=True,
+    )
+    assert selected[0]["iter"] == 3
+    assert selected[-1]["iter"] == 258
+    assert diagnostics["setup_iterations"] == 2
+    assert diagnostics["context_only_iterations"] == 1
+    assert diagnostics["mixed_context_generation_iterations"] == 1
+    assert diagnostics["schedule_mode"] == (
+        "staged_prefill_then_full_decode"
+    )
+
+
+def test_overlap_host_step_timing_replaces_double_iter_latency():
+    stats = [
+        iteration(
+            1,
+            active=8,
+            scheduled=4,
+            context=4,
+            generation=0,
+            drafted=0,
+            accepted=0,
+        )
+    ]
+    stats.extend(
+        iteration(index, latency_ms=40.0)
+        for index in range(2, 258)
+    )
+    aggregate = summarize_decode_rounds(
+        stats,
+        global_batch_size=64,
+        local_batch_size=8,
+        num_gpus=8,
+        allow_staged_prefill=True,
+        latency_rounds_to_skip=8,
+        timing_source="iter_latency_ms_overlap_diagnostic",
+    )
+    log_lines = [
+        "[TRT-LLM] [RANK 0] iter = 2, global_rank = 0, rank = 0, "
+        "host_step_time = 999.0ms, prev_device_step_time = 999.0ms",
+        "[offline-trt-worker 2026-06-14T00:00:00+00:00] "
+        "measured: generation start global_batch=64 max_output_tokens=1025",
+    ]
+    for index in range(2, 259):
+        host = 100.0 if index < 10 else 20.0
+        log_lines.append(
+            "[TensorRT-LLM][INFO] [RANK 0] "
+            f"iter = {index}, global_rank = 0, rank = 0, "
+            f"host_step_time = {host}ms, "
+            "prev_device_step_time = 19.0ms, timestamp = 1"
+        )
+    updated = apply_trt_host_step_timing(
+        aggregate,
+        "\n".join(log_lines),
+        global_batch_size=64,
+        num_gpus=8,
+        skip_rounds=8,
+    )
+    assert updated["decode_round_tpot_ms"] == pytest.approx(20.0)
+    assert updated["decode_step_tput_per_gpu"] == pytest.approx(400.0)
+    assert updated["output_tput_per_gpu"] == pytest.approx(1000.0)
+    assert updated["timing_source"] == (
+        "trt_print_iter_log_host_step_time"
+    )
+    assert updated["stats_iter_latency_diagnostic"][
+        "decode_round_tpot_ms"
+    ] == pytest.approx(40.0)
+
+
+def test_pr_reference_comparison_reports_decode_and_fleet_denominators():
+    comparison = pr_reference_comparison(
+        {
+            "active_gpu_count": 8,
+            "output_tput_per_gpu": 10000.0,
+        },
+        profile_name="pr-tp8-mtp1",
+        reference_concurrency=4301,
+        reference_active_global_batch=3440,
+        reference_prefill_gpu_count=48,
+        reference_output_tput_per_decode_gpu=9686.735,
+        reference_output_tput_per_total_gpu=1383.8193,
+        reference_recipe_url="https://example.test/recipe.yaml",
+    )
+    assert comparison["measured_output_tput_total"] == 80000.0
+    assert comparison["reference_active_global_batch"] == 3440
+    assert comparison[
+        "measured_output_tput_per_reference_total_gpu"
+    ] == pytest.approx(80000.0 / 56)
+    assert comparison[
+        "offline_to_reference_decode_gpu_ratio"
+    ] == pytest.approx(10000.0 / 9686.735)
 
 
 def test_huawei_comparison_uses_raw_step_rate_and_separate_yield():

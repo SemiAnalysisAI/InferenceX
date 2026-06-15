@@ -1,9 +1,9 @@
-"""Environment aliases that must exist in TensorRT-LLM MPI workers.
+"""Environment aliases that must be normalized in TensorRT-LLM MPI workers.
 
 TensorRT-LLM's ``MpiPoolSession`` explicitly forwards ``TRTLLM_*`` and
-``TLLM_*`` variables. The perfect-router implementation reads the unprefixed
-``ENABLE_PERFECT_ROUTER`` variable, so recreate it in every spawned Python
-process before TensorRT-LLM imports its model code.
+``TLLM_*`` variables. Huawei mode recreates the unprefixed perfect-router
+alias before TensorRT-LLM imports its model code; PR-max removes any stale
+unprefixed value so learned routing remains active.
 """
 
 from __future__ import annotations
@@ -17,6 +17,8 @@ from io_utils import append_json_line
 def apply_trtllm_env_aliases() -> None:
     if os.getenv("TRTLLM_ENABLE_PERFECT_ROUTER") == "1":
         os.environ["ENABLE_PERFECT_ROUTER"] = "1"
+    else:
+        os.environ.pop("ENABLE_PERFECT_ROUTER", None)
 
     marker = os.getenv("TRTLLM_PERFECT_ROUTER_MARKER")
     if not marker:
