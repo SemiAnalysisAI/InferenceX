@@ -160,7 +160,6 @@ sglang serve \
     --port $PORT \
     "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
-    --disable-radix-cache \
     --attention-backend dsv4 \
     --max-running-requests ${CONC} \
     --mem-fraction-static 0.90 \
