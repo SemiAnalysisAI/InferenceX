@@ -126,7 +126,7 @@ index 71dd7634a..63500487d 100644
 
  import torch
 diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
-index 33851fdc8..50554b98c 100644
+index 33851fdc8..9e0145ff9 100644
 --- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 +++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
 @@ -1,28 +1,35 @@
@@ -173,7 +173,7 @@ index 33851fdc8..50554b98c 100644
  from vllm.model_executor.layers.fused_moe.moe_align_block_size import (
      moe_align_block_size,
  )
-@@ -34,9 +41,46 @@ from vllm.triton_utils import tl, triton
+@@ -34,9 +41,46 @@
 
  logger = init_logger(__name__)
 
@@ -182,7 +182,7 @@ index 33851fdc8..50554b98c 100644
 +# between 827 and 843 tokens on MI300X. Keep the cutoff tile-aligned.
 +_BF16_PREFILL_TOKEN_THRESHOLD = 832
 +_LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE = 5
-+
+
 +
 +def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
 +    """Limit BF16 fallback weights to the exact MiniMax-M3 TP shape."""
@@ -214,14 +214,14 @@ index 33851fdc8..50554b98c 100644
 +        or num_tokens <= _BF16_DECODE_TOKEN_THRESHOLD
 +    )
 +
-
++
  @triton.jit
 -def _mxfp8_grouped_gemm_kernel(
 +def _mxfp8_grouped_gemm_dot_scaled_kernel(
      a_ptr,
      a_scale_ptr,
      b_ptr,
-@@ -125,6 +169,116 @@ def _mxfp8_grouped_gemm_kernel(
+@@ -125,6 +169,148 @@
      )
 
 
@@ -335,10 +335,49 @@ index 33851fdc8..50554b98c 100644
 +    )
 +
 +
++def _gfx94x_grouped_gemm_config(
++    m_routed: int,
++    n: int,
++    k: int,
++    block_m: int,
++    is_gemm2: bool,
++) -> tuple[int, int, int]:
++    short_k_gemm2 = is_gemm2 and block_m <= 16 and k <= 512 and k % 64 == 0
++    if short_k_gemm2:
++        # MiniMax-M3 TP GEMM2 has a wide N=6144 and short K=384. Pairing two
++        # waves over 64 columns amortizes indexing while a 64-wide K tile
++        # exposes enough independent work for the short reduction.
++        return 64, 64, 2
++
++    block_k = 128 if k % 128 == 0 and block_m <= 16 else 64 if k % 64 == 0 else 32
++    if block_m <= 16:
++        # One wave per 32 output columns avoids the register pressure of the
++        # original 128-column tile. At the very smallest routed batch, pairing
++        # two waves in a 64-column program amortizes launch/indexing overhead.
++        block_n = 64 if m_routed < 32 else 32
++        num_warps = 2 if m_routed < 32 else 1
++    elif block_m >= 64 and n >= 2048 and k >= 2048:
++        # EP prefill GEMMs remain register-bound at a 128-column tile even with
++        # 64 rows. Two-wave 64-column programs expose more independent work.
++        block_n = 64
++        num_warps = 2
++    else:
++        block_n = 128
++        num_warps = 4 if block_m <= 32 else 8
++    return block_n, block_k, num_warps
++
++
  def _grouped_gemm_mxfp8(
      a_q: torch.Tensor,  # [M, K] fp8 e4m3
      a_scale: torch.Tensor,  # [M, K//32] uint8 (E8M0)
-@@ -143,16 +297,71 @@ def _grouped_gemm_mxfp8(
+@@ -140,19 +326,81 @@
+     a_div: int,
+     mul_weight_by: torch.Tensor | None = None,
+     expert_map: torch.Tensor | None = None,
++    is_gemm2: bool = False,
++    block_n_override: int = 0,
++    block_k_override: int = 0,
++    num_warps_override: int = 0,
  ) -> torch.Tensor:
      M_routed = num_valid_tokens
      E, N, K = w.shape
@@ -360,35 +399,38 @@ index 33851fdc8..50554b98c 100644
 +            "MXFP8 weight scales must use [E, N, K/32] or packed "
 +            f"[E, K/32, N] layout, got {tuple(w_scale.shape)}."
 +        )
-+    BLOCK_K = (
-+        128
-+        if current_platform.is_fp8_fnuz() and K % 128 == 0 and block_m <= 16
-+        else 64
-+        if current_platform.is_fp8_fnuz() and K % 64 == 0
-+        else 32
-+        if current_platform.is_fp8_fnuz()
-+        else 128
-+    )
++    is_fnuz = current_platform.is_fp8_fnuz()
++    if is_fnuz:
++        BLOCK_N, BLOCK_K, num_warps = _gfx94x_grouped_gemm_config(
++            M_routed,
++            N,
++            K,
++            block_m,
++            is_gemm2,
++        )
++    else:
++        BLOCK_N = 128
++        BLOCK_K = 128
++        num_warps = 8
 +    # moe_align_block_size allocates for the worst case where every expert is
 +    # active. At small batches that can be much larger than the number of
 +    # blocks that can contain valid assignments. Limit the launch to the
 +    # tighter static upper bound; the device-side num_post check handles the
 +    # remaining tail.
 +    max_post_padded = min(sorted_token_ids.shape[0], M_routed * block_m)
-+    if current_platform.is_fp8_fnuz() and block_m <= 16:
-+        # One wave per 32 output columns avoids the register pressure of the
-+        # original 128-column tile. At the very smallest routed batch, pairing
-+        # two waves in a 64-column program amortizes launch/indexing overhead.
-+        BLOCK_N = 64 if M_routed < 32 else 32
-+        num_warps = 2 if M_routed < 32 else 1
-+    elif current_platform.is_fp8_fnuz() and block_m >= 64 and N >= 2048 and K >= 2048:
-+        # EP prefill GEMMs remain register-bound at a 128-column tile even with
-+        # 64 rows. Two-wave 64-column programs expose more independent work.
-+        BLOCK_N = 64
-+        num_warps = 2
-+    else:
-+        BLOCK_N = 128
-+        num_warps = 4 if current_platform.is_fp8_fnuz() and block_m <= 32 else 8
++    if block_n_override:
++        BLOCK_N = block_n_override
++    if block_k_override:
++        BLOCK_K = block_k_override
++    if num_warps_override:
++        num_warps = num_warps_override
++    if BLOCK_K % 32 != 0 or K % BLOCK_K != 0:
++        raise ValueError(
++            f"MXFP8 grouped GEMM requires BLOCK_K to divide K in 32-value "
++            f"units, got BLOCK_K={BLOCK_K}, K={K}."
++        )
++    if num_warps not in (1, 2, 4, 8):
++        raise ValueError(f"Unsupported num_warps={num_warps}.")
 +    m_blocks = triton.cdiv(max_post_padded, block_m)
 +    n_blocks = triton.cdiv(N, BLOCK_N)
 +
@@ -416,7 +458,7 @@ index 33851fdc8..50554b98c 100644
          a_q,
          a_scale,
          w,
-@@ -173,9 +382,9 @@ def _grouped_gemm_mxfp8(
+@@ -173,9 +421,9 @@
          w.stride(0),
          w.stride(1),
          w.stride(2),
@@ -429,7 +471,7 @@ index 33851fdc8..50554b98c 100644
          out.stride(0),
          out.stride(1),
          A_DIV=a_div,
-@@ -183,7 +392,7 @@ def _grouped_gemm_mxfp8(
+@@ -183,7 +431,7 @@
          BLOCK_M=block_m,
          BLOCK_N=BLOCK_N,
          BLOCK_K=BLOCK_K,
@@ -438,11 +480,17 @@ index 33851fdc8..50554b98c 100644
      )
      return out
 
-@@ -202,12 +411,20 @@ def fused_moe_mxfp8_native(
+@@ -202,12 +450,26 @@
      limit: float | None,
      global_num_experts: int,
      expert_map: torch.Tensor | None,
 +    output: torch.Tensor | None = None,
++    g1_block_n: int = 0,
++    g1_block_k: int = 0,
++    g1_num_warps: int = 0,
++    g2_block_n: int = 0,
++    g2_block_k: int = 0,
++    g2_num_warps: int = 0,
  ) -> torch.Tensor:
      T, H = hidden_states.shape
      top_k = topk_ids.shape[1]
@@ -460,35 +508,49 @@ index 33851fdc8..50554b98c 100644
      sorted_ids, expert_ids, num_post = moe_align_block_size(
          topk_ids,
          block_m,
-@@ -256,17 +473,74 @@ def fused_moe_mxfp8_native(
-         M,
-         top_k,
+@@ -232,6 +494,9 @@
+         hidden_states.dtype,
+         a_div=top_k,
+         expert_map=expert_map,
++        block_n_override=g1_block_n,
++        block_k_override=g1_block_k,
++        num_warps_override=g1_num_warps,
+     )  # [M, 2I]
+
+     # SwiGLU-OAI (split layout: gate=g1[:, :I], up=g1[:, I:]) FUSED with the
+@@ -258,15 +523,76 @@
          block_m,
 -        torch.float32,
 +        hidden_states.dtype if current_platform.is_fp8_fnuz() else torch.float32,
          a_div=1,
          mul_weight_by=topk_weights.reshape(-1).to(torch.float32),
          expert_map=expert_map,
-     )  # [M, H] == [T*top_k, H]
-
+-    )  # [M, H] == [T*top_k, H]
+-
 -    return g2.view(T, top_k, H).sum(dim=1).to(hidden_states.dtype)
++        is_gemm2=True,
++        block_n_override=g2_block_n,
++        block_k_override=g2_block_k,
++        num_warps_override=g2_num_warps,
++    )  # [M, H] == [T*top_k, H]
+
 +    if current_platform.is_fp8_fnuz():
 +        if output is None:
 +            output = torch.empty_like(hidden_states)
 +        ops.moe_sum(g2.view(T, top_k, H), output)
 +        return output
-+
+
 +    result = g2.view(T, top_k, H).sum(dim=1).to(hidden_states.dtype)
 +    if output is not None:
 +        output.copy_(result)
 +        return output
 +    return result
-
-
++
++
  class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
 -    """Native MXFP8 MoE (CDNA4 ``dot_scaled``) on gfx950."""
 +    """Fused MXFP8 MoE on gfx94x/gfx95x."""
-+
+
 +    def __init__(
 +        self,
 +        moe_config: FusedMoEConfig,
@@ -509,7 +571,7 @@ index 33851fdc8..50554b98c 100644
 +            )
 +            self.bf16_experts = TritonExperts(moe_config, bf16_config)
 +
-+    @property
+     @property
 +    def requires_bf16_fallback_weights(self) -> bool:
 +        return self.bf16_experts is not None
 +
@@ -535,10 +597,10 @@ index 33851fdc8..50554b98c 100644
 +            raise RuntimeError("Packed MXFP8 scales are specific to gfx94x.")
 +        self.w1_scale_val = w1_scale
 +        self.w2_scale_val = w2_scale
-
-     @property
++
++    @property
      def quant_dtype(self) -> torch.dtype | str | None:
-@@ -283,7 +557,9 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -283,7 +609,9 @@
 
      @staticmethod
      def _supports_current_device() -> bool:
@@ -549,7 +611,7 @@ index 33851fdc8..50554b98c 100644
 
      def apply(
          self,
-@@ -303,6 +579,35 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -303,6 +631,35 @@
          expert_tokens_meta: mk.ExpertTokensMetadata | None,
          apply_router_weight_on_input: bool,
      ):
@@ -585,7 +647,7 @@ index 33851fdc8..50554b98c 100644
          alpha = self.quant_config.gemm1_alpha
          alpha = 1.702 if alpha is None else float(alpha)
          beta = self.quant_config.gemm1_beta
-@@ -322,5 +627,6 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+@@ -322,5 +679,6 @@
              limit=limit,
              global_num_experts=global_num_experts,
              expert_map=expert_map,
