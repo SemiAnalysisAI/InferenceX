@@ -1,0 +1,842 @@
+diff --git a/tests/kernels/test_minimax_m3_amd_ops.py b/tests/kernels/test_minimax_m3_amd_ops.py
+index 4119d7f5c..fe9c524f3 100644
+--- a/tests/kernels/test_minimax_m3_amd_ops.py
++++ b/tests/kernels/test_minimax_m3_amd_ops.py
+@@ -112,7 +112,8 @@ def test_mxfp8_gfx94x_grouped_gemm_config(
+         ({}, True),
+         ({"max_model_len": 10240}, True),
+         ({"max_model_len": 0}, False),
+-        ({"ep_size": 8}, False),
++        ({"ep_size": 8}, True),
++        ({"ep_size": 4}, False),
+         ({"has_shared_experts": False}, False),
+         ({"experts_per_token": 8}, False),
+         ({"hidden_dim": 4096}, False),
+@@ -165,45 +166,92 @@ def test_mxfp8_bf16_decode_fallback_disabled_on_gfx950(monkeypatch):
+ 
+ 
+ @pytest.mark.parametrize(
+-    ("num_tokens", "native_weights_available", "expected"),
++    (
++        "num_tokens",
++        "native_weights_available",
++        "bf16_weights_available",
++        "expected",
++    ),
+     [
+-        (1, True, True),
+-        (8, True, True),
+-        (9, True, False),
+-        (128, True, False),
+-        (831, True, False),
+-        (832, True, True),
+-        (1023, True, True),
+-        (128, False, True),
++        (1, True, True, True),
++        (8, True, True, True),
++        (9, True, True, False),
++        (128, True, True, False),
++        (831, True, True, False),
++        (832, True, True, True),
++        (1023, True, True, True),
++        (128, False, True, True),
++        (1, True, False, False),
++        (1023, True, False, False),
+     ],
+ )
+ def test_mxfp8_bf16_expert_dispatch(
+     num_tokens,
+     native_weights_available,
++    bf16_weights_available,
+     expected,
+ ):
+     from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
+         _should_use_bf16_experts,
+     )
+ 
+-    assert _should_use_bf16_experts(num_tokens, native_weights_available) is expected
++    assert (
++        _should_use_bf16_experts(
++            num_tokens,
++            native_weights_available,
++            bf16_weights_available,
++        )
++        is expected
++    )
++
++
++@pytest.mark.parametrize(
++    ("max_model_len", "layer_index", "ep_size", "expected"),
++    [
++        (2304, 0, 1, "dual"),
++        (2304, 0, 8, "dual"),
++        (9472, 0, 1, "bf16_only"),
++        (9472, 0, 8, "native_only"),
++        (9472, 1, 8, "dual"),
++        (9472, 5, 8, "native_only"),
++    ],
++)
++def test_mxfp8_weight_storage_policy(max_model_len, layer_index, ep_size, expected):
++    from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
++        _mxfp8_weight_storage_policy,
++    )
++
++    assert _mxfp8_weight_storage_policy(max_model_len, layer_index, ep_size) == expected
+ 
+ 
+ @pytest.mark.parametrize(
+-    ("max_model_len", "layer_index", "expected"),
++    ("num_valid_tokens", "num_local_experts", "block_m", "allocation", "expected"),
+     [
+-        (2304, 0, False),
+-        (9472, 0, True),
+-        (9472, 1, False),
+-        (9472, 5, True),
++        (864, 16, 16, 2784, 1104),
++        (64, 8, 16, 1024, 176),
++        (4, 128, 16, 64, 64),
+     ],
+ )
+-def test_mxfp8_bf16_only_storage_policy(max_model_len, layer_index, expected):
++def test_mxfp8_max_post_padded(
++    num_valid_tokens,
++    num_local_experts,
++    block_m,
++    allocation,
++    expected,
++):
+     from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
+-        _should_store_bf16_only,
++        _max_post_padded,
+     )
+ 
+-    assert _should_store_bf16_only(max_model_len, layer_index) is expected
++    assert (
++        _max_post_padded(
++            num_valid_tokens,
++            num_local_experts,
++            block_m,
++            allocation,
++        )
++        == expected
++    )
+ 
+ 
+ @pytest.mark.skipif(
+@@ -380,7 +428,17 @@ def test_mxfp8_native_linear(m, n, k):
+ # --------------------------------------------------------------------------- #
+ # Fused MXFP8 MoE grouped GEMM vs dequant-to-bf16 MoE math
+ # --------------------------------------------------------------------------- #
+-def _ref_moe(x, w13, w2, topk_weights, topk_ids, alpha, beta, limit):
++def _ref_moe(
++    x,
++    w13,
++    w2,
++    topk_weights,
++    topk_ids,
++    alpha,
++    beta,
++    limit,
++    expert_map=None,
++):
+     T, H = x.shape
+     inter = w2.shape[-1]
+     top_k = topk_ids.shape[1]
+@@ -388,6 +446,10 @@ def _ref_moe(x, w13, w2, topk_weights, topk_ids, alpha, beta, limit):
+     for t in range(T):
+         for j in range(top_k):
+             e = int(topk_ids[t, j].item())
++            if expert_map is not None:
++                e = int(expert_map[e].item())
++                if e < 0:
++                    continue
+             g1 = x[t].float() @ w13[e].float().T  # [2I]
+             gate = g1[:inter]
+             up = g1[inter:]
+@@ -459,6 +521,98 @@ def test_mxfp8_native_moe(T, H, inter, E, top_k, pack_scales):
+     assert _relerr(got, ref) < 5e-2
+ 
+ 
++@pytest.mark.skipif(
++    not current_platform.is_fp8_fnuz(),
++    reason="route-aware native EP optimization is specific to gfx94x.",
++)
++@torch.inference_mode()
++def test_mxfp8_native_moe_expert_parallel():
++    from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
++        fused_moe_mxfp8_native,
++    )
++
++    torch.manual_seed(0)
++    T, H, inter, global_e, local_e, top_k = 8, 256, 512, 8, 4, 2
++    alpha, beta, limit = 1.702, 1.0, 7.0
++    w13_bf16 = (
++        torch.randn(local_e, 2 * inter, H, device=DEVICE, dtype=torch.bfloat16) * 0.1
++    )
++    w2_bf16 = torch.randn(local_e, H, inter, device=DEVICE, dtype=torch.bfloat16) * 0.1
++    w13_fp8, w13_scale = _mxfp8_e4m3_quantize_torch(
++        w13_bf16,
++        is_sf_swizzled_layout=False,
++    )
++    w2_fp8, w2_scale = _mxfp8_e4m3_quantize_torch(
++        w2_bf16,
++        is_sf_swizzled_layout=False,
++    )
++    w13_fp8, w13_scale = normalize_mxfp8_e4m3fn_to_e4m3fnuz(
++        w13_fp8,
++        w13_scale,
++    )
++    w2_fp8, w2_scale = normalize_mxfp8_e4m3fn_to_e4m3fnuz(
++        w2_fp8,
++        w2_scale,
++    )
++    w13_deq = dequant_mxfp8_to_bf16(w13_fp8, w13_scale)
++    w2_deq = dequant_mxfp8_to_bf16(w2_fp8, w2_scale)
++    w13_scale = w13_scale.transpose(1, 2).contiguous()
++    w2_scale = w2_scale.transpose(1, 2).contiguous()
++
++    expert_map = torch.tensor(
++        [0, -1, 1, -1, 2, -1, 3, -1],
++        device=DEVICE,
++        dtype=torch.int32,
++    )
++    topk_ids = torch.tensor(
++        [
++            [0, 1],
++            [2, 3],
++            [4, 6],
++            [1, 3],
++            [6, 7],
++            [0, 4],
++            [5, 7],
++            [2, 6],
++        ],
++        device=DEVICE,
++        dtype=torch.int32,
++    )
++    topk_weights = torch.rand(T, top_k, device=DEVICE, dtype=torch.float32)
++    topk_weights /= topk_weights.sum(dim=-1, keepdim=True)
++    x = torch.randn(T, H, device=DEVICE, dtype=torch.bfloat16) * 0.5
++    output = torch.empty_like(x)
++
++    got = fused_moe_mxfp8_native(
++        x,
++        w13_fp8,
++        w13_scale,
++        w2_fp8,
++        w2_scale,
++        topk_weights,
++        topk_ids,
++        alpha=alpha,
++        beta=beta,
++        limit=limit,
++        global_num_experts=global_e,
++        expert_map=expert_map,
++        output=output,
++    )
++    ref = _ref_moe(
++        x,
++        w13_deq,
++        w2_deq,
++        topk_weights,
++        topk_ids,
++        alpha,
++        beta,
++        limit,
++        expert_map=expert_map,
++    )
++    assert got is output
++    assert _relerr(got, ref) < 5e-2
++
++
+ # --------------------------------------------------------------------------- #
+ # MXFP8 linear emulation: BF16-at-load (default) vs per-step dequant + switch
+ # --------------------------------------------------------------------------- #
+diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
+index 9e0145ff9..244065006 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py
+@@ -46,13 +46,16 @@ _BF16_DECODE_TOKEN_THRESHOLD = 8
+ # between 827 and 843 tokens on MI300X. Keep the cutoff tile-aligned.
+ _BF16_PREFILL_TOKEN_THRESHOLD = 832
+ _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE = 5
++_WEIGHT_STORAGE_DUAL = "dual"
++_WEIGHT_STORAGE_BF16_ONLY = "bf16_only"
++_WEIGHT_STORAGE_NATIVE_ONLY = "native_only"
+ 
+ 
+ def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
+-    """Limit BF16 fallback weights to the exact MiniMax-M3 TP shape."""
++    """Limit mixed BF16/native storage to profiled MiniMax-M3 shapes."""
+     return (
+         current_platform.is_fp8_fnuz()
+-        and moe_config.ep_size == 1
++        and moe_config.ep_size in (1, 8)
+         and moe_config.has_shared_experts
+         and moe_config.num_experts == 128
+         and moe_config.experts_per_token == 4
+@@ -62,23 +65,45 @@ def _should_use_bf16_decode_fallback(moe_config: FusedMoEConfig) -> bool:
+     )
+ 
+ 
+-def _should_store_bf16_only(max_model_len: int, layer_index: int) -> bool:
+-    return (
+-        max_model_len > 4096 and layer_index % _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE == 0
+-    )
++def _mxfp8_weight_storage_policy(
++    max_model_len: int,
++    layer_index: int,
++    ep_size: int,
++) -> str:
++    if max_model_len <= 4096 or layer_index % _LONG_CONTEXT_BF16_ONLY_LAYER_STRIDE != 0:
++        return _WEIGHT_STORAGE_DUAL
++    if ep_size > 1:
++        return _WEIGHT_STORAGE_NATIVE_ONLY
++    return _WEIGHT_STORAGE_BF16_ONLY
+ 
+ 
+ def _should_use_bf16_experts(
+     num_tokens: int,
+     native_weights_available: bool,
++    bf16_weights_available: bool,
+ ) -> bool:
+-    return (
++    return bf16_weights_available and (
+         not native_weights_available
+-        or num_tokens >= _BF16_PREFILL_TOKEN_THRESHOLD
+         or num_tokens <= _BF16_DECODE_TOKEN_THRESHOLD
++        or num_tokens >= _BF16_PREFILL_TOKEN_THRESHOLD
+     )
+ 
+ 
++def _max_post_padded(
++    num_valid_tokens: int,
++    num_local_experts: int,
++    block_m: int,
++    allocation_size: int,
++) -> int:
++    """Static upper bound for a block-aligned local-expert route list."""
++    max_padded = min(
++        allocation_size,
++        num_valid_tokens * block_m,
++        num_valid_tokens + num_local_experts * (block_m - 1),
++    )
++    return (max_padded // block_m) * block_m
++
++
+ @triton.jit
+ def _mxfp8_grouped_gemm_dot_scaled_kernel(
+     a_ptr,
+@@ -108,6 +133,7 @@ def _mxfp8_grouped_gemm_dot_scaled_kernel(
+     stride_cn,
+     A_DIV: tl.constexpr,
+     MUL_WEIGHT: tl.constexpr,
++    FUSE_TOPK: tl.constexpr,
+     BLOCK_M: tl.constexpr,
+     BLOCK_N: tl.constexpr,
+     BLOCK_K: tl.constexpr,
+@@ -161,12 +187,14 @@ def _mxfp8_grouped_gemm_dot_scaled_kernel(
+         w = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0.0)
+         acc = acc * w[:, None]
+ 
+-    c_ptrs = c_ptr + offs_token[:, None] * stride_cm + offs_n[None, :] * stride_cn
+-    tl.store(
+-        c_ptrs,
+-        acc.to(c_ptr.dtype.element_ty),
+-        mask=token_mask[:, None] & n_mask[None, :],
+-    )
++    c_row = offs_token // top_k if FUSE_TOPK else offs_token
++    c_ptrs = c_ptr + c_row[:, None] * stride_cm + offs_n[None, :] * stride_cn
++    c_mask = token_mask[:, None] & n_mask[None, :]
++    result = acc.to(c_ptr.dtype.element_ty)
++    if FUSE_TOPK:
++        tl.atomic_add(c_ptrs, result, mask=c_mask, sem="relaxed")
++    else:
++        tl.store(c_ptrs, result, mask=c_mask)
+ 
+ 
+ @triton.jit
+@@ -198,6 +226,7 @@ def _mxfp8_grouped_gemm_fnuz_kernel(
+     stride_cn,
+     A_DIV: tl.constexpr,
+     MUL_WEIGHT: tl.constexpr,
++    FUSE_TOPK: tl.constexpr,
+     BLOCK_M: tl.constexpr,
+     BLOCK_N: tl.constexpr,
+     BLOCK_K: tl.constexpr,
+@@ -271,12 +300,14 @@ def _mxfp8_grouped_gemm_fnuz_kernel(
+         w = tl.load(topk_weights_ptr + offs_token, mask=token_mask, other=0.0)
+         acc = acc * w[:, None]
+ 
+-    c_ptrs = c_ptr + offs_token[:, None] * stride_cm + offs_n[None, :] * stride_cn
+-    tl.store(
+-        c_ptrs,
+-        acc.to(c_ptr.dtype.element_ty),
+-        mask=token_mask[:, None] & n_mask[None, :],
+-    )
++    c_row = offs_token // top_k if FUSE_TOPK else offs_token
++    c_ptrs = c_ptr + c_row[:, None] * stride_cm + offs_n[None, :] * stride_cn
++    c_mask = token_mask[:, None] & n_mask[None, :]
++    result = acc.to(c_ptr.dtype.element_ty)
++    if FUSE_TOPK:
++        tl.atomic_add(c_ptrs, result, mask=c_mask, sem="relaxed")
++    else:
++        tl.store(c_ptrs, result, mask=c_mask)
+ 
+ 
+ def _gfx94x_grouped_gemm_config(
+@@ -330,6 +361,9 @@ def _grouped_gemm_mxfp8(
+     block_n_override: int = 0,
+     block_k_override: int = 0,
+     num_warps_override: int = 0,
++    output: torch.Tensor | None = None,
++    fuse_topk: bool = False,
++    zero_nonlocal_output: bool = True,
+ ) -> torch.Tensor:
+     M_routed = num_valid_tokens
+     E, N, K = w.shape
+@@ -363,12 +397,15 @@ def _grouped_gemm_mxfp8(
+         BLOCK_N = 128
+         BLOCK_K = 128
+         num_warps = 8
+-    # moe_align_block_size allocates for the worst case where every expert is
+-    # active. At small batches that can be much larger than the number of
+-    # blocks that can contain valid assignments. Limit the launch to the
+-    # tighter static upper bound; the device-side num_post check handles the
+-    # remaining tail.
+-    max_post_padded = min(sorted_token_ids.shape[0], M_routed * block_m)
++    # With EP, the align buffer is sized from the global expert count even
++    # though only local assignments survive. Bound the launch by the local
++    # expert count; the device-side num_post check handles the remaining tail.
++    max_post_padded = _max_post_padded(
++        M_routed,
++        E,
++        block_m,
++        sorted_token_ids.shape[0],
++    )
+     if block_n_override:
+         BLOCK_N = block_n_override
+     if block_k_override:
+@@ -385,11 +422,32 @@ def _grouped_gemm_mxfp8(
+     m_blocks = triton.cdiv(max_post_padded, block_m)
+     n_blocks = triton.cdiv(N, BLOCK_N)
+ 
+-    # Under expert parallelism (expert_map set) tokens routed to non-local
+-    # experts are dropped from sorted_token_ids, so their output rows are never
+-    # written.
+-    alloc = torch.zeros if expert_map is not None else torch.empty
+-    out = alloc((M_routed, N), dtype=out_dtype, device=a_q.device)
++    if fuse_topk:
++        if M_routed % top_k != 0:
++            raise ValueError(
++                f"Routed rows ({M_routed}) must be divisible by top_k ({top_k})."
++            )
++        expected_shape = (M_routed // top_k, N)
++        if output is None:
++            out = torch.zeros(expected_shape, dtype=out_dtype, device=a_q.device)
++        else:
++            if output.shape != expected_shape or output.dtype != out_dtype:
++                raise ValueError(
++                    "Fused top-k output must have shape/dtype "
++                    f"{expected_shape}/{out_dtype}, got "
++                    f"{tuple(output.shape)}/{output.dtype}."
++                )
++            out = output
++            out.zero_()
++    else:
++        # EP rows that route to remote experts are unwritten. Dense consumers
++        # need zeros; route-aware consumers can skip the memset.
++        alloc = (
++            torch.zeros
++            if expert_map is not None and zero_nonlocal_output
++            else torch.empty
++        )
++        out = alloc((M_routed, N), dtype=out_dtype, device=a_q.device)
+     grid = (m_blocks, n_blocks)
+     kernel = (
+         _mxfp8_grouped_gemm_fnuz_kernel
+@@ -428,6 +486,7 @@ def _grouped_gemm_mxfp8(
+         out.stride(1),
+         A_DIV=a_div,
+         MUL_WEIGHT=mul_weight_by is not None,
++        FUSE_TOPK=fuse_topk,
+         BLOCK_M=block_m,
+         BLOCK_N=BLOCK_N,
+         BLOCK_K=BLOCK_K,
+@@ -477,6 +536,7 @@ def fused_moe_mxfp8_native(
+         expert_map,
+         ignore_invalid_experts=expert_map is not None,
+     )
++    use_sparse_ep_path = expert_map is not None and current_platform.is_fp8_fnuz()
+ 
+     # GEMM1: x (mxfp8) @ w13^T -> [M, 2I]
+     a_q, a_s = mxfp8_e4m3_quantize(hidden_states)
+@@ -497,6 +557,7 @@ def fused_moe_mxfp8_native(
+         block_n_override=g1_block_n,
+         block_k_override=g1_block_k,
+         num_warps_override=g1_num_warps,
++        zero_nonlocal_output=not use_sparse_ep_path,
+     )  # [M, 2I]
+ 
+     # SwiGLU-OAI (split layout: gate=g1[:, :I], up=g1[:, I:]) FUSED with the
+@@ -506,10 +567,62 @@ def fused_moe_mxfp8_native(
+     # ``silu_and_mul_with_clamp`` op: it rounds intermediates to bf16, rel ~3e-3.)
+     # Lazy import: the amd.ops package pulls in the minimax_m3 platform dispatch,
+     # only resolvable after the model module finishes loading.
+-    from vllm.models.minimax_m3.amd.ops import swiglu_oai_quantize_mxfp8
++    from vllm.models.minimax_m3.amd.ops import (
++        swiglu_oai_quantize_mxfp8,
++        swiglu_oai_quantize_mxfp8_routed,
++    )
+ 
+     # GEMM2: act (mxfp8) @ w2^T -> [M, H], weighted by topk_weights, then reduce.
+-    act_q, act_s = swiglu_oai_quantize_mxfp8(g1, alpha=alpha, beta=beta, limit=limit)
++    if use_sparse_ep_path:
++        max_post_padded = _max_post_padded(
++            M,
++            w13.shape[0],
++            block_m,
++            sorted_ids.shape[0],
++        )
++        act_q, act_s = swiglu_oai_quantize_mxfp8_routed(
++            g1,
++            sorted_ids,
++            num_post,
++            num_valid_tokens=M,
++            max_num_tokens_post_padded=max_post_padded,
++            alpha=alpha,
++            beta=beta,
++            limit=limit,
++            block_m=block_m,
++        )
++    else:
++        act_q, act_s = swiglu_oai_quantize_mxfp8(
++            g1,
++            alpha=alpha,
++            beta=beta,
++            limit=limit,
++        )
++
++    if use_sparse_ep_path:
++        return _grouped_gemm_mxfp8(
++            act_q,
++            act_s,
++            w2,
++            w2_scale,
++            sorted_ids,
++            expert_ids,
++            num_post,
++            M,
++            top_k,
++            block_m,
++            hidden_states.dtype,
++            a_div=1,
++            mul_weight_by=topk_weights.reshape(-1).to(torch.float32),
++            expert_map=expert_map,
++            is_gemm2=True,
++            block_n_override=g2_block_n,
++            block_k_override=g2_block_k,
++            num_warps_override=g2_num_warps,
++            output=output,
++            fuse_topk=True,
++        )
++
+     g2 = _grouped_gemm_mxfp8(
+         act_q,
+         act_s,
+@@ -556,6 +669,7 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+         self.w1_bf16: torch.Tensor | None = None
+         self.w2_bf16: torch.Tensor | None = None
+         self.native_weights_available = True
++        self.bf16_weights_available = False
+         self.bf16_experts: TritonExperts | None = None
+         if _should_use_bf16_decode_fallback(moe_config):
+             bf16_config = biased_moe_quant_config(
+@@ -583,6 +697,7 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+         self.w1_bf16 = w1_bf16
+         self.w2_bf16 = w2_bf16
+         self.native_weights_available = native_weights_available
++        self.bf16_weights_available = True
+ 
+     def bind_packed_weight_scales(
+         self,
+@@ -636,6 +751,7 @@ class Mxfp8NativeTritonExperts(Mxfp8TritonExpertsBase):
+         if bf16_experts is not None and _should_use_bf16_experts(
+             num_tokens,
+             self.native_weights_available,
++            self.bf16_weights_available,
+         ):
+             if self.w1_bf16 is None or self.w2_bf16 is None:
+                 raise RuntimeError(
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
+index bc00da41e..e7c2c26b0 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
+@@ -82,6 +82,19 @@ def _select_rocm_mxfp8_backend(
+     """ROCm fallback when vendor MXFP8 backends are unavailable."""
+ 
+     if current_platform.is_fp8_fnuz() and config.ep_size > 1:
++        from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
++            Mxfp8NativeTritonExperts,
++            _should_use_bf16_decode_fallback,
++        )
++
++        if _should_use_bf16_decode_fallback(config):
++            logger.info_once(
++                "Using the profiled gfx94x MiniMax-M3 EP8 MXFP8 backend: "
++                "native local-route kernels for decode and retained BF16 "
++                "experts for large prefill."
++            )
++            return Fp8MoeBackend.NATIVE_MXFP8, Mxfp8NativeTritonExperts
++
+         from vllm.model_executor.layers.fused_moe.experts.mxfp8_emulation_moe import (
+             Mxfp8EmulationTritonExperts,
+         )
+diff --git a/vllm/model_executor/layers/quantization/modelopt.py b/vllm/model_executor/layers/quantization/modelopt.py
+index 1a4049d3f..9417f2ebd 100644
+--- a/vllm/model_executor/layers/quantization/modelopt.py
++++ b/vllm/model_executor/layers/quantization/modelopt.py
+@@ -2132,10 +2132,12 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+         )
+ 
+     def _retain_bf16_fallback_weights(self, layer: RoutedExperts) -> None:
+-        """Keep the BF16 weights selected by the gfx94x TP dispatch policy."""
++        """Configure profiled gfx94x MiniMax-M3 native/BF16 weight storage."""
+         from vllm.model_executor.layers.fused_moe.experts.mxfp8_native_moe import (
++            _WEIGHT_STORAGE_BF16_ONLY,
++            _WEIGHT_STORAGE_NATIVE_ONLY,
+             Mxfp8NativeTritonExperts,
+-            _should_store_bf16_only,
++            _mxfp8_weight_storage_policy,
+         )
+         from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
+             dequant_mxfp8_to_bf16,
+@@ -2150,6 +2152,20 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+                 "Expected Mxfp8NativeTritonExperts for the gfx94x native backend."
+             )
+ 
++        layer_index = extract_layer_index(layer.layer_name)
++        storage_policy = _mxfp8_weight_storage_policy(
++            self.moe.max_model_len,
++            layer_index,
++            self.moe.ep_size,
++        )
++        if storage_policy == _WEIGHT_STORAGE_NATIVE_ONLY:
++            logger.info_once(
++                "Using native-only MXFP8 storage for one-fifth of long-context "
++                "gfx94x EP MoE layers; the remaining layers retain BF16 for "
++                "large-prefill dispatch."
++            )
++            return
++
+         target_dtype = getattr(layer, "orig_dtype", torch.bfloat16)
+         w13_bf16 = dequant_mxfp8_to_bf16(layer.w13_weight, layer.w13_weight_scale).to(
+             target_dtype
+@@ -2157,12 +2173,8 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+         w2_bf16 = dequant_mxfp8_to_bf16(layer.w2_weight, layer.w2_weight_scale).to(
+             target_dtype
+         )
+-        layer_index = extract_layer_index(layer.layer_name)
+-        store_bf16_only = _should_store_bf16_only(
+-            self.moe.max_model_len,
+-            layer_index,
+-        )
+ 
++        store_bf16_only = storage_policy == _WEIGHT_STORAGE_BF16_ONLY
+         if store_bf16_only:
+             replace_parameter(layer, "w13_weight", w13_bf16)
+             replace_parameter(layer, "w2_weight", w2_bf16)
+@@ -2177,10 +2189,10 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+ 
+         if self.moe.max_model_len <= 4096:
+             logger.info_once(
+-                "Retaining BF16 MXFP8 MoE weights for gfx94x TP decode and "
+-                "prefill dispatch."
++                "Retaining native MXFP8 and BF16 MoE weights for profiled "
++                "gfx94x MiniMax-M3 dispatch."
+             )
+-        else:
++        elif self.moe.ep_size == 1:
+             logger.info_once(
+                 "Using BF16-only storage for one-fifth of gfx94x TP MoE "
+                 "layers and retaining both MXFP8 and BF16 weights for the "
+diff --git a/vllm/models/minimax_m3/amd/ops/__init__.py b/vllm/models/minimax_m3/amd/ops/__init__.py
+index 22d96f9de..a2672b05d 100644
+--- a/vllm/models/minimax_m3/amd/ops/__init__.py
++++ b/vllm/models/minimax_m3/amd/ops/__init__.py
+@@ -13,6 +13,7 @@ from vllm.models.minimax_m3.amd.ops.gemma_rmsnorm import (
+ )
+ from vllm.models.minimax_m3.amd.ops.swiglu_oai import (
+     swiglu_oai_quantize_mxfp8,
++    swiglu_oai_quantize_mxfp8_routed,
+     swiglu_oai_split,
+ )
+ 
+@@ -21,4 +22,5 @@ __all__ = [
+     "gemma_fused_add_rmsnorm",
+     "swiglu_oai_split",
+     "swiglu_oai_quantize_mxfp8",
++    "swiglu_oai_quantize_mxfp8_routed",
+ ]
+diff --git a/vllm/models/minimax_m3/amd/ops/swiglu_oai.py b/vllm/models/minimax_m3/amd/ops/swiglu_oai.py
+index 9572c5109..7fca053fb 100644
+--- a/vllm/models/minimax_m3/amd/ops/swiglu_oai.py
++++ b/vllm/models/minimax_m3/amd/ops/swiglu_oai.py
+@@ -124,6 +124,77 @@ def _swiglu_oai_quant_kernel(
+     )
+ 
+ 
++@triton.jit
++def _swiglu_oai_quant_routed_kernel(
++    g_ptr,
++    aq_ptr,
++    as_ptr,
++    sorted_token_ids_ptr,
++    num_tokens_post_padded_ptr,
++    num_valid_tokens,
++    n_inter,
++    stride_gm,
++    stride_gn,
++    stride_qm,
++    stride_qn,
++    stride_sm,
++    stride_sk,
++    alpha,
++    beta,
++    limit,
++    HAS_LIMIT: tl.constexpr,
++    BLOCK_M: tl.constexpr,
++):
++    """Route-aware SwiGLU-OAI + MXFP8 quantization for expert parallelism."""
++    pid_m = tl.program_id(0)
++    pid_b = tl.program_id(1)
++    num_post = tl.load(num_tokens_post_padded_ptr)
++    if pid_m * BLOCK_M >= num_post:
++        return
++
++    offs_tid = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
++    route_mask = offs_tid < num_post
++    route_ids = tl.load(
++        sorted_token_ids_ptr + offs_tid,
++        mask=route_mask,
++        other=num_valid_tokens,
++    ).to(tl.int64)
++    route_mask = route_mask & (route_ids < num_valid_tokens)
++    safe_route_ids = tl.where(route_mask, route_ids, 0)
++    offs_c = pid_b * 32 + tl.arange(0, 32)
++
++    gate = tl.load(
++        g_ptr + safe_route_ids[:, None] * stride_gm + offs_c[None, :] * stride_gn,
++        mask=route_mask[:, None],
++        other=0.0,
++    ).to(tl.float32)
++    up = tl.load(
++        g_ptr
++        + safe_route_ids[:, None] * stride_gm
++        + (n_inter + offs_c)[None, :] * stride_gn,
++        mask=route_mask[:, None],
++        other=0.0,
++    ).to(tl.float32)
++    if HAS_LIMIT:
++        gate = tl.minimum(gate, limit)
++        up = tl.minimum(tl.maximum(up, -limit), limit)
++    act = gate * tl.sigmoid(alpha * gate) * (up + beta)
++    amax = tl.maximum(tl.max(tl.abs(act), axis=1), 1e-30)
++    sb = tl.minimum(tl.maximum(tl.floor(tl.log2(amax)) + 127.0, 0.0), 254.0)
++    descale = tl.exp2(sb - 127.0)
++    aq = (act / descale[:, None]).to(aq_ptr.dtype.element_ty)
++    tl.store(
++        aq_ptr + safe_route_ids[:, None] * stride_qm + offs_c[None, :] * stride_qn,
++        aq,
++        mask=route_mask[:, None],
++    )
++    tl.store(
++        as_ptr + safe_route_ids * stride_sm + pid_b * stride_sk,
++        sb.to(tl.uint8),
++        mask=route_mask,
++    )
++
++
+ def swiglu_oai_quantize_mxfp8(
+     gate_up: torch.Tensor,
+     alpha: float,
+@@ -181,6 +252,79 @@ def swiglu_oai_quantize_mxfp8(
+     return aq, asc
+ 
+ 
++def swiglu_oai_quantize_mxfp8_routed(
++    gate_up: torch.Tensor,
++    sorted_token_ids: torch.Tensor,
++    num_tokens_post_padded: torch.Tensor,
++    *,
++    num_valid_tokens: int,
++    max_num_tokens_post_padded: int,
++    alpha: float,
++    beta: float,
++    limit: float | None,
++    block_m: int,
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Quantize only the locally routed rows produced by an EP GEMM1."""
++    from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
++        MXFP8_BLOCK_SIZE,
++        MXFP8_SCALE_DTYPE,
++        MXFP8_VALUE_DTYPE,
++    )
++
++    two_i = gate_up.shape[-1]
++    n_inter = two_i // 2
++    if n_inter % MXFP8_BLOCK_SIZE != 0:
++        raise ValueError(
++            f"fused swiglu+quant needs I % {MXFP8_BLOCK_SIZE} == 0, got I={n_inter}"
++        )
++    if max_num_tokens_post_padded % block_m != 0:
++        raise ValueError(
++            "max_num_tokens_post_padded must be block aligned, got "
++            f"{max_num_tokens_post_padded} for block_m={block_m}."
++        )
++
++    g1 = gate_up.reshape(-1, two_i).contiguous()
++    value_dtype = (
++        torch.float8_e4m3fnuz if current_platform.is_fp8_fnuz() else MXFP8_VALUE_DTYPE
++    )
++    aq = torch.empty(
++        (num_valid_tokens, n_inter),
++        dtype=value_dtype,
++        device=g1.device,
++    )
++    asc = torch.empty(
++        (num_valid_tokens, n_inter // MXFP8_BLOCK_SIZE),
++        dtype=MXFP8_SCALE_DTYPE,
++        device=g1.device,
++    )
++    grid = (
++        max_num_tokens_post_padded // block_m,
++        n_inter // MXFP8_BLOCK_SIZE,
++    )
++    _swiglu_oai_quant_routed_kernel[grid](
++        g1,
++        aq,
++        asc,
++        sorted_token_ids,
++        num_tokens_post_padded,
++        num_valid_tokens,
++        n_inter,
++        g1.stride(0),
++        g1.stride(1),
++        aq.stride(0),
++        aq.stride(1),
++        asc.stride(0),
++        asc.stride(1),
++        float(alpha),
++        float(beta),
++        0.0 if limit is None else float(limit),
++        HAS_LIMIT=limit is not None,
++        BLOCK_M=block_m,
++        num_warps=4,
++    )
++    return aq, asc
++
++
+ def swiglu_oai_split(
+     gate_up: torch.Tensor,
+     alpha: float,
