@@ -8,7 +8,7 @@ frontend:
 
 model:
   path: "dsv4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260510-2473659e"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260603-83bc7766"
   precision: "mxfp4"
 
 resources:
