@@ -3842,3 +3842,13 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
     - "Runner script updated to support dsv4 model prefix with dynamo-trt framework on GB300"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+
+- config-keys:
+    - glm5-fp4-gb200-dynamo-sglang
+  description:
+    - "Initial submission: GLM-5 FP4 disagg on GB200 with Dynamo SGLang (8k1k + 1k1k, STP / no-MTP)."
+    - "Image: lmsysorg/sglang:v0.5.11-cu130"
+    - "Recipes ported from srt-slurm PR #211 (recipes/gb200-fp4/glm5.yaml), split per topology under recipes/sglang/glm5/gb200-fp4/."
+    - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
+    - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
