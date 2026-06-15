@@ -551,7 +551,7 @@ jobs:
                 )"
                 latest_runtime="$(
                   grep -aE \
-                    'Loading weights:|\\[TRT-LLM\\]|Warmup|CUDA graph|capture|tuning' \
+                    'Loading weights:|\[TRT-LLM\]|Warmup|CUDA graph|capture|tuning' \
                     "$normalized_log" \
                     | tail -n 3 \
                     | tr '\n' ' ' \

@@ -226,15 +226,16 @@ export PYTHONPYCACHEPREFIX=/tmp/inferencex-offline-pycache
 export PYTHONPATH="/workspace/utils/bench_offline:${PYTHONPATH:-}"
 export ENROOT_ALLOW_DEV=yes
 export NCCL_GRAPH_MIXING_SUPPORT=0
-export MIMALLOC_PURGE_DELAY=-1
+export MIMALLOC_PURGE_DELAY=0
 export PYTHONWARNINGS="ignore::DeprecationWarning:cutlass.cute.core"
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+unset PYTORCH_CUDA_ALLOC_CONF
 export TLLM_LOG_LEVEL=INFO
-export TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=1
+unset TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL
 export TRTLLM_ENABLE_PDL=1
 export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
 export TRTLLM_EPLB_SHM_NAME="offline_${JOB_ID}_${REPLICA_LABEL}_${TRT_BENCH_RACK_ID}"
+log "PR decode environment mimalloc_purge_delay=$MIMALLOC_PURGE_DELAY serialized_weight_loading=${TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL:-unset} pytorch_cuda_alloc_conf=${PYTORCH_CUDA_ALLOC_CONF:-unset}"
 
 HOST_EXTERNAL_WORK_DIR="${TRT_BENCH_WORKSPACE}/.offline_work_${BENCH_ID}_${JOB_ID}"
 EXTERNAL_WORK_DIR="/workspace/.offline_work_${BENCH_ID}_${JOB_ID}"

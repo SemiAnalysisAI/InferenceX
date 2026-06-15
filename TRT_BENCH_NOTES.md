@@ -134,10 +134,18 @@ Copied TP8 engine settings:
 - learned model router; no perfect router
 - EP8/384-slot load-balancer map
 - `MEGAMOE_DEEPGEMM`, low-precision combine, and PDL
-- `TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=1`
-- `MIMALLOC_PURGE_DELAY=-1`
+- default parallel weight loading
+- `MIMALLOC_PURGE_DELAY=0`
 - `UCX_TLS=cuda_ipc,cuda_copy,sm,self,tcp`
 - full `/dev/shm` tmpfs and unique EPLB shared-memory name per child
+
+Do not copy the recipe's prefill-only
+`TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=1`,
+`MIMALLOC_PURGE_DELAY=-1`, or
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` into TP8 decode engines.
+Run `27531206092` did that and left eight of nine rack replicas idle during
+model finalization at 0% GPU utilization; only replica 3 reached the measured
+barrier.
 
 The direct offline engine keeps the documented `max_num_tokens=32768`
 adaptation because it must admit its own 8K prompts. The serving decode worker

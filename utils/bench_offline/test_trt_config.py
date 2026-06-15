@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -510,6 +511,19 @@ def test_rack_synchronization_config_reports_missing_index():
                 RACK_BARRIER_TIMEOUT_ENV: "3600",
             }
         )
+
+
+def test_rack_launcher_uses_pr_decode_environment():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (
+        repo_root
+        / "benchmarks/multi_node/offline/dsv4_fp4_gb300_rack_replica.sh"
+    ).read_text(encoding="utf-8")
+
+    assert "export MIMALLOC_PURGE_DELAY=0" in source
+    assert "unset TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL" in source
+    assert "unset PYTORCH_CUDA_ALLOC_CONF" in source
+    assert "export MIMALLOC_PURGE_DELAY=-1" not in source
 
 
 @pytest.mark.parametrize(

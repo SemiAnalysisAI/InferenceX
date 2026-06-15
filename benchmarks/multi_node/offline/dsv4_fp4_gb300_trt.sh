@@ -544,7 +544,13 @@ export ENROOT_ALLOW_DEV=yes
 export NCCL_GRAPH_MIXING_SUPPORT=0
 export MIMALLOC_PURGE_DELAY=0
 export PYTHONWARNINGS="ignore::DeprecationWarning:cutlass.cute.core"
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+if [[ "$TRT_BENCH_CONFIG_PROFILE" == "huawei" ]]; then
+    export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+else
+    unset PYTORCH_CUDA_ALLOC_CONF
+    unset TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL
+    log "PR decode environment mimalloc_purge_delay=$MIMALLOC_PURGE_DELAY serialized_weight_loading=${TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL:-unset} pytorch_cuda_alloc_conf=${PYTORCH_CUDA_ALLOC_CONF:-unset}"
+fi
 export TLLM_LOG_LEVEL=INFO
 export TRTLLM_ENABLE_PDL=1
 export TRTLLM_SERVER_DISABLE_GC=1

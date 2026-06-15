@@ -151,6 +151,8 @@ to the complete 18-node, 72-GPU GB300 allocation:
 - one required Fabric `ClusterUUID` and `CliqueId` across all 72 GPUs
 - the attempt-14 image, TRT revision, EP8/384 EPLB map, learned router,
   overlap scheduler, KV fraction `0.80`, and CUDA graphs through batch 512
+- the recipe's decode environment: default parallel weight loading,
+  `MIMALLOC_PURGE_DELAY=0`, and no prefill-only expandable allocator setting
 
 This is intentionally reported as `9xDEP8`, not TP72. Every GPU is active,
 but each TensorRT/NCCL world is confined to its assigned two-node pair. TRT's

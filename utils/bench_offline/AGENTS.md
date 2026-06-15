@@ -143,8 +143,10 @@ benchmark.
 - Preserve PR #1689 run `27164980476` attempt 14's TP8 engine details:
   max batch 512, the complete CUDA graph list through 512, KV fraction 0.80,
   overlap scheduling, learned router, EP8/384 EPLB, PDL,
-  `MEGAMOE_DEEPGEMM`, serialized weight loading,
-  `MIMALLOC_PURGE_DELAY=-1`, and full `/dev/shm`.
+  `MEGAMOE_DEEPGEMM`, default parallel weight loading,
+  `MIMALLOC_PURGE_DELAY=0`, and full `/dev/shm`. Do not copy the PR's
+  prefill-only serialized loading, `MIMALLOC_PURGE_DELAY=-1`, or
+  `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True` into decode engines.
 - Rack GBS72/288/576 preserve Huawei local batches 1/4/8 per GPU. Rack
   GBS30960/36864 are nine times the copied TP8 active/capacity points.
   Huawei is MTP3 and this engine is MTP1; compare raw decode-step throughput
