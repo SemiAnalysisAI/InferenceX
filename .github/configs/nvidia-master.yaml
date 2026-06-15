@@ -4902,6 +4902,29 @@ minimaxm3-fp8-h200-vllm:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
+# MiniMax-M3 MXFP8 H200 agentic-coding (Claude Code trace replay) with CPU
+# KV-cache offloading. Test of vLLM v1's native KV-offloading connector on M3 at
+# a single large concurrency: TEP8 (TP8 + expert parallel), offloading: cpu,
+# conc 64. Serve flags mirror the M3 H200 fixed-seq-len recipe (--block-size 128
+# for MSA, --language-model-only, BF16 KV — MXFP8 has no calibrated fp8 KV
+# scales, vllm-project/vllm#45381). Prefix caching stays enabled (coding traces
+# share large prefixes; offloading that cache is the point). CPU offload via
+# --kv-offloading-backend native (TOTAL_CPU_DRAM_GB default 600), matching the
+# M2.5 H200 agentic recipe.
+minimaxm3-fp8-h200-vllm-agentic:
+  image: vllm/vllm-openai:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 8, offloading: cpu, conc-list: [ 64 ] }
+
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2

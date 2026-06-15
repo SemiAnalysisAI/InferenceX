@@ -3814,3 +3814,12 @@
   description:
     - "Extend MiniMax-M3 MXFP8 H100/H200 non-MTP sweeps to concurrency 1 on the latency rows (H100: TP8; H200: TP4 and TP8) and add full TEP coverage from conc 1 to 256 (H100: TP8+EP8; H200: TP4+EP4 and TP8+EP8, incl. a new TP4+EP4 row for 8k1k). H200 TP8+EP8 upper bound moves 512->256 (high concurrency stays covered by the TP8+EP8 dp-attn DEP rows). DEP rows unchanged"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1761
+
+- config-keys:
+    - minimaxm3-fp8-h200-vllm-agentic
+  scenario-type:
+    - agentic-coding
+  description:
+    - "Initial submission (test): MiniMax-M3 MXFP8 H200 agentic-coding (Claude Code trace replay) with CPU KV-cache offloading — tests vLLM v1's native KV-offloading connector on M3 at a single large concurrency (TEP8: TP8 + expert parallel, offloading: cpu, conc 64, duration 1800s)"
+    - "New agentic recipe benchmarks/single_node/agentic/minimaxm3_fp8_h200.sh: --block-size 128 (MSA), --language-model-only, BF16 KV (no --kv-cache-dtype fp8 — MXFP8 lacks calibrated KV scales, vllm-project/vllm#45381), prefix caching enabled; CPU offload via --kv-offloading-backend native --kv-offloading-size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager (default 600 GB), matching the M2.5 H200 agentic recipe"
+  pr-link: TBD
