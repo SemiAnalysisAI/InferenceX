@@ -22,6 +22,29 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+VLLM_PACKAGE_ROOT="$(
+    python - <<'PY'
+from pathlib import Path
+
+import vllm
+
+print(Path(vllm.__file__).resolve().parent.parent)
+PY
+)"
+MXFP8_PATCH="$(dirname "$0")/minimaxm3_pr45567_mxfp8.patch"
+MXFP8_NATIVE_MOE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/experts/mxfp8_native_moe.py"
+MXFP8_PATCH_MARKER="max_post_padded = min(sorted_token_ids.shape[0], M_routed * block_m)"
+if ! grep -Fq "$MXFP8_PATCH_MARKER" "$MXFP8_NATIVE_MOE"; then
+    if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$MXFP8_PATCH"; then
+        echo "Failed to apply the vLLM PR 45567 MXFP8 patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -Fq "$MXFP8_PATCH_MARKER" "$MXFP8_NATIVE_MOE"; then
+    echo "vLLM PR 45567 MXFP8 launch-grid marker is missing after patching" >&2
+    exit 1
+fi
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
