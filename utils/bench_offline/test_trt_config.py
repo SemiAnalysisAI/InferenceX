@@ -15,6 +15,7 @@ from trt_config import (
     FP8_DEEP_GEMM_MAX_ROWS_ENV,
     FP8_FUSED_QUANT_MAX_ROWS,
     GBS128_PREFILL_TRANSIENT_RESERVE_BYTES,
+    GB300_GBS128_ENGINE_WARMUP_MAX_TOKENS,
     GB300_PROFILE,
     HUAWEI_MEASURED_DECODE_ROUNDS,
     HUAWEI_WARMUP_DECODE_ROUNDS,
@@ -28,6 +29,7 @@ from trt_config import (
     attention_workspace_target_bytes,
     benchmark_environment,
     build_llm_kwargs,
+    engine_warmup_max_tokens,
     external_mpi_rank_environment,
     fixed_environment,
     kv_prefill_reserve_bytes,
@@ -68,17 +70,23 @@ def test_one_global_batch_derives_every_local_capacity(
 
 
 @pytest.mark.parametrize(
-    ("global_batch_size", "expected_local", "expected_tokens"),
     (
-        (16, 1, 8192),
-        (64, 4, 32768),
-        (128, 8, 65536),
+        "global_batch_size",
+        "expected_local",
+        "expected_tokens",
+        "expected_warmup_tokens",
+    ),
+    (
+        (16, 1, 8192, 65536),
+        (64, 4, 32768, 65536),
+        (128, 8, 65536, 32768),
     ),
 )
 def test_gb300_derives_dep16_local_capacity(
     global_batch_size,
     expected_local,
     expected_tokens,
+    expected_warmup_tokens,
 ):
     kwargs = build_llm_kwargs(
         "/model",
@@ -97,6 +105,10 @@ def test_gb300_derives_dep16_local_capacity(
     assert kwargs["moe_expert_parallel_size"] == 16
     assert kwargs["max_batch_size"] == expected_local
     assert kwargs["max_num_tokens"] == expected_tokens
+    assert (
+        engine_warmup_max_tokens(global_batch_size, GB300_PROFILE)
+        == expected_warmup_tokens
+    )
     assert kwargs["gpus_per_node"] == 4
     assert kwargs["kv_cache_config"]["free_gpu_memory_fraction"] == 0.70
     assert kwargs["moe_config"]["backend"] == "MEGAMOE_DEEPGEMM"
@@ -133,6 +145,9 @@ def test_gb300_rank_environment_enables_required_runtime_flags():
     assert environment[ATTENTION_WORKSPACE_ENV] == "0"
     assert environment[KV_PREFILL_RESERVE_ENV] == "0"
     assert environment[MIN_RUNTIME_KV_TOKENS_ENV] == "74752"
+    assert environment[
+        "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS"
+    ] == str(GB300_GBS128_ENGINE_WARMUP_MAX_TOKENS)
     assert environment[
         "TRTLLM_BENCH_FP8_FUSED_QUANT_MAX_ROWS"
     ] == "32768"

@@ -39,6 +39,12 @@ MOE_MAX_NUM_TOKENS = 65536
 # at runtime capacity because DeepSeek-V4 attention metadata allocates lazily
 # from it on the first forward pass.
 ENGINE_WARMUP_MAX_TOKENS = 65536
+# GB300 GBS128 reached the full 65536-token runtime shape during synthetic
+# warmup, then exhausted memory while TRT created temporary KV-estimation
+# resources. GBS64 proves the same image can initialize the 32768-token tuning
+# shape. Limit only the synthetic pure-context request; runtime capacity and
+# the real fixed-batch prefill remain 65536 tokens.
+GB300_GBS128_ENGINE_WARMUP_MAX_TOKENS = 32768
 # TRT's capacity estimator does not exercise the 131072-token real prefill.
 # Leave room for its 8 GiB FP8 Q projection and 2 GiB BF16 RoPE projection,
 # plus allocator headroom, by reducing only the final GBS128 KV budget.
@@ -269,6 +275,18 @@ def max_num_tokens(
     return local_batch_size(global_batch_size, profile) * INPUT_TOKENS
 
 
+def engine_warmup_max_tokens(
+    global_batch_size: int,
+    profile: HardwareProfile | None = None,
+) -> int:
+    """Bound TRT's synthetic context-only tuning shape."""
+    selected = profile or HARDWARE_PROFILE
+    validate_global_batch_size(global_batch_size, selected)
+    if selected.key == "gb300" and global_batch_size == 128:
+        return GB300_GBS128_ENGINE_WARMUP_MAX_TOKENS
+    return ENGINE_WARMUP_MAX_TOKENS
+
+
 def attention_workspace_target_bytes(
     global_batch_size: int,
     profile: HardwareProfile | None = None,
@@ -400,7 +418,7 @@ def fixed_environment(
             )
         ),
         "TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS": str(
-            ENGINE_WARMUP_MAX_TOKENS
+            engine_warmup_max_tokens(global_batch_size, selected)
         ),
         FP8_DEEP_GEMM_MAX_ROWS_ENV: str(
             config.fp8_deep_gemm_max_rows or 0

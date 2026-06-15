@@ -34,6 +34,12 @@ benchmark.
   packed-FP8 quantizer guard at 32768 rows: run `27515257151` showed the
   GB300 GBS128 65536-row warmup projection fail
   `fp8_quantize_1x128_packed_ue8m0` with a CUDA `invalid argument`.
+- Keep GB300 GBS128 runtime `max_num_tokens=65536`, but cap only TRT's
+  synthetic pure-context warmup request at 32768 tokens. Run `27516149323`
+  proved the packed-FP8 guard, then exhausted memory while creating temporary
+  KV-estimation resources after the 65536-token autotune. GBS64 proves the
+  same image initializes the 32768-token tuning shape. Do not apply the
+  B300-only memory workarounds or shrink the real GBS128 prefill.
 - The barrier arm file, rank marker, corpus, and worker artifacts must be on
   shared `/workspace`, never node-local `/tmp`.
 - External MPI management workers start before rank 0 launches `run.py`.

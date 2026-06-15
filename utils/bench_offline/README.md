@@ -77,31 +77,34 @@ local_batch_size = global_batch_size / active_gpu_count
 max_batch_size = local_batch_size
 cuda_graph_batch_size = local_batch_size
 max_num_tokens = local_batch_size * 8192
-synthetic pure-context warmup request = min(max_num_tokens, 65536)
+synthetic pure-context warmup request =
+    min(max_num_tokens, profile_and_batch_warmup_cap)
 minimum runtime KV tokens = local_batch_size * 9344
 ```
 
 ### B300 Capacity
 
-| GBS | Local batch/rank | TRT max_num_tokens/rank | Minimum KV tokens/rank | KV reserve |
-|---:|---:|---:|---:|---:|
-| 16 | 2 | 16384 | 18688 | 0 |
-| 64 | 8 | 65536 | 74752 | 0 |
-| 128 | 16 | 131072 | 149504 | 12 GiB |
+| GBS | Local batch/rank | TRT max_num_tokens/rank | Synthetic warmup | Minimum KV tokens/rank | KV reserve |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 2 | 16384 | 16384 | 18688 | 0 |
+| 64 | 8 | 65536 | 65536 | 74752 | 0 |
+| 128 | 16 | 131072 | 65536 | 149504 | 12 GiB |
 
 ### GB300 Capacity
 
-| GBS | Local batch/rank | TRT max_num_tokens/rank | Minimum KV tokens/rank | KV reserve |
-|---:|---:|---:|---:|---:|
-| 16 | 1 | 8192 | 9344 | 0 |
-| 64 | 4 | 32768 | 37376 | 0 |
-| 128 | 8 | 65536 | 74752 | 0 |
+| GBS | Local batch/rank | TRT max_num_tokens/rank | Synthetic warmup | Minimum KV tokens/rank | KV reserve |
+|---:|---:|---:|---:|---:|---:|
+| 16 | 1 | 8192 | 8192 | 9344 | 0 |
+| 64 | 4 | 32768 | 32768 | 37376 | 0 |
+| 128 | 8 | 65536 | 32768 | 74752 | 0 |
 
-All GB300 runtime shapes fit the fixed 65536-token synthetic warmup ceiling.
-GB300 uses the packed-FP8 quantizer guard above 32768 rows because GBS128
-reaches a 65536-row warmup/prefill projection. The B300-only eager attention
-workspace, 12 GiB KV reduction, and oversized DeepGemm chunker remain
-disabled.
+GB300 GBS128 retains a 65536-token runtime capacity and real full-batch
+prefill, but tunes only a 32768-token synthetic context shape. Run
+`27516149323` reached the guarded 65536-token warmup, then exhausted memory
+while TRT created temporary KV-estimation resources. GBS64 already proves the
+same image and operators initialize at 32768 tokens. The B300-only eager
+attention workspace, 12 GiB KV reduction, and oversized DeepGemm chunker
+remain disabled.
 
 ### B300 Pinned-Image Workarounds
 
@@ -357,11 +360,12 @@ Artifacts:
    create its local MPI pool and does not need this host-side step.
 6. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
    GBS-derived value while synthetic pure-context warmup requests are capped
-   at 65536 tokens. On B300 GBS128, reserve the full-runtime non-graph attention
-   workspace before the first forward, then subtract the 12 GiB real-prefill
-   transient from TRT's calibrated final KV budget while preserving the
-   fixed-batch minimum cache cost. TRT's internal capacity probes run while
-   the benchmark request gate is disarmed.
+   at 65536 tokens, except GB300 GBS128, which uses a 32768-token tuning cap.
+   On B300 GBS128, reserve the full-runtime non-graph attention workspace
+   before the first forward, then subtract the 12 GiB real-prefill transient
+   from TRT's calibrated final KV budget while preserving the fixed-batch
+   minimum cache cost. TRT's internal capacity probes run while the benchmark
+   request gate is disarmed.
 7. On B300 only, keep oversized FP8 activation quantization and DeepGemm
    calls bounded while preserving one executor-level prefill iteration.
 8. Atomically arm the fixed-batch request gate after engine initialization.

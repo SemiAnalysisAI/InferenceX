@@ -57,17 +57,18 @@ Fixed GB300 engine profile:
 
 Capacity:
 
-| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` | Minimum KV tokens |
-|---:|---:|---:|---:|---:|---:|
-| 16 | 1 | 1 | 1 | 8192 | 9344 |
-| 64 | 4 | 4 | 4 | 32768 | 37376 |
-| 128 | 8 | 8 | 8 | 65536 | 74752 |
+| GBS | Local/rank | `max_batch_size` | CUDA graph | `max_num_tokens` | Synthetic warmup | Minimum KV tokens |
+|---:|---:|---:|---:|---:|---:|---:|
+| 16 | 1 | 1 | 1 | 8192 | 8192 | 9344 |
+| 64 | 4 | 4 | 4 | 32768 | 32768 | 37376 |
+| 128 | 8 | 8 | 8 | 65536 | 32768 | 74752 |
 
-Every GB300 shape fits the 65536-token warmup ceiling. The B300-only eager
-attention workspace, 12 GiB KV reserve, and 131072-row DeepGemm chunker are
-disabled. The packed-FP8 tactic guard is enabled above 32768 rows so GBS128's
-65536-row warmup/prefill projection uses TRT's Triton quantizer; GBS16/64 and
-all measured decode shapes stay on the fused path.
+GB300 GBS128 keeps its 65536-token runtime and real full-batch prefill, but
+uses the GBS64-proven 32768-token shape for TRT's synthetic context-only
+tuning request. The B300-only eager attention workspace, 12 GiB KV reserve,
+and 131072-row DeepGemm chunker are disabled. The packed-FP8 tactic guard is
+enabled above 32768 rows, so the real GBS128 prefill uses TRT's Triton
+quantizer; all measured decode shapes stay on the fused path.
 
 Launch chain:
 
@@ -291,6 +292,20 @@ so this was not an OOM. The profile had disabled the packed-FP8 guard because
 the shape fits the warmup ceiling, but that ceiling is exactly the failing
 kernel shape. The follow-up enables the existing 32768-row Triton fallback
 for GB300 while leaving DeepGemm chunking and B300 memory workarounds off.
+
+Run `27516149323`, source
+`5245f9b221939bee948058146379dc8fb5fd3053`, proved the packed-FP8 guard:
+GBS128 passed the previous 65536-row CUDA `invalid argument` and completed
+about 325 seconds of synthetic engine warmup/autotuning. Initialization then
+failed with TRT's explicit insufficient-memory report while creating
+temporary KV-estimation resources. Per-rank model resources had reached about
+272 GiB, leaving 66.67 GiB free where the temporary executor needed
+97.33 GiB. Peak telemetry was 271-278 GiB used per GPU.
+
+The follow-up retains `max_num_tokens=65536`, local batch 8, minimum KV
+capacity 74752, and the real one-iteration 65536-token prefill. It changes
+only `_create_warmup_request()`'s pure-context tuning shape to 32768 tokens,
+which is already proven by the successful GBS64 row on the same image.
 
 ## Why The Old Result Was Too High
 

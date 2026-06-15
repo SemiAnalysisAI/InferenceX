@@ -522,6 +522,8 @@ def main() -> int:
             "engine initialization start "
             f"max_batch_size={llm_kwargs['max_batch_size']} "
             f"max_num_tokens={llm_kwargs['max_num_tokens']} "
+            "engine_warmup_max_tokens="
+            f"{rank_environment['TRTLLM_BENCH_ENGINE_WARMUP_MAX_TOKENS']} "
             "kv_cache_fraction="
             f"{llm_kwargs['kv_cache_config']['free_gpu_memory_fraction']} "
             "moe_max_num_tokens="

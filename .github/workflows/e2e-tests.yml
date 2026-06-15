@@ -189,6 +189,8 @@ jobs:
                 global_batch_size: .benchmark.global_batch_size,
                 local_batch_size: .benchmark.local_batch_size,
                 active_gpu_count: .benchmark.active_gpu_count,
+                max_num_tokens: .benchmark.max_num_tokens,
+                engine_warmup_max_tokens: .benchmark.engine_warmup_max_tokens,
                 warmup_decode_rounds: .benchmark.warmup_decode_rounds,
                 measured_decode_rounds: .benchmark.measured_decode_rounds
               },

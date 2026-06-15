@@ -37,6 +37,7 @@ from trt_config import (
     WORLD_SIZE,
     attention_workspace_target_bytes,
     benchmark_environment,
+    engine_warmup_max_tokens,
     external_mpi_rank_environment,
     local_batch_size,
     max_num_tokens,
@@ -343,6 +344,7 @@ def main() -> int:
             "generated_output_tokens": MEASURED_OUTPUT_TOKENS,
             "mtp_max_draft_len": MTP_DRAFT_TOKENS,
             "max_seq_len": MAX_SEQ_LEN,
+            "engine_warmup_max_tokens": None,
             "attention_workspace_target_bytes": None,
             "fp8_deep_gemm_max_rows": (
                 FIXED_BENCHMARK_CONFIG.fp8_deep_gemm_max_rows
@@ -423,6 +425,9 @@ def main() -> int:
         base_result["benchmark"]["local_batch_size"] = local_batch
         base_result["benchmark"]["max_num_tokens"] = max_num_tokens(
             args.global_batch_size
+        )
+        base_result["benchmark"]["engine_warmup_max_tokens"] = (
+            engine_warmup_max_tokens(args.global_batch_size)
         )
         base_result["benchmark"]["attention_workspace_target_bytes"] = (
             attention_workspace_target_bytes(args.global_batch_size)
@@ -537,6 +542,8 @@ def main() -> int:
             f"global_batch={args.global_batch_size} "
             f"local_batch={local_batch} "
             f"max_num_tokens={max_num_tokens(args.global_batch_size)} "
+            "engine_warmup_max_tokens="
+            f"{engine_warmup_max_tokens(args.global_batch_size)} "
             "attention_workspace_bytes="
             f"{attention_workspace_target_bytes(args.global_batch_size)} "
             "fp8_deep_gemm_max_rows="
