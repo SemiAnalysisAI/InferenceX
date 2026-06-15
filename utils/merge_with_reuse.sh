@@ -6,8 +6,8 @@
 #   2. Merge origin/main into the PR branch.  Any `perf-changelog.yaml`
 #      conflict is auto-resolved by accepting main's entries and re-appending
 #      the PR's entry at the bottom with `XXX` -> the PR number.
-#   3. Push the merge commit and cancel the sweep it triggers (the prior
-#      successful sweep is what the merge run will reuse).
+#   3. Push the merge commit. The PR synchronize run observes the reuse
+#      authorization and skips sweep setup and benchmark jobs.
 #   4. Squash-merge the PR to main (--admin).
 #
 # Usage: utils/merge_with_reuse.sh <pr-number>
@@ -43,9 +43,10 @@ HAS_FULL_SWEEP="$(jq -r '
     | if (($names | index("full-sweep-enabled")) != null)
          or (($names | index("non-canary-full-sweep-enabled")) != null)
          or (($names | index("full-sweep-fail-fast")) != null)
+         or (($names | index("full-sweep-fail-fast-no-canary")) != null)
       then "1" else "" end
 ' <<<"$PR_INFO")"
-[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing 'full-sweep-enabled', 'non-canary-full-sweep-enabled', or 'full-sweep-fail-fast' label"
+[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing a full-sweep label ('full-sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast', or 'full-sweep-fail-fast-no-canary')"
 
 # Warn early if no successful run exists on any current PR commit.
 PR_SHAS="$(gh api "repos/${REPO}/pulls/${PR}/commits" --paginate --jq '.[].sha')"
@@ -185,30 +186,13 @@ fi
 
 POST_MERGE="$(git rev-parse HEAD)"
 
-# --- step 3: push and cancel triggered sweep --------------------------------
+# --- step 3: push merge commit -----------------------------------------------
 if [ "$PRE_MERGE" = "$POST_MERGE" ]; then
-    log "PR already up to date with main; skipping push + cancel"
+    log "PR already up to date with main; skipping push"
 else
     log "Pushing merge commit ${POST_MERGE:0:8}"
     git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"
-
-    log "Waiting for triggered sweep run to register"
-    RUN_ID=""
-    for _ in 1 2 3 4 5; do
-        sleep 5
-        RUN_ID="$(gh run list --repo "$REPO" --branch "$HEAD_BRANCH" \
-            --workflow run-sweep.yml --limit 5 \
-            --json databaseId,headSha,status \
-            --jq ".[] | select(.headSha==\"${POST_MERGE}\" and (.status==\"queued\" or .status==\"in_progress\")) | .databaseId" | head -1)"
-        [ -n "$RUN_ID" ] && break
-    done
-    if [ -n "$RUN_ID" ]; then
-        log "Cancelling sweep run ${RUN_ID}"
-        gh run cancel "$RUN_ID" --repo "$REPO" >/dev/null
-        ok "Sweep cancelled"
-    else
-        echo "  No queued/in-progress sweep found after 25s — proceeding."
-    fi
+    ok "Push complete; the reuse authorization will suppress the synchronize sweep"
 fi
 
 # --- step 4: squash-merge to main -------------------------------------------

@@ -100,6 +100,7 @@ def result(
     *,
     enabled: bool,
     reason: str,
+    skip_pr_sweep: bool = False,
     source_run_id: str = "",
     source_run_attempt: str = "",
     source_run_url: str = "",
@@ -109,6 +110,7 @@ def result(
     """Build the result payload."""
     return {
         "reuse-enabled": "true" if enabled else "false",
+        "skip-pr-sweep": "true" if skip_pr_sweep else "false",
         "reuse-source-run-id": source_run_id,
         "reuse-source-run-attempt": source_run_attempt,
         "reuse-source-run-url": source_run_url,
@@ -224,13 +226,21 @@ def validate_reusable_run(
     pr_number: int,
     run: dict[str, Any],
     token: str,
+    allow_failed: bool = False,
 ) -> None:
     """Fail closed unless an Actions run is a valid reusable source run."""
     run_id = int(run["id"])
     if run.get("event") != "pull_request":
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
-    if run.get("status") != "completed" or run.get("conclusion") != "success":
-        raise RuntimeError(f"Reusable source run {run_id} did not complete successfully.")
+    if run.get("status") != "completed":
+        raise RuntimeError(f"Reusable source run {run_id} is not completed.")
+    allowed_conclusions = {"success", "failure"} if allow_failed else {"success"}
+    if run.get("conclusion") not in allowed_conclusions:
+        expected = "success or failure" if allow_failed else "success"
+        raise RuntimeError(
+            f"Reusable source run {run_id} has conclusion {run.get('conclusion')!r}; "
+            f"expected {expected}."
+        )
     expected_path = workflow_path(workflow_id)
     run_path = str(run.get("path") or "")
     if run_path and run_path != expected_path:
@@ -274,11 +284,13 @@ def main() -> int:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--event-name", required=True)
+    parser.add_argument("--event-action", default="")
+    parser.add_argument("--pr-number", type=int)
     parser.add_argument("--ref", required=True)
     parser.add_argument("--workflow-id", default="run-sweep.yml")
     parser.add_argument(
         "--full-sweep-label",
-        default="full-sweep-enabled,non-canary-full-sweep-enabled,full-sweep-fail-fast",
+        default="full-sweep-enabled,non-canary-full-sweep-enabled,full-sweep-fail-fast,full-sweep-fail-fast-no-canary",
         help="Comma-separated PR labels treated as 'full sweep'; reuse requires at least one.",
     )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
@@ -298,6 +310,36 @@ def main() -> int:
         for value in args.allowed_author_associations.split(",")
         if value.strip()
     }
+
+    if args.event_name == "pull_request":
+        if args.event_action != "synchronize":
+            outputs = result(
+                enabled=False,
+                reason=f"pull_request action {args.event_action or 'unknown'} is not synchronize",
+            )
+        else:
+            if args.pr_number is None:
+                raise RuntimeError("--pr-number is required for pull_request synchronize")
+            authorized, _ = find_reuse_authorization(
+                args.repo,
+                args.pr_number,
+                token,
+                args.pinned_run_command,
+                allowed_author_associations,
+            )
+            outputs = result(
+                enabled=False,
+                skip_pr_sweep=authorized,
+                reason=(
+                    f"PR #{args.pr_number} has {args.pinned_run_command} authorization"
+                    if authorized
+                    else f"PR #{args.pr_number} has no {args.pinned_run_command} authorization"
+                ),
+                source_pr_number=str(args.pr_number),
+            )
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
 
     if args.event_name != "push" or args.ref != "refs/heads/main":
         outputs = result(enabled=False, reason="not a push to main")
@@ -397,7 +439,14 @@ def main() -> int:
         )
 
     run_id = int(run["id"])
-    validate_reusable_run(args.repo, args.workflow_id, pr_number, run, token)
+    validate_reusable_run(
+        args.repo,
+        args.workflow_id,
+        pr_number,
+        run,
+        token,
+        allow_failed=pinned_run_id is not None,
+    )
 
     outputs = result(
         enabled=True,
