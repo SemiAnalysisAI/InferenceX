@@ -32,6 +32,10 @@ RACK_WORLD_SIZE=72
 REPLICA_COUNT=9
 REPLICA_PHYSICAL_NODES=2
 GPUS_PER_NODE=4
+RACK_INIT_WAVE_SIZE="${TRT_BENCH_RACK_INIT_WAVE_SIZE:-3}"
+RACK_INIT_WAVE_TIMEOUT_SECONDS="$(
+    printf '%s' "${TRT_BENCH_RACK_INIT_WAVE_TIMEOUT_SECONDS:-1500}"
+)"
 TRT_BENCH_GIT_REVISION="$(git -C "$TRT_BENCH_WORKSPACE" rev-parse HEAD)"
 export TRT_BENCH_GIT_REVISION
 
@@ -45,6 +49,19 @@ case "$GLOBAL_BATCH_SIZE" in
 esac
 if (( GLOBAL_BATCH_SIZE % REPLICA_COUNT != 0 )); then
     echo "Rack global batch must divide across $REPLICA_COUNT replicas" >&2
+    exit 1
+fi
+if [[ ! "$RACK_INIT_WAVE_SIZE" =~ ^[1-9][0-9]*$ ]] \
+    || (( RACK_INIT_WAVE_SIZE > REPLICA_COUNT )); then
+    echo \
+        "TRT_BENCH_RACK_INIT_WAVE_SIZE must be in 1..${REPLICA_COUNT}: ${RACK_INIT_WAVE_SIZE}" \
+        >&2
+    exit 1
+fi
+if [[ ! "$RACK_INIT_WAVE_TIMEOUT_SECONDS" =~ ^[1-9][0-9]*$ ]]; then
+    echo \
+        "TRT_BENCH_RACK_INIT_WAVE_TIMEOUT_SECONDS must be positive: ${RACK_INIT_WAVE_TIMEOUT_SECONDS}" \
+        >&2
     exit 1
 fi
 ENGINE_GLOBAL_BATCH_SIZE=$((GLOBAL_BATCH_SIZE / REPLICA_COUNT))
@@ -505,8 +522,14 @@ export TRT_BENCH_RACK_GLOBAL_BATCH_SIZE="$GLOBAL_BATCH_SIZE"
 export TRT_BENCH_FABRIC_CLUSTER_UUID="$FABRIC_CLUSTER_UUID"
 export TRT_BENCH_FABRIC_CLIQUE_ID="$FABRIC_CLIQUE_ID"
 
-log "launching nine TP8/EP8 MTP1 engines"
-for replica_index in $(seq 0 $((REPLICA_COUNT - 1))); do
+launch_replica() {
+    local replica_index="$1"
+    local first_node
+    local second_node
+    local replica_nodes
+    local replica_label
+    local replica_root
+
     first_node="${allocation_nodes[$((replica_index * REPLICA_PHYSICAL_NODES))]}"
     second_node="${allocation_nodes[$((replica_index * REPLICA_PHYSICAL_NODES + 1))]}"
     replica_nodes="${first_node},${second_node}"
@@ -524,12 +547,79 @@ for replica_index in $(seq 0 $((REPLICA_COUNT - 1))); do
         "$TRT_BENCH_WORKSPACE/benchmarks/multi_node/offline/dsv4_fp4_gb300_rack_replica.sh" \
         > "${replica_root}/host_launcher.log" 2>&1 &
     REPLICA_PIDS[replica_index]=$!
-done
+}
 
+wave_count=$(((REPLICA_COUNT + RACK_INIT_WAVE_SIZE - 1) / RACK_INIT_WAVE_SIZE))
+log "initializing nine TP8/EP8 MTP1 engines in waves size=$RACK_INIT_WAVE_SIZE waves=$wave_count timeout=${RACK_INIT_WAVE_TIMEOUT_SECONDS}s"
 replica_started="$SECONDS"
-last_replica_heartbeat=-1
 replica_failure=0
 replica_failure_message=""
+for ((wave_start = 0; wave_start < REPLICA_COUNT; wave_start += RACK_INIT_WAVE_SIZE)); do
+    wave_end=$((wave_start + RACK_INIT_WAVE_SIZE - 1))
+    if (( wave_end >= REPLICA_COUNT )); then
+        wave_end=$((REPLICA_COUNT - 1))
+    fi
+    wave_number=$((wave_start / RACK_INIT_WAVE_SIZE + 1))
+    wave_size=$((wave_end - wave_start + 1))
+    log "launching initialization wave=$wave_number/$wave_count replicas=$(printf 'r%02d' "$wave_start")-$(printf 'r%02d' "$wave_end")"
+    for ((replica_index = wave_start; replica_index <= wave_end; replica_index += 1)); do
+        launch_replica "$replica_index"
+    done
+
+    wave_started="$SECONDS"
+    last_wave_heartbeat=-1
+    while true; do
+        wave_ready=0
+        for ((replica_index = wave_start; replica_index <= wave_end; replica_index += 1)); do
+            ready_path="${RACK_ROOT}/barrier/replica_$(printf '%02d' "$replica_index").ready.json"
+            if [[ -s "$ready_path" ]]; then
+                ((wave_ready += 1))
+                continue
+            fi
+            pid="${REPLICA_PIDS[$replica_index]}"
+            if ! kill -0 "$pid" >/dev/null 2>&1; then
+                set +e
+                wait "$pid"
+                replica_rc=$?
+                set -e
+                REPLICA_PIDS[replica_index]=""
+                replica_label="$(printf 'r%02d' "$replica_index")"
+                replica_failure=1
+                replica_failure_message="Replica ${replica_label} exited with return code ${replica_rc} before its initialization wave reached the rack barrier"
+                break
+            fi
+        done
+        if [[ "$replica_failure" -eq 1 ]]; then
+            break
+        fi
+        if (( wave_ready == wave_size )); then
+            log "initialization wave complete wave=$wave_number/$wave_count ready=$wave_ready/$wave_size"
+            break
+        fi
+        wave_elapsed=$((SECONDS - wave_started))
+        if (( wave_elapsed >= RACK_INIT_WAVE_TIMEOUT_SECONDS )); then
+            replica_failure=1
+            replica_failure_message="Initialization wave ${wave_number}/${wave_count} timed out after ${wave_elapsed}s with ${wave_ready}/${wave_size} replicas at the rack barrier"
+            break
+        fi
+        if (( wave_elapsed / 60 > last_wave_heartbeat )); then
+            last_wave_heartbeat=$((wave_elapsed / 60))
+            log "initialization wave active wave=$wave_number/$wave_count elapsed=${wave_elapsed}s ready=$wave_ready/$wave_size"
+        fi
+        sleep 1
+    done
+    if [[ "$replica_failure" -eq 1 ]]; then
+        break
+    fi
+done
+
+if [[ "$replica_failure" -eq 1 ]]; then
+    log "$replica_failure_message; terminating initialized replicas"
+    write_host_failure 1 "$replica_failure_message"
+    exit 1
+fi
+
+last_replica_heartbeat=-1
 completed_replicas=0
 declare -a REPLICA_DONE=()
 while (( completed_replicas < REPLICA_COUNT )); do

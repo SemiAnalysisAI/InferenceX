@@ -167,13 +167,18 @@ made into a 72-rank engine by changing MoE cluster settings.
 | 30960 | 3440 | 430 | 9x attempt-14 active decode population |
 | 36864 | 4096 | 512 | 9x copied engine capacity |
 
-All nine engines initialize independently and wait at one shared barrier
-immediately before the measured generation pass. Logical rack decode round
-`i` uses the maximum rank-0 `host_step_time` for round `i` across the nine
-engines. The rack result then skips the first eight logical rounds and applies
-the upper-IQR filter. This models a fixed global batch whose next step cannot
-complete before its slowest replica. Aggregation rejects measured-pass start
-skew above 10 seconds.
+The engines initialize in three waves of three. A wave must finish
+initialization and reach the shared pre-measurement barrier before the next
+wave starts. This limits concurrent safetensor loading to 24 ranks; run
+`27533885582` proved that launching all 72 ranks together can leave one rank
+blocked in model loading after the other eight engines are ready. The
+measured pass is unchanged: all nine engines release together.
+
+Logical rack decode round `i` uses the maximum rank-0 `host_step_time` for
+round `i` across the nine engines. The rack result then skips the first eight
+logical rounds and applies the upper-IQR filter. This models a fixed global
+batch whose next step cannot complete before its slowest replica. Aggregation
+rejects measured-pass start skew above 10 seconds.
 
 Speculative proposed/accepted counters are summed across replicas for the
 same 256-round window. Huawei uses MTP3 and the copied TP8 engine uses MTP1,

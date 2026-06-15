@@ -147,6 +147,22 @@ Run `27531206092` did that and left eight of nine rack replicas idle during
 model finalization at 0% GPU utilization; only replica 3 reached the measured
 barrier.
 
+Run `27533885582`, source
+`7fd1bdb0bf6a6c9e23d52e38a4fb3db78cb6d99d`, corrected the decode
+environment. Replicas `r01` through `r08` all completed initialization and
+reached the shared measured-pass barrier in about 17 minutes. Replica `r00`
+did not: per-rank diagnostics showed ranks 0-3 at KV-cache construction,
+ranks 4/6/7 in MoE finalization, and rank 5 stationary since 08:34 UTC while
+opening `model-00043-of-00064.safetensors`. There was no TensorRT fatal
+record. The run was canceled after all other replicas proved ready.
+
+This isolates the remaining fault to simultaneous 72-rank model loading, not
+the copied TP8 decode configuration. Rack initialization now runs in three
+waves of three engines. Every wave must reach the pre-measurement barrier
+within 1500 seconds before the next wave starts, limiting concurrent model
+loading to 24 ranks. The measured pass still releases all nine engines
+together and therefore preserves the 72-GPU fixed-global-batch contract.
+
 The direct offline engine keeps the documented `max_num_tokens=32768`
 adaptation because it must admit its own 8K prompts. The serving decode worker
 in the PR receives transferred KV and uses `max_num_tokens=1024`.

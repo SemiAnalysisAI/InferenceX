@@ -151,6 +151,12 @@ benchmark.
   GBS30960/36864 are nine times the copied TP8 active/capacity points.
   Huawei is MTP3 and this engine is MTP1; compare raw decode-step throughput
   before separately applying measured MTP yield.
+- Initialize rack engines in waves of three. Each wave must reach the
+  pre-measurement rack barrier before the next wave starts. This limits model
+  loading to 24 ranks at a time while preserving all nine exact PR decode
+  engines for the synchronized measured pass. Do not restore simultaneous
+  72-rank model loading: run `27533885582` left `r00` rank 5 blocked while
+  opening safetensor shard 43 after every other replica initialized.
 - Each child proves its own 256-round exact fixed-batch window. All children
   must reach one shared measured-pass barrier. For logical rack round `i`,
   use the maximum rank-0 `host_step_time` across the nine child round-`i`

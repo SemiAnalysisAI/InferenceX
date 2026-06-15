@@ -526,6 +526,20 @@ def test_rack_launcher_uses_pr_decode_environment():
     assert "export MIMALLOC_PURGE_DELAY=-1" not in source
 
 
+def test_rack_parent_limits_concurrent_engine_initialization():
+    repo_root = Path(__file__).resolve().parents[2]
+    source = (
+        repo_root
+        / "benchmarks/multi_node/offline/dsv4_fp4_gb300_rack_trt.sh"
+    ).read_text(encoding="utf-8")
+
+    assert 'TRT_BENCH_RACK_INIT_WAVE_SIZE:-3' in source
+    assert 'TRT_BENCH_RACK_INIT_WAVE_TIMEOUT_SECONDS:-1500' in source
+    assert "for ((wave_start = 0;" in source
+    assert "initialization wave complete" in source
+    assert "replica_$(printf '%02d' \"$replica_index\").ready.json" in source
+
+
 @pytest.mark.parametrize(
     ("profile_name", "global_batch_size", "local_batch", "engine_batch"),
     (
