@@ -12712,7 +12712,7 @@ minimaxm3-fp8-h100-vllm-mtp:
 
 
 dsv4-fp4-b200-sglang-agentic-hicache:
-  image: lmsysorg/sglang:v0.5.12.post1-cu130
+  image: lmsysorg/sglang:v0.5.13-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200
@@ -12728,7 +12728,7 @@ dsv4-fp4-b200-sglang-agentic-hicache:
 
 
 dsv4-fp4-b300-sglang-agentic-hicache:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260609-317fc6a9
+  image: lmsysorg/sglang:v0.5.13-cu130
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
