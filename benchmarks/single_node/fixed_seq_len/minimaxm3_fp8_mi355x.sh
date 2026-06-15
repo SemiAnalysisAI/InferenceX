@@ -44,6 +44,7 @@ if ! grep -Fq "$MXFP8_PATCH_MARKER" "$MXFP8_NATIVE_MOE"; then
     echo "vLLM PR 45567 MXFP8 launch-grid marker is missing after patching" >&2
     exit 1
 fi
+python "$(dirname "$0")/minimaxm3_mi355x_pr45567_smoke.py"
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
