@@ -41,6 +41,15 @@ use the normal HIP graph path and ten request batches.
   gfx94x MXFP8 backend to EP8 and an FP8 index-key cache are the first two
   experiments; corrected FP8 main-KV storage and sparse-attention split-K
   tuning follow.
+- The upstream audit found no exact MI300X M3 implementation for native EP8
+  MXFP8, an FP8 M3 index cache, or the sparse-attention one-chunk direct-output
+  path. Lower-batch routing work should not start from scratch: existing vLLM
+  implementations cover top-k plus activation quantization, align plus sort,
+  and direct expert-output accumulation and can be adapted to M3.
+- Do not enable the whole AITER MoE path for this recipe. Current vLLM
+  explicitly treats MXFP8 as unsupported by AITER MoE and emulates it. AITER's
+  fused MX quant/sort and reduction kernels are useful references or
+  components, but its integrated A8W4 path is not M3's W8A8 MXFP8 contract.
 - c256 is a saturation-throughput point, not a latency operating point. The
   final 8k/c256 run improves TPOT by 9.23% and throughput by 4.22%, while mean
   TTFT rises 14.75% because requests queue behind a saturated decode batch.
@@ -138,6 +147,49 @@ The main M3 and index Q/K paths are already horizontally fused into one
 projection and one norm/RoPE/cache kernel. The index score and top-k then
 produce the sparse-attention block list, so there is no expensive independent
 attention branch to move to a second stream.
+
+## Upstream Reuse Audit
+
+The search covered current vLLM, AITER, SGLang, and ATOM sources plus open and
+merged implementation PRs. The measured budgets below are full 60-layer decode
+phase totals, so they are strict upper bounds; a fused sub-kernel can remove
+only part of each number.
+
+| Target | Full-step budget | Prior implementation | M3 MI300X decision |
+| --- | ---: | --- | --- |
+| TP all-reduce + Gemma RMSNorm | 4.88 ms at 8k/c256 | [vLLM 43953](https://github.com/vllm-project/vllm/pull/43953), [vLLM 45639](https://github.com/vllm-project/vllm/pull/45639), [InferenceX 1770](https://github.com/SemiAnalysisAI/InferenceX/pull/1770), [InferenceX 1778](https://github.com/SemiAnalysisAI/InferenceX/pull/1778) | Already implemented and has a dedicated MI300X validation PR; do not duplicate |
+| Sigmoid/bias top-k + activation quantization | Router chain is 1.00-1.50 ms | [vLLM 43592](https://github.com/vllm-project/vllm/pull/43592) | Port the prepared-input design for c1/c16, replacing its per-128 FP8 scale contract with M3's per-32 E8M0/FNUZ MXFP8 contract |
+| MoE align + sort | Routing preparation is 0.26-1.34 ms | [vLLM 44167](https://github.com/vllm-project/vllm/pull/44167), AITER `sort_tokens_fused` | Port for TP c1/c16; the existing fast path excludes the c256 EP expert map |
+| GEMM2 direct accumulation | Finalization is 0.65-1.01 ms | [vLLM 38702](https://github.com/vllm-project/vllm/pull/38702), [AITER 3377](https://github.com/ROCm/aiter/pull/3377) | Adapt only for small token counts; do not replace the current top-k-4 reduction at c256 |
+| Shared expert as an expert slot | Shared MLP plus combine is about 1.4-2.7 ms | [vLLM 39280](https://github.com/vllm-project/vllm/pull/39280), [vLLM 44313](https://github.com/vllm-project/vllm/pull/44313), [vLLM 44434](https://github.com/vllm-project/vllm/pull/44434), SGLang fused shared experts | Reuse the weight/routing design, but implement it in the native MXFP8 backend and preserve routed-only scaling |
+| FP8 index-key cache | Score is 10.86 ms at 8k/c256 | [ATOM indexer](https://github.com/ROCm/atom/blob/368cd515d71a329031fc9f4d6f0f72065fe20717/atom/models/deepseek_v2.py), [SGLang ROCm cache store](https://github.com/sgl-project/sglang/blob/19e85868f616b885755cb567246517fc30502dc2/python/sglang/jit_kernel/triton_store_cache.py) | Reuse fused BF16-to-FP8 paged scatter with one FP32 scale per key row; adapt scoring to M3 |
+| FP8 main KV cache | Attend plus merge is 5.19 ms at 8k/c256 | [vLLM 45563](https://github.com/vllm-project/vllm/pull/45563), [vLLM 45680](https://github.com/vllm-project/vllm/pull/45680) | Validate the existing FNUZ fix and FP8 sparse-GQA insertion path before writing another kernel |
+| One-chunk sparse direct output | Merge is 0.26-0.29 ms at c256 | No exact M3 implementation found | Implement after selecting the KV dtype; benchmark 1/2/4/8 chunks |
+| Score + top-k fusion | Partial top-k is 0.29-0.32 ms at c256 | No exact M3 implementation found; ATOM and SGLang still materialize scores before top-k | Lower priority unless fusion also changes score tiling or cache reuse |
+| Cross-microbatch TP overlap | Collective bound is 4.88 ms at 8k/c256 | [vLLM 44677](https://github.com/vllm-project/vllm/pull/44677), [vLLM 36851](https://github.com/vllm-project/vllm/pull/36851), AITER Iris | Correct dependency model, but not ready for M3 EP, direct fused AR, or ROCm graph replay |
+| Dense attention backend | 1.36 ms across three layers | Existing vLLM AITER FlashAttention backend | Run a backend A/B only; this is not a new kernel target |
+
+The existing routing kernels are precedents, not drop-in binaries:
+
+- vLLM 43592 fuses routing top-k with per-token-group FP8 quantization and
+  supplies both through a prepared-input MoE hook. M3 needs E4M3FNUZ values,
+  per-32 E8M0 scales, hidden size 6144, 128 experts, and top-k 4. Keep the FP32
+  router projection separate.
+- vLLM 44167 replaces multi-launch histogram/prefix/scatter alignment with one
+  CTA when there are many experts and at most 1024 routed IDs. Its no-expert-map
+  constraint makes TP c1/c16 the direct M3 target, not EP c256.
+- vLLM 38702 atomically accumulates small-token GEMM2 output into the final
+  hidden state. AITER also has a deterministic gather/reduce implementation.
+  Both avoid inventing a new reduction algorithm, but the native MXFP8 GEMM2
+  epilogue still needs M3-specific integration.
+
+The AITER compatibility boundary is explicit in current
+[`rocm_aiter_moe.py`](https://github.com/vllm-project/vllm/blob/0d80979644e0237b6ef02ce0601dc0bd654e357b/vllm/model_executor/layers/fused_moe/experts/rocm_aiter_moe.py#L304-L310):
+MXFP6 and MXFP8 use emulation rather than native AITER MoE. AITER
+[PR 3398](https://github.com/ROCm/aiter/pull/3398) does provide fused dynamic
+MX quantization plus MoE sort, including gfx942 FNUZ scale handling. Reuse that
+quant/sort work where its layout matches, but do not switch this W8A8 recipe to
+the integrated AITER A8W4 path.
 
 ## Profile Results
 
@@ -312,8 +364,10 @@ The vLLM starting points were
 The M3-specific compile path now also exists in
 [vLLM PR 45639](https://github.com/vllm-project/vllm/pull/45639).
 [InferenceX PR 1770](https://github.com/SemiAnalysisAI/InferenceX/pull/1770)
-is the corresponding MI355X hardware-validation PR. A new InferenceX kernel PR
-for the same AR+Gemma-RMS operation would be duplicate work.
+is the corresponding MI355X hardware-validation PR, and
+[InferenceX PR 1778](https://github.com/SemiAnalysisAI/InferenceX/pull/1778)
+is the separate MI300X validation PR. Another InferenceX kernel PR for the same
+AR+Gemma-RMS operation would be duplicate work.
 
 The implementation:
 
@@ -459,13 +513,17 @@ upside than only fusing top-k because the score kernel dominates the index path.
 Required work:
 
 - plumb `indexer_kv_dtype` through the AMD M3 model and cache specification
-- add FP8 insertion for the normalized index keys
-- load and convert FP8 keys in `_decode_index_score_kernel`
+- use a fused BF16-to-FP8 paged cache write with one FP32 scale per key row
+- load FP8 keys and apply the row scale in `_decode_index_score_kernel`
 - compare top-k block agreement, logits, and full GSM8K against BF16
 - profile both 1k/c256 and 8k/c256 before enabling any lower-concurrency shape
 
-Index keys are normalized, which makes unit-scale FP8 plausible, but accuracy
-must be measured rather than assumed.
+Do not assume normalized keys make unit-scale FP8 sufficient. ATOM and SGLang
+already implement the safer layout for the same 128-element index-key shape:
+fused quantize plus paged scatter, FP8 key bytes, and one FP32 scale per cached
+row. Their decode path still computes a full score tensor and runs top-k
+separately, so this is direct cache-format prior art rather than evidence that
+score/top-k fusion is already solved.
 
 ### 3. Corrected FP8 Main KV Cache
 
@@ -475,6 +533,8 @@ FN, which severely corrupted attention. Open
 [vLLM PR 45563](https://github.com/vllm-project/vllm/pull/45563) fixes the
 dtype view and reports full GSM8K strict exact match recovering from `0.0099`
 to `0.9575`; its separate InferenceX eval reached `0.9606`.
+[vLLM PR 45680](https://github.com/vllm-project/vllm/pull/45680) adds FP8
+sparse-GQA cache plumbing and fused insertion support.
 
 This needs a matched performance and accuracy A/B on the final profiling
 branch, not an assumption that FP8 is now free. The upside is material:
@@ -491,7 +551,32 @@ At an 8k active context with c256, main-KV FP8 saves roughly 32 GB per GPU;
 combining it with an FP8 index cache saves about 47.5 GB. That may also change
 whether retaining both native and BF16 EP weights is feasible.
 
-### 4. Sparse-Attention Split-K and Single-Chunk Fast Path
+### 4. Port Prepared Top-K + MXFP8 Input Quantization
+
+[vLLM PR 43592](https://github.com/vllm-project/vllm/pull/43592) already
+implements the relevant scheduling idea for MiniMax M2: one small-batch kernel
+computes sigmoid/bias top-k and activation quantization, then a prepared-input
+hook lets FusedMoE consume those results without repeating work. Its
+microbenchmarks improve the fused region by roughly 2-4 us for token counts
+through 256, and its M2 c16 serving result improves output throughput by about
+3%.
+
+Use that implementation as the starting point, but adapt its quantization
+contract rather than copying it:
+
+- keep M3's FP32 `GateLinear` router projection unchanged
+- emit E4M3FNUZ activations with per-32 E8M0 scales, not the existing
+  per-128 FP32 scales
+- produce the layout expected by the native gfx94x W8A8 MXFP8 backend
+- pass top-k and quantized input through the prepared-input hook
+- shape-gate c1/c16 first; the c256 EP route needs expert-map integration and
+  the upstream kernel loses its small-batch advantage at larger token counts
+
+The full router chain is 1.00-1.50 ms per decode step, but only part of that is
+removable. Treat the upstream few-microsecond-per-layer result as the realistic
+target and benchmark the fused region before changing model plumbing.
+
+### 5. Sparse-Attention Split-K and Single-Chunk Fast Path
 
 At c256, the current `TARGET_GRID=256` policy chooses one top-k chunk. Each
 program then walks all eight valid blocks at 1k or all 16 at 8k. The attend
@@ -505,20 +590,38 @@ output and skip the merge and unnecessary LSE output. Keep lower-concurrency
 shape policies separate: c1/c16 already choose more chunks to reach the target
 grid.
 
-### 5. Score + Partial Top-K Fusion
+### 6. Port the Small-Batch Align + Sort Kernel
 
-The decode index path currently writes a full FP32 score tensor and launches a
-separate partial top-k kernel. Fuse score production with per-chunk top-k and
-write only the final candidates. This removes one launch and the score
-store/read round trip. The c256 path already has one chunk and therefore no
-separate top-k merge kernel.
+[vLLM PR 44167](https://github.com/vllm-project/vllm/pull/44167) replaces the
+multi-kernel histogram, prefix-sum, and scatter sequence with one CTA for
+small-batch, many-expert routing. M3's TP c1/c16 shapes fit its important
+conditions: 128 experts, top-k 4, and at most 1024 routed IDs. The c256 EP path
+has an expert map and is intentionally excluded by the existing design.
 
-The bound is smaller than FP8 index storage: partial top-k costs 0.29-0.32 ms
-at current c256, while index-key reads dominate the 10.86 ms long-context
-score. Prioritize this after the cache-dtype experiment unless a fused kernel
-also improves score tiling or cache reuse.
+Port or HIP-enable that implementation and benchmark it against the current
+`moe_align_block_size` plus sort sequence. AITER's `sort_tokens_fused` is a
+second gfx942 implementation reference for very small token counts. Routing
+preparation totals 0.26-1.34 ms over the full step, but the upstream end-to-end
+gain is much smaller; this is a low-risk launch-reduction port, not a major
+c256 optimization.
 
-### 6. Fuse the Shared Expert into Native MXFP8 MoE
+### 7. Shape-Gated GEMM2 Direct Accumulation
+
+The native M3 GEMM2 already applies router weights, then launches the
+top-k-4 `moe_sum` reduction. [vLLM PR
+38702](https://github.com/vllm-project/vllm/pull/38702) provides the exact
+small-token precedent: GEMM2 atomically accumulates directly into
+`[tokens, hidden]`, eliminating the separate reduction. AITER
+[PR 3377](https://github.com/ROCm/aiter/pull/3377) provides a deterministic
+masked gather/reduce alternative.
+
+Integrate one of those designs with the native MXFP8 GEMM2 only for c1/c16.
+The direct-accumulation implementation is intended for at most 32 tokens and
+regresses larger shapes. The measured 0.65-1.01 ms finalization total also
+contains shared combine and other work, so the realistic saving is only the
+few microseconds per sparse layer currently spent in `moe_sum`.
+
+### 8. Fuse the Shared Expert into Native MXFP8 MoE
 
 The separate shared MLP costs about 1.0-1.9 ms, plus 0.31-0.82 ms for the serial
 combine. Since side-stream overlap failed, the more promising design is to
@@ -531,13 +634,19 @@ grouped MoE:
 - preserve routed scaling without applying it to the shared slot
 - validate TP/EP weight mapping and GSM8K
 
-This follows the AITER fused-shared-expert model used by
+This follows the merged Qwen3-Next design in
+[vLLM PR 39280](https://github.com/vllm-project/vllm/pull/39280), the model
+integrations in
 [vLLM PR 44313](https://github.com/vllm-project/vllm/pull/44313) and
-[vLLM PR 44434](https://github.com/vllm-project/vllm/pull/44434), but M3's
-MXFP8 backend is not compatible with that AITER path. The M3 Amdahl bound is
-also much smaller than the GLM/Qwen gains reported in those PRs.
+[vLLM PR 44434](https://github.com/vllm-project/vllm/pull/44434), and SGLang's
+generic `num_fused_shared_experts` path. M3's `shared_experts` metadata does not
+currently enter the AITER fused-shared-expert path, and the native W8A8 MXFP8
+backend is incompatible with it. Preserve the upstream correctness rule:
+routed scaling applies to the four routed slots, not to the unit-weight shared
+slot. This is medium priority because always processing a fifth expert can
+lose at high concurrency.
 
-### 7. DBO TP All-Reduce/Compute Overlap
+### 9. DBO TP All-Reduce/Compute Overlap
 
 [vLLM PR 44677](https://github.com/vllm-project/vllm/pull/44677) demonstrates
 95.7% TP all-reduce hiding and up to 8.1% prefill throughput gain on H200 by
@@ -561,13 +670,29 @@ the EP backend and fused-collective integration are explicit.
 
 ### Lower-Priority or Rejected Paths
 
+- Score plus partial top-k fusion has no exact external M3 implementation.
+  ATOM and SGLang also materialize scores before top-k. The partial top-k is
+  only 0.29-0.32 ms at c256 while the score kernel is 10.86 ms, and the local
+  c256 path already skips the top-k merge. Revisit only if fusion also changes
+  score tiling or cache reuse.
+- The script currently forces Triton attention. A `ROCM_AITER_FA` A/B for the
+  three generic dense-attention layers is reasonable, provided logs confirm
+  the 57 custom sparse layers keep the M3 backend. Its entire full-step upper
+  bound is 1.36 ms, so this is backend validation rather than a kernel PR.
 - Splitting M3's main/index QK preparation across streams can hide at most
   0.26-0.30 ms over the full 60-layer step and adds graph complexity.
 - Quantizing the router is not recommended. M3 deliberately computes router
   logits in FP32 for accuracy.
-- Router/top-k/alignment/input preparation totals about 2.76 ms at fused
-  8k/c256. Kernel fusion there is useful, but below expert GEMM and index-cache
-  work.
+- No exact router-GEMM plus sigmoid/bias top-k-4 implementation was found.
+  AITER's fused router operation is top-k 1, so it is not an M3 substitute.
+- Do not retry GEMM1 plus SwiGLU plus activation-quant fusion as one large
+  gfx942 kernel. The native MXFP8 work in
+  [vLLM PR 45567](https://github.com/vllm-project/vllm/pull/45567) already
+  measured a 9-22% regression from register pressure; the current separate
+  GEMM1 followed by fused SwiGLU/quant is the better boundary.
+- Do not enable general AITER MoE for the serialized MXFP8 checkpoint. Current
+  vLLM emulates MXFP8 in that backend; reuse its quant/sort or reduction
+  components only after matching M3's layout.
 - [vLLM AsyncTP](https://github.com/vllm-project/vllm/pull/17882) is not a
   current MI300X path. The pass manager imports `AsyncTPPass` only for the CUDA
   platform, not ROCm, and its supported GEMM+reduce-scatter/all-gather patterns
