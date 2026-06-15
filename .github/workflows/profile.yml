@@ -126,15 +126,16 @@ jobs:
               f.write("filtered=[]\ncount=0\n")
             raise SystemExit(1)
 
-          # One job per concurrency: the first config generated for each conc
-          # (the leading search-space row), ordered by conc. A single conc value
-          # yields one job, matching the prior behaviour.
-          by_conc = {}
+          # One job per (concurrency, tp): the first config generated for each
+          # (conc, tp) pair — i.e. the leading 1k1k search-space row of each TP —
+          # ordered by (conc, tp). This profiles both TP4 and TP8 at every conc.
+          # A single conc/tp still yields one job (backward compatible).
+          by_key = {}
           for job in data:
-            c = job.get("conc")
-            if c not in by_conc:
-              by_conc[c] = job
-          filt = [by_conc[c] for c in sorted(by_conc)]
+            k = (job.get("conc"), job.get("tp"))
+            if k not in by_key:
+              by_key[k] = job
+          filt = [by_key[k] for k in sorted(by_key)]
 
           out = json.dumps(filt)
           print(out)
@@ -258,12 +259,6 @@ jobs:
           fi
 
       - name: Process result (json -> agg)
-        # Non-fatal: the profiling deliverable is the trace (already captured
-        # above), not the agg JSON. process_result.py divides by tpot and hits a
-        # ZeroDivisionError on degenerate single-request runs (conc 1, where the
-        # profile path caps num_prompts to 1), which must not block the trace
-        # upload / storage push / relay link.
-        continue-on-error: true
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
         run: |

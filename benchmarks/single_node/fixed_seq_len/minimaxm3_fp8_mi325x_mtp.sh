@@ -171,9 +171,19 @@ PYEOF
 
 start_gpu_monitor
 
+# When PROFILE=1 (profile.yml), arm vLLM's torch profiler via --profiler-config.
+# This minimax-m3 image's vLLM does NOT honour the VLLM_TORCH_PROFILER_DIR env
+# var, so the serve flag is what makes /start_profile emit a trace. Write to the
+# dir benchmark_lib's relay scans (VLLM_TORCH_PROFILER_DIR, default /workspace/).
+PROFILE_ARGS=()
+if [ "${PROFILE:-}" = "1" ]; then
+    PROFILE_ARGS=(--profiler-config "{\"profiler\": \"torch\", \"torch_profiler_dir\": \"${VLLM_TORCH_PROFILER_DIR:-/workspace/}\"}")
+fi
+
 set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
+    "${PROFILE_ARGS[@]}" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
