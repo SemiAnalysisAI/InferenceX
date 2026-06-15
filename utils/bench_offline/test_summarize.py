@@ -235,3 +235,61 @@ def test_pr_max_summary_uses_decode_and_reference_denominators():
     assert flat["pr_reference_concurrency"] == 4301
     assert flat["pr_reference_active_global_batch"] == 3440
     assert flat["pr_offline_to_reference_decode_gpu_ratio"] == 1.03234
+
+
+def test_rack_summary_and_renderer_report_replicated_dep8():
+    result = successful_result(
+        global_batch_size=72,
+        hardware_profile="gb300",
+    )
+    result["benchmark"].update(
+        {
+            "experiment_id": "rack-tp8x9-mtp1-gbs72",
+            "benchmark_profile": "rack-tp8x9-mtp1",
+            "hardware": "GB300 NVL72",
+            "active_gpu_count": 72,
+            "local_batch_size": 1,
+            "physical_nodes": 18,
+            "effective_parallelism": "9xDEP8",
+            "replica_count": 9,
+            "replica_world_size": 8,
+            "engine_global_batch_size": 8,
+        }
+    )
+    result["config"].update(
+        {
+            "active_gpu_count": 72,
+            "tensor_parallel_size": 8,
+            "moe_expert_parallel_size": 8,
+            "replica_count": 9,
+        }
+    )
+    result["aggregate"].update(
+        {
+            "local_batch_size": 1,
+            "timing_source": (
+                "slowest_replica_trt_print_iter_log_host_step_time"
+            ),
+            "filter": {
+                "retained_rounds": 248,
+                "outlier_rounds": 0,
+                "rounds_skipped": 8,
+            },
+        }
+    )
+    result["huawei"]["reference_global_batch_size"] = 16
+
+    row = result_row("rack-tp8x9-mtp1-gbs72", None, result)
+    rendered = markdown([row])
+    assert "GB300 NVL72 TRT Fixed-GBS Rack Benchmark" in rendered
+    assert "| 72 | 1 | 72 | success |" in rendered
+    assert "nine synchronized TP8/EP8 MTP1" in rendered
+
+    flat = renderer_row(result)
+    assert flat is not None
+    assert flat["conc"] == 72
+    assert flat["decode_tp"] == 8
+    assert flat["decode_ep"] == 8
+    assert flat["num_decode_gpu"] == 72
+    assert flat["decode_num_workers"] == 9
+    assert flat["replica_count"] == 9

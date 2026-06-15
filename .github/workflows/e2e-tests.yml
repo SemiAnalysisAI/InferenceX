@@ -27,6 +27,8 @@ on:
           - pr-tp32-mtp3
           - pr-tp16-mtp3
           - pr-tp8-mtp1
+          - rack-huawei-sweep
+          - rack-max-sweep
         default: huawei
       test-name:
         description: Display name for this benchmark run
@@ -93,6 +95,10 @@ jobs:
               "pr-tp16-mtp3": (400, 512),
               "pr-tp8-mtp1": (3440, 4096),
           }
+          rack_profiles = {
+              "rack-huawei-sweep": (72, 288, 576),
+              "rack-max-sweep": (30960, 36864),
+          }
           if benchmark_profile == "huawei":
               allowed = {16, 64, 128}
               values = (
@@ -124,7 +130,36 @@ jobs:
                   raise SystemExit(
                       f"{benchmark_profile} requires hardware-profile=gb300"
                   )
-              if benchmark_profile == "pr-max-sweep":
+              if benchmark_profile in rack_profiles:
+                  allowed = set(rack_profiles[benchmark_profile])
+                  values = (
+                      list(rack_profiles[benchmark_profile])
+                      if requested == "auto"
+                      else [
+                          int(item.strip())
+                          for item in requested.split(",")
+                          if item.strip()
+                      ]
+                  )
+                  if not values:
+                      raise SystemExit(
+                          "At least one rack global batch size is required"
+                      )
+                  if len(values) != len(set(values)):
+                      raise SystemExit(
+                          f"Duplicate rack global batch sizes: {values}"
+                      )
+                  invalid = sorted(set(values) - allowed)
+                  if invalid:
+                      raise SystemExit(
+                          f"Unsupported {benchmark_profile} global batch "
+                          f"sizes {invalid}; allowed={sorted(allowed)}"
+                      )
+                  entries = [
+                      ("rack-tp8x9-mtp1", global_batch)
+                      for global_batch in values
+                  ]
+              elif benchmark_profile == "pr-max-sweep":
                   if requested != "auto":
                       raise SystemExit(
                           "pr-max-sweep requires global_batch_sizes=auto"
@@ -239,6 +274,7 @@ jobs:
           rm -f "$TRT_BENCH_WORKSPACE"/offline_timing_*.log
           rm -f "$TRT_BENCH_WORKSPACE"/offline_debug_*.tar.gz
           rm -rf "$TRT_BENCH_WORKSPACE"/.offline_work_*
+          rm -rf "$TRT_BENCH_WORKSPACE"/.offline_rack_*
 
       - name: Checkout benchmark branch
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -277,6 +313,9 @@ jobs:
                 local_batch_size: .benchmark.local_batch_size,
                 engine_max_batch_size: .benchmark.engine_max_batch_size,
                 active_gpu_count: .benchmark.active_gpu_count,
+                replica_count: .benchmark.replica_count,
+                replica_world_size: .benchmark.replica_world_size,
+                engine_global_batch_size: .benchmark.engine_global_batch_size,
                 max_num_tokens: .benchmark.max_num_tokens,
                 engine_warmup_max_tokens: .benchmark.engine_warmup_max_tokens,
                 warmup_decode_rounds: .benchmark.warmup_decode_rounds,

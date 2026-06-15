@@ -8,6 +8,10 @@ set -Eeuo pipefail
 
 TRT_BENCH_CONFIG_PROFILE="${TRT_BENCH_CONFIG_PROFILE:-huawei}"
 TRT_BENCH_WORKSPACE="${TRT_BENCH_WORKSPACE:-$GITHUB_WORKSPACE}"
+if [[ "$TRT_BENCH_CONFIG_PROFILE" == "rack-tp8x9-mtp1" ]]; then
+    exec bash \
+        "$TRT_BENCH_WORKSPACE/benchmarks/multi_node/offline/dsv4_fp4_gb300_rack_trt.sh"
+fi
 IMAGE="${IMAGE:-nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1}"
 MODEL_PATH="${MODEL_PATH:-/scratch/models/DeepSeek-V4-Pro}"
 DATASET_REVISION="${DATASET_REVISION:-90f0394333616266d9fe85824ceaf505093cbaa5}"

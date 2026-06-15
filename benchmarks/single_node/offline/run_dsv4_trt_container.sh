@@ -16,6 +16,7 @@ TRT_BENCH_HARDWARE_PROFILE="${TRT_BENCH_HARDWARE_PROFILE:-b300}"
 TRT_BENCH_CONFIG_PROFILE="${TRT_BENCH_CONFIG_PROFILE:-huawei}"
 TRT_BENCH_EXTERNAL_MPI="${TRT_BENCH_EXTERNAL_MPI:-0}"
 TRT_BENCH_CACHE_ROOT="${TRT_BENCH_CACHE_ROOT:-/data/trtllm-cache/dsv4-c185066-sm100a}"
+TRT_BENCH_OUTPUT_ROOT="${TRT_BENCH_OUTPUT_ROOT:-/workspace}"
 if [[ ! "$BENCH_ID" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]]; then
     echo "Invalid BENCH_ID: $BENCH_ID" >&2
     exit 1
@@ -27,10 +28,11 @@ if [[ "$TRT_BENCH_EXTERNAL_MPI" == "1" ]]; then
 else
     WORK_DIR="/tmp/inferencex-trt-offline-${BENCH_ID}-${ALLOCATION_JOB_ID}-$$"
 fi
-RESULT_FILE="/workspace/offline_result_${BENCH_ID}.json"
-CONTROLLER_LOG="/workspace/offline_controller_${BENCH_ID}.log"
-DEBUG_ARCHIVE="/workspace/offline_debug_${BENCH_ID}.tar.gz"
-GPU_METRICS="/workspace/offline_gpu_metrics_${BENCH_ID}.csv"
+mkdir -p "$TRT_BENCH_OUTPUT_ROOT"
+RESULT_FILE="${TRT_BENCH_OUTPUT_ROOT}/offline_result_${BENCH_ID}.json"
+CONTROLLER_LOG="${TRT_BENCH_OUTPUT_ROOT}/offline_controller_${BENCH_ID}.log"
+DEBUG_ARCHIVE="${TRT_BENCH_OUTPUT_ROOT}/offline_debug_${BENCH_ID}.tar.gz"
+GPU_METRICS="${TRT_BENCH_OUTPUT_ROOT}/offline_gpu_metrics_${BENCH_ID}.csv"
 COMPLETION_FILE="${TRT_BENCH_COMPLETION_FILE:-}"
 
 log() {
@@ -99,6 +101,7 @@ world_sizes = {
     "pr-tp32-mtp3": 32,
     "pr-tp16-mtp3": 16,
     "pr-tp8-mtp1": 8,
+    "rack-tp8-mtp1-engine": 8,
 }
 world_size = world_sizes.get(benchmark_profile, 0)
 hardware = (
@@ -195,7 +198,7 @@ if [[ "$TRT_BENCH_HARDWARE_PROFILE" == "b300" ]]; then
     export NCCL_NVLS_ENABLE=0
 fi
 export NCCL_GRAPH_MIXING_SUPPORT=0
-export MIMALLOC_PURGE_DELAY=0
+export MIMALLOC_PURGE_DELAY="${MIMALLOC_PURGE_DELAY:-0}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 export TRTLLM_SERVER_DISABLE_GC=1
 export TRTLLM_WORKER_DISABLE_GC=1
@@ -210,7 +213,7 @@ fi
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPYCACHEPREFIX=/tmp/inferencex-offline-pycache
 export PYTHONPATH="/workspace/utils/bench_offline:${PYTHONPATH:-}"
-export CUTE_DSL_CACHE_DIR="$TRT_BENCH_CACHE_ROOT/cute-dsl"
+export CUTE_DSL_CACHE_DIR="${CUTE_DSL_CACHE_DIR:-$TRT_BENCH_CACHE_ROOT/cute-dsl}"
 # TRT's MPI pool forwards TRTLLM_* variables, so the rank-entry shim restores
 # the unprefixed CuTe variable before importing TRT's worker implementation.
 export TRTLLM_BENCH_CUTE_DSL_CACHE_DIR="$CUTE_DSL_CACHE_DIR"

@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from io_utils import read_locked_text, write_json
+from io_utils import read_json, read_locked_text, write_json
 from metrics import (
     select_full_batch_decode_rounds,
     summarize_decode_rounds,
@@ -38,6 +38,11 @@ from trt_config import (
     validate_global_batch_size,
     warmup_output_tokens,
 )
+
+RACK_BARRIER_DIR_ENV = "TRT_BENCH_RACK_BARRIER_DIR"
+RACK_REPLICA_COUNT_ENV = "TRT_BENCH_RACK_REPLICA_COUNT"
+RACK_REPLICA_INDEX_ENV = "TRT_BENCH_RACK_REPLICA_INDEX"
+RACK_BARRIER_TIMEOUT_ENV = "TRT_BENCH_RACK_BARRIER_TIMEOUT_SECONDS"
 
 
 def utc_now() -> str:
@@ -116,6 +121,105 @@ def arm_fixed_batch_request_barrier(
     }
     write_json(arm_path, marker)
     return marker
+
+
+def synchronize_rack_replicas() -> dict[str, Any]:
+    """Release every initialized replica into the measured pass together."""
+    barrier_dir_raw = os.getenv(RACK_BARRIER_DIR_ENV)
+    if not barrier_dir_raw:
+        return {"enabled": False}
+
+    try:
+        replica_count = int(os.environ[RACK_REPLICA_COUNT_ENV])
+        replica_index = int(os.environ[RACK_REPLICA_INDEX_ENV])
+        timeout_seconds = int(
+            os.getenv(RACK_BARRIER_TIMEOUT_ENV, "900")
+        )
+    except (KeyError, ValueError) as error:
+        raise RuntimeError(
+            "Rack synchronization requires integer replica count, index, "
+            "and timeout values"
+        ) from error
+    if replica_count <= 1:
+        raise RuntimeError("Rack synchronization requires multiple replicas")
+    if not 0 <= replica_index < replica_count:
+        raise RuntimeError(
+            f"Replica index {replica_index} is outside 0.."
+            f"{replica_count - 1}"
+        )
+    if timeout_seconds <= 0:
+        raise RuntimeError("Rack barrier timeout must be positive")
+
+    barrier_dir = Path(barrier_dir_raw)
+    barrier_dir.mkdir(parents=True, exist_ok=True)
+    ready_path = barrier_dir / f"replica_{replica_index:02d}.ready.json"
+    release_path = barrier_dir / "release.json"
+    ready = {
+        "ready_at": utc_now(),
+        "replica_count": replica_count,
+        "replica_index": replica_index,
+        "pid": os.getpid(),
+    }
+    write_json(ready_path, ready)
+    log_progress(
+        "rack measured-pass barrier ready "
+        f"replica={replica_index + 1}/{replica_count} "
+        f"path={barrier_dir}"
+    )
+
+    expected_paths = [
+        barrier_dir / f"replica_{index:02d}.ready.json"
+        for index in range(replica_count)
+    ]
+    started = time.monotonic()
+    last_heartbeat = -1
+    while True:
+        missing = [path.name for path in expected_paths if not path.is_file()]
+        if replica_index == 0 and not missing and not release_path.exists():
+            write_json(
+                release_path,
+                {
+                    "released_at": utc_now(),
+                    "replica_count": replica_count,
+                    "ready_files": [path.name for path in expected_paths],
+                },
+            )
+        if release_path.is_file():
+            release = read_json(release_path)
+            if int(release.get("replica_count", -1)) != replica_count:
+                raise RuntimeError(
+                    "Rack barrier release replica count does not match"
+                )
+            elapsed = time.monotonic() - started
+            log_progress(
+                "rack measured-pass barrier released "
+                f"replica={replica_index + 1}/{replica_count} "
+                f"wait={elapsed:.1f}s"
+            )
+            return {
+                "enabled": True,
+                "barrier_dir": str(barrier_dir),
+                "replica_count": replica_count,
+                "replica_index": replica_index,
+                "ready": ready,
+                "release": release,
+                "wait_seconds": elapsed,
+            }
+        elapsed = time.monotonic() - started
+        if elapsed >= timeout_seconds:
+            raise TimeoutError(
+                "Timed out waiting for rack measured-pass barrier after "
+                f"{timeout_seconds}s; missing={missing}"
+            )
+        heartbeat = int(elapsed // 30)
+        if heartbeat > last_heartbeat:
+            last_heartbeat = heartbeat
+            log_progress(
+                "rack measured-pass barrier waiting "
+                f"replica={replica_index + 1}/{replica_count} "
+                f"elapsed={elapsed:.0f}s missing={missing}"
+            )
+        time.sleep(0.5)
 
 
 def read_perfect_router_marker(path: Path) -> dict[str, Any]:
@@ -240,11 +344,17 @@ def generate(
     *,
     label: str,
     max_tokens: int,
-) -> tuple[list[Any], float, list[dict[str, Any]]]:
+) -> tuple[
+    list[Any],
+    float,
+    list[dict[str, Any]],
+    dict[str, str],
+]:
     log_progress(
         f"{label}: generation start global_batch={len(inputs)} "
         f"max_output_tokens={max_tokens}"
     )
+    started_at = utc_now()
     started = time.perf_counter()
     outputs = llm.generate(
         inputs,
@@ -252,6 +362,7 @@ def generate(
         use_tqdm=False,
     )
     wall_seconds = time.perf_counter() - started
+    finished_at = utc_now()
     if not isinstance(outputs, list):
         outputs = [outputs]
     if len(outputs) != len(inputs):
@@ -263,7 +374,15 @@ def generate(
         f"{label}: generation complete wall={wall_seconds:.1f}s "
         f"iteration_stats={len(iteration_stats)}"
     )
-    return outputs, wall_seconds, iteration_stats
+    return (
+        outputs,
+        wall_seconds,
+        iteration_stats,
+        {
+            "started_at": started_at,
+            "finished_at": finished_at,
+        },
+    )
 
 
 def validate_rank_propagation(
@@ -600,7 +719,12 @@ def main() -> int:
             warmup_result: dict[str, Any]
             if config.run_request_warmup:
                 phase = "warmup"
-                warmup_outputs, warmup_wall, warmup_stats = generate(
+                (
+                    warmup_outputs,
+                    warmup_wall,
+                    warmup_stats,
+                    warmup_timing,
+                ) = generate(
                     llm,
                     inputs,
                     label="warmup",
@@ -637,6 +761,7 @@ def main() -> int:
                     ),
                     "output_tokens_per_request": warmup_tokens,
                     "wall_seconds": warmup_wall,
+                    **warmup_timing,
                     "request_aggregate": warmup_requests["aggregate"],
                     "schedule_validation": warmup_schedule,
                 }
@@ -655,8 +780,16 @@ def main() -> int:
                     ),
                 }
 
+            phase = "rack_replica_barrier"
+            rack_synchronization = synchronize_rack_replicas()
+
             phase = "measured_generation"
-            measured_outputs, measured_wall, measured_stats = generate(
+            (
+                measured_outputs,
+                measured_wall,
+                measured_stats,
+                measured_timing,
+            ) = generate(
                 llm,
                 inputs,
                 label="measured",
@@ -750,6 +883,7 @@ def main() -> int:
                     ),
                     "output_tokens_per_request": measured_tokens,
                     "wall_seconds": measured_wall,
+                    **measured_timing,
                     "requests": request_summary["requests"],
                     "iteration_stats_file": (
                         "measured_iteration_stats.json"
@@ -771,6 +905,7 @@ def main() -> int:
                     "configured": configured_environment,
                     "rank_expected": rank_environment,
                     "fixed_batch_barrier": fixed_batch_barrier,
+                    "rack_synchronization": rack_synchronization,
                 },
                 "corpus": corpus_manifest,
             }

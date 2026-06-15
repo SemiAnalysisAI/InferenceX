@@ -4,9 +4,11 @@ from types import SimpleNamespace
 import pytest
 
 from metrics import (
+    aggregate_replicated_decode_rounds,
     apply_trt_host_step_timing,
     huawei_comparison,
     huawei_filter_round_latencies,
+    huawei_scaled_local_batch_comparison,
     parse_trt_iteration_log,
     pr_reference_comparison,
     select_full_batch_decode_rounds,
@@ -398,6 +400,54 @@ def test_overlap_host_step_timing_replaces_double_iter_latency():
     assert updated["stats_iter_latency_diagnostic"][
         "decode_round_tpot_ms"
     ] == pytest.approx(40.0)
+
+
+def test_replicated_rack_round_uses_slowest_tp8_engine():
+    replicas = []
+    for replica_index in range(9):
+        latency = 20.0 if replica_index == 8 else 10.0
+        replicas.append(
+            {
+                "selected_round_latencies_ms": [latency] * 256,
+                "measured_decode_rounds": 256,
+                "raw_proposed_draft_tokens": 2048,
+                "raw_accepted_draft_tokens": 1024,
+                "raw_generation_slots": 2048,
+                "decode_round_tpot_ms": latency,
+                "output_tput_per_gpu": 1.0,
+                "observed_tokens_per_step": 1.5,
+                "schedule_validation": {
+                    "selected_first_iter": 2,
+                    "selected_last_iter": 257,
+                },
+            }
+        )
+    aggregate = aggregate_replicated_decode_rounds(
+        replicas,
+        global_batch_size=72,
+        num_gpus=72,
+        skip_rounds=8,
+        mtp_draft_tokens=1,
+    )
+    assert aggregate["decode_round_tpot_ms"] == pytest.approx(20.0)
+    assert aggregate["decode_step_tput_per_gpu"] == pytest.approx(50.0)
+    assert aggregate["observed_tokens_per_step"] == pytest.approx(1.5)
+    assert aggregate["output_tput_per_gpu"] == pytest.approx(75.0)
+    assert aggregate["filter"]["retained_rounds"] == 248
+    assert aggregate["replica_count"] == 9
+
+    comparison = huawei_scaled_local_batch_comparison(
+        72,
+        aggregate,
+        hardware_key="gb300-rack",
+        hardware_label="GB300 NVL72",
+    )
+    assert comparison["reference_global_batch_size"] == 16
+    assert comparison["local_batch_match"] is True
+    assert comparison["global_batch_match"] is False
+    assert comparison[
+        "hardware_to_huawei_decode_step_ratio"
+    ] == pytest.approx(50.0 / 56.70)
 
 
 def test_trt_iteration_log_uses_final_executor_pass():

@@ -11,7 +11,7 @@ These are operational notes for running and debugging `trt-bench`.
   `GBS / decode-round TPOT / active_gpu_count`.
 - MTP yield is separate.
 
-Two benchmark-profile families share that outer contract:
+Three benchmark-profile families share that outer contract:
 
 - `huawei`: B300 DEP8 or GB300 DEP16, GBS16/64/128, MTP3, one exact
   full-batch prefill, non-overlap `iterLatencyMS`, two request-warmup rounds,
@@ -22,6 +22,10 @@ Two benchmark-profile families share that outer contract:
   warmup; rank-0 TRT `host_step_time`; eight measured rounds skipped; no
   sparse-attention config; learned model router; default
   `attention_dp_config=None`.
+- Rack: `rack-tp8x9-mtp1`; 18 GB300 nodes and 72 GPUs; nine synchronized
+  TP8/EP8 MTP1 engines; GBS72/288/576 for Huawei local-batch matching and
+  GBS30960/36864 for rack saturation; slowest-replica rank-0
+  `host_step_time` per logical round.
 
 The validated baselines are B300 DEP8 at TRT `c185066` and GB300 NVL16
 DEP16 using the DeepSeek-V4 development image from InferenceX PR #1689.
@@ -34,7 +38,7 @@ Source:
 
 ```text
 PR: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
-run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/13
+run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/14
 srt-slurm branch: sa-submission-q2-2026
 image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
 ```
@@ -47,7 +51,7 @@ image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
 
 The launcher dynamically allocates 32, 16, or 8 decode GPUs and downloads the
 matching EP32, EP16, or EP8 384-slot EPLB map. The CUDA graph lists are copied
-exactly from the recipes. Attempt 13's output throughput times mean TPOT gives
+exactly from the recipes. Attempt 14's output throughput times mean TPOT gives
 active decode populations 189.65, 401.41, and 3437.66; the first point in
 each pair is the nearest rank-divisible fixed batch. The second is the copied
 engine capacity.
@@ -77,10 +81,120 @@ The result's `pr_reference` object reports:
 
 - output tok/s per decode GPU, matching InferenceX's serving denominator
 - output tok/s normalized by the PR's decode plus prefill GPUs
-- ratios to attempt 13 under both denominators
+- ratios to attempt 14 under both denominators
 
 The total-fleet number is a comparison normalization. The offline allocation
 contains only the decode GPUs and performs prefill on them before timing.
+
+## GB300 NVL72 Rack Implementation
+
+Source recipe:
+
+```text
+PR: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/14
+commit: e2dd5ca5b334e33b6692f81d0dbf9ce59b860d96
+TRT source: 34a563ac6d8cc0ca7068c7f619e869fb8a625333
+image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
+srt-slurm branch: sa-submission-q2-2026
+```
+
+The fastest final recipe is TP8/EP8 MTP1. TRT's model-parallel world size is
+`tp * pp * cp`, so this remains an eight-rank engine. MoE cluster parallelism
+does not turn it into a 72-rank engine. The rack implementation therefore
+runs nine independent engines:
+
+```text
+18 physical nodes * 4 GPUs = 72 GPUs
+2 adjacent nodes * 4 GPUs = 8 ranks per engine
+9 disjoint node pairs = 9 TP8/EP8 engines
+reported parallelism = 9xDEP8
+```
+
+The parent launcher owns one 18-node Slurm allocation. Before engine launch it
+requires:
+
+- one exact 72-rank map, ranks `0..71`
+- four local ranks on each of exactly 18 hosts
+- Fabric `Completed`/`Success` for all 72 GPUs
+- one shared non-empty `ClusterUUID` and `CliqueId`
+
+Each child launcher owns one assigned node pair, validates ranks `0..7`,
+preseeds the complete external-MPI environment, and starts one
+`trtllm-llmapi-launch`. The nine NCCL worlds do not communicate with each
+other. All GPUs still belong to the same proven NVLink domain, but the result
+must never be labeled TP72.
+
+Copied TP8 engine settings:
+
+- max batch size 512
+- CUDA graph batches `1,2,4,8,16,24,32,40..512`
+- KV cache fraction 0.80
+- overlap scheduler and rank-0 `print_iter_log`
+- learned model router; no perfect router
+- EP8/384-slot load-balancer map
+- `MEGAMOE_DEEPGEMM`, low-precision combine, and PDL
+- `TRT_LLM_DISABLE_LOAD_WEIGHTS_IN_PARALLEL=1`
+- `MIMALLOC_PURGE_DELAY=-1`
+- `UCX_TLS=cuda_ipc,cuda_copy,sm,self,tcp`
+- full `/dev/shm` tmpfs and unique EPLB shared-memory name per child
+
+The direct offline engine keeps the documented `max_num_tokens=32768`
+adaptation because it must admit its own 8K prompts. The serving decode worker
+in the PR receives transferred KV and uses `max_num_tokens=1024`.
+
+Rack batches:
+
+| Rack GBS | Engine GBS | Local/GPU | Meaning |
+|---:|---:|---:|---|
+| 72 | 8 | 1 | same local batch as Huawei GBS16 |
+| 288 | 32 | 4 | same local batch as Huawei GBS64 |
+| 576 | 64 | 8 | same local batch as Huawei GBS128 |
+| 30960 | 3440 | 430 | nine times attempt-14 active decode population |
+| 36864 | 4096 | 512 | nine times copied engine capacity |
+
+Every child independently proves 256 consecutive exact fixed-batch decode
+iterations. Immediately before its measured `generate()` call, each child
+writes `replica_NN.ready.json` and waits. Replica 0 publishes the release only
+after all nine ready files are visible. This barrier synchronizes the
+measured passes, not engine initialization. Children may wait up to one hour
+for the slowest engine to finish initialization. Aggregation rejects a
+measured-pass start skew above 10 seconds.
+
+For logical rack round `i`, aggregation takes:
+
+```text
+rack_round_latency[i] =
+    max(replica_0_host_step[i], ..., replica_8_host_step[i])
+```
+
+It then discards the first eight rack rounds, applies only the upper-IQR
+filter, and calculates:
+
+```text
+decode_step_tput_per_gpu =
+    rack_global_batch_size / rack_round_tpot_seconds / 72
+```
+
+Speculative proposed/accepted counts are summed across all nine child windows.
+Huawei uses MTP3 while this copied engine uses MTP1. Compare raw step
+throughput first; apply the measured MTP yield only when discussing output
+tokens.
+
+Only `offline_result_rack-tp8x9-mtp1-gbsN.json` is renderer-visible. Child
+results stay under:
+
+```text
+.offline_rack_ID_JOB/
+  barrier/
+  replicas/
+    r00/ ... r08/
+```
+
+That tree is included in `offline_debug_ID.tar.gz` and excluded from
+`collect-results`. A rack result is invalid if any child fails, a barrier
+index is missing, fabric provenance differs, or fewer than nine timing vectors
+reach aggregation.
 
 ## GB300 NVL16 Implementation
 
@@ -680,6 +794,62 @@ the first two valid warmup rounds are required.
 
 ## Dispatch
 
+GB300 NVL72 GBS72 canary:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=rack-huawei-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 NVL72 TRT rack GBS72 canary' \
+  -f 'inputs[global_batch_sizes]=72' \
+  -f 'inputs[salloc-time]=360' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
+
+GB300 NVL72 Huawei-local-batch sweep:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=rack-huawei-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 NVL72 TRT Huawei-local-batch sweep' \
+  -f 'inputs[global_batch_sizes]=auto' \
+  -f 'inputs[salloc-time]=360' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
+
+GB300 NVL72 saturation sweep:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=rack-max-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 NVL72 TRT max offline' \
+  -f 'inputs[global_batch_sizes]=auto' \
+  -f 'inputs[salloc-time]=360' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
+
+The workflow matrix is sequential. Start with GBS72. Once it succeeds, run
+`rack-huawei-sweep` for the local-batch comparison and `rack-max-sweep` for
+the actual maximum-throughput points. All rack rows request the complete
+18-node allocation.
+
 GB300 PR-max sweep:
 
 ```bash
@@ -703,7 +873,7 @@ Single PR profile: replace `pr-max-sweep` with `pr-tp32-mtp3`,
 subset such as `512` for a targeted capacity rerun. `pr-max-sweep` always
 requires `auto`.
 
-Attempt 13's final copied jobs took about 38 minutes for TP32, 80 minutes for
+Attempt 14's final copied jobs took about 38 minutes for TP32, 80 minutes for
 TP16, and 216 minutes for TP8. The TP8 cost is dominated by initializing the
 complete CUDA graph list through batch 512, so reducing the benchmark to one
 request pass does not remove it. Keep the PR-max 300-minute Slurm limit,
@@ -795,7 +965,8 @@ Authoritative offline row:
 
 - `decode_round_tpot_ms`: filtered full-batch timing from `timing_source`
 - `timing_source`: Huawei `iter_latency_ms` or PR-max
-  `trt_print_iter_log_host_step_time`
+  `trt_print_iter_log_host_step_time`; rack uses
+  `slowest_replica_trt_print_iter_log_host_step_time`
 - `decode_step_tput_per_gpu`: full-batch step rate per active decode GPU
 - `observed_tokens_per_step`: MTP output multiplier
 - `output_tput_per_gpu`: step rate times output multiplier
@@ -804,7 +975,11 @@ Authoritative offline row:
 - `schedule_validation`: exact selected iteration and local-batch proof
 - `stats_iter_latency_diagnostic`: overlap iteration timing retained only for
   PR-max diagnosis
-- `pr_reference`: attempt-13 reference values and decode/fleet ratios
+- `pr_reference`: attempt-14 reference values and decode/fleet ratios
+- `rack`: all nine child sources, node pairs, child timing values, and the
+  same-index slowest-replica aggregation rule
+- `measured_start_skew_seconds`: spread between the nine child measured-pass
+  start timestamps; useful for verifying the shared barrier
 
 Flat renderer row:
 
@@ -817,7 +992,10 @@ Flat renderer row:
 - `conc`: renderer compatibility alias for `global_batch_size`; it is not
   HTTP serving concurrency and did not control scheduling
 - `benchmark_profile` and `timing_source`: required to distinguish Huawei
-  rows from PR-max rows
+  rows from PR-max and rack rows
+- `replica_count=9`, `decode_tp=8`, `decode_ep=8`, and
+  `num_decode_gpu=72` identify the rack as nine active DEP8 engines rather
+  than a nonexistent TP72 engine
 
 Do not put the custom aggregate wrapper in `results_bmk`; the unofficial-run
 API expects every JSON object there to be a flat benchmark row.
@@ -875,7 +1053,7 @@ Reference:
 
 ```text
 PR: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
-run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/13
+run: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/14
 row: D(tp16/ep16/dptrue/nw1), P(tp4/ep4/dptrue/nw6), conc=666
 recipe: ctx6dep4_gen1dep16_batch32_eplb384_mtp3.yaml
 ```
@@ -1276,8 +1454,15 @@ Exact flat renderer rows, sorted by GBS for readability:
    host-step rows are present. Use `offline_world_ID.log` for all-rank
    launch/runtime context.
 5. Extract `offline_debug_ID.tar.gz`, then inspect `worker_result.json` and
-   `worker.log`.
-6. Query iteration stats:
+   `worker.log`. For rack runs, the archive instead contains
+   `.offline_rack_ID_JOB/replicas/r00` through `r08`; begin with each
+   `host_launcher.log`, then the failed child's world/timing/completion files.
+   Extract that child's nested `offline_debug_*.tar.gz` for worker files.
+6. For rack runs, require nine child result files, barrier-ready indices
+   `0..8`, one release record, matching child fabric UUID/clique values, and
+   top-level timing source
+   `slowest_replica_trt_print_iter_log_host_step_time`.
+7. Query iteration stats:
 
    ```bash
    jq -r '
@@ -1294,19 +1479,20 @@ Exact flat renderer rows, sorted by GBS for readability:
    ' measured_iteration_stats.json | head -40
    ```
 
-7. Confirm rank markers are exactly `0..world_size-1`.
-8. On GB300, inspect `offline_rank_map_ID.tsv` and
+8. Confirm rank markers are exactly `0..world_size-1`.
+9. On GB300, inspect `offline_rank_map_ID.tsv` and
    `offline_topology_ID.log` before debugging TRT. PR-max expects 8, 16, or
-   32 ranks according to profile. A rank-placement or fabric failure is
-   infrastructure, not a benchmark result.
-9. For PR-max, require
+   32 ranks according to profile. Rack expects 72 top-level ranks and nine
+   independent child maps of eight ranks. A rank-placement or fabric failure
+   is infrastructure, not a benchmark result.
+10. For PR-max, require
    `timing_source=trt_print_iter_log_host_step_time`, inspect setup counts,
    and verify the selected range is 256 consecutive full-batch rows. Also
    require `perfect_router.enabled=false`, no perfect-router alias on any
    rank, and `resolved_parallelism.attention_dp_configured=false`.
-10. On B300 GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for
+11. On B300 GBS128, require `fp8_prefill_gemm_chunked` on ranks `0..7` for
    131072 rows, two 65536-row chunks, and synchronized chunks.
-11. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
+12. Check GPU telemetry, including `memory.used` and `memory.free`, for OOM,
    idle prefill gaps, or a hung rank.
 
 Do not weaken the fixed-batch gate. Infrastructure errors may be retried on a

@@ -5,9 +5,11 @@ benchmark.
 
 - This branch is disposable and must remain isolated from the normal serving
   sweep. Never edit `nvidia-master.yaml` or `perf-changelog.yaml`.
-- There are two isolated contracts. `huawei` is the validated B300/GB300
+- There are three isolated contracts. `huawei` is the validated B300/GB300
   fixed-GBS comparison. The three `pr-*` profiles copy PR #1689's GB300
   decode recipes for maximum offline decode saturation.
+  `rack-tp8x9-mtp1` runs nine synchronized copies of the fastest TP8 recipe
+  across one proven 72-GPU GB300 fabric domain.
 - `global_batch_size` is authoritative. In `huawei`, `max_num_tokens` is
   `local_batch_size * 8192` and prefill must be one exact iteration. In
   PR-max, fixed GBS is the copied decode capacity and
@@ -126,6 +128,41 @@ benchmark.
   `inputs[global_batch_sizes]=auto`. Experiment IDs include profile and GBS,
   for example `pr-tp8-mtp1-gbs4096`.
 
+## GB300 NVL72 Rack Profile
+
+- Select workflow profile `rack-huawei-sweep` for rack GBS
+  `72/288/576`, or `rack-max-sweep` for `30960/36864`. The internal engine
+  profile is `rack-tp8-mtp1-engine`.
+- Allocate exactly 18 four-GPU nodes. Require the full rank map `0..71`,
+  four local ranks per host, and one non-empty Fabric `ClusterUUID` and
+  `CliqueId` across all 72 GPUs before launching any engine.
+- Partition the allocation into nine disjoint adjacent node pairs. Each pair
+  runs one independent external-MPI TP8/EP8 MTP1 engine with ranks `0..7`.
+  Report the result as `9xDEP8`; never describe it as TP72. All 72 GPUs are
+  active, but TensorRT/NCCL collectives remain within each pair.
+- Preserve PR #1689 run `27164980476` attempt 14's TP8 engine details:
+  max batch 512, the complete CUDA graph list through 512, KV fraction 0.80,
+  overlap scheduling, learned router, EP8/384 EPLB, PDL,
+  `MEGAMOE_DEEPGEMM`, serialized weight loading,
+  `MIMALLOC_PURGE_DELAY=-1`, and full `/dev/shm`.
+- Rack GBS72/288/576 preserve Huawei local batches 1/4/8 per GPU. Rack
+  GBS30960/36864 are nine times the copied TP8 active/capacity points.
+  Huawei is MTP3 and this engine is MTP1; compare raw decode-step throughput
+  before separately applying measured MTP yield.
+- Each child proves its own 256-round exact fixed-batch window. All children
+  must reach one shared measured-pass barrier. For logical rack round `i`,
+  use the maximum rank-0 `host_step_time` across the nine child round-`i`
+  values, then skip eight logical rounds and apply the upper-IQR filter.
+  Reject measured-pass start skew above 10 seconds; the initialization
+  barrier timeout is one hour.
+- Child results and logs must remain under
+  `.offline_rack_ID_JOB/replicas/rNN` and enter the uploaded debug archive
+  only. Publish exactly one top-level `offline_result_ID.json`, so
+  `collect-results` cannot mistake child engines for benchmark rows.
+- A rack run is invalid if any child fails, any barrier index is missing, the
+  measured start times are not synchronized, child fabric provenance differs,
+  or the parent row lacks all nine child result proofs.
+
 ## B300 Baseline Constraints
 
 - Start KV capacity from
@@ -188,7 +225,9 @@ benchmark.
   zero-acceptance worst case of 1024 decode iterations.
 - Huawei timing uses TRT `iterLatencyMS` with overlap disabled and skips one
   round. PR-max timing uses rank-0 `host_step_time` with overlap enabled and
-  skips eight. Both discard only values above `Q3 + 1.5 * IQR`.
+  skips eight. Rack timing takes the maximum same-index PR-max
+  `host_step_time` across all nine engines before skipping eight. All discard
+  only values above `Q3 + 1.5 * IQR`.
 - The headline metric is raw decode-round throughput:
   `GBS / decode_round_TPOT / active_gpu_count`. MTP output yield and
   acceptance are separate.
@@ -238,6 +277,6 @@ benchmark.
   `-1`; stack dumping changes logging overhead and is diagnostic only.
 - Verify with `python -m pytest utils/bench_offline -v`,
   `python -m compileall utils/bench_offline`, `bash -n` and `shellcheck` on
-  all three launchers, and `actionlint .github/workflows/e2e-tests.yml`.
+  every offline launcher, and `actionlint .github/workflows/e2e-tests.yml`.
 - A GPU benchmark is not valid until its Actions artifact proves the schedule
   validation, timing filter, exact rank set, and result values.

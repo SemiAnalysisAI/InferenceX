@@ -456,6 +456,21 @@ def test_pr_profile_rejects_non_capacity_global_batch():
         validate_global_batch_size(256, profile)
 
 
+def test_rack_replica_profile_keeps_attempt14_tp8_engine_capacity():
+    profile = hardware_profile("gb300", "rack-tp8-mtp1-engine")
+    for global_batch_size in (8, 32, 64, 3440, 4096):
+        validate_global_batch_size(global_batch_size, profile)
+    kwargs = build_llm_kwargs("/model", 8, profile)
+    assert profile.world_size == 8
+    assert profile.physical_nodes == 2
+    assert local_batch_size(8, profile) == 1
+    assert kwargs["max_batch_size"] == 512
+    assert max(kwargs["cuda_graph_config"]["batch_sizes"]) == 512
+    assert kwargs["speculative_config"]["max_draft_len"] == 1
+    assert kwargs["disable_overlap_scheduler"] is False
+    assert kwargs["kv_cache_config"]["free_gpu_memory_fraction"] == 0.80
+
+
 @pytest.mark.parametrize(
     ("profile_name", "global_batch_size", "local_batch", "engine_batch"),
     (

@@ -89,6 +89,7 @@ PR_TP8_GRAPH_BATCH_SIZES = (
     32,
     *range(40, 513, 8),
 )
+RACK_TP8_ENGINE_GLOBAL_BATCH_SIZES = (8, 32, 64, 3440, 4096)
 FIXED_BATCH_ARM_ENV = "TRTLLM_BENCH_FIXED_BATCH_ARM_FILE"
 FIXED_BATCH_ARM_FILENAME = "fixed_batch_barrier.armed.json"
 BENCHMARK_PROFILE_ENV = "TRT_BENCH_CONFIG_PROFILE"
@@ -425,6 +426,15 @@ GB300_PR_CONFIGS = {
         fp8_deep_gemm_max_rows=None,
     ),
 }
+GB300_RACK_ENGINE_CONFIG = replace(
+    GB300_PR_CONFIGS["pr-tp8-mtp1"],
+    name="pr-1689-rack-replica-tp8-ep8-batch512-mtp1",
+    profile_key="rack-tp8-mtp1-engine",
+    allowed_global_batch_sizes=RACK_TP8_ENGINE_GLOBAL_BATCH_SIZES,
+)
+GB300_PR_CONFIGS[GB300_RACK_ENGINE_CONFIG.profile_key] = (
+    GB300_RACK_ENGINE_CONFIG
+)
 BENCHMARK_PROFILES = {
     "huawei": GB300_HUAWEI_CONFIG,
     **GB300_PR_CONFIGS,

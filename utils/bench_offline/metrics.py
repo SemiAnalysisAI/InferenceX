@@ -612,6 +612,7 @@ def summarize_decode_rounds(
         "raw_acceptance_rate": acceptance_rate,
         "raw_accepted_draft_tokens": accepted,
         "raw_proposed_draft_tokens": drafted,
+        "raw_generation_slots": generation_slots,
         "token_yield_source": "iteration_spec_decoding_stats",
         "equivalent_output_tpot_ms": equivalent_output_tpot_ms,
         "output_tput_per_gpu": output_tput_per_gpu,
@@ -746,6 +747,151 @@ def apply_trt_host_step_timing(
     return updated
 
 
+def aggregate_replicated_decode_rounds(
+    replica_aggregates: list[dict[str, Any]],
+    *,
+    global_batch_size: int,
+    num_gpus: int,
+    skip_rounds: int,
+    mtp_draft_tokens: int,
+) -> dict[str, Any]:
+    """Aggregate synchronized replica rounds as one fixed rack batch."""
+    if not replica_aggregates:
+        raise ValueError("At least one replica aggregate is required")
+    replica_count = len(replica_aggregates)
+    if global_batch_size % replica_count != 0:
+        raise ValueError(
+            f"Rack global batch {global_batch_size} is not divisible by "
+            f"{replica_count} replicas"
+        )
+    if global_batch_size % num_gpus != 0:
+        raise ValueError(
+            f"Rack global batch {global_batch_size} is not divisible by "
+            f"{num_gpus} GPUs"
+        )
+
+    round_vectors = [
+        [float(value) for value in aggregate["selected_round_latencies_ms"]]
+        for aggregate in replica_aggregates
+    ]
+    measured_rounds = int(
+        replica_aggregates[0]["measured_decode_rounds"]
+    )
+    if any(len(values) != measured_rounds for values in round_vectors):
+        raise RuntimeError(
+            "Replica timing vectors do not all contain the validated "
+            f"{measured_rounds} decode rounds"
+        )
+    if any(
+        int(aggregate["measured_decode_rounds"]) != measured_rounds
+        for aggregate in replica_aggregates
+    ):
+        raise RuntimeError("Replica measured-round counts do not match")
+
+    rack_latencies = [
+        max(values)
+        for values in zip(*round_vectors, strict=True)
+    ]
+    filtered = filter_round_latencies(
+        rack_latencies,
+        skip_rounds=skip_rounds,
+    )
+    decode_round_tpot_ms = float(filtered["mean_ms"])
+    decode_step_tput_per_gpu = (
+        global_batch_size / (decode_round_tpot_ms / 1000.0) / num_gpus
+    )
+
+    drafted = sum(
+        int(aggregate["raw_proposed_draft_tokens"])
+        for aggregate in replica_aggregates
+    )
+    accepted = sum(
+        int(aggregate["raw_accepted_draft_tokens"])
+        for aggregate in replica_aggregates
+    )
+    generation_slots = sum(
+        int(aggregate["raw_generation_slots"])
+        for aggregate in replica_aggregates
+    )
+    if drafted <= 0 or generation_slots <= 0:
+        raise RuntimeError(
+            "Replica aggregates omitted speculative counters for the "
+            "validated rack window"
+        )
+    accepted_drafts_per_step = accepted / generation_slots
+    tokens_per_step = 1.0 + accepted_drafts_per_step
+    if not 1.0 <= tokens_per_step <= mtp_draft_tokens + 1.0:
+        raise RuntimeError(
+            f"Observed rack MTP token yield is invalid: {tokens_per_step}"
+        )
+    output_tput_per_gpu = decode_step_tput_per_gpu * tokens_per_step
+
+    return {
+        "global_batch_size": global_batch_size,
+        "engine_global_batch_size": global_batch_size // replica_count,
+        "local_batch_size": global_batch_size // num_gpus,
+        "active_gpu_count": num_gpus,
+        "replica_count": replica_count,
+        "measured_decode_rounds": measured_rounds,
+        "decode_round_tpot_ms": decode_round_tpot_ms,
+        "median_decode_round_tpot_ms": float(filtered["median_ms"]),
+        "p90_decode_round_tpot_ms": float(filtered["p90_ms"]),
+        "p99_decode_round_tpot_ms": float(filtered["p99_ms"]),
+        "decode_step_tput_per_gpu": decode_step_tput_per_gpu,
+        "decode_step_tput_total": decode_step_tput_per_gpu * num_gpus,
+        "observed_tokens_per_step": tokens_per_step,
+        "accepted_drafts_per_step": accepted_drafts_per_step,
+        "effective_acceptance_rate": (
+            accepted_drafts_per_step / mtp_draft_tokens
+        ),
+        "raw_acceptance_rate": accepted / drafted,
+        "raw_accepted_draft_tokens": accepted,
+        "raw_proposed_draft_tokens": drafted,
+        "raw_generation_slots": generation_slots,
+        "token_yield_source": (
+            "summed_iteration_spec_decoding_stats_across_replicas"
+        ),
+        "equivalent_output_tpot_ms": (
+            decode_round_tpot_ms / tokens_per_step
+        ),
+        "output_tput_per_gpu": output_tput_per_gpu,
+        "timing_source": (
+            "slowest_replica_trt_print_iter_log_host_step_time"
+        ),
+        "logical_round_aggregation": "maximum_replica_host_step_time",
+        "filter": {
+            key: value
+            for key, value in filtered.items()
+            if key != "retained_latencies_ms"
+        },
+        "selected_round_latencies_ms": rack_latencies,
+        "replica_timing_summary": [
+            {
+                "decode_round_tpot_ms": float(
+                    aggregate["decode_round_tpot_ms"]
+                ),
+                "output_tput_per_gpu": float(
+                    aggregate["output_tput_per_gpu"]
+                ),
+                "observed_tokens_per_step": float(
+                    aggregate["observed_tokens_per_step"]
+                ),
+            }
+            for aggregate in replica_aggregates
+        ],
+        "schedule_validation": {
+            "mode": "synchronized_replicated_fixed_global_batch",
+            "replica_count": replica_count,
+            "measured_decode_rounds": measured_rounds,
+            "round_completion_rule": "slowest_replica",
+            "replica_windows": [
+                aggregate["schedule_validation"]
+                for aggregate in replica_aggregates
+            ],
+        },
+    }
+
+
 def pr_reference_comparison(
     decode_rounds: dict[str, Any],
     *,
@@ -878,3 +1024,84 @@ def huawei_comparison(
         }
     )
     return comparison
+
+
+def huawei_scaled_local_batch_comparison(
+    rack_global_batch_size: int,
+    decode_rounds: dict[str, Any],
+    *,
+    hardware_key: str,
+    hardware_label: str,
+) -> dict[str, Any]:
+    """Compare a full rack at the same requests-per-accelerator as Huawei."""
+    active_gpu_count = int(decode_rounds["active_gpu_count"])
+    local_batch = int(decode_rounds["local_batch_size"])
+    matching = [
+        reference
+        for reference in HUAWEI_REFERENCE.values()
+        if (
+            int(reference["global_batch_size"])
+            // int(reference["chips"])
+            == local_batch
+        )
+    ]
+    if len(matching) != 1:
+        raise ValueError(
+            "Huawei has no unique reference row for local batch "
+            f"{local_batch}"
+        )
+    reference = matching[0]
+    reference_global_batch = int(reference["global_batch_size"])
+    huawei_tokens_per_step = 1.0 + float(
+        reference["published_accepted_drafts_per_step"]
+    )
+    huawei_output_tput = (
+        float(reference["decode_step_tput_per_chip"])
+        * huawei_tokens_per_step
+    )
+    step_tput = float(decode_rounds["decode_step_tput_per_gpu"])
+    output_tput = float(decode_rounds["output_tput_per_gpu"])
+    return {
+        **reference,
+        "mode": "scaled_global_batch_same_local_batch_offline_decode",
+        "rack_global_batch_size": rack_global_batch_size,
+        "reference_global_batch_size": reference_global_batch,
+        "global_batch_match": (
+            rack_global_batch_size == reference_global_batch
+        ),
+        "scaled_global_batch": True,
+        "device_count_match": active_gpu_count == int(reference["chips"]),
+        "local_batch_match": True,
+        "hardware_topology_match": False,
+        "hardware_key": hardware_key,
+        "hardware_label": hardware_label,
+        "active_gpu_count": active_gpu_count,
+        "local_batch_size": local_batch,
+        "huawei_local_batch_size": local_batch,
+        "published_tokens_per_step": huawei_tokens_per_step,
+        "published_output_tput_per_chip": huawei_output_tput,
+        "decode_round_tpot_ms_measured": float(
+            decode_rounds["decode_round_tpot_ms"]
+        ),
+        "decode_step_tput_per_gpu_measured": step_tput,
+        "observed_tokens_per_step_measured": float(
+            decode_rounds["observed_tokens_per_step"]
+        ),
+        "output_tput_per_gpu_measured": output_tput,
+        "hardware_to_huawei_decode_step_ratio": (
+            step_tput
+            / float(reference["decode_step_tput_per_chip"])
+        ),
+        "hardware_to_huawei_output_ratio": (
+            output_tput / huawei_output_tput
+        ),
+        "comparison_note": (
+            f"The rack GBS {rack_global_batch_size} scales Huawei GBS "
+            f"{reference_global_batch} from 16 chips to "
+            f"{active_gpu_count} GPUs, preserving local batch "
+            f"{local_batch}. Sequence length, fixed-batch decode-window "
+            "selection, and upper-IQR filtering match. The copied GB300 "
+            "recipe uses MTP1 while Huawei publishes MTP3, so raw decode "
+            "steps and observed output-token yield are both reported."
+        ),
+    }

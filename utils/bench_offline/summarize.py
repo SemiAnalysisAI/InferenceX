@@ -79,6 +79,7 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
     expert_parallel_size = int(
         config.get("moe_expert_parallel_size") or active_gpu_count
     )
+    replica_count = int(benchmark.get("replica_count") or 1)
     is_multinode = bool(
         benchmark.get(
             "is_multinode",
@@ -130,11 +131,11 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
         "prefill_tp": tensor_parallel_size,
         "prefill_ep": expert_parallel_size,
         "prefill_dp_attention": True,
-        "prefill_num_workers": 0,
+        "prefill_num_workers": replica_count if replica_count > 1 else 0,
         "decode_tp": tensor_parallel_size,
         "decode_ep": expert_parallel_size,
         "decode_dp_attention": True,
-        "decode_num_workers": 0,
+        "decode_num_workers": replica_count if replica_count > 1 else 0,
         "num_prefill_gpu": active_gpu_count,
         "num_decode_gpu": active_gpu_count,
         # Custom fields remain useful in downloaded flat rows. The standard
@@ -156,6 +157,7 @@ def renderer_row(result: dict[str, Any]) -> dict[str, Any] | None:
             aggregate["measured_decode_rounds"]
         ),
         "timing_source": aggregate.get("timing_source"),
+        "replica_count": replica_count,
         **equivalent_percentiles,
     }
     pr_reference = result.get("pr_reference") or {}
@@ -299,6 +301,10 @@ def result_row(
         "huawei_decode_round_tpot_ms": huawei.get(
             "decode_round_tpot_ms"
         ),
+        "huawei_reference_global_batch_size": huawei.get(
+            "reference_global_batch_size",
+            huawei.get("global_batch_size"),
+        ),
         "huawei_decode_step_tput_per_chip": huawei.get(
             "decode_step_tput_per_chip"
         ),
@@ -370,7 +376,74 @@ def markdown(rows: list[dict[str, Any]]) -> str:
         str(row.get("benchmark_profile") or "").startswith("pr-")
         for row in rows
     )
-    if is_pr_max:
+    is_rack = any(
+        str(row.get("benchmark_profile") or "").startswith("rack-")
+        for row in rows
+    )
+    if is_rack:
+        lines = [
+            "# DeepSeek-V4 GB300 NVL72 TRT Fixed-GBS Rack Benchmark",
+            "",
+            "| Rack GBS | Local/GPU | GPUs | Status | Slowest-replica step ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Huawei GBS | Huawei step ms | GB300/Huawei step |",
+            "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+        ]
+        for row in rows:
+            lines.append(
+                "| {gbs} | {local} | {gpus} | {status} | {tpot} | "
+                "{step_tput} | {tokens_per_step} | {output_tput} | "
+                "{wall} | {huawei_gbs} | {huawei_tpot} | {ratio} |".format(
+                    gbs=row.get("global_batch_size") or "-",
+                    local=row.get("local_batch_size") or "-",
+                    gpus=row.get("active_gpu_count") or "-",
+                    status=row["status"],
+                    tpot=_fmt(row.get("decode_round_tpot_ms"), 3),
+                    step_tput=_fmt(
+                        row.get("decode_step_tput_per_gpu"),
+                        2,
+                    ),
+                    tokens_per_step=_fmt(
+                        row.get("observed_tokens_per_step"),
+                        3,
+                    ),
+                    output_tput=_fmt(
+                        row.get("output_tput_per_gpu"),
+                        2,
+                    ),
+                    wall=_fmt(
+                        row.get("wall_output_tput_per_gpu"),
+                        2,
+                    ),
+                    huawei_gbs=(
+                        row.get("huawei_reference_global_batch_size")
+                        or "-"
+                    ),
+                    huawei_tpot=_fmt(
+                        row.get("huawei_decode_round_tpot_ms"),
+                        2,
+                    ),
+                    ratio=_fmt(
+                        row.get(
+                            "hardware_to_huawei_decode_step_ratio"
+                        ),
+                        3,
+                    ),
+                )
+            )
+        lines.extend(
+            [
+                "",
+                "## Metric meanings",
+                "",
+                "- One rack row is nine synchronized TP8/EP8 MTP1 TensorRT engines on 18 four-GPU nodes. All 72 GPUs must report one NVLink Fabric UUID and clique.",
+                "- `Rack GBS` is fixed and divided equally across the nine engines. `Local/GPU` is `Rack GBS / 72`; the Huawei-comparable rows 72/288/576 preserve Huawei local batches 1/4/8.",
+                "- `Slowest-replica step` takes the maximum same-index rank-0 TRT `host_step_time` across the nine engines for each of 256 logical decode rounds, then discards eight startup rounds and upper-IQR outliers.",
+                "- `Decode steps/s/GPU` is `Rack GBS / step time / 72`. `Tok/step` is measured MTP acceptance; output throughput multiplies the two.",
+                "- Huawei uses MTP3 while the copied attempt-14 TP8 recipe uses MTP1. The table therefore keeps raw decode-step and acceptance-adjusted output rates separate.",
+                "- Rack GBS 30960/36864 are saturation points copied from nine times the attempt-14 TP8 active/capacity batches; they have no Huawei local-batch row.",
+                "",
+            ]
+        )
+    elif is_pr_max:
         lines = [
             "# DeepSeek-V4 GB300 TRT PR-Config Offline Decode Saturation",
             "",
@@ -424,10 +497,10 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                 "",
                 "## Metric meanings",
                 "",
-                "- `GBS` is a fixed decode population. Each copied recipe runs its attempt-13 active estimate and engine-capacity endpoint: TP32=192/256, TP16=400/512, TP8=3440/4096. It is not HTTP concurrency.",
+                "- `GBS` is a fixed decode population. Each copied recipe runs its attempt-14 active estimate and engine-capacity endpoint: TP32=192/256, TP16=400/512, TP8=3440/4096. It is not HTTP concurrency.",
                 "- `Host-step ms` is rank-0 TRT `host_step_time` for 256 consecutive full-batch decode iterations under overlap scheduling, after discarding eight startup rounds and upper-IQR outliers.",
                 "- `Output tok/s/decode-GPU` multiplies full-batch decode-step rate by the measured MTP token yield.",
-                "- `PR output tok/s/decode-GPU` is attempt 13's serving result for the copied recipe. `Offline/PR decode` compares the same decode-GPU denominator.",
+                "- `PR output tok/s/decode-GPU` is attempt 14's serving result for the copied recipe. `Offline/PR decode` compares the same decode-GPU denominator.",
                 "- `PR-fleet-normalized` divides offline total output throughput by the PR's decode plus prefill GPU count. It is a comparison normalization, not the offline run's actual allocation.",
                 "- The offline adaptation performs 8K prefill on the decode GPUs with `max_num_tokens=32768`; the PR worker receives transferred KV and uses its smaller decode-only token cap.",
                 "",

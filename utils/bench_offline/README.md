@@ -3,12 +3,15 @@
 This is a branch-only benchmark. It does not use the normal InferenceX serving
 pipeline and is not intended to merge into `main`.
 
-It has two deliberately separate contracts:
+It has three deliberately separate contracts:
 
 - `huawei` preserves the validated Huawei-style fixed-GBS method.
 - `pr-tp32-mtp3`, `pr-tp16-mtp3`, and `pr-tp8-mtp1` copy the three final
   GB300 decode recipes from InferenceX PR #1689 and measure maximum saturated
   offline decode throughput.
+- `rack-tp8x9-mtp1` runs nine synchronized copies of the PR's fastest TP8
+  decode engine across one 72-GPU GB300 NVLink domain. It measures both
+  Huawei-equivalent local batches and full-engine saturation.
 
 Do not compare or combine their timing fields without checking
 `benchmark_profile` and `aggregate.timing_source`.
@@ -95,7 +98,7 @@ and make MTP acceptance incomparable with the PR.
 | `pr-tp16-mtp3` | `4 x 4` | 400, 512 | 25, 32 | MTP3 | `1,2,4,8,16,24,32` | 0.70 | 666 |
 | `pr-tp8-mtp1` | `2 x 4` | 3440, 4096 | 430, 512 | MTP1 | `1,2,4,8,16,24,32,40..512` | 0.80 | 4301 |
 
-Attempt 13's output throughput times mean TPOT implies about 190, 401, and
+Attempt 14's output throughput times mean TPOT implies about 190, 401, and
 3438 active decode requests. Those are rounded to rank-divisible fixed GBS
 192, 400, and 3440. Each profile also runs its engine-capacity endpoint. The
 engine `max_batch_size` and full CUDA graph list remain copied from the PR for
@@ -124,7 +127,7 @@ parses rank-0 `print_iter_log` output and uses `host_step_time` for
 `aggregate.stats_iter_latency_diagnostic`. MTP yield still comes from the
 same selected iteration-stat window.
 
-Attempt 13 reference output rates are stored with each profile:
+Attempt 14 reference output rates are stored with each profile:
 
 | Profile | Output tok/s/decode-GPU | Output tok/s/all PR GPUs |
 |---|---:|---:|
@@ -135,6 +138,46 @@ Attempt 13 reference output rates are stored with each profile:
 The result reports both decode-GPU comparison and a hypothetical PR-fleet
 normalization. The latter divides offline total output by the PR's decode plus
 prefill GPU count; those prefill GPUs were not allocated by the offline run.
+
+## GB300 NVL72 Rack Profile
+
+`rack-tp8x9-mtp1` scales the fastest resolved recipe from
+[PR #1689 attempt 14](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/14)
+to the complete 18-node, 72-GPU GB300 allocation:
+
+- nine independent TP8/EP8 MTP1 TensorRT engines
+- two adjacent four-GPU nodes and eight ranks per engine
+- one Slurm allocation spanning all 18 nodes
+- one required Fabric `ClusterUUID` and `CliqueId` across all 72 GPUs
+- the attempt-14 image, TRT revision, EP8/384 EPLB map, learned router,
+  overlap scheduler, KV fraction `0.80`, and CUDA graphs through batch 512
+
+This is intentionally reported as `9xDEP8`, not TP72. Every GPU is active,
+but each TensorRT/NCCL world is confined to its assigned two-node pair. TRT's
+model-parallel world size is `tp * pp * cp`; the copied TP8 engine cannot be
+made into a 72-rank engine by changing MoE cluster settings.
+
+| Rack GBS | Per-engine GBS | Local batch/GPU | Purpose |
+|---:|---:|---:|---|
+| 72 | 8 | 1 | Huawei GBS16 local-batch match |
+| 288 | 32 | 4 | Huawei GBS64 local-batch match |
+| 576 | 64 | 8 | Huawei GBS128 local-batch match |
+| 30960 | 3440 | 430 | 9x attempt-14 active decode population |
+| 36864 | 4096 | 512 | 9x copied engine capacity |
+
+All nine engines initialize independently and wait at one shared barrier
+immediately before the measured generation pass. Logical rack decode round
+`i` uses the maximum rank-0 `host_step_time` for round `i` across the nine
+engines. The rack result then skips the first eight logical rounds and applies
+the upper-IQR filter. This models a fixed global batch whose next step cannot
+complete before its slowest replica. Aggregation rejects measured-pass start
+skew above 10 seconds.
+
+Speculative proposed/accepted counters are summed across replicas for the
+same 256-round window. Huawei uses MTP3 and the copied TP8 engine uses MTP1,
+so raw decode-step throughput and observed output-token yield remain separate.
+The 72/288/576 rows compare against Huawei GBS16/64/128 by equal local batch,
+not equal global batch.
 
 ## Global And Local Batch
 
@@ -444,7 +487,7 @@ GB300 artifacts:
 
 ### PR #1689 Serving Comparison
 
-[PR #1689 attempt 13](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/13)
+[PR #1689 attempt 14](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27164980476/attempts/14)
 does not contain an equivalent GBS128 offline result. The same-width TP16
 decode row used:
 
@@ -509,39 +552,40 @@ a serving saturation experiment, not correct this offline result.
 
 1. Dispatch `.github/workflows/e2e-tests.yml`.
 2. Run one requested global batch at a time.
-3. Allocate one eight-GPU B300 node or the GB300 profile's exact 2, 4, or 8
-   four-GPU nodes. GB300 validates the complete dynamic rank map and requires
-   one shared `ClusterUUID` and `CliqueId` across every selected GPU.
+3. Allocate one eight-GPU B300 node, the selected 2/4/8-node GB300 engine, or
+   the rack profile's complete 18-node/72-GPU domain. GB300 validates the
+   complete dynamic rank map and one shared Fabric `ClusterUUID` and
+   `CliqueId` across every allocated GPU.
 4. Build the exact 8192-token corpus.
-5. Before GB300 starts `trtllm-llmapi-launch`, preseed the complete
-   fixed-batch environment because the 16 external MPI management workers
-   exist before rank 0 creates its later worker subprocess. Rank 0 recomputes
-   and validates this contract before engine construction. B300 lets TRT
-   create its local MPI pool and does not need this host-side step.
-6. Start one fresh TensorRT-LLM engine. Runtime capacity stays at the full
-   GBS-derived value while synthetic pure-context warmup requests are capped
-   at 65536 tokens, except GB300 GBS128, which uses a 32768-token tuning cap.
-   On B300 GBS128, reserve the full-runtime non-graph attention workspace
-   before the first forward, then subtract the 12 GiB real-prefill transient
-   from TRT's calibrated final KV budget while preserving the fixed-batch
-   minimum cache cost. TRT's internal capacity probes run while the benchmark
-   request gate is disarmed.
-7. On B300 only, keep oversized FP8 activation quantization and DeepGemm
+5. Before each GB300 `trtllm-llmapi-launch`, preseed the complete fixed-batch
+   environment because external MPI management workers exist before rank 0
+   creates its later worker subprocess. Rank 0 recomputes and validates this
+   contract before engine construction.
+6. Start one fresh TensorRT-LLM engine for Huawei/PR-max, or nine independent
+   TP8 engines on disjoint two-node pairs for the rack profile. The rack
+   parent owns the allocation and fabric proof; each child owns its MPI world,
+   logs, completion record, and hidden child result.
+7. Keep runtime capacity at the configured value while applying only the
+   documented synthetic-warmup and B300 memory workarounds. On B300 only,
+   keep oversized FP8 activation quantization and DeepGemm
    calls bounded while preserving one executor-level prefill iteration.
 8. Atomically arm the fixed-batch request gate after engine initialization.
 9. In `huawei`, run the short full-batch request warmup. PR-max skips this
    second request pass and uses engine graph warmup plus eight discarded
    measured rounds.
-10. Run one measured generation.
-11. Validate and filter 256 exact full-batch decode iterations. In PR-max,
-    replace overlap-invalid `iterLatencyMS` with rank-0 `host_step_time`.
-12. After result and debug files are finalized, atomically publish a
-    completion record. The GB300 host requires both the result and completion
-    files before accepting success. If the external MPI world exits first, it
-    waits up to 120 seconds for shared-filesystem visibility, then verifies
-    both statuses and cancels the allocation.
-13. Upload per-job result/debug/topology artifacts.
-14. Collect `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
+10. For rack runs, wait until all nine engines are ready, then release one
+    shared measured-pass barrier.
+11. Run one measured generation and validate 256 exact full-batch decode
+    iterations per engine. PR-max and rack children use rank-0
+    `host_step_time`; Huawei uses non-overlap `iterLatencyMS`.
+12. Rack aggregation aligns the nine 256-value timing vectors by round index,
+    takes the per-round maximum, then applies the startup skip and upper-IQR
+    filter. Only the resulting 72-GPU row is copied to the top-level result
+    path.
+13. After result and debug files are finalized, atomically publish completion
+    records, verify shared-filesystem visibility, and cancel the allocation.
+14. Upload per-job result/debug/topology artifacts, then collect
+    `offline_aggregate.json`, `offline_summary.md`, and `agg_bmk.json`.
 
 There is no HTTP server, request-rate generator, generic benchmark client,
 serial scheduler tuning, or normal InferenceX matrix processing.
@@ -564,6 +608,10 @@ serial scheduler tuning, or normal InferenceX matrix processing.
   `trt_print_iter_log_host_step_time` for PR-max
 - `pr_reference`: copied serving result plus decode-GPU and PR-fleet
   comparison ratios for PR-max rows
+- `rack`: child engine provenance and the synchronized round-alignment rule
+  for NVL72 rows
+- `slowest_replica_trt_print_iter_log_host_step_time`: rack timing source;
+  each logical round is the maximum same-index TP8 host-step latency
 
 `results_bmk/agg_bmk.json` remains renderer-compatible. Standard throughput
 and TPOT fields use acceptance-adjusted output-token metrics. Custom flat
@@ -573,6 +621,57 @@ alias for `global_batch_size`; this offline path does not use serving
 concurrency.
 
 ## Dispatch
+
+GB300 NVL72 GBS72 canary:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=rack-huawei-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 NVL72 TRT rack GBS72 canary' \
+  -f 'inputs[global_batch_sizes]=72' \
+  -f 'inputs[salloc-time]=360' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
+
+Huawei-local-batch rack sweep:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=rack-huawei-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 NVL72 TRT Huawei-local-batch sweep' \
+  -f 'inputs[global_batch_sizes]=auto' \
+  -f 'inputs[salloc-time]=360' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
+
+Maximum-throughput rack sweep:
+
+```bash
+BENCH_REF="$(git rev-parse HEAD)"
+gh api -X POST \
+  /repos/SemiAnalysisAI/InferenceX/actions/workflows/e2e-tests.yml/dispatches \
+  -f ref='trt-bench' \
+  -f "inputs[ref]=$BENCH_REF" \
+  -f 'inputs[hardware-profile]=gb300' \
+  -f 'inputs[benchmark-profile]=rack-max-sweep' \
+  -f 'inputs[test-name]=DSV4 GB300 NVL72 TRT max offline' \
+  -f 'inputs[global_batch_sizes]=auto' \
+  -f 'inputs[salloc-time]=360' \
+  -f 'inputs[worker-timeout]=18000' \
+  -f 'inputs[worker-stack-period]=-1'
+```
 
 PR-max sweep:
 
@@ -633,7 +732,8 @@ jq '.' ./offline-summary/agg_bmk.json
 ## Debugging
 
 Each job uploads files keyed by its experiment ID (`gbs64` for old Huawei
-dispatches, or for example `pr-tp8-mtp1-gbs4096`):
+dispatches, `pr-tp8-mtp1-gbs4096`, or
+`rack-tp8x9-mtp1-gbs36864`):
 
 - `offline_result_ID.json`
 - `offline_controller_ID.log`
@@ -650,6 +750,11 @@ dispatches, or for example `pr-tp8-mtp1-gbs4096`):
 The debug archive contains the corpus manifest, worker log/result,
 `warmup_iteration_stats.json` when applicable,
 `measured_iteration_stats.json`, and the every-rank environment marker.
+For rack runs it contains `.offline_rack_ID_JOB/`, including
+`replicas/r00` through `replicas/r08`, each child launcher/world/timing log,
+completion record, nested child debug archive, and child result. Those child
+results remain inside the archive so `collect-results` sees exactly one
+72-GPU row.
 
 Debug in this order:
 
@@ -659,40 +764,47 @@ Debug in this order:
    `print_iter_log` host-step timing. `offline_world_ID.log` is the mirrored
    all-rank console stream. Then extract the debug archive and inspect
    `worker.log` for the worker lifecycle and iteration stats.
-4. Use `jq` on iteration stats; do not dump the full JSON into the chat.
-5. For Huawei, confirm one full context-only iteration precedes decode. For
+4. For rack runs, first inspect the parent world/topology log, then
+   `replicas/rNN/host_launcher.log`. Inspect the failed child's world,
+   timing, and completion logs, then extract its nested debug archive for
+   worker logs. Require all nine barrier-ready files before the shared release
+   record.
+5. Use `jq` on iteration stats; do not dump the full JSON into the chat.
+6. For Huawei, confirm one full context-only iteration precedes decode. For
    PR-max, staged/mixed setup is allowed, but the selected window must contain
    256 consecutive exact full-batch decode iterations.
-6. Confirm rank markers are exactly `0..world_size-1` with identical fixed
+7. Confirm rank markers are exactly `0..world_size-1` with identical fixed
    environment. Huawei requires perfect-router value `1`; PR-max requires it
    to be absent on every rank.
-7. On GB300, confirm 2, 4, or 8 hosts according to profile, four local ranks
-   per host, and one shared non-empty Fabric `ClusterUUID` and `CliqueId`.
-   For PR-max, also confirm `timing_source` is
+8. On GB300, confirm 2, 4, 8, or 18 hosts according to profile, four local
+   ranks per host, and one shared non-empty Fabric `ClusterUUID` and
+   `CliqueId`. Rack children must each contain ranks `0..7` on their assigned
+   node pair, and the top-level row must say `9xDEP8`, not TP72. For PR-max,
+   also confirm `timing_source` is
    `trt_print_iter_log_host_step_time`.
-8. Confirm `offline_completion_gbsN.json` has the same `result_status` as the
+9. Confirm `offline_completion_gbsN.json` has the same `result_status` as the
    result and a matching return code. Its presence proves rank 0 finished
    copying the result and creating the debug archive before the host canceled
    the external MPI allocation.
-9. For initialization stalls, use the controller heartbeat's `rank_progress`
+10. For initialization stalls, use the controller heartbeat's `rank_progress`
    to identify which ranks reached warmup completion, clock synchronization,
    and executor worker start.
-10. If ranks fail during shim installation, inspect `entry_failed` markers.
+11. If ranks fail during shim installation, inspect `entry_failed` markers.
    If there are only `sitecustomize` rows and no `entry_start`, confirm the
    host logged `preseeded external MPI rank environment` before
    `trtllm-llmapi-launch`.
-11. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
+12. Confirm `fixed_batch_barrier.armed.json` was created only after the worker
    logged `engine initialization complete`.
-12. On B300 GBS128, confirm every rank emitted
+13. On B300 GBS128, confirm every rank emitted
    `attention_workspace_preallocated` with target and allocated bytes
    `27111981056`, and `cuda_graph_workspace_bytes=0`.
-13. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
+14. On B300 GBS128, confirm every rank emitted `kv_prefill_reserve_applied` with
     reserve `12884901888`, minimum tokens `149504`, an exact
     configured-minus-adjusted delta, and adjusted bytes at least the reported
     minimum runtime KV bytes.
-14. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
+15. On B300 GBS128, confirm every rank emitted `fp8_prefill_gemm_chunked` for
     exactly 131072 rows, two 65536-row chunks, and synchronized chunks.
-15. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
+16. Inspect `memory.used` and `memory.free` in the applicable GPU telemetry
     files around full prefill.
 
 Do not weaken either profile's schedule proof. Huawei must retain one complete
@@ -700,3 +812,5 @@ full-batch prefill and non-overlap timing. PR-max must retain its copied
 overlap scheduler, learned router, unset `attention_dp_config`, exact decode
 capacity, CUDA graph set, MTP depth, and host-step timing. Internal fused-op
 chunking is allowed only when it does not change the selected decode window.
+Rack results additionally require all nine child proofs, one measured-pass
+barrier, same-index slowest-replica timing, and one 72-GPU fabric proof.
