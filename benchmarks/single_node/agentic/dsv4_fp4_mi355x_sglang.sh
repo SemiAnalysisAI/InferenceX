@@ -96,7 +96,6 @@ esac
 
 # ---- LLM server config ----------------------------------------------------------
 
-CACHE_ARGS=()
 WARMUP_ARGS=()
 CUDA_GRAPH_MAX_BS="$CONC"
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
