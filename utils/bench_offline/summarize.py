@@ -243,6 +243,34 @@ def result_row(
         )
     if output_ratio is None:
         output_ratio = huawei.get("b300_to_huawei_output_ratio")
+    huawei_step_tput = huawei.get("decode_step_tput_per_chip")
+    measured_tokens_per_step = aggregate.get(
+        "observed_tokens_per_step"
+    )
+    huawei_same_yield_output_tput = huawei.get(
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step"
+    )
+    if (
+        huawei_same_yield_output_tput is None
+        and huawei_step_tput is not None
+        and measured_tokens_per_step is not None
+    ):
+        huawei_same_yield_output_tput = (
+            float(huawei_step_tput)
+            * float(measured_tokens_per_step)
+        )
+    same_yield_ratio = huawei.get(
+        "hardware_to_huawei_same_yield_output_ratio"
+    )
+    if (
+        same_yield_ratio is None
+        and aggregate.get("output_tput_per_gpu") is not None
+        and huawei_same_yield_output_tput
+    ):
+        same_yield_ratio = (
+            float(aggregate["output_tput_per_gpu"])
+            / float(huawei_same_yield_output_tput)
+        )
     return {
         "experiment_id": experiment_id,
         "hardware": benchmark.get("hardware"),
@@ -308,7 +336,13 @@ def result_row(
         "huawei_decode_step_tput_per_chip": huawei.get(
             "decode_step_tput_per_chip"
         ),
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step": (
+            huawei_same_yield_output_tput
+        ),
         "hardware_to_huawei_decode_step_ratio": step_ratio,
+        "hardware_to_huawei_same_yield_output_ratio": (
+            same_yield_ratio
+        ),
         "hardware_to_huawei_output_ratio": output_ratio,
         "pr_reference_concurrency": pr_reference.get(
             "reference_concurrency"
@@ -384,14 +418,16 @@ def markdown(rows: list[dict[str, Any]]) -> str:
         lines = [
             "# DeepSeek-V4 GB300 NVL72 TRT Fixed-GBS Rack Benchmark",
             "",
-            "| Rack GBS | Local/GPU | GPUs | Status | Slowest-replica step ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Huawei GBS | Huawei step ms | GB300/Huawei step |",
-            "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|",
+            "| Rack GBS | Local/GPU | GPUs | Status | Slowest-replica step ms | Decode steps/s/GPU | Tok/step | Output tok/s/GPU | Wall tok/s/GPU | Huawei GBS | Huawei step ms | Huawei steps/s/chip | Huawei @ GB300 yield tok/s/chip | GB300/Huawei same-yield |",
+            "|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|",
         ]
         for row in rows:
             lines.append(
                 "| {gbs} | {local} | {gpus} | {status} | {tpot} | "
                 "{step_tput} | {tokens_per_step} | {output_tput} | "
-                "{wall} | {huawei_gbs} | {huawei_tpot} | {ratio} |".format(
+                "{wall} | {huawei_gbs} | {huawei_tpot} | "
+                "{huawei_step_tput} | {huawei_same_yield_output} | "
+                "{same_yield_ratio} |".format(
                     gbs=row.get("global_batch_size") or "-",
                     local=row.get("local_batch_size") or "-",
                     gpus=row.get("active_gpu_count") or "-",
@@ -421,9 +457,19 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                         row.get("huawei_decode_round_tpot_ms"),
                         2,
                     ),
-                    ratio=_fmt(
+                    huawei_step_tput=_fmt(
+                        row.get("huawei_decode_step_tput_per_chip"),
+                        2,
+                    ),
+                    huawei_same_yield_output=_fmt(
                         row.get(
-                            "hardware_to_huawei_decode_step_ratio"
+                            "huawei_output_tput_per_chip_at_measured_tokens_per_step"
+                        ),
+                        2,
+                    ),
+                    same_yield_ratio=_fmt(
+                        row.get(
+                            "hardware_to_huawei_same_yield_output_ratio"
                         ),
                         3,
                     ),
@@ -438,6 +484,7 @@ def markdown(rows: list[dict[str, Any]]) -> str:
                 "- `Rack GBS` is fixed and divided equally across the nine engines. `Local/GPU` is `Rack GBS / 72`; the Huawei-comparable rows 72/288/576 preserve Huawei local batches 1/4/8.",
                 "- `Slowest-replica step` takes the maximum same-index rank-0 TRT `host_step_time` across the nine engines for each of 256 logical decode rounds, then discards eight startup rounds and upper-IQR outliers.",
                 "- `Decode steps/s/GPU` is `Rack GBS / step time / 72`. `Tok/step` is measured MTP acceptance; output throughput multiplies the two.",
+                "- `Huawei @ GB300 yield` multiplies Huawei's published raw decode-step rate by the measured GB300 `Tok/step`. Its GB300/Huawei ratio is therefore exactly the raw decode-step ratio, without crediting either stack for a different MTP depth or acceptance rate.",
                 "- Huawei uses MTP3 while the copied attempt-14 TP8 recipe uses MTP1. The table therefore keeps raw decode-step and acceptance-adjusted output rates separate.",
                 "- Rack GBS 30960/36864 are saturation points copied from nine times the attempt-14 TP8 active/capacity batches; they have no Huawei local-batch row.",
                 "",

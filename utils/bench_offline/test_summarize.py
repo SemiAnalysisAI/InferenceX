@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from bench_offline.summarize import (
     discover_results,
     markdown,
@@ -89,6 +91,12 @@ def test_summary_explains_huawei_round_units():
     assert "GBS / decode_round_TPOT / 8" in rendered
     assert "8 B300 GPUs" in rendered
     assert "| 64 | 8 | 8 | success |" in rendered
+    assert row[
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step"
+    ] == pytest.approx(210.16 * 2.5)
+    assert row[
+        "hardware_to_huawei_same_yield_output_ratio"
+    ] == pytest.approx(400.0 / 210.16)
 
 
 def test_results_are_keyed_by_global_batch_id(tmp_path):

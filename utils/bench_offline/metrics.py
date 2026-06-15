@@ -962,6 +962,13 @@ def huawei_comparison(
     )
     step_tput = float(decode_rounds["decode_step_tput_per_gpu"])
     output_tput = float(decode_rounds["output_tput_per_gpu"])
+    measured_tokens_per_step = float(
+        decode_rounds["observed_tokens_per_step"]
+    )
+    huawei_same_yield_output_tput = (
+        float(reference["decode_step_tput_per_chip"])
+        * measured_tokens_per_step
+    )
     active_gpu_count = int(decode_rounds["active_gpu_count"])
     local_batch = int(decode_rounds["local_batch_size"])
     prefix = hardware_key.lower().replace("-", "_")
@@ -984,13 +991,17 @@ def huawei_comparison(
             decode_rounds["decode_round_tpot_ms"]
         ),
         "decode_step_tput_per_gpu_measured": step_tput,
-        "observed_tokens_per_step_measured": float(
-            decode_rounds["observed_tokens_per_step"]
-        ),
+        "observed_tokens_per_step_measured": measured_tokens_per_step,
         "output_tput_per_gpu_measured": output_tput,
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step": (
+            huawei_same_yield_output_tput
+        ),
         "hardware_to_huawei_decode_step_ratio": (
             step_tput
             / float(reference["decode_step_tput_per_chip"])
+        ),
+        "hardware_to_huawei_same_yield_output_ratio": (
+            output_tput / huawei_same_yield_output_tput
         ),
         "hardware_to_huawei_output_ratio": (
             output_tput / huawei_output_tput
@@ -1017,6 +1028,9 @@ def huawei_comparison(
             f"{prefix}_output_tput_per_gpu": output_tput,
             f"{prefix}_to_huawei_decode_step_ratio": comparison[
                 "hardware_to_huawei_decode_step_ratio"
+            ],
+            f"{prefix}_to_huawei_same_yield_output_ratio": comparison[
+                "hardware_to_huawei_same_yield_output_ratio"
             ],
             f"{prefix}_to_huawei_output_ratio": comparison[
                 "hardware_to_huawei_output_ratio"
@@ -1061,6 +1075,13 @@ def huawei_scaled_local_batch_comparison(
     )
     step_tput = float(decode_rounds["decode_step_tput_per_gpu"])
     output_tput = float(decode_rounds["output_tput_per_gpu"])
+    measured_tokens_per_step = float(
+        decode_rounds["observed_tokens_per_step"]
+    )
+    huawei_same_yield_output_tput = (
+        float(reference["decode_step_tput_per_chip"])
+        * measured_tokens_per_step
+    )
     return {
         **reference,
         "mode": "scaled_global_batch_same_local_batch_offline_decode",
@@ -1084,13 +1105,17 @@ def huawei_scaled_local_batch_comparison(
             decode_rounds["decode_round_tpot_ms"]
         ),
         "decode_step_tput_per_gpu_measured": step_tput,
-        "observed_tokens_per_step_measured": float(
-            decode_rounds["observed_tokens_per_step"]
-        ),
+        "observed_tokens_per_step_measured": measured_tokens_per_step,
         "output_tput_per_gpu_measured": output_tput,
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step": (
+            huawei_same_yield_output_tput
+        ),
         "hardware_to_huawei_decode_step_ratio": (
             step_tput
             / float(reference["decode_step_tput_per_chip"])
+        ),
+        "hardware_to_huawei_same_yield_output_ratio": (
+            output_tput / huawei_same_yield_output_tput
         ),
         "hardware_to_huawei_output_ratio": (
             output_tput / huawei_output_tput

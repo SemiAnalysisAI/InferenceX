@@ -448,6 +448,12 @@ def test_replicated_rack_round_uses_slowest_tp8_engine():
     assert comparison[
         "hardware_to_huawei_decode_step_ratio"
     ] == pytest.approx(50.0 / 56.70)
+    assert comparison[
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step"
+    ] == pytest.approx(56.70 * 1.5)
+    assert comparison[
+        "hardware_to_huawei_same_yield_output_ratio"
+    ] == pytest.approx(50.0 / 56.70)
 
 
 def test_trt_iteration_log_uses_final_executor_pass():
@@ -510,6 +516,12 @@ def test_huawei_comparison_uses_raw_step_rate_and_separate_yield():
     assert comparison["published_output_tput_per_chip"] == pytest.approx(
         210.16 * 2.44
     )
+    assert comparison[
+        "huawei_output_tput_per_chip_at_measured_tokens_per_step"
+    ] == pytest.approx(210.16 * 2.5)
+    assert comparison[
+        "hardware_to_huawei_same_yield_output_ratio"
+    ] == pytest.approx(400.0 / 210.16)
 
 
 def test_huawei_comparison_names_gb300_and_matches_device_count():
