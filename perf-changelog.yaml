@@ -3887,3 +3887,10 @@
     - "Align MiniMax-M3 B300 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
     - "Add TP4+EP4 coverage for MiniMax-M3 B300: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1781
+
+- config-keys:
+    - minimaxm3-fp8-b300-dynamo-vllm
+  description:
+    - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k STP."
+    - "Add six local srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b300-fp8/1k1k and wire the B300 launcher to overlay them into srt-slurm."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
