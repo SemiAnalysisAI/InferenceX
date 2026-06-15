@@ -3676,7 +3676,7 @@
     - "Rack-scale wide expert-parallel (deepseek-v4 megamoe style; DEP = DP-attn + EP): EP8/EP16 spans multiple GB200 nodes vs B200's 8-GPU NVLink island"
     - "5 topologies: 1P1D TP4 (2n, low-lat), 1P1D DEP8 (4n), 1P1D DEP8->DEP16 (6n, wide decode), 2P1D DEP8->DEP16 (8n), 4P1D DEP8->DEP16 (12n, max tput)"
     - "Low-conc focus (conc 1-64): 1P1D TP4 (2n baseline), 1P2D TP4 (3n, 2 decode workers), 1P1D TP4->TEP8 (3n, decode TP8+EP8 to match B200 TEP8 topology). High-conc entries (DEP8/DEP16/2P1D/4P1D) temporarily commented out."
-    - "8k1k: 1P1D TP4 (2n) at conc 1-16; high-conc 8k1k entries temporarily commented out"
+    - "8k1k: 1P1D TP4 (2n) baseline + 1P1D TP4->TEP8 (3n, decode TP8+EP8) at conc 1-16; high-conc entries temporarily commented out"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
 
 - config-keys:
