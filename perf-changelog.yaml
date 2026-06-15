@@ -3844,6 +3844,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
 
 - config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
+
+- config-keys:
     - glm5-fp4-gb200-dynamo-sglang
   description:
     - "Initial submission: GLM-5 FP4 disagg on GB200 with Dynamo SGLang (8k1k + 1k1k, STP / no-MTP)."
@@ -3851,4 +3865,5 @@
     - "Recipes ported from srt-slurm PR #211 (recipes/gb200-fp4/glm5.yaml), split per topology under recipes/sglang/glm5/gb200-fp4/."
     - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
     - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
+  
