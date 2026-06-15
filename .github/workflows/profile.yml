@@ -22,6 +22,15 @@ on:
         required: false
         type: string
         default: '1k1k'
+      m3-aiter-ar-rms-mode:
+        description: "MiniMax M3 MI300X AITER AR+RMS experiment mode"
+        required: false
+        type: choice
+        options:
+          - 'off'
+          - control
+          - fused
+        default: 'off'
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -93,6 +102,7 @@ jobs:
       - id: filter
         name: Validate generated jobs
         env:
+          M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
           RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
         run: |
@@ -106,6 +116,23 @@ jobs:
               raise SystemExit("No profile entries matched the requested filters")
           if len(data) > 24:
               raise SystemExit(f"Refusing to profile {len(data)} entries; maximum is 24")
+
+          mode = os.environ["M3_AITER_AR_RMS_MODE"]
+          if mode not in {"off", "control", "fused"}:
+              raise SystemExit(f"Invalid M3 AITER AR+RMS mode: {mode}")
+          if mode != "off":
+              invalid = [
+                  item
+                  for item in data
+                  if item.get("runner") != "mi300x"
+                  or item.get("model-prefix") != "minimaxm3"
+                  or item.get("framework") != "vllm"
+              ]
+              if invalid:
+                  raise SystemExit(
+                      "M3 AITER AR+RMS mode only supports MiniMax M3 "
+                      "vLLM jobs on MI300X"
+                  )
 
           identities = {
               (
@@ -154,6 +181,7 @@ jobs:
       RUN_EVAL: 'false'
       EVAL_ONLY: 'false'
       SCENARIO_SUBDIR: ${{ matrix.config['scenario-type'] == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
+      M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
@@ -193,7 +221,11 @@ jobs:
         run: |
           set -euo pipefail
           ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          mode_suffix=""
+          if [ "$M3_AITER_AR_RMS_MODE" != "off" ]; then
+            mode_suffix="_m3ar-${M3_AITER_AR_RMS_MODE}"
+          fi
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
           summary_path="profile_summary_${res_name}.json"
 
@@ -218,14 +250,30 @@ jobs:
             find "$host_trace_dir" -maxdepth 2 -type f -printf '%p %s bytes\n' || true
             exit 1
           fi
-
-          python3 utils/analyze_profile_trace.py \
-            "$trace_path" \
-            --expected-concurrency "$CONC" \
-            --output "$summary_path"
-
           echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
           echo "summary=$summary_path" >> "$GITHUB_OUTPUT"
+
+          analysis_args=(
+            "$trace_path"
+            --expected-concurrency "$CONC"
+            --output "$summary_path"
+          )
+          if [ "$MODEL_PREFIX" = "minimaxm3" ] && [[ "$RUNNER_NAME" == mi300x* ]]; then
+            analysis_args+=(
+              --min-kernel-count 1000
+              --minimum-concurrency-fraction 0.8
+            )
+          fi
+          if [ "$M3_AITER_AR_RMS_MODE" = "fused" ]; then
+            analysis_args+=(
+              --require-category aiter_fused_allreduce_rmsnorm
+            )
+          elif [ "$M3_AITER_AR_RMS_MODE" = "control" ]; then
+            analysis_args+=(
+              --forbid-category aiter_fused_allreduce_rmsnorm
+            )
+          fi
+          python3 utils/analyze_profile_trace.py "${analysis_args[@]}"
 
       - name: Process result
         env:
@@ -233,6 +281,7 @@ jobs:
         run: python3 utils/process_result.py
 
       - name: Upload profile trace
+        if: ${{ always() && steps.run.outputs.trace != '' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_trace_${{ env.RESULT_FILENAME }}

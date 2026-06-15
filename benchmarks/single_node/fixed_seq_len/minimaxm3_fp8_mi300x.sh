@@ -34,6 +34,64 @@ SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
+M3_AITER_AR_RMS_MODE="${M3_AITER_AR_RMS_MODE:-off}"
+M3_AITER_AR_RMS_ARGS=()
+case "$M3_AITER_AR_RMS_MODE" in
+    off)
+        ;;
+    control|fused)
+        # Enable AITER only to make the allreduce+RMSNorm pass available.
+        # Keep every independently selectable AITER path disabled so the
+        # control and fused runs differ only by fuse_allreduce_rms.
+        export VLLM_ROCM_USE_AITER=1
+        export VLLM_ROCM_USE_AITER_PAGED_ATTN=0
+        export VLLM_ROCM_USE_AITER_LINEAR=0
+        export VLLM_ROCM_USE_AITER_LINEAR_HIPBMM=0
+        export VLLM_ROCM_USE_AITER_MOE=0
+        export VLLM_ROCM_USE_AITER_RMSNORM=0
+        export VLLM_ROCM_USE_AITER_MLA=0
+        export VLLM_ROCM_USE_AITER_MHA=0
+        export VLLM_ROCM_USE_AITER_FP4_ASM_GEMM=0
+        export VLLM_ROCM_USE_AITER_TRITON_ROPE=0
+        export VLLM_ROCM_USE_AITER_FP8BMM=0
+        export VLLM_ROCM_USE_AITER_FP4BMM=0
+        export VLLM_ROCM_USE_AITER_UNIFIED_ATTENTION=0
+        export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
+        export VLLM_ROCM_USE_AITER_TRITON_GEMM=0
+
+        python3 /workspace/utils/patch_minimaxm3_aiter_ar_rms.py
+
+        fuse_allreduce_rms=false
+        if [ "$M3_AITER_AR_RMS_MODE" = "fused" ]; then
+            fuse_allreduce_rms=true
+        fi
+        compilation_config='{"compile_ranges_endpoints":[512,4096],'
+        if [ "${PROFILE:-0}" = "1" ]; then
+            # Expose compiled kernels to ROCTracer during profile runs.
+            compilation_config+='"cudagraph_mode":"NONE",'
+        fi
+        compilation_config+='"pass_config":{'
+        compilation_config+='"eliminate_noops":true,'
+        compilation_config+='"fuse_norm_quant":false,'
+        compilation_config+='"fuse_act_quant":false,'
+        compilation_config+='"fuse_attn_quant":false,'
+        compilation_config+='"enable_sp":false,'
+        compilation_config+='"fuse_gemm_comms":false,'
+        compilation_config+='"enable_qk_norm_rope_fusion":false,'
+        compilation_config+='"fuse_rope_kvcache_cat_mla":false,'
+        compilation_config+='"fuse_act_padding":false,'
+        compilation_config+='"fuse_mla_dual_rms_norm":false,'
+        compilation_config+='"fuse_rope_kvcache":false,'
+        compilation_config+="\"fuse_allreduce_rms\":${fuse_allreduce_rms}}}"
+        M3_AITER_AR_RMS_ARGS=(--compilation-config "$compilation_config")
+        echo "M3 AITER AR+RMS experiment mode: $M3_AITER_AR_RMS_MODE"
+        ;;
+    *)
+        echo "Invalid M3_AITER_AR_RMS_MODE: $M3_AITER_AR_RMS_MODE" >&2
+        exit 2
+        ;;
+esac
+
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
 fi
@@ -52,7 +110,8 @@ fi
 PROFILE_ARGS=()
 if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget=8192
-    profile_delay=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget + 1 ))
+    profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
+    profile_delay=$((profile_prefill_iterations + 16))
     export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/workspace/profile_traces/${RESULT_FILENAME}}"
     rm -rf "$VLLM_TORCH_PROFILER_DIR"
     mkdir -p "$VLLM_TORCH_PROFILER_DIR"
@@ -79,6 +138,7 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
+    "${M3_AITER_AR_RMS_ARGS[@]}" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
