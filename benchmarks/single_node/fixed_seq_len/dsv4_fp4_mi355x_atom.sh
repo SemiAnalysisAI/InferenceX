@@ -54,6 +54,7 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
+export GPU_MAX_HW_QUEUES=5
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
