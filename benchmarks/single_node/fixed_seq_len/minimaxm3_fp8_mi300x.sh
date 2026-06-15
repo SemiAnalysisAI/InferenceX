@@ -51,7 +51,7 @@ fi
 INDEX_TOPK_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_topk.patch"
 INDEX_TOPK_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"
 INDEX_TOPK_SOURCE_SHA256="20351dd410d409c2c779d1d05d3d715633323f6b0e022e3ae6fae1c487ab5888"
-INDEX_TOPK_PATCHED_SHA256="703f58d19cba588f744e2f07b837cace047c9bd022d7c0212731bedf86cc85e0"
+INDEX_TOPK_PATCHED_SHA256="36f5132ef789c74b7f88be8bd34a6ca1ea6c3ee6561213305f1db9f1b9cbd6fe"
 index_topk_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
 if [ "$index_topk_sha256" = "$INDEX_TOPK_SOURCE_SHA256" ]; then
     if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_TOPK_PATCH"; then

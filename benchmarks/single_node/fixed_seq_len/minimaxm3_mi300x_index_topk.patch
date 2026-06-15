@@ -106,7 +106,37 @@ index c32ff38d9..93957d8fd 100644
  
  
  @triton.heuristics(
-@@ -833,22 +852,30 @@ def minimax_m3_index_decode(
+@@ -782,14 +801,19 @@ def minimax_m3_index_decode(
+         device=idx_q.device,
+     )
+     # split-K over seq blocks; chunk count depends only on shape constants so
+-    # the grid is fixed within a cuda graph.
+-    TARGET_GRID = 4096
++    # the grid is fixed within a cuda graph. The lower grid plus explicit
++    # launch settings wins on MI300X once either batch or context is large.
++    tune_score_launch = batch >= 128 or (batch >= 16 and max_block >= 64)
++    target_grid = 2048 if tune_score_launch else 4096
+     MAX_NUM_KV_CHUNKS = 256
+     target = max(
+-        1, min(MAX_NUM_KV_CHUNKS, TARGET_GRID // max(1, batch * num_idx_heads))
++        1, min(MAX_NUM_KV_CHUNKS, target_grid // max(1, batch * num_idx_heads))
+     )
+     num_kv_chunks = 1 << (target.bit_length() - 1)
+     grid_score = (batch, num_kv_chunks)
++    score_launch = dict(pdl_launch)
++    if tune_score_launch:
++        score_launch.update(num_warps=2, num_stages=3)
+     _decode_index_score_kernel[grid_score](
+         idx_q,
+         index_kv_cache,
+@@ -815,5 +839,5 @@ def minimax_m3_index_decode(
+         BLOCK_SIZE_K=SPARSE_BLOCK_SIZE,
+         num_kv_chunks=num_kv_chunks,
+         USE_PDL=use_pdl,
+-        **pdl_launch,
++        **score_launch,
+     )
+@@ -833,22 +857,30 @@ def minimax_m3_index_decode(
      num_topk_chunks = 1 << (topk_target.bit_length() - 1)
      block_size_t = triton.next_power_of_2(topk)
      chunk_blocks = (max_block + num_topk_chunks - 1) // num_topk_chunks
@@ -153,7 +183,7 @@ index c32ff38d9..93957d8fd 100644
      _topk_index_partial_kernel[(batch, num_idx_heads, num_topk_chunks)](
          score,
          topk_score_partial,
-@@ -869,9 +896,17 @@ def minimax_m3_index_decode(
+@@ -869,9 +901,17 @@ def minimax_m3_index_decode(
          topk_idx_partial.stride(1),
          topk_idx_partial.stride(2),
          topk_idx_partial.stride(3),
