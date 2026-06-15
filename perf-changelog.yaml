@@ -3849,4 +3849,4 @@
     - "Replace triton w4a16 MoE with FlyDSL w4a16 MoE"
     - "Image: vllm/vllm-openai-rocm:nightly"
     - "Add more sweep points"
-  pr-link:
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1777
