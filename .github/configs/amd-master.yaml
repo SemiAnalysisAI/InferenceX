@@ -2966,3 +2966,66 @@ minimaxm3-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+
+# Temporary eval-only validation configs for vllm-project/vllm#45720. These
+# compare the PR image with the default BF16 KV cache and explicit FP8 KV cache
+# on identical TP8+EP8 shapes.
+minimaxm3-fp8-mi300x-vllm-pr45720-bf16kv:
+  image: cquil/vllm-openai-rocm:98bf645b5fbcb72b7def5aeb8d43af7ceaba4078
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+
+minimaxm3-fp8-mi300x-vllm-pr45720-fp8kv:
+  image: cquil/vllm-openai-rocm:98bf645b5fbcb72b7def5aeb8d43af7ceaba4078
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3fp8kv
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+
+minimaxm3-fp8-mi325x-vllm-pr45720-bf16kv:
+  image: cquil/vllm-openai-rocm:98bf645b5fbcb72b7def5aeb8d43af7ceaba4078
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi325x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+
+minimaxm3-fp8-mi325x-vllm-pr45720-fp8kv:
+  image: cquil/vllm-openai-rocm:98bf645b5fbcb72b7def5aeb8d43af7ceaba4078
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3fp8kv
+  runner: mi325x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
