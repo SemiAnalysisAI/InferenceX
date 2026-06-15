@@ -128,12 +128,8 @@ for key, value in bmk_result.items():
     if key.endswith('ms'):
         data[key.replace('_ms', '')] = float(value) / 1000.0
     if 'tpot' in key:
-        # intvty = 1000 / tpot_ms. tpot can be 0 on degenerate single-request
-        # runs (e.g. the profiler path caps num_prompts to 1 at conc 1), so guard
-        # the division instead of crashing; 0 tpot -> 0 interactivity.
-        tpot_ms = float(value)
         data[key.replace('_ms', '').replace(
-            'tpot', 'intvty')] = (1000.0 / tpot_ms) if tpot_ms else 0.0
+            'tpot', 'intvty')] = 1000.0 / float(value)
 
 print(json.dumps(data, indent=2))
 
