@@ -3807,3 +3807,10 @@
   description:
     - "Extend the MiniMax-M3 MXFP8 MI300X and MI325X non-MTP sweeps down to concurrency 1 on the TP-only latency rows (was conc 4), to capture the single-request latency point; TEP/DEP rows keep their higher concurrency starts"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1760
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm
+    - minimaxm3-fp8-h200-vllm
+  description:
+    - "Extend MiniMax-M3 MXFP8 H100/H200 non-MTP sweeps to concurrency 1 on the latency rows (H100: TP8; H200: TP4 and TP8) and add full TEP coverage from conc 1 to 256 (H100: TP8+EP8; H200: TP4+EP4 and TP8+EP8, incl. a new TP4+EP4 row for 8k1k). H200 TP8+EP8 upper bound moves 512->256 (high concurrency stays covered by the TP8+EP8 dp-attn DEP rows). DEP rows unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1761
