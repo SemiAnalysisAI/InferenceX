@@ -74,7 +74,7 @@ case "$OFFLOADING" in
         # node budget. Lower TP configs use higher ratios to maintain adequate
         # host token capacity without exceeding DRAM limits.
         if [ "$TP" -ge 8 ]; then
-            DEFAULT_HICACHE_RATIO=8
+            DEFAULT_HICACHE_RATIO=2
         else
             DEFAULT_HICACHE_RATIO=16
         fi
