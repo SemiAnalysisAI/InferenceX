@@ -81,6 +81,7 @@ TOPOLOGY_FILE="${TRT_BENCH_WORKSPACE}/offline_topology_${BENCH_ID}.log"
 ALLOCATION_LOG="${TRT_BENCH_WORKSPACE}/offline_allocation_${BENCH_ID}.log"
 COMPLETION_FILE="${TRT_BENCH_WORKSPACE}/offline_completion_${BENCH_ID}.json"
 WORLD_LOG="${TRT_BENCH_WORKSPACE}/offline_world_${BENCH_ID}.log"
+TIMING_LOG="${TRT_BENCH_WORKSPACE}/offline_timing_${BENCH_ID}.log"
 JOB_ID=""
 TELEMETRY_STEP_PID=""
 RANK_ENV_RECORDS=""
@@ -93,6 +94,7 @@ rm -f \
     "$ALLOCATION_LOG" \
     "$COMPLETION_FILE" \
     "$WORLD_LOG" \
+    "$TIMING_LOG" \
     "${TRT_BENCH_WORKSPACE}/offline_gpu_metrics_${BENCH_ID}_"*.csv
 
 log() {
@@ -521,6 +523,8 @@ TRT_BENCH_COMPLETION_FILE="/workspace/$(basename "$COMPLETION_FILE")"
 export TRT_BENCH_COMPLETION_FILE
 TRT_BENCH_EXTERNAL_WORLD_LOG="/workspace/$(basename "$WORLD_LOG")"
 export TRT_BENCH_EXTERNAL_WORLD_LOG
+TRT_BENCH_EXTERNAL_TIMING_LOG="/workspace/$(basename "$TIMING_LOG")"
+export TRT_BENCH_EXTERNAL_TIMING_LOG
 TRT_BENCH_RANK_MAP_ARTIFACT="$(basename "$RANK_MAP_FILE")"
 TRT_BENCH_TOPOLOGY_ARTIFACT="$(basename "$TOPOLOGY_FILE")"
 export TRT_BENCH_RANK_MAP_ARTIFACT
@@ -598,9 +602,11 @@ CONTAINER_MOUNTS+=",${LOAD_BALANCER_ROOT}:/dsv4-eplb-configs"
 log "starting external TRT world with trtllm-llmapi-launch"
 log "image=$IMAGE model=$MODEL_PATH profile=$TRT_BENCH_CONFIG_PROFILE global_batch=$GLOBAL_BATCH_SIZE"
 log "external world output=$WORLD_LOG"
+log "rank-0 timing output=$TIMING_LOG"
 world_started="$SECONDS"
 last_world_heartbeat=-1
 set +e
+# shellcheck disable=SC2016
 srun \
     --jobid="$JOB_ID" \
     --overlap \
@@ -618,6 +624,20 @@ srun \
     --no-container-entrypoint \
     --export=ALL,GITHUB_WORKSPACE=/workspace \
     bash -c '
+        if [[ "${SLURM_PROCID:-}" == "0" ]]; then
+            : > "$TRT_BENCH_EXTERNAL_TIMING_LOG"
+            tail --pid="$$" -n +1 -F \
+                "$TRT_BENCH_EXTERNAL_TIMING_LOG" &
+            if command -v numactl >/dev/null 2>&1; then
+                exec numactl -m 0,1 \
+                    trtllm-llmapi-launch \
+                    bash /workspace/benchmarks/single_node/offline/run_dsv4_trt_container.sh \
+                    >> "$TRT_BENCH_EXTERNAL_TIMING_LOG" 2>&1
+            fi
+            exec trtllm-llmapi-launch \
+                bash /workspace/benchmarks/single_node/offline/run_dsv4_trt_container.sh \
+                >> "$TRT_BENCH_EXTERNAL_TIMING_LOG" 2>&1
+        fi
         if command -v numactl >/dev/null 2>&1; then
             exec numactl -m 0,1 \
                 trtllm-llmapi-launch \

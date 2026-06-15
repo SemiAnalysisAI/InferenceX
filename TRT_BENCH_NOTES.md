@@ -69,9 +69,10 @@ cannot finish before 256 exact full-batch decode rounds.
 
 Do not use overlap `iterLatencyMS` as the result. The controller aligns
 selected iteration IDs with rank-0 `print_iter_log`, filters
-`host_step_time` from `offline_world_ID.log`, and stores the original stats
-timing only as a diagnostic. TRT resets iteration IDs after engine warmup, so
-the final occurrence of each selected ID is the measured executor pass.
+`host_step_time` from `offline_timing_ID.log`, and stores the original stats
+timing only as a diagnostic. `offline_world_ID.log` is the mirrored all-rank
+console stream. TRT resets iteration IDs after engine warmup, so the final
+occurrence of each selected ID is the measured executor pass.
 The result's `pr_reference` object reports:
 
 - output tok/s per decode GPU, matching InferenceX's serving denominator
@@ -177,6 +178,7 @@ Artifacts unique to GB300:
 - `offline_gpu_metrics_ID_HOST.csv` for every allocated host
 - `offline_completion_ID.json`
 - `offline_world_ID.log`
+- `offline_timing_ID.log`
 
 The topology log proves that the expected profile-sized rank set entered the
 GB300 NVLink Fabric before the measured engine was started. The result itself
@@ -205,6 +207,18 @@ normal startup skip and upper-IQR filter (`233/255` rows retained). This is a
 plumbing validation, not an official benchmark row. The follow-up captures
 the same outer stream in `offline_world_ID.log` and requires the controller
 to publish the successful result before collection.
+
+Run `27524518166`, source
+`edd91e444f581129771dbe0184e4d6c65baa6dc0`, proved that host-side capture
+was still not a stable controller input for larger logs. TP16 GBS400's worker
+completed successfully, selected exact local-batch-25 iterations `9..264`,
+and the final artifact contained rank-0 timing rows through iteration `494`.
+During postprocessing, however, the rank-0 container's NFS view of the
+host-appended file stopped at iteration `131`; the controller timed out after
+10 seconds and GBS512 was canceled. The follow-up writes
+`offline_timing_ID.log` directly from Slurm rank 0 on the same compute node
+as the controller, while a separate follower mirrors that file to the
+all-rank console stream.
 
 Run `27502789238`, source
 `3ca9a9febe452918641fc842e5e425553cf035a2`, reached Slurm allocation
@@ -744,13 +758,14 @@ gh api -X POST \
 
 Normal launches stream `salloc` output, print one queue heartbeat per minute,
 and preserve `offline_allocation_ID.log`. The external `srun`/MPI stream is
-both shown live and preserved as `offline_world_ID.log`; PR-max headline
-timing is parsed from that file. A `PENDING` heartbeat means TRT has not
-started and the worker timeout has not begun. The matrix is sequential. It
-does not fail fast, so one copied PR profile failing does not suppress the
-other topology results. It runs TP32, then TP16, then TP8 so launch/config
-errors surface on the shortest copied engine before the multi-hour TP8 graph
-initialization.
+shown live and preserved as `offline_world_ID.log`. Slurm rank 0 writes
+`offline_timing_ID.log` directly on its compute node and mirrors it into the
+world stream; PR-max headline timing is parsed from the direct file. A
+`PENDING` heartbeat means TRT has not started and the worker timeout has not
+begun. The matrix is sequential. It does not fail fast, so one copied PR
+profile failing does not suppress the other topology results. It runs TP32,
+then TP16, then TP8 so launch/config errors surface on the shortest copied
+engine before the multi-hour TP8 graph initialization.
 
 For an initialization hang, let the controller time out so the container
 finalizer preserves `worker.log`; do not cancel the Actions run externally.
@@ -1246,8 +1261,9 @@ Exact flat renderer rows, sorted by GBS for readability:
 1. Inspect `Show result headline`.
 2. Download `offline-trt-job-ID`.
 3. Read `offline_controller_ID.log`.
-4. For PR-max, read `offline_world_ID.log` and confirm the selected rank-0
-   host-step rows are present.
+4. For PR-max, read `offline_timing_ID.log` and confirm the selected rank-0
+   host-step rows are present. Use `offline_world_ID.log` for all-rank
+   launch/runtime context.
 5. Extract `offline_debug_ID.tar.gz`, then inspect `worker_result.json` and
    `worker.log`.
 6. Query iteration stats:

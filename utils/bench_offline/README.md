@@ -644,6 +644,7 @@ dispatches, or for example `pr-tp8-mtp1-gbs4096`):
 - `offline_topology_ID.log` on GB300
 - `offline_completion_ID.json` on GB300
 - `offline_world_ID.log` on GB300
+- `offline_timing_ID.log` on GB300
 - `offline_debug_ID.tar.gz`
 
 The debug archive contains the corpus manifest, worker log/result,
@@ -654,9 +655,10 @@ Debug in this order:
 
 1. Read the result's `failure_kind`, `phase`, and `error`.
 2. Read `offline_controller_gbsN.log`.
-3. For PR-max, read `offline_world_ID.log` for rank-0
-   `print_iter_log` host-step timing. Then extract the debug archive and
-   inspect `worker.log` for the worker lifecycle and iteration stats.
+3. For PR-max, read `offline_timing_ID.log` for the authoritative rank-0
+   `print_iter_log` host-step timing. `offline_world_ID.log` is the mirrored
+   all-rank console stream. Then extract the debug archive and inspect
+   `worker.log` for the worker lifecycle and iteration stats.
 4. Use `jq` on iteration stats; do not dump the full JSON into the chat.
 5. For Huawei, confirm one full context-only iteration precedes decode. For
    PR-max, staged/mixed setup is allowed, but the selected window must contain

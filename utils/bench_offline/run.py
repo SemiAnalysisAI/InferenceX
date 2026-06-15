@@ -50,7 +50,7 @@ from trt_config import (
 
 
 PROGRESS_INTERVAL_SECONDS = 60.0
-TIMING_LOG_VISIBILITY_TIMEOUT_SECONDS = 10.0
+TIMING_LOG_VISIBILITY_TIMEOUT_SECONDS = 30.0
 WORKER_PROGRESS_PREFIX = "[offline-trt-worker "
 MPI_PROGRESS_PREFIX = "[offline-trt-mpi] "
 WORKER_FATAL_LOG_MARKERS = (
@@ -472,6 +472,11 @@ def main() -> int:
                 if os.getenv("TRT_BENCH_EXTERNAL_WORLD_LOG")
                 else None
             ),
+            "external_timing_log_artifact": (
+                Path(os.environ["TRT_BENCH_EXTERNAL_TIMING_LOG"]).name
+                if os.getenv("TRT_BENCH_EXTERNAL_TIMING_LOG")
+                else None
+            ),
             "fabric_cluster_uuid": os.getenv(
                 "TRT_BENCH_FABRIC_CLUSTER_UUID"
             ),
@@ -797,8 +802,11 @@ def main() -> int:
         if config.overlap_scheduler:
             timing_log_path = Path(
                 os.getenv(
-                    "TRT_BENCH_EXTERNAL_WORLD_LOG",
-                    str(worker_log),
+                    "TRT_BENCH_EXTERNAL_TIMING_LOG",
+                    os.getenv(
+                        "TRT_BENCH_EXTERNAL_WORLD_LOG",
+                        str(worker_log),
+                    ),
                 )
             )
             log_progress(
