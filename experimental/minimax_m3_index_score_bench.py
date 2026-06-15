@@ -69,11 +69,16 @@ def _allocate_inputs(
 def _launch(
     tensors: tuple[torch.Tensor, ...],
     chunks: int,
-    num_warps: int,
-    num_stages: int,
+    num_warps: int | None,
+    num_stages: int | None,
 ) -> None:
     idx_q, index_kv_cache, block_table, seq_lens, score = tensors
     batch, num_idx_heads, head_dim = idx_q.shape
+    launch_options = {}
+    if num_warps is not None:
+        launch_options["num_warps"] = num_warps
+    if num_stages is not None:
+        launch_options["num_stages"] = num_stages
     _decode_index_score_kernel[(batch, chunks)](
         idx_q,
         index_kv_cache,
@@ -99,16 +104,15 @@ def _launch(
         BLOCK_SIZE_K=SPARSE_BLOCK_SIZE,
         num_kv_chunks=chunks,
         USE_PDL=False,
-        num_warps=num_warps,
-        num_stages=num_stages,
+        **launch_options,
     )
 
 
 def _benchmark(
     tensors: tuple[torch.Tensor, ...],
     chunks: int,
-    num_warps: int,
-    num_stages: int,
+    num_warps: int | None,
+    num_stages: int | None,
     warmup: int,
     repetitions: int,
 ) -> float:
@@ -126,11 +130,72 @@ def _benchmark(
     return start.elapsed_time(end) * 1000 / repetitions
 
 
+def _chunk_count(target_grid: int, batch: int) -> int:
+    target = max(1, min(256, target_grid // batch))
+    return 1 << (target.bit_length() - 1)
+
+
+def _run_shape(
+    label: str,
+    batch: int,
+    seq_len: int,
+    max_model_len: int,
+    configurations: list[tuple[str, int, int | None, int | None]],
+    warmup: int,
+    repetitions: int,
+) -> list[dict[str, Any]]:
+    tensors = _allocate_inputs(batch, seq_len, max_model_len)
+    actual_blocks = math.ceil(seq_len / SPARSE_BLOCK_SIZE)
+    reference: torch.Tensor | None = None
+    results: list[dict[str, Any]] = []
+
+    for config_name, chunks, num_warps, num_stages in configurations:
+        _launch(tensors, chunks, num_warps, num_stages)
+        torch.cuda.synchronize()
+        score = tensors[-1][..., :actual_blocks].clone()
+        if reference is None:
+            reference = score
+            max_abs_error = 0.0
+        else:
+            max_abs_error = float((score - reference).abs().max().item())
+
+        duration_us = _benchmark(
+            tensors,
+            chunks,
+            num_warps,
+            num_stages,
+            warmup,
+            repetitions,
+        )
+        result = {
+            "label": label,
+            "config": config_name,
+            "batch": batch,
+            "seq_len": seq_len,
+            "max_model_len": max_model_len,
+            "chunks": chunks,
+            "num_warps": num_warps if num_warps is not None else "default",
+            "num_stages": num_stages if num_stages is not None else "default",
+            "grid_programs": batch * chunks,
+            "blocks_per_chunk": math.ceil(actual_blocks / chunks),
+            "duration_us": duration_us,
+            "max_abs_error": max_abs_error,
+        }
+        results.append(result)
+        print(json.dumps(result, sort_keys=True), flush=True)
+
+    del tensors
+    torch.cuda.empty_cache()
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch", type=int, required=True)
-    parser.add_argument("--seq-len", type=int, required=True)
-    parser.add_argument("--max-model-len", type=int, required=True)
+    parser.add_argument("--batch", type=int)
+    parser.add_argument("--seq-len", type=int)
+    parser.add_argument("--max-model-len", type=int)
+    parser.add_argument("--m3-matrix", action="store_true")
+    parser.add_argument("--compare-current", action="store_true")
     parser.add_argument("--chunks", type=_csv_ints, default=[1, 2, 4, 8, 16, 32])
     parser.add_argument("--warps", type=_csv_ints, default=[4])
     parser.add_argument("--stages", type=_csv_ints, default=[2])
@@ -139,54 +204,57 @@ def main() -> None:
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
 
-    if args.max_model_len < args.seq_len:
-        parser.error("--max-model-len must be at least --seq-len")
-    if args.batch <= 0 or args.warmup < 0 or args.repetitions <= 0:
-        parser.error(
-            "batch and repetitions must be positive; warmup cannot be negative"
-        )
+    if args.warmup < 0 or args.repetitions <= 0:
+        parser.error("repetitions must be positive; warmup cannot be negative")
 
     torch.manual_seed(0)
     torch.cuda.set_device(0)
-    tensors = _allocate_inputs(args.batch, args.seq_len, args.max_model_len)
-    actual_blocks = math.ceil(args.seq_len / SPARSE_BLOCK_SIZE)
+    if args.m3_matrix:
+        shapes = [
+            ("1k-c1", 1, 1024, 2304),
+            ("1k-c16", 16, 1024, 2304),
+            ("1k-c256", 256, 1024, 2304),
+            ("8k-c1", 1, 8192, 9472),
+            ("8k-c16", 16, 8192, 9472),
+            ("8k-c256", 256, 8192, 9472),
+        ]
+    else:
+        if args.batch is None or args.seq_len is None or args.max_model_len is None:
+            parser.error(
+                "--batch, --seq-len, and --max-model-len are required "
+                "unless --m3-matrix is used"
+            )
+        shapes = [("custom", args.batch, args.seq_len, args.max_model_len)]
 
-    reference: torch.Tensor | None = None
     results: list[dict[str, Any]] = []
-    for chunks in args.chunks:
-        for num_warps in args.warps:
-            for num_stages in args.stages:
-                _launch(tensors, chunks, num_warps, num_stages)
-                torch.cuda.synchronize()
-                score = tensors[-1][..., :actual_blocks].clone()
-                if reference is None:
-                    reference = score
-                    max_abs_error = 0.0
-                else:
-                    max_abs_error = float((score - reference).abs().max().item())
-
-                duration_us = _benchmark(
-                    tensors,
-                    chunks,
-                    num_warps,
-                    num_stages,
-                    args.warmup,
-                    args.repetitions,
-                )
-                result = {
-                    "batch": args.batch,
-                    "seq_len": args.seq_len,
-                    "max_model_len": args.max_model_len,
-                    "chunks": chunks,
-                    "num_warps": num_warps,
-                    "num_stages": num_stages,
-                    "grid_programs": args.batch * chunks,
-                    "blocks_per_chunk": math.ceil(actual_blocks / chunks),
-                    "duration_us": duration_us,
-                    "max_abs_error": max_abs_error,
-                }
-                results.append(result)
-                print(json.dumps(result, sort_keys=True))
+    for label, batch, seq_len, max_model_len in shapes:
+        if batch <= 0 or max_model_len < seq_len:
+            parser.error(
+                "batch must be positive and max model length must cover seq len"
+            )
+        if args.compare_current:
+            configurations = [
+                ("current", _chunk_count(4096, batch), None, None),
+                ("tuned", _chunk_count(2048, batch), 2, 3),
+            ]
+        else:
+            configurations = [
+                ("custom", chunks, num_warps, num_stages)
+                for chunks in args.chunks
+                for num_warps in args.warps
+                for num_stages in args.stages
+            ]
+        results.extend(
+            _run_shape(
+                label,
+                batch,
+                seq_len,
+                max_model_len,
+                configurations,
+                args.warmup,
+                args.repetitions,
+            )
+        )
 
     output = {
         "device": torch.cuda.get_device_name(0),
