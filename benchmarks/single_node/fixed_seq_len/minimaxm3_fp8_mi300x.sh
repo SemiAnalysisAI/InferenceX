@@ -51,7 +51,7 @@ fi
 INDEX_TOPK_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_topk.patch"
 INDEX_TOPK_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"
 INDEX_TOPK_SOURCE_SHA256="20351dd410d409c2c779d1d05d3d715633323f6b0e022e3ae6fae1c487ab5888"
-INDEX_TOPK_PATCHED_SHA256="954f08ea4df094895e45433ba842409e348315a2c9c431e7231c80d7e7d5d1dc"
+INDEX_TOPK_PATCHED_SHA256="703f58d19cba588f744e2f07b837cace047c9bd022d7c0212731bedf86cc85e0"
 index_topk_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
 if [ "$index_topk_sha256" = "$INDEX_TOPK_SOURCE_SHA256" ]; then
     if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_TOPK_PATCH"; then
@@ -71,7 +71,7 @@ if [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
     echo "MI300X index top-k patched fingerprint mismatch: $index_topk_sha256" >&2
     exit 1
 fi
-echo "MI300X single-chunk index top-k patch ready: $index_topk_sha256"
+echo "MI300X index top-k patch ready: $index_topk_sha256"
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 

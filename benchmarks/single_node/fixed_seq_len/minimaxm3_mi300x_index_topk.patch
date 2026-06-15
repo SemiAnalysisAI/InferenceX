@@ -1,8 +1,36 @@
 diff --git a/vllm/models/minimax_m3/common/ops/index_topk.py b/vllm/models/minimax_m3/common/ops/index_topk.py
-index c32ff38d9..33d95b3cf 100644
+index c32ff38d9..93957d8fd 100644
 --- a/vllm/models/minimax_m3/common/ops/index_topk.py
 +++ b/vllm/models/minimax_m3/common/ops/index_topk.py
-@@ -419,9 +419,14 @@ def _topk_index_partial_kernel(
+@@ -175,11 +175,9 @@ def _index_block_score_kernel(
+ @triton.heuristics({"BLOCK_SIZE_T": lambda args: triton.next_power_of_2(args["topk"])})
+ @triton.autotune(
+     configs=[
+-        triton.Config({"BLOCK_SIZE_K": 2048}, num_warps=8, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 1024}, num_warps=8, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 512}, num_warps=8, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 256}, num_warps=8, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 128}, num_warps=4, num_stages=2),
++        # Every measured M3 MI300X shape selects this config. Larger candidates
++        # can leave an asynchronous HIP illegal-address error during first-run
++        # autotuning on otherwise-cold runner nodes.
+         triton.Config({"BLOCK_SIZE_K": 64}, num_warps=2, num_stages=2),
+     ],
+     key=["BLOCK_SIZE_T"],
+@@ -390,10 +388,8 @@ def _decode_index_score_kernel(
+ @triton.heuristics({"BLOCK_SIZE_T": lambda args: triton.next_power_of_2(args["topk"])})
+ @triton.autotune(
+     configs=[
+-        triton.Config({"BLOCK_SIZE_K": 256}, num_warps=8, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 256}, num_warps=4, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 128}, num_warps=4, num_stages=2),
+-        triton.Config({"BLOCK_SIZE_K": 128}, num_warps=4, num_stages=3),
++        # Match the stable prefill config above; this is also the selected
++        # winner for every measured M3 decode shape on MI300X.
+         triton.Config({"BLOCK_SIZE_K": 64}, num_warps=2, num_stages=2),
+     ],
+     key=["topk"],
+@@ -419,9 +415,14 @@ def _topk_index_partial_kernel(
      stride_ti_h,
      stride_ti_b,
      stride_ti_t,
@@ -17,7 +45,7 @@ index c32ff38d9..33d95b3cf 100644
  ):
      tl.static_assert(topk < BLOCK_SIZE_K)
      pid_b = tl.program_id(0)  # flattened query-token id
-@@ -510,24 +515,42 @@ def _topk_index_partial_kernel(
+@@ -510,24 +511,42 @@ def _topk_index_partial_kernel(
          axis=0,
      )
  
@@ -78,7 +106,7 @@ index c32ff38d9..33d95b3cf 100644
  
  
  @triton.heuristics(
-@@ -833,22 +856,30 @@ def minimax_m3_index_decode(
+@@ -833,22 +852,30 @@ def minimax_m3_index_decode(
      num_topk_chunks = 1 << (topk_target.bit_length() - 1)
      block_size_t = triton.next_power_of_2(topk)
      chunk_blocks = (max_block + num_topk_chunks - 1) // num_topk_chunks
@@ -125,7 +153,7 @@ index c32ff38d9..33d95b3cf 100644
      _topk_index_partial_kernel[(batch, num_idx_heads, num_topk_chunks)](
          score,
          topk_score_partial,
-@@ -869,9 +900,17 @@ def minimax_m3_index_decode(
+@@ -869,9 +896,17 @@ def minimax_m3_index_decode(
          topk_idx_partial.stride(1),
          topk_idx_partial.stride(2),
          topk_idx_partial.stride(3),
