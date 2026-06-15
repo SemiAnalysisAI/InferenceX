@@ -102,6 +102,166 @@ def test_find_reuse_authorization_ignores_inline_mentions(monkeypatch) -> None:
     ) == (False, None)
 
 
+def test_find_latest_successful_pr_run_skips_newer_failed_run(monkeypatch) -> None:
+    failed_run = {
+        "id": 222,
+        "conclusion": "failure",
+        "head_sha": "abc123",
+    }
+    successful_run = {
+        "id": 111,
+        "conclusion": "success",
+        "head_sha": "abc123",
+    }
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        assert path == "/actions/workflows/run-sweep.yml/runs"
+        return [failed_run, successful_run]
+
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+
+    assert (
+        reuse.find_latest_successful_pr_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            "feature-branch",
+            {"abc123"},
+            "token",
+        )
+        == successful_run
+    )
+
+
+def test_main_skips_pr_synchronize_with_reuse_authorization(
+    monkeypatch, tmp_path
+) -> None:
+    comments = [
+        {
+            "created_at": "2026-05-13T00:00:00Z",
+            "author_association": "MEMBER",
+            "body": "/reuse-sweep-run",
+        },
+    ]
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        assert path == "/issues/1321/comments"
+        return comments
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "abc123",
+            "--event-name",
+            "pull_request",
+            "--event-action",
+            "synchronize",
+            "--pr-number",
+            "1321",
+            "--ref",
+            "refs/pull/1321/merge",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    assert reuse.main() == 0
+
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["reuse-enabled"] == "false"
+    assert outputs["skip-pr-sweep"] == "true"
+    assert outputs["reuse-source-pr-number"] == "1321"
+
+
+def test_main_allows_pr_synchronize_without_reuse_authorization(
+    monkeypatch, tmp_path
+) -> None:
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        assert path == "/issues/1321/comments"
+        return [
+            {
+                "created_at": "2026-05-13T00:00:00Z",
+                "author_association": "CONTRIBUTOR",
+                "body": "/reuse-sweep-run",
+            },
+        ]
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "abc123",
+            "--event-name",
+            "pull_request",
+            "--event-action",
+            "synchronize",
+            "--pr-number",
+            "1321",
+            "--ref",
+            "refs/pull/1321/merge",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    assert reuse.main() == 0
+
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["reuse-enabled"] == "false"
+    assert outputs["skip-pr-sweep"] == "false"
+
+
+def test_main_does_not_check_reuse_comment_for_label_event(
+    monkeypatch, tmp_path
+) -> None:
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("comments should not be queried for label events")
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "paginated_github_api", fail_if_called)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "abc123",
+            "--event-name",
+            "pull_request",
+            "--event-action",
+            "labeled",
+            "--pr-number",
+            "1321",
+            "--ref",
+            "refs/pull/1321/merge",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    assert reuse.main() == 0
+
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["skip-pr-sweep"] == "false"
+
+
 def test_validate_reusable_run_accepts_successful_same_pr_run(monkeypatch) -> None:
     monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
     monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
@@ -121,6 +281,54 @@ def test_validate_reusable_run_accepts_successful_same_pr_run(monkeypatch) -> No
         },
         "token",
     )
+
+
+def test_validate_reusable_run_accepts_failed_run_when_explicitly_allowed(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
+
+    reuse.validate_reusable_run(
+        "SemiAnalysisAI/InferenceX",
+        "run-sweep.yml",
+        1321,
+        {
+            "id": 25763404168,
+            "event": "pull_request",
+            "status": "completed",
+            "conclusion": "failure",
+            "path": ".github/workflows/run-sweep.yml",
+            "head_sha": "abc123",
+        },
+        "token",
+        allow_failed=True,
+    )
+
+
+def test_validate_reusable_run_rejects_failed_run_by_default(monkeypatch) -> None:
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
+    monkeypatch.setattr(reuse, "pr_commit_shas", lambda *args: {"abc123"})
+
+    try:
+        reuse.validate_reusable_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            1321,
+            {
+                "id": 25763404168,
+                "event": "pull_request",
+                "status": "completed",
+                "conclusion": "failure",
+                "path": ".github/workflows/run-sweep.yml",
+                "head_sha": "abc123",
+            },
+            "token",
+        )
+    except RuntimeError as error:
+        assert "expected success" in str(error)
+    else:
+        raise AssertionError("expected an unpinned failed run to be rejected")
 
 
 def test_validate_reusable_run_accepts_run_for_older_pr_commit(monkeypatch) -> None:
@@ -254,6 +462,76 @@ def test_main_enables_pinned_reuse_without_extra_label(monkeypatch, tmp_path) ->
     assert outputs["reuse-source-run-id"] == "25763404168"
     assert outputs["reuse-source-pr-number"] == "1321"
     assert outputs["reuse-source-head-sha"] == "abc123"
+
+
+def test_main_enables_explicitly_pinned_failed_run(monkeypatch, tmp_path) -> None:
+    comments = [
+        {
+            "created_at": "2026-05-13T00:00:00Z",
+            "author_association": "OWNER",
+            "body": "/reuse-sweep-run 25763404168",
+        },
+    ]
+    run = {
+        "id": 25763404168,
+        "event": "pull_request",
+        "status": "completed",
+        "conclusion": "failure",
+        "path": ".github/workflows/run-sweep.yml",
+        "run_attempt": 1,
+        "html_url": "https://github.com/SemiAnalysisAI/InferenceX/actions/runs/25763404168",
+        "head_sha": "abc123",
+    }
+
+    def fake_github_api(repo, path, token, params=None):
+        if path == "/commits/merge-sha/pulls":
+            return [{"number": 1321}]
+        if path == "/pulls/1321":
+            return {
+                "merged_at": "2026-05-13T00:01:00Z",
+                "labels": [{"name": "full-sweep-enabled"}],
+                "head": {"sha": "abc123"},
+            }
+        if path == "/actions/runs/25763404168":
+            return run
+        raise AssertionError(f"unexpected GitHub API path: {path}")
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        if path == "/issues/1321/comments":
+            return comments
+        if path == "/pulls/1321/commits":
+            return [{"sha": "abc123"}]
+        if path == "/actions/runs/25763404168/artifacts":
+            return [{"name": "results_bmk"}]
+        raise AssertionError(f"unexpected paginated GitHub API path: {path}")
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "github_api", fake_github_api)
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "merge-sha",
+            "--event-name",
+            "push",
+            "--ref",
+            "refs/heads/main",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    assert reuse.main() == 0
+
+    outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
+    assert outputs["reuse-enabled"] == "true"
+    assert outputs["reuse-source-run-id"] == "25763404168"
 
 
 def test_main_resolves_no_arg_command_to_latest_head_sweep(monkeypatch, tmp_path) -> None:

@@ -34,9 +34,54 @@ on:
             - "perf-changelog.yaml"
 
 jobs:
+    reuse-sweep-gate:
+        runs-on: ubuntu-latest
+        permissions:
+            contents: read
+            issues: read
+            pull-requests: read
+        if: >-
+            github.event_name == 'pull_request' &&
+            github.event.action == 'synchronize' &&
+            !github.event.pull_request.draft &&
+            (
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
+              contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
+            )
+        outputs:
+            skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+            - name: Check for reusable sweep authorization
+              id: gate
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  python3 "${GITHUB_WORKSPACE}/utils/find_reusable_sweep_run.py" \
+                    --repo "${{ github.repository }}" \
+                    --commit-sha "${{ github.event.pull_request.head.sha }}" \
+                    --event-name "${{ github.event_name }}" \
+                    --event-action "${{ github.event.action }}" \
+                    --pr-number "${{ github.event.pull_request.number }}" \
+                    --ref "${{ github.ref }}" \
+                    --workflow-id "run-sweep.yml"
+
     check-newline:
+        needs: reuse-sweep-gate
         runs-on: ubuntu-latest
         if: >-
+            always() &&
+            (
+              needs.reuse-sweep-gate.result == 'skipped' ||
+              (
+                needs.reuse-sweep-gate.result == 'success' &&
+                needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
+              )
+            ) &&
             github.event_name == 'pull_request' &&
             !github.event.pull_request.draft &&
             (
@@ -60,30 +105,41 @@ jobs:
                   fi
 
     setup:
+        needs: reuse-sweep-gate
         runs-on: ubuntu-latest
         if: >-
+            always() &&
             (
-              github.event_name == 'pull_request' &&
-              !github.event.pull_request.draft &&
+              needs.reuse-sweep-gate.result == 'skipped' ||
               (
-                contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
-                contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
-                contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
-                contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
-                contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
-              ) &&
-              (
-                (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-                github.event.label.name == 'sweep-enabled' ||
-                github.event.label.name == 'full-sweep-enabled' ||
-                github.event.label.name == 'non-canary-full-sweep-enabled' ||
-                github.event.label.name == 'full-sweep-fail-fast' ||
-                github.event.label.name == 'full-sweep-fail-fast-no-canary'
+                needs.reuse-sweep-gate.result == 'success' &&
+                needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
               )
-            ) ||
+            ) &&
             (
-              github.event_name != 'pull_request' &&
-              !contains(github.event.head_commit.message, '[skip-sweep]')
+              (
+                github.event_name == 'pull_request' &&
+                !github.event.pull_request.draft &&
+                (
+                  contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
+                  contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
+                  contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
+                  contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') ||
+                  contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')
+                ) &&
+                (
+                  (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+                  github.event.label.name == 'sweep-enabled' ||
+                  github.event.label.name == 'full-sweep-enabled' ||
+                  github.event.label.name == 'non-canary-full-sweep-enabled' ||
+                  github.event.label.name == 'full-sweep-fail-fast' ||
+                  github.event.label.name == 'full-sweep-fail-fast-no-canary'
+                )
+              ) ||
+              (
+                github.event_name != 'pull_request' &&
+                !contains(github.event.head_commit.message, '[skip-sweep]')
+              )
             )
         outputs:
             search-space-config: ${{ steps.setup.outputs.search-space-config }}
@@ -743,9 +799,11 @@ jobs:
                 collect-evals,
                 calc-success-rate,
                 upload-changelog-metadata,
+                setup,
             ]
         if: >-
             always() &&
+            needs.setup.result == 'success' &&
             github.event_name == 'pull_request' &&
             !github.event.pull_request.draft &&
             (
