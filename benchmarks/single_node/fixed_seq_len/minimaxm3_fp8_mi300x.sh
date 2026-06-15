@@ -47,11 +47,31 @@ elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
+PROFILE_ARGS=()
+if [ "${PROFILE:-0}" = "1" ]; then
+    profile_token_budget=8192
+    profile_delay=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget + 1 ))
+    export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/workspace/profile_traces/${RESULT_FILENAME}}"
+    rm -rf "$VLLM_TORCH_PROFILER_DIR"
+    mkdir -p "$VLLM_TORCH_PROFILER_DIR"
+
+    profiler_config="$(
+        printf '{"profiler":"torch","torch_profiler_dir":"%s","torch_profiler_with_stack":false,"torch_profiler_with_flops":false,"torch_profiler_use_gzip":true,"torch_profiler_dump_cuda_time_total":false,"torch_profiler_record_shapes":false,"torch_profiler_with_memory":false,"ignore_frontend":true,"delay_iterations":%d,"max_iterations":1}' \
+            "$VLLM_TORCH_PROFILER_DIR" "$profile_delay"
+    )"
+    PROFILE_ARGS=(
+        --max-num-batched-tokens "$profile_token_budget"
+        --profiler-config "$profiler_config"
+    )
+    echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
+fi
+
 start_gpu_monitor
 
 set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
+    "${PROFILE_ARGS[@]}" \
     --block-size 128 \
     --kv-cache-dtype fp8 \
     --no-enable-prefix-caching \
