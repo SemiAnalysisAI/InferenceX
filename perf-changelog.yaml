@@ -3850,3 +3850,4 @@
     - "Image: vllm/vllm-openai-rocm:nightly"
     - "Add more sweep points"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1777
+
