@@ -487,12 +487,23 @@ jobs:
                 | sort
               for log_path in \
                 "$benchmark_dir"/offline_controller_*.log \
-                "$benchmark_dir"/offline_world_*.log \
-                "$benchmark_dir"/.offline_rack_*/replicas/*/host_launcher.log
+                "$benchmark_dir"/offline_world_*.log
               do
                 if [[ -f "$log_path" ]]; then
                   echo "--- tail: $log_path ---"
                   tail -n 80 "$log_path"
+                fi
+              done
+              for log_path in \
+                "$benchmark_dir"/.offline_rack_*/replicas/*/host_launcher.log
+              do
+                if [[ -f "$log_path" ]]; then
+                  echo "--- filtered tail: $log_path ---"
+                  tr '\r' '\n' < "$log_path" \
+                    | grep -E \
+                        'offline-trt-|Traceback|Fatal error|ERROR|failed|barrier' \
+                    | tail -n 80 \
+                    || true
                 fi
               done
             fi
