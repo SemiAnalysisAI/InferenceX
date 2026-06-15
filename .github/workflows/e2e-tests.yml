@@ -457,7 +457,7 @@ jobs:
             squeue \
               --steps \
               --jobs="$job_id" \
-              --format='%.24i %.10T %.10M %.6D %.30R %.40j' \
+              --format='%.24i %.10M %.40j' \
               || true
             echo '--- target job accounting ---'
             sstat \
@@ -485,6 +485,82 @@ jobs:
                    -o -name 'replica_*.ready.json' \) \
                 -printf '%TY-%Tm-%TdT%TH:%TM:%TS %12s %p\n' \
                 | sort
+              for replica_dir in \
+                "$benchmark_dir"/.offline_rack_*/replicas/r[0-9][0-9]
+              do
+                if [[ ! -d "$replica_dir" ]]; then
+                  continue
+                fi
+                replica_label="$(basename "$replica_dir")"
+                log_path="${replica_dir}/host_launcher.log"
+                ready_path="$(
+                  find "$(dirname "$(dirname "$replica_dir")")/barrier" \
+                    -maxdepth 1 \
+                    -name "replica_${replica_label#r}.ready.json" \
+                    -print \
+                    -quit \
+                    2>/dev/null \
+                    || true
+                )"
+                result_path="$(
+                  find "$replica_dir" \
+                    -maxdepth 1 \
+                    -name 'offline_result_*.json' \
+                    -print \
+                    -quit \
+                    2>/dev/null \
+                    || true
+                )"
+                echo "--- replica status: $replica_label ---"
+                printf 'ready=%s result=%s\n' \
+                  "$([[ -n "$ready_path" ]] && echo yes || echo no)" \
+                  "$([[ -n "$result_path" ]] && echo yes || echo no)"
+                if [[ ! -f "$log_path" ]]; then
+                  echo 'host_launcher.log=missing'
+                  continue
+                fi
+                printf 'host_launcher.log bytes=%s modified=%s\n' \
+                  "$(stat -c '%s' "$log_path")" \
+                  "$(stat -c '%y' "$log_path")"
+                normalized_log="$(mktemp)"
+                tr '\r' '\n' < "$log_path" | tail -n 4000 \
+                  > "$normalized_log"
+                latest_weight="$(
+                  grep -a 'Loading weights:' "$normalized_log" \
+                    | tail -n 1 \
+                    || true
+                )"
+                latest_phase="$(
+                  grep -aE \
+                    'engine initialization|warmup|CUDA graph|capture|rack measured-pass barrier' \
+                    "$normalized_log" \
+                    | tail -n 1 \
+                    || true
+                )"
+                latest_event="$(
+                  grep -aE \
+                    '\[offline-trt-(controller|worker|rack-replica)' \
+                    "$normalized_log" \
+                    | tail -n 1 \
+                    || true
+                )"
+                latest_fatal="$(
+                  grep -aE \
+                    'Traceback|Fatal error|ERROR|entry_failed|_error|timed out' \
+                    "$normalized_log" \
+                    | tail -n 1 \
+                    || true
+                )"
+                printf 'latest_weight=%s\n' \
+                  "${latest_weight:-none in last 4000 normalized lines}"
+                printf 'latest_phase=%s\n' \
+                  "${latest_phase:-none in last 4000 normalized lines}"
+                printf 'latest_event=%s\n' \
+                  "${latest_event:-none in last 4000 normalized lines}"
+                printf 'latest_fatal=%s\n' \
+                  "${latest_fatal:-none in last 4000 normalized lines}"
+                rm -f "$normalized_log"
+              done
               for log_path in \
                 "$benchmark_dir"/offline_controller_*.log \
                 "$benchmark_dir"/offline_world_*.log
