@@ -10,12 +10,17 @@ index 27650c8e6..ac5e260a8 100644
  from collections.abc import Iterable
  
  import torch
-@@ -40,6 +41,7 @@ from vllm.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+@@ -37,10 +38,12 @@ from vllm.model_executor.layers.attention_layer_base import AttentionLayerBase
+ from vllm.model_executor.layers.fused_allreduce_gemma_rms_norm import (
+     fused_allreduce_gemma_rms_norm,
++    initialize_m3_aiter_allreduce,
+ )
  from vllm.model_executor.layers.fused_moe import (
      FusedMoE,
      GateLinear,
 +    MoERunner,
      fused_moe_make_expert_params_mapping,
+ )
  )
  from vllm.model_executor.layers.linear import (
 @@ -117,6 +119,17 @@ def _is_moe_layer(config: PretrainedConfig, layer_id: int) -> bool:
@@ -110,15 +115,17 @@ index 27650c8e6..ac5e260a8 100644
          hidden_states = self.self_attn(
              positions=positions,
              hidden_states=hidden_states,
-@@ -815,6 +858,7 @@ class MiniMaxM3Model(nn.Module):
+@@ -815,6 +858,9 @@ class MiniMaxM3Model(nn.Module):
          cache_config = vllm_config.cache_config
          quant_config = vllm_config.quant_config
          self.config = config
 +        self.defer_ffn_allreduce = _defer_ffn_allreduce()
++        if self.defer_ffn_allreduce:
++            initialize_m3_aiter_allreduce()
  
          self.vocab_size = config.vocab_size
  
-@@ -856,7 +900,12 @@ class MiniMaxM3Model(nn.Module):
+@@ -856,7 +902,12 @@ class MiniMaxM3Model(nn.Module):
          for layer in self.layers[self.start_layer : self.end_layer]:
              hidden_states, residual = layer(positions, hidden_states, residual)
  

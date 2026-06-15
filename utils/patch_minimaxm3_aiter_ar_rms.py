@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply the pinned vLLM eager-path patch for the M3 AITER AR+RMS experiment."""
+"""Apply the pinned vLLM direct-call patch for the M3 AITER AR+RMS experiment."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ EXPECTED_SOURCE_SHA256 = {
 }
 EXPECTED_PATCHED_SHA256 = {
     "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py": (
-        "fc018fb9e89af9f734e7f7c0f5618f3d280bd83fd004781fd9dfd2665559eec6"
+        "6f7738bcf127f285de97a754b4ebf6df16a4d683ccbf7607fafdfeb321a1d38f"
     ),
 }
 
@@ -38,7 +38,7 @@ def _replace_once(text: str, old: str, new: str, label: str) -> str:
 
 
 def patch_helper_source(source: str) -> str:
-    """Use AITER directly from M3's eager allreduce+Gemma RMSNorm helper."""
+    """Use AITER directly from M3's allreduce+Gemma RMSNorm helper."""
     if PATCH_MARKER in source:
         return source
 
@@ -47,6 +47,34 @@ def patch_helper_source(source: str) -> str:
         "import torch\n\nfrom vllm.distributed.communication_op",
         "import os\n\nimport torch\n\nfrom vllm.distributed.communication_op",
         "fused_allreduce_gemma_rms_norm import",
+    )
+    source = _replace_once(
+        source,
+        """_FI_SUPPORTED_DTYPES = (torch.bfloat16, torch.float16)
+
+
+def _max_token_num""",
+        """_FI_SUPPORTED_DTYPES = (torch.bfloat16, torch.float16)
+
+
+def initialize_m3_aiter_allreduce() -> None:
+    \"\"\"Initialize AITER before vLLM enters its HIP-graph capture context.\"\"\"
+    if os.getenv("M3_AITER_AR_RMS_MODE") != "fused":
+        return
+
+    from vllm._aiter_ops import rocm_aiter_ops
+
+    if rocm_aiter_ops.get_aiter_allreduce() is None:
+        rocm_aiter_ops.initialize_aiter_allreduce(
+            get_tp_group().cpu_group,
+            torch.device("cuda", torch.cuda.current_device()),
+        )
+    if rocm_aiter_ops.get_aiter_allreduce() is None:
+        raise RuntimeError("AITER custom allreduce initialization failed")
+
+
+def _max_token_num""",
+        "fused_allreduce_gemma_rms_norm initializer",
     )
     return _replace_once(
         source,
@@ -67,16 +95,12 @@ def patch_helper_source(source: str) -> str:
         and hidden_states.shape[0] <= 512
     )
     if use_m3_aiter:
-        # InferenceX M3 AITER AR+RMS experiment: M3 runs eager, so invoke
-        # AITER directly instead of relying on a torch.compile fusion pass.
+        # InferenceX M3 AITER AR+RMS experiment: invoke AITER directly
+        # instead of relying on a torch.compile fusion pass.
         from vllm._aiter_ops import rocm_aiter_ops
 
+        initialize_m3_aiter_allreduce()
         aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
-        if aiter_ar is None:
-            rocm_aiter_ops.initialize_aiter_allreduce(
-                get_tp_group().cpu_group, hidden_states.device
-            )
-            aiter_ar = rocm_aiter_ops.get_aiter_allreduce()
         if aiter_ar is None:
             raise RuntimeError("AITER custom allreduce initialization failed")
         if not hasattr(aiter_ar, "_pool") and hidden_states.shape[-1] not in (
@@ -103,8 +127,8 @@ def patch_helper_source(source: str) -> str:
             ).contiguous()
             norm._inferencex_aiter_gamma = gamma
 
-        # amd-aiter 0.1.13.post1's one-stage kernel lacks the exit barrier
-        # fixed by ROCm/aiter#3514 and is unsafe under HIP graph replay.
+        # The pinned AITER 0.1.15 tag lacks the one-stage exit barrier fixed
+        # by ROCm/aiter#3514, so use the graph-safe two-stage implementation.
         result = aiter_ar.fused_ar_rms(
             hidden_states,
             residual,

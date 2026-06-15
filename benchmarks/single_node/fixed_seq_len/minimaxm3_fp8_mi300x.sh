@@ -89,9 +89,9 @@ case "$M3_AITER_AR_RMS_MODE" in
     off)
         ;;
     control|fused)
-        # Enable AITER only to make the eager fused allreduce+RMSNorm op
-        # available. M3 does not support torch.compile, so the runtime patch
-        # calls this one op directly from its existing eager helper. The model
+        # Enable AITER only to make the fused allreduce+RMSNorm op available.
+        # M3 does not support torch.compile, so the runtime patch calls this
+        # one op directly from its existing helper. The model
         # patch also defers FFN/MoE output reductions into the following Gemma
         # norm so the same helper covers both transformer residual boundaries.
         # Keep every independently selectable AITER path disabled so the
@@ -124,7 +124,7 @@ case "$M3_AITER_AR_RMS_MODE" in
         DEFERRED_FFN_AR_PATCH="$(dirname "$0")/minimaxm3_mi300x_deferred_ffn_ar.patch"
         M3_MODEL_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
         M3_MODEL_SOURCE_SHA256="91d81f8613e32f7afbd65c289f7885c5371263f70503bd053f97880989bf7536"
-        M3_MODEL_PATCHED_SHA256="1d59c18a84c64cf383380718bec33e7785cbc5b9bd8fcf68436a2d1107637ca3"
+        M3_MODEL_PATCHED_SHA256="d26aa77cfce7c6162b0d1ebe2b403b854f5abe8f656b3a8deda2db1d89318ea8"
         m3_model_sha256="$(sha256sum "$M3_MODEL_SOURCE" | awk '{print $1}')"
         if [ "$m3_model_sha256" = "$M3_MODEL_SOURCE_SHA256" ]; then
             if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
@@ -173,12 +173,6 @@ elif [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 PROFILE_ARGS=()
-if [ "$M3_AITER_AR_RMS_MODE" != "off" ]; then
-    # AITER custom allreduce corrupts memory when this eager M3 helper is
-    # captured and replayed by HIP graphs. Keep both experiment arms eager so
-    # control and fused differ only at the allreduce+Gemma RMSNorm boundary.
-    PROFILE_ARGS+=(--compilation-config '{"cudagraph_mode":"NONE"}')
-fi
 if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget=8192
     profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from utils.patch_minimaxm3_aiter_ar_rms import (
@@ -15,8 +17,16 @@ def test_patch_helper_uses_aiter_directly_for_m3_decode():
     source = """import torch
 
 from vllm.distributed.communication_op import tensor_model_parallel_all_reduce
+from vllm.model_executor.layers.layernorm import GemmaRMSNorm
 
-def helper(hidden_states, residual, norm):
+_FI_SUPPORTED_DTYPES = (torch.bfloat16, torch.float16)
+
+
+def _max_token_num():
+    pass
+
+
+def fused_allreduce_gemma_rms_norm(hidden_states, residual, norm):
     # Fallback: explicit all-reduce + GemmaRMSNorm (matches the unfused model).
     reduced = tensor_model_parallel_all_reduce(hidden_states)
     return norm(reduced, residual)
@@ -28,7 +38,10 @@ def helper(hidden_states, residual, norm):
     assert PATCH_MARKER in patched
     assert 'os.getenv("M3_AITER_AR_RMS_MODE") == "fused"' in patched
     assert "hidden_states.shape[0] <= 512" in patched
+    assert "def initialize_m3_aiter_allreduce()" in patched
+    assert 'torch.device("cuda", torch.cuda.current_device())' in patched
     assert "rocm_aiter_ops.initialize_aiter_allreduce" in patched
+    assert "initialize_m3_aiter_allreduce()" in patched
     assert "aiter_ar.fused_ar_rms" in patched
     assert "registered=torch.cuda.is_current_stream_capturing()" in patched
     assert "use_1stage=False" in patched
@@ -43,6 +56,17 @@ def test_replace_once_rejects_source_drift():
         _replace_once("unchanged", "missing", "replacement", "test")
 
 
+def test_m3_model_patch_initializes_aiter_before_graph_capture():
+    patch = (
+        Path(__file__).resolve().parents[1]
+        / "benchmarks/single_node/fixed_seq_len"
+        / "minimaxm3_mi300x_deferred_ffn_ar.patch"
+    ).read_text(encoding="utf-8")
+
+    assert "+    initialize_m3_aiter_allreduce," in patch
+    assert "+            initialize_m3_aiter_allreduce()" in patch
+
+
 def test_apply_runtime_patch_rejects_patched_source_drift(tmp_path, monkeypatch):
     helper_relative = (
         "vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py"
@@ -50,8 +74,16 @@ def test_apply_runtime_patch_rejects_patched_source_drift(tmp_path, monkeypatch)
     helper_source = """import torch
 
 from vllm.distributed.communication_op import tensor_model_parallel_all_reduce
+from vllm.model_executor.layers.layernorm import GemmaRMSNorm
 
-def helper(hidden_states, residual, norm):
+_FI_SUPPORTED_DTYPES = (torch.bfloat16, torch.float16)
+
+
+def _max_token_num():
+    pass
+
+
+def fused_allreduce_gemma_rms_norm(hidden_states, residual, norm):
     # Fallback: explicit all-reduce + GemmaRMSNorm (matches the unfused model).
     reduced = tensor_model_parallel_all_reduce(hidden_states)
     return norm(reduced, residual)
@@ -93,8 +125,16 @@ def test_apply_runtime_patch_rejects_generated_patch_drift(tmp_path, monkeypatch
     helper_source = """import torch
 
 from vllm.distributed.communication_op import tensor_model_parallel_all_reduce
+from vllm.model_executor.layers.layernorm import GemmaRMSNorm
 
-def helper(hidden_states, residual, norm):
+_FI_SUPPORTED_DTYPES = (torch.bfloat16, torch.float16)
+
+
+def _max_token_num():
+    pass
+
+
+def fused_allreduce_gemma_rms_norm(hidden_states, residual, norm):
     # Fallback: explicit all-reduce + GemmaRMSNorm (matches the unfused model).
     reduced = tensor_model_parallel_all_reduce(hidden_states)
     return norm(reduced, residual)
