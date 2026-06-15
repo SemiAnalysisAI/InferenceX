@@ -191,6 +191,26 @@ so raw decode-step throughput and observed output-token yield remain separate.
 The 72/288/576 rows compare against Huawei GBS16/64/128 by equal local batch,
 not equal global batch.
 
+The final maximum-throughput sweep is
+[Actions run 27545752641](https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27545752641)
+at source `775a1451074966b871f1cbd57229894d393f4af0`:
+
+| Rack GBS | Local/GPU | Rack step ms | Steps/s/GPU | Tok/step | Output tok/s/GPU | Versus PR TP8 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 30960 | 430 | 82.041011 | 5241.281069 | 1.806613 | 9468.968467 | -2.248095% |
+| 36864 | 512 | 90.548343 | 5654.438070 | 1.814993 | 10262.766175 | +5.946593% |
+
+GBS36864 is the best validated GB300 result. It fills the copied batch-512
+engine and exceeds attempt 14's `9686.735465` output tok/s/decode-GPU by
+`5.946593%`, even though the rack metric takes the slowest of nine
+synchronized engines for every logical round. The individual TP8 replicas
+ranged from `10356.040023` to `10538.418796` output tok/s/GPU.
+
+The renderer-compatible result is available at the
+[InferenceMAX unofficial run](https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27545752641).
+The exact flat rows and retry details are recorded in
+[TRT_BENCH_NOTES.md](../../TRT_BENCH_NOTES.md).
+
 ## Global And Local Batch
 
 There is one authoritative `global_batch_size`. Every per-rank capacity is

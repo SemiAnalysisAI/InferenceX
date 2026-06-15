@@ -270,6 +270,14 @@ benchmark.
   `806.321670` tok/s/GPU. All rows passed exact rank, fabric, fixed-prefill,
   256-round, marker, completion, aggregate, and renderer validation. Use it
   as the GB300 regression baseline.
+- Final known-good GB300 rack maximum sweep is Actions run `27545752641` at
+  `775a1451074966b871f1cbd57229894d393f4af0`. GBS30960/36864 raw
+  decode-step rates are `5241.281069` and `5654.438070` steps/s/GPU; output
+  rates are `9468.968467` and `10262.766175` tok/s/GPU. GBS36864 is the
+  branch maximum and is `5.946593%` above PR #1689 attempt 14's TP8 output
+  rate under the same decode-GPU denominator. Both rows passed the nine-engine
+  barrier, 72-GPU fabric proof, exact 256-round window, aggregate, and
+  renderer validation. Use it as the rack-max regression baseline.
 - `offline_aggregate.json` is authoritative. `results_bmk/agg_bmk.json` uses
   acceptance-adjusted output-token throughput and equivalent output-token
   TPOT for standard renderer fields, while retaining custom decode-round

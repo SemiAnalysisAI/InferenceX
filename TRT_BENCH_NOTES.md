@@ -253,6 +253,142 @@ Exact flat renderer row:
 ]
 ```
 
+### Final Rack Maximum-Throughput Sweep
+
+Run `27545752641`, source
+`775a1451074966b871f1cbd57229894d393f4af0`, validated both copied TP8 rack
+saturation points:
+
+```text
+run: 27545752641
+url: https://github.com/SemiAnalysisAI/InferenceX/actions/runs/27545752641
+renderer: https://inferencemax-r4i4xgna4-semianalysisai.vercel.app/inference?unofficialrun=27545752641
+GBS30960 Slurm job: 8813
+GBS36864 Slurm job: 8815
+```
+
+| Rack GBS | Engine GBS | Local/GPU | Rack step ms | Steps/s/GPU | Tok/step | Output TPOT ms | Output tok/s/GPU | Wall tok/s/GPU | Versus PR |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 30960 | 3440 | 430 | 82.041011 | 5241.281069 | 1.806613 | 45.411494 | 9468.968467 | 1382.349906 | -2.248095% |
+| 36864 | 4096 | 512 | 90.548343 | 5654.438070 | 1.814993 | 49.889084 | 10262.766175 | 1331.507904 | +5.946593% |
+
+The capacity row is the best validated GB300 result on this branch. It exceeds
+attempt 14's `9686.735465` output tok/s/decode-GPU by `576.030710`
+tok/s/GPU, or `5.946593%`. The active row deliberately fixes the same
+430-request local population implied by the PR and is `2.248095%` lower. The
+capacity row instead fills the copied batch-512 engine.
+
+The rack headline remains stricter than scoring any one TP8 engine. At
+GBS36864 the nine individual replicas produced `10356.040023` to
+`10538.418796` output tok/s/GPU, with mean `10428.449018`; every individual
+replica exceeded the PR by at least `6.909496%`. The published rack row is
+lower because each logical round uses the maximum same-index latency across
+all nine replicas.
+
+Both rows used one measured pass, 256 exact full-batch decode rounds, eight
+startup rounds skipped, and 208 rounds retained after 40 upper-IQR outliers.
+Measured start skew was `0.000277` seconds for GBS30960 and `0.000455` seconds
+for GBS36864. Both allocations proved Fabric UUID
+`8fe56262-d2bb-4602-b338-8898d34c4731` and clique `32766` across all 72 GPUs.
+GBS30960 retried `r00` once after the 600-second model-load admission timeout;
+GBS36864 retried `r08` once. The successful attempts used the unchanged copied
+TRT configuration.
+
+`wall_output_tput_per_gpu` includes staged 8K prefill and the complete request
+pass, so it is not the PR-comparison metric. The renderer fields
+`output_tput_per_gpu` and `mean_tpot` are the acceptance-adjusted decode-window
+metrics. `conc` is a flat-schema alias for fixed rack GBS, not serving
+concurrency.
+
+Exact flat renderer rows:
+
+```json
+[
+  {
+    "benchmark_profile": "rack-tp8x9-mtp1",
+    "conc": 30960,
+    "decode_dp_attention": true,
+    "decode_ep": 8,
+    "decode_num_workers": 9,
+    "decode_round_tpot_ms": 82.04101140682513,
+    "decode_step_tput_per_gpu": 5241.281069387542,
+    "decode_tp": 8,
+    "disagg": false,
+    "engine_max_batch_size": 512,
+    "framework": "trt",
+    "global_batch_size": 30960,
+    "hw": "gb300-nv",
+    "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": true,
+    "isl": 8192,
+    "local_batch_size": 430,
+    "mean_intvty": 22.02085689965943,
+    "mean_tpot": 0.04541149350166595,
+    "measured_decode_rounds": 256,
+    "median_tpot": 0.045354886029864684,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 72,
+    "num_prefill_gpu": 72,
+    "observed_tokens_per_step": 1.8066133720930233,
+    "osl": 1024,
+    "output_tput_per_gpu": 9468.968466853554,
+    "p90_tpot": 0.04606294411368792,
+    "p99_tpot": 0.0470255470529077,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 8,
+    "prefill_num_workers": 9,
+    "prefill_tp": 8,
+    "replica_count": 9,
+    "spec_decoding": "mtp",
+    "timing_source": "slowest_replica_trt_print_iter_log_host_step_time",
+    "tput_per_gpu": 9468.968466853554
+  },
+  {
+    "benchmark_profile": "rack-tp8x9-mtp1",
+    "conc": 36864,
+    "decode_dp_attention": true,
+    "decode_ep": 8,
+    "decode_num_workers": 9,
+    "decode_round_tpot_ms": 90.54834338334891,
+    "decode_step_tput_per_gpu": 5654.438069975255,
+    "decode_tp": 8,
+    "disagg": false,
+    "engine_max_batch_size": 512,
+    "framework": "trt",
+    "global_batch_size": 36864,
+    "hw": "gb300-nv",
+    "image": "nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1",
+    "infmax_model_prefix": "dsv4",
+    "is_multinode": true,
+    "isl": 8192,
+    "local_batch_size": 512,
+    "mean_intvty": 20.044465185924917,
+    "mean_tpot": 0.04988908363103611,
+    "measured_decode_rounds": 256,
+    "median_tpot": 0.04974934500687279,
+    "model": "deepseek-ai/DeepSeek-V4-Pro",
+    "num_decode_gpu": 72,
+    "num_prefill_gpu": 72,
+    "observed_tokens_per_step": 1.8149931165907118,
+    "osl": 1024,
+    "output_tput_per_gpu": 10262.766175193558,
+    "p90_tpot": 0.050719981593169344,
+    "p99_tpot": 0.05213402061976046,
+    "precision": "fp4",
+    "prefill_dp_attention": true,
+    "prefill_ep": 8,
+    "prefill_num_workers": 9,
+    "prefill_tp": 8,
+    "replica_count": 9,
+    "spec_decoding": "mtp",
+    "timing_source": "slowest_replica_trt_print_iter_log_host_step_time",
+    "tput_per_gpu": 10262.766175193558
+  }
+]
+```
+
 The direct offline engine keeps the documented `max_num_tokens=32768`
 adaptation because it must admit its own 8K prompts. The serving decode worker
 in the PR receives transferred KV and uses `max_num_tokens=1024`.
