@@ -175,7 +175,9 @@ jobs:
       max-parallel: 4
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
-    runs-on: ${{ matrix.config.runner }}
+    # The generic mi300x label also includes direct-host TW runners, while this
+    # profiling harness uses the checked-in Slurm launcher.
+    runs-on: ${{ matrix.config.runner == 'mi300x' && 'mi300x-p1' || matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}
