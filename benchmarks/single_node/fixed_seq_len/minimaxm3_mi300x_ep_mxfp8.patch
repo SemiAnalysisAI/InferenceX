@@ -1,8 +1,8 @@
 diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py
-index 63500487d..a6002b696 100644
+index 63500487d..73bbcdd25 100644
 --- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py
 +++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py
-@@ -11,11 +11,21 @@ import torch
+@@ -11,11 +11,20 @@ import torch
  
  import vllm.model_executor.layers.fused_moe.modular_kernel as mk
  from vllm.logger import init_logger
@@ -14,7 +14,6 @@ index 63500487d..a6002b696 100644
  from vllm.model_executor.layers.fused_moe.experts.triton_moe import TritonExperts
 +from vllm.model_executor.layers.fused_moe.fused_moe import (
 +    _prepare_expert_assignment,
-+    invoke_fused_moe_gated_triton_kernel,
 +    invoke_fused_moe_triton_kernel,
 +)
 +from vllm.model_executor.layers.fused_moe.moe_fused_mul_sum import (
@@ -24,7 +23,7 @@ index 63500487d..a6002b696 100644
  from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
      dequant_mxfp8_to_bf16,
  )
-@@ -24,9 +34,35 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+@@ -24,9 +33,37 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
      kMxfp8Dynamic,
      kMxfp8Static,
  )
@@ -33,7 +32,9 @@ index 63500487d..a6002b696 100644
  
  logger = init_logger(__name__)
  
-+_MINIMAX_M3_MI300X_EP_BF16_CONFIG = {
++# Keep unprofiled prefill and mixed batches on the generic TritonExperts path.
++_MINIMAX_M3_MI300X_EP_MAX_DECODE_TOKENS = 256
++_MINIMAX_M3_MI300X_EP_DECODE_CONFIG = {
 +    "BLOCK_SIZE_M": 16,
 +    "BLOCK_SIZE_N": 64,
 +    "BLOCK_SIZE_K": 128,
@@ -60,7 +61,7 @@ index 63500487d..a6002b696 100644
  
  class Mxfp8TritonExpertsBase(TritonExperts):
      """Shared MXFP8 MoE setup: stash E8M0 scales, clear scales on ``quant_config``."""
-@@ -67,6 +103,7 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+@@ -67,6 +104,7 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
          quant_config: FusedMoEQuantConfig,
      ):
          super().__init__(moe_config, quant_config)
@@ -68,7 +69,7 @@ index 63500487d..a6002b696 100644
          logger.warning_once(
              "Using Mxfp8EmulationTritonExperts MoE backend. Weights are "
              "dequantized to BF16 on the fly; this is slower than a native "
-@@ -122,6 +159,99 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+@@ -122,6 +160,109 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
              return
          super().activation(activation, output, input)
  
@@ -85,13 +86,13 @@ index 63500487d..a6002b696 100644
 +        workspace13: torch.Tensor,
 +        workspace2: torch.Tensor,
 +    ) -> None:
-+        """Run only local EP routes with a fused BF16 GEMM1 SwiGLU epilogue."""
++        """Run only local EP routes with the efficient BF16 grouped GEMMs."""
 +        E, num_tokens, N, K, top_k_num = self.moe_problem_size(
 +            hidden_states, w1, w2, topk_ids
 +        )
 +        if global_num_experts == -1:
 +            global_num_experts = expert_map.numel()
-+        config = _MINIMAX_M3_MI300X_EP_BF16_CONFIG
++        config = _MINIMAX_M3_MI300X_EP_DECODE_CONFIG
 +        sorted_token_ids, expert_ids, num_tokens_post_padded = (
 +            _prepare_expert_assignment(
 +                topk_ids,
@@ -107,34 +108,44 @@ index 63500487d..a6002b696 100644
 +        assert sorted_token_ids is not None
 +
 +        activation_dim = N // 2
++        intermediate_gate_up = _resize_cache(
++            workspace2,
++            (num_tokens, top_k_num, N),
++        )
 +        intermediate_activation = _resize_cache(
 +            workspace13,
 +            (num_tokens * top_k_num, activation_dim),
 +        )
-+        intermediate_output = _resize_cache(
-+            workspace2,
-+            (num_tokens, top_k_num, K),
-+        )
 +
-+        alpha = self.quant_config.gemm1_alpha
-+        alpha = 1.702 if alpha is None else float(alpha)
-+        beta = self.quant_config.gemm1_beta
-+        beta = 1.0 if beta is None else float(beta)
-+        limit = self.quant_config.gemm1_clamp_limit
-+        limit = None if limit is None else float(limit)
-+
-+        invoke_fused_moe_gated_triton_kernel(
++        invoke_fused_moe_triton_kernel(
 +            hidden_states,
 +            w1,
-+            intermediate_activation,
++            intermediate_gate_up,
++            None,
++            None,
++            None,
 +            sorted_token_ids,
 +            expert_ids,
 +            num_tokens_post_padded,
++            False,
 +            top_k_num,
 +            config,
-+            alpha,
-+            beta,
-+            limit,
++            compute_type=tl.bfloat16,
++            use_fp8_w8a8=False,
++            use_int8_w8a8=False,
++            use_int8_w8a16=False,
++            use_int4_w4a16=False,
++            per_channel_quant=False,
++        )
++        self.activation(
++            MoEActivation.SWIGLUOAI_UNINTERLEAVE,
++            intermediate_activation,
++            intermediate_gate_up.view(-1, N),
++        )
++
++        intermediate_output = _resize_cache(
++            workspace2,
++            (num_tokens, top_k_num, K),
 +        )
 +        invoke_fused_moe_triton_kernel(
 +            intermediate_activation,
@@ -168,13 +179,14 @@ index 63500487d..a6002b696 100644
      def apply(
          self,
          output: torch.Tensor,
-@@ -157,6 +287,29 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+@@ -157,6 +298,30 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
                  hidden_states.dtype
              )
  
 +        use_sparse_ep = (
 +            self.use_sparse_mi300x_ep
 +            and hidden_states.dtype == torch.bfloat16
++            and hidden_states.shape[0] <= _MINIMAX_M3_MI300X_EP_MAX_DECODE_TOKENS
 +            and activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE
 +            and expert_map is not None
 +            and not apply_router_weight_on_input
@@ -517,179 +529,10 @@ index 9e0145ff9..010b53d5f 100644
              if self.w1_bf16 is None or self.w2_bf16 is None:
                  raise RuntimeError(
 diff --git a/vllm/model_executor/layers/fused_moe/fused_moe.py b/vllm/model_executor/layers/fused_moe/fused_moe.py
-index 49957c8f5..26b3c6f74 100644
+index 49957c8f5..6a206ba05 100644
 --- a/vllm/model_executor/layers/fused_moe/fused_moe.py
 +++ b/vllm/model_executor/layers/fused_moe/fused_moe.py
-@@ -553,6 +553,168 @@ def fused_moe_kernel(
-     tl.store(c_ptrs, accumulator, mask=c_mask)
- 
- 
-+@triton.jit
-+def fused_moe_gated_kernel(
-+    a_ptr,
-+    b_ptr,
-+    c_ptr,
-+    sorted_token_ids_ptr,
-+    expert_ids_ptr,
-+    num_tokens_post_padded_ptr,
-+    N,
-+    K,
-+    EM,
-+    num_valid_tokens,
-+    stride_am,
-+    stride_ak,
-+    stride_be,
-+    stride_bk,
-+    stride_bn,
-+    stride_cm,
-+    stride_cn,
-+    alpha,
-+    beta,
-+    limit,
-+    BLOCK_SIZE_M: tl.constexpr,
-+    BLOCK_SIZE_N: tl.constexpr,
-+    BLOCK_SIZE_K: tl.constexpr,
-+    GROUP_SIZE_M: tl.constexpr,
-+    top_k: tl.constexpr,
-+    compute_type: tl.constexpr,
-+    HAS_LIMIT: tl.constexpr,
-+):
-+    """BF16 grouped GEMM1 with a split SwiGLU-OAI epilogue."""
-+    pid = tl.program_id(axis=0)
-+    num_pid_m = tl.cdiv(EM, BLOCK_SIZE_M)
-+    num_pid_n = tl.cdiv(N, BLOCK_SIZE_N)
-+    num_pid_in_group = GROUP_SIZE_M * num_pid_n
-+    group_id = pid // num_pid_in_group
-+    first_pid_m = group_id * GROUP_SIZE_M
-+    group_size_m = min(num_pid_m - first_pid_m, GROUP_SIZE_M)
-+    pid_m = first_pid_m + ((pid % num_pid_in_group) % group_size_m)
-+    pid_n = (pid % num_pid_in_group) // group_size_m
-+
-+    offs_m = tl.arange(0, BLOCK_SIZE_M).to(tl.int64)
-+    num_tokens_post_padded = tl.load(num_tokens_post_padded_ptr)
-+    if pid_m * BLOCK_SIZE_M >= num_tokens_post_padded:
-+        return
-+
-+    offs_token_id = pid_m * BLOCK_SIZE_M + offs_m
-+    offs_token = tl.load(sorted_token_ids_ptr + offs_token_id).to(tl.int64)
-+    token_mask = offs_token < num_valid_tokens
-+    off_expert = tl.load(expert_ids_ptr + pid_m).to(tl.int64)
-+    if off_expert < 0:
-+        return
-+
-+    offs_n = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N).to(tl.int64)
-+    offs_k = tl.arange(0, BLOCK_SIZE_K)
-+    n_mask = offs_n < N
-+    a_ptrs = a_ptr + (
-+        offs_token[:, None] // top_k * stride_am + offs_k[None, :] * stride_ak
-+    )
-+    b_gate_ptrs = (
-+        b_ptr
-+        + off_expert * stride_be
-+        + offs_k[:, None] * stride_bk
-+        + offs_n[None, :] * stride_bn
-+    )
-+    b_up_ptrs = b_gate_ptrs + N * stride_bn
-+
-+    gate_acc = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-+    up_acc = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-+    for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-+        k_mask = offs_k < K - k * BLOCK_SIZE_K
-+        a = tl.load(
-+            a_ptrs,
-+            mask=token_mask[:, None] & k_mask[None, :],
-+            other=0.0,
-+        )
-+        gate_w = tl.load(
-+            b_gate_ptrs,
-+            mask=k_mask[:, None] & n_mask[None, :],
-+            other=0.0,
-+        )
-+        up_w = tl.load(
-+            b_up_ptrs,
-+            mask=k_mask[:, None] & n_mask[None, :],
-+            other=0.0,
-+        )
-+        gate_acc += tl.dot(a, gate_w)
-+        up_acc += tl.dot(a, up_w)
-+        a_ptrs += BLOCK_SIZE_K * stride_ak
-+        b_gate_ptrs += BLOCK_SIZE_K * stride_bk
-+        b_up_ptrs += BLOCK_SIZE_K * stride_bk
-+
-+    # Preserve the BF16 GEMM1 store/reload boundary of the unfused path before
-+    # applying SwiGLU in FP32.
-+    gate = gate_acc.to(compute_type).to(tl.float32)
-+    up = up_acc.to(compute_type).to(tl.float32)
-+    if HAS_LIMIT:
-+        gate = tl.minimum(gate, limit)
-+        up = tl.minimum(tl.maximum(up, -limit), limit)
-+    activated = gate * tl.sigmoid(alpha * gate) * (up + beta)
-+
-+    c_ptrs = c_ptr + stride_cm * offs_token[:, None] + stride_cn * offs_n[None, :]
-+    c_mask = token_mask[:, None] & n_mask[None, :]
-+    tl.store(c_ptrs, activated.to(compute_type), mask=c_mask)
-+
-+
-+def invoke_fused_moe_gated_triton_kernel(
-+    A: torch.Tensor,
-+    B: torch.Tensor,
-+    C: torch.Tensor,
-+    sorted_token_ids: torch.Tensor,
-+    expert_ids: torch.Tensor,
-+    num_tokens_post_padded: torch.Tensor,
-+    top_k: int,
-+    config: dict[str, Any],
-+    alpha: float,
-+    beta: float,
-+    limit: float | None,
-+) -> None:
-+    """Run BF16 GEMM1 and emit activated split-SwiGLU rows directly."""
-+    assert A.dtype == B.dtype == C.dtype == torch.bfloat16
-+    assert B.size(1) == C.size(1) * 2
-+    assert A.size(1) == B.size(2)
-+    assert sorted_token_ids.stride(0) == 1
-+
-+    EM = sorted_token_ids.size(0)
-+    grid = lambda META: (
-+        triton.cdiv(EM, META["BLOCK_SIZE_M"])
-+        * triton.cdiv(C.size(1), META["BLOCK_SIZE_N"]),
-+    )
-+    launch_config = config.copy()
-+    launch_config.pop("SPLIT_K", None)
-+    block_size_k = launch_config.pop("BLOCK_SIZE_K")
-+    fused_moe_gated_kernel[grid](
-+        A,
-+        B,
-+        C,
-+        sorted_token_ids,
-+        expert_ids,
-+        num_tokens_post_padded,
-+        C.size(1),
-+        A.size(1),
-+        EM,
-+        A.size(0) * top_k,
-+        A.stride(0),
-+        A.stride(1),
-+        B.stride(0),
-+        B.stride(2),
-+        B.stride(1),
-+        C.stride(0),
-+        C.stride(1),
-+        alpha,
-+        beta,
-+        0.0 if limit is None else limit,
-+        top_k=top_k,
-+        compute_type=tl.bfloat16,
-+        HAS_LIMIT=limit is not None,
-+        BLOCK_SIZE_K=block_size_k,
-+        **launch_config,
-+    )
-+
-+
- # NOTE(zyongye): we can remove all the wna16 kernel
- # once we drop off sm75 support
- def invoke_fused_moe_wna16_cuda_kernel(
-@@ -1434,6 +1596,7 @@ def _prepare_expert_assignment(
+@@ -1434,6 +1434,7 @@ def _prepare_expert_assignment(
      use_int4_w4a16: bool = False,
      block_shape: list[int] | None = None,
      ignore_invalid_experts: bool = False,
@@ -697,7 +540,7 @@ index 49957c8f5..26b3c6f74 100644
  ) -> tuple[torch.Tensor | None, torch.Tensor, torch.Tensor]:
      """Prepare expert assignments for the aligned and low-latency Triton paths."""
      # SPARSITY_FACTOR is a heuristic margin ensuring tokens_in_chunk * top_k
-@@ -1468,6 +1631,7 @@ def _prepare_expert_assignment(
+@@ -1468,6 +1469,7 @@ def _prepare_expert_assignment(
          global_num_experts,
          expert_map,
          ignore_invalid_experts=ignore_invalid_experts,
