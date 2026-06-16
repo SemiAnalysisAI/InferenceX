@@ -9852,7 +9852,7 @@ dsv4-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: gb300-cw
+  runner: gb300
   precision: fp4
   framework: dynamo-sglang
   multinode: true
@@ -10180,7 +10180,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-20260527-14f81a67
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: gb300-cw
+  runner: gb300
   precision: fp4
   framework: dynamo-sglang
   multinode: true
@@ -11089,30 +11089,13 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
           ep: 8
           dp-attn: true
 
-# CoreWeave sibling of dsv4-fp4-gb300-dynamo-vllm-agentic — same image,
-# recipes, and search space; only `runner` differs (gb300-cw vs gb300-nv).
-# Kept as a separate config (not a label-widening on the -nv entry)
-# because we dispatch NV and CW as independent sweep runs — bundling
-# both SKUs into one `gh workflow run` invocation lets a fault on one
-# cascade-cancel the other (see prior R20–R23 outages). The two sibling
-# configs share recipe files via the same launch_gb300-cw.sh IS_AGENTIC
-# overlay (recipes/vllm/deepseek-v4/agentic/), so a change to the recipe
-# applies to both clusters with no duplication.
-
-# CoreWeave sibling of dsv4-fp4-gb300-dynamo-vllm-agentic — same image,
-# recipes, and search space; only `runner` differs (gb300-cw vs gb300-nv).
-# Kept as a separate config (not a label-widening on the -nv entry)
-# because we dispatch NV and CW as independent sweep runs — bundling
-# both SKUs into one `gh workflow run` invocation lets a fault on one
-# cascade-cancel the other (see prior R20–R23 outages). The two sibling
-# configs share recipe files via the same launch_gb300-cw.sh IS_AGENTIC
-# overlay (recipes/vllm/deepseek-v4/agentic/), so a change to the recipe
-# applies to both clusters with no duplication.
+# Keep the legacy config key for changelog compatibility; execution now uses
+# the generic GB300 runner pool.
 dsv4-fp4-gb300-cw-dynamo-vllm-agentic:
   image: vllm/vllm-openai:v0.21.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: gb300-cw
+  runner: gb300
   precision: fp4
   framework: dynamo-vllm
   multinode: true
