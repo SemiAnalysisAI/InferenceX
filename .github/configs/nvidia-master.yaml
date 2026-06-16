@@ -12604,6 +12604,7 @@ minimaxm3-fp8-b300-vllm:
       # tp2 fits MXFP8 weights (~222 GB/GPU of 288) but KV headroom is thin;
       # 1k1k only, drop if it OOMs at the high end.
       - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - isl: 8192
       osl: 1024
@@ -12611,6 +12612,8 @@ minimaxm3-fp8-b300-vllm:
       - { tp: 8, conc-start: 1, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
       - { tp: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
@@ -12676,6 +12679,7 @@ minimaxm3-fp8-b200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
@@ -12683,6 +12687,8 @@ minimaxm3-fp8-b200-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
@@ -12710,6 +12716,7 @@ minimaxm3-fp8-b300-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
@@ -12717,6 +12724,8 @@ minimaxm3-fp8-b300-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
