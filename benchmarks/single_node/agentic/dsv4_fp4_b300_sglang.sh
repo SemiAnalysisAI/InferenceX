@@ -113,10 +113,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
-    SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS=$((TP * 8))
-    if [ "$SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS" -gt "$CONC" ]; then
-        SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS="$CONC"
+    AIPERF_HTTP_CONNECTION_LIMIT=$((TP * 32))
+    if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -gt "$CONC" ]; then
+        AIPERF_HTTP_CONNECTION_LIMIT="$CONC"
     fi
+    export AIPERF_HTTP_CONNECTION_LIMIT
 fi
 
 PARALLEL_ARGS=(--tp "$TP")
@@ -240,9 +241,6 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
         --prometheus-port "$SGLANG_ROUTER_METRICS_PORT" \
         --connect-timeout-secs 900 \
         --request-timeout-secs 14400 \
-        --max-concurrent-requests "$SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS" \
-        --queue-size 2048 \
-        --queue-timeout-secs 14400 \
         --disable-health-check \
         --disable-retries > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
