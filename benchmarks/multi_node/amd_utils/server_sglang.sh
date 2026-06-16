@@ -419,12 +419,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "================================================"
 
-    # Install LAUNCH_PREFIX dependencies if needed (e.g. numactl missing in container)
-    if [[ "${LAUNCH_PREFIX:-}" == *numactl* ]] && ! command -v numactl &>/dev/null; then
-        echo "[server_sglang] Installing numactl (required by LAUNCH_PREFIX)..."
-        apt-get install -y -q numactl >/dev/null 2>&1 || { echo "[server_sglang] WARNING: numactl install failed"; }
-    fi
-
     # start the head prefill server
     PREFILL_MORI_MOE_ENV=""
     set -x
@@ -741,11 +735,6 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
-    # Install LAUNCH_PREFIX dependencies if needed (e.g. numactl missing in container)
-    if [[ "${LAUNCH_PREFIX:-}" == *numactl* ]] && ! command -v numactl &>/dev/null; then
-        echo "[server_sglang] Installing numactl (required by LAUNCH_PREFIX)..."
-        apt-get install -y -q numactl >/dev/null 2>&1 || { echo "[server_sglang] WARNING: numactl install failed"; }
-    fi
 
     DECODE_MORI_MOE_ENV=""
     set -x
