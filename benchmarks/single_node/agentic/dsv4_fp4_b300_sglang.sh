@@ -132,6 +132,8 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
+        --incremental-streaming-output
+        --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
         --moe-runner-backend flashinfer_mxfp4
