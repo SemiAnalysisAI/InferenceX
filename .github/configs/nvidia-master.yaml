@@ -8199,7 +8199,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: true
 
 kimik2.5-fp4-gb200-dynamo-trt:
-  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: gb200
@@ -8213,34 +8213,104 @@ kimik2.5-fp4-gb200-dynamo-trt:
       osl: 1024
       search-space:
       # Non-MTP configurations (default spec_decoding="none")
-      - conc-list: [ 4, 192, 360, 668 ]
+      - conc-list: [ 8 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
           ep: 8
           dp-attn: false
-      - conc-list: [ 5, 15, 30, 55 ]
+      - conc-list: [ 12 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch2_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch2_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 24 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 192 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch32_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch32_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 30 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml"
         decode:
           num-worker: 5
           tp: 4
           ep: 4
           dp-attn: false
+      - conc-list: [ 60 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - conc-list: [ 333 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
       - conc-list: [ 666 ]
         prefill:
           num-worker: 1
@@ -8248,40 +8318,26 @@ kimik2.5-fp4-gb200-dynamo-trt:
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - conc-list: [ 2253 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch16_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch16_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
           tp: 32
           ep: 32
           dp-attn: true
-      - conc-list: [ 4301, 6452 ]
+      - conc-list: [ 1127 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch32_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch32_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
-          tp: 8
-          ep: 8
+          tp: 32
+          ep: 32
           dp-attn: true
       - conc-list: [ 4301 ]
         prefill:
@@ -8296,6 +8352,34 @@ kimik2.5-fp4-gb200-dynamo-trt:
           num-worker: 1
           tp: 16
           ep: 16
+          dp-attn: true
+      - conc-list: [ 8192 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch512_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch512_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - conc-list: [ 2253 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch64_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
           dp-attn: true
       - conc-list: [ 4301 ]
         prefill:
@@ -8316,43 +8400,85 @@ kimik2.5-fp4-gb200-dynamo-trt:
       osl: 1024
       search-space:
       # Non-MTP configurations (default spec_decoding="none")
-      - conc-list: [ 4 ]
+      - conc-list: [ 8 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
           ep: 8
           dp-attn: false
-      - conc-list: [ 156 ]
+      - conc-list: [ 24 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml"
         decode:
           num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 5 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch1_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch1_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
           tp: 4
           ep: 4
           dp-attn: false
-      - conc-list: [ 5, 15, 30, 60, 105 ]
+      - conc-list: [ 30 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - conc-list: [ 60 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - conc-list: [ 105 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_eplb0_mtp0.yaml"
         decode:
           num-worker: 5
           tp: 4
@@ -8365,40 +8491,54 @@ kimik2.5-fp4-gb200-dynamo-trt:
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep32_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep32_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - conc-list: [ 666 ]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep32_batch16_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep32_batch16_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - conc-list: [ 1229 ]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep16_batch64_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep16_batch64_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
           tp: 16
           ep: 16
           dp-attn: true
-      - conc-list: [ 615 ]
+      - conc-list: [ 1229 ]
         prefill:
-          num-worker: 3
+          num-worker: 6
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx6dep4_gen1dep32_batch32_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx6dep4_gen1dep32_batch32_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - conc-list: [ 2151 ]
-        prefill:
-          num-worker: 5
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
+          tp: 32
+          ep: 32
           dp-attn: true
       - conc-list: [ 2253 ]
         prefill:
@@ -8409,6 +8549,20 @@ kimik2.5-fp4-gb200-dynamo-trt:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml
           - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - conc-list: [ 4301 ]
+        prefill:
+          num-worker: 9
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx9dep4_gen1dep16_batch256_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx9dep4_gen1dep16_batch256_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
           tp: 16
