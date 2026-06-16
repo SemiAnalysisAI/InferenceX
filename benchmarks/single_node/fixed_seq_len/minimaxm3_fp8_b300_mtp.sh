@@ -69,7 +69,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 elif [ "$EP_SIZE" -gt 1 ]; then
   PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
 else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP"
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --moe-backend marlin"
 fi
 
 # use 3 speculative tokens for all configs for now

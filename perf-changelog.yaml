@@ -3900,3 +3900,12 @@
   description:
     - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark (1k/1k and 8k/1k) with a TP/TEP/DEP parallelism sweep"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1711
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
