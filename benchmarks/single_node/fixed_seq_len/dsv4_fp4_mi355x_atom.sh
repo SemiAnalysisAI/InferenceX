@@ -56,6 +56,8 @@ export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
 export GPU_MAX_HW_QUEUES=5
+OPT_ARGS=(--hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}')
+
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -66,7 +68,8 @@ python3 -m atom.entrypoints.openai_server \
     --no-enable_prefix_caching \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
-    > $SERVER_LOG 2>&1 &
+    "${OPT_ARGS[@]}" \
+    > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!
 
