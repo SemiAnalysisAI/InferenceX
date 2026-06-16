@@ -410,9 +410,18 @@ else
         # the exclusive node instead of Slurm's implicit 2 TB default.
         SALLOC_MEMORY_ARGS=(--mem=0)
     fi
+    DEFAULT_SALLOC_TIME_LIMIT=180
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "sglang" ]]; then
+        if [[ "$CONC" -ge 512 || ( "$DP_ATTENTION" == "true" && "$CONC" -ge 128 ) ]]; then
+            # C512 and high-concurrency DP replays can spend multiple hours in
+            # long-context warmup before the 30-minute profiling phase.
+            DEFAULT_SALLOC_TIME_LIMIT=300
+        fi
+    fi
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-$DEFAULT_SALLOC_TIME_LIMIT}"
     # Default 180 min; AL-matrix collection (16 server starts) needs longer and
     # overrides via SALLOC_TIME_LIMIT.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time="${SALLOC_TIME_LIMIT:-180}" --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
