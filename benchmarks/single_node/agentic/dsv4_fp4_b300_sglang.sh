@@ -112,6 +112,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     USE_SGLANG_ROUTER=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
+    SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
     SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS=$((TP * 32))
     if [ "$SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS" -gt "$CONC" ]; then
         SGLANG_ROUTER_MAX_CONCURRENT_REQUESTS="$CONC"
@@ -227,7 +228,7 @@ wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" -
 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
-    "$SGLANG_PYTHON" -m sglang_router.launch_router \
+    "$SGLANG_ROUTER_BIN" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
         --policy manual \
         --assignment-mode min_load \
