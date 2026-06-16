@@ -8,8 +8,12 @@ name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-tp8-8k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "ghcr.io/semianalysisai/vllm-openai:minimax-m3-78ef73"
+  container: "vllm/vllm-openai:minimax-m3"
   precision: "fp8"
+
+extra_mount:
+  - "/mnt/lustre01/users-public/sa-shared/patches/m3/worker.py:/usr/local/lib/python3.12/dist-packages/vllm/distributed/kv_transfer/kv_connector/v1/nixl/worker.py"
+  - "/mnt/lustre01/users-public/sa-shared/patches/m3/fused_allreduce_gemma_rms_norm.py:/usr/local/lib/python3.12/dist-packages/vllm/model_executor/layers/fused_allreduce_gemma_rms_norm.py"
 
 dynamo:
   install: true
