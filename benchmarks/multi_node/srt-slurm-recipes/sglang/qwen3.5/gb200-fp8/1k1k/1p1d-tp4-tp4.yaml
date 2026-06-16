@@ -85,7 +85,7 @@ backend:
       mem-fraction-static: 0.8
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      context-length: 2020
+      context-length: 4096
       cuda-graph-max-bs: 1024
       decode-log-interval: 1
       stream-interval: 50
@@ -106,7 +106,7 @@ backend:
       mem-fraction-static: 0.8
       chunked-prefill-size: 16384
       max-prefill-tokens: 16384
-      context-length: 2020
+      context-length: 4096
       cuda-graph-max-bs: 1024
       decode-log-interval: 1
       stream-interval: 50
