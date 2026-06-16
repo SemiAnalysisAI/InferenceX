@@ -14,8 +14,9 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
+#   chi-mi300x-034: enroot user-namespace permission failure
 #   chi-mi300x-049: persistent /nvme_home disk-full
-JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-034,chi-mi300x-049 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
