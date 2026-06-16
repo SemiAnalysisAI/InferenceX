@@ -128,11 +128,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         mkdir -p recipes/sglang/glm5/b200-fp8
         cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/b200-fp8" recipes/sglang/glm5/b200-fp8
     elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+        # MEASURED-POWER CAMPAIGN (dsr1-disagg-NVIDIA): clone the SemiAnalysisAI
+        # perfmon fork (NVIDIA/srt-slurm PR #35, feat/inferencex-perfmon) instead
+        # of NVIDIA/srt-slurm@main. The fork ships the SAME b200 dsr1 recipe this
+        # config points at (recipes/b200-fp4/1k1k.yaml) PLUS the per-node
+        # nvidia-smi perfmon machinery (src/srtctl/monitor/perfmon.py) that writes
+        # perf_samples_*.csv when a recipe declares `monitoring:`. That is what
+        # turns the b200 dsr1-disagg energy charts MEASURED. The recipe lives in
+        # the fork directly, so the prior mkdir/cp into recipes/sglang/dsr1/b200-fp4
+        # (a different path, unused by this config's CONFIG_FILE) is dropped.
+        git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-        mkdir -p recipes/sglang/dsr1/b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
+        git checkout feat/inferencex-perfmon
+        export PERFMON_ENABLED=1
     else
         git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
         cd "$SRT_REPO_DIR" || exit 1
@@ -259,6 +267,23 @@ EOF
     # so large-model loads (e.g. DSR1-FP8 ~680GB off shared FS) finish in time.
     # Uses ${CONFIG_FILE%%:*} because CONFIG_FILE may carry an :override[N] suffix.
     sed -i 's/^  max_attempts: [0-9]*/  max_attempts: 720/' "${CONFIG_FILE%%:*}"
+    # MEASURED-POWER CAMPAIGN: enable per-node nvidia-smi perfmon and give the
+    # slow dsr1 bring-up headroom. This recipe is `base:` + `zip_override_*`, so
+    # `monitoring:` must be inserted INTO base: (2-space indent) to survive the
+    # override zip — a top-level EOF append (the flat-recipe trick) is ignored
+    # here. health_check lives at base.health_check.max_attempts (4-space), which
+    # the 2-space sed above does NOT match, so bump it here (360->540, i.e.
+    # 60min->90min, for the ~35min dsr1 warmup). Guarded on PERFMON_ENABLED so
+    # only the perfmon-fork dsr1 path is affected.
+    if [ "${PERFMON_ENABLED:-0}" = "1" ]; then
+        CFG="${CONFIG_FILE%%:*}"
+        if [ -f "$CFG" ] && ! grep -q '^[[:space:]]*monitoring:' "$CFG"; then
+            awk '/^base:/{print; print "  monitoring:"; print "    enabled: true"; print "    sample_interval: 1.0"; next} {print}' "$CFG" > "$CFG.perfmon.tmp" && mv "$CFG.perfmon.tmp" "$CFG"
+            echo "[perfmon] injected monitoring: under base: in $CFG"
+        fi
+        sed -i 's/^    max_attempts: [0-9]*/    max_attempts: 540/' "$CFG"
+        echo "[perfmon] set base.health_check.max_attempts=540 (90min) in $CFG"
+    fi
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
     echo "$SRTCTL_OUTPUT"
 
@@ -381,6 +406,25 @@ EOF
             shopt -u nullglob
         else
             echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
+        fi
+    fi
+
+    # MEASURED-POWER CAMPAIGN: stage per-node perfmon CSVs for the downstream
+    # "Process result" step BEFORE the outputs cleanup below deletes them.
+    # perfmon writes perf_samples_*.csv under the per-node job logs; copy them
+    # into $GITHUB_WORKSPACE and export GPU_METRICS_CSV_GLOB so aggregate_power.py
+    # emits measured power + temp/util/mem. b200-dgxc logs live on shared Lustre
+    # (LOGS_DIR is populated by the compute nodes), so a recursive find picks up
+    # every node's CSV. Guarded on PERFMON_ENABLED (dsr1 perfmon-fork path only).
+    if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -d "$LOGS_DIR" ]; then
+        if find "$LOGS_DIR" -name 'perf_samples_*.csv' 2>/dev/null | grep -q .; then
+            mkdir -p "$GITHUB_WORKSPACE/perf_samples"
+            find "$LOGS_DIR" -name 'perf_samples_*.csv' -exec cp {} "$GITHUB_WORKSPACE/perf_samples/" \;
+            perf_csv_count=$(ls "$GITHUB_WORKSPACE/perf_samples"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+            echo "GPU_METRICS_CSV_GLOB=$GITHUB_WORKSPACE/perf_samples/perf_samples_*.csv" >> "$GITHUB_ENV"
+            echo "[perfmon] staged $perf_csv_count per-node perf_samples_*.csv to \$GITHUB_WORKSPACE/perf_samples/"
+        else
+            echo "[perfmon] WARNING: monitoring enabled but no perf_samples_*.csv under $LOGS_DIR — measured power aggregation skipped (compute-node visibility?)" >&2
         fi
     fi
 

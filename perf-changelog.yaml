@@ -3958,3 +3958,11 @@
     - "Exercises launch_gb200-nv.sh's new dsr1 branch: clones SemiAnalysisAI/srt-slurm@feat/inferencex-perfmon (ships the gb200 dsr1 recipes at recipes/gb200-fp4/1k1k/low-latency.yaml + the perfmon machinery), injects monitoring: + health_check (90min ceiling for the ~35min dsr1 warmup), and stages perf_samples_*.csv + GPU_METRICS_CSV_GLOB for Process-result. Same proven pattern as the gb300 CoreWeave validation (run 27170607165)."
     - "Success: job green AND agg JSON patched with avg_power_w + prefill_avg_power_w/decode_avg_power_w + workers[].avg_temp_c/peak_temp_c/avg_util_pct/avg_mem_used_mb. This is CANONICAL NVIDIA (gb200) measured data, sidestepping the wedged gb300-nv fleet. Run-only PR; do not merge (duplicates #1574 consumer code)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1791
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-powercheck
+  description:
+    - "Single-job b200 validation of measured dsr1 power+temp on the b200-multinode pool (b200-dgxc-slurm_{7,8,9} -> launch_b200-dgxc.sh). The gb300-nv and gb200 multinode pools are wedged on stale-NFS pre-run cleanup; the b200-multinode pool has been idle 60+ sweeps (health unverified, but idle => no accumulated stale benchmark_logs, the best NVIDIA multinode bet). Mirrors the first 1k/1k cell of dsr1-fp4-b200-dynamo-sglang (zip_override_stp_lowlat[0] = STP, 1 prefill TP4 + 5 decode TP8), trimmed to one concurrency so the matrix expands to exactly ONE b200 job."
+    - "Exercises launch_b200-dgxc.sh's dsr1 branch: now clones SemiAnalysisAI/srt-slurm@feat/inferencex-perfmon (ships recipes/b200-fp4/1k1k.yaml + the perfmon machinery) instead of NVIDIA/srt-slurm@main, inserts monitoring: INTO the recipe's base: block (so it survives the zip_override) and bumps base.health_check.max_attempts to 540 (90min for the ~35min dsr1 warmup), then stages perf_samples_*.csv + GPU_METRICS_CSV_GLOB for Process-result. Same proven pipeline as the gb300 CoreWeave validation (run 27170607165)."
+    - "Success: job green AND agg JSON patched with avg_power_w + prefill_avg_power_w/decode_avg_power_w + workers[].avg_temp_c/peak_temp_c/avg_util_pct/avg_mem_used_mb. This is CANONICAL NVIDIA (b200) measured data. Run-only PR; do not merge (duplicates #1574 consumer code)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1791
