@@ -36,6 +36,7 @@ print(Path(vllm.__file__).resolve().parent.parent)
 PY
 )"
 MXFP8_PATCH="$(dirname "$0")/minimaxm3_mi300x_mxfp8.patch"
+MXFP8_EP_PATCH="$(dirname "$0")/minimaxm3_mi300x_ep_mxfp8.patch"
 MXFP8_ORACLE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py"
 if ! grep -q "Using fused CDNA3 (gfx94x)" "$MXFP8_ORACLE"; then
     if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$MXFP8_PATCH"; then
@@ -45,6 +46,16 @@ if ! grep -q "Using fused CDNA3 (gfx94x)" "$MXFP8_ORACLE"; then
 fi
 if ! grep -q "Using fused CDNA3 (gfx94x)" "$MXFP8_ORACLE"; then
     echo "MI300X MXFP8 backend marker is missing after patching" >&2
+    exit 1
+fi
+if ! grep -q "profiled gfx94x MiniMax-M3 EP8" "$MXFP8_ORACLE"; then
+    if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$MXFP8_EP_PATCH"; then
+        echo "Failed to apply the MI300X EP8 MXFP8 tuning patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -q "profiled gfx94x MiniMax-M3 EP8" "$MXFP8_ORACLE"; then
+    echo "MI300X EP8 MXFP8 tuning marker is missing after patching" >&2
     exit 1
 fi
 
