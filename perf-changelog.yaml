@@ -3859,9 +3859,11 @@
 - config-keys:
     - minimaxm3-fp8-gb200-dynamo-vllm
   description:
-    - "Fix MNNVL fused allreduce correctness bug for TEP8 multi-node decode (gsm8k=0.0000 → expect passing)"
-    - "Root cause: fused_allreduce_gemma_rms_norm passed norm_out=separate buffer, triggering the residual_out←allreduce_in aliasing path which produces wrong results on the MNNVL backend across NVL72 node boundaries"
-    - "Fix: pass norm_out=None to match the compile-time AllReduceFusedAddGemmaRMSNormPattern aliasing (norm_out←allreduce_in, residual_out←residual) — commit 66a43ba on cleanup/m3-mi300x-mxfp8"
+    - "Fix NixlConnector handshake failure for hetero-TP disagg when num_kv_heads < decode TP (M3 TEP8: TP4 prefill → TP8 decode)"
+    - "Root cause: _validate_remote_agent_handshake used raw tp_ratio (8/4=2) for block_len validation, but M3 has only 4 KV heads — both sides have max(1,4//tp)=1 head/rank → same block_len. The assertion expected remote_len=131072 but got 65536, failing every handshake (0 KV transfers, gsm8k=0.0000)."
+    - "Fix: replace tp_ratio with head_ratio (remote_heads_per_rank // local_heads_per_rank) which correctly accounts for GQA replication — commit 78ef73b on cleanup/m3-mi300x-mxfp8"
+    - "Also includes norm_out=None MNNVL aliasing fix (commit 66a43ba)"
+    - "Image: ghcr.io/semianalysisai/vllm-openai:minimax-m3-78ef73 (built from cleanup/m3-mi300x-mxfp8 HEAD 78ef73bc4)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
 
 - config-keys:
