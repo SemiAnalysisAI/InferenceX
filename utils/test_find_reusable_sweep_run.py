@@ -119,6 +119,7 @@ def test_find_latest_successful_pr_run_skips_newer_failed_run(monkeypatch) -> No
         return [failed_run, successful_run]
 
     monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
 
     assert (
         reuse.find_latest_successful_pr_run(
@@ -129,6 +130,40 @@ def test_find_latest_successful_pr_run_skips_newer_failed_run(monkeypatch) -> No
             "token",
         )
         == successful_run
+    )
+
+
+def test_find_latest_successful_pr_run_skips_gated_noop_run(monkeypatch) -> None:
+    gated_run = {
+        "id": 333,
+        "conclusion": "success",
+        "head_sha": "def456",
+    }
+    real_run = {
+        "id": 222,
+        "conclusion": "success",
+        "head_sha": "abc123",
+    }
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        assert path == "/actions/workflows/run-sweep.yml/runs"
+        return [gated_run, real_run]
+
+    artifacts_by_run = {333: set(), 222: {"results_bmk"}}
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse, "artifact_names", lambda repo, run_id, token: artifacts_by_run[run_id]
+    )
+
+    assert (
+        reuse.find_latest_successful_pr_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            "feature-branch",
+            {"abc123", "def456"},
+            "token",
+        )
+        == real_run
     )
 
 
