@@ -39,6 +39,10 @@ elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
     # symlink on the runner pod that points at the NFS copy.
     export MODEL_PATH=/scratch/models/DeepSeek-V4-Pro
     export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-trt" ]]; then
+    export SERVED_MODEL_NAME="glm-5-nvfp4"
+    export MODEL_PATH=/scratch/models/GLM-5-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
