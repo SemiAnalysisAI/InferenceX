@@ -3896,6 +3896,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1781
 
 - config-keys:
+    - qwen3.5-fp4-b200-trt
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark (1k/1k and 8k/1k) with a TP/TEP/DEP parallelism sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1711
+
+- config-keys:
   - dsv4-fp4-gb200-dynamo-sglang-mtp
   description:
     - "Initial submission: DSv4-Pro FP4 disagg on GB200 with SGLang + MTP speculative decoding (8k/1k)."
