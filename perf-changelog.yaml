@@ -3894,3 +3894,9 @@
     - "Align MiniMax-M3 B300 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
     - "Add TP4+EP4 coverage for MiniMax-M3 B300: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1781
+
+- config-keys:
+    - qwen3.5-fp4-b200-trt
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark (1k/1k and 8k/1k) with a TP/TEP/DEP parallelism sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1711
