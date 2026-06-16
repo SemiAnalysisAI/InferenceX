@@ -23,6 +23,9 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
+export ENROOT_DATA_PATH="/tmp/enroot-data-$JOB_ID"
+export ENROOT_RUNTIME_PATH="/tmp/enroot-runtime-$JOB_ID"
+
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
     exec 9>\"$LOCK_FILE\"
