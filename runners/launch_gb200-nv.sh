@@ -21,6 +21,11 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # DSV4 sglang recipes.
         export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     else
         export MODEL_PATH=$MODEL
     fi
