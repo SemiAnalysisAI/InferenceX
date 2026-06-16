@@ -181,12 +181,18 @@ def find_latest_successful_pr_run(
             "status": "completed",
         },
     )
-    # GitHub returns runs newest-first.
+    # GitHub returns runs newest-first.  Skip gated no-op runs (synchronize
+    # events suppressed by a /reuse-sweep-run comment) which complete as
+    # "success" but produce no benchmark or eval artifacts.
     for run in runs:
         if run.get("conclusion") != "success":
             continue
-        if str(run.get("head_sha") or "") in valid_shas:
-            return run
+        if str(run.get("head_sha") or "") not in valid_shas:
+            continue
+        names = artifact_names(repo, int(run["id"]), token)
+        if "results_bmk" not in names and "eval_results_all" not in names:
+            continue
+        return run
     return None
 
 

@@ -3832,6 +3832,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1761
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch fixed-seq-len search space from TP8 to TP4 for both isl=1024 and isl=8192 scenarios"
+    - "Expand isl=8192 coverage: add TP4 dp-attn sweep (conc 32–2048) and TP4 TP-only sweep (conc 1–32)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
+  
+- config-keys:
     - dsv4-fp4-gb300-dynamo-trt
     - dsv4-fp4-gb300-dynamo-trt-mtp
   description:
@@ -3851,6 +3858,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
 
 - config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang MTP 1k/1k coverage using lmsysorg/sglang:nightly-dev-cu13-20260615-c127ba64"
@@ -3859,5 +3873,3 @@
     - "Flat dep4 and tp4 splits replace the upstream disagg-low-latency-dep4-mtp.yaml and disagg-low-latency-tp4-mtp.yaml templates (each base + zip_override_1k1k_lowlat with decode_nodes [1,2,4,6]). The templated form silently broke under the gb300-cw launcher: srtctl fans the single recipe into 4 Slurm submissions per `srtctl apply`, but launch_gb300-cw.sh:282 captures the job IDs with `grep -oP '✅ Job \\K[0-9]+'` into a scalar JOB_ID, jamming 4 newline-separated IDs into one variable. Downstream uses (LOGS_DIR path interpolation at :293-294, squeue polls at :313-314, error message at :315) all corrupt, producing the observed `ERROR: Job 7079\\n7082 failed before creating log file` and orphaning the real Slurm jobs. Single-config files match the 8k1k convention (one recipe per decode-worker count) and force srtctl to emit exactly 1 job per launcher invocation"
     - "Decode side runs EAGLE (num-steps=3, eagle-topk=1, num-draft-tokens=4) on all 11 recipes; all recipes pin lmsysorg/sglang:nightly-dev-cu13-20260615-c127ba64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1697
-
- 
