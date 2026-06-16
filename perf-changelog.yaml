@@ -3845,6 +3845,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1761
 
 - config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch fixed-seq-len search space from TP8 to TP4 for both isl=1024 and isl=8192 scenarios"
+    - "Expand isl=8192 coverage: add TP4 dp-attn sweep (conc 32–2048) and TP4 TP-only sweep (conc 1–32)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
+  
+- config-keys:
     - dsv4-fp4-gb300-dynamo-trt
     - dsv4-fp4-gb300-dynamo-trt-mtp
   description:
@@ -3865,6 +3872,13 @@
     - "Also includes norm_out=None MNNVL aliasing fix (commit 66a43ba)"
     - "Image: ghcr.io/semianalysisai/vllm-openai:minimax-m3-78ef73 (built from cleanup/m3-mi300x-mxfp8 HEAD 78ef73bc4)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
 
 - config-keys:
     - minimaxm3-fp8-b200-vllm
