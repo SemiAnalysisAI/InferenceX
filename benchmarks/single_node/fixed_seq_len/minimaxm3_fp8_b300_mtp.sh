@@ -62,6 +62,7 @@ SERVER_LOG=/workspace/server.log
 # 444 GB of MXFP8 weights off shared FS; engine startup can exceed the
 # default 600s readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_FLOAT32_MATMUL_PRECISION=high
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
@@ -73,14 +74,6 @@ fi
 
 # use 3 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=3
-
-# Fixed-seq-len runs don't need graphs past the decode step's token count:
-# with spec decoding every running request contributes 1 + NUM_SPEC_TOKENS
-# tokens per step, so capture up to the next power of two >=
-# CONC * (1 + NUM_SPEC_TOKENS), capped at vLLM's 2048 ceiling.
-CAPTURE_SIZE=4
-while (( CAPTURE_SIZE < CONC * (1 + NUM_SPEC_TOKENS) )); do CAPTURE_SIZE=$((CAPTURE_SIZE * 2)); done
-(( CAPTURE_SIZE > 2048 )) && CAPTURE_SIZE=2048
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -96,7 +89,7 @@ $PARALLEL_ARGS \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --language-model-only \
---max-cudagraph-capture-size $CAPTURE_SIZE \
+--max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
 --stream-interval 20 --no-enable-prefix-caching \
