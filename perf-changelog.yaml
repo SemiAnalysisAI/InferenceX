@@ -3891,6 +3891,7 @@
 - config-keys:
     - minimaxm3-fp8-b300-dynamo-vllm
   description:
-    - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k STP."
-    - "Add six local srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b300-fp8/1k1k and wire the B300 launcher to overlay them into srt-slurm."
+    - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP."
+    - "Add local srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b300-fp8 and wire the B300 launcher to overlay them into srt-slurm."
+    - "Add TP8 decode variants with expert parallelism disabled and the Marlin MoE backend for selected low-concurrency 1k1k and 8k1k shapes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1787
