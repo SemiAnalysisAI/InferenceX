@@ -2137,7 +2137,6 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
-
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2152,12 +2151,15 @@ dsv4-fp4-mi355x-sglang:
       osl: 1024
       search-space:
       - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
-      - { tp: 8, dp-attn: false, conc-start: 1 , conc-end: 32 }
+      - { tp: 4, dp-attn: true, conc-start: 16, conc-end: 128 }
+      - { tp: 4, dp-attn: false, conc-start: 1 , conc-end: 32 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
-      - { tp: 8, dp-attn: false, conc-start: 1, conc-end: 32 }
+      - { tp: 4, dp-attn: true, conc-start: 16, conc-end: 128 }
+      - { tp: 4, dp-attn: false, conc-start: 1, conc-end: 32 }
+
 
 # MTP variant of dsv4-fp4-mi355x-sglang. Mirrors the base search space and adds
 # spec-decoding: mtp, which routes to dsv4_fp4_mi355x_sglang_mtp.sh (EAGLE
