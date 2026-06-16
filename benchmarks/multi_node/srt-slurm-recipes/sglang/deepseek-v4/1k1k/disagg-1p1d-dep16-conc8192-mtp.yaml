@@ -17,7 +17,7 @@ frontend:
   num_additional_frontends: 8
 
 model:
-  path: dsv4-pro
+  path: deepseek-v4-pro
   container: "lmsysorg/sglang:nightly-dev-cu13-20260615-c127ba64"
   precision: fp4
 
