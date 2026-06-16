@@ -71,39 +71,42 @@ export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 # OFFLOADING=hicache | none (passed from YAML; default none for disagg).
 # HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
 export OFFLOADING="${OFFLOADING:-none}"
-export HICACHE_TIER="${HICACHE_TIER:-L3}"
-export HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-64}"
-export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
-# DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
-export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-# Per-rank L2 host pool in GB.
-export HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-100}"
+# HiCache/Mooncake tunables only matter when KV offloading is enabled.
+if [[ "$OFFLOADING" == "hicache" ]]; then
+  export HICACHE_TIER="${HICACHE_TIER:-L2}"
+  export HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-64}"
+  export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
+  # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
+  export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
+  # Per-rank L2 host pool in GB.
+  export HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-100}"
 
-# ── HiCache layout/backend by tier ──
-#   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
-#   L2 (CPU DRAM): layer_first + direct + write_through_selective + storage=none
-# NOTE: write_through_selective evicts only under GPU memory pressure, avoiding
-# the mori RDMA race that causes GPU memory access faults with write_through.
-if [[ "${HICACHE_TIER^^}" == "L3" ]]; then
-  export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
-  export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-  export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-  export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-mooncake}"
-else
-  export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
-  export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-  export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-  export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
+  # ── HiCache layout/backend by tier ──
+  #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
+  #   L2 (CPU DRAM): layer_first + direct + write_through_selective + storage=none
+  # NOTE: write_through_selective evicts only under GPU memory pressure, avoiding
+  # the mori RDMA race that causes GPU memory access faults with write_through.
+  if [[ "${HICACHE_TIER^^}" == "L3" ]]; then
+    export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
+    export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-mooncake}"
+  else
+    export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
+    export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+    export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
+  fi
+  export HICACHE_DECODE="${HICACHE_DECODE:-0}"
+  # Shared nodes: use non-default Mooncake ports to avoid collisions.
+  export MC_MASTER_PORT="${MC_MASTER_PORT:-58137}"
+  export MC_METRICS_PORT="${MC_METRICS_PORT:-19003}"
+  export MC_PATCH_HOSTPOOL="${MC_PATCH_HOSTPOOL:-1}"
+  export MC_PROTOCOL="${MC_PROTOCOL:-tcp}"
+  export MC_GLOBAL_SEG="${MC_GLOBAL_SEG:-30gb}"
+  export MC_DEVICE="${MC_DEVICE:-rdma0}"
+  export MC_MASTER_ADDR="${MC_MASTER_ADDR:-}"
 fi
-export HICACHE_DECODE="${HICACHE_DECODE:-0}"
-# Shared nodes: use non-default Mooncake ports to avoid collisions.
-export MC_MASTER_PORT="${MC_MASTER_PORT:-58137}"
-export MC_METRICS_PORT="${MC_METRICS_PORT:-19003}"
-export MC_PATCH_HOSTPOOL="${MC_PATCH_HOSTPOOL:-1}"
-export MC_PROTOCOL="${MC_PROTOCOL:-tcp}"
-export MC_GLOBAL_SEG="${MC_GLOBAL_SEG:-30gb}"
-export MC_DEVICE="${MC_DEVICE:-rdma0}"
-export MC_MASTER_ADDR="${MC_MASTER_ADDR:-}"
 
 # ── MoRIIO RDMA Send Queue tuning ──
 export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
