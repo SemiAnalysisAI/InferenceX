@@ -23,7 +23,7 @@ index 63500487d..665b26208 100644
  from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
      dequant_mxfp8_to_bf16,
  )
-@@ -24,9 +33,35 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+@@ -24,9 +33,38 @@ from vllm.model_executor.layers.quantization.utils.quant_utils import (
      kMxfp8Dynamic,
      kMxfp8Static,
  )
@@ -33,13 +33,16 @@ index 63500487d..665b26208 100644
  logger = init_logger(__name__)
  
 +_MINIMAX_M3_MI300X_EP_BF16_CONFIG = {
-+    "BLOCK_SIZE_M": 16,
++    "BLOCK_SIZE_M": 64,
 +    "BLOCK_SIZE_N": 64,
 +    "BLOCK_SIZE_K": 128,
-+    "GROUP_SIZE_M": 1,
++    "GROUP_SIZE_M": 8,
 +    "SPLIT_K": 1,
 +    "num_warps": 4,
 +    "num_stages": 2,
++    "waves_per_eu": 0,
++    "matrix_instr_nonkdim": 16,
++    "kpack": 2,
 +}
 +
 +
@@ -59,7 +62,7 @@ index 63500487d..665b26208 100644
  
  class Mxfp8TritonExpertsBase(TritonExperts):
      """Shared MXFP8 MoE setup: stash E8M0 scales, clear scales on ``quant_config``."""
-@@ -67,6 +102,7 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+@@ -67,6 +105,7 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
          quant_config: FusedMoEQuantConfig,
      ):
          super().__init__(moe_config, quant_config)
@@ -67,7 +70,7 @@ index 63500487d..665b26208 100644
          logger.warning_once(
              "Using Mxfp8EmulationTritonExperts MoE backend. Weights are "
              "dequantized to BF16 on the fly; this is slower than a native "
-@@ -122,6 +158,109 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+@@ -122,6 +161,109 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
              return
          super().activation(activation, output, input)
  
@@ -177,7 +180,7 @@ index 63500487d..665b26208 100644
      def apply(
          self,
          output: torch.Tensor,
-@@ -157,6 +296,29 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+@@ -157,6 +299,29 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
                  hidden_states.dtype
              )
  
