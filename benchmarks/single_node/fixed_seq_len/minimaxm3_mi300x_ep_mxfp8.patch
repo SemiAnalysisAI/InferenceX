@@ -34,8 +34,8 @@ index 63500487d..665b26208 100644
  
 +_MINIMAX_M3_MI300X_EP_BF16_CONFIG = {
 +    "BLOCK_SIZE_M": 16,
-+    "BLOCK_SIZE_N": 128,
-+    "BLOCK_SIZE_K": 64,
++    "BLOCK_SIZE_N": 64,
++    "BLOCK_SIZE_K": 128,
 +    "GROUP_SIZE_M": 1,
 +    "SPLIT_K": 1,
 +    "num_warps": 4,
