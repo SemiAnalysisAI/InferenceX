@@ -3879,3 +3879,12 @@
     - "Align MiniMax-M3 B200/B300 EAGLE3 MTP serving with the MiniMax-M2.5 FP8 serving settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and using max cudagraph capture size 2048."
     - "Add TP4+EP4 MTP coverage: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1784
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
