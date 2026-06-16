@@ -3887,4 +3887,4 @@
     - minimaxm3-fp8-b300-vllm-mtp
   description:
     - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1807
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
