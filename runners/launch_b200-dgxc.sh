@@ -436,7 +436,14 @@ else
         # node has about 4 TB of physical RAM.
         SALLOC_MEMORY_ARGS=(--mem=0)
     fi
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time=180 --no-shell --job-name="$RUNNER_NAME"
+    DEFAULT_SALLOC_TIME_LIMIT=180
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "sglang" && "${OFFLOADING:-none}" == "hicache" && "$CONC" -ge 512 ]]; then
+        # C512 replays 694 long-context warmup trajectories before the timed
+        # profile. The normal three-hour allocation expires during warmup.
+        DEFAULT_SALLOC_TIME_LIMIT=300
+    fi
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-$DEFAULT_SALLOC_TIME_LIMIT}"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # DSv4 is also staged on the compute nodes' local RAID. Loading the 806 GB
