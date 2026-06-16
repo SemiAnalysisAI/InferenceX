@@ -739,7 +739,7 @@ glm5.1-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 256 }
 
 kimik2.5-int4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:nightly-b8336c3c7c298e0878f22a7bf70f4e295b2f4e01
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x
@@ -751,11 +751,13 @@ kimik2.5-int4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 64 }
+      - { tp: 8, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 4, conc-end: 128 }
 
 kimik2.5-int4-mi325x-vllm:
   image: vllm/vllm-openai-rocm:v0.21.0
