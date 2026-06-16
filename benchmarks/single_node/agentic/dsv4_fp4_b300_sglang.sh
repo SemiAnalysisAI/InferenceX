@@ -235,6 +235,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
         --prometheus-port "$SGLANG_ROUTER_METRICS_PORT" \
         --connect-timeout-secs 900 \
         --request-timeout-secs 14400 \
+        --disable-health-check \
         --disable-retries > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
