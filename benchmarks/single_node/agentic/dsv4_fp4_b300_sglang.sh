@@ -113,7 +113,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
-    AIPERF_HTTP_CONNECTION_LIMIT=$((TP * 32))
+    AIPERF_HTTP_CONNECTION_LIMIT="$TP"
     if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -gt "$CONC" ]; then
         AIPERF_HTTP_CONNECTION_LIMIT="$CONC"
     fi
