@@ -1,3 +1,6 @@
 **/__pycache__/**
 **/.coverage
 experimental/multiturn/vllm_benchmark/results/
+
+# Local transformers module stubs (not part of InferenceX)
+/modules/

@@ -211,10 +211,19 @@ fi
 
 # When both DP and EP are enabled, override max-running-requests and dispatch tokens
 if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; then
-    decode_max_running_requests=$BENCH_MAX_CONC_VALUE
     decode_dp_ranks=$DECODE_TP_SIZE
-    MORI_MAX_DISPATCH_TOKENS_DECODE=$((BENCH_MAX_CONC_VALUE / decode_dp_ranks))
+    # max-running-requests is split across DP ranks (sglang's req_to_token_pool is
+    # per-rank = max_running_requests // dp_ranks). It must be >= dp_ranks, else the
+    # per-rank pool floors to 0 and get_batch_sizes_to_capture collapses capture_bs
+    # to [0] (AssertionError). This happens when bench concurrency < dp_ranks.
+    decode_max_running_requests=$BENCH_MAX_CONC_VALUE
+    if (( decode_max_running_requests < decode_dp_ranks )); then
+        decode_max_running_requests=$decode_dp_ranks
+    fi
+    MORI_MAX_DISPATCH_TOKENS_DECODE=$((decode_max_running_requests / decode_dp_ranks))
+    (( MORI_MAX_DISPATCH_TOKENS_DECODE < 1 )) && MORI_MAX_DISPATCH_TOKENS_DECODE=1
     MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
+    (( MORI_MOE_MAX_INPUT_TOKENS_DECODE < 1 )) && MORI_MOE_MAX_INPUT_TOKENS_DECODE=1
     # Update derived variable
     SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
     export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
