@@ -22,6 +22,7 @@ echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTIO
 SERVER_LOG=/workspace/server.log
 
 PARALLEL_ARGS=(-tp "$TP") #TP
+CUDAGRAPH_SIZES='[1, 2, 4, 8, 16, 32, 48, 64, 128, 256, 512]'
 if [ "$DP_ATTENTION" = "true" ]; then
     if [ "$EP_SIZE" -gt 1 ]; then #DP+EP
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
