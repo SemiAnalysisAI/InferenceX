@@ -131,6 +131,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
+        --enable-dp-attention-local-control-broadcast
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
         --moe-runner-backend flashinfer_mxfp4
