@@ -412,7 +412,7 @@ else
     fi
     DEFAULT_SALLOC_TIME_LIMIT=180
     if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "sglang" ]]; then
-        if [[ "$CONC" -ge 512 || ( "$DP_ATTENTION" == "true" && "$CONC" -ge 128 ) ]]; then
+        if [[ "$CONC" -ge 512 || ( "$DP_ATTENTION" == "true" && "$CONC" -ge 96 ) ]]; then
             # C512 and high-concurrency DP replays can spend multiple hours in
             # long-context warmup before the 30-minute profiling phase.
             DEFAULT_SALLOC_TIME_LIMIT=300
