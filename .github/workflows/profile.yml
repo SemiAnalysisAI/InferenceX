@@ -18,10 +18,26 @@ on:
         type: string
         default: '64'
       seq-lens:
-        description: "Space-separated sequence lengths (1k1k and/or 8k1k)"
+        description: "Space-separated sequence lengths (1k1k, 8k1k, and/or 32k1k)"
         required: false
         type: string
         default: '1k1k'
+      m3-profile-phase:
+        description: "MiniMax M3 MI300X execution phase to capture"
+        required: false
+        type: choice
+        options:
+          - decode
+          - prefill
+        default: decode
+      m3-kv-cache-mode:
+        description: "MiniMax M3 MI300X main KV-cache dtype experiment"
+        required: false
+        type: choice
+        options:
+          - bf16
+          - fp8
+        default: bf16
       m3-aiter-ar-rms-mode:
         description: "MiniMax M3 MI300X AITER AR+RMS experiment mode"
         required: false
@@ -111,6 +127,8 @@ jobs:
         name: Validate generated jobs
         env:
           M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+          M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
+          M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
           M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
           RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
@@ -129,12 +147,23 @@ jobs:
           mode = os.environ["M3_AITER_AR_RMS_MODE"]
           if mode not in {"off", "control", "fused"}:
               raise SystemExit(f"Invalid M3 AITER AR+RMS mode: {mode}")
+          kv_cache_mode = os.environ["M3_KV_CACHE_MODE"]
+          if kv_cache_mode not in {"bf16", "fp8"}:
+              raise SystemExit(f"Invalid M3 KV-cache mode: {kv_cache_mode}")
+          profile_phase = os.environ["M3_PROFILE_PHASE"]
+          if profile_phase not in {"decode", "prefill"}:
+              raise SystemExit(f"Invalid M3 profile phase: {profile_phase}")
           shared_mode = os.environ["M3_SHARED_EXPERT_STREAM_MODE"]
           if shared_mode not in {"off", "on"}:
               raise SystemExit(
                   f"Invalid M3 shared-expert stream mode: {shared_mode}"
               )
-          if mode != "off" or shared_mode != "off":
+          if (
+              mode != "off"
+              or shared_mode != "off"
+              or kv_cache_mode != "bf16"
+              or profile_phase != "decode"
+          ):
               invalid = [
                   item
                   for item in data
@@ -152,6 +181,8 @@ jobs:
               (
                   item["runner"],
                   item["exp-name"],
+                  item["isl"],
+                  item["osl"],
                   item["tp"],
                   item.get("ep", 1),
                   item["conc"],
@@ -198,6 +229,8 @@ jobs:
       EVAL_ONLY: 'false'
       SCENARIO_SUBDIR: ${{ matrix.config['scenario-type'] == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
       M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+      M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
+      M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
       M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
@@ -245,6 +278,12 @@ jobs:
           if [ "$M3_SHARED_EXPERT_STREAM_MODE" = "on" ]; then
             mode_suffix="${mode_suffix}_m3se-on"
           fi
+          if [ "$M3_KV_CACHE_MODE" != "bf16" ]; then
+            mode_suffix="${mode_suffix}_m3kv-${M3_KV_CACHE_MODE}"
+          fi
+          if [ "$M3_PROFILE_PHASE" != "decode" ]; then
+            mode_suffix="${mode_suffix}_m3phase-${M3_PROFILE_PHASE}"
+          fi
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
           summary_path="profile_summary_${res_name}.json"
@@ -278,13 +317,18 @@ jobs:
           analysis_args=(
             "$trace_path"
             --expected-concurrency "$CONC"
+            --phase "$M3_PROFILE_PHASE"
             --output "$summary_path"
           )
           if [ "$MODEL_PREFIX" = "minimaxm3" ] && [[ "$RUNNER_NAME" == mi300x* ]]; then
-            analysis_args+=(
-              --min-kernel-count 1000
-              --minimum-concurrency-fraction 0.8
-            )
+            if [ "$M3_PROFILE_PHASE" = "decode" ]; then
+              analysis_args+=(
+                --min-kernel-count 1000
+                --minimum-concurrency-fraction 0.8
+              )
+            else
+              analysis_args+=(--min-kernel-count 500)
+            fi
           fi
           if [ "$M3_AITER_AR_RMS_MODE" = "fused" ]; then
             analysis_args+=(

@@ -788,9 +788,12 @@ def analyze_trace(
     path: Path,
     expected_concurrency: int | None = None,
     minimum_concurrency_fraction: float = 1.0,
+    phase: str = "decode",
 ) -> dict[str, Any]:
     if not 0 < minimum_concurrency_fraction <= 1:
         raise ValueError("minimum concurrency fraction must be in (0, 1]")
+    if phase not in {"decode", "prefill"}:
+        raise ValueError("phase must be 'decode' or 'prefill'")
 
     with _open_trace(path) as trace_file:
         payload = json.load(trace_file)
@@ -818,20 +821,23 @@ def analyze_trace(
     )
     for annotation in annotations:
         values = {key: int(value) for key, value in annotation[1].groupdict().items()}
-        if values["context_requests"] != 0 or values["context_tokens"] != 0:
-            continue
-        if expected_concurrency is not None and not (
-            minimum_generation_requests
-            <= values["generation_requests"]
-            <= expected_concurrency
-        ):
+        if phase == "decode":
+            if values["context_requests"] != 0 or values["context_tokens"] != 0:
+                continue
+            if expected_concurrency is not None and not (
+                minimum_generation_requests
+                <= values["generation_requests"]
+                <= expected_concurrency
+            ):
+                continue
+        elif values["context_requests"] == 0 or values["context_tokens"] == 0:
             continue
         matching_annotations.append(annotation)
 
     if not matching_annotations:
         observed = [item[0].get("name") for item in annotations]
         raise ValueError(
-            "no steady-state decode annotation matched the expected concurrency; "
+            f"no {phase} annotation matched the requested profile phase; "
             f"observed={observed}"
         )
 
@@ -842,7 +848,16 @@ def analyze_trace(
         matching_annotations,
         key=lambda item: (
             "gpu_user_annotation" in str(item[0].get("cat", "")).lower(),
-            int(item[1].group("generation_requests")),
+            (
+                int(item[1].group("generation_requests"))
+                if phase == "decode"
+                else int(item[1].group("context_tokens"))
+            ),
+            (
+                int(item[1].group("context_requests"))
+                if phase == "prefill"
+                else 0
+            ),
             _duration(item[0]),
         ),
     )
@@ -978,6 +993,7 @@ def analyze_trace(
         "trace": str(path),
         "annotation": annotation_event["name"],
         "annotation_category": annotation_event.get("cat", ""),
+        "profile_phase": phase,
         "expected_concurrency": expected_concurrency,
         "minimum_concurrency_fraction": minimum_concurrency_fraction,
         **annotation_values,
@@ -987,6 +1003,7 @@ def analyze_trace(
         "annotation_gpu_idle_us": max(
             0.0, annotation_duration_us - annotation_kernel_busy_us
         ),
+        "kernel_span_us": kernel_end - kernel_start,
         "decode_kernel_span_us": kernel_end - kernel_start,
         "total_kernel_duration_us": total_kernel_us,
         "kernel_busy_time_us": kernel_busy_us,
@@ -1018,7 +1035,7 @@ def validate_categories(
     """Validate experiment kernels without accepting out-of-window events."""
     if (required or forbidden) and not summary["annotation_window_used"]:
         raise ValueError(
-            "kernel category validation requires events inside the decode annotation"
+            "kernel category validation requires events inside the selected annotation"
         )
 
     observed_categories = set(summary["categories"])
@@ -1061,6 +1078,11 @@ def main() -> None:
         type=float,
         default=1.0,
     )
+    parser.add_argument(
+        "--phase",
+        choices=("decode", "prefill"),
+        default="decode",
+    )
     parser.add_argument("--output", type=Path)
     parser.add_argument("--min-kernel-count", type=int)
     parser.add_argument("--min-kernel-stream-count", type=int)
@@ -1072,6 +1094,7 @@ def main() -> None:
         args.trace,
         args.expected_concurrency,
         args.minimum_concurrency_fraction,
+        args.phase,
     )
     try:
         validate_kernel_count(summary, args.min_kernel_count)

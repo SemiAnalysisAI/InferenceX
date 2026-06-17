@@ -294,7 +294,7 @@ def test_analyze_trace_allows_bounded_underfilled_decode(tmp_path):
     assert summary["generation_requests"] == 217
     assert summary["minimum_concurrency_fraction"] == 0.8
 
-    with pytest.raises(ValueError, match="no steady-state decode annotation"):
+    with pytest.raises(ValueError, match="no decode annotation"):
         analyze_trace(trace, expected_concurrency=256)
 
 
@@ -413,8 +413,59 @@ def test_analyze_trace_rejects_context_work(tmp_path):
         ],
     )
 
-    with pytest.raises(ValueError, match="no steady-state decode annotation"):
+    with pytest.raises(ValueError, match="no decode annotation"):
         analyze_trace(trace, expected_concurrency=16)
+
+
+def test_analyze_trace_selects_largest_prefill_annotation(tmp_path):
+    trace = _write_trace(
+        tmp_path,
+        [
+            {
+                "name": "execute_context_2(4096)_generation_0(0)",
+                "cat": "gpu_user_annotation",
+                "ph": "X",
+                "ts": 100,
+                "dur": 100,
+            },
+            {
+                "name": "small_prefill",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 110,
+                "dur": 20,
+            },
+            {
+                "name": "execute_context_1(8192)_generation_0(0)",
+                "cat": "gpu_user_annotation",
+                "ph": "X",
+                "ts": 300,
+                "dur": 200,
+            },
+            {
+                "name": "large_prefill",
+                "cat": "kernel",
+                "ph": "X",
+                "ts": 320,
+                "dur": 40,
+            },
+        ],
+    )
+
+    summary = analyze_trace(trace, expected_concurrency=256, phase="prefill")
+
+    assert summary["profile_phase"] == "prefill"
+    assert summary["context_requests"] == 1
+    assert summary["context_tokens"] == 8192
+    assert summary["kernel_span_us"] == 40
+    assert summary["top_kernels"][0]["name"] == "large_prefill"
+
+
+def test_analyze_trace_rejects_invalid_phase(tmp_path):
+    trace = _write_trace(tmp_path, [])
+
+    with pytest.raises(ValueError, match="phase must be"):
+        analyze_trace(trace, phase="mixed")
 
 
 def test_category_validation_rejects_out_of_window_fallback():
@@ -423,7 +474,7 @@ def test_category_validation_rejects_out_of_window_fallback():
         "categories": {"aiter_fused_allreduce_rmsnorm": {"count": 1}},
     }
 
-    with pytest.raises(ValueError, match="inside the decode annotation"):
+    with pytest.raises(ValueError, match="inside the selected annotation"):
         validate_categories(
             summary,
             required=["aiter_fused_allreduce_rmsnorm"],

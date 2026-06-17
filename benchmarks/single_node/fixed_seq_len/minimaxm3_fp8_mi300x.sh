@@ -84,6 +84,42 @@ if [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
 fi
 echo "MI300X index top-k patch ready: $index_topk_sha256"
 
+M3_KV_CACHE_MODE="${M3_KV_CACHE_MODE:-bf16}"
+KV_CACHE_ARGS=()
+case "$M3_KV_CACHE_MODE" in
+    bf16)
+        ;;
+    fp8)
+        # Port the validated ROCm FNUZ dtype handling from vLLM PR #45563.
+        FP8_KV_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_kv.patch"
+        SPARSE_ATTN_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/sparse_attn.py"
+        SPARSE_ATTN_IMPL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/sparse_attention.py"
+        if ! grep -q "_FP8_DTYPES" "$SPARSE_ATTN_SOURCE"; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$FP8_KV_PATCH"; then
+                echo "Failed to validate the MiniMax M3 FP8 KV-cache patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$FP8_KV_PATCH"; then
+                echo "Failed to apply the MiniMax M3 FP8 KV-cache patch" >&2
+                exit 1
+            fi
+        fi
+        if ! grep -q "current_platform.fp8_dtype()" "$SPARSE_ATTN_IMPL" \
+            || ! grep -q "torch.float8_e4m3fnuz" "$SPARSE_ATTN_SOURCE"; then
+            echo "MiniMax M3 FP8 KV-cache dtype fix is missing after patching" >&2
+            exit 1
+        fi
+        python3 -m py_compile "$SPARSE_ATTN_SOURCE" "$SPARSE_ATTN_IMPL"
+        KV_CACHE_ARGS=(--kv-cache-dtype fp8)
+        echo "M3 main KV-cache experiment mode: fp8"
+        ;;
+    *)
+        echo "Invalid M3_KV_CACHE_MODE: $M3_KV_CACHE_MODE" >&2
+        exit 2
+        ;;
+esac
+
 M3_SHARED_EXPERT_STREAM_MODE="${M3_SHARED_EXPERT_STREAM_MODE:-off}"
 export M3_SHARED_EXPERT_STREAM_MODE
 case "$M3_SHARED_EXPERT_STREAM_MODE" in
@@ -216,8 +252,22 @@ fi
 PROFILE_ARGS=()
 if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget=8192
-    profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
-    profile_delay=$((profile_prefill_iterations + 16))
+    M3_PROFILE_PHASE="${M3_PROFILE_PHASE:-decode}"
+    case "$M3_PROFILE_PHASE" in
+        decode)
+            profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
+            profile_delay=$((profile_prefill_iterations + 16))
+            profile_description="one steady-state decode iteration after $profile_delay engine iterations"
+            ;;
+        prefill)
+            profile_delay=0
+            profile_description="the first 8192-token chunked-prefill iteration"
+            ;;
+        *)
+            echo "Invalid M3_PROFILE_PHASE: $M3_PROFILE_PHASE" >&2
+            exit 2
+            ;;
+    esac
     benchmark_num_prompts="$CONC"
     export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/tmp/inferencex-profile/${RESULT_FILENAME}}"
     rm -rf "$VLLM_TORCH_PROFILER_DIR"
@@ -233,7 +283,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
         --compilation-config '{"cudagraph_mode":"NONE"}'
     )
     # ROCTracer does not expose every kernel launched inside a HIP graph.
-    echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
+    echo "Profiling $profile_description."
 else
     benchmark_num_prompts="$((CONC * 10))"
 fi
@@ -244,6 +294,7 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
+    "${KV_CACHE_ARGS[@]}" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
