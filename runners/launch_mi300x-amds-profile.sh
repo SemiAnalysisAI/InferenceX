@@ -52,62 +52,21 @@ REMOTE_BASE="$(
     '
 )"
 REMOTE_WORKSPACE="${REMOTE_BASE}/workspace-${JOB_ID}"
-REMOTE_SQUASH_DIR="${REMOTE_BASE}/squash"
-REMOTE_CACHE_DIR="${REMOTE_BASE}/enroot-cache"
-REMOTE_DATA_DIR="${REMOTE_BASE}/enroot-data"
-REMOTE_RUNTIME_DIR="${REMOTE_BASE}/enroot-runtime"
-REMOTE_TEMP_DIR="${REMOTE_BASE}/enroot-temp"
-REMOTE_HOME="${REMOTE_BASE}/home"
-REMOTE_XDG_CACHE_HOME="${REMOTE_BASE}/xdg-cache"
-REMOTE_XDG_DATA_HOME="${REMOTE_BASE}/xdg-data"
-REMOTE_XDG_RUNTIME_DIR="${REMOTE_BASE}/xdg-runtime"
-SQUASH_FILE="${REMOTE_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-LOCK_FILE="${SQUASH_FILE}.lock"
+SQUASH_FILE="/home/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
     mkdir -p \
         "$REMOTE_WORKSPACE" \
-        "$REMOTE_SQUASH_DIR" \
-        "$REMOTE_CACHE_DIR" \
-        "$REMOTE_DATA_DIR" \
-        "$REMOTE_RUNTIME_DIR" \
-        "$REMOTE_TEMP_DIR" \
-        "$REMOTE_HOME" \
-        "$REMOTE_XDG_CACHE_HOME" \
-        "$REMOTE_XDG_DATA_HOME" \
-        "$REMOTE_XDG_RUNTIME_DIR" \
         "$REMOTE_WORKSPACE/.profile-home"
 tar --exclude='.git' -C "$SOURCE_WORKSPACE" -cf - . \
     | srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
         tar -xf - -C "$REMOTE_WORKSPACE"
 
-srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp bash -c "
-    set -euo pipefail
-    export HOME=\"$REMOTE_HOME\"
-    export XDG_CACHE_HOME=\"$REMOTE_BASE/cache\"
-    export ENROOT_CACHE_PATH=\"$REMOTE_CACHE_DIR\"
-    export ENROOT_DATA_PATH=\"$REMOTE_DATA_DIR\"
-    export ENROOT_RUNTIME_PATH=\"$REMOTE_RUNTIME_DIR\"
-    export ENROOT_TEMP_PATH=\"$REMOTE_TEMP_DIR\"
-    mkdir -p \
-        \"\$HOME\" \
-        \"\$XDG_CACHE_HOME\" \
-        \"\$ENROOT_CACHE_PATH\" \
-        \"\$ENROOT_DATA_PATH\" \
-        \"\$ENROOT_RUNTIME_PATH\" \
-        \"\$ENROOT_TEMP_PATH\"
-    exec 9>\"$LOCK_FILE\"
-    flock -w 600 9 || {
-        echo 'Failed to acquire lock for $SQUASH_FILE' >&2
-        exit 1
-    }
-    if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
-        echo 'Squash file already exists and is valid, skipping import'
-    else
-        rm -f \"$SQUASH_FILE\"
-        enroot import -o \"$SQUASH_FILE\" \"docker://$IMAGE\"
-    fi
-"
+# Reuse the shared image imported by the production MI300X launcher. Importing
+# into node-local storage as an unprivileged user cannot create overlay
+# whiteouts on this cluster.
+srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
+    unsquashfs -l "$SQUASH_FILE" >/dev/null
 
 set +e
 srun --jobid="$JOB_ID" \
@@ -115,11 +74,12 @@ srun --jobid="$JOB_ID" \
     --chdir=/tmp \
     --container-image="$SQUASH_FILE" \
     --container-mounts="$REMOTE_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
-    --no-container-mount-home \
+    --container-mount-home \
+    --container-writable \
     --container-remap-root \
     --container-workdir=/workspace/ \
     --no-container-entrypoint \
-    --export="ALL,HOME=$REMOTE_HOME,XDG_CACHE_HOME=$REMOTE_XDG_CACHE_HOME,XDG_DATA_HOME=$REMOTE_XDG_DATA_HOME,XDG_RUNTIME_DIR=$REMOTE_XDG_RUNTIME_DIR,TMPDIR=$REMOTE_TEMP_DIR" \
+    --export=ALL \
     bash -c '
         export HOME=/workspace/.profile-home
         overlay=/workspace/.vllm-profile-overlay
