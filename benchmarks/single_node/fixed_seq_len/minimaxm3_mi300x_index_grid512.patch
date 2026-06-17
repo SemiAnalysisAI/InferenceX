@@ -1,0 +1,12 @@
+diff --git a/vllm/models/minimax_m3/common/ops/index_topk.py b/vllm/models/minimax_m3/common/ops/index_topk.py
+--- a/vllm/models/minimax_m3/common/ops/index_topk.py
++++ b/vllm/models/minimax_m3/common/ops/index_topk.py
+@@ -804,7 +804,7 @@ def minimax_m3_index_decode(
+     # the grid is fixed within a cuda graph. The lower grid plus explicit
+     # launch settings wins on MI300X once either batch or context is large.
+     tune_score_launch = batch >= 128 or (batch >= 16 and max_block >= 64)
+-    target_grid = 2048 if tune_score_launch else 4096
++    target_grid = 512 if tune_score_launch else 4096
+     MAX_NUM_KV_CHUNKS = 256
+     target = max(
+         1, min(MAX_NUM_KV_CHUNKS, target_grid // max(1, batch * num_idx_heads))
