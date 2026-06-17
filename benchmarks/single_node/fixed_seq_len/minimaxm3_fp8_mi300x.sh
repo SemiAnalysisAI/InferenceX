@@ -5,7 +5,9 @@
 # MXFP8 MoE patch. Short-context EP8 uses the measured native/BF16 policy;
 # long-context EP8 compacts local decode routes and uses low-padding BF16 GEMMs.
 # Block size 128 is mandatory for MSA sparse attention. This experiment enables
-# the corrected FNUZ FP8 main KV cache validated by vLLM PR #45563.
+# the corrected FNUZ FP8 main KV cache validated by vLLM PR #45563. A TP4/DP2
+# hybrid keeps EP8 for the experts while halving each replica's attention and
+# indexer batch. Sequence-parallel MoE avoids routing duplicate TP activations.
 # Target image vLLM revision: 4a560dd8db67c270f5e2afb614558271b76f2294.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -80,6 +82,31 @@ if ! grep -q "current_platform.fp8_dtype()" "$SPARSE_ATTN_IMPL" \
 fi
 python3 -m py_compile "$SPARSE_ATTN_SOURCE" "$SPARSE_ATTN_IMPL"
 
+# M3 did not opt into vLLM's TP+DP sequence-parallel MoE path. Without this,
+# TP4/DP2 routes four replicated copies of each DP rank's tokens through EP8.
+HYBRID_TPDP_PATCH="$(dirname "$0")/minimaxm3_mi300x_hybrid_tpdp_sp.patch"
+M3_AMD_MODEL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
+if ! grep -q "self.is_sequence_parallel = parallel_config.use_sequence_parallel_moe" \
+    "$M3_AMD_MODEL"; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$HYBRID_TPDP_PATCH"; then
+        echo "Failed to validate the MiniMax M3 hybrid TP/DP patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$HYBRID_TPDP_PATCH"; then
+        echo "Failed to apply the MiniMax M3 hybrid TP/DP patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -q "sequence_parallel_chunk(hidden_states)" "$M3_AMD_MODEL" \
+    || ! grep -q "is_sequence_parallel=self.is_sequence_parallel" \
+        "$M3_AMD_MODEL"; then
+    echo "MiniMax M3 hybrid TP/DP markers are missing after patching" >&2
+    exit 1
+fi
+python3 -m py_compile "$M3_AMD_MODEL"
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
@@ -99,6 +126,16 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(
         --tensor-parallel-size 1
         --data-parallel-size "$TP"
+        --enable-expert-parallel
+    )
+elif [ "$EP_SIZE" -gt "$TP" ]; then
+    if [ $((EP_SIZE % TP)) -ne 0 ]; then
+        echo "EP_SIZE=$EP_SIZE must be divisible by TP=$TP" >&2
+        exit 1
+    fi
+    PARALLEL_ARGS=(
+        --tensor-parallel-size "$TP"
+        --data-parallel-size "$((EP_SIZE / TP))"
         --enable-expert-parallel
     )
 elif [ "$EP_SIZE" -gt 1 ]; then

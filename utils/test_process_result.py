@@ -207,6 +207,27 @@ class TestProcessResultScript:
         output_file = tmp_path / "agg_benchmark_result.json"
         assert output_file.exists()
 
+    def test_single_node_hybrid_tp_ep_uses_full_gpu_count(
+        self, tmp_path, sample_benchmark_result, single_node_env_vars
+    ):
+        env = {
+            **single_node_env_vars,
+            "TP": "4",
+            "EP_SIZE": "8",
+        }
+
+        result = run_script(tmp_path, env, sample_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["tp"] == 4
+        assert output_data["ep"] == 8
+        assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / 8)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(
+            (15000.5 - 12000.0) / 8
+        )
+
     def test_multinode_processing(self, tmp_path, sample_benchmark_result, multinode_env_vars):
         """Test multinode result processing."""
         result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)

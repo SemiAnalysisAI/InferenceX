@@ -13,9 +13,14 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
+NUM_GPUS="$TP"
+if [ "${EP_SIZE:-1}" -gt "$NUM_GPUS" ]; then
+    NUM_GPUS="$EP_SIZE"
+fi
+
 # Pin this validation branch to nodes that completed MI300X profiles today.
 # chi-mi300x-034 and -035 currently fail to create enroot user namespaces.
-JOB_ID=$(salloc --partition=$PARTITION --nodes=1 --nodelist=chi-mi300x-043,chi-mi300x-057 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(salloc --partition=$PARTITION --nodes=1 --nodelist=chi-mi300x-043,chi-mi300x-057 --gres=gpu:$NUM_GPUS --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
