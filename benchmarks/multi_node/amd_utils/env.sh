@@ -293,7 +293,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         export SGLANG_DEFAULT_THINKING=1
         export SGLANG_DSV4_REASONING_EFFORT=max
         export SGLANG_USE_ROCM700A=0
-        export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
+        export SGLANG_HACK_FLASHMLA_BACKEND=triton
         export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
         export SGLANG_OPT_USE_FUSED_COMPRESS=true
         export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
