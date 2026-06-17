@@ -41,18 +41,18 @@ fi
 # Determine TPU resource configuration based on TP
 export TP="${TP:-8}"
 if [ "$TP" -eq 8 ]; then
-    export TPU_REPLICAS="2"
-    export TPU_CHIPS="4"
-    export TPU_TOPOLOGY="2x2x2"
+    export TPU_REPLICAS="${TPU_REPLICAS:-1}"
+    export TPU_CHIPS="${TPU_CHIPS:-4}"
+    export TPU_TOPOLOGY="${TPU_TOPOLOGY:-2x2x1}"
 elif [ "$TP" -eq 4 ]; then
-    export TPU_REPLICAS="1"
-    export TPU_CHIPS="4"
-    export TPU_TOPOLOGY="2x2x1"
+    export TPU_REPLICAS="${TPU_REPLICAS:-1}"
+    export TPU_CHIPS="${TPU_CHIPS:-4}"
+    export TPU_TOPOLOGY="${TPU_TOPOLOGY:-2x2x1}"
 elif [ "$TP" -eq 2 ]; then
     # Minimum topology for TPU v7 on GKE is 4 chips (2x2x1), so we run TP=2 on it
-    export TPU_REPLICAS="1"
-    export TPU_CHIPS="4"
-    export TPU_TOPOLOGY="2x2x1"
+    export TPU_REPLICAS="${TPU_REPLICAS:-1}"
+    export TPU_CHIPS="${TPU_CHIPS:-4}"
+    export TPU_TOPOLOGY="${TPU_TOPOLOGY:-2x2x1}"
 else
     echo "Unsupported TP: $TP. Supported values are 2, 4, 8."
     exit 1

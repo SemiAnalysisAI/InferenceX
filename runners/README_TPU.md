@@ -100,6 +100,17 @@ export IMAGE="your-custom-vllm-image"
 ./launch_tpu-v7-gke.sh
 ```
 
+### 🎛️ Single-Node vs. Multi-Node Mode (TP=8)
+By default, running `TP=8` on GKE will schedule the workload entirely on a **single physical host** (`TPU_TOPOLOGY="2x2x1"` / `TPU_REPLICAS=1`) for maximum performance (reaching parity with CDK bare-metal), though it restricts active HBM memory headroom to $32\text{ GB}$ (higher OOM risk under `CONC >= 128`):
+
+```bash
+# Run TP=8 on a single host (Default, maximum performance, tight HBM headroom)
+./launch_tpu-v7-gke.sh
+
+# Run TP=8 across 2 hosts (Multi-Host, maximum HBM headroom, slight network latency)
+TP=8 TPU_REPLICAS=2 TPU_TOPOLOGY=2x2x2 ./launch_tpu-v7-gke.sh
+```
+
 ---
 
 ## 3. How it Works & Output
