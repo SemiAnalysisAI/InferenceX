@@ -3927,3 +3927,11 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026 (gb300_nvfp4 STP recipes)"
     - "Runner script launch_gb300-nv.sh: added dynamo-trt-specific glm5-fp4 case with SERVED_MODEL_NAME and SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1798
+  
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Convert checkpoint MXFP8 MoE weights once at load time to 128x128 block FP8 on gfx942."
+    - "Normalize OCP E4M3 values to FNUZ and use the regular Triton block-FP8 backend."
+    - "Use measured low-token TP tiles and a tuned local-expert table without changing the TP8/TP8+EP8 matrix."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753

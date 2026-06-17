@@ -3,6 +3,7 @@ import json
 import re
 import subprocess
 from collections import defaultdict
+from pathlib import Path
 
 import yaml
 from constants import GENERATE_SWEEPS_PY_SCRIPT, MASTER_CONFIGS
@@ -15,6 +16,34 @@ from matrix_logic.validation import (
 
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
+    repo_root = subprocess.run(
+        ["git", "rev-parse", "--show-toplevel"],
+        capture_output=True,
+        text=True,
+    )
+    git_filepath = filepath
+    if repo_root.returncode == 0:
+        resolved_path = Path(filepath).resolve()
+        resolved_root = Path(repo_root.stdout.strip()).resolve()
+        if resolved_path == resolved_root or resolved_root in resolved_path.parents:
+            git_filepath = resolved_path.relative_to(resolved_root).as_posix()
+
+    base_file = subprocess.run(
+        ["git", "show", f"{base_ref}:{git_filepath}"],
+        capture_output=True,
+    )
+    head_file = subprocess.run(
+        ["git", "show", f"{head_ref}:{git_filepath}"],
+        capture_output=True,
+    )
+
+    if (
+        base_file.returncode == 0
+        and head_file.returncode == 0
+        and head_file.stdout.startswith(base_file.stdout)
+    ):
+        return head_file.stdout[len(base_file.stdout) :].decode()
+
     result = subprocess.run(
         ["git", "diff", base_ref, head_ref, "--", filepath],
         capture_output=True,
