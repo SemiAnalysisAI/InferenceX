@@ -292,14 +292,27 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+M3_EXPERT_PLACEMENT_STRATEGY="${M3_EXPERT_PLACEMENT_STRATEGY:-linear}"
+case "$M3_EXPERT_PLACEMENT_STRATEGY" in
+    linear|round_robin)
+        ;;
+    *)
+        echo "Invalid M3_EXPERT_PLACEMENT_STRATEGY: $M3_EXPERT_PLACEMENT_STRATEGY" >&2
+        exit 2
+        ;;
+esac
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(
         --tensor-parallel-size 1
         --data-parallel-size "$TP"
         --enable-expert-parallel
+        --expert-placement-strategy "$M3_EXPERT_PLACEMENT_STRATEGY"
     )
 elif [ "$EP_SIZE" -gt 1 ]; then
-    PARALLEL_ARGS+=(--enable-expert-parallel)
+    PARALLEL_ARGS+=(
+        --enable-expert-parallel
+        --expert-placement-strategy "$M3_EXPERT_PLACEMENT_STRATEGY"
+    )
 fi
 
 PROFILE_ARGS=()

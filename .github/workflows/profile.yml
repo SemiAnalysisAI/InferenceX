@@ -72,6 +72,14 @@ on:
           - 'off'
           - 'on'
         default: 'off'
+      m3-expert-placement-strategy:
+        description: "MiniMax M3 MI300X expert placement strategy"
+        required: false
+        type: choice
+        options:
+          - linear
+          - round_robin
+        default: linear
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -148,6 +156,7 @@ jobs:
           M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
           M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
           M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
+          M3_EXPERT_PLACEMENT_STRATEGY: ${{ inputs.m3-expert-placement-strategy }}
           M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
           RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
@@ -189,6 +198,9 @@ jobs:
               raise SystemExit(
                   f"Invalid M3 shared-expert stream mode: {shared_mode}"
               )
+          placement = os.environ["M3_EXPERT_PLACEMENT_STRATEGY"]
+          if placement not in {"linear", "round_robin"}:
+              raise SystemExit(f"Invalid M3 expert placement strategy: {placement}")
           if (
               mode != "off"
               or shared_mode != "off"
@@ -196,6 +208,7 @@ jobs:
               or index_kv_cache_mode != "bf16"
               or profile_phase != "decode"
               or profile_token_budget != 8192
+              or placement != "linear"
           ):
               invalid = [
                   item
@@ -266,6 +279,7 @@ jobs:
       M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
       M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
       M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
+      M3_EXPERT_PLACEMENT_STRATEGY: ${{ inputs.m3-expert-placement-strategy }}
       M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
@@ -324,6 +338,9 @@ jobs:
           fi
           if [ "$M3_PROFILE_TOKEN_BUDGET" != "8192" ]; then
             mode_suffix="${mode_suffix}_m3bt-${M3_PROFILE_TOKEN_BUDGET}"
+          fi
+          if [ "$M3_EXPERT_PLACEMENT_STRATEGY" != "linear" ]; then
+            mode_suffix="${mode_suffix}_m3ep-${M3_EXPERT_PLACEMENT_STRATEGY}"
           fi
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
