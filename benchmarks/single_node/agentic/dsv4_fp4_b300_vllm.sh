@@ -218,7 +218,7 @@ if [ "$USE_VLLM_ROUTER" = "true" ]; then
         --port "$PORT" \
         --prometheus-host 127.0.0.1 \
         --prometheus-port "$VLLM_ROUTER_METRICS_PORT" \
-        --request-timeout-secs 3600 \
+        --request-timeout-secs 14400 \
         --disable-retries > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
     echo "Router PID: $ROUTER_PID"
