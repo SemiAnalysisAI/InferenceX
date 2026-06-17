@@ -118,6 +118,24 @@ if ! grep -q "tune_score_launch" "$M3_INDEX_TOPK" \
     echo "MiniMax M3 index-selection optimization markers are missing after patching" >&2
     exit 1
 fi
+FP8_INDEX_TYPED_LOAD_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_index_typed_load.patch"
+if ! grep -q "kernel_index_cache" "$M3_INDEX_TOPK"; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$FP8_INDEX_TYPED_LOAD_PATCH"; then
+        echo "Failed to validate the MiniMax M3 FP8 index typed-load patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$FP8_INDEX_TYPED_LOAD_PATCH"; then
+        echo "Failed to apply the MiniMax M3 FP8 index typed-load patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -q "kernel_index_cache" "$M3_INDEX_TOPK" \
+    || grep -q "float8e4b15" "$M3_INDEX_TOPK"; then
+    echo "MiniMax M3 FP8 index typed-load markers are missing after patching" >&2
+    exit 1
+fi
 python3 -m py_compile "$M3_AMD_MODEL" "$M3_INDEXER" "$M3_INDEX_TOPK"
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
