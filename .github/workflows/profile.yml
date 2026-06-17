@@ -38,6 +38,14 @@ on:
           - bf16
           - fp8
         default: bf16
+      m3-index-kv-cache-mode:
+        description: "MiniMax M3 MI300X index KV-cache dtype experiment"
+        required: false
+        type: choice
+        options:
+          - bf16
+          - fp8
+        default: bf16
       m3-aiter-ar-rms-mode:
         description: "MiniMax M3 MI300X AITER AR+RMS experiment mode"
         required: false
@@ -127,6 +135,7 @@ jobs:
         name: Validate generated jobs
         env:
           M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+          M3_INDEX_KV_CACHE_MODE: ${{ inputs.m3-index-kv-cache-mode }}
           M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
           M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
           M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
@@ -150,6 +159,13 @@ jobs:
           kv_cache_mode = os.environ["M3_KV_CACHE_MODE"]
           if kv_cache_mode not in {"bf16", "fp8"}:
               raise SystemExit(f"Invalid M3 KV-cache mode: {kv_cache_mode}")
+          index_kv_cache_mode = os.environ["M3_INDEX_KV_CACHE_MODE"]
+          if index_kv_cache_mode not in {"bf16", "fp8"}:
+              raise SystemExit(
+                  f"Invalid M3 index KV-cache mode: {index_kv_cache_mode}"
+              )
+          if index_kv_cache_mode == "fp8" and kv_cache_mode != "fp8":
+              raise SystemExit("M3 FP8 index cache requires the FP8 main KV cache")
           profile_phase = os.environ["M3_PROFILE_PHASE"]
           if profile_phase not in {"decode", "prefill"}:
               raise SystemExit(f"Invalid M3 profile phase: {profile_phase}")
@@ -162,6 +178,7 @@ jobs:
               mode != "off"
               or shared_mode != "off"
               or kv_cache_mode != "bf16"
+              or index_kv_cache_mode != "bf16"
               or profile_phase != "decode"
           ):
               invalid = [
@@ -229,6 +246,7 @@ jobs:
       EVAL_ONLY: 'false'
       SCENARIO_SUBDIR: ${{ matrix.config['scenario-type'] == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
       M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
+      M3_INDEX_KV_CACHE_MODE: ${{ inputs.m3-index-kv-cache-mode }}
       M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
       M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
       M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
@@ -280,6 +298,9 @@ jobs:
           fi
           if [ "$M3_KV_CACHE_MODE" != "bf16" ]; then
             mode_suffix="${mode_suffix}_m3kv-${M3_KV_CACHE_MODE}"
+          fi
+          if [ "$M3_INDEX_KV_CACHE_MODE" != "bf16" ]; then
+            mode_suffix="${mode_suffix}_m3idxkv-${M3_INDEX_KV_CACHE_MODE}"
           fi
           if [ "$M3_PROFILE_PHASE" != "decode" ]; then
             mode_suffix="${mode_suffix}_m3phase-${M3_PROFILE_PHASE}"

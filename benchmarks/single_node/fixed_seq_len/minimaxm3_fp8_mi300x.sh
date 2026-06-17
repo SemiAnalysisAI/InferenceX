@@ -120,6 +120,59 @@ case "$M3_KV_CACHE_MODE" in
         ;;
 esac
 
+M3_INDEX_KV_CACHE_MODE="${M3_INDEX_KV_CACHE_MODE:-bf16}"
+INDEX_KV_CACHE_ARGS=()
+case "$M3_INDEX_KV_CACHE_MODE" in
+    bf16)
+        ;;
+    fp8)
+        if [ "$M3_KV_CACHE_MODE" != "fp8" ]; then
+            echo "M3 FP8 index cache requires M3_KV_CACHE_MODE=fp8" >&2
+            exit 2
+        fi
+        FP8_INDEX_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_index_cache_after_tuning.patch"
+        M3_AMD_MODEL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
+        M3_INDEXER="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/indexer.py"
+        if ! grep -q "minimax_m3_index_k_quant_and_cache" "$INDEX_TOPK_SOURCE"; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$FP8_INDEX_PATCH"; then
+                echo "Failed to validate the tuned MiniMax M3 FP8 index-cache patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$FP8_INDEX_PATCH"; then
+                echo "Failed to apply the tuned MiniMax M3 FP8 index-cache patch" >&2
+                exit 1
+            fi
+        fi
+        if ! grep -q "cache_head_dim" "$M3_INDEXER" \
+            || ! grep -q "self._fp8_index" "$M3_AMD_MODEL"; then
+            echo "MiniMax M3 FP8 index-cache markers are missing after patching" >&2
+            exit 1
+        fi
+        python3 - "$INDEX_TOPK_SOURCE" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+score_launch = """        USE_PDL=use_pdl,
+        USE_FP8=use_fp8,
+        IS_FNUZ=is_fnuz,
+        **score_launch,
+"""
+if score_launch not in source:
+    raise SystemExit("FP8 index flags are not attached to the tuned score launch")
+PY
+        python3 -m py_compile "$M3_AMD_MODEL" "$M3_INDEXER" "$INDEX_TOPK_SOURCE"
+        INDEX_KV_CACHE_ARGS=(--attention_config.indexer_kv_dtype=fp8)
+        echo "M3 index KV-cache experiment mode: fp8"
+        ;;
+    *)
+        echo "Invalid M3_INDEX_KV_CACHE_MODE: $M3_INDEX_KV_CACHE_MODE" >&2
+        exit 2
+        ;;
+esac
+
 M3_SHARED_EXPERT_STREAM_MODE="${M3_SHARED_EXPERT_STREAM_MODE:-off}"
 export M3_SHARED_EXPERT_STREAM_MODE
 case "$M3_SHARED_EXPERT_STREAM_MODE" in
@@ -295,6 +348,7 @@ vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${PROFILE_ARGS[@]}" \
     "${KV_CACHE_ARGS[@]}" \
+    "${INDEX_KV_CACHE_ARGS[@]}" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
