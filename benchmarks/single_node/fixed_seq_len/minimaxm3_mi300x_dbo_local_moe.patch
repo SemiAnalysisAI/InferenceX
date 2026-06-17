@@ -1,0 +1,55 @@
+diff --git a/vllm/model_executor/layers/fused_moe/modular_kernel.py b/vllm/model_executor/layers/fused_moe/modular_kernel.py
+index e80224be7..ea3677edb 100644
+--- a/vllm/model_executor/layers/fused_moe/modular_kernel.py
++++ b/vllm/model_executor/layers/fused_moe/modular_kernel.py
+@@ -245,6 +245,16 @@ class FusedMoEPrepareAndFinalize(ABC):
+         """
+         return False
+ 
++    def supports_dbo(self) -> bool:
++        """
++        Indicates whether prepare and finalize are safe to run under DBO.
++
++        Async prepare/finalize implementations already coordinate their
++        communication with the DBO scheduler. Synchronous implementations
++        must opt in explicitly when they do not perform cross-rank work.
++        """
++        return self.supports_async()
++
+     def on_commit(self) -> None:
+         """
+         Runs after this prepare/finalize has been committed to the active
+@@ -1136,7 +1146,7 @@ class FusedMoEKernelModularImpl:
+             # We shouldn't be running an a2a kernel that doesn't
+             # support async prepare/finalize
+             # TODO(lucas): enable in follow-up
+-            assert not dbo_enabled()
++            assert not dbo_enabled() or self.prepare_finalize.supports_dbo()
+ 
+             (
+                 a1q,
+@@ -1306,7 +1316,7 @@ class FusedMoEKernelModularImpl:
+                 dimension) needed by the shared expert MLP.
+         """
+         if not self.prepare_finalize.supports_async():
+-            assert not dbo_enabled()
++            assert not dbo_enabled() or self.prepare_finalize.supports_dbo()
+ 
+             self.prepare_finalize.finalize(
+                 output,
+diff --git a/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py b/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py
+index 69587770c..dc59d0023 100644
+--- a/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py
++++ b/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py
+@@ -38,6 +38,11 @@ def _quantize_input(
+ 
+ 
+ class MoEPrepareAndFinalizeNoDPEPModular(mk.FusedMoEPrepareAndFinalizeModular):
++    def supports_dbo(self) -> bool:
++        # This path only quantizes local inputs and reduces local expert
++        # outputs; it has no collective that needs async prepare/finalize.
++        return True
++
+     @property
+     def activation_format(self) -> mk.FusedMoEActivationFormat:
+         return mk.FusedMoEActivationFormat.Standard

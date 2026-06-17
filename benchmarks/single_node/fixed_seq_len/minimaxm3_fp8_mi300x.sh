@@ -213,8 +213,11 @@ case "$M3_DBO_MODE" in
         ;;
     decode|prefill|all)
         DBO_PATCH="$(dirname "$0")/minimaxm3_mi300x_dbo.patch"
+        DBO_LOCAL_MOE_PATCH="$(dirname "$0")/minimaxm3_mi300x_dbo_local_moe.patch"
         DBO_COMM_SOURCE="$VLLM_PACKAGE_ROOT/vllm/distributed/communication_op.py"
         DBO_CONFIG_SOURCE="$VLLM_PACKAGE_ROOT/vllm/config/vllm.py"
+        DBO_MOE_SOURCE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/modular_kernel.py"
+        DBO_LOCAL_MOE_SOURCE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/prepare_finalize/no_dp_ep.py"
         if ! grep -q "_all_reduce_with_dbo_yields" "$DBO_COMM_SOURCE"; then
             if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
                 < "$DBO_PATCH"; then
@@ -226,8 +229,22 @@ case "$M3_DBO_MODE" in
                 exit 1
             fi
         fi
+        if ! grep -q "def supports_dbo" "$DBO_MOE_SOURCE"; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$DBO_LOCAL_MOE_PATCH"; then
+                echo "Failed to validate the MiniMax M3 local-MoE DBO patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$DBO_LOCAL_MOE_PATCH"; then
+                echo "Failed to apply the MiniMax M3 local-MoE DBO patch" >&2
+                exit 1
+            fi
+        fi
         if ! grep -q "_all_reduce_with_dbo_yields" "$DBO_COMM_SOURCE" \
             || ! grep -q "Microbatching with DP+EP" "$DBO_CONFIG_SOURCE" \
+            || ! grep -q "self.prepare_finalize.supports_dbo" "$DBO_MOE_SOURCE" \
+            || ! grep -q "def supports_dbo" "$DBO_LOCAL_MOE_SOURCE" \
             || ! grep -q "dbo_prefill_min_seq_len" \
                 "$VLLM_PACKAGE_ROOT/vllm/config/parallel.py" \
             || ! grep -q "num_ubatches > 1" \
@@ -240,6 +257,8 @@ case "$M3_DBO_MODE" in
             "$DBO_CONFIG_SOURCE" \
             "$DBO_COMM_SOURCE" \
             "$VLLM_PACKAGE_ROOT/vllm/engine/arg_utils.py" \
+            "$DBO_MOE_SOURCE" \
+            "$DBO_LOCAL_MOE_SOURCE" \
             "$VLLM_PACKAGE_ROOT/vllm/v1/worker/dp_utils.py" \
             "$VLLM_PACKAGE_ROOT/vllm/v1/worker/gpu_model_runner.py" \
             "$VLLM_PACKAGE_ROOT/vllm/v1/worker/gpu_ubatch_wrapper.py" \
