@@ -58,6 +58,7 @@ REMOTE_DATA_DIR="${REMOTE_BASE}/enroot-data"
 REMOTE_RUNTIME_DIR="${REMOTE_BASE}/enroot-runtime"
 REMOTE_TEMP_DIR="${REMOTE_BASE}/enroot-temp"
 REMOTE_HOME="${REMOTE_BASE}/home"
+REMOTE_ENROOT_CONF="${REMOTE_WORKSPACE}/.profile-enroot.conf"
 SQUASH_FILE="${REMOTE_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
@@ -69,10 +70,19 @@ srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
         "$REMOTE_DATA_DIR" \
         "$REMOTE_RUNTIME_DIR" \
         "$REMOTE_TEMP_DIR" \
-        "$REMOTE_HOME"
+        "$REMOTE_HOME" \
+        "$REMOTE_WORKSPACE/.profile-home"
 tar --exclude='.git' -C "$SOURCE_WORKSPACE" -cf - . \
     | srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
         tar -xf - -C "$REMOTE_WORKSPACE"
+srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
+    bash -c 'printf "%s\n" \
+        "environ() {" \
+        "    env" \
+        "}" \
+        "rc() {" \
+        "    exec \"\$@\"" \
+        "}" > "$1"' _ "$REMOTE_ENROOT_CONF"
 
 srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp bash -c "
     set -euo pipefail
@@ -105,15 +115,18 @@ srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp bash -c "
 set +e
 srun --jobid="$JOB_ID" \
     --ntasks=1 \
-    --chdir=/tmp \
-    --container-image="$SQUASH_FILE" \
-    --container-mounts="$REMOTE_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
-    --no-container-mount-home \
-    --container-remap-root \
-    --container-workdir=/workspace/ \
-    --no-container-entrypoint \
-    --export=ALL \
+    --chdir="$REMOTE_WORKSPACE" \
+    --export="ALL,HOME=$REMOTE_HOME,XDG_CACHE_HOME=$REMOTE_BASE/cache,ENROOT_CACHE_PATH=$REMOTE_CACHE_DIR,ENROOT_DATA_PATH=$REMOTE_DATA_DIR,ENROOT_RUNTIME_PATH=$REMOTE_RUNTIME_DIR,ENROOT_TEMP_PATH=$REMOTE_TEMP_DIR" \
+    enroot start \
+    --root \
+    --conf "$REMOTE_ENROOT_CONF" \
+    --env HOME=/workspace/.profile-home \
+    --env GITHUB_WORKSPACE=/workspace \
+    --mount "$REMOTE_WORKSPACE:/workspace" \
+    --mount "$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE" \
+    "$SQUASH_FILE" \
     bash -c '
+        cd /workspace
         overlay=/workspace/.vllm-profile-overlay
         rm -rf "$overlay"
         mkdir -p "$overlay"
