@@ -3902,6 +3902,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1711
 
 - config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k
   description:
     - "Add DeepSeek-V4-Pro FP4 GB300 disaggregated SGLang MTP 1k/1k coverage using lmsysorg/sglang:nightly-dev-cu13-20260615-c127ba64"
