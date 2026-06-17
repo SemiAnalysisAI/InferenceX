@@ -1,0 +1,109 @@
+diff --git a/vllm/models/minimax_m3/common/ops/index_topk.py b/vllm/models/minimax_m3/common/ops/index_topk.py
+index baeb2caa5..d068236c4 100644
+--- a/vllm/models/minimax_m3/common/ops/index_topk.py
++++ b/vllm/models/minimax_m3/common/ops/index_topk.py
+@@ -176,7 +176,6 @@ def _index_block_score_kernel(
+     BLOCK_SIZE_Q: tl.constexpr,
+     BLOCK_SIZE_K: tl.constexpr,  # == SPARSE_BLOCK_SIZE (128)
+     USE_FP8: tl.constexpr,
+-    IS_FNUZ: tl.constexpr,
+ ):
+     sm_scale_log2e = sm_scale * 1.4426950409
+     pid_q = tl.program_id(0)
+@@ -219,13 +218,9 @@ def _index_block_score_kernel(
+         # for tokens beyond seqlen, they will be masked in qk later.
+         if USE_FP8:
+             cache_block_ptr = ik_cache_ptr + page * stride_ik_blk
+-            k_raw = tl.load(
++            k_fp8 = tl.load(
+                 cache_block_ptr + off_k[None, :] * head_dim + off_d[:, None],
+             )
+-            if IS_FNUZ:
+-                k_fp8 = k_raw.to(tl.float8e4b15, bitcast=True)
+-            else:
+-                k_fp8 = k_raw.to(tl.float8e4nv, bitcast=True)
+             scale_ptrs = (cache_block_ptr + BLOCK_SIZE_K * head_dim + off_k * 4).to(
+                 tl.pointer_type(tl.float32)
+             )
+@@ -412,7 +407,6 @@ def _decode_index_score_kernel(
+     num_kv_chunks,
+     USE_PDL: tl.constexpr,
+     USE_FP8: tl.constexpr,
+-    IS_FNUZ: tl.constexpr,
+ ):
+     sm_scale_log2e = sm_scale * 1.4426950409
+     pid_b = tl.program_id(0)  # flattened query-token id
+@@ -458,13 +452,9 @@ def _decode_index_score_kernel(
+         # for tokens beyond seqlen, they will be masked in qk later.
+         if USE_FP8:
+             cache_block_ptr = ik_cache_ptr + page * stride_ik_blk
+-            k_raw = tl.load(
++            k_fp8 = tl.load(
+                 cache_block_ptr + off_k[:, None] * head_dim + off_d[None, :],
+             )
+-            if IS_FNUZ:
+-                k_fp8 = k_raw.to(tl.float8e4b15, bitcast=True)
+-            else:
+-                k_fp8 = k_raw.to(tl.float8e4nv, bitcast=True)
+             scale_ptrs = (cache_block_ptr + BLOCK_SIZE_K * head_dim + off_k * 4).to(
+                 tl.pointer_type(tl.float32)
+             )
+@@ -796,7 +786,12 @@ def minimax_m3_index_score(
+     use_fp8 = index_kv_cache.dtype == torch.uint8
+     if use_fp8:
+         assert index_kv_cache.shape[-1] == head_dim + 4
+-    is_fnuz = current_platform.fp8_dtype() == torch.float8_e4m3fnuz
++        # Explicit FNUZ casts are unsupported by ROCm Triton. Loading through
++        # a platform-FP8 pointer gives Triton the correct element type while
++        # preserving the byte-packed scale trailer in each cache page.
++        kernel_index_cache = index_kv_cache.view(current_platform.fp8_dtype())
++    else:
++        kernel_index_cache = index_kv_cache
+ 
+     # Keep score strides 16-divisible to avoid Triton recompiles.
+     score_block_stride = round_up(max_block, 16)
+@@ -809,7 +804,7 @@ def minimax_m3_index_score(
+     grid_score = (triton.cdiv(max_query_len, BLOCK_SIZE_Q), batch * num_idx_heads)
+     _index_block_score_kernel[grid_score](
+         idx_q,
+-        index_kv_cache,
++        kernel_index_cache,
+         score,
+         block_table,
+         cu_seqlens_q,
+@@ -831,7 +826,6 @@ def minimax_m3_index_score(
+         BLOCK_SIZE_Q=BLOCK_SIZE_Q,
+         BLOCK_SIZE_K=SPARSE_BLOCK_SIZE,
+         USE_FP8=use_fp8,
+-        IS_FNUZ=is_fnuz,
+     )
+     return score
+ 
+@@ -908,7 +902,9 @@ def minimax_m3_index_decode(
+     use_fp8 = index_kv_cache.dtype == torch.uint8
+     if use_fp8:
+         assert index_kv_cache.shape[-1] == head_dim + 4
+-    is_fnuz = current_platform.fp8_dtype() == torch.float8_e4m3fnuz
++        kernel_index_cache = index_kv_cache.view(current_platform.fp8_dtype())
++    else:
++        kernel_index_cache = index_kv_cache
+     use_pdl = current_platform.is_arch_support_pdl()
+     # `launch_pdl` is a Triton runtime kwarg only some backends accept (CUDA
+     # SM9+); this ROCm Triton rejects it even when False ("Keyword argument
+@@ -939,7 +935,7 @@ def minimax_m3_index_decode(
+         score_launch.update(num_warps=2, num_stages=3)
+     _decode_index_score_kernel[grid_score](
+         idx_q,
+-        index_kv_cache,
++        kernel_index_cache,
+         score,
+         block_table,
+         seq_lens,
+@@ -963,7 +959,6 @@ def minimax_m3_index_decode(
+         num_kv_chunks=num_kv_chunks,
+         USE_PDL=use_pdl,
+         USE_FP8=use_fp8,
+-        IS_FNUZ=is_fnuz,
+         **score_launch,
+     )
+ 
