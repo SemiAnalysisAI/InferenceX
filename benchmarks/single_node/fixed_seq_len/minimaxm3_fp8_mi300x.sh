@@ -35,6 +35,7 @@ import vllm
 print(Path(vllm.__file__).resolve().parent.parent)
 PY
 )"
+M3_AMD_MODEL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
 MXFP8_PATCH="$(dirname "$0")/minimaxm3_mi300x_mxfp8.patch"
 MXFP8_EP_PATCH="$(dirname "$0")/minimaxm3_mi300x_ep_mxfp8.patch"
 MXFP8_ORACLE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py"
@@ -131,7 +132,6 @@ case "$M3_INDEX_KV_CACHE_MODE" in
             exit 2
         fi
         FP8_INDEX_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_index_cache_after_tuning.patch"
-        M3_AMD_MODEL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
         M3_INDEXER="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/indexer.py"
         if ! grep -q "minimax_m3_index_k_quant_and_cache" "$INDEX_TOPK_SOURCE"; then
             if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
@@ -294,7 +294,35 @@ fi
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 M3_EXPERT_PLACEMENT_STRATEGY="${M3_EXPERT_PLACEMENT_STRATEGY:-linear}"
 case "$M3_EXPERT_PLACEMENT_STRATEGY" in
-    linear|round_robin)
+    linear)
+        ;;
+    round_robin)
+        EXPERT_PLACEMENT_PATCH="$(dirname "$0")/minimaxm3_mi300x_ungrouped_round_robin.patch"
+        EXPERT_MAP_MANAGER="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/expert_map_manager.py"
+        FUSED_MOE_LAYER="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/layer.py"
+        if ! grep -q "allow_ungrouped_round_robin" "$EXPERT_MAP_MANAGER"; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$EXPERT_PLACEMENT_PATCH"; then
+                echo "Failed to validate the M3 round-robin placement patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$EXPERT_PLACEMENT_PATCH"; then
+                echo "Failed to apply the M3 round-robin placement patch" >&2
+                exit 1
+            fi
+        fi
+        if ! grep -q "allow_ungrouped_round_robin=True" "$M3_AMD_MODEL" \
+            || ! grep -q "allow_ungrouped_round_robin=allow_ungrouped_round_robin" \
+                "$FUSED_MOE_LAYER"; then
+            echo "M3 round-robin placement opt-in markers are missing" >&2
+            exit 1
+        fi
+        python3 -m py_compile \
+            "$EXPERT_MAP_MANAGER" \
+            "$FUSED_MOE_LAYER" \
+            "$M3_AMD_MODEL"
+        echo "M3 expert placement experiment mode: round_robin"
         ;;
     *)
         echo "Invalid M3_EXPERT_PLACEMENT_STRATEGY: $M3_EXPERT_PLACEMENT_STRATEGY" >&2
