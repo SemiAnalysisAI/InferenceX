@@ -3919,3 +3919,8 @@
     - "Also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1767
   
+  - config-keys:
+    - dsr1-fp4-mi355x-sglang
+  description:
+    - "Introduce EP configurations"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1811
