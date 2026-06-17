@@ -252,9 +252,9 @@ jobs:
       max-parallel: 4
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
-    # The generic mi300x label also includes direct-host TW runners, while this
-    # profiling harness uses the checked-in Slurm launcher.
-    runs-on: ${{ matrix.config.runner == 'mi300x' && 'mi300x-p1' || matrix.config.runner }}
+    # Runner 08 uses a /home workspace that is not visible from the Slurm
+    # compute nodes. Pin the validated runner 07 for this MI300X experiment.
+    runs-on: ${{ matrix.config.runner == 'mi300x' && 'mi300x-amds_07' || matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}
@@ -355,7 +355,7 @@ jobs:
 
           if [[ "$RUNNER_NAME" == mi300x-amds_* ]]; then
             sed -i \
-              's/--exclude=chi-mi300x-049/--nodelist=chi-mi300x-043,chi-mi300x-057,chi-mi300x-058/' \
+              's/--exclude=chi-mi300x-049/--nodelist=chi-mi300x-058/' \
               runners/launch_mi300x-amds.sh
           fi
 
