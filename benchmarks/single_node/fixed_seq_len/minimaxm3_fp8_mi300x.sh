@@ -102,6 +102,13 @@ vllm serve "$MODEL" --port "$PORT" \
 SERVER_PID=$!
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
 
+num_prompts_multiplier=10
+if [ "$ISL" -ge 32768 ]; then
+    # One full wave is enough for the 32k residency sanity check. Ten waves at
+    # c256 would process roughly 84 million prompt tokens.
+    num_prompts_multiplier=1
+fi
+
 run_benchmark_serving \
     --model "$MODEL" \
     --port "$PORT" \
@@ -109,7 +116,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts "$((CONC * 10))" \
+    --num-prompts "$((CONC * num_prompts_multiplier))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \

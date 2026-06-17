@@ -182,6 +182,7 @@ class TestSeqLenToStr:
         """Known sequence lengths should return short name."""
         assert seq_len_to_str(1024, 1024) == "1k1k"
         assert seq_len_to_str(8192, 1024) == "8k1k"
+        assert seq_len_to_str(32768, 1024) == "32k1k"
 
     def test_unknown_sequence_lengths(self):
         """Unknown sequence lengths should return isl_osl format."""

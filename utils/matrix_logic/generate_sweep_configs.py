@@ -17,7 +17,8 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "8k1k": (8192, 1024)
+    "8k1k": (8192, 1024),
+    "32k1k": (32768, 1024),
 }
 
 MIN_EVAL_CONC = 16
@@ -1126,7 +1127,7 @@ def main():
         nargs='+',
         choices=list(seq_len_stoi.keys()),
         required=False,
-        help='Only include these sequence length configurations (e.g., 1k1k 8k1k)'
+        help='Only include these sequence length configurations (e.g., 1k1k 8k1k 32k1k)'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',
