@@ -1,0 +1,117 @@
+diff --git a/vllm/models/minimax_m3/common/ops/index_topk.py b/vllm/models/minimax_m3/common/ops/index_topk.py
+index d068236c4..25fa18405 100644
+--- a/vllm/models/minimax_m3/common/ops/index_topk.py
++++ b/vllm/models/minimax_m3/common/ops/index_topk.py
+@@ -176,6 +176,8 @@ def _index_block_score_kernel(
+     BLOCK_SIZE_Q: tl.constexpr,
+     BLOCK_SIZE_K: tl.constexpr,  # == SPARSE_BLOCK_SIZE (128)
+     USE_FP8: tl.constexpr,
++    USE_FP8_DOT: tl.constexpr,
++    IS_FNUZ: tl.constexpr,
+ ):
+     sm_scale_log2e = sm_scale * 1.4426950409
+     pid_q = tl.program_id(0)
+@@ -199,6 +201,12 @@ def _index_block_score_kernel(
+         order=(1, 0),
+     )
+     q = tl.load(q_ptrs, boundary_check=(0,), padding_option="zero")
++    if USE_FP8_DOT:
++        q_fp32 = q.to(tl.float32)
++        q_absmax = tl.maximum(tl.max(tl.abs(q_fp32), axis=1), 1e-4)
++        fp8_max: tl.constexpr = 224.0 if IS_FNUZ else 448.0
++        q_scale = tl.exp2(tl.ceil(tl.log2(q_absmax / fp8_max)))
++        q = (q_fp32 / q_scale[:, None]).to(ik_cache_ptr.dtype.element_ty)
+     q_start = prefix_len + pid_q * BLOCK_SIZE_Q
+ 
+     off_q = tl.arange(0, BLOCK_SIZE_Q) + pid_q * BLOCK_SIZE_Q + prefix_len
+@@ -225,7 +233,7 @@ def _index_block_score_kernel(
+                 tl.pointer_type(tl.float32)
+             )
+             k_scale = tl.load(scale_ptrs)
+-            k = k_fp8.to(tl.bfloat16)
++            k = k_fp8 if USE_FP8_DOT else k_fp8.to(tl.bfloat16)
+         else:
+             k = tl.load(
+                 ik_cache_ptr
+@@ -238,6 +246,8 @@ def _index_block_score_kernel(
+             # Scale is per cached token, so applying it to the dot output is
+             # equivalent to dequantizing every K element and uses fewer ops.
+             qk *= k_scale[None, :]
++            if USE_FP8_DOT:
++                qk *= q_scale[:, None]
+         # apply causal mask as needed
+         if q_start < i + BLOCK_SIZE_K:
+             qk = tl.where(off_q[:, None] >= pos[None, :], qk, float("-inf"))
+@@ -407,6 +417,8 @@ def _decode_index_score_kernel(
+     num_kv_chunks,
+     USE_PDL: tl.constexpr,
+     USE_FP8: tl.constexpr,
++    USE_FP8_DOT: tl.constexpr,
++    IS_FNUZ: tl.constexpr,
+ ):
+     sm_scale_log2e = sm_scale * 1.4426950409
+     pid_b = tl.program_id(0)  # flattened query-token id
+@@ -443,6 +455,12 @@ def _decode_index_score_kernel(
+         + tl.arange(0, num_idx_heads) * stride_q_h
+         + off_d[:, None] * stride_q_d,
+     )  # [D,H]
++    if USE_FP8_DOT:
++        q_fp32 = q.to(tl.float32)
++        q_absmax = tl.maximum(tl.max(tl.abs(q_fp32), axis=0), 1e-4)
++        fp8_max: tl.constexpr = 224.0 if IS_FNUZ else 448.0
++        q_scale = tl.exp2(tl.ceil(tl.log2(q_absmax / fp8_max)))
++        q = (q_fp32 / q_scale[None, :]).to(ik_cache_ptr.dtype.element_ty)
+     for blk in tl.range(chunk_start_block, chunk_end_block):
+         page = tl.load(bt_row + blk).to(tl.int64)
+         pos = blk * BLOCK_SIZE_K + off_k
+@@ -459,7 +477,7 @@ def _decode_index_score_kernel(
+                 tl.pointer_type(tl.float32)
+             )
+             k_scale = tl.load(scale_ptrs)
+-            k = k_fp8.to(tl.bfloat16)
++            k = k_fp8 if USE_FP8_DOT else k_fp8.to(tl.bfloat16)
+         else:
+             k = tl.load(
+                 ik_cache_ptr
+@@ -470,6 +488,8 @@ def _decode_index_score_kernel(
+         kq = tl.dot(k, q) * sm_scale_log2e  # [N,H]
+         if USE_FP8:
+             kq *= k_scale[:, None]
++            if USE_FP8_DOT:
++                kq *= q_scale[None, :]
+         kq = tl.where(pos_mask[:, None], kq, float("-inf"))
+         score = tl.max(kq, axis=0)  # [H]
+         is_init = blk < init_blocks
+@@ -784,6 +804,7 @@ def minimax_m3_index_score(
+     batch = cu_seqlens_q.shape[0] - 1
+     max_block = triton.cdiv(max_seq_len, SPARSE_BLOCK_SIZE)
+     use_fp8 = index_kv_cache.dtype == torch.uint8
++    use_fp8_dot = use_fp8 and current_platform.is_rocm()
+     if use_fp8:
+         assert index_kv_cache.shape[-1] == head_dim + 4
+         # Explicit FNUZ casts are unsupported by ROCm Triton. Loading through
+@@ -826,6 +847,8 @@ def minimax_m3_index_score(
+         BLOCK_SIZE_Q=BLOCK_SIZE_Q,
+         BLOCK_SIZE_K=SPARSE_BLOCK_SIZE,
+         USE_FP8=use_fp8,
++        USE_FP8_DOT=use_fp8_dot,
++        IS_FNUZ=current_platform.is_fp8_fnuz(),
+     )
+     return score
+ 
+@@ -900,6 +923,7 @@ def minimax_m3_index_decode(
+     batch = total_q
+     max_block = triton.cdiv(max_seq_len, SPARSE_BLOCK_SIZE)
+     use_fp8 = index_kv_cache.dtype == torch.uint8
++    use_fp8_dot = use_fp8 and current_platform.is_rocm()
+     if use_fp8:
+         assert index_kv_cache.shape[-1] == head_dim + 4
+         kernel_index_cache = index_kv_cache.view(current_platform.fp8_dtype())
+@@ -959,6 +983,8 @@ def minimax_m3_index_decode(
+         num_kv_chunks=num_kv_chunks,
+         USE_PDL=use_pdl,
+         USE_FP8=use_fp8,
++        USE_FP8_DOT=use_fp8_dot,
++        IS_FNUZ=current_platform.is_fp8_fnuz(),
+         **score_launch,
+     )
