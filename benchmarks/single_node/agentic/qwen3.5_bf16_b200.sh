@@ -12,9 +12,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars MODEL TP CONC RESULT_DIR DURATION EP_SIZE
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-10}
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -62,7 +59,6 @@ python3 -m sglang.launch_server \
 --mem-fraction-static 0.82 \
 --chunked-prefill-size 32768 \
 --max-prefill-tokens 32768 \
---context-length $MAX_MODEL_LEN \
 --attention-backend trtllm_mha \
 --moe-runner-backend flashinfer_trtllm \
 --enable-flashinfer-allreduce-fusion \

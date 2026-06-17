@@ -16,6 +16,17 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
+# Agentic replays must use the model's native context limit. Ignore inherited
+# workflow or shell overrides so neither the server nor AIPerf applies a cap.
+_benchmark_caller="${BASH_SOURCE[1]:-}"
+if [[ "$_benchmark_caller" == */agentic/* ||
+      "$_benchmark_caller" == */agentic_*.sh ||
+      "${IS_AGENTIC:-0}" == "1" ||
+      "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
+    unset MAX_MODEL_LEN
+fi
+unset _benchmark_caller
+
 # --------------------------------
 # GPU monitoring helpers
 # --------------------------------

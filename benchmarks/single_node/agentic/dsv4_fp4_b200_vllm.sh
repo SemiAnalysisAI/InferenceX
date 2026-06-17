@@ -29,10 +29,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=1000000
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -209,7 +205,6 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
-    --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
 )

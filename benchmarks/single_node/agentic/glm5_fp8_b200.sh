@@ -11,10 +11,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC RESULT_DIR DURATION
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -71,7 +67,6 @@ python3 -m sglang.launch_server \
 --max-prefill-tokens 32768 \
 --enable-flashinfer-allreduce-fusion \
 --stream-interval 30 \
---context-length $MAX_MODEL_LEN \
 --enable-metrics \
 --model-loader-extra-config '{"enable_multithread_load": true}' > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!

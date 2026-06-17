@@ -16,14 +16,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
-# Kimi-K2.5 advertises a 262144-token context window in vLLM 0.21.0.
-# Matrix defaults may export MAX_MODEL_LEN=0 to mean "server default"; for this
-# script we need the concrete value so AgentX filters prompt+max_tokens against
-# the same limit vLLM enforces.
-if [[ -z "${MAX_MODEL_LEN:-}" || "$MAX_MODEL_LEN" == "0" ]]; then
-    MAX_MODEL_LEN=262144
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -804,7 +796,6 @@ VLLM_CMD=(
     --gpu-memory-utilization 0.90
     --block-size=1
     --trust-remote-code
-    --max-model-len "$MAX_MODEL_LEN"
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
     "${PREFIX_CACHE_ARGS[@]}"

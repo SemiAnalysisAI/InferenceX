@@ -11,12 +11,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
-# Agentic matrix entries don't set max-model-len, so the workflow passes 0.
-# ${:-DEFAULT} only fires on unset/empty, so handle 0 explicitly.
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -35,7 +29,6 @@ mkdir -p "$RESULT_DIR"
 cat > "$RESULT_DIR/config.yaml" << EOF
 async-scheduling: true
 max-cudagraph-capture-size: 2048
-max-model-len: $MAX_MODEL_LEN
 EOF
 
 OFFLOAD_ARGS=""

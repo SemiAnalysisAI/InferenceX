@@ -11,10 +11,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -73,7 +69,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --port $PORT \
 $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
---max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
 --max-cudagraph-capture-size 2048 \
 --max-num-seqs $CONC \

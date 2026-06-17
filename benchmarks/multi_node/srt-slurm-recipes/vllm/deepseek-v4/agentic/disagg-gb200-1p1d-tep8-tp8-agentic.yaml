@@ -27,8 +27,8 @@ name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 # Standard agentic deltas (see the gb300 agentic recipes):
 #   - benchmark.type custom -> agentic_srt.sh
 #   - prefix caching ON (no no-enable-prefix-caching)
-#   - max-model-len 262144 + 061526 256k-capped corpus (GB200 cannot serve
-#     the full 1M DSv4 context, mirroring the minimaxm2.5 agentic configs)
+#   - max-model-len omitted so vLLM derives it from the model config
+#   - 061526 256k-capped corpus retained to bound per-request GB200 memory
 #   - infra.nats_max_payload_mb 32 (long agentic prompts exceed NATS' 1 MiB)
 #   - srun_options.container-remap-root (apt-get git in agentic_srt.sh)
 
@@ -121,7 +121,6 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       enforce-eager: true
-      max-model-len: 262144
       max-num-seqs: 16
       # 16384 batched tokens + util 0.90 (the fixed-seq megamoe recipes use
       # 32768 + 0.95, tuned for 9k contexts): at 256k contexts the first
@@ -149,7 +148,6 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       enable-ep-weight-filter: true
-      max-model-len: 262144
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -198,8 +196,6 @@ benchmark:
     # dataset isn't re-downloaded on every run. Overrides the workflow-level
     # HF_HUB_CACHE=/mnt/hf_hub_cache, which doesn't exist on these nodes.
     HF_HUB_CACHE: "/hf_hub_cache"
-    # The server runs at max-model-len 262144 (see header comment) — replay
-    # the 256k-capped corpus and tell aiperf to filter inputs to the served
-    # window, mirroring the minimaxm2.5 agentic configs.
+    # Keep requests within the validated GB200 workload envelope while the
+    # server derives its context limit from the model config.
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526_256k"
-    MAX_MODEL_LEN: "262144"

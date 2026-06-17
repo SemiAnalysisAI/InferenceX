@@ -11,10 +11,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=131072
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -35,7 +31,6 @@ kv-cache-dtype: fp8
 compilation-config: '{"pass_config":{"fuse_allreduce_rms":true,"eliminate_noops":true}}'
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
-max-model-len: $MAX_MODEL_LEN
 EOF
 
 OFFLOAD_ARGS=""

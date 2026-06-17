@@ -24,12 +24,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
-if ! declare -p MAX_MODEL_LEN >/dev/null 2>&1; then
-    MAX_MODEL_LEN=1000000
-elif [[ -z "$MAX_MODEL_LEN" || "$MAX_MODEL_LEN" = "0" ]]; then
-    MAX_MODEL_LEN=1000000
-fi
-
 if declare -p SLURM_JOB_ID >/dev/null 2>&1 && [ -n "$SLURM_JOB_ID" ]; then
     SLURM_NODE=unknown
     if declare -p SLURMD_NODENAME >/dev/null 2>&1 && [ -n "$SLURMD_NODENAME" ]; then
@@ -207,7 +201,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --reasoning-parser deepseek_v4 \
 --enable-prefix-caching \
 --no-disable-hybrid-kv-cache-manager \
---max-model-len "$MAX_MODEL_LEN" \
 --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS" \
 "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!

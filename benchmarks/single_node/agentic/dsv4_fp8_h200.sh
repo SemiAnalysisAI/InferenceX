@@ -13,10 +13,6 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC RESULT_DIR DURATION
 
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=800000
-fi
-
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -58,7 +54,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 --block-size 256 \
 --enable-expert-parallel \
 --data-parallel-size $TP \
---max-model-len $MAX_MODEL_LEN \
 --gpu-memory-utilization 0.95 \
 --max-num-seqs $CONC \
 --max-num-batched-tokens 512 \
