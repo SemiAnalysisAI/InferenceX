@@ -2779,7 +2779,8 @@ dsv4-fp4-mi355x-sglang-agentic:
 
 # target
 dsv4-fp4-mi355x-sglang-agentic-hicache:
-  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm700-mi35x-20260616
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260610
+  #image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm700-mi35x-20260616 blk size 1
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
