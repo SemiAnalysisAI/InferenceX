@@ -121,13 +121,31 @@ sed -e "s|\${JOB_NAME}|${JOB_NAME}|g" \
 kubectl apply -f "$TEMP_YAML"
 
 echo "Waiting for TPU Sweep Job to complete (this may take up to 30-40 minutes)..."
-kubectl wait --for=condition=completed jobset/${JOB_NAME} --timeout=2h
+kubectl wait --for=condition=Completed jobset/${JOB_NAME} --timeout=2h
 
 # Find master pod name
 POD_NAME=$(kubectl get pods -l jobset.sigs.k8s.io/jobset-name=${JOB_NAME},batch.kubernetes.io/job-completion-index=0 -o jsonpath='{.items[0].metadata.name}')
 
-echo "Job completed successfully. Pulling results folder from pod ${POD_NAME}..."
-kubectl cp "${POD_NAME}:/tmp/bench_results" "${SCRIPT_DIR}/../results/bench_results" -c sidecar-bench
+echo "Job completed successfully. Pulling stdout results log from pod ${POD_NAME}..."
+kubectl logs "${POD_NAME}" -c sidecar-bench > "${SCRIPT_DIR}/../results/raw_logs.txt"
+
+# Reconstruct JSON files locally using inline python
+python3 -c "
+import os, re, json
+log_path = '${SCRIPT_DIR}/../results/raw_logs.txt'
+out_dir = '${SCRIPT_DIR}/../results/bench_results'
+os.makedirs(out_dir, exist_ok=True)
+with open(log_path, 'r') as f:
+    content = f.read()
+match = re.search(r'=== BENCHMARK_JSON_RESULT_START ===\n(.*)\n=== BENCHMARK_JSON_RESULT_END ===', content, re.DOTALL)
+if match:
+    file_blocks = re.split(r'=== RESULT_FILE: (.*) ===', match.group(1))
+    for i in range(1, len(file_blocks), 2):
+        filename = file_blocks[i].strip()
+        with open(os.path.join(out_dir, filename), 'w') as out_f:
+            json.dump(json.loads(file_blocks[i+1].strip()), out_f, indent=2)
+"
+rm -f "${SCRIPT_DIR}/../results/raw_logs.txt"
 
 # --- 4. Process Loop Result Files ---
 echo "Translating and processing sweep results..."
@@ -154,6 +172,8 @@ for file in "${SCRIPT_DIR}/../results/bench_results"/result_*.json; do
         export RESULT_FILENAME="${target_job_name}"
         export RUNNER_TYPE="tpu-v7"
         export FRAMEWORK="vllm"
+        export PRECISION="${PRECISION}"
+        export IMAGE="${IMAGE}"
         export DISAGG="false"
         export SPEC_DECODING="none"
         export MODEL_PREFIX="qwen3.5"
