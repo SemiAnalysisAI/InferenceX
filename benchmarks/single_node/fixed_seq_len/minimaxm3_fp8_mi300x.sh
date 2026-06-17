@@ -85,6 +85,36 @@ if [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
 fi
 echo "MI300X index top-k patch ready: $index_topk_sha256"
 
+INDEX_GRID_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_grid512.patch"
+INDEX_GRID_SOURCE_SHA256="36f5132ef789c74b7f88be8bd34a6ca1ea6c3ee6561213305f1db9f1b9cbd6fe"
+INDEX_GRID_PATCHED_SHA256="f98190a5e9b97bdd775cf087b63d4981bd9673ae52be3d30adfa931fa5925ad2"
+index_grid_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
+if [ "$index_grid_sha256" = "$INDEX_GRID_SOURCE_SHA256" ]; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$INDEX_GRID_PATCH"; then
+        echo "Failed to validate the MI300X index grid patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_GRID_PATCH"; then
+        echo "Failed to apply the MI300X index grid patch" >&2
+        exit 1
+    fi
+elif [ "$index_grid_sha256" != "$INDEX_GRID_PATCHED_SHA256" ]; then
+    echo "MI300X index grid source fingerprint mismatch: $index_grid_sha256" >&2
+    exit 1
+fi
+index_grid_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
+if [ "$index_grid_sha256" != "$INDEX_GRID_PATCHED_SHA256" ]; then
+    echo "MI300X index grid patched fingerprint mismatch: $index_grid_sha256" >&2
+    exit 1
+fi
+if ! grep -q "target_grid = 512 if tune_score_launch" "$INDEX_TOPK_SOURCE"; then
+    echo "MI300X index grid marker is missing after patching" >&2
+    exit 1
+fi
+python3 -m py_compile "$INDEX_TOPK_SOURCE"
+echo "MI300X index grid patch ready: $index_grid_sha256"
+
 M3_KV_CACHE_MODE="${M3_KV_CACHE_MODE:-bf16}"
 KV_CACHE_ARGS=()
 case "$M3_KV_CACHE_MODE" in
