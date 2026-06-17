@@ -92,8 +92,8 @@ export IMAGE="your-custom-vllm-image"
 
 ## 3. How it Works & Output
 
-1.  **Orchestration**: The script uses `tpu-v7-jobset.yaml.template` to dynamically generate Kubernetes JobSets for each test case (e.g., ISL=1024, OSL=1024, Conc=64).
+1.  **Consolidated Mesh Orchestration**: The script deploys a **single unified Kubernetes JobSet** (`tpu-v7-jobset.yaml.template`) covering the entire sweep space. This avoids repeated GKE cluster node re-allocations and weight downloading, and completely prevents Double-Loading RAM OOMs.
 2.  **Resource Configuration**: The requested TPU chips and GKE TPU topology selector are automatically determined from the `$TP` parameter (e.g., TP=8 maps to 8 chips with topology `2x2x2`).
-3.  **Isolation**: For each test case, a fresh JobSet is created. It starts a vLLM server and a sidecar benchmark client.
-4.  **Data Collection**: Once the benchmark finishes, the script uses `kubectl cp` to extract the `result.json` from the cloud container to your local `results/` directory.
-5.  **Standardization**: The script automatically calls `utils/process_result.py` from within the `results/` directory to convert the raw metrics into standard InferenceX dashboard JSON format (`results/agg_*.json`), making TPU results directly comparable with B300/MI355 results.
+3.  **JAX Cache Preservation**: JAX compilation caching is enabled via `JAX_COMPILATION_CACHE_DIR` pointing to `/root/.cache`. By running a targeted Host Purge DaemonSet after the run, we clean up the massive 378 GB weights while preserving the compile cache. Subsequent warmups are cut from 1.5 hours to 2 minutes.
+4.  **Logging-based Data Collection**: Once the sequential benchmark loop completes inside the container, results are dumped to the container's stdout logs. The script downloads these logs via `kubectl logs`, parses the output markers, and reconstructs the 14 individual result JSON files locally.
+5.  **Standardization**: The script automatically calls `utils/process_result.py` to convert the raw metrics into standard InferenceX dashboard JSON format (`results/agg_*.json`), making TPU results directly comparable with GPU results.
