@@ -145,6 +145,7 @@ def parse_range(cuda_range, default_start, default_end):
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
+print(f'MODEL_EP_FLAGS=\"{m.get(\"ep_flags\", \"\")}\"')
 
 prefill = m.get('prefill', {})
 decode = m.get('decode', {})
@@ -357,6 +358,7 @@ build_server_config() {
     local base_config="$MODEL_BASE_FLAGS"
     local mtp_config=""
     local dp_config=""
+    local ep_config=""
     local specific_config=""
 
     # MTP config (only if MTP is enabled and mode is decode)
@@ -369,6 +371,13 @@ build_server_config() {
         dp_config="$MODEL_DP_FLAGS"
     fi
 
+    # EP config (only if EP is enabled): a2a backend, deepep mode, ep-dispatch algo.
+    # With ep=1 (EP disabled) these are dropped, so the MoE runs tensor-parallel (TP)
+    # instead of expert-parallel — even when dp-attention is on.
+    if [[ "$enable_ep" == "true" ]]; then
+        ep_config="$MODEL_EP_FLAGS"
+    fi
+
     # Mode-specific config
     if [[ "$mode" == "prefill" ]]; then
         specific_config="$PREFILL_MODE_FLAGS"
@@ -376,10 +385,13 @@ build_server_config() {
         specific_config="$DECODE_MODE_FLAGS"
     fi
 
-    # Combine: parallel args + base config + mtp config (decode only) + dp config + specific config
+    # Combine: parallel args + base config + ep config + mtp config (decode only) + dp config + specific config
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
+    fi
+    if [[ -n "$ep_config" ]]; then
+        full_config="$full_config $ep_config"
     fi
     if [[ -n "$mtp_config" ]] && [[ "$mode" == "decode" ]]; then
         full_config="$full_config $mtp_config"
