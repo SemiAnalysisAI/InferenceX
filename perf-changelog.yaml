@@ -3909,7 +3909,16 @@
   description:
     - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
-
+  
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Fix gsm8k accuracy at 88% instead of 95% for a single point."
+    - "In previous submission, there was an numeric issue causing accuracy degradation and performance anomaly in some MTP points at certain concurrency."
+    - "This issue is now fixed in the latest TRTLLM release."
+    - "Also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1767
+  
 - config-keys:
     - glm5-fp4-gb300-dynamo-trt
   description:
@@ -3918,4 +3927,3 @@
     - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026 (gb300_nvfp4 STP recipes)"
     - "Runner script launch_gb300-nv.sh: added dynamo-trt-specific glm5-fp4 case with SERVED_MODEL_NAME and SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1798
-

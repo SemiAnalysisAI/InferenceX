@@ -6887,10 +6887,10 @@ dsr1-fp4-gb300-dynamo-sglang:
           dp-attn: true
 
 dsr1-fp8-gb300-dynamo-trt:
-  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
+  image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
   model: deepseek-ai/DeepSeek-R1-0528
   model-prefix: dsr1
-  runner: gb300
+  runner: gb300-nv
   precision: fp8
   framework: dynamo-trt
   multinode: true
