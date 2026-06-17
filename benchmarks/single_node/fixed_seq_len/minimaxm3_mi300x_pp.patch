@@ -1,0 +1,194 @@
+diff --git a/vllm/models/minimax_m3/amd/model.py b/vllm/models/minimax_m3/amd/model.py
+index 27650c8e6..d262109be 100644
+--- a/vllm/models/minimax_m3/amd/model.py
++++ b/vllm/models/minimax_m3/amd/model.py
+@@ -30,7 +30,7 @@ from vllm.config import (
+     VllmConfig,
+     get_current_vllm_config,
+ )
+-from vllm.distributed import get_tensor_model_parallel_world_size
++from vllm.distributed import get_pp_group, get_tensor_model_parallel_world_size
+ from vllm.forward_context import get_forward_context
+ from vllm.model_executor.layers.attention import Attention
+ from vllm.model_executor.layers.attention_layer_base import AttentionLayerBase
+@@ -62,12 +62,15 @@ from vllm.model_executor.model_loader.weight_utils import (
+ from vllm.model_executor.models.interfaces import (
+     MultiModalEmbeddings,
+     SupportsMultiModal,
++    SupportsPP,
+ )
+ from vllm.model_executor.models.utils import (
+     AutoWeightsLoader,
++    PPMissingLayer,
+     WeightsMapper,
+     init_vllm_registered_model,
+     is_pp_missing_parameter,
++    make_empty_intermediate_tensors_factory,
+     make_layers,
+     maybe_prefix,
+ )
+@@ -90,6 +93,7 @@ from vllm.models.minimax_m3.common.sparse_attention import (
+ )
+ from vllm.models.minimax_m3.common.vision_tower import MiniMaxVLVisionModel
+ from vllm.multimodal import MULTIMODAL_REGISTRY
++from vllm.sequence import IntermediateTensors
+ from vllm.utils.torch_utils import kv_cache_dtype_str_to_dtype
+ from vllm.v1.kv_cache_interface import (
+     FullAttentionSpec,
+@@ -818,12 +822,15 @@ class MiniMaxM3Model(nn.Module):
+ 
+         self.vocab_size = config.vocab_size
+ 
+-        self.embed_tokens = VocabParallelEmbedding(
+-            config.vocab_size,
+-            config.hidden_size,
+-            quant_config=quant_config,
+-            prefix=f"{prefix}.embed_tokens",
+-        )
++        if get_pp_group().is_first_rank:
++            self.embed_tokens = VocabParallelEmbedding(
++                config.vocab_size,
++                config.hidden_size,
++                quant_config=quant_config,
++                prefix=f"{prefix}.embed_tokens",
++            )
++        else:
++            self.embed_tokens = PPMissingLayer()
+ 
+         self.start_layer, self.end_layer, self.layers = make_layers(
+             config.num_hidden_layers,
+@@ -836,7 +843,13 @@ class MiniMaxM3Model(nn.Module):
+             prefix=f"{prefix}.layers",
+         )
+ 
+-        self.norm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
++        if get_pp_group().is_last_rank:
++            self.norm = MiniMAXGemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
++        else:
++            self.norm = PPMissingLayer()
++        self.make_empty_intermediate_tensors = make_empty_intermediate_tensors_factory(
++            ["hidden_states", "residual"], config.hidden_size
++        )
+ 
+     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+         return self.embed_tokens(input_ids)
+@@ -845,17 +858,28 @@ class MiniMaxM3Model(nn.Module):
+         self,
+         input_ids: torch.Tensor | None,
+         positions: torch.Tensor,
++        intermediate_tensors: IntermediateTensors | None,
+         inputs_embeds: torch.Tensor | None = None,
+-    ) -> torch.Tensor:
+-        if inputs_embeds is not None:
+-            hidden_states = inputs_embeds
++    ) -> torch.Tensor | IntermediateTensors:
++        if get_pp_group().is_first_rank:
++            if inputs_embeds is not None:
++                hidden_states = inputs_embeds
++            else:
++                hidden_states = self.embed_input_ids(input_ids)
++            residual = None
+         else:
+-            hidden_states = self.embed_input_ids(input_ids)
+-        residual = None
++            assert intermediate_tensors is not None
++            hidden_states = intermediate_tensors["hidden_states"]
++            residual = intermediate_tensors["residual"]
+ 
+         for layer in self.layers[self.start_layer : self.end_layer]:
+             hidden_states, residual = layer(positions, hidden_states, residual)
+ 
++        if not get_pp_group().is_last_rank:
++            return IntermediateTensors(
++                {"hidden_states": hidden_states, "residual": residual}
++            )
++
+         hidden_states, _ = self.norm(hidden_states, residual)
+         return hidden_states
+ 
+@@ -967,7 +991,7 @@ class MiniMaxM3Model(nn.Module):
+         return loaded_params
+ 
+ 
+-class MiniMaxM3SparseForCausalLM(nn.Module):
++class MiniMaxM3SparseForCausalLM(nn.Module, SupportsPP):
+     """MiniMax M3 (sparse/dense backbone) for causal language modeling."""
+ 
+     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
+@@ -979,13 +1003,19 @@ class MiniMaxM3SparseForCausalLM(nn.Module):
+         self.model = MiniMaxM3Model(
+             vllm_config=vllm_config, prefix=maybe_prefix(prefix, "model")
+         )
+-        self.lm_head = ParallelLMHead(
+-            config.vocab_size,
+-            config.hidden_size,
+-            quant_config=quant_config,
+-            prefix=maybe_prefix(prefix, "lm_head"),
+-        )
++        if get_pp_group().is_last_rank:
++            self.lm_head = ParallelLMHead(
++                config.vocab_size,
++                config.hidden_size,
++                quant_config=quant_config,
++                prefix=maybe_prefix(prefix, "lm_head"),
++            )
++        else:
++            self.lm_head = PPMissingLayer()
+         self.logits_processor = LogitsProcessor(config.vocab_size)
++        self.make_empty_intermediate_tensors = (
++            self.model.make_empty_intermediate_tensors
++        )
+ 
+     def embed_input_ids(self, input_ids: torch.Tensor) -> torch.Tensor:
+         return self.model.embed_input_ids(input_ids)
+@@ -994,10 +1024,11 @@ class MiniMaxM3SparseForCausalLM(nn.Module):
+         self,
+         input_ids: torch.Tensor | None,
+         positions: torch.Tensor,
++        intermediate_tensors: IntermediateTensors | None = None,
+         inputs_embeds: torch.Tensor | None = None,
+         **kwargs,
+-    ) -> torch.Tensor:
+-        return self.model(input_ids, positions, inputs_embeds)
++    ) -> torch.Tensor | IntermediateTensors:
++        return self.model(input_ids, positions, intermediate_tensors, inputs_embeds)
+ 
+     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor | None:
+         return self.logits_processor(self.lm_head, hidden_states)
+@@ -1019,7 +1050,9 @@ class MiniMaxM3SparseForCausalLM(nn.Module):
+     info=MiniMaxM3VLProcessingInfo,
+     dummy_inputs=MiniMaxM3VLDummyInputsBuilder,
+ )
+-class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal):
++class MiniMaxM3SparseForConditionalGeneration(
++    nn.Module, SupportsMultiModal, SupportsPP
++):
+     """Top-level (VL) entry point for MiniMax M3.
+ 
+     Owns the shared MiniMax-M3 vision tower on ROCm and delegates text
+@@ -1079,6 +1112,9 @@ class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal):
+             prefix=maybe_prefix(prefix, "language_model"),
+             architectures=["MiniMaxM3SparseForCausalLM"],
+         )
++        self.make_empty_intermediate_tensors = (
++            self.language_model.make_empty_intermediate_tensors
++        )
+ 
+     def _parse_and_validate_image_input(self, **kwargs: object) -> dict | None:
+         pixel_values = kwargs.pop("pixel_values", None)
+@@ -1188,10 +1224,13 @@ class MiniMaxM3SparseForConditionalGeneration(nn.Module, SupportsMultiModal):
+         self,
+         input_ids: torch.Tensor | None,
+         positions: torch.Tensor,
++        intermediate_tensors: IntermediateTensors | None = None,
+         inputs_embeds: torch.Tensor | None = None,
+         **kwargs,
+-    ) -> torch.Tensor:
+-        return self.language_model(input_ids, positions, inputs_embeds)
++    ) -> torch.Tensor | IntermediateTensors:
++        return self.language_model(
++            input_ids, positions, intermediate_tensors, inputs_embeds
++        )
+ 
+     def compute_logits(self, hidden_states: torch.Tensor) -> torch.Tensor | None:
+         return self.language_model.compute_logits(hidden_states)

@@ -362,6 +362,30 @@ class TestCalculations:
         assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 6000 / 4
         assert output_data["input_tput_per_gpu"] == pytest.approx(500.0)  # (8000 - 6000) / 4
 
+    def test_throughput_per_gpu_pipeline_parallel(self, tmp_path, single_node_env_vars):
+        """Pipeline-parallel results divide throughput by TP times PP."""
+        benchmark_result = {
+            "model_id": "test-model",
+            "max_concurrency": 256,
+            "total_token_throughput": 16000.0,
+            "output_throughput": 8000.0,
+        }
+
+        env = single_node_env_vars.copy()
+        env["TP"] = "4"
+        env["EP_SIZE"] = "4"
+        env["PP_SIZE"] = "2"
+
+        result = run_script(tmp_path, env, benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+
+        output_data = json.loads(result.stdout)
+        assert output_data["tp"] == 4
+        assert output_data["ep"] == 4
+        assert output_data["tput_per_gpu"] == pytest.approx(2000.0)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(1000.0)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(1000.0)
+
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""
         benchmark_result = {

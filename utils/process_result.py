@@ -111,15 +111,19 @@ else:
     tp_size = int(single_node_env['TP'])
     ep_size = int(single_node_env['EP_SIZE'])
     dp_attention = single_node_env['DP_ATTENTION']
+    pp_size = int(os.environ.get('PP_SIZE', '1'))
+    if pp_size <= 0:
+        raise ValueError("PP_SIZE must be a positive integer.")
+    num_gpus = tp_size * pp_size
 
     single_node_data = {
         'is_multinode': False,
         'tp': tp_size,
         'ep': ep_size,
         'dp_attention': dp_attention,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
-        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
+        'tput_per_gpu': float(bmk_result['total_token_throughput']) / num_gpus,
+        'output_tput_per_gpu': float(bmk_result['output_throughput']) / num_gpus,
+        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / num_gpus,
     }
 
     data = data | single_node_data

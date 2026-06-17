@@ -1,0 +1,28 @@
+diff --git a/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py b/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py
+index 73bbcdd25..0ee34b642 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py
+@@ -51,11 +51,11 @@ _MINIMAX_M3_MI300X_EP_DECODE_CONFIG = {
+ }
+ 
+ 
+-def _is_minimax_m3_mi300x_ep8(moe_config: FusedMoEConfig) -> bool:
+-    """Match the profiled MiniMax-M3 EP8 shape on gfx94x."""
++def _is_minimax_m3_mi300x_sparse_ep(moe_config: FusedMoEConfig) -> bool:
++    """Match MiniMax-M3 EP layouts with low local decode-route density."""
+     return (
+         current_platform.is_fp8_fnuz()
+-        and moe_config.ep_size == 8
++        and moe_config.ep_size in (4, 8)
+         and moe_config.has_shared_experts
+         and moe_config.num_experts == 128
+         and moe_config.experts_per_token == 4
+@@ -104,7 +104,7 @@ class Mxfp8EmulationTritonExperts(Mxfp8TritonExpertsBase):
+         quant_config: FusedMoEQuantConfig,
+     ):
+         super().__init__(moe_config, quant_config)
+-        self.use_sparse_mi300x_ep = _is_minimax_m3_mi300x_ep8(moe_config)
++        self.use_sparse_mi300x_ep = _is_minimax_m3_mi300x_sparse_ep(moe_config)
+         logger.warning_once(
+             "Using Mxfp8EmulationTritonExperts MoE backend. Weights are "
+             "dequantized to BF16 on the fly; this is slower than a native "

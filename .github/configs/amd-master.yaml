@@ -2878,6 +2878,29 @@ minimaxm3-fp8-mi300x-vllm:
       - { tp: 8, conc-start: 1, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
 
+# Isolated long-context topology experiment. TP4 removes M3's TP8 KV/index-head
+# replication and sparse-attention head padding; PP2 partitions layers and KV
+# state across all eight GPUs. EP4 retains the same low local route density as
+# the measured EP8 decode path. Keep this separate from the production recipe.
+minimaxm3pp2-fp8-mi300x-vllm:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3pp2
+  runner: mi300x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 4, conc-start: 256, conc-end: 256 }
+    - isl: 32768
+      osl: 1024
+      search-space:
+      - { tp: 4, ep: 4, conc-start: 256, conc-end: 256 }
+
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi300x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
 # Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). Same TP8-only

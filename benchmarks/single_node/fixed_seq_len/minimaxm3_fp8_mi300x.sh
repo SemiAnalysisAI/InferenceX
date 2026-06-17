@@ -80,6 +80,45 @@ if ! grep -q "current_platform.fp8_dtype()" "$SPARSE_ATTN_IMPL" \
 fi
 python3 -m py_compile "$SPARSE_ATTN_SOURCE" "$SPARSE_ATTN_IMPL"
 
+PP_SIZE="${PP_SIZE:-1}"
+if ! [[ "$PP_SIZE" =~ ^[1-9][0-9]*$ ]]; then
+    echo "PP_SIZE must be a positive integer, got: $PP_SIZE" >&2
+    exit 1
+fi
+if [ "$PP_SIZE" -gt 1 ]; then
+    # Adapt upstream vLLM PR #45810 to this image's older AMD M3 model.
+    PP_PATCH="$(dirname "$0")/minimaxm3_mi300x_pp.patch"
+    EP4_PATCH="$(dirname "$0")/minimaxm3_mi300x_ep4.patch"
+    M3_MODEL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
+    MXFP8_EMULATION="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/experts/mxfp8_emulation_moe.py"
+    if ! grep -q "class MiniMaxM3SparseForCausalLM(nn.Module, SupportsPP)" "$M3_MODEL"; then
+        if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$PP_PATCH"; then
+            echo "Failed to validate the MiniMax M3 pipeline-parallel patch" >&2
+            exit 1
+        fi
+        if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$PP_PATCH"; then
+            echo "Failed to apply the MiniMax M3 pipeline-parallel patch" >&2
+            exit 1
+        fi
+    fi
+    if ! grep -q "_is_minimax_m3_mi300x_sparse_ep" "$MXFP8_EMULATION"; then
+        if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$EP4_PATCH"; then
+            echo "Failed to validate the MiniMax M3 EP4 decode patch" >&2
+            exit 1
+        fi
+        if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$EP4_PATCH"; then
+            echo "Failed to apply the MiniMax M3 EP4 decode patch" >&2
+            exit 1
+        fi
+    fi
+    if ! grep -q "class MiniMaxM3SparseForCausalLM(nn.Module, SupportsPP)" "$M3_MODEL" \
+        || ! grep -q "_is_minimax_m3_mi300x_sparse_ep" "$MXFP8_EMULATION"; then
+        echo "MiniMax M3 TP4+PP2 runtime patches are incomplete" >&2
+        exit 1
+    fi
+    python3 -m py_compile "$M3_MODEL" "$MXFP8_EMULATION"
+fi
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
@@ -95,6 +134,9 @@ if [ "${EVAL_ONLY}" = "true" ]; then
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+if [ "$PP_SIZE" -gt 1 ]; then
+    PARALLEL_ARGS+=(--pipeline-parallel-size "$PP_SIZE")
+fi
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(
         --tensor-parallel-size 1
