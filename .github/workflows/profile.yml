@@ -355,7 +355,7 @@ jobs:
 
           if [[ "$RUNNER_NAME" == mi300x-amds_* ]]; then
             sed -i \
-              's/--exclude=chi-mi300x-049/--exclude=chi-mi300x-034,chi-mi300x-049/' \
+              's/--exclude=chi-mi300x-049/--exclude=chi-mi300x-034,chi-mi300x-049,chi-mi300x-058/' \
               runners/launch_mi300x-amds.sh
           fi
 
