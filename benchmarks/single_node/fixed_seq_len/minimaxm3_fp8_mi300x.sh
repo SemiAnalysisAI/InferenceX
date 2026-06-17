@@ -304,7 +304,15 @@ fi
 
 PROFILE_ARGS=()
 if [ "${PROFILE:-0}" = "1" ]; then
-    profile_token_budget=8192
+    profile_token_budget="${M3_PROFILE_TOKEN_BUDGET:-8192}"
+    case "$profile_token_budget" in
+        8192|16384|32768)
+            ;;
+        *)
+            echo "Invalid M3_PROFILE_TOKEN_BUDGET: $profile_token_budget" >&2
+            exit 2
+            ;;
+    esac
     M3_PROFILE_PHASE="${M3_PROFILE_PHASE:-decode}"
     case "$M3_PROFILE_PHASE" in
         decode)
@@ -314,7 +322,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
             ;;
         prefill)
             profile_delay=0
-            profile_description="the first 8192-token chunked-prefill iteration"
+            profile_description="the first ${profile_token_budget}-token chunked-prefill iteration"
             ;;
         *)
             echo "Invalid M3_PROFILE_PHASE: $M3_PROFILE_PHASE" >&2

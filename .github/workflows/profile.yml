@@ -30,6 +30,15 @@ on:
           - decode
           - prefill
         default: decode
+      m3-profile-token-budget:
+        description: "MiniMax M3 MI300X max batched tokens during profiling"
+        required: false
+        type: choice
+        options:
+          - '8192'
+          - '16384'
+          - '32768'
+        default: '8192'
       m3-kv-cache-mode:
         description: "MiniMax M3 MI300X main KV-cache dtype experiment"
         required: false
@@ -138,6 +147,7 @@ jobs:
           M3_INDEX_KV_CACHE_MODE: ${{ inputs.m3-index-kv-cache-mode }}
           M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
           M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
+          M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
           M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
           RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
@@ -169,6 +179,11 @@ jobs:
           profile_phase = os.environ["M3_PROFILE_PHASE"]
           if profile_phase not in {"decode", "prefill"}:
               raise SystemExit(f"Invalid M3 profile phase: {profile_phase}")
+          profile_token_budget = int(os.environ["M3_PROFILE_TOKEN_BUDGET"])
+          if profile_token_budget not in {8192, 16384, 32768}:
+              raise SystemExit(
+                  f"Invalid M3 profile token budget: {profile_token_budget}"
+              )
           shared_mode = os.environ["M3_SHARED_EXPERT_STREAM_MODE"]
           if shared_mode not in {"off", "on"}:
               raise SystemExit(
@@ -180,6 +195,7 @@ jobs:
               or kv_cache_mode != "bf16"
               or index_kv_cache_mode != "bf16"
               or profile_phase != "decode"
+              or profile_token_budget != 8192
           ):
               invalid = [
                   item
@@ -249,6 +265,7 @@ jobs:
       M3_INDEX_KV_CACHE_MODE: ${{ inputs.m3-index-kv-cache-mode }}
       M3_KV_CACHE_MODE: ${{ inputs.m3-kv-cache-mode }}
       M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
+      M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
       M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
@@ -304,6 +321,9 @@ jobs:
           fi
           if [ "$M3_PROFILE_PHASE" != "decode" ]; then
             mode_suffix="${mode_suffix}_m3phase-${M3_PROFILE_PHASE}"
+          fi
+          if [ "$M3_PROFILE_TOKEN_BUDGET" != "8192" ]; then
+            mode_suffix="${mode_suffix}_m3bt-${M3_PROFILE_TOKEN_BUDGET}"
           fi
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
