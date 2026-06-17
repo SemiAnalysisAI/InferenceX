@@ -11,7 +11,8 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
     EP_SIZE \
-    DP_ATTENTION
+    DP_ATTENTION \
+    MAX_MODEL_LEN
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -23,11 +24,11 @@ SERVER_LOG=/workspace/server.log
 
 export OMP_NUM_THREADS=1
 
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=""
-else
-    CALCULATED_MAX_MODEL_LEN=" --max-model-len 10240 "
+# Use the matrix-supplied MAX_MODEL_LEN (isl + osl + 256). Eval-only jobs need a
+# larger window for the eval prompts, so override it from the eval context.
+if [ "${EVAL_ONLY}" = "true" ]; then
+    setup_eval_context
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
 if [ "$EP_SIZE" -gt 1 ]; then
@@ -52,7 +53,7 @@ python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
     -tp $TP \
-    $CALCULATED_MAX_MODEL_LEN $EP \
+    --max-model-len $MAX_MODEL_LEN $EP \
     --block-size 128 \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --trust-remote-code \
