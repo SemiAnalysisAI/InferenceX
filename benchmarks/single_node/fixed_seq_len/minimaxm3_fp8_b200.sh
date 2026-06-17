@@ -45,7 +45,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 elif [ "$EP_SIZE" -gt 1 ]; then
   PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
 else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP"
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --moe-backend marlin"
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
