@@ -53,6 +53,7 @@ REMOTE_BASE="$(
 )"
 REMOTE_WORKSPACE="${REMOTE_BASE}/workspace-${JOB_ID}"
 SQUASH_FILE="/home/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+LOCK_FILE="${SQUASH_FILE}.lock"
 
 srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
     mkdir -p \
@@ -62,11 +63,24 @@ tar --exclude='.git' -C "$SOURCE_WORKSPACE" -cf - . \
     | srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
         tar -xf - -C "$REMOTE_WORKSPACE"
 
-# Reuse the shared image imported by the production MI300X launcher. Importing
-# into node-local storage as an unprivileged user cannot create overlay
-# whiteouts on this cluster.
-srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
-    unsquashfs -l "$SQUASH_FILE" >/dev/null
+# Keep the image in the same shared location as the production launcher.
+# Node-local filesystems on this cluster do not preserve the capabilities
+# Enroot needs, while the shared squash directory does.
+srun --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp bash -c "
+    set -e
+    mkdir -p \"$(dirname "$SQUASH_FILE")\"
+    exec 9>\"$LOCK_FILE\"
+    flock -w 600 9 || {
+        echo 'Failed to acquire lock for $SQUASH_FILE' >&2
+        exit 1
+    }
+    if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
+        echo 'Squash file already exists and is valid, skipping import'
+    else
+        rm -f \"$SQUASH_FILE\"
+        enroot import -o \"$SQUASH_FILE\" \"docker://$IMAGE\"
+    fi
+"
 
 set +e
 srun --jobid="$JOB_ID" \
