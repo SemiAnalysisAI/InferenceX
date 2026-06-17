@@ -56,7 +56,7 @@ export RESULT_FILENAME="${RESULT_FILENAME:-${RUNNER_NAME:-dsv4-fp4-agentic}}"
 # ── Agentic benchmark params ──
 export DURATION="${DURATION:-1800}"
 # DSV4-Pro max model len for agentic traces (matches single-node recipe).
-export MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-1000000}"
 
 # ── In-tree sglang patches ──
 # mori_conn.py targets hybrid-state bugs (GLM-5, Qwen3.5). DSV4-Pro uses a
@@ -73,7 +73,7 @@ export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 export OFFLOADING="${OFFLOADING:-none}"
 # HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$OFFLOADING" == "hicache" ]]; then
-  export HICACHE_TIER="${HICACHE_TIER:-L2}"
+  export HICACHE_TIER="${HICACHE_TIER:-L3}"
   export HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-64}"
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
@@ -97,15 +97,19 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
     export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
     export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
   fi
-  export HICACHE_DECODE="${HICACHE_DECODE:-0}"
+  export HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-wait_complete}"
   # Shared nodes: use non-default Mooncake ports to avoid collisions.
   export MC_MASTER_PORT="${MC_MASTER_PORT:-58137}"
+  export MC_METADATA_PORT="${MC_METADATA_PORT:-8080}"
   export MC_METRICS_PORT="${MC_METRICS_PORT:-19003}"
+  export MC_MASTER_THREADS="${MC_MASTER_THREADS:-64}"
+  export MC_EVICTION_HIGH_WATERMARK="${MC_EVICTION_HIGH_WATERMARK:-0.95}"
   export MC_PATCH_HOSTPOOL="${MC_PATCH_HOSTPOOL:-1}"
   export MC_PROTOCOL="${MC_PROTOCOL:-tcp}"
-  export MC_GLOBAL_SEG="${MC_GLOBAL_SEG:-30gb}"
-  export MC_DEVICE="${MC_DEVICE:-rdma0}"
+  export MC_GLOBAL_SEG="${MC_GLOBAL_SEG:-64gb}"
+  export MC_DEVICE="${MC_DEVICE:-}"
   export MC_MASTER_ADDR="${MC_MASTER_ADDR:-}"
+  export MC_METADATA_SERVER="${MC_METADATA_SERVER:-}"
 fi
 
 # ── MoRIIO RDMA Send Queue tuning ──
