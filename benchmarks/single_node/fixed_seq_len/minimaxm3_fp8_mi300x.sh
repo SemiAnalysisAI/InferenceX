@@ -112,6 +112,7 @@ vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --kv-cache-dtype fp8 \
     --block-size 128 \
+    --max-num-batched-tokens 4096 \
     --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \

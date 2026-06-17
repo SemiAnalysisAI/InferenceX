@@ -16,3 +16,7 @@ minimaxm3-fp8-mi300x-vllm:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
+    - isl: 32768
+      osl: 1024
+      search-space:
+      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
