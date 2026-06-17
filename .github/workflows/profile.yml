@@ -254,7 +254,7 @@ jobs:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
     # Use the runner/node pair from the latest successful M3 c256 serving run.
     # Controller runners with /home workspaces are not visible to compute nodes.
-    runs-on: ${{ matrix.config.runner == 'mi300x' && 'mi300x-amds_06' || matrix.config.runner }}
+    runs-on: ${{ matrix.config.runner == 'mi300x' && 'mi300x-p1' || matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}
@@ -355,7 +355,7 @@ jobs:
 
           if [[ "$RUNNER_NAME" == mi300x-amds_* ]]; then
             sed -i \
-              's/--exclude=chi-mi300x-049/--nodelist=chi-mi300x-057/' \
+              's/--exclude=chi-mi300x-049/--exclude=chi-mi300x-034,chi-mi300x-049/' \
               runners/launch_mi300x-amds.sh
           fi
 
