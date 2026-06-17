@@ -60,6 +60,38 @@ if ! grep -q "profiled gfx94x MiniMax-M3 EP8" "$MXFP8_ORACLE"; then
     exit 1
 fi
 
+BLOCK_FP8_PATCH="$(dirname "$0")/minimaxm3_mi300x_block_fp8.patch"
+MODEL_OPT_SOURCE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/quantization/modelopt.py"
+MXFP8_UTILS_SOURCE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py"
+if ! grep -q "VLLM_ROCM_MXFP8_BLOCK_FP8" "$VLLM_PACKAGE_ROOT/vllm/envs.py"; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$BLOCK_FP8_PATCH"; then
+        echo "Failed to validate the gfx942 MXFP8 block-FP8 patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$BLOCK_FP8_PATCH"; then
+        echo "Failed to apply the gfx942 MXFP8 block-FP8 patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -q "requantize_mxfp8_to_block_fp8_" "$MODEL_OPT_SOURCE" \
+    || ! grep -q "matrix-by-matrix" "$MXFP8_UTILS_SOURCE"; then
+    echo "gfx942 MXFP8 block-FP8 markers are missing after patching" >&2
+    exit 1
+fi
+python3 -m py_compile \
+    "$VLLM_PACKAGE_ROOT/vllm/envs.py" \
+    "$MODEL_OPT_SOURCE" \
+    "$MXFP8_UTILS_SOURCE"
+export VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD=1
+export VLLM_ROCM_MXFP8_BLOCK_FP8=1
+# Isolate the Triton block-FP8 result first. AITER linear is profiled
+# separately; AITER MoE does not implement M3's un-interleaved clamped SwiGLU.
+export VLLM_ROCM_USE_AITER=0
+export VLLM_ROCM_USE_AITER_LINEAR=0
+export VLLM_ROCM_USE_AITER_MOE=0
+echo "M3 gfx942 MXFP8 weight mode: 128x128 block FP8 (Triton)"
+
 INDEX_TOPK_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_topk.patch"
 INDEX_TOPK_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"
 INDEX_TOPK_SOURCE_SHA256="20351dd410d409c2c779d1d05d3d715633323f6b0e022e3ae6fae1c487ab5888"
