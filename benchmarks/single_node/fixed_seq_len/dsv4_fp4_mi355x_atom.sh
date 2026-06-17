@@ -28,13 +28,15 @@ if [ "$DP_ATTENTION" = "true" ]; then
         PARALLEL_ARGS=(-tp "$TP" --enable-expert-parallel --enable-dp-attention )
     else #DPA+TP
         #DPA+TP+TBO
-        #if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
-        #    PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
-        #elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
-        #    PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
-        #else
-        #    PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
-        #fi
+        if [ "$ISL" -eq 1024 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 1024 ]; then
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+            export GPU_MAX_HW_QUEUES=5
+        elif [ "$ISL" -eq 8192 ] && [ "$OSL" -eq 1024 ] && [ "$CONC" -ge 256 ]; then
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention --enable-tbo)
+            export GPU_MAX_HW_QUEUES=5
+        else
+            PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
+        fi
         PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
     fi
 fi 
@@ -44,9 +46,6 @@ BENCHMARK_MAX_MODEL_LEN="$MAX_MODEL_LEN"
 if [ "${EVAL_ONLY}" = "true" ]; then
     EVAL_MAX_MODEL_LEN=$(compute_eval_context_length "$MODEL" "$BENCHMARK_MAX_MODEL_LEN")
     export EVAL_MAX_MODEL_LEN
-    SERVE_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
-else
-    SERVE_MAX_MODEL_LEN="$BENCHMARK_MAX_MODEL_LEN"
 fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
@@ -55,7 +54,7 @@ set -x
 export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
-export GPU_MAX_HW_QUEUES=5
+MEM_FRAC_STATIC=0.9
 OPT_ARGS=(--hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}')
 
 python3 -m atom.entrypoints.openai_server \
@@ -64,9 +63,8 @@ python3 -m atom.entrypoints.openai_server \
     "${PARALLEL_ARGS[@]}" \
     --kv_cache_dtype fp8 \
     --trust-remote-code \
-    --gpu-memory-utilization 0.85 \
+    --gpu-memory-utilization $MEM_FRAC_STATIC \
     --no-enable_prefix_caching \
-    --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
     "${OPT_ARGS[@]}" \
     > "$SERVER_LOG" 2>&1 &
