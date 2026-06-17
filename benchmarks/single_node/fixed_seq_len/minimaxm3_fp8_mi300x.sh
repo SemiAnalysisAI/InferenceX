@@ -83,6 +83,7 @@ python3 -m py_compile "$SPARSE_ATTN_SOURCE" "$SPARSE_ATTN_IMPL"
 
 # Quantize the M3 index-key side cache to FP8 with one FP32 scale per token.
 FP8_INDEX_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_index_cache.patch"
+INDEX_SELECTION_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_selection.patch"
 M3_AMD_MODEL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/amd/model.py"
 M3_INDEXER="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/indexer.py"
 M3_INDEX_TOPK="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"
@@ -100,6 +101,21 @@ if ! grep -q "cache_head_dim" "$M3_INDEXER" \
     || ! grep -q "USE_FP8=use_fp8" "$M3_INDEX_TOPK" \
     || ! grep -q "self._fp8_index" "$M3_AMD_MODEL"; then
     echo "MiniMax M3 FP8 index-cache markers are missing after patching" >&2
+    exit 1
+fi
+if ! grep -q "tune_score_launch" "$M3_INDEX_TOPK"; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_SELECTION_PATCH"; then
+        echo "Failed to validate the MiniMax M3 index-selection patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_SELECTION_PATCH"; then
+        echo "Failed to apply the MiniMax M3 index-selection patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -q "tune_score_launch" "$M3_INDEX_TOPK" \
+    || ! grep -q "WRITE_FINAL=write_final" "$M3_INDEX_TOPK"; then
+    echo "MiniMax M3 index-selection optimization markers are missing after patching" >&2
     exit 1
 fi
 python3 -m py_compile "$M3_AMD_MODEL" "$M3_INDEXER" "$M3_INDEX_TOPK"
