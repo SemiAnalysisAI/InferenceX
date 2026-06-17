@@ -53,7 +53,6 @@ on:
       run-eval:
         type: boolean
         required: true
-        default: false
       eval-only:
         description: "Run only evals (skip throughput benchmark)"
         type: boolean
@@ -68,10 +67,30 @@ on:
         required: false
         type: string
       scenario-type:
-        description: "Scenario type (fixed-seq-len or agentic-coding)"
+        description: "Scenario type (fixed-seq-len, agentic-coding, or fixed-ar-mtp)"
         required: false
         type: string
         default: 'fixed-seq-len'
+      draft-model:
+        description: "Draft model for fixed-AR MTP scenarios"
+        required: false
+        type: string
+        default: ''
+      num-speculative-tokens:
+        description: "Number of speculative tokens for fixed-AR MTP scenarios"
+        required: false
+        type: string
+        default: ''
+      rejection-sample-method:
+        description: "Speculative rejection sampling method"
+        required: false
+        type: string
+        default: ''
+      synthetic-acceptance-rates:
+        description: "JSON array of synthetic acceptance rates for fixed-AR MTP scenarios"
+        required: false
+        type: string
+        default: ''
       offloading:
         description: "KV offload backend for agentic scenarios (none/cpu/ssd/lmcache/lmcache-mp/hicache)"
         required: false
@@ -111,6 +130,10 @@ env:
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
+  DRAFT_MODEL: ${{ inputs.draft-model }}
+  NUM_SPECULATIVE_TOKENS: ${{ inputs.num-speculative-tokens }}
+  REJECTION_SAMPLE_METHOD: ${{ inputs.rejection-sample-method }}
+  SYNTHETIC_ACCEPTANCE_RATES: ${{ inputs.synthetic-acceptance-rates }}
   OFFLOADING: ${{ inputs.offloading }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}

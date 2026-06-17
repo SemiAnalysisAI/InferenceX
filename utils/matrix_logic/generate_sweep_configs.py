@@ -26,6 +26,24 @@ MIN_EVAL_CONC = 16
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
 
+def parse_concurrency_filter(values):
+    if values is None:
+        return None
+
+    conc_values = []
+    for value in values:
+        for part in str(value).split(","):
+            part = part.strip()
+            if not part:
+                continue
+            try:
+                conc_values.append(int(part))
+            except ValueError as exc:
+                raise argparse.ArgumentTypeError(
+                    f"invalid concurrency value: {part!r}") from exc
+    return conc_values
+
+
 def seq_len_to_str(isl: int, osl: int) -> str:
     """Convert sequence lengths to short string representation.
 
@@ -124,7 +142,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     # Mark the selected entries (skip agentic entries which don't support evals)
     for i, entry in enumerate(matrix_values):
-        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+        if entry.get(Fields.SCENARIO_TYPE.value) in ('agentic-coding', 'fixed-ar-mtp'):
             continue
         entry[Fields.RUN_EVAL.value] = i in eval_indices
         if i in mn_eval_conc:
@@ -187,6 +205,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
         scenarios = val[Fields.SCENARIOS.value]
         scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
         seq_len_configs = scenarios.get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
+        fixed_ar_mtp_configs = scenarios.get(Fields.FIXED_AR_MTP.value, []) if (scenario_filter is None or 'fixed-ar-mtp' in scenario_filter) else []
         image = val[Fields.IMAGE.value]
         model = val[Fields.MODEL.value]
         precision = val[Fields.PRECISION.value]
@@ -377,6 +396,97 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         conc *= args.step_size
                         if conc > conc_end:
                             conc = conc_end
+
+        # ---- Fixed-AR MTP throughput scenarios ----
+        if not is_multinode:
+            for fixed_ar_config in fixed_ar_mtp_configs:
+                isl = fixed_ar_config[Fields.ISL.value]
+                osl = fixed_ar_config[Fields.OSL.value]
+
+                if seq_lens_filter and (isl, osl) not in seq_lens_filter:
+                    continue
+
+                bmk_space = fixed_ar_config[Fields.SEARCH_SPACE.value]
+                seq_len_str = seq_len_to_str(isl, osl)
+                runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
+
+                for bmk in bmk_space:
+                    tp = bmk[Fields.TP.value]
+                    ep = bmk.get(Fields.EP.value)
+                    dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "mtp")
+
+                    if Fields.CONC_LIST.value in bmk:
+                        conc_values = bmk[Fields.CONC_LIST.value]
+                    else:
+                        conc_start = bmk[Fields.CONC_START.value]
+                        conc_end = bmk[Fields.CONC_END.value]
+                        conc_values = []
+                        conc = conc_start
+                        while conc <= conc_end:
+                            conc_values.append(conc)
+                            if conc == conc_end:
+                                break
+                            conc *= args.step_size
+                            if conc > conc_end:
+                                conc = conc_end
+
+                    if args.max_tp is not None:
+                        if args.max_tp <= 0:
+                            continue
+                        if tp > args.max_tp:
+                            continue
+
+                    if args.max_ep is not None:
+                        if args.max_ep <= 0:
+                            continue
+                        if ep is not None and ep > args.max_ep:
+                            ep = args.max_ep
+
+                    if args.min_conc is not None:
+                        if args.min_conc <= 0:
+                            continue
+                        conc_values = [c for c in conc_values if c >= args.min_conc]
+                        if not conc_values:
+                            continue
+
+                    if args.max_conc is not None:
+                        if args.max_conc <= 0:
+                            continue
+                        filtered_conc = [c for c in conc_values if c <= args.max_conc]
+                        if not filtered_conc:
+                            conc_values = [args.max_conc]
+                        else:
+                            conc_values = filtered_conc
+
+                    for conc in conc_values:
+                        for runner_value in runners_for_entry:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.ISL.value: isl,
+                                Fields.OSL.value: osl,
+                                Fields.TP.value: tp,
+                                Fields.CONC.value: conc,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 256,
+                                Fields.EP.value: ep if ep is not None else 1,
+                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                                Fields.DISAGG.value: disagg,
+                                Fields.RUN_EVAL.value: False,
+                                Fields.SCENARIO_TYPE.value: "fixed-ar-mtp",
+                                Fields.DRAFT_MODEL.value: fixed_ar_config[Fields.DRAFT_MODEL.value],
+                                Fields.NUM_SPECULATIVE_TOKENS.value: fixed_ar_config[Fields.NUM_SPECULATIVE_TOKENS.value],
+                                Fields.REJECTION_SAMPLE_METHOD.value: fixed_ar_config[Fields.REJECTION_SAMPLE_METHOD.value],
+                                Fields.SYNTHETIC_ACCEPTANCE_RATES.value: fixed_ar_config[Fields.SYNTHETIC_ACCEPTANCE_RATES.value],
+                            }
+                            validate_matrix_entry(entry, is_multinode=False)
+                            matrix_values.append(entry)
 
         # ---- Agentic-coding scenarios ----
         agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
@@ -682,6 +792,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
 
         scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
         fixed_configs = val[Fields.SCENARIOS.value].get(Fields.FIXED_SEQ_LEN.value, []) if (scenario_filter is None or 'fixed-seq-len' in scenario_filter) else []
+        fixed_ar_mtp_configs = val[Fields.SCENARIOS.value].get(Fields.FIXED_AR_MTP.value, []) if (scenario_filter is None or 'fixed-ar-mtp' in scenario_filter) else []
         for seq_len_config in fixed_configs:
             isl = seq_len_config[Fields.ISL.value]
             osl = seq_len_config[Fields.OSL.value]
@@ -791,6 +902,71 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
                                 Fields.DISAGG.value: disagg,
                                 Fields.RUN_EVAL.value: False,
+                            }
+                            matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
+
+        # ---- Fixed-AR MTP throughput scenarios ----
+        if not is_multinode:
+            for fixed_ar_config in fixed_ar_mtp_configs:
+                isl = fixed_ar_config[Fields.ISL.value]
+                osl = fixed_ar_config[Fields.OSL.value]
+
+                if seq_lens_filter and (isl, osl) not in seq_lens_filter:
+                    continue
+
+                seq_len_str = seq_len_to_str(isl, osl)
+
+                for bmk in fixed_ar_config[Fields.SEARCH_SPACE.value]:
+                    tp = bmk[Fields.TP.value]
+                    ep = bmk.get(Fields.EP.value)
+                    dp_attn = bmk.get(Fields.DP_ATTN.value)
+                    spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "mtp")
+
+                    if Fields.CONC_LIST.value in bmk:
+                        conc_values = bmk[Fields.CONC_LIST.value]
+                    else:
+                        conc_start = bmk[Fields.CONC_START.value]
+                        conc_end = bmk[Fields.CONC_END.value]
+                        conc_values = []
+                        conc = conc_start
+                        while conc <= conc_end:
+                            conc_values.append(conc)
+                            if conc == conc_end:
+                                break
+                            conc *= 2
+                            if conc > conc_end:
+                                conc = conc_end
+
+                    if getattr(args, 'conc', None):
+                        conc_values = [c for c in conc_values if c in args.conc]
+                        if not conc_values:
+                            continue
+
+                    for conc in conc_values:
+                        for runner_value in runners_for_entry:
+                            entry = {
+                                Fields.IMAGE.value: image,
+                                Fields.MODEL.value: model,
+                                Fields.MODEL_PREFIX.value: model_code,
+                                Fields.PRECISION.value: precision,
+                                Fields.FRAMEWORK.value: framework,
+                                Fields.RUNNER.value: runner_value,
+                                Fields.ISL.value: isl,
+                                Fields.OSL.value: osl,
+                                Fields.TP.value: tp,
+                                Fields.CONC.value: conc,
+                                Fields.MAX_MODEL_LEN.value: isl + osl + 256,
+                                Fields.EP.value: ep if ep is not None else 1,
+                                Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
+                                Fields.SPEC_DECODING.value: spec_decoding,
+                                Fields.EXP_NAME.value: f"{model_code}_{seq_len_str}",
+                                Fields.DISAGG.value: disagg,
+                                Fields.RUN_EVAL.value: False,
+                                Fields.SCENARIO_TYPE.value: "fixed-ar-mtp",
+                                Fields.DRAFT_MODEL.value: fixed_ar_config[Fields.DRAFT_MODEL.value],
+                                Fields.NUM_SPECULATIVE_TOKENS.value: fixed_ar_config[Fields.NUM_SPECULATIVE_TOKENS.value],
+                                Fields.REJECTION_SAMPLE_METHOD.value: fixed_ar_config[Fields.REJECTION_SAMPLE_METHOD.value],
+                                Fields.SYNTHETIC_ACCEPTANCE_RATES.value: fixed_ar_config[Fields.SYNTHETIC_ACCEPTANCE_RATES.value],
                             }
                             matrix_values.append(validate_matrix_entry(entry, is_multinode=False))
 
@@ -948,7 +1124,7 @@ def main():
     parent_parser.add_argument(
         '--scenario-type',
         nargs='+',
-        choices=['fixed-seq-len', 'agentic-coding'],
+        choices=['fixed-seq-len', 'agentic-coding', 'fixed-ar-mtp'],
         required=False,
         help='Scenario type(s) to include. If not specified, all scenario types are generated.'
     )
@@ -1117,9 +1293,8 @@ def main():
     test_config_keys_parser.add_argument(
         '--conc',
         nargs='+',
-        type=int,
         required=False,
-        help='Only include these concurrency values. Values must exist in the config conc-range/list.'
+        help='Only include these concurrency values. Supports space-separated or comma-separated values, e.g. 32 64 or 32,64. Values must exist in the config conc-range/list.'
     )
     test_config_keys_parser.add_argument(
         '--seq-lens',
@@ -1135,6 +1310,8 @@ def main():
     )
 
     args = parser.parse_args()
+    if args.command == 'test-config':
+        args.conc = parse_concurrency_filter(args.conc)
     apply_node_type_defaults(args)
 
     # Load and validate configuration files (validation happens by default in load functions)

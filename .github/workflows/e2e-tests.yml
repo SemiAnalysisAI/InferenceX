@@ -51,6 +51,7 @@ jobs:
             multi-node-eval-config: ${{ steps.get-jobs.outputs.multi-node-eval-config }}
             agentic-config: ${{ steps.get-jobs.outputs.agentic-config }}
             multi-node-agentic-config: ${{ steps.get-jobs.outputs.multi-node-agentic-config }}
+            fixed-ar-mtp-config: ${{ steps.get-jobs.outputs.fixed-ar-mtp-config }}
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
@@ -71,12 +72,14 @@ jobs:
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))")
                   MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))")
-                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
+                  FIXED_AR_MTP=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'fixed-ar-mtp']))")
+                  SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') not in ('agentic-coding', 'fixed-ar-mtp') and not x.get('eval-only', False)]))")
                   MULTI=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
                   EVALS=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and x.get('run-eval', False)]))")
                   MULTI_EVAL=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' in x and x.get('run-eval', False)]))")
                   echo "agentic-config=$AGENTIC" >> $GITHUB_OUTPUT
                   echo "multi-node-agentic-config=$MULTI_AGENTIC" >> $GITHUB_OUTPUT
+                  echo "fixed-ar-mtp-config=$FIXED_AR_MTP" >> $GITHUB_OUTPUT
                   echo "single-node-config=$SINGLE" >> $GITHUB_OUTPUT
                   echo "multi-node-config=$MULTI" >> $GITHUB_OUTPUT
                   echo "eval-config=$EVALS" >> $GITHUB_OUTPUT
@@ -190,7 +193,7 @@ jobs:
             osl: '0'
             max-model-len: '0'
             spec-decoding: 'none'
-            disagg: 'false'
+            disagg: ${{ 'false' }}
             run-eval: false
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
@@ -233,6 +236,41 @@ jobs:
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
+            ref: ${{ inputs.ref }}
+
+    test-sweep-fixed-ar-mtp:
+        needs: get-jobs
+        if: ${{ needs.get-jobs.outputs.fixed-ar-mtp-config != '[]' }}
+        uses: ./.github/workflows/benchmark-tmpl.yml
+        name: Fixed-AR-MTP throughput /
+        strategy:
+            fail-fast: false
+            matrix:
+                config: ${{ fromJson(needs.get-jobs.outputs.fixed-ar-mtp-config) }}
+        secrets: inherit
+        with:
+            exp-name: ${{ matrix.config.exp-name }}
+            isl: ${{ matrix.config.isl }}
+            osl: ${{ matrix.config.osl }}
+            max-model-len: ${{ matrix.config.max-model-len }}
+            runner: ${{ matrix.config.runner }}
+            image: ${{ matrix.config.image }}
+            model: ${{ matrix.config.model }}
+            model-prefix: ${{ matrix.config.model-prefix }}
+            framework: ${{ matrix.config.framework }}
+            precision: ${{ matrix.config.precision }}
+            tp: ${{ matrix.config.tp }}
+            ep: ${{ matrix.config.ep }}
+            dp-attn: ${{ matrix.config.dp-attn }}
+            conc: ${{ matrix.config.conc }}
+            spec-decoding: ${{ matrix.config.spec-decoding }}
+            disagg: ${{ matrix.config.disagg }}
+            run-eval: false
+            scenario-type: fixed-ar-mtp
+            draft-model: ${{ matrix.config.draft-model }}
+            num-speculative-tokens: ${{ matrix.config.num-speculative-tokens }}
+            rejection-sample-method: ${{ matrix.config.rejection-sample-method }}
+            synthetic-acceptance-rates: ${{ toJson(matrix.config.synthetic-acceptance-rates) }}
             ref: ${{ inputs.ref }}
 
     test-sweep-single-node:
@@ -297,8 +335,8 @@ jobs:
             ref: ${{ inputs.ref }}
 
     collect-results:
-        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-agentic, test-sweep-multi-node-agentic]
-        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
+        needs: [test-sweep-multi-node, test-sweep-single-node, test-sweep-fixed-ar-mtp, test-sweep-agentic, test-sweep-multi-node-agentic]
+        if: ${{ always() && (needs.test-sweep-multi-node.result != 'skipped' || needs.test-sweep-single-node.result != 'skipped' || needs.test-sweep-fixed-ar-mtp.result != 'skipped' || needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
         uses: ./.github/workflows/collect-results.yml
         secrets: inherit
         with:

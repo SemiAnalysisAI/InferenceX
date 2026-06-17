@@ -199,7 +199,17 @@ else
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    case "$SPEC_DECODING" in
+        mtp)
+            SPEC_SUFFIX="_mtp"
+            ;;
+        eagle3)
+            SPEC_SUFFIX="_eagle3"
+            ;;
+        *)
+            SPEC_SUFFIX=""
+            ;;
+    esac
 
     PARTITION="compute"
     SQUASH_FILE="/var/lib/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
@@ -248,9 +258,16 @@ else
     fi
 
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"
-    SCRIPT_FW="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
-    SCRIPT_FALLBACK="benchmarks/single_node/${SCENARIO_SUBDIR:-fixed_seq_len/}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
-    if [[ -f "$SCRIPT_FW" ]]; then
+    SCRIPT_SUBDIR="${SCENARIO_SUBDIR:-fixed_seq_len/}"
+    SCRIPT_FW="benchmarks/single_node/${SCRIPT_SUBDIR}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    SCRIPT_FIXED_AR="benchmarks/single_node/${SCRIPT_SUBDIR}${SCRIPT_BASE}_${FRAMEWORK}${SPEC_SUFFIX}_fixed_AR.sh"
+    SCRIPT_FIXED_AR_MTP="benchmarks/single_node/${SCRIPT_SUBDIR}${SCRIPT_BASE}_${FRAMEWORK}_mtp_fixed_AR.sh"
+    SCRIPT_FALLBACK="benchmarks/single_node/${SCRIPT_SUBDIR}${SCRIPT_BASE}${FRAMEWORK_SUFFIX}${SPEC_SUFFIX}.sh"
+    if [[ "$SCENARIO_TYPE" == "fixed-ar-mtp" && -f "$SCRIPT_FIXED_AR" ]]; then
+        BENCHMARK_SCRIPT="$SCRIPT_FIXED_AR"
+    elif [[ "$SCENARIO_TYPE" == "fixed-ar-mtp" && -f "$SCRIPT_FIXED_AR_MTP" ]]; then
+        BENCHMARK_SCRIPT="$SCRIPT_FIXED_AR_MTP"
+    elif [[ -f "$SCRIPT_FW" ]]; then
         BENCHMARK_SCRIPT="$SCRIPT_FW"
     else
         BENCHMARK_SCRIPT="$SCRIPT_FALLBACK"
