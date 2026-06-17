@@ -1,0 +1,525 @@
+apiVersion: jobset.x-k8s.io/v1alpha2
+kind: JobSet
+metadata:
+  name: ${JOB_NAME}
+spec:
+  successPolicy:
+    operator: All
+    targetReplicatedJobs:
+      - tpu-worker
+  replicatedJobs:
+    - name: tpu-worker
+      replicas: 1
+      template:
+        spec:
+          parallelism: ${TPU_REPLICAS}
+          completions: ${TPU_REPLICAS}
+          completionMode: Indexed
+          template:
+            spec:
+              containers:
+              - name: vllm-server
+                image: ${IMAGE}
+                imagePullPolicy: Always
+                command: ["/bin/bash", "-c"]
+                args:
+                - |
+                  set -x
+                  # Multi-host JAX configuration
+                  export JAX_COORDINATOR_ADDRESS="${JOB_NAME}-tpu-worker-0-0.${JOB_NAME}"
+                  export JAX_COORDINATOR_PORT=1234
+                  export JAX_PROCESS_COUNT=${TPU_REPLICAS}
+                  export JAX_PROCESS_INDEX=$$JOB_COMPLETION_INDEX
+
+                  # Calculation for model length
+                  model_len=$(( ${MAX_ISL} + ${MAX_OSL} + 20 ))
+                  
+                  # Synchronize weight download, startup, and wait for CoreDNS propagation
+                  python3 <<'EOF'
+                  import os
+                  import socket
+                  import time
+                  from google.cloud import storage
+
+                  # 1. Download weights
+                  dest_dir = '/root/.cache/vllm/assets/model_streamer/98418607'
+                  os.makedirs(dest_dir, exist_ok=True)
+                  client = storage.Client()
+                  bucket_src = client.bucket('sangamjindal')
+                  blobs = list(bucket_src.list_blobs(prefix='Qwen3.5-397B-A17B-FP8/'))
+ 
+                  from concurrent.futures import ThreadPoolExecutor
+ 
+                  def download_blob(blob):
+                      if blob.name.endswith('/'):
+                          return
+                      rel_path = os.path.relpath(blob.name, 'Qwen3.5-397B-A17B-FP8')
+                      dest_path = os.path.join(dest_dir, rel_path)
+                      os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                      if not os.path.exists(dest_path) or os.path.getsize(dest_path) != blob.size:
+                          print(f'Downloading {blob.name} to {dest_path}...')
+                          # Re-create client per thread to prevent connection pool sharing issues
+                          thread_client = storage.Client()
+                          thread_bucket = thread_client.bucket('sangamjindal')
+                          thread_blob = thread_bucket.blob(blob.name)
+                          thread_blob.download_to_filename(dest_path)
+                          print(f'Finished {blob.name}')
+ 
+                  with ThreadPoolExecutor(max_workers=16) as executor:
+                      executor.map(download_blob, blobs)
+
+                  # 2. Socket Barrier Sync & IP Exchange
+                  job_index = os.environ.get('JOB_COMPLETION_INDEX', '0')
+                  port = 12345
+
+                  # Get local IP
+                  hostname = socket.gethostname()
+                  local_ip = socket.gethostbyname(hostname)
+
+                  # Get hostnames from environment
+                  job_name = os.environ.get('JOB_NAME', 'ix-tpu-v7-1024-1024-c4-141658')
+                  host0_dns = f"{job_name}-tpu-worker-0-0.{job_name}"
+                  host1_dns = f"{job_name}-tpu-worker-0-1.{job_name}"
+
+                  process_count = int(os.environ.get('JAX_PROCESS_COUNT', '1'))
+                  if process_count > 1:
+                      if job_index == '0':
+                          # Server (Worker 0)
+                          s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                          s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                          s.bind(('0.0.0.0', port))
+                          s.listen(1)
+                          print(f"Worker 0 listening on port {port}...")
+                          conn, addr = s.accept()
+                          worker1_ip = addr[0]
+                          print(f"Worker 1 connected from {worker1_ip}. Exchanging IPs...")
+                          # Send worker 0 IP to worker 1
+                          conn.sendall(local_ip.encode('utf-8'))
+                          conn.close()
+                          s.close()
+                          
+                          actual_worker0_ip = local_ip
+                          actual_worker1_ip = worker1_ip
+                      else:
+                          # Client (Worker 1)
+                          coordinator_host = os.environ.get('JAX_COORDINATOR_ADDRESS', 'localhost')
+                          print(f"Worker 1 attempting to connect to coordinator {coordinator_host}:{port}...")
+                          while True:
+                              try:
+                                  s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                                  s.connect((coordinator_host, port))
+                                  # Receive worker 0's IP
+                                  worker0_ip = s.recv(1024).decode('utf-8')
+                                  print(f"Connected to coordinator at {worker0_ip}. Synchronization complete!")
+                                  s.close()
+                                  break
+                              except Exception as e:
+                                  print(f"Connection to coordinator failed: {e}. Sleeping 2s...")
+                                  time.sleep(2)
+                                  
+                          actual_worker0_ip = worker0_ip
+                          actual_worker1_ip = local_ip
+                  else:
+                      actual_worker0_ip = local_ip
+                      actual_worker1_ip = ""
+
+                  # 3. Wait for DNS propagation
+                  if process_count > 1:
+                      print("Waiting for CoreDNS to propagate correct IP records...")
+                      while True:
+                          try:
+                              resolved_worker0_ip = socket.gethostbyname(host0_dns)
+                              resolved_worker1_ip = socket.gethostbyname(host1_dns)
+                              print(f"DNS Resolution: {host0_dns} -> {resolved_worker0_ip} (expected: {actual_worker0_ip})")
+                              print(f"DNS Resolution: {host1_dns} -> {resolved_worker1_ip} (expected: {actual_worker1_ip})")
+                              
+                              if resolved_worker0_ip == actual_worker0_ip and resolved_worker1_ip == actual_worker1_ip:
+                                  print("CoreDNS records are fully synchronized!")
+                                  break
+                          except Exception as e:
+                              print(f"DNS Resolution error: {e}")
+                              
+                          print("DNS records are stale/missing. Sleeping 5s before retry...")
+                          time.sleep(5)
+
+                  # Write to env file
+                  with open('/tmp/signal/resolved_ips.env', 'w') as f:
+                      f.write(f"export resolved_worker0_ip={actual_worker0_ip}\n")
+                      f.write(f"export resolved_worker1_ip={actual_worker1_ip}\n")
+                  EOF
+
+                  # Hotpatch tpu_inference utils.py to handle non-addressable devices memory stats
+                  python3 <<'EOF'
+                  file_path = '/root/cloud-devkit/tpu-inference/tpu_inference/utils.py'
+                  with open(file_path, 'r') as f:
+                      code = f.read()
+
+                  target = "\n".join([line if line.strip() else "" for line in """\
+                      multihost_backend = envs.TPU_MULTIHOST_BACKEND
+                      if multihost_backend == "ray":
+                          # MemoryStats is only supported for addressable PjRt devices.
+                          # Assume all the devices have similar memory usage for now.
+                          # TODO(ranlihao): find a proper way to get the memory usage of each device.
+                          for device in devices:
+                              try:
+                                  hbm_used = device.memory_stats()["bytes_in_use"]
+                                  hbm_limit = device.memory_stats()["bytes_limit"]
+                                  logger.info(
+                                      "Get memory stats for device %s. Assuming all devices have the same usage.",
+                                      device)
+                                  usage.extend([(hbm_used, hbm_limit)] * len(devices))
+                                  break
+                              except Exception as e:
+                                  logger.warning(
+                                      "Failed to get memory stats for device %s: %s. ", device,
+                                      e)
+                      else:
+                          for device in devices:
+                              hbm_used = device.memory_stats()["bytes_in_use"]
+                              hbm_limit = device.memory_stats()["bytes_limit"]
+                              usage.append((hbm_used, hbm_limit))
+                  """.splitlines()])
+
+                  replacement = "\n".join([line if line.strip() else "" for line in """\
+                      import jax
+                      if jax.process_count() > 1:
+                          local_device = None
+                          local_process_index = jax.process_index()
+                          for d in devices:
+                              if d.process_index == local_process_index:
+                                  local_device = d
+                                  break
+                          if local_device is None:
+                              for d in jax.devices():
+                                  if d.process_index == local_process_index:
+                                      local_device = d
+                                      break
+                          if local_device is not None:
+                              try:
+                                  hbm_used = local_device.memory_stats()["bytes_in_use"]
+                                  hbm_limit = local_device.memory_stats()["bytes_limit"]
+                                  usage.extend([(hbm_used, hbm_limit)] * len(devices))
+                              except Exception:
+                                  usage.extend([(0, 95 * 1024 * 1024 * 1024)] * len(devices))
+                          else:
+                              usage.extend([(0, 95 * 1024 * 1024 * 1024)] * len(devices))
+                      else:
+                          for device in devices:
+                              try:
+                                  hbm_used = device.memory_stats()["bytes_in_use"]
+                                  hbm_limit = device.memory_stats()["bytes_limit"]
+                                  usage.append((hbm_used, hbm_limit))
+                              except Exception:
+                                  usage.append((0, 95 * 1024 * 1024 * 1024))
+                  """.splitlines()])
+
+                  if target in code:
+                      code = code.replace(target, replacement)
+                      with open(file_path, 'w') as f:
+                          f.write(code)
+                      print('utils.py patched successfully!')
+                  else:
+                      print('Error: Target string not found in utils.py!')
+                      with open('/tmp/debug_target.txt', 'w') as f:
+                          f.write(target)
+                      with open('/tmp/debug_code.txt', 'w') as f:
+                          f.write(code)
+                  EOF
+
+                  # Hotpatch tpu_inference layers/common/utils.py to handle multi-host Native JAX setups without Ray
+                  python3 <<'EOF'
+                  file_path = '/root/cloud-devkit/tpu-inference/tpu_inference/layers/common/utils.py'
+                  with open(file_path, 'r') as f:
+                      code = f.read()
+                  target1 = "        if multihost_backend != \"ray\" or (isinstance(t, jax.Array)\n                                          and not t.is_fully_addressable):"
+                  replacement1 = "        if jax.process_count() == 1 or (isinstance(t, jax.Array)\n                                          and not t.is_fully_addressable):"
+                  target2 = "            global_array = jax.make_array_from_callback(\n                t.shape, sharding, lambda index: t[index])"
+                  replacement2 = "            global_array = jax.make_array_from_callback(\n                t.shape, sharding, lambda index: t[index], dtype=t.dtype)"
+                  if target1 in code and target2 in code:
+                      code = code.replace(target1, replacement1).replace(target2, replacement2)
+                      with open(file_path, 'w') as f:
+                          f.write(code)
+                      print('layers/common/utils.py patched successfully!')
+                  else:
+                      print('Error: Target code blocks not found in layers/common/utils.py!')
+                  EOF
+
+                  # Hotpatch tpu_inference worker/tpu_worker.py to dynamically resolve local devices based on JAX process index
+                  python3 <<'EOF'
+                  file_path = '/root/cloud-devkit/tpu-inference/tpu_inference/worker/tpu_worker.py'
+                  with open(file_path, 'r') as f:
+                      code = f.read()
+                  lines = code.splitlines()
+                  patched = False
+                  for i, line in enumerate(lines):
+                      if 'self.devices = jax.devices()[:sharding_config.' in line:
+                          indent = len(line) - len(line.lstrip())
+                          lines[i] = ' ' * indent + 'local_process_index = jax.process_index()'
+                          lines[i+1] = ' ' * indent + 'self.devices = [d for d in jax.devices() if d.process_index == local_process_index][:sharding_config.total_devices]'
+                          patched = True
+                          break
+                  if patched:
+                      code = '\n'.join(lines) + '\n'
+                      with open(file_path, 'w') as f:
+                          f.write(code)
+                      print('tpu_worker.py patched successfully!')
+                  else:
+                      print('Error: Target code line not found in tpu_worker.py!')
+                  EOF
+
+                  # Hotpatch tpu_inference models/vllm/experimental/vision_tower_jit.py to check for StageMissingLayer (text-only models)
+                  python3 <<'EOF'
+                  file_path = '/root/cloud-devkit/tpu-inference/tpu_inference/models/vllm/experimental/vision_tower_jit.py'
+                  with open(file_path, 'r') as f:
+                      code = f.read()
+                  lines = code.splitlines()
+                  patched = False
+                  for i, line in enumerate(lines):
+                      if 'def has_jittable_vision(vllm_model) -> bool:' in line:
+                          lines.insert(i + 2, '    if type(getattr(vllm_model, "visual", None)).__name__ == "StageMissingLayer":')
+                          lines.insert(i + 3, '        return False')
+                          patched = True
+                          break
+                  if patched:
+                      code = '\n'.join(lines) + '\n'
+                      with open(file_path, 'w') as f:
+                          f.write(code)
+                      print('vision_tower_jit.py patched successfully!')
+                  else:
+                      print('Error: Target function signature not found in vision_tower_jit.py!')
+                  EOF
+
+                  # Load the resolved IP variables
+                  source /tmp/signal/resolved_ips.env
+
+                  # Override JAX/TPU env vars using the raw IPs
+                  export JAX_COORDINATOR_ADDRESS="${resolved_worker0_ip}"
+                  if [ -n "${resolved_worker1_ip:-}" ]; then
+                      export TPU_PROCESS_ADDRESSES="${resolved_worker0_ip}:8471,${resolved_worker1_ip}:8471"
+                      export TPU_WORKER_HOSTNAMES="${resolved_worker0_ip},${resolved_worker1_ip}"
+                      export JAX_PROCESS_COUNT=2
+                  else
+                      export TPU_PROCESS_ADDRESSES="${resolved_worker0_ip}:8471"
+                      export TPU_WORKER_HOSTNAMES="${resolved_worker0_ip}"
+                      export JAX_PROCESS_COUNT=1
+                  fi
+                  export JAX_PROCESS_INDEX=$$JOB_COMPLETION_INDEX
+                  export TPU_WORKER_ID=$$JOB_COMPLETION_INDEX
+                  export CLOUD_TPU_TASK_ID=$$JOB_COMPLETION_INDEX
+
+                  # Start vLLM server
+                  vllm serve \
+                    /root/.cache/vllm/assets/model_streamer/98418607 \
+                    --served-model-name ${MODEL_NAME} \
+                    --max-model-len=${model_len} \
+                    --tensor-parallel-size=${TP} \
+                    --max-num-batched-tokens=2048 \
+                    --max-num-seqs=64 \
+                    --no-enable-prefix-caching \
+                    --gpu-memory-utilization=0.90 \
+                    --async-scheduling \
+                    --limit-mm-per-prompt '{"image": 0, "video": 0}' \
+                    --kv-cache-dtype=fp8 \
+                    --mamba-ssm-cache-dtype bfloat16 \
+                    --enable-chunked-prefill \
+                    --enable-expert-parallel \
+                    --language-model-only \
+                    --enable-auto-tool-choice \
+                    --tool-call-parser=qwen3_coder \
+                    --reasoning-parser=qwen3 \
+                    --block-size=256 \
+                    --additional-config='{"sharding": {"sharding_strategy": {"enable_dp_attention": true}}}' \
+                    &
+                  
+                  vllm_pid=$$!
+                  while [ ! -f /tmp/signal/done ]; do
+                    if ! kill -0 $$vllm_pid 2>/dev/null; then
+                      echo "vLLM process died, exiting loop."
+                      touch /tmp/signal/done
+                      break
+                    fi
+                    sleep 5
+                  done
+                  kill -9 $$vllm_pid 2>/dev/null || true
+                  exit 0
+                env:
+                - name: ATTN_BUCKETIZED_NUM_REQS
+                  value: "true"
+                - name: ATTN_CUSTOM_NUM_REQS_BUCKETS
+                  value: "1,2,4,8,16,32,64"
+                - name: ONEHOT_MOE_PERMUTE_THRESHOLD
+                  value: "32768"
+                - name: DP_SCHED_BATCH_PREFILL
+                  value: "1"
+                - name: NEW_MODEL_DESIGN
+                  value: "1"
+                - name: USE_MOE_EP_KERNEL
+                  value: "0"
+                - name: RAGGED_GATED_DELTA_RULE_IMPL
+                  value: "chunked_kernel_p_recurrent_kernel_d"
+                - name: MODEL_IMPL_TYPE
+                  value: "vllm"
+                - name: TPU_BACKEND_TYPE
+                  value: "jax"
+                - name: PJRT_DEVICE
+                  value: "TPU"
+                - name: TPU_PREMAPPED_BUFFER_SIZE
+                  value: "17179869184"
+                - name: TPU_PREMAPPED_BUFFER_TRANSFER_THRESHOLD_BYTES
+                  value: "17179869184"
+                - name: TPU_PROCESS_PORT
+                  value: "8471"
+                - name: JOB_NAME
+                  value: "${JOB_NAME}"
+                - name: JAX_PLATFORMS
+                  value: "tpu,cpu"
+                - name: JAX_COORDINATOR_TIMEOUT
+                  value: "1200"
+                - name: JAX_DISTRIBUTED_TIMEOUT
+                  value: "1200"
+                - name: TPU_SDK_GRPC_TIMEOUT_SEC
+                  value: "1200"
+                - name: TPU_LOG_DIR
+                  value: "/root/.cache/tpu_logs"
+                - name: JAX_COMPILATION_CACHE_DIR
+                  value: "/root/.cache/jax_compilation_cache"
+                resources:
+                  limits:
+                    google.com/tpu: "${TPU_CHIPS}"
+                  requests:
+                    google.com/tpu: "${TPU_CHIPS}"
+                volumeMounts:
+                - mountPath: /tmp/signal
+                  name: shared-signal
+                - mountPath: /root/.cache
+                  name: model-cache
+
+              - name: sidecar-bench
+                image: ${IMAGE}
+                command: ["/bin/bash", "-c"]
+                args:
+                - |
+                    set -e
+                    if [ "$$JOB_COMPLETION_INDEX" -eq 0 ]; then
+                        OUTPUT_DIR=/tmp/bench_results
+                        mkdir -p $$OUTPUT_DIR
+                        
+                        # Wait for the IP file to be generated by the server container
+                        while [ ! -f /tmp/signal/resolved_ips.env ]; do sleep 2; done
+
+                        # Load the resolved IP variables
+                        source /tmp/signal/resolved_ips.env
+
+                        # Probe which worker is running the API server (JAX process 0 ends up on either worker0 or worker1)
+                        TARGET_IP=""
+                        while [ -z "${TARGET_IP}" ]; do
+                            for ip in "${resolved_worker0_ip}" "${resolved_worker1_ip}"; do
+                                if [ -n "${ip}" ] && curl -s -f http://${ip}:8000/health > /dev/null; then
+                                    TARGET_IP="${ip}"
+                                    break
+                                fi
+                            done
+                            if [ -z "${TARGET_IP}" ]; then
+                                echo "Waiting for API server to start on any worker IP..."
+                                sleep 5
+                            fi
+                        done
+
+                        echo "API server successfully detected on ${TARGET_IP}:8000"
+
+                        # Parse list variables into bash arrays
+                        read -r -a isls <<< "$$ISL_LIST"
+                        read -r -a osls <<< "$$OSL_LIST"
+                        read -r -a concs <<< "$$CONC_LIST"
+
+                        # Sequential internal loop sweep
+                        for isl in "$${isls[@]}"; do
+                            for osl in "$${osls[@]}"; do
+                                for conc in "$${concs[@]}"; do
+                                    echo "============================================================"
+                                    echo "RUNNING BENCHMARK IN LOOP: ISL=$$isl, OSL=$$osl, CONC=$$conc"
+                                    echo "============================================================"
+                                    python3 /root/cloud-devkit/InferenceX/utils/bench_serving/benchmark_serving.py \
+                                      --host "$${TARGET_IP}" \
+                                      --model "${MODEL_NAME}" \
+                                      --port "8000" \
+                                      --dataset-name random \
+                                      --random-input-len "$$isl" \
+                                      --random-output-len "$$osl" \
+                                      --random-range-ratio "0.8" \
+                                      --num-prompts "$$(( conc * 10 ))" \
+                                      --max-concurrency "$$conc" \
+                                      --save-result \
+                                      --result-dir "$$OUTPUT_DIR" \
+                                      --result-filename "result_$${isl}_$${osl}_$${conc}.json" \
+                                      --ignore-eos
+                                done
+                            done
+                        done
+
+                        touch /tmp/signal/done
+                        echo "All benchmarks complete on master. Dumping logs for output parser..."
+                        
+                        echo "=== BENCHMARK_JSON_RESULT_START ==="
+                        for file in $$OUTPUT_DIR/result_*.json; do
+                            if [ -f "$$file" ]; then
+                                echo "=== RESULT_FILE: $$(basename $$file) ==="
+                                cat "$$file"
+                                echo ""
+                            fi
+                        done
+                        echo "=== BENCHMARK_JSON_RESULT_END ==="
+                        sleep 5
+                    else
+                        echo "Worker pod (rank $$JOB_COMPLETION_INDEX) waiting for completion..."
+                        while [ ! -f /tmp/signal/resolved_ips.env ]; do sleep 2; done
+                        source /tmp/signal/resolved_ips.env
+
+                        # Wait until Worker 0's JAX port is OPEN for the first time
+                        echo "Waiting for Worker 0 JAX port to open..."
+                        while ! timeout 2 bash -c "cat < /dev/null > /dev/tcp/\${resolved_worker0_ip}/8471" 2>/dev/null; do
+                            sleep 2
+                        done
+                        echo "Worker 0 JAX port is open. Monitoring for shutdown..."
+
+                        # Loop and check if Worker 0 (master) is still responsive on port 8471 (JAX)
+                        while true; do
+                            if ! timeout 2 bash -c "cat < /dev/null > /dev/tcp/\${resolved_worker0_ip}/8471" 2>/dev/null; then
+                                echo "Worker 0 JAX port closed. Master pod has completed. Shutting down..."
+                                touch /tmp/signal/done
+                                break
+                            fi
+                            sleep 5
+                        done
+                        echo "Worker pod shutting down."
+                    fi
+                volumeMounts:
+                - mountPath: /tmp/signal
+                  name: shared-signal
+                - mountPath: /root/.cache
+                  name: model-cache
+                env:
+                - name: JOB_COMPLETION_INDEX
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.labels['batch.kubernetes.io/job-completion-index']
+                - name: ISL_LIST
+                  value: "${ISL_LIST}"
+                - name: OSL_LIST
+                  value: "${OSL_LIST}"
+                - name: CONC_LIST
+                  value: "${CONC_LIST}"
+              
+              hostNetwork: true
+              dnsPolicy: ClusterFirstWithHostNet
+              nodeSelector:
+                cloud.google.com/gke-tpu-accelerator: "tpu7x"
+                cloud.google.com/gke-tpu-topology: "${TPU_TOPOLOGY}"
+              restartPolicy: Never
+              volumes:
+              - emptyDir: {}
+                name: shared-signal
+              - name: model-cache
+                hostPath:
+                  path: /dev/shm/vllm_cache
+                  type: DirectoryOrCreate

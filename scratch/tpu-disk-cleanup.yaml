@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: tpu-disk-cleanup
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      name: tpu-disk-cleanup
+  template:
+    metadata:
+      labels:
+        name: tpu-disk-cleanup
+    spec:
+      priorityClassName: system-node-critical
+      hostNetwork: true
+      hostPID: true
+      tolerations:
+      - operator: Exists
+        effect: NoSchedule
+      nodeSelector:
+        cloud.google.com/gke-tpu-accelerator: "tpu7x"
+      containers:
+      - name: cleanup
+        image: alpine
+        resources:
+          limits:
+            cpu: 100m
+            memory: 100Mi
+          requests:
+            cpu: 100m
+            memory: 100Mi
+        securityContext:
+          privileged: true
+        command: ["/bin/sh", "-c"]
+        args:
+        - |
+          echo "=== DISK USAGE ==="
+          df -h /host
+          
+          echo "=== CONTAINERS ==="
+          chroot /host crictl ps -a
+          
+          echo "=== CLEANING CONTAINERS ==="
+          # Remove all exited containers
+          EXITED_CONTAINERS=$(chroot /host crictl ps -a --state Exited -q)
+          if [ -n "$EXITED_CONTAINERS" ]; then
+              chroot /host crictl rm $EXITED_CONTAINERS
+          fi
+          
+          echo "=== CLEANING IMAGES ==="
+          chroot /host crictl rmi --prune || true
+          
+          echo "=== CLEANING SHM, VAR_TMP & STATEFUL_PARTITION MODEL CACHE (PRESERVING JAX CACHE) ==="
+          find /host/dev/shm/vllm_cache/ -mindepth 1 -maxdepth 1 ! -name 'jax_compilation_cache' -exec rm -rf {} +
+          rm -rf /host/var/tmp/vllm_cache/*
+          rm -rf /host/mnt/stateful_partition/vllm_cache/*
+          echo "Model weights cache cleared, JAX compilation cache preserved!"
+          
+          echo "=== DISK USAGE AFTER CLEANUP ==="
+          df -h /host
+          
+          # Keep container running for a bit so we can inspect logs
+          sleep 120
+        volumeMounts:
+        - mountPath: /host
+          name: host-root
+      volumes:
+      - hostPath:
+          path: /
+        name: host-root
