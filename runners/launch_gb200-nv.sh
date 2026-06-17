@@ -40,8 +40,12 @@ elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SERVED_MODEL_NAME="kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
+    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5-NVFP4"
+        export SERVED_MODEL_NAME="glm-5-nvfp4"
+        export SRT_SLURM_MODEL_PREFIX="nvidia/GLM-5-NVFP4"
     else
-        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, or kimik2.5"
+        echo "Unsupported model prefix: $MODEL_PREFIX. Supported prefixes are: gptoss, dsr1, kimik2.5, or glm5"
         exit 1
     fi
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
