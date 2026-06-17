@@ -206,6 +206,78 @@ case "$M3_SHARED_EXPERT_STREAM_MODE" in
         ;;
 esac
 
+M3_DBO_MODE="${M3_DBO_MODE:-off}"
+DBO_ARGS=()
+case "$M3_DBO_MODE" in
+    off)
+        ;;
+    decode|prefill|all)
+        DBO_PATCH="$(dirname "$0")/minimaxm3_mi300x_dbo.patch"
+        DBO_COMM_SOURCE="$VLLM_PACKAGE_ROOT/vllm/distributed/communication_op.py"
+        DBO_CONFIG_SOURCE="$VLLM_PACKAGE_ROOT/vllm/config/vllm.py"
+        if ! grep -q "_all_reduce_with_dbo_yields" "$DBO_COMM_SOURCE"; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$DBO_PATCH"; then
+                echo "Failed to validate the MiniMax M3 DBO patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$DBO_PATCH"; then
+                echo "Failed to apply the MiniMax M3 DBO patch" >&2
+                exit 1
+            fi
+        fi
+        if ! grep -q "_all_reduce_with_dbo_yields" "$DBO_COMM_SOURCE" \
+            || ! grep -q "Microbatching with DP+EP" "$DBO_CONFIG_SOURCE" \
+            || ! grep -q "dbo_prefill_min_seq_len" \
+                "$VLLM_PACKAGE_ROOT/vllm/config/parallel.py" \
+            || ! grep -q "num_ubatches > 1" \
+                "$VLLM_PACKAGE_ROOT/vllm/v1/worker/gpu_model_runner.py"; then
+            echo "MiniMax M3 DBO markers are missing after patching" >&2
+            exit 1
+        fi
+        python3 -m py_compile \
+            "$VLLM_PACKAGE_ROOT/vllm/config/parallel.py" \
+            "$DBO_CONFIG_SOURCE" \
+            "$DBO_COMM_SOURCE" \
+            "$VLLM_PACKAGE_ROOT/vllm/engine/arg_utils.py" \
+            "$VLLM_PACKAGE_ROOT/vllm/v1/worker/dp_utils.py" \
+            "$VLLM_PACKAGE_ROOT/vllm/v1/worker/gpu_model_runner.py" \
+            "$VLLM_PACKAGE_ROOT/vllm/v1/worker/gpu_ubatch_wrapper.py" \
+            "$VLLM_PACKAGE_ROOT/vllm/v1/worker/ubatch_utils.py" \
+            "$VLLM_PACKAGE_ROOT/vllm/v1/worker/ubatching.py"
+        case "$M3_DBO_MODE" in
+            decode)
+                DBO_ARGS=(
+                    --enable-dbo
+                    --dbo-decode-token-threshold 32
+                    --dbo-prefill-token-threshold 2147483647
+                )
+                ;;
+            prefill)
+                DBO_ARGS=(
+                    --enable-dbo
+                    --dbo-decode-token-threshold 2147483647
+                    --dbo-prefill-token-threshold 512
+                    --dbo-prefill-min-seq-len 2048
+                )
+                ;;
+            all)
+                DBO_ARGS=(
+                    --enable-dbo
+                    --dbo-decode-token-threshold 32
+                    --dbo-prefill-token-threshold 512
+                    --dbo-prefill-min-seq-len 2048
+                )
+                ;;
+        esac
+        echo "M3 DBO experiment mode: $M3_DBO_MODE"
+        ;;
+    *)
+        echo "Invalid M3_DBO_MODE: $M3_DBO_MODE" >&2
+        exit 2
+        ;;
+esac
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
@@ -412,6 +484,7 @@ vllm serve "$MODEL" --port "$PORT" \
     "${PROFILE_ARGS[@]}" \
     "${KV_CACHE_ARGS[@]}" \
     "${INDEX_KV_CACHE_ARGS[@]}" \
+    "${DBO_ARGS[@]}" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \

@@ -80,6 +80,16 @@ on:
           - linear
           - round_robin
         default: linear
+      m3-dbo-mode:
+        description: "MiniMax M3 MI300X dual-batch overlap experiment"
+        required: false
+        type: choice
+        options:
+          - 'off'
+          - decode
+          - prefill
+          - all
+        default: 'off'
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -157,6 +167,7 @@ jobs:
           M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
           M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
           M3_EXPERT_PLACEMENT_STRATEGY: ${{ inputs.m3-expert-placement-strategy }}
+          M3_DBO_MODE: ${{ inputs.m3-dbo-mode }}
           M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
           RAW_MATRIX: ${{ steps.gen.outputs.raw }}
         shell: python
@@ -201,6 +212,13 @@ jobs:
           placement = os.environ["M3_EXPERT_PLACEMENT_STRATEGY"]
           if placement not in {"linear", "round_robin"}:
               raise SystemExit(f"Invalid M3 expert placement strategy: {placement}")
+          dbo_mode = os.environ["M3_DBO_MODE"]
+          if dbo_mode not in {"off", "decode", "prefill", "all"}:
+              raise SystemExit(f"Invalid M3 DBO mode: {dbo_mode}")
+          if dbo_mode == "decode" and profile_phase != "decode":
+              raise SystemExit("M3 decode-only DBO requires a decode profile")
+          if dbo_mode == "prefill" and profile_phase != "prefill":
+              raise SystemExit("M3 prefill-only DBO requires a prefill profile")
           if (
               mode != "off"
               or shared_mode != "off"
@@ -209,6 +227,7 @@ jobs:
               or profile_phase != "decode"
               or profile_token_budget != 8192
               or placement != "linear"
+              or dbo_mode != "off"
           ):
               invalid = [
                   item
@@ -280,6 +299,7 @@ jobs:
       M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
       M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
       M3_EXPERT_PLACEMENT_STRATEGY: ${{ inputs.m3-expert-placement-strategy }}
+      M3_DBO_MODE: ${{ inputs.m3-dbo-mode }}
       M3_SHARED_EXPERT_STREAM_MODE: ${{ inputs.m3-shared-expert-stream-mode }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
@@ -341,6 +361,9 @@ jobs:
           fi
           if [ "$M3_EXPERT_PLACEMENT_STRATEGY" != "linear" ]; then
             mode_suffix="${mode_suffix}_m3ep-${M3_EXPERT_PLACEMENT_STRATEGY}"
+          fi
+          if [ "$M3_DBO_MODE" != "off" ]; then
+            mode_suffix="${mode_suffix}_m3dbo-${M3_DBO_MODE}"
           fi
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"

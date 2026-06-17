@@ -1,0 +1,373 @@
+diff --git a/vllm/config/parallel.py b/vllm/config/parallel.py
+index a194640f2..4f2d2f4d4 100644
+--- a/vllm/config/parallel.py
++++ b/vllm/config/parallel.py
+@@ -220,6 +220,10 @@ class ParallelConfig:
+     prefills. If the number of tokens in the request is greater than this
+     threshold, microbatching will be used. Otherwise, the request will be
+     processed in a single batch."""
++    dbo_prefill_min_seq_len: int = 2048
++    """Min max-prompt-length in a prefill batch for DBO to fire. Below this,
++    DBO setup overhead dominates and the cell regresses. Set to 0 to disable
++    the gate."""
+ 
+     disable_nccl_for_dp_synchronization: bool | None = None
+     """Forces the dp synchronization logic in vllm/v1/worker/dp_utils.py 
+diff --git a/vllm/config/vllm.py b/vllm/config/vllm.py
+index a8443212f..a431b0543 100644
+--- a/vllm/config/vllm.py
++++ b/vllm/config/vllm.py
+@@ -1413,17 +1413,25 @@ class VllmConfig:
+             )
+ 
+         if self.parallel_config.use_ubatching:
+-            a2a_backend = self.parallel_config.all2all_backend
+-            assert a2a_backend in [
+-                "deepep_low_latency",
+-                "deepep_high_throughput",
+-            ], (
+-                "Microbatching currently only supports the deepep_low_latency and "
+-                f"deepep_high_throughput all2all backend. {a2a_backend} is not "
+-                "supported. To fix use --all2all-backend=deepep_low_latency or "
+-                "--all2all-backend=deepep_high_throughput and install the DeepEP"
+-                " kernels."
+-            )
++            # DP=1 expert parallelism uses local experts followed by a TP
++            # all-reduce, so it can use the generic TP DBO yield path. DP+EP
++            # dispatches tokens across ranks and still requires a DBO-aware
++            # all-to-all backend.
++            if (
++                self.parallel_config.enable_expert_parallel
++                and self.parallel_config.data_parallel_size > 1
++            ):
++                a2a_backend = self.parallel_config.all2all_backend
++                if a2a_backend not in [
++                    "deepep_low_latency",
++                    "deepep_high_throughput",
++                    "nixl_ep",
++                ]:
++                    raise ValueError(
++                        "Microbatching with DP+EP requires --all2all-backend="
++                        "deepep_low_latency, deepep_high_throughput, or nixl_ep; "
++                        f"got {a2a_backend}."
++                    )
+ 
+             if not self.model_config.disable_cascade_attn:
+                 self.model_config.disable_cascade_attn = True
+diff --git a/vllm/distributed/communication_op.py b/vllm/distributed/communication_op.py
+index 5ad99e4e1..c54c50d29 100644
+--- a/vllm/distributed/communication_op.py
++++ b/vllm/distributed/communication_op.py
+@@ -9,9 +9,50 @@ import torch.distributed
+ from .parallel_state import get_tp_group
+ 
+ 
++def _all_reduce_with_dbo_yields(input_: torch.Tensor) -> torch.Tensor:
++    try:
++        from vllm.v1.worker.ubatching import (
++            dbo_enabled,
++            dbo_yield_and_switch_from_comm_to_compute,
++            dbo_yield_and_switch_from_compute_to_comm,
++        )
++    except Exception:
++        return get_tp_group().all_reduce(input_)
++    if not dbo_enabled():
++        return get_tp_group().all_reduce(input_)
++    dbo_yield_and_switch_from_compute_to_comm()
++    out = get_tp_group().all_reduce(input_)
++    dbo_yield_and_switch_from_comm_to_compute()
++    return out
++
++
++# Custom-op wrapper keeps AR opaque to torch.compile so dynamo cannot
++# constant-fold the runtime dbo_enabled() check at trace time. Required for
++# DBO + cudagraph_mode=PIECEWISE coexistence.
++try:
++    from vllm.utils.torch_utils import direct_register_custom_op
++
++    def _ar_op_impl(input_: torch.Tensor) -> torch.Tensor:
++        return _all_reduce_with_dbo_yields(input_)
++
++    def _ar_op_fake(input_: torch.Tensor) -> torch.Tensor:
++        return torch.empty_like(input_)
++
++    direct_register_custom_op(
++        op_name="vllm_dbo_all_reduce",
++        op_func=_ar_op_impl,
++        mutates_args=[],
++        fake_impl=_ar_op_fake,
++    )
++    _AR_OP = torch.ops.vllm.vllm_dbo_all_reduce.default
++except Exception:
++    _AR_OP = None
++
++
+ def tensor_model_parallel_all_reduce(input_: torch.Tensor) -> torch.Tensor:
+-    """All-reduce the input tensor across model parallel group."""
+-    return get_tp_group().all_reduce(input_)
++    if _AR_OP is not None:
++        return _AR_OP(input_)
++    return _all_reduce_with_dbo_yields(input_)
+ 
+ 
+ def tensor_model_parallel_all_gather(
+diff --git a/vllm/engine/arg_utils.py b/vllm/engine/arg_utils.py
+index f863fad17..adb21dccd 100644
+--- a/vllm/engine/arg_utils.py
++++ b/vllm/engine/arg_utils.py
+@@ -489,6 +489,7 @@ class EngineArgs:
+     ubatch_size: int = ParallelConfig.ubatch_size
+     dbo_decode_token_threshold: int = ParallelConfig.dbo_decode_token_threshold
+     dbo_prefill_token_threshold: int = ParallelConfig.dbo_prefill_token_threshold
++    dbo_prefill_min_seq_len: int = ParallelConfig.dbo_prefill_min_seq_len
+     disable_nccl_for_dp_synchronization: bool | None = (
+         ParallelConfig.disable_nccl_for_dp_synchronization
+     )
+@@ -1090,6 +1091,10 @@ class EngineArgs:
+             "--dbo-prefill-token-threshold",
+             **parallel_kwargs["dbo_prefill_token_threshold"],
+         )
++        parallel_group.add_argument(
++            "--dbo-prefill-min-seq-len",
++            **parallel_kwargs["dbo_prefill_min_seq_len"],
++        )
+         parallel_group.add_argument(
+             "--disable-nccl-for-dp-synchronization",
+             **parallel_kwargs["disable_nccl_for_dp_synchronization"],
+@@ -2003,6 +2008,7 @@ class EngineArgs:
+             ubatch_size=self.ubatch_size,
+             dbo_decode_token_threshold=self.dbo_decode_token_threshold,
+             dbo_prefill_token_threshold=self.dbo_prefill_token_threshold,
++            dbo_prefill_min_seq_len=self.dbo_prefill_min_seq_len,
+             disable_nccl_for_dp_synchronization=self.disable_nccl_for_dp_synchronization,
+             enable_eplb=self.enable_eplb,
+             eplb_config=self.eplb_config,
+diff --git a/vllm/v1/worker/dp_utils.py b/vllm/v1/worker/dp_utils.py
+index e7c6d81a9..af3dec8cd 100644
+--- a/vllm/v1/worker/dp_utils.py
++++ b/vllm/v1/worker/dp_utils.py
+@@ -1,6 +1,7 @@
+ # SPDX-License-Identifier: Apache-2.0
+ # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
+ 
++import numpy as np
+ import torch
+ import torch.distributed as dist
+ 
+@@ -168,6 +169,7 @@ def coordinate_batch_across_dp(
+     num_tokens_padded: int | None = None,
+     uniform_decode: bool | None = None,
+     cudagraph_mode: int = 0,
++    num_scheduled_tokens_per_request: "np.ndarray | None" = None,
+ ) -> tuple[bool, torch.Tensor | None, int]:
+     """
+     Coordinates amongst all DP ranks to determine if and how the full batch
+@@ -194,9 +196,40 @@ def coordinate_batch_across_dp(
+     ]
+ 
+     """
++    if (
++        num_scheduled_tokens_per_request is not None
++        and len(num_scheduled_tokens_per_request) > 0
++    ):
++        max_pl = int(np.max(num_scheduled_tokens_per_request))
++        num_reqs_local = int(len(num_scheduled_tokens_per_request))
++    else:
++        max_pl = 0
++        num_reqs_local = 0
++
+     if parallel_config.data_parallel_size == 1:
+-        # Early exit.
+-        return False, None, cudagraph_mode
++        # DP=1 fast path: skip cross-rank AR; run local thresholds only.
++        if not allow_microbatching:
++            return False, None, cudagraph_mode
++        assert uniform_decode is not None
++        should_ubatch_local = check_ubatch_thresholds(
++            parallel_config,
++            num_tokens_unpadded,
++            uniform_decode=uniform_decode,
++            max_prompt_len=max_pl,
++            num_reqs=num_reqs_local,
++        )
++        if not should_ubatch_local:
++            return False, None, cudagraph_mode
++        if num_tokens_padded is None:
++            num_tokens_padded = num_tokens_unpadded
++        if is_last_ubatch_empty(
++            num_tokens_unpadded, num_tokens_padded, parallel_config.num_ubatches
++        ):
++            return False, None, cudagraph_mode
++        num_tokens_after_padding = torch.tensor(
++            [num_tokens_padded], dtype=torch.int32, device="cpu"
++        )
++        return True, num_tokens_after_padding, cudagraph_mode
+ 
+     # If the caller has explicitly enabled microbatching.
+     should_attempt_ubatching = False
+@@ -207,6 +240,8 @@ def coordinate_batch_across_dp(
+             parallel_config,
+             num_tokens_unpadded,
+             uniform_decode=uniform_decode,
++            max_prompt_len=max_pl,
++            num_reqs=num_reqs_local,
+         )
+ 
+     if num_tokens_padded is None:
+diff --git a/vllm/v1/worker/gpu_model_runner.py b/vllm/v1/worker/gpu_model_runner.py
+index cb607c0b7..48756d752 100644
+--- a/vllm/v1/worker/gpu_model_runner.py
++++ b/vllm/v1/worker/gpu_model_runner.py
+@@ -2356,7 +2356,8 @@ class GPUModelRunner(
+         # can cache the attention metadata builds and just update the block table using
+         # `builder.update_block_table` if the builder supports it.
+         cached_attn_metadata: dict[
+-            tuple[KVCacheSpec, type[AttentionMetadataBuilder]], AttentionMetadata
++            tuple[KVCacheSpec, type[AttentionMetadataBuilder], int | None],
++            AttentionMetadata,
+         ] = {}
+ 
+         def _build_attn_group_metadata(
+@@ -2370,7 +2371,8 @@ class GPUModelRunner(
+             kv_cache_spec = kv_cache_groups[kv_cache_gid].kv_cache_spec
+             if isinstance(kv_cache_spec, UniformTypeKVCacheSpecs):
+                 kv_cache_spec = kv_cache_spec.kv_cache_specs[attn_group.layer_names[0]]
+-            cache_key = (kv_cache_spec, type(builder))
++            # ubid in key: each ubatch gets its own FlashAttentionMetadata.
++            cache_key = (kv_cache_spec, type(builder), ubid)
+ 
+             cascade_attn_prefix_len = (
+                 cascade_attn_prefix_lens[kv_cache_gid][attn_gid]
+@@ -3832,10 +3834,10 @@ class GPUModelRunner(
+                 "a multiple of tensor parallel size"
+             )
+ 
+-        # Extra coordination when running data-parallel since we need to coordinate
+-        # across ranks
++        # Enter for any ubatched run (incl. DP=1); coordinate_batch_across_dp
++        # short-circuits cross-rank ops when DP=1.
+         should_ubatch, num_tokens_across_dp = False, None
+-        if self.vllm_config.parallel_config.data_parallel_size > 1:
++        if self.vllm_config.parallel_config.num_ubatches > 1:
+             should_ubatch, num_tokens_across_dp, synced_cudagraph_mode = (
+                 coordinate_batch_across_dp(
+                     num_tokens_unpadded=num_tokens,
+@@ -3844,6 +3846,7 @@ class GPUModelRunner(
+                     num_tokens_padded=num_tokens_padded,
+                     uniform_decode=uniform_decode,
+                     cudagraph_mode=cudagraph_mode.value,
++                    num_scheduled_tokens_per_request=num_scheduled_tokens_np,
+                 )
+             )
+ 
+diff --git a/vllm/v1/worker/gpu_ubatch_wrapper.py b/vllm/v1/worker/gpu_ubatch_wrapper.py
+index 657fc8267..042c7b278 100644
+--- a/vllm/v1/worker/gpu_ubatch_wrapper.py
++++ b/vllm/v1/worker/gpu_ubatch_wrapper.py
+@@ -464,21 +464,26 @@ class UBatchWrapper:
+ 
+         dp_metadata = forward_context.dp_metadata
+ 
+-        # We shouldn't be here unless we are running with multiple DP ranks
+-        assert dp_metadata is not None
+-        ubatch_dp_metadata = []
+-        for ubatch_slice in ubatch_slices:
+-            dp_size = self.vllm_config.parallel_config.data_parallel_size
+-            ubatch_num_tokens_across_dp = torch.tensor(
+-                [ubatch_slice.num_tokens] * dp_size, device="cpu", dtype=torch.int32
+-            )
+-            ubatch_dp_metadata.append(
+-                DPMetadata.make(
+-                    self.vllm_config.parallel_config,
+-                    ubatch_slice.num_tokens,
+-                    ubatch_num_tokens_across_dp,
++        # DP=1 (single-host TP-only DBO): dp_metadata is None.
++        ubatch_dp_metadata: list[DPMetadata | None]
++        if dp_metadata is None:
++            ubatch_dp_metadata = [None] * len(ubatch_slices)
++        else:
++            ubatch_dp_metadata = []
++            for ubatch_slice in ubatch_slices:
++                dp_size = self.vllm_config.parallel_config.data_parallel_size
++                ubatch_num_tokens_across_dp = torch.tensor(
++                    [ubatch_slice.num_tokens] * dp_size,
++                    device="cpu",
++                    dtype=torch.int32,
++                )
++                ubatch_dp_metadata.append(
++                    DPMetadata.make(
++                        self.vllm_config.parallel_config,
++                        ubatch_slice.num_tokens,
++                        ubatch_num_tokens_across_dp,
++                    )
+                 )
+-            )
+ 
+         if (
+             num_tokens not in self.cudagraphs
+diff --git a/vllm/v1/worker/ubatch_utils.py b/vllm/v1/worker/ubatch_utils.py
+index f4a765290..9c3ed2d24 100644
+--- a/vllm/v1/worker/ubatch_utils.py
++++ b/vllm/v1/worker/ubatch_utils.py
+@@ -36,14 +36,27 @@ def is_last_ubatch_empty(
+ 
+ 
+ def check_ubatch_thresholds(
+-    config: ParallelConfig, num_tokens: int, uniform_decode: bool
++    config: ParallelConfig,
++    num_tokens: int,
++    uniform_decode: bool,
++    max_prompt_len: int = 0,
++    num_reqs: int = 0,
+ ) -> bool:
+     if not config.use_ubatching:
+         return False
+     if uniform_decode:
+         return num_tokens >= config.dbo_decode_token_threshold
+-    else:
+-        return num_tokens >= config.dbo_prefill_token_threshold
++    # Prefill: skip DBO on single-request batches (mid-request split path
++    # does not benefit) and below the seq-len floor.
++    if num_reqs > 0 and num_reqs < 2:
++        return False
++    if (
++        config.dbo_prefill_min_seq_len > 0
++        and max_prompt_len > 0
++        and max_prompt_len < config.dbo_prefill_min_seq_len
++    ):
++        return False
++    return num_tokens >= config.dbo_prefill_token_threshold
+ 
+ 
+ # This pads the last ubatch slice out to the total number of tokens
+diff --git a/vllm/v1/worker/ubatching.py b/vllm/v1/worker/ubatching.py
+index 6d06ba213..6a3db979a 100644
+--- a/vllm/v1/worker/ubatching.py
++++ b/vllm/v1/worker/ubatching.py
+@@ -15,6 +15,10 @@ _THREAD_ID_TO_CONTEXT: dict = {}
+ # Here we hardcode the number of microbatches to 2 for default.
+ _NUM_UBATCHES: int = 2
+ _CURRENT_CONTEXTS: list["UBatchContext | None"] = []
++# Number of busy-spin iterations before falling back to a blocking wait
++# at a DBO yield point. Saves ~150-200 us / forward by skipping futex
++# round-trips when the other ubatch thread is about to signal.
++_DBO_SPIN_ITERS: int = 200
+ 
+ 
+ class UBatchContext:
+@@ -100,7 +104,14 @@ class UBatchContext:
+         assert not self.cpu_wait_event.is_set()
+ 
+         self.cpu_signal_event.set()
+-        self.cpu_wait_event.wait()
++        # Brief busy-spin before blocking wait skips the futex round-trip
++        # when the other ubatch thread is about to set the event.
++        ev = self.cpu_wait_event
++        for _ in range(_DBO_SPIN_ITERS):
++            if ev.is_set():
++                break
++        else:
++            ev.wait()
+         self.cpu_wait_event.clear()
+         self._restore_context()
+ 
