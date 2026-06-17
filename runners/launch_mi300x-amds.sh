@@ -54,40 +54,30 @@ if [ "${PROFILE:-0}" = "1" ]; then
         | srun --jobid="$JOB_ID" --chdir=/tmp \
             tar -C "$PROFILE_WORKSPACE" -xf -
 
-    # enroot also needs writable HOME/XDG paths while importing on the compute
-    # node, whose configured /nvme_home directory may not exist.
-    srun --jobid="$JOB_ID" --job-name="$RUNNER_NAME" --chdir=/tmp \
-        bash -c '
-            set -euo pipefail
-            squash_dir="$1"
-            squash_file="$2"
-            image="$3"
-            enroot_root="/tmp/inferencex-enroot-$(id -u)"
-            export HOME="${enroot_root}/home"
-            export XDG_CACHE_HOME="${enroot_root}/cache"
-            export XDG_DATA_HOME="${enroot_root}/data"
-            export XDG_RUNTIME_DIR="${enroot_root}/runtime"
-            mkdir -p \
-                "$HOME" \
-                "$XDG_CACHE_HOME" \
-                "$XDG_DATA_HOME" \
-                "$XDG_RUNTIME_DIR" \
-                "$squash_dir"
-            chmod 700 "$XDG_RUNTIME_DIR"
-
-            exec 9>"${squash_file}.lock"
-            flock -w 600 9 || {
-                echo "Failed to acquire lock for $squash_file" >&2
-                exit 1
-            }
-            if unsquashfs -l "$squash_file" > /dev/null 2>&1; then
-                echo "Squash file already exists and is valid: $squash_file"
-            else
-                rm -f "$squash_file"
-                enroot import -o "$squash_file" "docker://$image"
-                unsquashfs -l "$squash_file" > /dev/null
-            fi
-        ' _ "$SQUASH_DIR" "$SQUASH_FILE" "$IMAGE"
+    # The compute nodes cannot import images because their unprivileged enroot
+    # setup cannot preserve file capabilities. Reuse the controller-built
+    # squash image and stage it once into the node-local cache instead.
+    if ! unsquashfs -l "$SHARED_SQUASH_FILE" > /dev/null 2>&1; then
+        echo "Controller squash image is missing or invalid: $SHARED_SQUASH_FILE" >&2
+        exit 1
+    fi
+    if srun --jobid="$JOB_ID" --chdir=/tmp \
+        unsquashfs -l "$SQUASH_FILE" > /dev/null 2>&1; then
+        echo "Node-local squash image already exists and is valid: $SQUASH_FILE"
+    else
+        echo "Staging $(du -h "$SHARED_SQUASH_FILE" | cut -f1) squash image to compute node"
+        cat "$SHARED_SQUASH_FILE" \
+            | srun --jobid="$JOB_ID" --chdir=/tmp bash -c '
+                set -euo pipefail
+                squash_file="$1"
+                squash_tmp="${squash_file}.tmp"
+                mkdir -p "$(dirname "$squash_file")"
+                rm -f "$squash_tmp"
+                cat > "$squash_tmp"
+                unsquashfs -l "$squash_tmp" > /dev/null
+                mv -f "$squash_tmp" "$squash_file"
+            ' _ "$SQUASH_FILE"
+    fi
 
     run_status=0
     srun --jobid="$JOB_ID" \
