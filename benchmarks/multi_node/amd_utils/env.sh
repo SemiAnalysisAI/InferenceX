@@ -174,7 +174,9 @@ else
     export SGLANG_DISAGGREGATION_NUM_PRE_ALLOCATE_REQS=32
 
     export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
-    export MORI_MAX_DISPATCH_TOKENS_DECODE=512
+    # 512 undersizes the decode MoRI MoE dispatch buffer for conc-32/EP16, where the
+    # cross-node all-to-all stalls under load.
+    export MORI_MAX_DISPATCH_TOKENS_DECODE=4096
 
     export MORI_MOE_MAX_INPUT_TOKENS_PREFILL=32768
     export MORI_MOE_MAX_INPUT_TOKENS_DECODE=2703
@@ -194,7 +196,16 @@ else
     # QoS/DSCP configuration
     # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
     if [[ -n "$MORI_RDMA_TC" ]]; then
-        echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
+        # Derive matching SL (VLAN 802.1p / priority) from TC when only TC is set.
+        # TC is the IP ToS byte (DSCP<<2); priority = DSCP>>3, so SL = TC>>5.
+        # bnxt_re REJECTS inconsistent DSCP/SL pairs ("Given DSCP N and/or SL M not
+        # mapping to lossless queue") and SILENTLY downgrades to the lossy best-effort
+        # queue, which surfaces under load as RETRY_EXC_ERR / stalled KV transfers.
+        # TC=104 (DSCP 26/AF31) -> SL=3, matching prio-pfc 3:on. Mirror to MoRI IO.
+        [[ -z "${MORI_RDMA_SL:-}" ]] && export MORI_RDMA_SL=$(( MORI_RDMA_TC >> 5 ))
+        export MORI_IO_TC="${MORI_IO_TC:-$MORI_RDMA_TC}"
+        export MORI_IO_SL="${MORI_IO_SL:-$MORI_RDMA_SL}"
+        echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC MORI_RDMA_SL=$MORI_RDMA_SL MORI_IO_TC=$MORI_IO_TC MORI_IO_SL=$MORI_IO_SL (set by runner or environment)"
     elif command -v nicctl &> /dev/null; then
         ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
         ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
