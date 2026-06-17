@@ -541,12 +541,29 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     echo "================================================"
 
+    # Dump all resolved commands to a text file for debugging / reproducibility.
+    CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
+    dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
+    echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
+    echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
+    echo "# Model: ${MODEL_NAME}  Image: ${DOCKER_IMAGE_NAME:-unknown}" >> "$CMD_DUMP"
+
     # Start the Mooncake store master (L3 HiCache backend) on node 0 only.
     # All prefill/decode servers connect to it via NODE0_ADDR:MC_MASTER_PORT.
     if [[ "${OFFLOADING:-none}" == "hicache" && "${HICACHE_STORAGE_BACKEND:-}" == "mooncake" ]]; then
         echo "Starting Mooncake master on ${host_ip}:${MC_MASTER_PORT} (metadata :${MC_METADATA_PORT}, metrics :${MC_METRICS_PORT})"
+        MC_MASTER_CMD="mooncake_master \
+        --enable_http_metadata_server=true \
+        --http_metadata_server_host=0.0.0.0 \
+        --http_metadata_server_port=${MC_METADATA_PORT} \
+        --rpc_port=${MC_MASTER_PORT} \
+        --rpc_thread_num=${MC_MASTER_THREADS} \
+        --metrics_port=${MC_METRICS_PORT} \
+        --enable_metric_reporting=true \
+        --eviction_high_watermark_ratio=${MC_EVICTION_HIGH_WATERMARK}"
+        dump_cmd "MOONCAKE MASTER" "$MC_MASTER_CMD"
         if [[ "$DRY_RUN" -eq 1 ]]; then
-            echo "DRY RUN: mooncake_master --rpc_port ${MC_MASTER_PORT} --enable_http_metadata_server=true --http_metadata_server_host=0.0.0.0 --http_metadata_server_port=${MC_METADATA_PORT} --rpc_thread_num=${MC_MASTER_THREADS} --metrics_port=${MC_METRICS_PORT} --enable_metric_reporting=true --eviction_high_watermark_ratio=${MC_EVICTION_HIGH_WATERMARK}"
+            echo "DRY RUN: $MC_MASTER_CMD"
         else
             MC_MASTER_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/mooncake_master_${host_name}.log"
             mooncake_master \
@@ -602,6 +619,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
 
+    dump_cmd "PREFILL (node 0)" "$PREFILL_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
@@ -639,6 +657,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${DECODE_ARGS}"
 
 
+    dump_cmd "ROUTER" "$ROUTER_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
@@ -827,6 +846,11 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
     echo "Prefill parallelism: TP=${PREFILL_TP_SIZE}, EP enabled: ${PREFILL_ENABLE_EP}, DP enabled: ${PREFILL_ENABLE_DP}"
 
+    CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
+    dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
+    echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
+    echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
+
     PREFILL_MORI_MOE_ENV=""
     set -x
     if [[ -n "$MORI_MOE_MAX_INPUT_TOKENS_PREFILL" ]]; then
@@ -848,6 +872,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         PREFILL_CMD="$PREFILL_CMD --dist-init-addr ${PREFILL_HEADNODE_URLS[$prefill_idx]} --nnodes ${PREFILL_NODES_PER_WORKER} --node-rank $rank"
     fi
 
+    dump_cmd "PREFILL (rank ${NODE_RANK})" "$PREFILL_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
@@ -895,6 +920,10 @@ else
     echo "Decode node rank: $RANK"
     echo "Decode parallelism: TP=${DECODE_TP_SIZE}, EP enabled: ${DECODE_ENABLE_EP}, DP enabled: ${DECODE_ENABLE_DP}"
 
+    CMD_DUMP="/run_logs/slurm_job-${SLURM_JOB_ID}/commands_${host_name}.txt"
+    dump_cmd() { echo -e "\n# ── $1 ──\n$2" >> "$CMD_DUMP"; }
+    echo "# Commands dump — $(date -u '+%Y-%m-%d %H:%M:%S UTC')" > "$CMD_DUMP"
+    echo "# Host: ${host_name} (${host_ip})  Node rank: ${NODE_RANK}" >> "$CMD_DUMP"
 
     DECODE_MORI_MOE_ENV=""
     set -x
@@ -917,6 +946,7 @@ else
         DECODE_CMD="$DECODE_CMD --dist-init-addr ${DECODE_HEADNODE_URLS[$decode_idx]} --nnodes ${DECODE_NODES_PER_WORKER} --node-rank $rank"
     fi
 
+    dump_cmd "DECODE (rank ${NODE_RANK})" "$DECODE_CMD"
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $DECODE_CMD"
     else
