@@ -42,6 +42,8 @@ vllm serve $MODEL --port $PORT \
 --trust-remote-code \
 --no-enable-prefix-caching \
 --max-num-seqs 256 \
+--moe-backend flydsl \
+--compilation-config '{"pass_config": {"fuse_allreduce_rms": false}}' \
 --mm-encoder-tp-mode data > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
