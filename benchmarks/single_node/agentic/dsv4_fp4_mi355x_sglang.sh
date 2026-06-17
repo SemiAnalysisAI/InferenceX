@@ -14,6 +14,8 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
+PORT=8787
+
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
@@ -43,7 +45,7 @@ amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
 # https://huggingface.co/datasets/semianalysisai/cc-traces-weka-with-subagents-060826
-# export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226
+ export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060826
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
@@ -106,7 +108,7 @@ export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=0
 export SGLANG_OPT_USE_FUSED_COMPRESS=true
-export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
+#export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
 export SGLANG_OPT_FP8_WO_A_GEMM=false
 export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
 export SGLANG_OPT_USE_TOPK_V2=false
@@ -122,6 +124,12 @@ export SGLANG_EAGER_INPUT_NO_COPY=true
 # multi-stream
 export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
 export SGLANG_ROCM_USE_MULTI_STREAM=false
+
+# relax timeout 
+export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
+
+# tree modification
+export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
 
 # Parallelism: pure TP, TP+EP, or DEP (DP-attn + EP). Matches the dsv4 b200
 # vllm agentic launcher so the agentic sweep can probe both interactivity and
@@ -149,6 +157,7 @@ else
     PER_ENGINE_MAX_RUNNING=$CONC
 fi
 
+set -x
 echo "Starting sglang server..."
 sglang serve \
     --model-path $MODEL \
