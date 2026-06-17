@@ -75,6 +75,18 @@ You can override the sweep parameters from the command line using environment va
 ISL_LIST="1024" OSL_LIST="1024" CONC_LIST="4" TP=8 ./launch_tpu-v7-gke.sh
 ```
 
+### Expected Run Timeline
+Here is the step-by-step estimated time required for a full 14-point benchmark sweep (Qwen-397B FP8, TP=8):
+
+| Phase | Duration (Initial Run) | Duration (Subsequent Runs) | Description |
+| :--- | :--- | :--- | :--- |
+| **1. Node Scheduling & Init** | 1 - 3 mins | 1 - 3 mins | GKE allocates TPU nodes and pulls the container image. |
+| **2. Weight Loading** | ~15 mins | **0 seconds** | Downloads 378 GB weights from GCS on first run; reads from host RAM disk thereafter. |
+| **3. JAX Warmup (Compile)** | ~1.5 hours | **~2 mins** | Compiles 70 static shapes from scratch on first run; hits the persistent JAX cache thereafter. |
+| **4. Benchmark Execution** | ~35 - 45 mins | ~35 - 45 mins | Sequentially executes the 14 configurations (2-3 mins per test point). |
+| **5. Host RAM Purging** | 1 - 2 mins | 1 - 2 mins | Clears weight caches from host RAM disk while preserving the JAX compile cache. |
+| **Total Duration** | **~2.5 hours** | **~40 - 55 mins** | Caching reduces subsequent runs to under an hour. |
+
 ### Advanced Configuration
 You can override models, images, or TP settings via environment variables:
 
