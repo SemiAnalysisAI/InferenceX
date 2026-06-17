@@ -2809,7 +2809,7 @@ dsr1-fp4-mi355x-sglang-disagg-agentic-hicache:
     - duration: 1800
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 32 ]
+        conc-list: [ 1 ]
         offloading: none
         prefill:
           num-worker: 1
