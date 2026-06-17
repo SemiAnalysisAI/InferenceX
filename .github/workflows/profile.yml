@@ -363,7 +363,7 @@ jobs:
             mode_suffix="${mode_suffix}_m3ep-${M3_EXPERT_PLACEMENT_STRATEGY}"
           fi
           if [ "$M3_DBO_MODE" != "off" ]; then
-            mode_suffix="${mode_suffix}_m3dbo-${M3_DBO_MODE}"
+            mode_suffix="${mode_suffix}_m3dbo-${M3_DBO_MODE}-rccl"
           fi
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${mode_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"

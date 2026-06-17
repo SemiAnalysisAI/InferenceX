@@ -268,6 +268,7 @@ case "$M3_DBO_MODE" in
             decode)
                 DBO_ARGS=(
                     --enable-dbo
+                    --disable-custom-all-reduce
                     --dbo-decode-token-threshold 32
                     --dbo-prefill-token-threshold 2147483647
                 )
@@ -275,6 +276,7 @@ case "$M3_DBO_MODE" in
             prefill)
                 DBO_ARGS=(
                     --enable-dbo
+                    --disable-custom-all-reduce
                     --dbo-decode-token-threshold 2147483647
                     --dbo-prefill-token-threshold 512
                     --dbo-prefill-min-seq-len 2048
@@ -283,6 +285,7 @@ case "$M3_DBO_MODE" in
             all)
                 DBO_ARGS=(
                     --enable-dbo
+                    --disable-custom-all-reduce
                     --dbo-decode-token-threshold 32
                     --dbo-prefill-token-threshold 512
                     --dbo-prefill-min-seq-len 2048
