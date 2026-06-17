@@ -90,7 +90,16 @@ export VLLM_ROCM_MXFP8_BLOCK_FP8=1
 export VLLM_ROCM_USE_AITER=0
 export VLLM_ROCM_USE_AITER_LINEAR=0
 export VLLM_ROCM_USE_AITER_MOE=0
+BLOCK_FP8_CONFIG_DIR="$(dirname "$0")/minimaxm3_mi300x_block_fp8_configs"
+BLOCK_FP8_CONFIG_FILE="$BLOCK_FP8_CONFIG_DIR/E=16,N=3072,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json"
+if [ ! -f "$BLOCK_FP8_CONFIG_FILE" ]; then
+    echo "Missing MiniMax-M3 MI300X block-FP8 config: $BLOCK_FP8_CONFIG_FILE" >&2
+    exit 1
+fi
+export VLLM_TUNED_CONFIG_FOLDER
+VLLM_TUNED_CONFIG_FOLDER="$(cd "$BLOCK_FP8_CONFIG_DIR" && pwd)"
 echo "M3 gfx942 MXFP8 weight mode: 128x128 block FP8 (Triton)"
+echo "M3 block-FP8 MoE config source: SGLang PR 27944 MI300X tuning"
 
 INDEX_TOPK_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_topk.patch"
 INDEX_TOPK_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"
