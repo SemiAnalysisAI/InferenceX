@@ -113,4 +113,4 @@ export IMAGE="your-custom-vllm-image"
     > [!IMPORTANT]
     > **Local Output Only**: The current TPU GKE runner pipeline **only** generates the local `results/agg_*.json` result files. Automatic telemetry ingestion into the production database (InferenceX dashboard website) is currently **not** supported for GKE TPU runs.
     > 
-    > **TODO**: Integrate the GKE TPU sweep job into the main GitHub Actions workflow (`.github/workflows/run-sweep.yml`) by configuring Google Cloud OIDC/Service Account credentials on GitHub, allowing GHA to run `launch_tpu-v7-gke.sh`, upload the resulting artifacts, and trigger the `trigger-ingest` repository dispatch API to sync results to the Neon database automatically.
+    > **TODO**: Sync results to the iX Neon database automatically.
