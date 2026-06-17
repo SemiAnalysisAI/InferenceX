@@ -37,7 +37,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         else
             PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
         fi
-        PARALLEL_ARGS=(-tp "$TP" --enable-dp-attention )
     fi
 fi 
 
