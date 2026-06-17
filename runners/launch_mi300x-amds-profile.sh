@@ -54,21 +54,41 @@ REMOTE_BASE="$(
 REMOTE_WORKSPACE="${REMOTE_BASE}/workspace-${JOB_ID}"
 REMOTE_SQUASH_DIR="${REMOTE_BASE}/squash"
 REMOTE_CACHE_DIR="${REMOTE_BASE}/enroot-cache"
+REMOTE_DATA_DIR="${REMOTE_BASE}/enroot-data"
+REMOTE_RUNTIME_DIR="${REMOTE_BASE}/enroot-runtime"
+REMOTE_TEMP_DIR="${REMOTE_BASE}/enroot-temp"
+REMOTE_HOME="${REMOTE_BASE}/home"
 SQUASH_FILE="${REMOTE_SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
-    mkdir -p "$REMOTE_WORKSPACE" "$REMOTE_SQUASH_DIR" "$REMOTE_CACHE_DIR"
+    mkdir -p \
+        "$REMOTE_WORKSPACE" \
+        "$REMOTE_SQUASH_DIR" \
+        "$REMOTE_CACHE_DIR" \
+        "$REMOTE_DATA_DIR" \
+        "$REMOTE_RUNTIME_DIR" \
+        "$REMOTE_TEMP_DIR" \
+        "$REMOTE_HOME"
 tar --exclude='.git' -C "$SOURCE_WORKSPACE" -cf - . \
     | srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp \
         tar -xf - -C "$REMOTE_WORKSPACE"
 
 srun --quiet --jobid="$JOB_ID" --ntasks=1 --chdir=/tmp bash -c "
     set -euo pipefail
-    export HOME=\"$REMOTE_BASE/home\"
+    export HOME=\"$REMOTE_HOME\"
     export XDG_CACHE_HOME=\"$REMOTE_BASE/cache\"
     export ENROOT_CACHE_PATH=\"$REMOTE_CACHE_DIR\"
-    mkdir -p \"\$HOME\" \"\$XDG_CACHE_HOME\" \"\$ENROOT_CACHE_PATH\"
+    export ENROOT_DATA_PATH=\"$REMOTE_DATA_DIR\"
+    export ENROOT_RUNTIME_PATH=\"$REMOTE_RUNTIME_DIR\"
+    export ENROOT_TEMP_PATH=\"$REMOTE_TEMP_DIR\"
+    mkdir -p \
+        \"\$HOME\" \
+        \"\$XDG_CACHE_HOME\" \
+        \"\$ENROOT_CACHE_PATH\" \
+        \"\$ENROOT_DATA_PATH\" \
+        \"\$ENROOT_RUNTIME_PATH\" \
+        \"\$ENROOT_TEMP_PATH\"
     exec 9>\"$LOCK_FILE\"
     flock -w 600 9 || {
         echo 'Failed to acquire lock for $SQUASH_FILE' >&2
@@ -89,12 +109,19 @@ srun --jobid="$JOB_ID" \
     --container-image="$SQUASH_FILE" \
     --container-mounts="$REMOTE_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
     --no-container-mount-home \
-    --container-writable \
     --container-remap-root \
     --container-workdir=/workspace/ \
     --no-container-entrypoint \
-    --export=ALL,HOME=/tmp \
+    --export=ALL \
     bash -c '
+        overlay=/workspace/.vllm-profile-overlay
+        rm -rf "$overlay"
+        mkdir -p "$overlay"
+        vllm_package="$(
+            python3 -c "from pathlib import Path; import vllm; print(Path(vllm.__file__).resolve().parent)"
+        )"
+        cp -a "$vllm_package" "$overlay/"
+        export PYTHONPATH="$overlay${PYTHONPATH:+:$PYTHONPATH}"
         if [[ "${PROFILE:-0}" == "1" && "${MODEL_PREFIX:-}" == "minimaxm3" && "${FRAMEWORK:-}" == "vllm" ]]; then
             python3 /workspace/utils/patch_vllm_mi300x_rank0_profiler.py
         fi
