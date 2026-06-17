@@ -3894,3 +3894,28 @@
     - "Align MiniMax-M3 B300 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
     - "Add TP4+EP4 coverage for MiniMax-M3 B300: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1781
+
+- config-keys:
+    - qwen3.5-fp4-b200-trt
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark (1k/1k and 8k/1k) with a TP/TEP/DEP parallelism sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1711
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
+  
+  - config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Fix gsm8k accuracy at 88% instead of 95% for a single point."
+    - "In previous submission, there was an numeric issue causing accuracy degradation and performance anomaly in some MTP points at certain concurrency."
+    - "This issue is now fixed in the latest TRTLLM release."
+    - "Also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1767
+  
