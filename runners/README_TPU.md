@@ -108,4 +108,9 @@ export IMAGE="your-custom-vllm-image"
 2.  **Resource Configuration**: The requested TPU chips and GKE TPU topology selector are automatically determined from the `$TP` parameter (e.g., TP=8 maps to 8 chips with topology `2x2x2`).
 3.  **JAX Cache Preservation**: JAX compilation caching is enabled via `JAX_COMPILATION_CACHE_DIR` pointing to `/root/.cache`. By running a targeted Host Purge DaemonSet after the run, we clean up the massive 378 GB weights while preserving the compile cache. Subsequent warmups are cut from 1.5 hours to 2 minutes.
 4.  **Logging-based Data Collection**: Once the sequential benchmark loop completes inside the container, results are dumped to the container's stdout logs. The script downloads these logs via `kubectl logs`, parses the output markers, and reconstructs the 14 individual result JSON files locally.
-5.  **Standardization**: The script automatically calls `utils/process_result.py` to convert the raw metrics into standard InferenceX dashboard JSON format (`results/agg_*.json`), making TPU results directly comparable with GPU results.
+5.  **Standardization**: The script automatically calls `utils/process_result.py` to convert the raw metrics into standard InferenceX dashboard JSON format (`results/agg_*.json`).
+    
+    > [!IMPORTANT]
+    > **Local Output Only**: The current TPU GKE runner pipeline **only** generates the local `results/agg_*.json` result files. Automatic telemetry ingestion into the production database (InferenceX dashboard website) is currently **not** supported for GKE TPU runs.
+    > 
+    > **TODO**: Integrate the GKE TPU sweep job into the main GitHub Actions workflow (`.github/workflows/run-sweep.yml`) by configuring Google Cloud OIDC/Service Account credentials on GitHub, allowing GHA to run `launch_tpu-v7-gke.sh`, upload the resulting artifacts, and trigger the `trigger-ingest` repository dispatch API to sync results to the Neon database automatically.
