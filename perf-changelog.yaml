@@ -3867,5 +3867,8 @@
 - config-keys:
     - dsr1-fp8-gb300-dynamo-trt
   description:
-    - "Fix gsm8k accuracy at 88% instead of 95% for a single point, also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
+    - "Fix gsm8k accuracy at 88% instead of 95% for a single point."
+    - "In previous submission, there was an numeric issue causing accuracy degradation and performance anomaly in some MTP points at certain concurrency."
+    - "This issue is now fixed in the latest TRTLLM release."
+    - "Also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1767
