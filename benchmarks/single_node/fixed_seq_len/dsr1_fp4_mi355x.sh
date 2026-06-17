@@ -5,6 +5,7 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 check_env_vars \
     MODEL \
     TP \
+	EP_SIZE \
     CONC \
     ISL \
     OSL \
@@ -37,16 +38,21 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
+if [ "${EP_SIZE:-1}" -gt 1 ]; then
+    PARALLEL_ARGS+=( --ep-size "$EP_SIZE" )
+fi
+
 set -x
 python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --host=0.0.0.0 --port=$PORT \
+"${PARALLEL_ARGS[@]}" \
 --tensor-parallel-size=$TP \
 --chunked-prefill-size=$PREFILL_SIZE \
 --mem-fraction-static=0.8 \
 --disable-radix-cache \
 --num-continuous-decode-steps=4 \
 --max-prefill-tokens=$PREFILL_SIZE \
---cuda-graph-max-bs=128 \
+--cuda-graph-max-bs=512 \
 --attention-backend aiter \
 --kv-cache-dtype fp8_e4m3 $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
