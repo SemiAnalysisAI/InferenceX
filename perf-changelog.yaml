@@ -3918,4 +3918,10 @@
     - "This issue is now fixed in the latest TRTLLM release."
     - "Also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1767
-  
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+  description:
+    - "Add day-zero MiniMax-M3 MXFP4 (amd/MiniMax-M3-MXFP4) single-node atom benchmark on MI355X, following the ROCm/ATOM MiniMax-M3 recipe (TP4, block size 128 for MSA, FP8 KV cache)."
+  pr-link: TBD
+
