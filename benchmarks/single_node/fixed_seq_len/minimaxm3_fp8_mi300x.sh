@@ -4,9 +4,8 @@
 # Reuses the dedicated ROCm image and applies the checked-in hybrid gfx94x
 # MXFP8 MoE patch. Short-context EP8 uses the measured native/BF16 policy;
 # long-context EP8 compacts local decode routes and uses low-padding BF16 GEMMs.
-# Block size 128 is mandatory for MSA sparse attention. Keep the default BF16
-# KV cache on gfx942: the checkpoint has no calibrated q/prob scales for ROCm
-# FP8 attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
+# Block size 128 is mandatory for MSA sparse attention. This experiment enables
+# the corrected FNUZ FP8 main KV cache validated by vLLM PR #45563.
 # Target image vLLM revision: 4a560dd8db67c270f5e2afb614558271b76f2294.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -60,6 +59,27 @@ if ! grep -q "profiled gfx94x MiniMax-M3 EP8" "$MXFP8_ORACLE"; then
     exit 1
 fi
 
+# Port the validated ROCm FNUZ dtype handling from vLLM PR #45563.
+FP8_KV_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_kv.patch"
+SPARSE_ATTN_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/sparse_attn.py"
+SPARSE_ATTN_IMPL="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/sparse_attention.py"
+if ! grep -q "_FP8_DTYPES" "$SPARSE_ATTN_SOURCE"; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 < "$FP8_KV_PATCH"; then
+        echo "Failed to validate the MiniMax M3 FP8 KV-cache patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 < "$FP8_KV_PATCH"; then
+        echo "Failed to apply the MiniMax M3 FP8 KV-cache patch" >&2
+        exit 1
+    fi
+fi
+if ! grep -q "current_platform.fp8_dtype()" "$SPARSE_ATTN_IMPL" \
+    || ! grep -q "torch.float8_e4m3fnuz" "$SPARSE_ATTN_SOURCE"; then
+    echo "MiniMax M3 FP8 KV-cache dtype fix is missing after patching" >&2
+    exit 1
+fi
+python3 -m py_compile "$SPARSE_ATTN_SOURCE" "$SPARSE_ATTN_IMPL"
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
@@ -90,6 +110,7 @@ start_gpu_monitor
 set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
+    --kv-cache-dtype fp8 \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \

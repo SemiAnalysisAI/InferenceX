@@ -1,0 +1,58 @@
+diff --git a/vllm/models/minimax_m3/common/ops/sparse_attn.py b/vllm/models/minimax_m3/common/ops/sparse_attn.py
+index 40287e166b2a..7b6fb73cba9a 100644
+--- a/vllm/models/minimax_m3/common/ops/sparse_attn.py
++++ b/vllm/models/minimax_m3/common/ops/sparse_attn.py
+@@ -24,6 +24,13 @@ from vllm.utils.math_utils import round_up
+ # One sparse block == one KV page.
+ SPARSE_BLOCK_SIZE = 128
+ 
++_FP8_DTYPES = (
++    torch.float8_e4m3fn,
++    torch.float8_e4m3fnuz,
++    torch.float8_e5m2,
++    torch.float8_e5m2fnuz,
++)
++
+ 
+ _SPARSE_ATTN_NUM_STAGES_KWARG: dict | None = None
+ 
+@@ -456,7 +463,7 @@ def minimax_m3_sparse_attn(
+     batch = cu_seqlens_q.shape[0] - 1
+     topk = topk_idx.shape[-1]
+     gqa_group_size = num_heads // num_kv_heads
+-    use_fp8 = kv_cache.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
++    use_fp8 = kv_cache.dtype in _FP8_DTYPES
+     grid = (max_query_len, num_kv_heads, batch)
+     _gqa_sparse_fwd_kernel[grid](
+         q,
+@@ -513,7 +520,7 @@ def minimax_m3_sparse_attn_decode(
+     assert total_q == seq_lens.shape[0] * decode_query_len
+     max_topk = topk_idx.shape[-1]
+     gqa_group_size = num_heads // num_kv_heads
+-    use_fp8 = kv_cache.dtype in (torch.float8_e4m3fn, torch.float8_e5m2)
++    use_fp8 = kv_cache.dtype in _FP8_DTYPES
+     use_pdl = current_platform.is_arch_support_pdl()
+     # `launch_pdl` is a Triton runtime kwarg only some backends accept (CUDA
+     # SM9+); this ROCm Triton rejects it even when False ("Keyword argument
+diff --git a/vllm/models/minimax_m3/common/sparse_attention.py b/vllm/models/minimax_m3/common/sparse_attention.py
+index 8cca0e8e2998..ab8f24186e6b 100644
+--- a/vllm/models/minimax_m3/common/sparse_attention.py
++++ b/vllm/models/minimax_m3/common/sparse_attention.py
+@@ -291,9 +291,14 @@ class MiniMaxM3SparseTritonImpl(MiniMaxM3SparseImpl):
+         self.num_kv_heads = num_kv_heads if num_kv_heads is not None else num_heads
+         self.kv_cache_dtype = kv_cache_dtype
+         self.use_fp8_kv = is_quantized_kv_cache(kv_cache_dtype)
+-        self.kv_cache_fp8_dtype = (
+-            torch.float8_e5m2 if "e5m2" in kv_cache_dtype else torch.float8_e4m3fn
+-        )
++        if "e5m2" in kv_cache_dtype:
++            self.kv_cache_fp8_dtype = (
++                torch.float8_e5m2fnuz
++                if current_platform.is_fp8_fnuz()
++                else torch.float8_e5m2
++            )
++        else:
++            self.kv_cache_fp8_dtype = current_platform.fp8_dtype()
+         # Sparse selection parameters (block_size == page size == SPARSE_BLOCK_SIZE).
+         self.topk_blocks = topk_blocks
+         self.block_size = sparse_block_size
