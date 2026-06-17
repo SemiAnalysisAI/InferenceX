@@ -12720,7 +12720,9 @@ dsv4-fp4-b200-sglang-agentic-hicache:
     - duration: 1800
       search-space:
       - { tp: 8, offloading: none,     conc-list: [1, 4, 8, 16, 32, 40] }
-      - { tp: 8, offloading: hicache,  conc-list: [40, 48, 52, 64, 72, 84, 100, 128, 196, 256, 512] }
+      - { tp: 8, offloading: hicache,  conc-list: [40, 48, 52, 64, 72] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none,    conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: hicache, conc-list: [64, 128, 196, 256, 512] }
 
 
 dsv4-fp4-b300-sglang-agentic-hicache:
@@ -12737,8 +12739,6 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 4, 8, 16, 32] }
       - { tp: 8, offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 64, 72] }
-      - { tp: 4, offloading: hicache, conc-list: [32, 48, 64, 96, 128, 192, 256] }
-      - { tp: 8, offloading: hicache, conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
       - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [8, 16, 32, 64, 128] }
       - { tp: 4, ep: 4, dp-attn: true, offloading: hicache, conc-list: [32, 48, 64, 96, 128, 192, 256] }
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }

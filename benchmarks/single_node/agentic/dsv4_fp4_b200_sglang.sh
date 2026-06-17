@@ -58,11 +58,6 @@ install_agentic_deps
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
-if [ "$DP_ATTENTION" = "true" ]; then
-    echo "Error: current SGLang nightly self-collides on internal IPC ports during single-node DP-attention startup; use pure TP until upstream fixes PortArgs initialization." >&2
-    exit 1
-fi
-
 CACHE_ARGS=()
 case "$OFFLOADING" in
     none)
@@ -106,13 +101,55 @@ case "$OFFLOADING" in
         ;;
 esac
 
+USE_SGLANG_ROUTER=false
+SGLANG_BACKEND_PORT="$PORT"
+ROUTER_LOG="$RESULT_DIR/router.log"
+if [ "$DP_ATTENTION" = "true" ]; then
+    USE_SGLANG_ROUTER=true
+    SGLANG_BACKEND_PORT=$((PORT + 1))
+    SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
+    SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
+    AIPERF_HTTP_CONNECTION_LIMIT=$((TP / 2))
+    if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -lt 1 ]; then
+        AIPERF_HTTP_CONNECTION_LIMIT=1
+    fi
+    if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -gt "$CONC" ]; then
+        AIPERF_HTTP_CONNECTION_LIMIT="$CONC"
+    fi
+    export AIPERF_HTTP_CONNECTION_LIMIT
+fi
+
 PARALLEL_ARGS=(--tp "$TP")
 METRICS_ARGS=(--enable-metrics)
 CHUNKED_PREFILL_SIZE=8192
-PARALLEL_ARGS+=(
-    --moe-runner-backend flashinfer_mxfp4
-    --disable-flashinfer-autotune
-)
+if [ "$DP_ATTENTION" = "true" ]; then
+    DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    PARALLEL_ARGS+=(
+        --dp "$TP"
+        --enable-dp-attention
+        --enable-dp-attention-local-control-broadcast
+        --incremental-streaming-output
+        --stream-interval 20
+        --dist-init-addr "127.0.0.1:$((PORT + 2000))"
+        --ep-size "$EP_SIZE"
+        --moe-a2a-backend deepep
+        --deepep-config "$DEEPEP_CONFIG"
+        --enable-prefill-delayer
+    )
+    CHUNKED_PREFILL_SIZE=32768
+else
+    PARALLEL_ARGS+=(
+        --moe-runner-backend flashinfer_mxfp4
+        --disable-flashinfer-autotune
+    )
+fi
 
 MODEL_ARGS=()
 # The B200-specialized image deadlocks immediately after weight loading when
@@ -157,7 +194,7 @@ SGLANG_CMD=(
     --model-path "$MODEL_PATH"
     --served-model-name "$MODEL"
     --host 0.0.0.0
-    --port "$PORT"
+    --port "$SGLANG_BACKEND_PORT"
     --trust-remote-code
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
@@ -195,19 +232,41 @@ echo "Server PID: $SERVER_PID"
 capture_cache_metrics() {
     {
         echo "=== SGLang cache metrics snapshot $(date --iso-8601=seconds) ==="
-        curl -fsS "http://localhost:$PORT/metrics" 2>/dev/null \
+        curl -fsS "http://localhost:$SGLANG_BACKEND_PORT/metrics" 2>/dev/null \
             | grep -E '^(sglang:(cache_hit_rate|cached_tokens_total|prompt_tokens_total|hicache_host_used_tokens|hicache_host_total_tokens|token_usage|num_requests_running|num_requests_waiting))' \
             || true
         echo "============================================================"
     } >> "$SERVER_LOG"
 }
 
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+if [ "$USE_SGLANG_ROUTER" = "true" ]; then
+    echo "Starting SGLang router on port $PORT for $TP DP ranks..."
+    "$SGLANG_ROUTER_BIN" \
+        --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
+        --policy manual \
+        --assignment-mode min_load \
+        --request-id-headers x-correlation-id \
+        --dp-aware \
+        --host 0.0.0.0 \
+        --port "$PORT" \
+        --prometheus-host 127.0.0.1 \
+        --prometheus-port "$SGLANG_ROUTER_METRICS_PORT" \
+        --connect-timeout-secs 900 \
+        --request-timeout-secs 14400 \
+        --disable-health-check \
+        --disable-retries > "$ROUTER_LOG" 2>&1 &
+    ROUTER_PID=$!
+    echo "Router PID: $ROUTER_PID"
+    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
+fi
+
 if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
     capture_cache_metrics
     trap capture_cache_metrics EXIT
 fi
 
 build_replay_cmd "$RESULT_DIR"
-REPLAY_CMD+=" --server-metrics http://localhost:$PORT/metrics"
+REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
 run_agentic_replay_and_write_outputs "$RESULT_DIR"
