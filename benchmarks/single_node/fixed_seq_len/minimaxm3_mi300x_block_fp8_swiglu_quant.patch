@@ -1,0 +1,51 @@
+diff --git a/vllm/model_executor/layers/fused_moe/experts/triton_moe.py b/vllm/model_executor/layers/fused_moe/experts/triton_moe.py
+index d81458b37..eb7399331 100644
+--- a/vllm/model_executor/layers/fused_moe/experts/triton_moe.py
++++ b/vllm/model_executor/layers/fused_moe/experts/triton_moe.py
+@@ -34,6 +34,7 @@ from vllm.model_executor.layers.fused_moe.utils import (
+ )
+ from vllm.model_executor.layers.quantization.utils.fp8_utils import (
+     is_deep_gemm_e8m0_used,
++    silu_mul_per_token_group_quant_fp8_colmajor,
+ )
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+     QuantKey,
+@@ -371,9 +372,9 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
+ 
+         a2q_scale: torch.Tensor | None = None
+ 
+-        # Fuse SiLU+Mul + FP8 block quantize into a single kernel
+-        # when conditions permit (gated SiLU, fp8 block quant with
+-        # group_size=128, no LoRA requiring the BF16 intermediate).
++        # Fuse gated activation + FP8 block quantize when no LoRA path needs
++        # the BF16 activation. MiniMax-M3 uses split-layout SwiGLU-OAI, which
++        # the generic C++ SiLU kernel cannot express.
+         if (
+             activation == MoEActivation.SILU
+             and self.quant_config.use_fp8_w8a8
+@@ -386,6 +387,25 @@ class TritonExperts(LoRAExpertsMixin, mk.FusedMoEExpertsModular):
+                 group_size=128,
+                 quant_dtype=current_platform.fp8_dtype(),
+             )
++        elif (
++            activation == MoEActivation.SWIGLUOAI_UNINTERLEAVE
++            and self.quant_config.use_fp8_w8a8
++            and self.block_shape == [128, 128]
++            and intermediate_cache1.numel() // N % 128 == 0
++            and lora_context is None
++            and current_platform.is_rocm()
++            and not is_deep_gemm_e8m0_used()
++        ):
++            qintermediate_cache2, a2q_scale = (
++                silu_mul_per_token_group_quant_fp8_colmajor(
++                    intermediate_cache1.view(-1, N),
++                    use_ue8m0=False,
++                    clamp_limit=self.gemm1_clamp_limit,
++                    group_size=128,
++                    alpha=self.gemm1_alpha,
++                    beta=self.gemm1_beta,
++                )
++            )
+         else:
+             self.activation(
+                 activation, intermediate_cache2, intermediate_cache1.view(-1, N)
