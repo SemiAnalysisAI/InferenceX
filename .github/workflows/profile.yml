@@ -310,7 +310,99 @@ jobs:
           ref: ${{ needs.get-jobs.outputs.source-sha }}
           clean: true
 
+      - name: Diagnose Slurm filesystem
+        shell: bash
+        run: |
+          set -euo pipefail
+          job_id="$(
+            salloc \
+              --partition=compute \
+              --nodelist=chi-mi300x-035 \
+              --gres=gpu:1 \
+              --cpus-per-task=4 \
+              --time=15 \
+              --no-shell \
+              --job-name="${{ runner.name }}-fs-diagnostic" \
+              2>&1 | tee /dev/stderr |
+              grep -oP 'Granted job allocation \K[0-9]+'
+          )"
+          if [ -z "$job_id" ]; then
+            echo "Failed to allocate diagnostic job" >&2
+            exit 1
+          fi
+          trap 'scancel "$job_id" >/dev/null 2>&1 || true' EXIT
+
+          {
+            echo "=== controller ==="
+            id
+            hostname
+            pwd
+            printf 'HOME=%s\nGITHUB_WORKSPACE=%s\n' "$HOME" "$GITHUB_WORKSPACE"
+            ls -ld \
+              /home/gharunner \
+              /home/gharunner/gharunners \
+              /home/gharunner/gharunners/squash \
+              /nfsdata/sa/gharunner/gharunners \
+              /raid \
+              /tmp \
+              /var/tmp 2>&1 || true
+
+            echo "=== compute node ==="
+            # shellcheck disable=SC2016
+            srun --jobid="$job_id" --chdir=/tmp bash -lc '
+              set -u
+              id
+              hostname
+              pwd
+              printf "HOME=%s\nUSER=%s\n" "$HOME" "$USER"
+              ls -la / | head -100
+              ls -ld \
+                /home \
+                /home/gharunner \
+                /home/gharunner/gharunners \
+                /home/gharunner/gharunners/squash \
+                /nfsdata \
+                /nfsdata/sa/gharunner/gharunners \
+                /raid \
+                /raid/hf-hub-cache \
+                /nvme_home \
+                /tmp \
+                /var/tmp 2>&1 || true
+              echo "--- candidate squash directories ---"
+              find /home /nfsdata /raid -maxdepth 5 -type d -name squash \
+                -print 2>/dev/null | head -100
+              echo "--- cached MiniMax image files ---"
+              find /home /nfsdata /raid -maxdepth 6 -type f \
+                \( -iname "*minimax*m3*.sqsh" -o -iname "*minimax-m3*.sqsh" \) \
+                -print 2>/dev/null | head -100
+              echo "--- writable candidates ---"
+              for base in /raid /tmp /var/tmp /nfsdata/sa/gharunner/gharunners; do
+                if [ -d "$base" ]; then
+                  probe="$base/inferencex-fs-probe-${SLURM_JOB_ID}"
+                  if mkdir "$probe" 2>/dev/null; then
+                    echo "writable $base"
+                    rmdir "$probe"
+                  else
+                    echo "not-writable $base"
+                  fi
+                fi
+              done
+              echo "--- filesystems ---"
+              df -hT
+              echo "--- relevant mounts ---"
+              mount | grep -E "(/home|/nfsdata|/raid|/nvme_home)" || true
+            '
+          } 2>&1 | tee mi300x_fs_diagnostic.txt
+
+      - name: Upload Slurm filesystem diagnostic
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mi300x_fs_diagnostic
+          path: mi300x_fs_diagnostic.txt
+          if-no-files-found: error
+
       - name: Launch and profile
+        if: ${{ inputs.config-key == '__run_profile__' }}
         id: run
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -405,12 +497,13 @@ jobs:
           python3 utils/analyze_profile_trace.py "${analysis_args[@]}"
 
       - name: Process result
+        if: ${{ inputs.config-key == '__run_profile__' }}
         env:
           RUNNER_TYPE: ${{ matrix.config.runner }}
         run: python3 utils/process_result.py
 
       - name: Upload profile trace
-        if: ${{ always() && steps.run.outputs.trace != '' }}
+        if: ${{ inputs.config-key == '__run_profile__' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_trace_${{ env.RESULT_FILENAME }}
@@ -418,6 +511,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload profile analysis
+        if: ${{ inputs.config-key == '__run_profile__' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_analysis_${{ env.RESULT_FILENAME }}
@@ -427,7 +521,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload server log
-        if: always()
+        if: ${{ inputs.config-key == '__run_profile__' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_server_logs_${{ env.RESULT_FILENAME }}
@@ -435,7 +529,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
-        if: always()
+        if: ${{ inputs.config-key == '__run_profile__' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: profile_gpu_metrics_${{ env.RESULT_FILENAME }}
@@ -443,7 +537,7 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload MoE debug log
-        if: ${{ env.MOE_DEBUG == '1' }}
+        if: ${{ inputs.config-key == '__run_profile__' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: moe_debug_${{ env.RESULT_FILENAME }}
@@ -452,7 +546,7 @@ jobs:
 
   publish:
     needs: [get-jobs, profile]
-    if: ${{ needs.profile.result == 'success' }}
+    if: ${{ inputs.config-key == '__publish_profile__' }}
     runs-on: ubuntu-latest
     steps:
       - name: Download profile traces
