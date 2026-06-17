@@ -18,9 +18,9 @@ if [ "${EP_SIZE:-1}" -gt "$NUM_GPUS" ]; then
     NUM_GPUS="$EP_SIZE"
 fi
 
-# Pin this validation branch to nodes that completed MI300X profiles today.
-# chi-mi300x-034 and -035 currently fail to create enroot user namespaces.
-JOB_ID=$(salloc --partition=$PARTITION --nodes=1 --nodelist=chi-mi300x-043,chi-mi300x-057 --gres=gpu:$NUM_GPUS --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+# Avoid nodes with known disk or enroot user-namespace failures while allowing
+# this exploratory topology run to use the rest of the MI300X pool.
+JOB_ID=$(salloc --partition=$PARTITION --nodes=1 --exclude=chi-mi300x-034,chi-mi300x-035,chi-mi300x-049 --gres=gpu:$NUM_GPUS --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
