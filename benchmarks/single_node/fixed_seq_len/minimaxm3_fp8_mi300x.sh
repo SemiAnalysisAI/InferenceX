@@ -158,9 +158,23 @@ case "$M3_INDEX_KV_CACHE_MODE" in
                 exit 1
             fi
         fi
+        FP8_INDEX_MFMA_PATCH="$(dirname "$0")/minimaxm3_mi300x_fp8_index_mfma.patch"
+        if ! grep -q "USE_FP8_DOT" "$INDEX_TOPK_SOURCE"; then
+            if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$FP8_INDEX_MFMA_PATCH"; then
+                echo "Failed to validate the MiniMax M3 FP8 index MFMA patch" >&2
+                exit 1
+            fi
+            if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+                < "$FP8_INDEX_MFMA_PATCH"; then
+                echo "Failed to apply the MiniMax M3 FP8 index MFMA patch" >&2
+                exit 1
+            fi
+        fi
         if ! grep -q "cache_head_dim" "$M3_INDEXER" \
             || ! grep -q "self._fp8_index" "$M3_AMD_MODEL" \
             || ! grep -q "kernel_index_cache" "$INDEX_TOPK_SOURCE" \
+            || ! grep -q "USE_FP8_DOT" "$INDEX_TOPK_SOURCE" \
             || grep -q "float8e4b15" "$INDEX_TOPK_SOURCE"; then
             echo "MiniMax M3 FP8 index-cache markers are missing after patching" >&2
             exit 1
@@ -172,6 +186,8 @@ import sys
 source = Path(sys.argv[1]).read_text()
 score_launch = """        USE_PDL=use_pdl,
         USE_FP8=use_fp8,
+        USE_FP8_DOT=use_fp8_dot,
+        IS_FNUZ=current_platform.is_fp8_fnuz(),
         **score_launch,
 """
 if score_launch not in source:
