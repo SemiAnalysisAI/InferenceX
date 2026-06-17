@@ -1,0 +1,256 @@
+diff --git a/vllm/envs.py b/vllm/envs.py
+index b2bdf11d6..e08ee6930 100755
+--- a/vllm/envs.py
++++ b/vllm/envs.py
+@@ -114,6 +114,7 @@ if TYPE_CHECKING:
+     VLLM_DISABLE_PYNCCL: bool = False
+     VLLM_USE_OINK_OPS: bool = False
+     VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD: bool = True
++    VLLM_ROCM_MXFP8_BLOCK_FP8: bool = True
+     VLLM_ROCM_USE_AITER: bool = False
+     VLLM_ROCM_USE_AITER_PAGED_ATTN: bool = False
+     VLLM_ROCM_USE_AITER_LINEAR: bool = True
+@@ -1100,6 +1101,11 @@ environment_variables: dict[str, Callable[[], Any]] = {
+         os.getenv("VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD", "True").lower()
+         in ("true", "1")
+     ),
++    # gfx942 cannot execute MX-scaled matrix instructions. Convert serialized
++    # MXFP8 weights once to native 128x128 block FP8 instead of BF16.
++    "VLLM_ROCM_MXFP8_BLOCK_FP8": lambda: (
++        os.getenv("VLLM_ROCM_MXFP8_BLOCK_FP8", "True").lower() in ("true", "1")
++    ),
+     "VLLM_ROCM_USE_AITER": lambda: (
+         os.getenv("VLLM_ROCM_USE_AITER", "False").lower() in ("true", "1")
+     ),
+diff --git a/vllm/model_executor/layers/quantization/modelopt.py b/vllm/model_executor/layers/quantization/modelopt.py
+index 604cce9f2..a775e383a 100644
+--- a/vllm/model_executor/layers/quantization/modelopt.py
++++ b/vllm/model_executor/layers/quantization/modelopt.py
+@@ -69,12 +69,15 @@ from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
+     MXFP8_BLOCK_SIZE,
+     MXFP8_SCALE_DTYPE,
+     MXFP8_VALUE_DTYPE,
++    requantize_mxfp8_to_block_fp8_,
+ )
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+     GroupShape,
+     create_fp8_quant_key,
+     is_layer_skipped,
++    kFp8Dynamic128Sym,
+     kFp8DynamicTokenSym,
++    kFp8Static128BlockSym,
+     kFp8StaticTensorSym,
+     kFp8StaticTokenSym,
+     kNvfp4Dynamic,
+@@ -99,6 +102,20 @@ if TYPE_CHECKING:
+
+ logger = init_logger(__name__)
+
++
++def _use_gfx942_mxfp8_block_fp8() -> bool:
++    if (
++        not current_platform.is_rocm()
++        or not envs.VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD
++        or not envs.VLLM_ROCM_MXFP8_BLOCK_FP8
++    ):
++        return False
++
++    from vllm.platforms.rocm import on_gfx942
++
++    return on_gfx942()
++
++
+ QUANT_ALGOS = [
+     # FP8 (per-tensor weight + optional static activation scale).
+     "FP8",
+@@ -1777,7 +1794,19 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
+                 "Dynamic quantization is not supported."
+             )
+
+-        self.kernel = init_mxfp8_linear_kernel()
++        self.use_rocm_block_fp8 = _use_gfx942_mxfp8_block_fp8()
++        if self.use_rocm_block_fp8:
++            self.weight_block_size = [128, 128]
++            self.activation_quant_key = create_fp8_quant_key(
++                static=False, group_shape=GroupShape(1, 128)
++            )
++            self.weight_quant_key = create_fp8_quant_key(
++                static=True, group_shape=GroupShape(128, 128)
++            )
++            self.out_dtype = torch.get_default_dtype()
++            self.input_dtype = get_current_vllm_config().model_config.dtype
++        else:
++            self.kernel = init_mxfp8_linear_kernel()
+
+     def create_weights(
+         self,
+@@ -1835,11 +1864,24 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
+         )
+         layer.register_parameter("weight_scale", weight_scale)
+
++        if self.use_rocm_block_fp8:
++            self.kernel = init_fp8_linear_kernel(
++                activation_quant_key=self.activation_quant_key,
++                weight_quant_key=self.weight_quant_key,
++                weight_shape=layer.weight.shape,
++                input_dtype=self.input_dtype,
++                out_dtype=self.out_dtype,
++                module_name=self.__class__.__name__,
++            )
++
+     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+         # Idempotent: the emulation kernel may dequant the weight to BF16 at load
+         # time (>=2-byte). If already converted, there is nothing left to do --
+         # avoid re-running the MXFP8-only validation/conversion below.
+-        if layer.weight.element_size() >= 2:
++        if layer.weight.element_size() >= 2 or (
++            self.use_rocm_block_fp8
++            and layer.weight.dtype == current_platform.fp8_dtype()
++        ):
+             return
+
+         # Validate weight tensor
+@@ -1865,6 +1907,19 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
+             f" got {layer.weight_scale.dtype}"
+         )
+
++        if self.use_rocm_block_fp8:
++            weight, weight_scale = requantize_mxfp8_to_block_fp8_(
++                layer.weight.data,
++                layer.weight_scale.data,
++                block_size=tuple(self.weight_block_size),
++            )
++            replace_parameter(layer, "weight", weight)
++            replace_parameter(layer, "weight_scale", weight_scale)
++            layer.weight_block_size = self.weight_block_size
++            logger.info_once(
++                "Converted gfx942 MXFP8 linear weights to 128x128 block FP8."
++            )
++
+         self.kernel.process_weights_after_loading(layer)
+
+     def apply(
+@@ -1890,6 +1945,19 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+         assert self.quant_config.is_checkpoint_mxfp8_serialized
+
+         self.mxfp8_backend, self.experts_cls = select_mxfp8_moe_backend(config=self.moe)
++        self.use_rocm_block_fp8 = _use_gfx942_mxfp8_block_fp8()
++        if self.use_rocm_block_fp8:
++            self.weight_block_size = [128, 128]
++            self.mxfp8_backend, self.experts_cls = select_fp8_moe_backend(
++                config=self.moe,
++                weight_key=kFp8Static128BlockSym,
++                activation_key=kFp8Dynamic128Sym,
++            )
++            logger.info_once(
++                "Using %s with load-time MXFP8->128x128 block-FP8 conversion "
++                "for gfx942 MoE.",
++                self.mxfp8_backend.value,
++            )
+
+     def create_weights(
+         self,
+@@ -2214,6 +2282,22 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+
+         self._check_weight_dtypes(layer)
+
++        if self.use_rocm_block_fp8:
++            w13, w13_scale = requantize_mxfp8_to_block_fp8_(
++                layer.w13_weight.data,
++                layer.w13_weight_scale.data,
++                block_size=tuple(self.weight_block_size),
++            )
++            w2, w2_scale = requantize_mxfp8_to_block_fp8_(
++                layer.w2_weight.data,
++                layer.w2_weight_scale.data,
++                block_size=tuple(self.weight_block_size),
++            )
++            replace_parameter(layer, "w13_weight", w13)
++            replace_parameter(layer, "w2_weight", w2)
++            replace_parameter(layer, "w13_weight_scale", w13_scale)
++            replace_parameter(layer, "w2_weight_scale", w2_scale)
++
+         layer.weight_block_size = self.weight_block_size
+
+         w13, w2, w13_scale, w2_scale = convert_to_fp8_moe_kernel_format(
+diff --git a/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py b/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
+index fa5b01615..64560fa86 100644
+--- a/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
++++ b/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
+@@ -258,6 +258,76 @@ def dequant_mxfp8_to_bf16(x: torch.Tensor, scales: torch.Tensor) -> torch.Tensor
+     return dequantized.to(torch.bfloat16)
+
+
++def requantize_mxfp8_to_block_fp8_(
++    weight: torch.Tensor,
++    scales: torch.Tensor,
++    block_size: tuple[int, int] = (128, 128),
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Convert MXFP8 weights in-place to native block FP8.
++
++    The returned weight aliases the one-byte checkpoint storage. Conversion is
++    matrix-by-matrix so the peak temporary is one BF16 expert, not an expanded
++    copy of the whole MoE layer.
++    """
++    from vllm.platforms import current_platform
++    from vllm.utils.deep_gemm import per_block_cast_to_fp8
++
++    if weight.dtype != MXFP8_VALUE_DTYPE:
++        raise ValueError(f"Expected MXFP8 weight dtype {MXFP8_VALUE_DTYPE}.")
++    if scales.dtype != MXFP8_SCALE_DTYPE:
++        raise ValueError(f"Expected MXFP8 scale dtype {MXFP8_SCALE_DTYPE}.")
++    if weight.ndim < 2:
++        raise ValueError("MXFP8 block-FP8 conversion requires a matrix.")
++    if not weight.is_contiguous() or not scales.is_contiguous():
++        raise ValueError("MXFP8 weight and scales must be contiguous.")
++
++    n, k = weight.shape[-2:]
++    if k % MXFP8_BLOCK_SIZE != 0:
++        raise ValueError(
++            f"MXFP8 K dimension must be divisible by {MXFP8_BLOCK_SIZE}, got {k}."
++        )
++    expected_scale_shape = (*weight.shape[:-1], k // MXFP8_BLOCK_SIZE)
++    if tuple(scales.shape) != expected_scale_shape:
++        raise ValueError(
++            "MXFP8 scale shape mismatch: expected "
++            f"{expected_scale_shape}, got {tuple(scales.shape)}."
++        )
++
++    block_n, block_k = block_size
++    matrix_count = weight.numel() // (n * k)
++    source = weight.detach().reshape(matrix_count, n, k)
++    source_scales = scales.detach().reshape(matrix_count, n, k // MXFP8_BLOCK_SIZE)
++    target = (
++        weight.detach().view(current_platform.fp8_dtype()).reshape(matrix_count, n, k)
++    )
++    target_scales = torch.empty(
++        (
++            matrix_count,
++            (n + block_n - 1) // block_n,
++            (k + block_k - 1) // block_k,
++        ),
++        dtype=torch.float32,
++        device=weight.device,
++    )
++
++    with torch.no_grad():
++        for matrix_id in range(matrix_count):
++            dequantized = dequant_mxfp8_to_bf16(
++                source[matrix_id], source_scales[matrix_id]
++            )
++            quantized, block_scales = per_block_cast_to_fp8(
++                dequantized,
++                block_size=[block_n, block_k],
++                use_ue8m0=False,
++            )
++            target[matrix_id].copy_(quantized)
++            target_scales[matrix_id].copy_(block_scales)
++
++    return target.view(weight.shape), target_scales.view(
++        *weight.shape[:-2], target_scales.shape[-2], target_scales.shape[-1]
++    )
++
++
+ def mxfp8_e4m3_quantize_fake(
+     x: torch.Tensor,
+     is_sf_swizzled_layout: bool = False,
