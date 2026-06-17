@@ -113,6 +113,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --kv-cache-dtype fp8 \
     --block-size 128 \
     --max-num-batched-tokens 16384 \
+    --long-prefill-token-threshold 8192 \
     --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
