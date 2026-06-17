@@ -163,6 +163,11 @@ fi
 
 set -x
 echo "Starting sglang server..."
+
+#image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260610
+#    --page-size 256 \
+#image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm700-mi35x-20260616 
+#    --page-size 1 \
 sglang serve \
     --model-path $MODEL \
     --host=0.0.0.0 \
@@ -173,7 +178,7 @@ sglang serve \
     --max-running-requests ${CONC} \
     --mem-fraction-static 0.90 \
     --swa-full-tokens-ratio 0.15 \
-    --page-size 256 \
+    --page-size 1 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
