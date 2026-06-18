@@ -215,7 +215,7 @@ jobs:
         run: |
           set -euo pipefail
           ep_val="${EP_SIZE:-1}"
-          profile_suffix="_${M3_PROFILE_PHASE}_bt${M3_PROFILE_TOKEN_BUDGET}"
+          profile_suffix="_${M3_PROFILE_PHASE}_bt${M3_PROFILE_TOKEN_BUDGET}_windowed"
           res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${profile_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
           summary_path="profile_summary_${res_name}.json"
