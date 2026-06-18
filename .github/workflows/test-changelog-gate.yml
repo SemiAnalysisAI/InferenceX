@@ -15,13 +15,14 @@ on:
       - "utils/process_changelog.py"
       - "utils/prepare_perf_changelog_merge.py"
       - "utils/recover_failed_ingest.py"
-      - "utils/test_prepare_perf_changelog_merge.py"
-      - "utils/test_recover_failed_ingest.py"
+      - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
+      - "utils/changelog_gate_tests/test_recover_failed_ingest.py"
       - "utils/test_validate_reusable_sweep_artifacts.py"
       - "utils/validate_perf_changelog.py"
       - "utils/validate_reusable_sweep_artifacts.py"
-      - "utils/test_validate_perf_changelog.py"
-      - "utils/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
+      - "utils/changelog_gate_tests/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/conftest.py"
       - "utils/merge_with_reuse.sh"
       - "utils/matrix_logic/**"
 
@@ -56,12 +57,12 @@ jobs:
       - name: Run validator, reuse, and gating tests
         run: |
           python -m pytest \
-            utils/test_validate_perf_changelog.py \
+            utils/changelog_gate_tests/test_validate_perf_changelog.py \
             utils/test_find_reusable_sweep_run.py \
-            utils/test_prepare_perf_changelog_merge.py \
-            utils/test_recover_failed_ingest.py \
+            utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py \
+            utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
-            utils/test_run_sweep_gating.py \
+            utils/changelog_gate_tests/test_run_sweep_gating.py \
             -v
 
       - name: Test historical push validation

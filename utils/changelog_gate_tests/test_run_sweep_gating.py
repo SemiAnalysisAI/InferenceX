@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 _WF = yaml.load(
     (REPO_ROOT / ".github/workflows/run-sweep.yml").read_text(),
     Loader=yaml.BaseLoader,

@@ -204,7 +204,7 @@ def test_raw_correction_rejects_whitespace_only_history_change() -> None:
 
 
 def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     workflow = yaml.load(
         (repo_root / ".github/workflows/run-sweep.yml").read_text(),
         Loader=yaml.BaseLoader,
@@ -253,7 +253,7 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
 
 
 def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
-    repo_root = Path(__file__).resolve().parents[1]
+    repo_root = Path(__file__).resolve().parents[2]
     script = (repo_root / "utils/merge_with_reuse.sh").read_text()
 
     push_index = script.index('git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"')
