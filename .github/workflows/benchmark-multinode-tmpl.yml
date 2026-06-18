@@ -172,9 +172,22 @@ jobs:
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
+            timeout 30 scancel --name="${{ runner.name }}" 2>/dev/null || true
+            # Bound the drain: on the NVIDIA clusters squeue/scancel hang (zombie
+            # job scancel can't reap, or unresponsive slurmctld), wedging this
+            # step for 15-20min+ and failing every dsr1 multinode leg (gb300-nv,
+            # gb200, b200; CoreWeave is unaffected). timeout-wrap every slurm call
+            # so a hang in the while-condition can't block, and force-KILL +
+            # proceed after 120s rather than looping forever.
+            _drain_deadline=$((SECONDS + 120))
+            while [ -n "$(timeout 30 squeue --name='${{ runner.name }}' --noheader --format='%i' 2>/dev/null)" ]; do
+              if [ "$SECONDS" -ge "$_drain_deadline" ]; then
+                echo "[Slurm] drain exceeded 120s; force-cancelling (KILL) and proceeding"
+                timeout 30 scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
+                sleep 5
+                break
+              fi
+              timeout 30 squeue --name="${{ runner.name }}" 2>/dev/null || true
               sleep 5
             done
           fi
