@@ -1,16 +1,25 @@
-# In-tree sglang patches for the MoRI PD-disagg path
+# In-tree patches for the MoRI / MoRIIO PD-disagg path
 
-This directory carries small Python overlays that get bind-mounted over
-the upstream sglang source inside the docker container at runtime.
-They are needed because some sglang releases ship known bugs in the
-MoRI disaggregation backend that block our benchmark + accuracy
-configs.
+This directory carries small overlays that fix up the engine source inside
+the docker container at runtime. They are needed because some published
+images ship known bugs in the (MoRI / MoRIIO) disaggregation backend that
+block our benchmark + accuracy configs — so we can keep reusing the
+**stock image** instead of rebuilding a patched one.
 
-The mount is wired through the `EXTRA_DOCKER_MOUNTS` env var that
-`job.slurm` consumes (an opt-in `${EXTRA_DOCKER_MOUNTS:-}` after the
-existing `-v` block). The local-test driver scripts under
-`scripts/sglang_disagg/` pre-set this env var to the path of the
-relevant overlay; CI runners that need the patch can do the same.
+- `mori_conn.py` — single-file overlay (bind-mounted) for the **sglang**
+  MoRI backend.
+- `moriio/` — unified-diff overlay (applied with `patch` at container
+  startup) for the **vLLM** MoRIIO connector (`minimax-m3` image). See its
+  section below.
+
+The `mori_conn.py` overlay is wired through the `EXTRA_DOCKER_MOUNTS` env
+var that `job.slurm` consumes (an opt-in `${EXTRA_DOCKER_MOUNTS:-}` after
+the existing `-v` block). The local-test driver scripts under
+`scripts/sglang_disagg/` pre-set this env var to the path of the relevant
+overlay; CI runners that need the patch can do the same. The `moriio/`
+diff needs no extra mount — the repo (and thus the diff file) is already
+bind-mounted into the container — `job.slurm` just runs `patch` against it
+before launching the server; see "How to enable" in its section below.
 
 ## `mori_conn.py`
 
@@ -72,6 +81,65 @@ already mounts into the container at `/workspace`.
 When this env var is unset (CI default for runs that don't need the
 patch), `${EXTRA_DOCKER_MOUNTS:-}` expands to the empty string and
 container behavior is byte-identical to the unpatched path.
+
+## `moriio/` (vLLM MoRIIO connector, MiniMax-M3)
+
+A unified diff (`moriio-kv-layout-fix.diff`), applied with `patch -p1`
+against the vLLM package dir inside the container, touching three files:
+
+```
+/usr/local/lib/python3.12/dist-packages/vllm/distributed/kv_transfer/kv_connector/v1/moriio/
+  ├── moriio_connector.py
+  ├── moriio_engine.py
+  └── moriio_common.py
+```
+
+Source: forked from the stock `vllm/vllm-openai-rocm:minimax-m3` image
+(vLLM `0.22.1rc1.dev490`).
+
+**Bug (general MoRIIO, not M3-specific):** the connector assumed the
+FlashAttention KV layout `[2, num_blocks, block_size, heads, head_dim]`
+(K/V axis **outer**), but this vLLM's attention backends (standard
+`TRITON_ATTN` **and** the M3 sparse backend) allocate
+`[num_blocks, 2, block_size, heads, head_dim]` (K/V axis **inner**).
+`_compute_block_transfer_offsets` indexed blocks with `stride[1]` (the
+K/V stride) instead of `stride[0]` (the block stride), so every disagg
+block transfer read the wrong region. Invisible to throughput
+benchmarks (they don't check output); only the **gsm8k accuracy eval**
+catches it. The connector was only ever correct for MLA models
+(DeepSeek, rank-3 path); MiniMax-M3 is GQA + sparse lightning-indexer
+→ broken (disagg gsm8k `0.0008` token salad).
+
+**Fix** — axis-aware offset computation: detect the block axis + optional
+size-2 K/V axis from each layer's real shape/stride, compute offsets per
+distinct geometry (handles M3's 2nd geometry, the rank-3 bf16 key-only
+indexer cache), `num_blocks = shape[0]`; the WRITE path memoizes offsets
+per geometry. Result: disagg gsm8k `strict-match 0.9583 /
+flexible-extract 0.9575` (matches single-node). Homogeneous models
+(uniform layout) are unaffected — one geometry, one offset set, same
+result. Heterogeneous-TP P/D (prefill TP ≠ decode TP) is still a TODO
+(same as upstream). Full write-up in
+`/apps/ditian12/m3_disagg_manual/moriio_hetkv_fix/README.md`.
+
+### How to enable
+
+`job.slurm` auto-applies this diff when `DOCKER_IMAGE_NAME` contains
+`minimax-m3` (and not the already-fixed `-hetkv` rebuild), unless the
+caller sets `MORIIO_KV_PATCH=skip`. To wire it by hand (e.g. the
+`m3_disagg_manual/run_manual_2node.sh` driver, which sets
+`MORIIO_KV_PATCH`), run inside the container before the server starts:
+
+```bash
+patch -p1 -d /usr/local/lib/python3.12/dist-packages \
+  < $DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-kv-layout-fix.diff
+```
+
+(`$DI_REPO_DIR` is the InferenceX checkout root that `job.slurm` already
+mounts into the container at `/workspace`.)
+
+This lets the **stock** `minimax-m3` image be reused for the E2E
+accuracy run — no `-hetkv` rebuild needed. Retire the overlay once the
+fix lands in a published image; it is not yet upstreamed.
 
 ## When to use which patch
 

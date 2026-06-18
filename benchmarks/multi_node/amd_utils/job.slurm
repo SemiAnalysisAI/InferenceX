@@ -81,6 +81,32 @@ if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
     echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
 fi
 
+# ── In-tree vLLM MoRIIO patch: auto-apply for known-affected images ──
+# The vLLM MoRIIOConnector (image vllm/vllm-openai-rocm:minimax-m3) ships a
+# transposed-KV-layout bug: it assumes the FlashAttention layout
+# [2, num_blocks, ...] (K/V axis outer) but this vLLM's backends allocate
+# [num_blocks, 2, ...] (K/V axis inner), so every disagg block transfer reads
+# the wrong region. Invisible to throughput, but corrupts GQA/non-MLA accuracy
+# (MiniMax-M3 gsm8k 0.0008 -> 0.958). Fix ships as a unified diff (see
+# patches/moriio/ and patches/README.md), applied to the vLLM package dir
+# inside the container at startup, ahead of the server launch below.
+#
+# Auto-applied when the image tag contains "minimax-m3" (and not the already-
+# fixed "-hetkv" rebuild), unless the caller sets MORIIO_KV_PATCH=skip. The
+# repo is already bind-mounted at DOCKER_MOUNT_PATH ("/workspace"), so the
+# diff needs no extra mount -- just an in-container `patch` call. A failed
+# apply aborts the container: silently running unpatched would silently
+# corrupt accuracy, not just skip a feature.
+_MORIIO_DIFF="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-kv-layout-fix.diff"
+_MORIIO_PATCH_CMD=""
+if [[ "${MORIIO_KV_PATCH:-auto}" != "skip" ]] \
+   && [[ -f "$_MORIIO_DIFF" ]] \
+   && [[ "${DOCKER_IMAGE_NAME:-}" == *"minimax-m3"* ]] \
+   && [[ "${DOCKER_IMAGE_NAME:-}" != *"hetkv"* ]]; then
+    _MORIIO_PATCH_CMD="patch -p1 -d /usr/local/lib/python3.12/dist-packages < /workspace/benchmarks/multi_node/amd_utils/patches/moriio/moriio-kv-layout-fix.diff || exit 1"
+    echo "[job.slurm] will auto-apply vLLM MoRIIO KV-layout diff inside container: ${_MORIIO_DIFF}"
+fi
+
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -593,6 +619,7 @@ fi
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         set -o pipefail
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        '"${_MORIIO_PATCH_CMD:-}"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 

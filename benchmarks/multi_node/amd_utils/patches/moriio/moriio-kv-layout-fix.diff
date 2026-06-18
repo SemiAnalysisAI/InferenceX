@@ -1,0 +1,218 @@
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py
+index 73694ce32..a30d30af8 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py
+@@ -80,6 +80,10 @@ class RemoteAllocInfo:
+     writes_done: int = 0
+     decode_dp_rank: int = 0
+     transfer_offset: tuple[list[int], list[int], list[int]] | None = None
++    # Per-layer-geometry offset cache (keyed by shape/stride/dtype) for
++    # heterogeneous-KV (hybrid/sparse) models. Homogeneous models populate a
++    # single entry. See MoRIIOWriter._prepare_transfer_plan.
++    transfer_offsets: dict = field(default_factory=dict)
+ 
+ 
+ class ROLE(Enum):
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
+index 167eef6e1..1846a3c21 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
+@@ -1233,8 +1233,10 @@ class MoRIIOConnectorWorker:
+             block_size, kv_latent_dim = block_shape
+             self.slot_size_bytes = kv_elem_size * kv_latent_dim
+         else:
+-            # [2 (k and v), num_blocks, ...]
+-            self.num_blocks = first_kv_cache.shape[1]
++            # Layout (num_blocks, 2, block_size, kv_heads, head_dim): the K/V
++            # axis is INNER (axis 1) and num_blocks is axis 0. (The old code read
++            # shape[1] here, which is the size-2 K/V axis, not num_blocks.)
++            self.num_blocks = first_kv_cache.shape[0]
+             block_rank = 3  # [block_size, kv_heads, head_dim]
+             block_shape = first_kv_cache.shape[-block_rank:]
+             block_size, n_kv_heads, head_dim = block_shape[-3:]
+@@ -1257,10 +1259,17 @@ class MoRIIOConnectorWorker:
+         caches_data = []
+ 
+         for cache_or_caches in kv_caches.values():
+-            cache_list = [cache_or_caches] if use_mla else cache_or_caches
++            # Per-layer rank: rank-3 (MLA / sparse indexer, single tensor) vs
++            # rank-5 (full attention, [K, V]). A single global use_mla flag
++            # mis-iterates the rank-3 indexer cache (over its num_blocks dim) for
++            # hybrid models, so detect per cache. region_len is the actual tensor
++            # (or K/V half) byte size -- equivalent to num_blocks * block_len for
++            # homogeneous models, correct for heterogeneous ones.
++            cache_is_mla = cache_or_caches.dim() == 3
++            cache_list = [cache_or_caches] if cache_is_mla else cache_or_caches
+             for cache in cache_list:
+                 base_addr = cache.data_ptr()
+-                region_len = self.num_blocks * self.block_len
++                region_len = cache.numel() * cache.element_size()
+                 caches_data.append((base_addr, region_len, cache.device.index, ""))
+                 kv_caches_base_addr.append(base_addr)
+ 
+@@ -1665,21 +1674,53 @@ class MoRIIOConnectorWorker:
+             Tuple of (local_offsets, remote_offsets, transfer_sizes)
+         """
+         assert self.kv_cache_shape is not None, "KV caches shape not initialized"
+-        is_mla = len(self.kv_cache_shape) == 3
+-        stride = self.kv_caches[layer_name].stride()
+-        sz = self.kv_caches[layer_name].element_size()
+-        if is_mla:
+-            blknum, blksize, hs = self.kv_cache_shape
+-            hn = 1
+-            block_stride = stride[0]
+-        else:
+-            _, blknum, blksize, hn, hs = self.kv_cache_shape
+-            local_ktov_stride = stride[0]
+-            block_stride = stride[1]
+-            remote_ktov_stride = block_stride * remote_moriio_meta.num_blocks
++        # Per-layer, axis-aware geometry.
++        #
++        # The KV tensors vLLM hands the connector are laid out (verified on
++        # MiniMax-M3 / TRITON_ATTN, vLLM 0.22.1):
++        #   * main attention (GQA, dense + sparse layers):
++        #       shape (num_blocks, 2, block_size, num_kv_heads, head_dim)
++        #       -- the K/V axis (size 2) is INNER (axis 1), num_blocks is axis 0.
++        #   * sparse lightning-indexer (key-only, bf16):
++        #       shape (num_blocks, block_size, head_dim)  -- rank 3, no K/V axis.
++        #
++        # The legacy code assumed the FlashAttention-style [2, num_blocks, ...]
++        # layout (K/V axis OUTER) and indexed blocks with stride[1] (the K/V
++        # stride) -- transposing block vs K/V so every block read the wrong
++        # region (corruption invisible to throughput-only benchmarks). Instead,
++        # detect the block axis (size == num_blocks) and the optional K/V axis
++        # (size 2) from THIS layer's own shape, and derive strides from them. The
++        # per-block stride is independent of num_blocks, so no remote-num_blocks
++        # scaling is needed (homogeneous P/D TP; heterogeneous TP still TODO).
++        layer_cache = self.kv_caches[layer_name]
++        layer_shape = tuple(layer_cache.shape)
++        stride = layer_cache.stride()
++        sz = layer_cache.element_size()
++        rank = len(layer_shape)
++
++        # K/V axis = the size-2 axis among the two outermost dims (if any).
++        kv_axis: int | None = None
++        if rank >= 4:
++            if layer_shape[0] == 2:
++                kv_axis = 0
++            elif layer_shape[1] == 2:
++                kv_axis = 1
++        # Block axis = outermost non-K/V axis (the one indexed by block_id).
++        block_axis = 0
++        if kv_axis == 0:
++            block_axis = 1
++        block_stride = stride[block_axis]
++        kv_stride = stride[kv_axis] if kv_axis is not None else 0
++        per_block = layer_shape[kv_axis] if kv_axis is not None else 1  # 2 (K,V) or 1
++
++        # One transferred slab = all dims except the block and K/V axes.
++        slot_elems = 1
++        for ax in range(rank):
++            if ax == block_axis or ax == kv_axis:
++                continue
++            slot_elems *= layer_shape[ax]
++        transfer_size_byte = slot_elems * sz
+ 
+-        transfer_size_byte = blksize * hn * hs * sz
+-        per_block = 1 if is_mla else 2
+         total = len(local_block_ids) * per_block
+         offset_local = [0] * total
+         offset_remote = [0] * total
+@@ -1688,17 +1729,9 @@ class MoRIIOConnectorWorker:
+         w = 0
+         for i, lb in enumerate(local_block_ids):
+             rb = remote_block_ids[i]
+-            # K
+-            offset_local[w] = sz * (lb * block_stride)
+-            offset_remote[w] = sz * (rb * block_stride)
+-            w += 1
+-            if not is_mla:
+-                # V
+-                # Handle num_block variations originating from PD (different kv strides)
+-                # TODO: address block_sz differences in heterogeneous TP scenarios
+-                # In MLA, we don't need to consider these two cases.
+-                offset_local[w] = sz * (1 * local_ktov_stride + lb * block_stride)
+-                offset_remote[w] = sz * (1 * remote_ktov_stride + rb * block_stride)
++            for kv in range(per_block):
++                offset_local[w] = sz * (lb * block_stride + kv * kv_stride)
++                offset_remote[w] = sz * (rb * block_stride + kv * kv_stride)
+                 w += 1
+ 
+         merged_l, merged_r, merged_s = self.merge_contiguous_blocks(
+@@ -1722,15 +1755,26 @@ class MoRIIOConnectorWorker:
+         dp0_engine_id = self.get_engine_name_with_dp(dst_engine_id, 0)
+         sessions, remote_moriio_meta = self._get_built_session(dp0_engine_id)
+ 
+-        first_layer = list(self.layer_name_to_local_kv_cache_metadata.keys())[0]
+-        offs = self._compute_block_transfer_offsets(
+-            first_layer, local_block_ids, remote_block_ids, remote_moriio_meta
+-        )
+-
+-        for layer_name in self.layer_name_to_local_kv_cache_metadata:
+-            sess_idx = list(self.layer_name_to_local_kv_cache_metadata.keys()).index(
+-                layer_name
++        # Heterogeneous-KV models register layers with different shapes/dtypes in
++        # a single KV-cache group sharing one block table, so block_ids match
++        # across layers but per-block byte geometry does not. Compute offsets per
++        # distinct layer geometry (memoized by shape/stride/dtype) so the rank-3
++        # bf16 indexer cache isn't read with the rank-5 fp8 main-cache sizing.
++        layer_names = list(self.layer_name_to_local_kv_cache_metadata.keys())
++        offs_by_geom: dict = {}
++        for sess_idx, layer_name in enumerate(layer_names):
++            layer_cache = self.kv_caches[layer_name]
++            geom_key = (
++                tuple(layer_cache.shape),
++                tuple(layer_cache.stride()),
++                layer_cache.dtype,
+             )
++            offs = offs_by_geom.get(geom_key)
++            if offs is None:
++                offs = self._compute_block_transfer_offsets(
++                    layer_name, local_block_ids, remote_block_ids, remote_moriio_meta
++                )
++                offs_by_geom[geom_key] = offs
+             # TODO : apply multi-session batch-read when moriio support it
+             transfer_status = self.moriio_wrapper.read_remote_data(
+                 offs[2], offs[0], offs[1], sessions[sess_idx]
+diff --git a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py
+index 3ca5f37ca..113eccad0 100644
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py
+@@ -279,21 +279,33 @@ class MoRIIOWriter:
+         Returns:
+             The transfer plan
+         """
+-        # Compute offsets if not cached
+-        if request_info.transfer_offset is None:
++        # Compute offsets per distinct layer geometry. Heterogeneous-KV models
++        # (e.g. MiniMax-M3's sparse indexer) place rank-3 bf16 and rank-5 fp8
++        # caches in one KV-cache group; caching a single offset set per request
++        # and reusing it for every layer corrupts the indexer cache. Block_ids
++        # are shared (single block table), so offsets depend only on the layer's
++        # shape/stride/dtype -- memoize by that geometry key.
++        layer_cache = self.worker.kv_caches[task.layer_name]
++        geom_key = (
++            tuple(layer_cache.shape),
++            tuple(layer_cache.stride()),
++            layer_cache.dtype,
++        )
++        offsets = request_info.transfer_offsets.get(geom_key)
++        if offsets is None:
+             offsets = self.worker._compute_block_transfer_offsets(
+                 task.layer_name,
+                 task.local_block_ids,
+                 request_info.block_ids,
+                 remote_moriio_meta,
+             )
+-            request_info.transfer_offset = offsets
++            request_info.transfer_offsets[geom_key] = offsets
+ 
+         # Get session index
+         layer_names = list(self.worker.layer_name_to_local_kv_cache_metadata.keys())
+         sess_idx = layer_names.index(task.layer_name)
+ 
+-        local_off, remote_off, sizes = request_info.transfer_offset
++        local_off, remote_off, sizes = offsets
+ 
+         return LayerTransferPlan(
+             request_id=task.request_id,
