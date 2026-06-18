@@ -170,15 +170,19 @@ transport defect; a green workflow alone is not acceptance.
 
 ## Baseline
 
-The B200 aggregate c64 reference is approximately:
+The June 10 B200 aggregate vLLM agentic run (`27297117163`) provides these
+reference points from the results database:
 
-- 82k tok/s total;
-- 10.3k tok/s/GPU;
-- about 93% measured cache hit.
+- c64 without offload: 81,863 tok/s total, 10,233 tok/s/GPU, 13.85s mean
+  TTFT, 82.1ms mean TPOT, and 93.5% measured server cache hit;
+- c64 with offload: 72,981 tok/s total, 9,123 tok/s/GPU, 12.73s mean TTFT,
+  101.5ms mean TPOT, and 93.2% measured server cache hit;
+- c128 without offload: 83,163 tok/s total and 10,395 tok/s/GPU;
+- c128 with offload: 98,908 tok/s total and 12,363 tok/s/GPU.
 
-That configuration uses KV offloading. The initial GB200 disaggregated sweep
-does not use offloading, as requested, but the comparison remains useful for
-detecting clearly invalid performance.
+The GB200 disaggregated sweep does not use KV offloading, as requested. Both
+B200 modes remain useful references, and the c32/c64/c128/c192 grid brackets
+the aggregate system's useful operating region.
 
 ## Open Investigation
 
