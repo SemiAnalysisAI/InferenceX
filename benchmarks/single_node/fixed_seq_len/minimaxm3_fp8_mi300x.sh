@@ -43,28 +43,45 @@ if [[ -z "$VLLM_PACKAGE_ROOT" || ! -d "$VLLM_PACKAGE_ROOT/vllm" ]]; then
     exit 1
 fi
 
-MXFP8_PATCH="$(dirname "$0")/minimaxm3_mi300x_mxfp8.patch"
-if [[ ! -f "$MXFP8_PATCH" ]]; then
-    echo "MI300X MXFP8 patch is missing: $MXFP8_PATCH" >&2
-    exit 1
-fi
+apply_vllm_patch() {
+    local patch_label="$1"
+    local patch_path="$2"
+    local -a patch_check_args=(
+        --batch
+        --silent
+        -d "$VLLM_PACKAGE_ROOT"
+        -p1
+        --dry-run
+    )
 
-PATCH_CHECK_ARGS=(--batch --silent -d "$VLLM_PACKAGE_ROOT" -p1 --dry-run)
-if patch "${PATCH_CHECK_ARGS[@]}" --reverse --forward < "$MXFP8_PATCH"; then
-    echo "MI300X MXFP8 patch is already fully applied"
-elif patch "${PATCH_CHECK_ARGS[@]}" --forward < "$MXFP8_PATCH"; then
-    if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$MXFP8_PATCH"; then
-        echo "Failed to apply the MI300X MXFP8 patch" >&2
+    if [[ ! -f "$patch_path" ]]; then
+        echo "$patch_label patch is missing: $patch_path" >&2
         exit 1
     fi
-else
-    echo "Installed vLLM is neither cleanly patchable nor fully patched" >&2
-    exit 1
-fi
-if ! patch "${PATCH_CHECK_ARGS[@]}" --reverse --forward < "$MXFP8_PATCH"; then
-    echo "MI300X MXFP8 patch verification failed" >&2
-    exit 1
-fi
+    if patch "${patch_check_args[@]}" --reverse --forward < "$patch_path"; then
+        echo "$patch_label patch is already fully applied"
+    elif patch "${patch_check_args[@]}" --forward < "$patch_path"; then
+        if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$patch_path"; then
+            echo "Failed to apply the $patch_label patch" >&2
+            exit 1
+        fi
+    else
+        echo "Installed vLLM cannot cleanly apply the $patch_label patch" >&2
+        exit 1
+    fi
+    if ! patch "${patch_check_args[@]}" --reverse --forward < "$patch_path"; then
+        echo "$patch_label patch verification failed" >&2
+        exit 1
+    fi
+}
+
+PATCH_DIR="$(dirname "$0")"
+apply_vllm_patch \
+    "MI300X block-FP8 conversion" \
+    "$PATCH_DIR/minimaxm3_mi300x_mxfp8.patch"
+apply_vllm_patch \
+    "MI300X sparse-index scorer" \
+    "$PATCH_DIR/minimaxm3_mi300x_index_score.patch"
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
