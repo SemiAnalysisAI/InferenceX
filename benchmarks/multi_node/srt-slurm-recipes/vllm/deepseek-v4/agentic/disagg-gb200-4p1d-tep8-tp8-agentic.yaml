@@ -1,16 +1,16 @@
-name: "svf-vllm-disagg-gb200-4p1d-tep4-tp8-agentic"
+name: "svf-vllm-disagg-gb200-4p1d-tep8-tp8-agentic"
 
-# Agentic-coding throughput shape for GB200: four cache-affinitized TEP4
-# prefill workers and one TP8 decode worker. Each prefill worker occupies one
-# four-GPU GB200 node; decode spans two nodes. A dedicated infra node brings
-# the allocation to seven nodes / 24 inference GPUs.
+# Agentic-coding throughput shape for GB200: four cache-affinitized TEP8
+# prefill workers and one TP8 decode worker. Every worker spans two four-GPU
+# GB200 nodes. A dedicated infra node brings the allocation to eleven nodes /
+# 40 inference GPUs.
 #
-# The trace has ~96% theoretical prefix reuse, but routing it through a single
-# prefill worker with Dynamo's RoundRobin frontend produced only ~5% actual
-# vLLM prefix-cache hits. KV-aware routing needs both router-mode=kv and vLLM
-# KV-event publication. The four prefill replicas increase cache capacity and
-# let Dynamo preserve per-session affinity without using DEP attention, whose
-# rank barriers amplify this trace's extreme per-request length variance.
+# TEP4 does not fit the DSv4 FP4 checkpoint in 186 GiB GB200 HBM: v0.23.0
+# reached 182.5 GiB/rank and needed another 1.97 GiB while constructing MoE
+# weights (run 27732316539). TP8 is the minimum viable model sharding here.
+# Dynamo KV routing plus explicit vLLM KV-event publication preserves cache
+# affinity across the four prefill replicas. Unlike DEP, TEP does not put
+# unrelated, highly variable agentic requests behind one attention barrier.
 
 model:
   path: "deepseek-v4-pro"
@@ -33,11 +33,11 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 4
+  prefill_nodes: 8
   decode_nodes: 2
   prefill_workers: 4
   decode_workers: 1
-  gpus_per_prefill: 4
+  gpus_per_prefill: 8
   gpus_per_decode: 8
 
 infra:
@@ -85,13 +85,14 @@ backend:
 
   vllm_config:
     prefill:
-      # Each TEP4 worker is contained within one node, so vLLM can generate a
-      # distinct NIXL engine ID per worker without the cross-node TP8 mismatch.
+      # vLLM v0.23 broadcasts rank zero's generated engine ID across each TP
+      # group. Leaving engine_id unset gives every prefill replica a distinct
+      # ID while keeping both nodes of that replica consistent.
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 4
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
       enable-expert-parallel: true
       enable-ep-weight-filter: true
@@ -107,8 +108,8 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
     decode:
-      # Decode still spans two nodes, so both TP8 node processes must share
-      # one deterministic engine ID for NIXL topology registration.
+      # Decode is the only decode replica, so a deterministic cross-node TP8
+      # engine ID remains safe and avoids depending on generated-ID sync here.
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "22222222-2222-4222-8222-222222222222"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"

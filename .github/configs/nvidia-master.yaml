@@ -12744,7 +12744,7 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [52, 64, 72, 84, 100, 128, 196, 256, 512] }
 
 
-# GB200 agentic disaggregation uses four TEP4 prefill replicas behind Dynamo's
+# GB200 agentic disaggregation uses four TEP8 prefill replicas behind Dynamo's
 # KV-aware router and one TP8 decode worker. TEP avoids DEP's per-rank request
 # length imbalance, while four cache-affinitized prefill workers provide enough
 # prefix-cache capacity for the long, high-reuse agentic trace.
@@ -12765,16 +12765,16 @@ dsv4-fp4-gb200-dynamo-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      # KV-aware agentic curve: 4p1d (TEP=4 / TP=8). 7 nodes incl. infra.
+      # KV-aware agentic curve: 4p1d (TEP=8 / TP=8). 11 nodes incl. infra.
       - spec-decoding: none
         conc-list: [32, 64, 128, 192]
         prefill:
           num-worker: 4
-          tp: 4
-          ep: 4
+          tp: 8
+          ep: 8
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-4p1d-tep4-tp8-agentic.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-4p1d-tep8-tp8-agentic.yaml"
         decode:
           num-worker: 1
           tp: 8
