@@ -8,11 +8,8 @@
 # --block-size 128 is mandatory (MSA sparse/index cache); the benchmark is
 # text-only, so --language-model-only frees the vision encoder's VRAM.
 #
-# The drafter is pinned to FLASH_ATTN: the EAGLE3 head is MHA, and FlashInfer
-# only supports page size 128 through its trtllm-gen kernel, which requires
-# GQA/MQA — engine init dies in FlashInferMetadataBuilder otherwise. The
-# target keeps its default (FlashInfer) backend; FLASH_ATTN takes any
-# multiple-of-16 block size, so the mandatory 128 is fine for the draft.
+# The target uses the FlashInfer TRT-LLM attention path. The EAGLE3 drafter is
+# pinned separately to TRITON_ATTN.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -69,7 +66,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 elif [ "$EP_SIZE" -gt 1 ]; then
   PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
 else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP --moe-backend marlin"
+  PARALLEL_ARGS="--tensor-parallel-size=$TP"
 fi
 
 # use 3 speculative tokens for all configs for now
@@ -88,10 +85,13 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
+--attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true}' \
+--attention-config.indexer_kv_dtype "fp8" \
+--kv-cache-dtype fp8 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
---speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"FLASH_ATTN\"}" \
+--speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"attention_backend\": \"TRITON_ATTN\"}" \
 --stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
