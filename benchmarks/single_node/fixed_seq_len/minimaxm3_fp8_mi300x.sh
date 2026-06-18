@@ -79,18 +79,52 @@ if ! grep -q "requantize_mxfp8_to_block_fp8_" "$MODEL_OPT_SOURCE" \
     echo "gfx942 MXFP8 block-FP8 markers are missing after patching" >&2
     exit 1
 fi
+BLOCK_FP8_MOE_ONLY_PATCH="$(dirname "$0")/minimaxm3_mi300x_block_fp8_moe_only.patch"
+BLOCK_FP8_MOE_ONLY_SOURCE_SHA256="263e2f4818338ce565b090bffb7c95cc9adbda3e409159e7306627374fd89dff"
+BLOCK_FP8_MOE_ONLY_PATCHED_SHA256="bf60827b4309688ef90e6818a2cb39926e6ceb31ebeb68b904980b48858f2822"
+modelopt_sha256="$(sha256sum "$MODEL_OPT_SOURCE" | awk '{print $1}')"
+if [ "$modelopt_sha256" = "$BLOCK_FP8_MOE_ONLY_SOURCE_SHA256" ]; then
+    if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$BLOCK_FP8_MOE_ONLY_PATCH"; then
+        echo "Failed to validate the gfx942 MXFP8 MoE-only patch" >&2
+        exit 1
+    fi
+    if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+        < "$BLOCK_FP8_MOE_ONLY_PATCH"; then
+        echo "Failed to apply the gfx942 MXFP8 MoE-only patch" >&2
+        exit 1
+    fi
+elif [ "$modelopt_sha256" != "$BLOCK_FP8_MOE_ONLY_PATCHED_SHA256" ]; then
+    echo "gfx942 MXFP8 MoE-only source fingerprint mismatch: $modelopt_sha256" >&2
+    exit 1
+fi
+modelopt_sha256="$(sha256sum "$MODEL_OPT_SOURCE" | awk '{print $1}')"
+if [ "$modelopt_sha256" != "$BLOCK_FP8_MOE_ONLY_PATCHED_SHA256" ]; then
+    echo "gfx942 MXFP8 MoE-only patched fingerprint mismatch: $modelopt_sha256" >&2
+    exit 1
+fi
+python3 - "$MODEL_OPT_SOURCE" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text()
+if source.count("self.use_rocm_block_fp8 = False") != 1:
+    raise SystemExit("Expected exactly one block-FP8-disabled linear policy")
+if source.count("self.use_rocm_block_fp8 = _use_gfx942_mxfp8_block_fp8()") != 1:
+    raise SystemExit("Expected block FP8 to remain enabled for MoE only")
+PY
 python3 -m py_compile \
     "$VLLM_PACKAGE_ROOT/vllm/envs.py" \
     "$MODEL_OPT_SOURCE" \
     "$MXFP8_UTILS_SOURCE"
 export VLLM_MXFP8_EMULATION_DEQUANT_AT_LOAD=1
 export VLLM_ROCM_MXFP8_BLOCK_FP8=1
-# Isolate the Triton block-FP8 result first. AITER linear is profiled
-# separately; AITER MoE does not implement M3's un-interleaved clamped SwiGLU.
+# Isolate the dominant routed-expert GEMMs. Dense linears retain the existing
+# MI300X native/BF16 policy while MoE uses Triton block FP8.
 export VLLM_ROCM_USE_AITER=0
 export VLLM_ROCM_USE_AITER_LINEAR=0
 export VLLM_ROCM_USE_AITER_MOE=0
-echo "M3 gfx942 MXFP8 weight mode: 128x128 block FP8 (Triton)"
+echo "M3 gfx942 MXFP8 weight mode: MoE-only 128x128 block FP8 (Triton)"
 
 INDEX_TOPK_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_topk.patch"
 INDEX_TOPK_SOURCE="$VLLM_PACKAGE_ROOT/vllm/models/minimax_m3/common/ops/index_topk.py"

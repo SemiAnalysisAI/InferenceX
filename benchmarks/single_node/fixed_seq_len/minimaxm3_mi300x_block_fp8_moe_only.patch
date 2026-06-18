@@ -1,0 +1,6 @@
+diff --git a/vllm/model_executor/layers/quantization/modelopt.py b/vllm/model_executor/layers/quantization/modelopt.py
+--- a/vllm/model_executor/layers/quantization/modelopt.py
++++ b/vllm/model_executor/layers/quantization/modelopt.py
+@@ -1797 +1797 @@
+-        self.use_rocm_block_fp8 = _use_gfx942_mxfp8_block_fp8()
++        self.use_rocm_block_fp8 = False
