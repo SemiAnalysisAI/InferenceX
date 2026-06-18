@@ -3956,4 +3956,3 @@
   description:
     - "Expand search space for minimaxm3-fp4-mi355x-atom: add TP2 and TP8 configurations, extend concurrency range to 256 for ISL1024 and ISL8192, and add TP8 conc=1-2 for ISL8192."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
- 
