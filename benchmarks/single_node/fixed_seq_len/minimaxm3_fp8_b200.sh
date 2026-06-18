@@ -45,7 +45,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
 elif [ "$EP_SIZE" -gt 1 ]; then
   PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
 else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP --moe-backend marlin"
+  PARALLEL_ARGS="--tensor-parallel-size=$TP"
 fi
 
 if [ "${EVAL_ONLY}" = "true" ]; then
@@ -61,6 +61,9 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.90 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
+--attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true}' \
+--attention-config.indexer_kv_dtype fp8 \
+--kv-cache-dtype fp8 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
