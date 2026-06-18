@@ -263,6 +263,12 @@ NATS/etcd node.
   every `dynamo-*` agentic framework. Runs produced before this correction are
   retained as diagnostic transport/topology evidence but are not accepted as
   the final high-cache agentic sweep.
+- Corrected high-concurrency runs use a 3,600-second Dynamo session inactivity
+  timeout instead of AIPerf's 300-second default. At saturation a single long
+  request plus the next inter-turn delay can exceed five minutes; allowing the
+  affinity lease to expire would silently destroy the cache locality being
+  measured. This setting does not change HTTP error handling or server health
+  deadlines.
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 

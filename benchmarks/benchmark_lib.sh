@@ -1123,6 +1123,11 @@ build_replay_cmd() {
     # keyed by the stable conversation correlation ID when this flag is set.
     if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
         REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+        # The upstream 300s affinity TTL is shorter than an overloaded
+        # high-concurrency agentic request. Keep bindings alive across long
+        # prefills, generation, and capped inter-turn delay. This controls the
+        # router's inactivity lease; it does not relax HTTP/request failures.
+        REPLAY_CMD+=" --dynamo-session-timeout-seconds ${AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS:-3600}"
     fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
