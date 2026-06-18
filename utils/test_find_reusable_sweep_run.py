@@ -119,6 +119,7 @@ def test_find_latest_successful_pr_run_skips_newer_failed_run(monkeypatch) -> No
         return [failed_run, successful_run]
 
     monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(reuse, "artifact_names", lambda *args: {"results_bmk"})
 
     assert (
         reuse.find_latest_successful_pr_run(
@@ -130,6 +131,87 @@ def test_find_latest_successful_pr_run_skips_newer_failed_run(monkeypatch) -> No
         )
         == successful_run
     )
+
+
+def test_find_latest_successful_pr_run_skips_gated_noop_run(monkeypatch) -> None:
+    gated_run = {
+        "id": 333,
+        "conclusion": "success",
+        "head_sha": "def456",
+    }
+    real_run = {
+        "id": 222,
+        "conclusion": "success",
+        "head_sha": "abc123",
+    }
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        assert path == "/actions/workflows/run-sweep.yml/runs"
+        return [gated_run, real_run]
+
+    artifacts_by_run = {333: set(), 222: {"results_bmk"}}
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse, "artifact_names", lambda repo, run_id, token: artifacts_by_run[run_id]
+    )
+
+    assert (
+        reuse.find_latest_successful_pr_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            "feature-branch",
+            {"abc123", "def456"},
+            "token",
+        )
+        == real_run
+    )
+
+
+def test_find_latest_successful_pr_run_accepts_agentic_only_run(
+    monkeypatch,
+) -> None:
+    agentic_run = {
+        "id": 444,
+        "conclusion": "success",
+        "head_sha": "abc123",
+    }
+
+    monkeypatch.setattr(
+        reuse,
+        "paginated_github_api",
+        lambda *args, **kwargs: [agentic_run],
+    )
+    monkeypatch.setattr(
+        reuse,
+        "artifact_names",
+        lambda *args: {"bmk_agentic_dsv4_tp8_conc16"},
+    )
+
+    assert (
+        reuse.find_latest_successful_pr_run(
+            "SemiAnalysisAI/InferenceX",
+            "run-sweep.yml",
+            "feature-branch",
+            {"abc123"},
+            "token",
+        )
+        == agentic_run
+    )
+
+
+def test_artifact_names_excludes_expired_artifacts(monkeypatch) -> None:
+    monkeypatch.setattr(
+        reuse,
+        "paginated_github_api",
+        lambda *args, **kwargs: [
+            {"name": "results_bmk", "expired": True},
+            {"name": "agentic_aggregated", "expired": False},
+        ],
+    )
+
+    assert reuse.artifact_names("repo", 123, "token") == {
+        "agentic_aggregated"
+    }
 
 
 def test_main_skips_pr_synchronize_with_reuse_authorization(
