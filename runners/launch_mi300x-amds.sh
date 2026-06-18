@@ -4,6 +4,10 @@ set -euo pipefail
 
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 export PORT=8888
+# Pyxis intentionally filters ENROOT_* overrides during container setup. Its
+# XDG defaults must point at node-local storage rather than the NFS home mount.
+export XDG_DATA_HOME="/enroot/enroot-data-user-gharunner"
+export XDG_CACHE_HOME="/enroot/enroot-cache-group-gharunner"
 
 PARTITION="compute"
 IMAGE_KEY="$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')"
@@ -18,7 +22,21 @@ set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
 #   chi-mi300x-049: persistent /nvme_home disk-full
-JOB_ID=$(salloc --partition="$PARTITION" --exclude=chi-mi300x-049 --gres=gpu:"$TP" --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+NODE_ARGS=(--exclude=chi-mi300x-049)
+if [ "${PROFILE:-0}" = "1" ] && [ -n "${M3_PROFILE_NODE:-}" ]; then
+    NODE_ARGS=(--nodelist="$M3_PROFILE_NODE")
+fi
+JOB_ID=$(
+    salloc \
+        --partition="$PARTITION" \
+        "${NODE_ARGS[@]}" \
+        --gres=gpu:"$TP" \
+        --cpus-per-task=256 \
+        --time=180 \
+        --no-shell \
+        --job-name="$RUNNER_NAME" \
+        2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+'
+)
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
@@ -92,8 +110,9 @@ if [ "${PROFILE:-0}" = "1" ]; then
         bash -c '
             set -euo pipefail
             export HOME=/tmp/inferencex-container-home
+            export XDG_DATA_HOME=/tmp/inferencex-container-data
             export XDG_CACHE_HOME=/tmp/inferencex-container-cache
-            mkdir -p "$HOME" "$XDG_CACHE_HOME"
+            mkdir -p "$HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
             if [[ "${MODEL_PREFIX:-}" == "minimaxm3" && "${FRAMEWORK:-}" == "vllm" ]]; then
                 python3 /workspace/utils/patch_vllm_mi300x_rank0_profiler.py
             fi

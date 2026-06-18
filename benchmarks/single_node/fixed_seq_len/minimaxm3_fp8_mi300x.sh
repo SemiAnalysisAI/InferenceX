@@ -93,9 +93,33 @@ fi
 
 PROFILE_ARGS=()
 if [ "${PROFILE:-0}" = "1" ]; then
-    profile_token_budget=8192
-    profile_prefill_iterations=$(( (ISL * CONC + profile_token_budget - 1) / profile_token_budget ))
-    profile_delay=$((profile_prefill_iterations + 16))
+    profile_token_budget="${M3_PROFILE_TOKEN_BUDGET:-8192}"
+    case "$profile_token_budget" in
+        8192|16384|32768)
+            ;;
+        *)
+            echo "Invalid M3_PROFILE_TOKEN_BUDGET: $profile_token_budget" >&2
+            exit 2
+            ;;
+    esac
+
+    profile_phase="${M3_PROFILE_PHASE:-decode}"
+    case "$profile_phase" in
+        decode)
+            profile_prefill_iterations=$(((ISL * CONC + profile_token_budget - 1) / profile_token_budget))
+            profile_delay=$((profile_prefill_iterations + 16))
+            profile_description="one steady-state decode iteration after $profile_delay engine iterations"
+            ;;
+        prefill)
+            profile_delay=0
+            profile_description="the first chunked-prefill iteration"
+            ;;
+        *)
+            echo "Invalid M3_PROFILE_PHASE: $profile_phase" >&2
+            exit 2
+            ;;
+    esac
+
     benchmark_num_prompts="$CONC"
     export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/tmp/inferencex-profile/${RESULT_FILENAME}}"
     rm -rf "$VLLM_TORCH_PROFILER_DIR"
@@ -111,7 +135,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
         --compilation-config '{"cudagraph_mode":"NONE"}'
     )
     # ROCTracer does not expose every kernel launched inside a HIP graph.
-    echo "Profiling one steady-state decode iteration after $profile_delay engine iterations."
+    echo "Profiling $profile_description with a $profile_token_budget-token budget."
 else
     benchmark_num_prompts="$((CONC * 10))"
 fi
