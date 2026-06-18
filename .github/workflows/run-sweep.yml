@@ -34,13 +34,76 @@ on:
             - "perf-changelog.yaml"
 
 jobs:
+    check-changelog:
+        runs-on: ubuntu-latest
+        if: >-
+            github.event_name != 'pull_request' ||
+            !github.event.pull_request.draft
+        outputs:
+            has-additions: ${{ steps.validate.outputs.has-additions }}
+            metadata-only: ${{ steps.validate.outputs.metadata-only }}
+        steps:
+            - name: Reject conflicting sweep labels
+              if: github.event_name == 'pull_request'
+              env:
+                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+              run: |
+                  count=$(jq '
+                    [
+                      .[] |
+                      select(
+                        . == "sweep-enabled" or
+                        . == "full-sweep-enabled" or
+                        . == "non-canary-full-sweep-enabled" or
+                        . == "full-sweep-fail-fast" or
+                        . == "full-sweep-fail-fast-no-canary"
+                      )
+                    ] |
+                    length
+                  ' <<<"$SWEEP_LABELS")
+                  if [ "$count" -gt 1 ]; then
+                      echo "::error::PR has multiple conflicting sweep labels. Pick exactly one."
+                      exit 1
+                  fi
+
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  fetch-depth: 0
+
+            - name: Validate perf-changelog.yaml
+              id: validate
+              run: |
+                  pip install pydantic pyyaml
+
+                  PR_ARGS=()
+                  if [ "${{ github.event_name }}" = "pull_request" ]; then
+                      BASE_REF="origin/${{ github.base_ref }}"
+                      HEAD_REF="${{ github.event.pull_request.head.sha }}"
+                      PR_ARGS=(--pr-number "${{ github.event.pull_request.number }}")
+                  else
+                      BASE_REF="${{ github.event.before }}"
+                      HEAD_REF="${{ github.event.after }}"
+                  fi
+
+                  python3 utils/validate_perf_changelog.py \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "$BASE_REF" \
+                    --head-ref "$HEAD_REF" \
+                    --github-output "$GITHUB_OUTPUT" \
+                    "${PR_ARGS[@]}"
+
     reuse-sweep-gate:
+        needs: check-changelog
         runs-on: ubuntu-latest
         permissions:
             contents: read
             issues: read
             pull-requests: read
         if: >-
+            always() &&
+            needs.check-changelog.result == 'success' &&
+            needs.check-changelog.outputs.has-additions == 'true' &&
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !github.event.pull_request.draft &&
@@ -70,45 +133,13 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-    check-newline:
-        needs: reuse-sweep-gate
-        runs-on: ubuntu-latest
-        if: >-
-            always() &&
-            (
-              needs.reuse-sweep-gate.result == 'skipped' ||
-              (
-                needs.reuse-sweep-gate.result == 'success' &&
-                needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
-              )
-            ) &&
-            github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
-            (
-              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-              github.event.label.name == 'sweep-enabled' ||
-              github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
-              github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary'
-            )
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-            - name: Check perf-changelog.yaml ends with newline
-              run: |
-                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
-                      echo "::error::perf-changelog.yaml must end with a newline character"
-                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
-                      exit 1
-                  fi
-
     setup:
-        needs: reuse-sweep-gate
+        needs: [check-changelog, reuse-sweep-gate]
         runs-on: ubuntu-latest
         if: >-
             always() &&
+            needs.check-changelog.result == 'success' &&
+            needs.check-changelog.outputs.has-additions == 'true' &&
             (
               needs.reuse-sweep-gate.result == 'skipped' ||
               (
@@ -150,25 +181,6 @@ jobs:
             reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
-            - name: Reject conflicting sweep labels
-              if: >-
-                  github.event_name == 'pull_request' &&
-                  (
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary'))
-                  )
-              run: |
-                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), 'non-canary-full-sweep-enabled' (full sweep, no canary gate), 'full-sweep-fail-fast' (full sweep behind the canary gate, first failure in a matrix cancels that matrix's remaining jobs), or 'full-sweep-fail-fast-no-canary' (the same, without the canary gate)."
-                  exit 1
-
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
@@ -614,12 +626,13 @@ jobs:
 
     reuse-ingest-artifacts:
         needs: setup
-        # `setup` runs via always() and depends on `reuse-sweep-gate`, which is
-        # skipped on every push-to-main. Without always() here, that skipped
-        # gate poisons this job's implicit success() check and it is skipped
-        # even when setup succeeded with reuse-enabled=true — silently breaking
-        # the merge-time ingest. Guard explicitly on setup success instead
-        # (same pattern as comment-unofficial-run-visualizer).
+        # `setup` runs via always() and depends on `check-changelog` plus
+        # `reuse-sweep-gate`, which is skipped on every push-to-main. Without
+        # always() here, that skipped gate poisons this job's implicit
+        # success() check and it is skipped even when setup succeeded with
+        # reuse-enabled=true — silently breaking the merge-time ingest. Guard
+        # explicitly on setup success instead (same pattern as
+        # comment-unofficial-run-visualizer).
         if: >-
             always() &&
             needs.setup.result == 'success' &&
@@ -645,7 +658,7 @@ jobs:
                       [ -e "$artifact_dir" ] || continue
                       name=$(basename "$artifact_dir")
                       case "$name" in
-                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|server_logs_*|multinode_server_logs_*|agentic_aggregated)
+                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|agentic_*|server_logs_*|multinode_server_logs_*)
                               ;;
                           *)
                               rm -rf "$artifact_dir"
