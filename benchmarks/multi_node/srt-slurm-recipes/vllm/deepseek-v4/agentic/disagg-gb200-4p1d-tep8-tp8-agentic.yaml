@@ -11,6 +11,9 @@ name: "svf-vllm-disagg-gb200-4p1d-tep8-tp8-agentic"
 # Dynamo KV routing plus explicit vLLM KV-event publication preserves cache
 # affinity across the four prefill replicas. Unlike DEP, TEP does not put
 # unrelated, highly variable agentic requests behind one attention barrier.
+# The 2026-05-26 Dynamo wheel is required for vLLM v0.23 KV-event tuples. The
+# older 2026-04-26 wheel rejects every BlockStored event's trailing metadata,
+# which leaves the router trees empty and destroys prefix affinity.
 
 model:
   path: "deepseek-v4-pro"
@@ -19,7 +22,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260426"
+  wheel: "1.2.0.dev20260526"
 
 setup_script: vllm-container-deps.sh
 
@@ -47,6 +50,11 @@ infra:
 frontend:
   type: dynamo
   enable_multiple_frontends: false
+  env:
+    # srt-slurm defaults to NATS, whose bounded streaming responders rejected
+    # c64 decode handoffs as "all workers are busy". Dynamo documents TCP as
+    # the fastest request plane; event publication still uses NATS separately.
+    DYN_REQUEST_PLANE: "tcp"
   args:
     router-mode: "kv"
     router-reset-states: true
@@ -55,6 +63,7 @@ backend:
   type: vllm
   connector: null
   prefill_environment:
+    DYN_REQUEST_PLANE: "tcp"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -70,6 +79,7 @@ backend:
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
+    DYN_REQUEST_PLANE: "tcp"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"

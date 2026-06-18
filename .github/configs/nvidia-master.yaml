@@ -12750,8 +12750,8 @@ dsv4-fp4-b300-sglang-agentic-hicache:
 # prefix-cache capacity for the long, high-reuse agentic trace.
 # Image matches the recipe's `model.container` (v0.23.0, required by the
 # current NVFP4 checkpoint; v0.20.0's NIXL connector also breaks TP8<->TP8
-# transfers, see the recipe header); the two must stay in lockstep — see
-# dsv4-fp4-gb300-dynamo-vllm-agentic.
+# transfers, see the recipe header). The recipe also pins a Dynamo wheel new
+# enough to decode v0.23 KV events; keep both runtime pins in lockstep with it.
 dsv4-fp4-gb200-dynamo-vllm-agentic:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
