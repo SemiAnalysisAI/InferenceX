@@ -96,7 +96,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         ND_PRIO=$(nicctl show qos 2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
         ND_DSCP=$(nicctl show qos 2>/dev/null | awk -v p="$ND_PRIO" '
 $1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
+    gsub(/[^0-9]/, "", $3); print $3; exit
 }')
         if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
             export UCX_IB_TRAFFIC_CLASS=$(( 4 * ND_DSCP ))
@@ -139,8 +139,8 @@ else
     # Align with mori-scheduler/scripts/multi_node reference: persist the AITER MLA
     # workspace (MLA prefill path) and enable the MXFP4 MoE scale-factor for this
     # MXFP4 model. Overridable.
-    export SGLANG_AITER_MLA_PERSIST="${SGLANG_AITER_MLA_PERSIST:-1}"
-    export AITER_MXFP4_MOE_SF="${AITER_MXFP4_MOE_SF:-1}"
+    # export SGLANG_AITER_MLA_PERSIST="${SGLANG_AITER_MLA_PERSIST:-1}"
+    # export AITER_MXFP4_MOE_SF="${AITER_MXFP4_MOE_SF:-1}"
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
     export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
@@ -170,7 +170,7 @@ else
     # Disable allocating memory in one pass
     export MORI_SHMEM_MODE=ISOLATION
     # mori shmem heap size (matches mori-scheduler reference). Overridable.
-    export MORI_SHMEM_HEAP_SIZE="${MORI_SHMEM_HEAP_SIZE:-1G}"
+    # export MORI_SHMEM_HEAP_SIZE="${MORI_SHMEM_HEAP_SIZE:-1G}"
 
     # Enable spec v2
     export SGLANG_ENABLE_SPEC_V2=1
@@ -200,8 +200,8 @@ else
     # MoRIIO SQ tuning defaults (can be overridden by caller env).
     # Keep explicit exports here so tuned values are guaranteed to reach the
     # sglang.launch_server process even if upstream env threading regresses.
-    export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
-    export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-}"
+    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-}"
 
     export MC_TE_METRIC=1
 
@@ -213,7 +213,7 @@ else
         ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
         ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
 $1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
+    gsub(/[^0-9]/, "", $3); print $3; exit
 }')
 
         if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then

@@ -172,6 +172,7 @@ print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
 
 print(f'DECODE_MEM_FRACTION_STATIC=\"{decode.get(\"mem_fraction_static\", 0.85)}\"')
 print(f'DECODE_PREFILL_ROUND_ROBIN_BALANCE=\"{decode.get(\"prefill_round_robin_balance\", True)}\"')
+print(f'DECODE_DISAGG_ENABLE_RADIX_CACHE=\"{decode.get(\"disagg_decode_enable_radix_cache\", False)}\"')
 
 dp = decode.get('dp', {})
 ep_only = decode.get('ep_only', {})
@@ -281,6 +282,9 @@ DECODE_MODE_FLAGS="--mem-fraction-static ${DECODE_MEM_FRACTION_STATIC} --max-run
 
 if [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "True" ]] || [[ "$DECODE_PREFILL_ROUND_ROBIN_BALANCE" == "true" ]]; then
     DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --prefill-round-robin-balance"
+fi
+if [[ "$DECODE_DISAGG_ENABLE_RADIX_CACHE" == "True" ]] || [[ "$DECODE_DISAGG_ENABLE_RADIX_CACHE" == "true" ]]; then
+    DECODE_MODE_FLAGS="$DECODE_MODE_FLAGS --disaggregation-decode-enable-radix-cache"
 fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
@@ -478,13 +482,18 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
         echo "--hicache-storage-backend mooncake --hicache-storage-backend-extra-config '${extra}' --enable-metrics --enable-cache-report"
     }
 
-    # --hicache-size is per rank per host pool; derive from the node-total DRAM
-    # budget divided by TP and the host-pool count unless set explicitly.
+    # HiCache capacity via --hicache-ratio (scales with GPU KV pool).
+    # Default: ratio=2 at TP>=8, ratio=16 at lower TP (matches single-node DSv4 recipe).
+    HICACHE_RATIO="${HICACHE_RATIO:-}"
+    if [[ -z "$HICACHE_RATIO" ]]; then
+        if [[ "$PREFILL_TP_SIZE" -ge 8 ]]; then
+            HICACHE_RATIO=2
+        else
+            HICACHE_RATIO=16
+        fi
+    fi
     build_hicache_flags() {
-        local tp="$1"
-        local size="${HICACHE_SIZE_GB:-$((HICACHE_TOTAL_CPU_DRAM_GB / tp / HICACHE_HOST_POOL_COUNT))}"
-        [ "$size" -lt 1 ] && size=1
-        echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-size ${size} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
+        echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-ratio ${HICACHE_RATIO} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
     }
 
     # HiCache requires RadixAttention; strip any --disable-radix-cache.
@@ -673,7 +682,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
-        ROUTER_LOG_FILE="/tmp/slurm_job-${SLURM_JOB_ID}_proxy_${host_name}.log"
+        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/router_${host_name}.log"
         set -x
         if [[ "${SGLANG_ROUTER_STDOUT_LOGS:-0}" == "1" ]]; then
             eval "$ROUTER_CMD" 2>&1 | tee "$ROUTER_LOG_FILE" &
