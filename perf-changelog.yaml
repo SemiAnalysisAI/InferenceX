@@ -3950,3 +3950,14 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Update the MiniMax-M3 B200/B300 single-node image to vllm/vllm-openai:minimax-m3-0618."
+    - "Use FlashInfer with TRT-LLM attention, FP8 indexer KV, and an FP8 KV cache."
+    - "Remove the explicit Marlin MoE backend override; the new image requires no additional MoE backend argument."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1831
