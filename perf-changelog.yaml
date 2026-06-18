@@ -3950,3 +3950,9 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Apply a gfx942-specific vectorized MiniMax M3 sparse index scorer at high batch, reducing isolated c256 scorer latency by 47-56% at 1k, 8k, and 32k context."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1840
