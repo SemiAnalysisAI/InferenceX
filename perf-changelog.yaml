@@ -3954,6 +3954,6 @@
 - config-keys:
     - minimaxm3-fp8-gb200-dynamo-vllm
   description:
-    - "Switch to vllm/vllm-openai:minimax-m3-0618 — contains upstream head_ratio fix (vllm-project/vllm#45879), drop extra_mount workaround"
+    - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), drop extra_mount workaround"
     - "NixlConnector handshake block_len validation now uses per-rank KV head ratio instead of tp_ratio, fixing GQA-replicated disagg (M3 TEP8: TP4→TP8, 4 KV heads)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
