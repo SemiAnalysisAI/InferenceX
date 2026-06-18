@@ -168,6 +168,27 @@ missing GB200 VMM registration. The gap between 96.5% theoretical reuse and
 low single-digit measured reuse must be re-evaluated after correcting that
 transport defect; a green workflow alone is not acceptance.
 
+### Cache-rate interpretation
+
+The apparent 96.5% theoretical versus 1.3--3.5% realized cache-rate gap in
+`27734909066` is explained by trajectory progress rather than token/hash
+divergence:
+
+- all 99 completed profiling records belonged to 99 distinct AIPerf sessions;
+  no session completed a second request;
+- the `inferencex-agentx-mvp` scenario requires `first_turn_prefix` cache
+  busting, so each completed first request was intentionally cold;
+- 131 requests were still in flight and cancelled after the 300-second window;
+- `theoretical_cache_hit_rate` in `process_agentic_result.py` walks historical
+  trace turns zero through the sampled turn and assumes those prior turns were
+  served with an infinite cache. It measures potential reuse, not realized
+  reuse when a replay starts midway through a trace and its first prefix is
+  deliberately busted.
+
+The scenario requires at least 900 seconds specifically to reach steady state.
+The VMM-enabled rerun uses 900 seconds and must show completed multi-turn
+sessions before its cache and throughput measurements are accepted.
+
 ## Baseline
 
 The June 10 B200 aggregate vLLM agentic run (`27297117163`) provides these
