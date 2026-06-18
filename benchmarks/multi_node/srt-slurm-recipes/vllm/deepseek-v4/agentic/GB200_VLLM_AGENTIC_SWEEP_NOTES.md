@@ -1,0 +1,182 @@
+# GB200 DeepSeek V4 vLLM Disaggregated Agentic Sweep Notes
+
+This is the engineering log for the GB200 DeepSeek V4 Pro NVFP4 vLLM
+disaggregated agentic sweep. It records configuration changes, official runs,
+observations, and the evidence behind each decision. It must be updated as the
+sweep progresses.
+
+## Target
+
+- Model: `deepseek-ai/DeepSeek-V4-Pro` (NVFP4 checkpoint)
+- Hardware: GB200, four GPUs exposed per Slurm node
+- Runtime: vLLM behind Dynamo disaggregated serving
+- Workload: `semianalysis_cc_traces_weka_061526`
+- Required result: successful official GitHub Actions artifacts covering
+  multiple concurrency points and multiple prefill/decode topologies
+- Baseline: single-node B200 aggregate vLLM results from the InferenceX results
+  database
+
+The workload has very long contexts and approximately 96% theoretical prefix
+reuse. Fixed-sequence recipes are not valid starting points because they use
+much shorter prompts and usually disable prefix caching.
+
+## Methodology
+
+1. Bring up a low-cost topology and prove model loading and cross-node NIXL
+   transfer.
+2. Validate KV event ingestion and request transport independently of
+   performance.
+3. Compare P/D balance at a constant 40-inference-GPU budget:
+   `4P/1D`, `3P/2D`, `2P/3D`, and `1P/4D`.
+4. Use c64 as a topology gate, then run c32/c64/c128/c192 curves for viable
+   topologies.
+5. Compare total and per-GPU throughput, TTFT, TPOT, E2E latency, request
+   errors, and measured cache reuse against the B200 aggregate baseline.
+
+Each P or D worker is TP8/TEP8 and spans two four-GPU Slurm nodes. Every
+constant-budget topology therefore uses ten inference nodes plus one dedicated
+NATS/etcd node.
+
+## Configuration Changes
+
+### Initial TP8 disaggregation (`444371fb`)
+
+- Added a GB200 agentic vLLM configuration using vLLM `v0.23.0`.
+- Used TP8/TEP8 workers because the current NVFP4 checkpoint is not supported
+  by the older vLLM images used by the fixed-sequence recipes.
+- Kept prefix caching enabled and used the full 061526 agentic trace.
+
+### KV-aware 4P/1D topology (`76ad0903`)
+
+- Added four cache-affinitized prefill replicas and one decode replica.
+- Enabled Dynamo KV routing and explicit vLLM KV-event publication.
+- Ensured each two-node TP8 prefill replica had one internally consistent and
+  externally distinct NIXL engine ID.
+
+### TEP8 correction (`b56d0d9e`)
+
+- Changed prefill model sharding from TEP4 to TEP8.
+- Evidence: official run `27732316539` reached 182.54 GiB per GPU and failed
+  while requesting another 1.97 GiB during MoE weight construction.
+- Conclusion: TEP4 cannot load this checkpoint on the available GB200 nodes.
+
+### Dynamo/vLLM compatibility and request transport (`1e29f559`)
+
+- Updated Dynamo from `1.2.0.dev20260426` to
+  `1.2.0.dev20260526`.
+- Set `DYN_REQUEST_PLANE=tcp` for frontend, prefill, and decode workers.
+- Kept KV events on their separate ZMQ-to-NATS event path.
+- Evidence for the Dynamo change: every vLLM v0.23 `BlockStored` event failed
+  to decode with the April 26 wheel. The compatible trailing-field parser was
+  added upstream on April 29 and is present in the May 26 wheel.
+- Evidence for TCP: the earlier c64 canary returned HTTP 503 with
+  `Rejecting request: all workers are busy` from the NATS request plane.
+  Dynamo documents TCP as its fastest request plane.
+- The apparent `DYN_VLLM_KV_EVENT_PORT=5200+` versus recipe port `20080`
+  mismatch was investigated and disproved: vLLM and its colocated Dynamo
+  worker correctly communicate over local `tcp://127.0.0.1:20080`.
+
+### P/D topology grid (`74dfa0bb`)
+
+- Added constant-40-GPU recipes for `3P/2D`, `2P/3D`, and `1P/4D` alongside
+  `4P/1D`.
+- Added c32/c64/c128/c192 to every topology in
+  `.github/configs/nvidia-master.yaml`.
+- Multi-decode recipes use generated vLLM v0.23 engine IDs. This avoids ID
+  collisions across decode replicas while vLLM synchronizes the generated ID
+  across the two nodes of each TP8 replica.
+
+### Slurm job-name prefix (branch-only historical workaround)
+
+- This branch prefixes GB200 Slurm jobs with `ifx-` in
+  `runners/launch_gb200-nv.sh`.
+- It is not standard on `main`.
+- It was introduced after jobs `18593` and `18599` were reportedly cancelled
+  by another Watchtower runner fleet that reused the `gb200-nv_N` names.
+- This naming change does not alter topology or benchmark behavior.
+
+## Validation
+
+- `python -m pytest utils/matrix_logic/ -q`: 158 passed.
+- All four topology recipes parse as YAML and were checked for:
+  - 40 inference GPUs plus one infrastructure node;
+  - matching vLLM image and Dynamo wheel;
+  - KV routing enabled;
+  - TCP request plane on all components;
+  - collision-free generated engine IDs for multi-decode topologies.
+- The sweep generator emits 16 points: four topologies times four
+  concurrencies.
+
+## Official Runs
+
+| Run | Configuration | Outcome | Key evidence |
+| --- | --- | --- | --- |
+| `27728896563` | 1P/1D, c32/c64/c128/c192 | Partially green, later cancelled | c64: about 26.7k tok/s total, 423s mean TTFT, about 5% cache hit; not competitive |
+| `27732316539` | TEP4 prefill attempt | Failed | Model-load OOM at 182.54 GiB/GPU plus 1.97 GiB allocation |
+| `27732541012` | 4P/1D c64, old Dynamo/NATS | Failed warmup | 45/85 errors; empty router indexes; KV-event decode errors; HTTP 503 overloads |
+| `27734909066` | 4P/1D c64, new Dynamo/TCP | Success | Official artifact; clean 85/85 warmup and 99/99 profiled requests |
+| `27737167704` | c64 topology sweep | Running/queued | 4P/1D, 3P/2D, 2P/3D, 1P/4D |
+
+## Corrected 4P/1D c64 Gate (`27734909066`)
+
+Functional results:
+
+- All four prefills and one decode worker registered.
+- Warmup: 85 completed, zero errors.
+- Profiling: 99 successful records, zero request errors.
+- HTTP 503 responses: zero.
+- KV-event decode failures: zero.
+- Dynamo made 125 selections with nonzero `effective cached blocks`, proving
+  that the KV index was populated and used.
+
+Performance from `results_bmk/agg_bmk.json`:
+
+- Total throughput: 22,573.5 tok/s.
+- Per-GPU throughput: 564.3 tok/s across 40 inference GPUs.
+- Output throughput: 124.2 tok/s total.
+- Mean TTFT: 133.0s; p95 TTFT: 205.5s.
+- Mean TPOT: 115.6ms; p95 TPOT: 209.5ms.
+- Mean E2E: 176.3s; p95 E2E: 263.8s.
+- Theoretical cache hit: 96.5%.
+- Final vLLM GPU prefix-hit rates by prefill: approximately 1.3% to 3.5%.
+
+Conclusion: this run proves the compatibility and transport fixes, but it is
+not a satisfactory performance result. It is slower than the earlier 1P/1D
+c64 point and far below the B200 aggregate baseline. The gap between 96.5%
+theoretical reuse and low single-digit measured reuse remains an open root
+cause; a green workflow alone is not acceptance.
+
+## Baseline
+
+The B200 aggregate c64 reference is approximately:
+
+- 82k tok/s total;
+- 10.3k tok/s/GPU;
+- about 93% measured cache hit.
+
+That configuration uses KV offloading. The initial GB200 disaggregated sweep
+does not use offloading, as requested, but the comparison remains useful for
+detecting clearly invalid performance.
+
+## Open Investigation
+
+1. Complete the c64 P/D topology comparison. The 4P/1D result is strongly
+   decode-limited, so D-heavy layouts are expected to improve latency and
+   completed-request rate.
+2. Determine why Dynamo observes only small cached overlaps even though the
+   trace reports about 96% theoretical reuse and the prefills have spare KV
+   capacity. Candidate causes must be proven from token/hash/routing evidence;
+   no cache-hit metric bypass or synthetic workload substitution is acceptable.
+3. Select viable topologies and run official c32/c64/c128/c192 curves.
+4. Download and review final artifacts against the B200 aggregate baseline.
+
+## Acceptance Criteria
+
+- At least two P/D parallelism configurations represented in official
+  successful GitHub Actions artifacts.
+- Multiple concurrency points for each selected topology.
+- No request errors or hidden warmup aborts.
+- Artifacts contain aggregated and raw agentic results.
+- Server logs demonstrate working KV-event ingestion and routing.
+- Performance is reviewed against B200 aggregate results and any remaining
+  gap is explained by measured evidence rather than workflow success alone.
