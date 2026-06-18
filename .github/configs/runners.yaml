@@ -104,6 +104,7 @@ mi300x:
 - 'mi300x-amds_06'
 - 'mi300x-amds_07'
 - 'mi300x-amds_08'
+- 'mi300x-tw_00'
 mi300x-disagg:
 - 'mi300x-amds_06'
 - 'mi300x-amds_07'
