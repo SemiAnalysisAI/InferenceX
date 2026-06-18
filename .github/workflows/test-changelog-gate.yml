@@ -37,8 +37,6 @@ jobs:
   test-changelog:
     name: Test changelog validation
     runs-on: ubuntu-latest
-    outputs:
-      has-additions: ${{ steps.contract.outputs.has-additions }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -55,7 +53,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pytest pydantic pyyaml
 
-      - name: Run validator and reuse tests
+      - name: Run validator, reuse, and gating tests
         run: |
           python -m pytest \
             utils/test_validate_perf_changelog.py \
@@ -65,10 +63,6 @@ jobs:
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/test_run_sweep_gating.py \
             -v
-
-      - name: Publish simulated append result
-        id: contract
-        run: echo "has-additions=true" >> "$GITHUB_OUTPUT"
 
       - name: Test historical push validation
         run: |
@@ -132,86 +126,3 @@ jobs:
             --base-ref "origin/${BASE_BRANCH}" \
             --head-ref "$GITHUB_SHA" \
             --pr-number "$PR_NUMBER"
-
-  test-reuse-sweep-gate:
-    name: Simulate authorized reuse
-    needs: test-changelog
-    runs-on: ubuntu-latest
-    if: >-
-      always() &&
-      needs.test-changelog.result == 'success'
-    outputs:
-      skip-pr-sweep: ${{ steps.gate.outputs.skip-pr-sweep }}
-    steps:
-      - name: Authorize reuse
-        id: gate
-        run: echo "skip-pr-sweep=true" >> "$GITHUB_OUTPUT"
-
-  test-setup:
-    name: Setup must be skipped
-    needs: [test-changelog, test-reuse-sweep-gate]
-    runs-on: ubuntu-latest
-    if: >-
-      always() &&
-      needs.test-changelog.result == 'success' &&
-      needs.test-changelog.outputs.has-additions == 'true' &&
-      (
-        needs.test-reuse-sweep-gate.result == 'skipped' ||
-        (
-          needs.test-reuse-sweep-gate.result == 'success' &&
-          needs.test-reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
-        )
-      )
-    steps:
-      - run: |
-          echo "::error::Setup ran even though reuse was authorized"
-          exit 1
-
-  test-metadata-only:
-    name: Simulate metadata-only changelog
-    runs-on: ubuntu-latest
-    outputs:
-      has-additions: ${{ steps.result.outputs.has-additions }}
-    steps:
-      - id: result
-        run: echo "has-additions=false" >> "$GITHUB_OUTPUT"
-
-  test-metadata-setup:
-    name: Metadata-only setup must be skipped
-    needs: test-metadata-only
-    runs-on: ubuntu-latest
-    if: >-
-      always() &&
-      needs.test-metadata-only.result == 'success' &&
-      needs.test-metadata-only.outputs.has-additions == 'true'
-    steps:
-      - run: |
-          echo "::error::Setup ran for a metadata-only changelog correction"
-          exit 1
-
-  verify-ordering:
-    name: Verify validation precedes reuse
-    needs:
-      [
-        test-changelog,
-        test-reuse-sweep-gate,
-        test-setup,
-        test-metadata-only,
-        test-metadata-setup,
-      ]
-    runs-on: ubuntu-latest
-    if: always()
-    env:
-      CHANGELOG_RESULT: ${{ needs.test-changelog.result }}
-      REUSE_GATE_RESULT: ${{ needs.test-reuse-sweep-gate.result }}
-      SETUP_RESULT: ${{ needs.test-setup.result }}
-      METADATA_RESULT: ${{ needs.test-metadata-only.result }}
-      METADATA_SETUP_RESULT: ${{ needs.test-metadata-setup.result }}
-    steps:
-      - name: Verify job results
-        run: |
-          test "$CHANGELOG_RESULT" = "success"
-          test "$REUSE_GATE_RESULT" = "success"
-          test "$SETUP_RESULT" = "skipped"
-          test "$METADATA_RESULT" = "success"
-          test "$METADATA_SETUP_RESULT" = "skipped"
