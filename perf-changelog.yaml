@@ -3959,5 +3959,5 @@
   description:
     - "Update the MiniMax-M3 B200/B300 single-node image to vllm/vllm-openai:minimax-m3-0618."
     - "Enable FlashInfer TRT-LLM attention with FP8 indexer KV and KV cache; use TRITON_ATTN for the EAGLE3 drafter."
-    - "Remove the explicit Marlin MoE override because the new image requires no additional MoE backend argument."
+    - "Switch TP-only configurations from explicit Marlin MoE to the new image's default FlashInfer TRT-LLM MoE backend."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1831
