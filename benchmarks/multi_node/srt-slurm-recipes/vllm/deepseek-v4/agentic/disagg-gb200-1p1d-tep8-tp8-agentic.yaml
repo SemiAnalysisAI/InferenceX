@@ -14,8 +14,9 @@ name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 # gb300 TEP/TP recipes (disagg-gb300-1p17d-tep4-tp4.yaml and the 1p6d
 # agentic decode): no data-parallel, no deep_gemm_mega_moe.
 #
-# Container is v0.21.0-ubuntu2404 (the gb300-validated agentic stack), NOT
-# the v0.20.0 the gb200 fixed-seq family pins: v0.20.0's NIXL connector
+# Container is v0.23.0, which understands the current NVFP4 checkpoint. The
+# older v0.21.0 image fails while loading it (missing w13_input_scale), and
+# v0.20.0's NIXL connector
 # breaks on TP8<->TP8 transfers — the decode worker's first get_finished()
 # poll dies with KeyError on the remote (prefill) engine_id in
 # transfer_topo.get_engine_info() because the prefill engine never
@@ -28,13 +29,13 @@ name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 #   - benchmark.type custom -> agentic_srt.sh
 #   - prefix caching ON (no no-enable-prefix-caching)
 #   - max-model-len omitted so vLLM derives it from the model config
-#   - 061526 256k-capped corpus retained to bound per-request GB200 memory
+#   - full 061526 corpus, matching the single-node DSv4 AgentX baseline
 #   - infra.nats_max_payload_mb 32 (long agentic prompts exceed NATS' 1 MiB)
 #   - srun_options.container-remap-root (apt-get git in agentic_srt.sh)
 
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.21.0-ubuntu2404"
+  container: "vllm/vllm-openai:v0.23.0"
   precision: "fp4"
 
 dynamo:
@@ -120,6 +121,7 @@ backend:
       pipeline-parallel-size: 1
       enable-expert-parallel: true
       enable-ep-weight-filter: true
+      attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
       max-num-seqs: 16
       # 16384 batched tokens + util 0.90 (the fixed-seq megamoe recipes use
@@ -147,7 +149,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      enable-ep-weight-filter: true
+      attention-config: '{"use_fp4_indexer_cache": true}'
       max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
@@ -159,7 +161,6 @@ backend:
       stream-interval: 50
       all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
-      enable-sleep-mode: true
       tokenizer-mode: deepseek_v4
 
 # cpus-per-task=72: one full GB200 NUMA socket (144 cores split 2 x 72) per
@@ -196,6 +197,6 @@ benchmark:
     # dataset isn't re-downloaded on every run. Overrides the workflow-level
     # HF_HUB_CACHE=/mnt/hf_hub_cache, which doesn't exist on these nodes.
     HF_HUB_CACHE: "/hf_hub_cache"
-    # Keep requests within the validated GB200 workload envelope while the
-    # server derives its context limit from the model config.
-    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526_256k"
+    # Match the single-node DSv4 baseline. The model advertises a 1M context
+    # window and TP8 shards its hybrid KV across the worker.
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526"

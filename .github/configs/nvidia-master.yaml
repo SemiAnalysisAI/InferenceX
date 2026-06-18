@@ -12752,12 +12752,12 @@ dsv4-fp4-b300-sglang-agentic-hicache:
 # No high-throughput conc-4096 tier yet: a single TP8 decode worker caps at
 # max-num-seqs 512, and DEP decode (which scales seqs) hits the KV wall
 # above; revisit with fp4 indexer cache or multi-worker TP8 decode.
-# Image matches the recipes' `model.container` (v0.21.0-ubuntu2404 — the
-# gb300-validated agentic stack; v0.20.0's NIXL connector breaks TP8<->TP8
+# Image matches the recipe's `model.container` (v0.23.0, required by the
+# current NVFP4 checkpoint; v0.20.0's NIXL connector also breaks TP8<->TP8
 # transfers, see the recipe header); the two must stay in lockstep — see
 # dsv4-fp4-gb300-dynamo-vllm-agentic.
 dsv4-fp4-gb200-dynamo-vllm-agentic:
-  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb200
@@ -12769,24 +12769,9 @@ dsv4-fp4-gb200-dynamo-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      # Low-latency: 1p1d (TEP=8 / TP=8) at conc 32. 5 nodes incl. infra.
+      # Initial agentic curve: 1p1d (TEP=8 / TP=8). 5 nodes incl. infra.
       - spec-decoding: none
-        conc-list: [32]
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-1p1d-tep8-tp8-agentic.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      # Mid: same 1p1d shape at conc 192.
-      - spec-decoding: none
-        conc-list: [192]
+        conc-list: [32, 64, 128, 192]
         prefill:
           num-worker: 1
           tp: 8
