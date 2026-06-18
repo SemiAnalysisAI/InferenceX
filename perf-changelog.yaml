@@ -3854,11 +3854,8 @@
 - config-keys:
     - minimaxm3-fp8-gb200-dynamo-vllm
   description:
-    - "Fix NixlConnector handshake failure for hetero-TP disagg when num_kv_heads < decode TP (M3 TEP8: TP4 prefill → TP8 decode)"
-    - "Root cause: _validate_remote_agent_handshake used raw tp_ratio (8/4=2) for block_len validation, but M3 has only 4 KV heads — both sides have max(1,4//tp)=1 head/rank → same block_len. The assertion expected remote_len=131072 but got 65536, failing every handshake (0 KV transfers, gsm8k=0.0000)."
-    - "Fix: replace tp_ratio with head_ratio (remote_heads_per_rank // local_heads_per_rank) which correctly accounts for GQA replication — commit 78ef73b on cleanup/m3-mi300x-mxfp8"
-    - "Also includes norm_out=None MNNVL aliasing fix (commit 66a43ba)"
-    - "Runtime-patched via extra_mount: ARM64 base image vllm/vllm-openai:minimax-m3 + bind-mounted worker.py (head_ratio) and fused_allreduce_gemma_rms_norm.py (norm_out=None) from shared lustre"
+    - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), drop extra_mount workaround"
+    - "NixlConnector handshake block_len validation now uses per-rank KV head ratio instead of tp_ratio, fixing GQA-replicated disagg (M3 TEP8: TP4→TP8, 4 KV heads)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
   evals-only: true
 
