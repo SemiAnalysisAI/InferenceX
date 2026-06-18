@@ -204,17 +204,29 @@ must still contain complete artifacts for the merge run's expected matrix.
 
 The comment is the reuse authorization, so adding it does not trigger or cancel
 a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. GitHub still creates a
-lightweight `pull_request` workflow run so it can inspect the PR comments, but
-the sweep setup and benchmark jobs are skipped. Removing and re-adding a sweep
-label explicitly starts a new sweep.
+full-sweep label do not start another benchmark sweep. GitHub still runs the
+CPU-only `check-changelog` job on the new commit before inspecting the reuse
+authorization. That job validates the complete YAML/schema, append-only entry
+ordering, duplicate YAML keys, byte-for-byte preservation of historical
+content, PR links, the generated sweep config, and sweep-label exclusivity.
+Link-only correction PRs stop after this CPU check because they have no
+benchmark matrix to generate. Only appended entries can continue to the reuse
+gate and sweep setup. Removing and re-adding a sweep label explicitly starts a
+new sweep.
+
+`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+It merges `main`, preserves the current main changelog bytes, canonicalizes an
+appended `XXX` link to the PR URL, pushes a fresh synchronization commit, and
+waits for `check-changelog` on that exact SHA before merging.
 
 On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
 commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
 run for the same PR, downloads the ingest-relevant artifacts, validates that
-`results_bmk` covers the merge run's expected benchmark matrix, and uploads
-them as `reused-ingest-artifacts`. The normal database ingest then publishes
-those artifacts with the merge run's changelog metadata.
+fixed-sequence, agentic, and eval-only artifacts exactly match the merge run's
+expected matrix, and uploads them as `reused-ingest-artifacts`. The normal
+database ingest then publishes those artifacts with the merge run's changelog
+metadata. Duplicate fixed-sequence, agentic, eval, or raw eval identities are
+rejected rather than collapsed during that comparison.
 
 Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier

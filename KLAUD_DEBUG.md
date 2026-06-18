@@ -33,6 +33,11 @@ python3 -c "import yaml; yaml.safe_load(open('perf-changelog.yaml'))"
 
 Do **not** try a 3-way merge of `perf-changelog.yaml` — whitespace edits will silently re-trigger the deletion check.
 
+After committing and pushing the resolution, wait for `check-changelog` on the
+new head SHA. `/reuse-sweep-run` skips setup and GPU jobs only after this
+CPU-only validation succeeds. `utils/merge_with_reuse.sh <PR>` performs this
+wait automatically.
+
 ---
 
 ## 2. vLLM v0.21.x / v0.20.x: GPU OOM at model-load
