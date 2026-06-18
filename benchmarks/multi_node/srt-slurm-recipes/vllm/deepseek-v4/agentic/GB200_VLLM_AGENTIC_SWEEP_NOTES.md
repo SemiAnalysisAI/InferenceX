@@ -212,6 +212,7 @@ NATS/etcd node.
 | `27770234988` | c64 topology sweep, RDMA + bounded registration cache | Success | All four 900-second topology jobs and aggregate/raw/server-log artifacts completed successfully |
 | `27785852838` | selected 4P/1D + 3P/2D curves, c32 | Cancelled | 4P/1D completed, but the run was stopped after proving AIPerf omitted Dynamo `nvext.session_control` |
 | `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | Cancelled | Stopped for the same missing conversation-binding metadata; three matrix jobs had separately failed checkout before using GPUs |
+| `27790985904` | corrected 4P/1D + 3P/2D c64 gate | In progress | First official run with AIPerf `--use-dynamo-conv-aware-routing`, dispatched from `ddc3de01` |
 
 ### Official RDMA topology gate: completed points
 
