@@ -209,7 +209,7 @@ NATS/etcd node.
 | `27734909066` | 4P/1D c64, new Dynamo/TCP | Success | Official artifact; clean 85/85 warmup and 99/99 profiled requests |
 | `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
 | `27738234911` | c64 topology sweep, VMM enabled | Failed | All four decode workers OOM during NVFP4 weight conversion before serving; no benchmark results |
-| `27770234988` | c64 topology sweep, RDMA + bounded registration cache | In progress | Official 900-second 4P/1D, 3P/2D, 2P/3D, and 1P/4D gate dispatched from `96f6346a` after direct canary `19244` validated the data plane |
+| `27770234988` | c64 topology sweep, RDMA + bounded registration cache | Success | All four 900-second topology jobs and aggregate/raw/server-log artifacts completed successfully |
 
 ### Official RDMA topology gate: completed points
 
@@ -222,6 +222,22 @@ NATS/etcd node.
   12.5% below the 81,863 tok/s B200 aggregate c64 baseline and has much higher
   TTFT, so the more prefill-heavy 4P/1D point remains necessary before choosing
   the final curve topologies.
+- The full c64 ranking is:
+  - 4P/1D: 922/922 requests, 96,043 tok/s, 2,401 tok/s/GPU, 70.9 s mean
+    TTFT, 20 ms mean TPOT, and 87.8 s mean E2E;
+  - 3P/2D: 682/682 requests, 71,625 tok/s, 1,791 tok/s/GPU, 115.8 s mean
+    TTFT, 15 ms mean TPOT, and 129.7 s mean E2E;
+  - 2P/3D: 490/490 requests, 48,443 tok/s, 1,211 tok/s/GPU, 189.3 s mean
+    TTFT, 13 ms mean TPOT, and 201.5 s mean E2E;
+  - 1P/4D: 250/250 requests, 23,775 tok/s, 594 tok/s/GPU, 388.9 s mean
+    TTFT, 12 ms mean TPOT, and 400.3 s mean E2E.
+- 4P/1D exceeds the B200 aggregate c64 throughput baseline by 17.3%, although
+  its TTFT remains higher because the realized prefill cache rate is still far
+  below the baseline. 3P/2D is retained as the useful decode-heavier curve.
+  The 2P/3D and 1P/4D recipes remain checked in with their gate evidence, but
+  their search-space entries were removed from `nvidia-master.yaml` so the
+  final c32/c64/c128/c192 sweep does not spend GPU time on proven prefill-
+  starved shapes.
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
