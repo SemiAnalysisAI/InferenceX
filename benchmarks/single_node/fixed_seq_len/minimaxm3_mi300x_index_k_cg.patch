@@ -1,0 +1,12 @@
+diff --git a/vllm/models/minimax_m3/common/ops/index_topk.py b/vllm/models/minimax_m3/common/ops/index_topk.py
+index 3b606abca..1f8512e2f 100644
+--- a/vllm/models/minimax_m3/common/ops/index_topk.py
++++ b/vllm/models/minimax_m3/common/ops/index_topk.py
+@@ -363,6 +363,7 @@ def _decode_index_score_kernel(
+             + page * stride_ik_blk
+             + off_k[:, None] * stride_ik_pos
+             + off_d * stride_ik_d,
++            cache_modifier=".cg",
+         )  # [N,D]
+         kq = tl.dot(k, q) * sm_scale_log2e  # [N,H]
+         kq = tl.where(pos_mask[:, None], kq, float("-inf"))

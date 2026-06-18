@@ -85,6 +85,39 @@ if [ "$index_topk_sha256" != "$INDEX_TOPK_PATCHED_SHA256" ]; then
 fi
 echo "MI300X index top-k patch ready: $index_topk_sha256"
 
+INDEX_K_CG_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_k_cg.patch"
+INDEX_K_CG_SOURCE_SHA256="36f5132ef789c74b7f88be8bd34a6ca1ea6c3ee6561213305f1db9f1b9cbd6fe"
+INDEX_K_CG_PATCHED_SHA256="262695bbf11566c1df738c7ca118f71c67aab454b996fe911460127cf13b19ac"
+if [ "${M3_INDEX_KV_CACHE_MODE:-bf16}" = "bf16" ]; then
+    index_k_cg_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
+    if [ "$index_k_cg_sha256" = "$INDEX_K_CG_SOURCE_SHA256" ]; then
+        if ! patch --batch --dry-run -d "$VLLM_PACKAGE_ROOT" -p1 \
+            < "$INDEX_K_CG_PATCH"; then
+            echo "Failed to validate the MI300X index K .cg patch" >&2
+            exit 1
+        fi
+        if ! patch --batch -d "$VLLM_PACKAGE_ROOT" -p1 \
+            < "$INDEX_K_CG_PATCH"; then
+            echo "Failed to apply the MI300X index K .cg patch" >&2
+            exit 1
+        fi
+    elif [ "$index_k_cg_sha256" != "$INDEX_K_CG_PATCHED_SHA256" ]; then
+        echo "MI300X index K .cg source fingerprint mismatch: $index_k_cg_sha256" >&2
+        exit 1
+    fi
+    index_k_cg_sha256="$(sha256sum "$INDEX_TOPK_SOURCE" | awk '{print $1}')"
+    if [ "$index_k_cg_sha256" != "$INDEX_K_CG_PATCHED_SHA256" ]; then
+        echo "MI300X index K .cg patched fingerprint mismatch: $index_k_cg_sha256" >&2
+        exit 1
+    fi
+    if ! grep -q 'cache_modifier=".cg"' "$INDEX_TOPK_SOURCE"; then
+        echo "MI300X index K .cg marker is missing after patching" >&2
+        exit 1
+    fi
+    python3 -m py_compile "$INDEX_TOPK_SOURCE"
+    echo "MI300X index K .cg patch ready: $index_k_cg_sha256"
+fi
+
 M3_KV_CACHE_MODE="${M3_KV_CACHE_MODE:-bf16}"
 KV_CACHE_ARGS=()
 case "$M3_KV_CACHE_MODE" in
