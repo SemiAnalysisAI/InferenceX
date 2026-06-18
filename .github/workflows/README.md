@@ -204,10 +204,12 @@ must still contain complete artifacts for the merge run's expected matrix.
 
 The comment is the reuse authorization, so adding it does not trigger or cancel
 a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. GitHub still creates a
-lightweight `pull_request` workflow run so it can inspect the PR comments, but
-the sweep setup and benchmark jobs are skipped. Removing and re-adding a sweep
-label explicitly starts a new sweep.
+full-sweep label do not start another benchmark sweep. GitHub still runs the
+CPU-only `check-changelog` job on the new commit before inspecting the reuse
+authorization. That job validates the complete YAML/schema, append-only entry
+ordering, changed-line whitespace, PR links, and the generated sweep config.
+Only after it passes can the reuse gate skip sweep setup and benchmark jobs.
+Removing and re-adding a sweep label explicitly starts a new sweep.
 
 On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
 commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`

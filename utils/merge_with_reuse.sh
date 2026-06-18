@@ -6,17 +6,20 @@
 #   2. Merge origin/main into the PR branch.  Any `perf-changelog.yaml`
 #      conflict is auto-resolved by accepting main's entries and re-appending
 #      the PR's entry at the bottom with `XXX` -> the PR number.
-#   3. Push the merge commit. The PR synchronize run observes the reuse
-#      authorization and skips sweep setup and benchmark jobs.
-#   4. Squash-merge the PR to main (--admin).
+#   3. Push the merge commit and wait for `check-changelog` on that exact SHA.
+#      The PR synchronize run then observes the reuse authorization and skips
+#      sweep setup and benchmark jobs.
+#   4. Squash-merge the PR to main (--admin) only after validation succeeds.
 #
 # Usage: utils/merge_with_reuse.sh <pr-number>
 # Env:   REPO (default SemiAnalysisAI/InferenceX)
+#        CHECK_TIMEOUT_SECONDS (default 900)
 
 set -euo pipefail
 
 REPO="${REPO:-SemiAnalysisAI/InferenceX}"
 CHANGELOG="perf-changelog.yaml"
+CHECK_TIMEOUT_SECONDS="${CHECK_TIMEOUT_SECONDS:-900}"
 
 if [ $# -ne 1 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
     echo "Usage: $0 <pr-number>" >&2
@@ -27,6 +30,38 @@ PR="$1"
 log() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
+
+wait_for_check() {
+    local sha="$1"
+    local check_name="$2"
+    local deadline=$((SECONDS + CHECK_TIMEOUT_SECONDS))
+
+    log "Waiting for ${check_name} on ${sha:0:8}"
+    while ((SECONDS < deadline)); do
+        local checks check status conclusion details
+        checks="$(gh api "repos/${REPO}/commits/${sha}/check-runs?per_page=100")"
+        check="$(jq -c --arg name "$check_name" '
+            [.check_runs[] | select(.name == $name)]
+            | sort_by(.started_at)
+            | last // {}
+        ' <<<"$checks")"
+        status="$(jq -r '.status // ""' <<<"$check")"
+        conclusion="$(jq -r '.conclusion // ""' <<<"$check")"
+        details="$(jq -r '.details_url // ""' <<<"$check")"
+
+        if [ "$status" = "completed" ]; then
+            if [ "$conclusion" = "success" ]; then
+                ok "${check_name} passed${details:+ — ${details}}"
+                return 0
+            fi
+            die "${check_name} concluded ${conclusion:-unknown}${details:+ — ${details}}"
+        fi
+
+        sleep 5
+    done
+
+    die "Timed out after ${CHECK_TIMEOUT_SECONDS}s waiting for ${check_name} on ${sha}"
+}
 
 ORIGINAL_BRANCH="$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)"
 cleanup() { git checkout --quiet "$ORIGINAL_BRANCH" 2>/dev/null || true; }
@@ -192,8 +227,10 @@ if [ "$PRE_MERGE" = "$POST_MERGE" ]; then
 else
     log "Pushing merge commit ${POST_MERGE:0:8}"
     git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"
-    ok "Push complete; the reuse authorization will suppress the synchronize sweep"
+    ok "Push complete; changelog validation will run before the reuse gate"
 fi
+
+wait_for_check "$POST_MERGE" "check-changelog"
 
 # --- step 4: squash-merge to main -------------------------------------------
 log "Squash-merging PR #${PR} into main"
