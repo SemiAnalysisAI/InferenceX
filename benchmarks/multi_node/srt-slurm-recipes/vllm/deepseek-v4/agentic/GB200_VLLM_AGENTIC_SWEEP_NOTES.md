@@ -130,6 +130,14 @@ NATS/etcd node.
   first confirmed six `mlx5` RDMA devices per node. The worker launch logs
   confirm `UCX_TLS=cuda_copy,rc` with no TCP fallback. This job is a transport
   canary only; official results still require GitHub Actions artifacts.
+- Job `19243` loaded all five model replicas, instantiated UCX on every NIXL
+  worker, registered the GPU KV caches, and reached healthy status without an
+  OOM or transport error. It then exited before sending requests because the
+  dedicated manual checkout had not initialized the `utils/aiperf` submodule;
+  `uv` correctly rejected the empty directory as not being a Python project.
+  GitHub Actions checks out submodules recursively, so this was a manual-canary
+  harness error rather than a recipe or production workflow defect. The rerun
+  initializes submodules explicitly.
 - During initialization, vLLM 0.23 warned on every decode process that Dynamo
   had imported NIXL before vLLM could set `UCX_RCACHE_MAX_UNRELEASED=1024`.
   The repository's existing vLLM disaggregated recipes set this variable on
