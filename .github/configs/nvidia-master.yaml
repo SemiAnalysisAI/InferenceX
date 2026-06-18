@@ -12985,8 +12985,7 @@ minimaxm3-fp8-b200-vllm:
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-b200-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
 # Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, drafter pinned
-# to FLASH_ATTN since the head is MHA and FlashInfer needs GQA/MQA at page
-# size 128). Search space mirrors the non-MTP entry trimmed at the
+# to TRITON_ATTN). Search space mirrors the non-MTP entry trimmed at the
 # extreme-concurrency end, identical to the minimaxm3-fp8-b300-vllm-mtp
 # precedent: spec decode pays off at low/mid concurrency while acceptance
 # dilutes in big batches, and the draft weights + draft KV shave headroom.

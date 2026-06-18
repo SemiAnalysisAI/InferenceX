@@ -62,7 +62,7 @@ $PARALLEL_ARGS \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --attention-config '{"backend": "FLASHINFER", "use_trtllm_attention": true}' \
---attention-config.indexer_kv_dtype fp8 \
+--attention-config.indexer_kv_dtype "fp8" \
 --kv-cache-dtype fp8 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
