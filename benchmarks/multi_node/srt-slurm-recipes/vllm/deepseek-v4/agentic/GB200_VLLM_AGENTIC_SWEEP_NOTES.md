@@ -105,6 +105,24 @@ NATS/etcd node.
 - `kv_buffer_size` was not changed: in vLLM 0.23 it does not size the
   `NixlConnector` transfer path, so changing it would not address this fault.
 
+### CuMem load failure and RDMA transport
+
+- Official run `27738234911` tested all four c64 topologies with the CuMem
+  allocator enabled and a scenario-compliant 900-second duration.
+- Every topology failed during TP8 decode model initialization before serving
+  requests. FlashInfer NVFP4 MoE weight conversion requested 20 MiB with only
+  11.5--11.6 MiB free on most ranks. vLLM reported 183.98 GiB in use per GPU,
+  including 68.79 GiB in the CuMem private pool.
+- The successful non-CuMem decode from `27734909066` loaded the same model in
+  107.98 GiB/GPU and subsequently allocated a 9.16-million-token KV cache.
+- CuMem is therefore not viable for this TP8 NVFP4 topology in vLLM 0.23. The
+  recipes now use the cluster's UCX reliable-connection RDMA transport
+  (`UCX_TLS=cuda_copy,rc`) for NIXL instead. This transport is already used by
+  the repository's GB200 vLLM disaggregated recipes for other models and does
+  not require VMM-backed allocations.
+- TCP is intentionally omitted so an unavailable RDMA transport fails visibly
+  instead of silently reproducing the 14--25 MiB/s data path.
+
 ### Slurm job-name prefix (branch-only historical workaround)
 
 - This branch prefixes GB200 Slurm jobs with `ifx-` in
@@ -135,7 +153,7 @@ NATS/etcd node.
 | `27732541012` | 4P/1D c64, old Dynamo/NATS | Failed warmup | 45/85 errors; empty router indexes; KV-event decode errors; HTTP 503 overloads |
 | `27734909066` | 4P/1D c64, new Dynamo/TCP | Success | Official artifact; clean 85/85 warmup and 99/99 profiled requests |
 | `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
-| `27738234911` | c64 topology sweep, VMM enabled | Queued | Four P/D topologies, 900-second scenario-compliant duration |
+| `27738234911` | c64 topology sweep, VMM enabled | Failed | All four decode workers OOM during NVFP4 weight conversion before serving; no benchmark results |
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 

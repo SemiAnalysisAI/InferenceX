@@ -75,8 +75,9 @@ backend:
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    # TP8 NVFP4 exhausts device memory when vLLM's CuMem allocator wraps model
+    # loading. Use the cluster's RDMA transport for NIXL KV transfers instead.
+    UCX_TLS: "cuda_copy,rc"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
     DYN_REQUEST_PLANE: "tcp"
@@ -89,8 +90,7 @@ backend:
     VLLM_SERVER_DEV_MODE: "1"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    UCX_TLS: "cuda_copy,rc"
     NCCL_P2P_LEVEL: NVL
 
   vllm_config:
@@ -116,10 +116,6 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
-      # GB200 multi-node NVLink requires VMM-backed KV allocations so NIXL can
-      # register CUDA IPC memory across NVLink domains instead of falling back
-      # to the host network transport.
-      enable-cumem-allocator: true
       tokenizer-mode: deepseek_v4
     decode:
       # Decode is the only decode replica, so a deterministic cross-node TP8
@@ -141,7 +137,6 @@ backend:
       stream-interval: 50
       all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
-      enable-cumem-allocator: true
       tokenizer-mode: deepseek_v4
 
 sbatch_directives:
