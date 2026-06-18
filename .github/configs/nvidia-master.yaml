@@ -12990,7 +12990,7 @@ minimaxm3-fp8-b200-vllm:
 # precedent: spec decode pays off at low/mid concurrency while acceptance
 # dilutes in big batches, and the draft weights + draft KV shave headroom.
 minimaxm3-fp8-b200-vllm-mtp:
-  image: vllm/vllm-openai:minimax-m3-0618
+  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b200-dgxc
