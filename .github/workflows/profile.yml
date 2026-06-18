@@ -18,10 +18,27 @@ on:
         type: string
         default: '64'
       seq-lens:
-        description: "Space-separated sequence lengths (1k1k and/or 8k1k)"
+        description: "Space-separated sequence lengths"
         required: false
         type: string
         default: '1k1k'
+      m3-profile-phase:
+        description: "MiniMax M3 phase to capture"
+        required: false
+        type: choice
+        options:
+          - decode
+          - prefill
+        default: decode
+      m3-profile-token-budget:
+        description: "MiniMax M3 max batched tokens while profiling"
+        required: false
+        type: choice
+        options:
+          - '8192'
+          - '16384'
+          - '32768'
+        default: '8192'
       moe-debug:
         description: "Enable MoE debug patch and log (MOE_DEBUG_LOG)"
         required: false
@@ -111,6 +128,8 @@ jobs:
               (
                   item["runner"],
                   item["exp-name"],
+                  item["isl"],
+                  item["osl"],
                   item["tp"],
                   item.get("ep", 1),
                   item["conc"],
@@ -131,10 +150,10 @@ jobs:
     timeout-minutes: 500
     strategy:
       fail-fast: false
-      max-parallel: 4
+      max-parallel: 1
       matrix:
         config: ${{ fromJson(needs.get-jobs.outputs.filtered-matrix) }}
-    runs-on: ${{ matrix.config.runner }}
+    runs-on: ${{ matrix.config.runner == 'mi300x' && 'mi300x-amds_04' || matrix.config.runner }}
     env:
       EXP_NAME: ${{ matrix.config.exp-name }}
       MODEL: ${{ matrix.config.model }}
@@ -154,6 +173,9 @@ jobs:
       RUN_EVAL: 'false'
       EVAL_ONLY: 'false'
       SCENARIO_SUBDIR: ${{ matrix.config['scenario-type'] == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
+      M3_PROFILE_NODE: chi-mi300x-035
+      M3_PROFILE_PHASE: ${{ inputs.m3-profile-phase }}
+      M3_PROFILE_TOKEN_BUDGET: ${{ inputs.m3-profile-token-budget }}
       MOE_DEBUG: '0'
       MOE_DEBUG_LOG: ${{ inputs.moe-debug && '/workspace/moe_debug.tp0.log' || '' }}
     steps:
@@ -180,7 +202,7 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          ref: ${{ inputs.ref || github.sha }}
+          ref: ${{ needs.get-jobs.outputs.source-sha }}
           clean: true
 
       - name: Launch and profile
@@ -193,7 +215,8 @@ jobs:
         run: |
           set -euo pipefail
           ep_val="${EP_SIZE:-1}"
-          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}"
+          profile_suffix="_${M3_PROFILE_PHASE}_bt${M3_PROFILE_TOKEN_BUDGET}"
+          res_name="${EXP_NAME}_${PRECISION}_${FRAMEWORK}_tp${TP}_ep${ep_val}_dpa-${DP_ATTENTION}_conc${CONC}_${RUNNER_NAME}${profile_suffix}"
           trace_path="profile_${res_name}.trace.json.gz"
           summary_path="profile_summary_${res_name}.json"
 
@@ -218,6 +241,7 @@ jobs:
           python3 utils/analyze_profile_trace.py \
             "$trace_path" \
             --expected-concurrency "$CONC" \
+            --phase "$M3_PROFILE_PHASE" \
             --output "$summary_path"
 
           echo "trace=$trace_path" >> "$GITHUB_OUTPUT"
