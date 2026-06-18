@@ -2928,11 +2928,10 @@ minimaxm3-fp8-mi300x-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
-# MiniMax-M3 MXFP8 MI325X day-zero recipe. Reuse the dedicated ROCm image
-# and serving flags validated on MI355X, with the H200 search space: TP4 and
-# TP8 latency, TP4/TP8 expert parallelism, and TP8 data-parallel attention.
+# MiniMax-M3 MXFP8 MI325X recipe, with the H200 search space: TP4 and TP8
+# latency, TP4/TP8 expert parallelism, and TP8 data-parallel attention.
 minimaxm3-fp8-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi325x

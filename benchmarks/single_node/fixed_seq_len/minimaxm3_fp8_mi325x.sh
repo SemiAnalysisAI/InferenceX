@@ -53,6 +53,7 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --block-size 128 \
+    --kv-cache-dtype fp8 \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \

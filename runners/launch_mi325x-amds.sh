@@ -13,7 +13,8 @@ SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
-JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+# pod2-120 lacks the populated /raid/hf-hub-cache required by the launcher.
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi325x-pod2-120.ord.vultr.cpe.ice.amd.com --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job" >&2
