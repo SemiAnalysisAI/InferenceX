@@ -3925,6 +3925,12 @@
     - "Add day-zero MiniMax-M3 MXFP4 (amd/MiniMax-M3-MXFP4) single-node atom benchmark on MI355X, following the ROCm/ATOM MiniMax-M3 recipe (TP4, block size 128 for MSA, default KV cache dtype)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1813
 
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+  description:
+    - "Expand search space for minimaxm3-fp4-mi355x-atom: add TP2 and TP8 configurations, extend concurrency range to 256 for ISL1024 and ISL8192, and add TP8 conc=1-2 for ISL8192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/new/amd/m3_atom
+
   
 - config-keys:
     - glm5-fp4-gb300-dynamo-trt
