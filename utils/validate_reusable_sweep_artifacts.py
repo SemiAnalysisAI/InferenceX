@@ -7,6 +7,7 @@ import argparse
 import csv
 import json
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -147,14 +148,21 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
-    """Build actual fixed-sequence identities from results_bmk."""
+def actual_benchmark_key_rows(
+    artifacts_dir: Path,
+) -> list[tuple[Any, ...]]:
+    """Build actual fixed-sequence identity rows from results_bmk."""
     paths = (artifacts_dir / "results_bmk").glob("*.json")
-    return {
+    return [
         benchmark_key(row)
         for _, row in json_rows(paths)
         if row.get("scenario_type") != "agentic-coding"
-    }
+    ]
+
+
+def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
+    """Build the set of actual fixed-sequence identities."""
+    return set(actual_benchmark_key_rows(artifacts_dir))
 
 
 def expected_agentic_keys(config: dict[str, Any]) -> set[tuple[Any, ...]]:
@@ -246,15 +254,20 @@ def agentic_point_files(artifacts_dir: Path) -> list[Path]:
     return sorted(set(paths))
 
 
+def agentic_keys_from_paths(paths: Iterable[Path]) -> list[tuple[Any, ...]]:
+    """Build agentic identity rows from aggregate or point-result paths."""
+    return [
+        agentic_key(row)
+        for _, row in json_rows(paths)
+        if row.get("scenario_type") == "agentic-coding"
+    ]
+
+
 def actual_agentic_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
     """Build actual agentic identities from aggregate and point results."""
     paths = list((artifacts_dir / "results_bmk").glob("*.json"))
     paths.extend(agentic_point_files(artifacts_dir))
-    return {
-        agentic_key(row)
-        for _, row in json_rows(paths)
-        if row.get("scenario_type") == "agentic-coding"
-    }
+    return set(agentic_keys_from_paths(paths))
 
 
 def validate_identity_set(
@@ -281,13 +294,70 @@ def validate_identity_set(
     return errors
 
 
+def duplicate_identity_errors(
+    label: str,
+    identities: Iterable[tuple[Any, ...]],
+) -> list[str]:
+    """Reject duplicate rows that set equality would otherwise hide."""
+    counts = Counter(identities)
+    duplicates = {
+        identity: count
+        for identity, count in counts.items()
+        if count > 1
+    }
+    if not duplicates:
+        return []
+
+    duplicate_rows = sum(count - 1 for count in duplicates.values())
+    errors = [
+        f"{label} artifacts contain {duplicate_rows} duplicate row(s)"
+    ]
+    for identity, count in sorted(
+        duplicates.items(),
+        key=lambda item: repr(item[0]),
+    )[:20]:
+        errors.append(f"  duplicate x{count}: {identity}")
+    if len(duplicates) > 20:
+        errors.append(f"  ... and {len(duplicates) - 20} more identities")
+    return errors
+
+
+def validate_fixed_artifacts(
+    artifacts_dir: Path,
+    expected: set[tuple[Any, ...]],
+) -> list[str]:
+    """Validate exact fixed-sequence rows, including duplicates."""
+    actual_rows = actual_benchmark_key_rows(artifacts_dir)
+    return [
+        *duplicate_identity_errors("fixed-sequence", actual_rows),
+        *validate_identity_set("fixed-sequence", expected, set(actual_rows)),
+    ]
+
+
 def validate_agentic_artifacts(
     artifacts_dir: Path,
     expected: set[tuple[Any, ...]],
 ) -> list[str]:
     """Validate exact agentic point, raw, and aggregate artifact coverage."""
-    actual = actual_agentic_keys(artifacts_dir)
-    errors = validate_identity_set("agentic", expected, actual)
+    point_rows = agentic_keys_from_paths(agentic_point_files(artifacts_dir))
+    errors = [
+        *duplicate_identity_errors("agentic point", point_rows),
+        *validate_identity_set("agentic", expected, set(point_rows)),
+    ]
+
+    results_bmk = artifacts_dir / "results_bmk"
+    if results_bmk.is_dir():
+        aggregate_rows = agentic_keys_from_paths(results_bmk.glob("*.json"))
+        errors.extend(
+            duplicate_identity_errors("agentic aggregate", aggregate_rows)
+        )
+        errors.extend(
+            validate_identity_set(
+                "agentic aggregate",
+                expected,
+                set(aggregate_rows),
+            )
+        )
 
     point_names = {
         path.relative_to(artifacts_dir).parts[0].removeprefix("bmk_")
@@ -317,11 +387,21 @@ def validate_agentic_artifacts(
             errors.append("missing agentic_aggregated/summary.csv")
         else:
             with open(summary_path, newline="") as handle:
-                summary_names = {
+                summary_rows = [
                     str(row.get("exp_name") or "")
                     for row in csv.DictReader(handle)
                     if row.get("exp_name")
-                }
+                ]
+            duplicate_names = [
+                name
+                for name, count in Counter(summary_rows).items()
+                if count > 1
+            ]
+            for name in sorted(duplicate_names):
+                errors.append(
+                    f"agentic aggregate has duplicate experiment: {name}"
+                )
+            summary_names = set(summary_rows)
             if summary_names != raw_names:
                 for name in sorted(raw_names - summary_names):
                     errors.append(f"agentic aggregate is missing experiment: {name}")
@@ -478,14 +558,24 @@ def validate_eval_artifacts(
     """Validate exact eval aggregate and raw artifact coverage."""
     errors: list[str] = []
     expected = set(expected_prefixes)
+    duplicate_prefixes = [
+        prefix
+        for prefix, count in Counter(expected_prefixes).items()
+        if count > 1
+    ]
+    for prefix in sorted(duplicate_prefixes):
+        errors.append(f"duplicate expected eval artifact prefix: {prefix}")
+
     actual_names = raw_eval_artifact_names(artifacts_dir)
-    matched: set[str] = set()
+    matched: dict[str, list[str]] = {
+        prefix: [] for prefix in expected
+    }
     unexpected: set[str] = set()
 
     for name in actual_names:
         matches = {prefix for prefix in expected if name.startswith(prefix)}
         if len(matches) == 1:
-            matched.update(matches)
+            matched[next(iter(matches))].append(name)
         elif not matches:
             unexpected.add(name)
         else:
@@ -493,7 +583,9 @@ def validate_eval_artifacts(
                 f"eval artifact {name!r} matches multiple expected identities"
             )
 
-    missing = expected - matched
+    missing = {
+        prefix for prefix, names in matched.items() if not names
+    }
     if missing:
         errors.append(f"missing {len(missing)} expected raw eval result artifact dir(s)")
         for prefix in sorted(missing)[:20]:
@@ -506,6 +598,12 @@ def validate_eval_artifacts(
             errors.append(f"  unexpected eval artifact: {name}")
         if len(unexpected) > 20:
             errors.append(f"  ... and {len(unexpected) - 20} more")
+    for prefix, names in sorted(matched.items()):
+        if len(names) > 1:
+            errors.append(
+                f"eval artifact prefix {prefix!r} matched "
+                f"{len(names)} raw result artifact dirs"
+            )
 
     aggregate_dir = artifacts_dir / "eval_results_all"
     aggregate_files = list(aggregate_dir.glob("*.json"))
@@ -514,12 +612,12 @@ def validate_eval_artifacts(
             errors.append("missing eval_results_all aggregate artifact")
         else:
             row_count = 0
-            aggregate_keys: set[tuple[Any, ...]] = set()
+            aggregate_rows: list[tuple[Any, ...]] = []
             for path in aggregate_files:
                 data = load_json(path)
                 if isinstance(data, list):
                     row_count += len(data)
-                    aggregate_keys.update(
+                    aggregate_rows.extend(
                         eval_key(row)
                         for row in data
                         if isinstance(row, dict)
@@ -528,10 +626,16 @@ def validate_eval_artifacts(
                 errors.append("eval_results_all contains no rows")
             if expected_aggregate_keys is not None:
                 errors.extend(
+                    duplicate_identity_errors(
+                        "eval aggregate",
+                        aggregate_rows,
+                    )
+                )
+                errors.extend(
                     validate_identity_set(
                         "eval aggregate",
                         expected_aggregate_keys,
-                        aggregate_keys,
+                        set(aggregate_rows),
                     )
                 )
     elif aggregate_dir.exists():
@@ -565,16 +669,11 @@ def main() -> int:
         )
 
     expected_bmk = expected_benchmark_keys(config)
-    actual_bmk = actual_benchmark_keys(args.artifacts_dir)
     expected_agentic = expected_agentic_keys(config)
     expected_eval_prefixes = expected_eval_artifact_prefixes(config)
     expected_eval_aggregate = expected_eval_keys(config)
 
-    errors = validate_identity_set(
-        "fixed-sequence",
-        expected_bmk,
-        actual_bmk,
-    )
+    errors = validate_fixed_artifacts(args.artifacts_dir, expected_bmk)
     if expected_bmk and not (args.artifacts_dir / "results_bmk").is_dir():
         errors.insert(0, "missing results_bmk benchmark aggregate artifact")
     errors.extend(

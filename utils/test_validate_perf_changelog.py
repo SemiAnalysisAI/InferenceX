@@ -214,6 +214,16 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
 
     assert "needs" not in jobs["check-changelog"]
     assert {"opened", "reopened"}.issubset(set(pull_request_types))
+    check_step_names = [
+        step.get("name")
+        for step in jobs["check-changelog"]["steps"]
+    ]
+    setup_step_names = [
+        step.get("name")
+        for step in jobs["setup"]["steps"]
+    ]
+    assert "Reject conflicting sweep labels" in check_step_names
+    assert "Reject conflicting sweep labels" not in setup_step_names
     assert jobs["check-changelog"]["outputs"]["has-additions"] == (
         "${{ steps.validate.outputs.has-additions }}"
     )
@@ -252,3 +262,5 @@ def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
     assert push_index < wait_index < merge_index
     assert "prepare_perf_changelog_merge.py" in script
     assert "git commit --allow-empty" in script
+    assert script.count('CURRENT_HEAD="$(gh pr view') == 2
+    assert "must have exactly one sweep label" in script

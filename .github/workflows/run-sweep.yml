@@ -45,6 +45,29 @@ jobs:
             has-additions: ${{ steps.validate.outputs.has-additions }}
             metadata-only: ${{ steps.validate.outputs.metadata-only }}
         steps:
+            - name: Reject conflicting sweep labels
+              if: github.event_name == 'pull_request'
+              env:
+                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+              run: |
+                  count=$(jq '
+                    [
+                      .[] |
+                      select(
+                        . == "sweep-enabled" or
+                        . == "full-sweep-enabled" or
+                        . == "non-canary-full-sweep-enabled" or
+                        . == "full-sweep-fail-fast" or
+                        . == "full-sweep-fail-fast-no-canary"
+                      )
+                    ] |
+                    length
+                  ' <<<"$SWEEP_LABELS")
+                  if [ "$count" -gt 1 ]; then
+                      echo "::error::PR has multiple conflicting sweep labels. Pick exactly one."
+                      exit 1
+                  fi
+
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
@@ -160,25 +183,6 @@ jobs:
             reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
-            - name: Reject conflicting sweep labels
-              if: >-
-                  github.event_name == 'pull_request' &&
-                  (
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary')) ||
-                    (contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast') && contains(github.event.pull_request.labels.*.name, 'full-sweep-fail-fast-no-canary'))
-                  )
-              run: |
-                  echo "::error::PR has multiple conflicting sweep labels. Pick exactly one of: 'sweep-enabled' (trims to min(conc) per parallelism config), 'full-sweep-enabled' (full intermediate concurrency sweep, with canary gate), 'non-canary-full-sweep-enabled' (full sweep, no canary gate), 'full-sweep-fail-fast' (full sweep behind the canary gate, first failure in a matrix cancels that matrix's remaining jobs), or 'full-sweep-fail-fast-no-canary' (the same, without the canary gate)."
-                  exit 1
-
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:

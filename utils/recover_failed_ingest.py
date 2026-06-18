@@ -534,11 +534,26 @@ def validate_recovery_workflow(path: Path, pr_number: int) -> None:
         raise RecoveryError("recovery job must run only on ubuntu-latest")
     if "strategy" in job or "uses" in job:
         raise RecoveryError("recovery job may not use a matrix or reusable workflow")
+    job_permissions = job.get("permissions")
+    if job_permissions is not None and (
+        not isinstance(job_permissions, dict)
+        or any(
+            value not in {"read", "none"}
+            for value in job_permissions.values()
+        )
+    ):
+        raise RecoveryError(
+            "recovery job permissions must be explicitly read-only"
+        )
+
     expected_confirmation = f"recover-pr-{pr_number}"
     confirmation_pattern = re.compile(
-        rf"inputs\.confirm\s*==\s*['\"]{re.escape(expected_confirmation)}['\"]"
+        rf"(?:\$\{{\{{\s*)?"
+        rf"inputs\.confirm\s*==\s*"
+        rf"(?P<quote>['\"]){re.escape(expected_confirmation)}(?P=quote)"
+        rf"(?:\s*\}}\}})?"
     )
-    if not confirmation_pattern.search(str(job.get("if") or "")):
+    if not confirmation_pattern.fullmatch(str(job.get("if") or "").strip()):
         raise RecoveryError(
             f"recovery job must require confirmation {expected_confirmation!r}"
         )

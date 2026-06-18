@@ -196,6 +196,62 @@ jobs:
         validate_recovery_workflow(workflow, 42)
 
 
+def test_validate_recovery_workflow_rejects_job_write_permissions(
+    tmp_path: Path,
+) -> None:
+    workflow = tmp_path / "recover.yml"
+    workflow.write_text(
+        """name: Recover
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  recover:
+    if: ${{ inputs.confirm == 'recover-pr-42' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - run: echo recover
+"""
+    )
+
+    with pytest.raises(RecoveryError, match="job permissions"):
+        validate_recovery_workflow(workflow, 42)
+
+
+def test_validate_recovery_workflow_rejects_bypassable_confirmation(
+    tmp_path: Path,
+) -> None:
+    workflow = tmp_path / "recover.yml"
+    workflow.write_text(
+        """name: Recover
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  recover:
+    if: ${{ inputs.confirm == 'recover-pr-42' || always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo recover
+"""
+    )
+
+    with pytest.raises(RecoveryError, match="require confirmation"):
+        validate_recovery_workflow(workflow, 42)
+
+
 def test_synthetic_commit_uses_base_tree_plus_only_changelog(
     tmp_path: Path,
 ) -> None:

@@ -14,6 +14,7 @@ from validate_reusable_sweep_artifacts import (
     main,
     validate_agentic_artifacts,
     validate_eval_artifacts,
+    validate_fixed_artifacts,
     validate_identity_set,
 )
 
@@ -244,6 +245,18 @@ def test_eval_validation_rejects_unexpected_result_dir(tmp_path: Path) -> None:
     assert "found 1 unexpected raw eval artifact dir(s)" in errors
 
 
+def test_eval_validation_rejects_duplicate_raw_identity(tmp_path: Path) -> None:
+    config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
+    prefixes = expected_eval_artifact_prefixes(config)
+    write_eval_aggregate(tmp_path)
+    (tmp_path / f"{prefixes[0]}00").mkdir()
+    (tmp_path / f"{prefixes[0]}01").mkdir()
+
+    errors = validate_eval_artifacts(tmp_path, prefixes)
+
+    assert any("matched 2 raw result artifact dirs" in error for error in errors)
+
+
 def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:
     config = {
         "evals": [single_eval_entry(32)],
@@ -263,6 +276,29 @@ def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:
     )
 
     assert "eval aggregate artifacts contain 1 unexpected row(s)" in errors
+
+
+def test_eval_aggregate_validation_rejects_duplicate_identity(
+    tmp_path: Path,
+) -> None:
+    config = {
+        "evals": [single_eval_entry(32)],
+        "multinode_evals": [],
+    }
+    prefixes = expected_eval_artifact_prefixes(config)
+    write_eval_aggregate(
+        tmp_path,
+        [single_eval_result(32), single_eval_result(32)],
+    )
+    (tmp_path / f"{prefixes[0]}00").mkdir()
+
+    errors = validate_eval_artifacts(
+        tmp_path,
+        prefixes,
+        expected_eval_keys(config),
+    )
+
+    assert "eval aggregate artifacts contain 1 duplicate row(s)" in errors
 
 
 def test_fixed_sequence_validation_is_exact(tmp_path: Path) -> None:
@@ -286,6 +322,30 @@ def test_fixed_sequence_validation_is_exact(tmp_path: Path) -> None:
     )
 
     assert "fixed-sequence artifacts contain 1 unexpected row(s)" in errors
+
+
+def test_fixed_sequence_validation_rejects_duplicate_identity(
+    tmp_path: Path,
+) -> None:
+    config = {
+        "single_node": {
+            "1k1k": [single_fixed_entry(8)],
+            "8k1k": [],
+        },
+        "multi_node": {"1k1k": [], "8k1k": []},
+    }
+    results = tmp_path / "results_bmk"
+    results.mkdir()
+    (results / "agg_bmk.json").write_text(
+        json.dumps([fixed_result(8), fixed_result(8)])
+    )
+
+    errors = validate_fixed_artifacts(
+        tmp_path,
+        expected_benchmark_keys(config),
+    )
+
+    assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
 
 
 def test_agentic_validation_checks_points_raw_and_aggregate(tmp_path: Path) -> None:
@@ -341,6 +401,51 @@ def test_agentic_validation_rejects_extra_identity(tmp_path: Path) -> None:
     )
 
     assert "agentic artifacts contain 1 unexpected row(s)" in errors
+
+
+def test_agentic_validation_requires_point_and_raw_artifacts(
+    tmp_path: Path,
+) -> None:
+    config = {
+        "single_node": {"agentic": [single_agentic_entry()]},
+        "multi_node": {"agentic": []},
+    }
+    aggregate = tmp_path / "results_bmk"
+    aggregate.mkdir()
+    (aggregate / "agg_bmk.json").write_text(
+        json.dumps([agentic_result()])
+    )
+
+    errors = validate_agentic_artifacts(
+        tmp_path,
+        expected_agentic_keys(config),
+    )
+
+    assert "agentic artifacts are missing 1 expected row(s)" in errors
+
+
+def test_agentic_validation_rejects_duplicate_point_identity(
+    tmp_path: Path,
+) -> None:
+    config = {
+        "single_node": {"agentic": [single_agentic_entry()]},
+        "multi_node": {"agentic": []},
+    }
+    write_agentic_artifacts(tmp_path, aggregate=False)
+    point_dir = (
+        tmp_path / "bmk_agentic_dsv4_tp8_conc16_offloadcpu_result"
+    )
+    result_path = next(point_dir.glob("*.json"))
+    result_path.write_text(
+        json.dumps([agentic_result(), agentic_result()])
+    )
+
+    errors = validate_agentic_artifacts(
+        tmp_path,
+        expected_agentic_keys(config),
+    )
+
+    assert "agentic point artifacts contain 1 duplicate row(s)" in errors
 
 
 def test_eval_only_main_does_not_require_benchmark_artifacts(

@@ -88,15 +88,29 @@ PR_STATE="$(jq -r '.state' <<<"$PR_INFO")"
     || die "PR #${PR} is from a fork; the merge helper cannot update its branch"
 
 HEAD_BRANCH="$(jq -r '.headRefName' <<<"$PR_INFO")"
-HAS_FULL_SWEEP="$(jq -r '
-    [.labels[].name] as $names
-    | if (($names | index("full-sweep-enabled")) != null)
-         or (($names | index("non-canary-full-sweep-enabled")) != null)
-         or (($names | index("full-sweep-fail-fast")) != null)
-         or (($names | index("full-sweep-fail-fast-no-canary")) != null)
-      then "1" else "" end
+SWEEP_LABELS="$(jq -c '
+    [
+      .labels[].name |
+      select(
+        . == "sweep-enabled" or
+        . == "full-sweep-enabled" or
+        . == "non-canary-full-sweep-enabled" or
+        . == "full-sweep-fail-fast" or
+        . == "full-sweep-fail-fast-no-canary"
+      )
+    ]
 ' <<<"$PR_INFO")"
-[ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing a full-sweep label ('full-sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast', or 'full-sweep-fail-fast-no-canary')"
+SWEEP_LABEL_COUNT="$(jq 'length' <<<"$SWEEP_LABELS")"
+[ "$SWEEP_LABEL_COUNT" -eq 1 ] \
+    || die "PR #${PR} must have exactly one sweep label"
+SELECTED_SWEEP_LABEL="$(jq -r '.[0]' <<<"$SWEEP_LABELS")"
+case "$SELECTED_SWEEP_LABEL" in
+    full-sweep-enabled|non-canary-full-sweep-enabled|full-sweep-fail-fast|full-sweep-fail-fast-no-canary)
+        ;;
+    *)
+        die "PR #${PR} must use a full-sweep label for artifact reuse"
+        ;;
+esac
 
 # Fail early unless a successful run with reusable artifacts exists on a
 # current PR commit. This excludes reuse-gate-only success runs.
@@ -195,9 +209,17 @@ ok "Push complete; changelog validation will run before the reuse gate"
 wait_for_check "$POST_MERGE" "check-changelog"
 
 # --- step 4: squash-merge to main -------------------------------------------
+CURRENT_HEAD="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq '.headRefOid')"
+[ "$CURRENT_HEAD" = "$POST_MERGE" ] \
+    || die "PR head changed to ${CURRENT_HEAD:0:8}; expected ${POST_MERGE:0:8}"
+
 log "Waiting for all PR checks"
 gh pr checks "$PR" --repo "$REPO" --watch --fail-fast
 ok "All PR checks passed"
+
+CURRENT_HEAD="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq '.headRefOid')"
+[ "$CURRENT_HEAD" = "$POST_MERGE" ] \
+    || die "PR head changed to ${CURRENT_HEAD:0:8}; expected ${POST_MERGE:0:8}"
 
 log "Squash-merging PR #${PR} into main"
 gh pr merge "$PR" --repo "$REPO" --squash --admin >/dev/null
