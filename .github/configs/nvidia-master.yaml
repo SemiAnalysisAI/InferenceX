@@ -13028,7 +13028,7 @@ minimaxm3-fp8-b200-vllm-mtp:
 # big batches, and the draft weights + draft KV shave headroom — tp2-ep2 is
 # dropped entirely since its KV headroom was already thin without a draft.
 minimaxm3-fp8-b300-vllm-mtp:
-  image: vllm/vllm-openai:minimax-m3-0618
+  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
