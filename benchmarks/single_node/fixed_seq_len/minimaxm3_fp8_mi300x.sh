@@ -1,12 +1,11 @@
 #!/usr/bin/env bash
 
 # MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe.
-# Reuses the dedicated ROCm image and applies the checked-in hybrid gfx94x
-# MXFP8 MoE patch. Short-context EP8 uses the measured native/BF16 policy;
-# long-context EP8 compacts local decode routes and uses low-padding BF16 GEMMs.
-# Block size 128 is mandatory for MSA sparse attention. Keep the default BF16
-# KV cache on gfx942: the checkpoint has no calibrated q/prob scales for ROCm
-# FP8 attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
+# Reuses the dedicated ROCm image and converts MXFP8 MoE weights to 128x128
+# block FP8 at load time. Block size 128 is mandatory for MSA sparse attention.
+# Keep the default BF16 KV cache on gfx942: the checkpoint has no calibrated
+# q/prob scales for ROCm FP8 attention, and vLLM's fallback scale of 1.0
+# corrupts model accuracy.
 # Target image vLLM revision: 4a560dd8db67c270f5e2afb614558271b76f2294.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -27,36 +26,43 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-VLLM_PACKAGE_ROOT="$(
-    python - <<'PY'
+if ! VLLM_PACKAGE_ROOT="$(
+    python3 - <<'PY'
 from pathlib import Path
 
 import vllm
 
 print(Path(vllm.__file__).resolve().parent.parent)
 PY
-)"
+)"; then
+    echo "Failed to locate the installed vLLM package" >&2
+    exit 1
+fi
+if [[ -z "$VLLM_PACKAGE_ROOT" || ! -d "$VLLM_PACKAGE_ROOT/vllm" ]]; then
+    echo "Invalid installed vLLM package root: $VLLM_PACKAGE_ROOT" >&2
+    exit 1
+fi
+
 MXFP8_PATCH="$(dirname "$0")/minimaxm3_mi300x_mxfp8.patch"
-MXFP8_EP_PATCH="$(dirname "$0")/minimaxm3_mi300x_ep_mxfp8.patch"
-MXFP8_ORACLE="$VLLM_PACKAGE_ROOT/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py"
-if ! grep -q "Using fused CDNA3 (gfx94x)" "$MXFP8_ORACLE"; then
+if [[ ! -f "$MXFP8_PATCH" ]]; then
+    echo "MI300X MXFP8 patch is missing: $MXFP8_PATCH" >&2
+    exit 1
+fi
+
+PATCH_CHECK_ARGS=(--batch --silent -d "$VLLM_PACKAGE_ROOT" -p1 --dry-run)
+if patch "${PATCH_CHECK_ARGS[@]}" --reverse --forward < "$MXFP8_PATCH"; then
+    echo "MI300X MXFP8 patch is already fully applied"
+elif patch "${PATCH_CHECK_ARGS[@]}" --forward < "$MXFP8_PATCH"; then
     if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$MXFP8_PATCH"; then
         echo "Failed to apply the MI300X MXFP8 patch" >&2
         exit 1
     fi
-fi
-if ! grep -q "Using fused CDNA3 (gfx94x)" "$MXFP8_ORACLE"; then
-    echo "MI300X MXFP8 backend marker is missing after patching" >&2
+else
+    echo "Installed vLLM is neither cleanly patchable nor fully patched" >&2
     exit 1
 fi
-if ! grep -q "profiled gfx94x MiniMax-M3 EP8" "$MXFP8_ORACLE"; then
-    if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$MXFP8_EP_PATCH"; then
-        echo "Failed to apply the MI300X EP8 MXFP8 optimization patch" >&2
-        exit 1
-    fi
-fi
-if ! grep -q "profiled gfx94x MiniMax-M3 EP8" "$MXFP8_ORACLE"; then
-    echo "MI300X EP8 MXFP8 optimization marker is missing after patching" >&2
+if ! patch "${PATCH_CHECK_ARGS[@]}" --reverse --forward < "$MXFP8_PATCH"; then
+    echo "MI300X MXFP8 patch verification failed" >&2
     exit 1
 fi
 
