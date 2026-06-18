@@ -73,6 +73,9 @@ def test_mi300x_profile_scratch_does_not_create_workspace_directories():
         REPO_ROOT
         / "benchmarks/single_node/fixed_seq_len/minimaxm3_fp8_mi300x.sh"
     ).read_text(encoding="utf-8")
+    benchmark_lib = (REPO_ROOT / "benchmarks/benchmark_lib.sh").read_text(
+        encoding="utf-8"
+    )
 
     assert "/workspace/profile_traces" not in workflow
     assert "/workspace/profile_traces" not in recipe
@@ -87,3 +90,6 @@ def test_mi300x_profile_scratch_does_not_create_workspace_directories():
     )
     assert 'benchmark_random_range_ratio="1.0"' in recipe
     assert '--output-len "$benchmark_output_len"' in recipe
+    assert 'benchmark_num_warmups="$CONC"' in recipe
+    assert '--num-warmups "$benchmark_num_warmups"' in recipe
+    assert '--num-warmups "$num_warmups"' in benchmark_lib

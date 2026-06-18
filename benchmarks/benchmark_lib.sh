@@ -185,6 +185,7 @@ wait_for_server_ready() {
 #   --random-range-ratio: Random range ratio
 #   --num-prompts: Number of prompts
 #   --max-concurrency: Max concurrency
+#   --num-warmups: Optional number of warmup requests (default: 2 * max concurrency)
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
@@ -210,6 +211,7 @@ run_benchmark_serving() {
     local random_range_ratio=""
     local num_prompts=""
     local max_concurrency=""
+    local num_warmups=""
     local result_filename=""
     local result_dir=""
     local workspace_dir=""
@@ -255,6 +257,10 @@ run_benchmark_serving() {
                 ;;
             --max-concurrency)
                 max_concurrency="$2"
+                shift 2
+                ;;
+            --num-warmups)
+                num_warmups="$2"
                 shift 2
                 ;;
             --result-filename)
@@ -338,6 +344,12 @@ run_benchmark_serving() {
         echo "Error: --result-dir is required"
         return 1
     fi
+    if [[ -z "$num_warmups" ]]; then
+        num_warmups="$((2 * max_concurrency))"
+    elif [[ ! "$num_warmups" =~ ^[0-9]+$ ]]; then
+        echo "Error: --num-warmups must be a non-negative integer"
+        return 1
+    fi
 
     if [[ -z "$workspace_dir" ]]; then
         workspace_dir=$(pwd)
@@ -371,7 +383,7 @@ run_benchmark_serving() {
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
-        --num-warmups "$((2 * max_concurrency))" \
+        --num-warmups "$num_warmups"
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"

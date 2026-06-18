@@ -94,6 +94,7 @@ fi
 PROFILE_ARGS=()
 benchmark_output_len="$OSL"
 benchmark_random_range_ratio="$RANDOM_RANGE_RATIO"
+benchmark_num_warmups="$((2 * CONC))"
 if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget="${M3_PROFILE_TOKEN_BUDGET:-8192}"
     profile_active_iterations=5
@@ -134,6 +135,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
     fi
 
     benchmark_num_prompts="$CONC"
+    benchmark_num_warmups="$CONC"
     benchmark_output_len="$profile_output_len"
     benchmark_random_range_ratio="1.0"
     export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/tmp/inferencex-profile/${RESULT_FILENAME}}"
@@ -182,6 +184,7 @@ run_benchmark_serving \
     --random-range-ratio "$benchmark_random_range_ratio" \
     --num-prompts "$benchmark_num_prompts" \
     --max-concurrency "$CONC" \
+    --num-warmups "$benchmark_num_warmups" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
     --trust-remote-code
