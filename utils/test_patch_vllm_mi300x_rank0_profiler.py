@@ -78,3 +78,12 @@ def test_mi300x_profile_scratch_does_not_create_workspace_directories():
     assert "/workspace/profile_traces" not in recipe
     assert "/tmp/inferencex-profile/${res_name}" in workflow
     assert "/tmp/inferencex-profile/${RESULT_FILENAME}" in recipe
+    assert "_windowed" in workflow
+    assert 'profile_active_iterations=5' in recipe
+    assert (
+        "profile_output_len=$((profile_delay + profile_active_iterations + "
+        "profile_tail_margin))"
+        in recipe
+    )
+    assert 'benchmark_random_range_ratio="1.0"' in recipe
+    assert '--output-len "$benchmark_output_len"' in recipe
