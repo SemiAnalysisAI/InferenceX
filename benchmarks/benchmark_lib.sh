@@ -1116,6 +1116,14 @@ build_replay_cmd() {
     # CPU on minimax-m2.5 at high concurrency. Lossless for vLLM (server
     # usage is authoritative).
     REPLAY_CMD+=" --use-server-token-count"
+    # Dynamo's KV router needs an explicit conversation session binding to
+    # keep later turns on the prefill worker that owns their prefix blocks.
+    # X-Correlation-ID is useful tracing metadata but does not establish that
+    # binding by itself. AIPerf emits nvext.session_control bind/close actions
+    # keyed by the stable conversation correlation ID when this flag is set.
+    if [[ "${FRAMEWORK:-}" == dynamo-* ]]; then
+        REPLAY_CMD+=" --use-dynamo-conv-aware-routing"
+    fi
     # Disable DCGM GPU telemetry collection. aiperf's GpuMetricTimeSeries
     # freezes its metric schema on the first DCGM scrape, then KeyErrors when
     # an optional field (xid_errors, power_violation, encoder_utilization)

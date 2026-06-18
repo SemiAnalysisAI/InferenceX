@@ -210,8 +210,8 @@ NATS/etcd node.
 | `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
 | `27738234911` | c64 topology sweep, VMM enabled | Failed | All four decode workers OOM during NVFP4 weight conversion before serving; no benchmark results |
 | `27770234988` | c64 topology sweep, RDMA + bounded registration cache | Success | All four 900-second topology jobs and aggregate/raw/server-log artifacts completed successfully |
-| `27785852838` | selected 4P/1D + 3P/2D curves, c32 | In progress | Official 900-second low-concurrency points dispatched from `9a7aff39` |
-| `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | In progress | Official 900-second saturation points dispatched from `9a7aff39` |
+| `27785852838` | selected 4P/1D + 3P/2D curves, c32 | Cancelled | 4P/1D completed, but the run was stopped after proving AIPerf omitted Dynamo `nvext.session_control` |
+| `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | Cancelled | Stopped for the same missing conversation-binding metadata; three matrix jobs had separately failed checkout before using GPUs |
 
 ### Official RDMA topology gate: completed points
 
@@ -240,6 +240,28 @@ NATS/etcd node.
   their search-space entries were removed from `nvidia-master.yaml` so the
   final c32/c64/c128/c192 sweep does not spend GPU time on proven prefill-
   starved shapes.
+
+### Missing Dynamo conversation binding
+
+- Recipe-side routing was configured correctly: the Dynamo frontend used
+  `router-mode: kv`, every prefill published KV events, and vLLM prefix caching
+  was enabled (none of the agentic recipes passed
+  `--no-enable-prefix-caching`). However, those settings alone do not make a
+  multi-turn conversation sticky.
+- The pinned AIPerf branch supports `--use-dynamo-conv-aware-routing`, which
+  adds Dynamo's `nvext.session_control` bind/close block to OpenAI request
+  bodies using the stable conversation correlation ID. The InferenceX replay
+  command did not enable the option. `X-Correlation-ID` was present, but it is
+  tracing metadata and does not establish a Dynamo session binding.
+- This explains the official 4P/1D c64 evidence: the four prefill engines
+  reported only 3.2--4.2% local prefix hits, token-weighted cache-read usage
+  was 3.75M / 88.45M = 4.24%, and only 250/2,172 (11.5%) frontend prefill
+  selections had nonzero effective cached blocks despite 96.6% theoretical
+  trace reuse.
+- `build_replay_cmd` now enables AIPerf's Dynamo conversation-aware routing for
+  every `dynamo-*` agentic framework. Runs produced before this correction are
+  retained as diagnostic transport/topology evidence but are not accepted as
+  the final high-cache agentic sweep.
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
