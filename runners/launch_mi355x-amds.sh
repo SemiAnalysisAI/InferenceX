@@ -77,7 +77,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
-    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
+    if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
         BENCHMARK_SUBDIR="multi_node"
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
@@ -238,6 +238,13 @@ else
 
     # to prevent reading outdated saved model. use a fresh model from hf repo
     if [[ ("$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "atom") ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
+        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+    fi
+
+    # MiniMax-M3 weights are not staged on the node-local /var/lib NVMe cache;
+    # they are pre-downloaded once to the NFS share instead. Covers both the
+    # MiniMaxAI MXFP8 checkpoint and the amd MXFP4 atom checkpoint.
+    if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* || "$MODEL" == amd/MiniMax-M3* ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 

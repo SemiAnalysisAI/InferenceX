@@ -181,7 +181,8 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 ## Reusing an Approved PR Full Sweep
 
 If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
-sequential canary, or `non-canary-full-sweep-enabled` without one), a
+sequential canary, `non-canary-full-sweep-enabled` without one, or a
+fail-fast variant — `full-sweep-fail-fast` / `full-sweep-fail-fast-no-canary`), a
 maintainer can avoid running the same sweep again after merge by leaving a PR
 comment before merging:
 
@@ -191,26 +192,49 @@ comment before merging:
 
 That reuses the latest successful `run-sweep.yml` `pull_request` run whose
 commit is still part of the PR. To select a particular eligible successful
-run, pin the source run explicitly:
+or failed run, pin the source run explicitly:
 
 ```
 /reuse-sweep-run <run_id>
 ```
 
+Only an explicitly pinned run may have a `failure` conclusion. An unpinned
+command always selects the latest successful eligible run. Pinned failed runs
+must still contain complete artifacts for the merge run's expected matrix.
+
 The comment is the reuse authorization, so adding it does not trigger or cancel
-a PR sweep. On the push-to-main run, `run-sweep.yml` resolves the merged PR
-from the merge commit, verifies the source run is a successful `pull_request`
-`run-sweep.yml` run for the same PR, downloads the ingest-relevant artifacts,
-validates that `results_bmk` covers the merge run's expected benchmark matrix,
-and uploads them as `reused-ingest-artifacts`. The normal database ingest then
-publishes those artifacts with the merge run's changelog metadata.
+a PR sweep. Once the comment is present, later commits pushed to a PR with a
+full-sweep label do not start another benchmark sweep. GitHub still runs the
+CPU-only `check-changelog` job on the new commit before inspecting the reuse
+authorization. That job validates the complete YAML/schema, append-only entry
+ordering, duplicate YAML keys, byte-for-byte preservation of historical
+content, PR links, the generated sweep config, and sweep-label exclusivity.
+Link-only correction PRs stop after this CPU check because they have no
+benchmark matrix to generate. Only appended entries can continue to the reuse
+gate and sweep setup. Removing and re-adding a sweep label explicitly starts a
+new sweep.
+
+`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+It merges `main`, preserves the current main changelog bytes, canonicalizes an
+appended `XXX` link to the PR URL, pushes a fresh synchronization commit, and
+waits for `check-changelog` on that exact SHA before merging.
+
+On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
+commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
+run for the same PR, downloads the ingest-relevant artifacts, validates that
+fixed-sequence, agentic, and eval-only artifacts exactly match the merge run's
+expected matrix, and uploads them as `reused-ingest-artifacts`. The normal
+database ingest then publishes those artifacts with the merge run's changelog
+metadata. Duplicate fixed-sequence, agentic, eval, or raw eval identities are
+rejected rather than collapsed during that comparison.
 
 Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier
 pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
 
-Reuse fails closed: if the comment is present but neither full-sweep label
-(`full-sweep-enabled` or `non-canary-full-sweep-enabled`) is present, or if
+Reuse fails closed: if the comment is present but no full-sweep label
+(`full-sweep-enabled`, `non-canary-full-sweep-enabled`,
+`full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`) is present, or if
 the source PR run or artifacts cannot be validated, the push-to-main workflow
 fails instead of falling back to a cluster sweep. Without the comment, the
 push-to-main workflow runs the normal full sweep.

@@ -1,0 +1,129 @@
+name: Test Changelog Gate
+run-name: Test Changelog Gate - ${{ github.ref_name }} @ ${{ github.sha }}
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - ".claude/commands/recover-failed-ingest.md"
+      - "perf-changelog.yaml"
+      - ".github/workflows/run-sweep.yml"
+      - ".github/workflows/test-changelog-gate.yml"
+      - "utils/find_reusable_sweep_run.py"
+      - "utils/test_find_reusable_sweep_run.py"
+      - "utils/process_changelog.py"
+      - "utils/prepare_perf_changelog_merge.py"
+      - "utils/recover_failed_ingest.py"
+      - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
+      - "utils/changelog_gate_tests/test_recover_failed_ingest.py"
+      - "utils/test_validate_reusable_sweep_artifacts.py"
+      - "utils/validate_perf_changelog.py"
+      - "utils/validate_reusable_sweep_artifacts.py"
+      - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
+      - "utils/changelog_gate_tests/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/conftest.py"
+      - "utils/merge_with_reuse.sh"
+      - "utils/matrix_logic/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: test-changelog-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-changelog:
+    name: Test changelog validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pydantic pyyaml
+
+      - name: Run validator, reuse, and gating tests
+        run: |
+          python -m pytest \
+            utils/changelog_gate_tests/test_validate_perf_changelog.py \
+            utils/test_find_reusable_sweep_run.py \
+            utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py \
+            utils/changelog_gate_tests/test_recover_failed_ingest.py \
+            utils/test_validate_reusable_sweep_artifacts.py \
+            utils/changelog_gate_tests/test_run_sweep_gating.py \
+            -v
+
+      - name: Test historical push validation
+        run: |
+          expect_rejected() {
+              local label="$1"
+              shift
+              local output
+              if output="$("$@" 2>&1)"; then
+                  echo "::error::${label} was unexpectedly accepted"
+                  return 1
+              fi
+              echo "${label} was rejected as expected"
+              printf '%s\n' "$output"
+          }
+
+          python utils/validate_perf_changelog.py \
+            --changelog-file perf-changelog.yaml \
+            --base-ref d99c824b1c4f0b1b007631191657e458ef2a332c^ \
+            --head-ref d99c824b1c4f0b1b007631191657e458ef2a332c
+
+          expect_rejected "PR #1767 malformed merge state" \
+            python utils/validate_perf_changelog.py \
+              --changelog-file perf-changelog.yaml \
+              --base-ref 7b9843d3a6e1fe7a2d92d327e25aae57ed3506c5^ \
+              --head-ref 7b9843d3a6e1fe7a2d92d327e25aae57ed3506c5 \
+              --pr-number 1767
+
+          expect_rejected "PR #1798 invalid merge state" \
+            python utils/validate_perf_changelog.py \
+              --changelog-file perf-changelog.yaml \
+              --base-ref 8aaff9fbb645ae9df9ba7593fa63273f839b62fb^1 \
+              --head-ref 8aaff9fbb645ae9df9ba7593fa63273f839b62fb \
+              --pr-number 1798
+
+      - name: Validate the associated pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          PR_INFO="$(
+              gh api \
+                -H "Accept: application/vnd.github+json" \
+                "repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/pulls" \
+                --jq '
+                  [.[] | select(.state == "open")]
+                  | first
+                  | if . == null then "" else ([.number, .base.ref] | @tsv) end
+                '
+          )"
+
+          if [ -z "$PR_INFO" ]; then
+              echo "::notice::No open pull request is associated with ${GITHUB_SHA}; skipping PR-diff validation"
+              exit 0
+          fi
+
+          IFS=$'\t' read -r PR_NUMBER BASE_BRANCH <<<"$PR_INFO"
+          git fetch --no-tags origin \
+            "+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
+
+          python utils/validate_perf_changelog.py \
+            --changelog-file perf-changelog.yaml \
+            --base-ref "origin/${BASE_BRANCH}" \
+            --head-ref "$GITHUB_SHA" \
+            --pr-number "$PR_NUMBER"
