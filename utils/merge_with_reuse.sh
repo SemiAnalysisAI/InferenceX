@@ -5,8 +5,9 @@
 #   1. Post `/reuse-sweep-run` so the merge-to-main run authorizes reuse.
 #   2. Merge origin/main into the PR branch.  Any `perf-changelog.yaml`
 #      conflict is auto-resolved by accepting main's entries and re-appending
-#      the PR's entry at the bottom with `XXX` -> the PR number.
-#   3. Push the merge commit and wait for `check-changelog` on that exact SHA.
+#      the PR's entry at the bottom with `XXX` -> the canonical PR URL.
+#   3. Canonicalize appended links, push a fresh commit, and wait for
+#      `check-changelog` on that exact SHA.
 #      The PR synchronize run then observes the reuse authorization and skips
 #      sweep setup and benchmark jobs.
 #   4. Squash-merge the PR to main (--admin) only after validation succeeds.
@@ -20,6 +21,7 @@ set -euo pipefail
 REPO="${REPO:-SemiAnalysisAI/InferenceX}"
 CHANGELOG="perf-changelog.yaml"
 CHECK_TIMEOUT_SECONDS="${CHECK_TIMEOUT_SECONDS:-900}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ $# -ne 1 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
     echo "Usage: $0 <pr-number>" >&2
@@ -30,6 +32,8 @@ PR="$1"
 log() { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
+
+[ -z "$(git status --porcelain)" ] || die "Working tree is not clean"
 
 wait_for_check() {
     local sha="$1"
@@ -64,13 +68,24 @@ wait_for_check() {
 }
 
 ORIGINAL_BRANCH="$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)"
-cleanup() { git checkout --quiet "$ORIGINAL_BRANCH" 2>/dev/null || true; }
+LOCAL_BRANCH=""
+cleanup() {
+    git checkout --quiet "$ORIGINAL_BRANCH" 2>/dev/null || true
+    if [ -n "$LOCAL_BRANCH" ]; then
+        git branch -D "$LOCAL_BRANCH" >/dev/null 2>&1 || true
+    fi
+}
 trap cleanup EXIT
 
 # --- preflight ---------------------------------------------------------------
-PR_INFO="$(gh pr view "$PR" --repo "$REPO" --json headRefName,state,labels)"
+PR_INFO="$(
+    gh pr view "$PR" --repo "$REPO" \
+        --json headRefName,isCrossRepository,state,labels
+)"
 PR_STATE="$(jq -r '.state' <<<"$PR_INFO")"
 [ "$PR_STATE" = "OPEN" ] || die "PR #${PR} is ${PR_STATE}, expected OPEN"
+[ "$(jq -r '.isCrossRepository' <<<"$PR_INFO")" = "false" ] \
+    || die "PR #${PR} is from a fork; the merge helper cannot update its branch"
 
 HEAD_BRANCH="$(jq -r '.headRefName' <<<"$PR_INFO")"
 HAS_FULL_SWEEP="$(jq -r '
@@ -83,12 +98,30 @@ HAS_FULL_SWEEP="$(jq -r '
 ' <<<"$PR_INFO")"
 [ -n "$HAS_FULL_SWEEP" ] || die "PR #${PR} is missing a full-sweep label ('full-sweep-enabled', 'non-canary-full-sweep-enabled', 'full-sweep-fail-fast', or 'full-sweep-fail-fast-no-canary')"
 
-# Warn early if no successful run exists on any current PR commit.
+# Fail early unless a successful run with reusable artifacts exists on a
+# current PR commit. This excludes reuse-gate-only success runs.
 PR_SHAS="$(gh api "repos/${REPO}/pulls/${PR}/commits" --paginate --jq '.[].sha')"
-SUCCESS_RUNS="$(gh api "repos/${REPO}/actions/workflows/run-sweep.yml/runs?event=pull_request&branch=${HEAD_BRANCH}&status=completed&per_page=100" \
-    --jq '.workflow_runs[] | select(.conclusion=="success") | .head_sha' || true)"
-if ! grep -qFxf <(echo "$SUCCESS_RUNS") <(echo "$PR_SHAS"); then
-    die "PR #${PR} has no successful run-sweep.yml run on any of its current commits"
+ELIGIBLE_RUN=""
+while IFS=$'\t' read -r run_id run_sha; do
+    grep -qxF "$run_sha" <<<"$PR_SHAS" || continue
+    artifact_names="$(
+        gh api "repos/${REPO}/actions/runs/${run_id}/artifacts?per_page=100" \
+            --paginate \
+            --jq '.artifacts[] | select(.expired == false) | .name'
+    )"
+    if grep -Eq '^(results_bmk|eval_results_all|bmk_agentic_)' \
+        <<<"$artifact_names"; then
+        ELIGIBLE_RUN="$run_id"
+        break
+    fi
+done < <(
+    gh api \
+        "repos/${REPO}/actions/workflows/run-sweep.yml/runs?event=pull_request&branch=${HEAD_BRANCH}&status=completed&per_page=100" \
+        --paginate \
+        --jq '.workflow_runs[] | select(.conclusion == "success") | [.id, .head_sha] | @tsv'
+)
+if [ -z "$ELIGIBLE_RUN" ]; then
+    die "PR #${PR} has no successful reusable run-sweep.yml run on a current commit"
 fi
 
 # --- step 1: comment ---------------------------------------------------------
@@ -97,9 +130,9 @@ gh pr comment "$PR" --repo "$REPO" --body "/reuse-sweep-run" >/dev/null
 ok "Comment posted"
 
 # --- step 2: merge main into PR branch --------------------------------------
-LOCAL_BRANCH="pr-${PR}-reuse"
+LOCAL_BRANCH="pr-${PR}-reuse-$$"
 log "Fetching PR branch ${HEAD_BRANCH}"
-git fetch origin "pull/${PR}/head:${LOCAL_BRANCH}" --force --quiet
+git fetch origin "pull/${PR}/head:${LOCAL_BRANCH}" --quiet
 git checkout --quiet "$LOCAL_BRANCH"
 git fetch origin main --quiet
 
@@ -117,122 +150,55 @@ if [ "$merge_status" -ne 0 ]; then
         die "Unexpected conflict(s) in: ${unresolved} — only ${CHANGELOG} is auto-resolved"
     fi
     log "Resolving ${CHANGELOG} conflict"
-    python3 - "$CHANGELOG" "$PR" "$REPO" <<'PY'
-import re
-import subprocess
-import sys
-
-import yaml
-
-path, pr, repo = sys.argv[1], sys.argv[2], sys.argv[3]
-pr_link_full = f"https://github.com/{repo}/pull/{pr}"
-
-
-def read_stage(stage: int) -> str:
-    return subprocess.check_output(["git", "show", f":{stage}:{path}"]).decode()
-
-
-def split_entries(text: str) -> tuple[str, list[str]]:
-    """Split a perf-changelog.yaml into (preamble, [entry_text, ...])."""
-    parts = re.split(r"\n(?=- config-keys:)", text)
-    if not parts:
-        return "", []
-    if parts[0].startswith("- config-keys:"):
-        return "", [p.rstrip("\n") for p in parts]
-    return parts[0], [p.rstrip("\n") for p in parts[1:]]
-
-
-def entry_signature(entry: dict) -> tuple:
-    """Identity used to detect duplicates across sides.
-
-    Same config-keys + same description = same logical entry, even if pr-link
-    differs (which is exactly the case when a placeholder XXX entry on the PR
-    side collides with a real entry that landed on main from another PR)."""
-    keys = tuple(sorted(entry.get("config-keys") or []))
-    desc = tuple(entry.get("description") or [])
-    return (keys, desc)
-
-
-# Stage 2 = HEAD (PR before merge); Stage 3 = MERGE_HEAD (origin/main).
-pr_text = read_stage(2)
-main_text = read_stage(3)
-
-pr_preamble, pr_blocks = split_entries(pr_text)
-main_preamble, main_blocks = split_entries(main_text)
-
-pr_data = yaml.safe_load(pr_text) or []
-main_data = yaml.safe_load(main_text) or []
-
-if len(pr_data) != len(pr_blocks) or len(main_data) != len(main_blocks):
-    sys.exit(
-        f"Entry/text-block count mismatch — file uses an unsupported shape. "
-        f"pr_data={len(pr_data)} pr_blocks={len(pr_blocks)} "
-        f"main_data={len(main_data)} main_blocks={len(main_blocks)}"
-    )
-
-main_sigs = {entry_signature(e) for e in main_data}
-
-contribs: list[str] = []
-for entry, block in zip(pr_data, pr_blocks):
-    link = str(entry.get("pr-link") or "")
-    if "XXX" not in link and not link.endswith(f"/pull/{pr}"):
-        continue
-    if entry_signature(entry) in main_sigs:
-        continue  # Same logical entry already on main (e.g. XXX placeholder vs real pr-link).
-    # Force the pr-link line to the canonical full URL, regardless of whether
-    # the PR's entry used bare `XXX` or `/pull/XXX`.
-    new_block, n = re.subn(
-        r"^(\s*pr-link:).*$",
-        lambda m: f"{m.group(1)} {pr_link_full}",
-        block,
-        count=1,
-        flags=re.MULTILINE,
-    )
-    if n != 1:
-        sys.exit(f"Could not locate pr-link line in entry: {entry}")
-    contribs.append(new_block)
-
-if not contribs:
-    sys.exit(
-        f"No PR contributions found in {path} "
-        f"(expected entry tagged with XXX or /pull/{pr} with new content)"
-    )
-
-sections: list[str] = []
-if main_preamble.strip():
-    sections.append(main_preamble.rstrip("\n"))
-sections.extend(main_blocks)
-sections.extend(contribs)
-
-result = "\n\n".join(s for s in sections if s) + "\n"
-open(path, "w").write(result)
-PY
-    python3 -c "
-import yaml
-entries = yaml.safe_load(open('$CHANGELOG'))
-last = entries[-1]
-assert last['pr-link'].endswith('/$PR'), f'last entry not for PR #$PR: {last}'
-print(f'  Last entry: {last[\"config-keys\"]} -> #$PR')
-"
-    [ -z "$(tail -c 1 "$CHANGELOG")" ] || die "${CHANGELOG} missing trailing newline"
+    if ! python3 "$SCRIPT_DIR/prepare_perf_changelog_merge.py" \
+        resolve-conflict \
+        --changelog-file "$CHANGELOG" \
+        --pr-number "$PR" \
+        --repo "$REPO"; then
+        git merge --abort
+        die "Could not safely resolve ${CHANGELOG}"
+    fi
     git add "$CHANGELOG"
-    git commit --no-edit -m "Merge branch 'main' into ${HEAD_BRANCH}"
+    git commit --no-edit
 fi
 
+HEAD_AFTER_MERGE="$(git rev-parse HEAD)"
+python3 "$SCRIPT_DIR/prepare_perf_changelog_merge.py" \
+    canonicalize \
+    --changelog-file "$CHANGELOG" \
+    --base-ref origin/main \
+    --pr-number "$PR" \
+    --repo "$REPO"
+
+if ! git diff --quiet -- "$CHANGELOG"; then
+    git add "$CHANGELOG"
+    if [ "$HEAD_AFTER_MERGE" != "$PRE_MERGE" ]; then
+        git commit --amend --no-edit
+    else
+        git commit -m "fix: canonicalize PR #${PR} changelog link [skip-sweep]"
+    fi
+fi
+
+# Always create a synchronize event when the branch was already prepared.
+# This guarantees that check-changelog exists for the exact SHA we validate.
+if [ "$PRE_MERGE" = "$(git rev-parse HEAD)" ]; then
+    git commit --allow-empty \
+        -m "chore: validate PR #${PR} changelog before reuse [skip-sweep]"
+fi
+
+# --- step 3: push prepared commit --------------------------------------------
 POST_MERGE="$(git rev-parse HEAD)"
-
-# --- step 3: push merge commit -----------------------------------------------
-if [ "$PRE_MERGE" = "$POST_MERGE" ]; then
-    log "PR already up to date with main; skipping push"
-else
-    log "Pushing merge commit ${POST_MERGE:0:8}"
-    git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"
-    ok "Push complete; changelog validation will run before the reuse gate"
-fi
+log "Pushing prepared commit ${POST_MERGE:0:8}"
+git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"
+ok "Push complete; changelog validation will run before the reuse gate"
 
 wait_for_check "$POST_MERGE" "check-changelog"
 
 # --- step 4: squash-merge to main -------------------------------------------
+log "Waiting for all PR checks"
+gh pr checks "$PR" --repo "$REPO" --watch --fail-fast
+ok "All PR checks passed"
+
 log "Squash-merging PR #${PR} into main"
 gh pr merge "$PR" --repo "$REPO" --squash --admin >/dev/null
 

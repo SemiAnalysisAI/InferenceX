@@ -9,6 +9,7 @@ from validate_perf_changelog import (
     ChangelogValidationError,
     compare_entries,
     parse_changelog,
+    validate_raw_change,
 )
 
 
@@ -54,6 +55,20 @@ def test_parse_changelog_rejects_malformed_nested_entry() -> None:
 """
 
     with pytest.raises(ChangelogValidationError, match="not valid YAML"):
+        parse_changelog(raw, "test changelog")
+
+
+def test_parse_changelog_rejects_duplicate_mapping_keys() -> None:
+    raw = b"""- config-keys:
+    - config-a
+  description:
+    - First
+  description:
+    - Second
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+
+    with pytest.raises(ChangelogValidationError, match="duplicate key"):
         parse_changelog(raw, "test changelog")
 
 
@@ -128,6 +143,66 @@ def test_compare_entries_rejects_correction_mixed_with_append() -> None:
         compare_entries(base, head, 42)
 
 
+def test_raw_append_requires_exact_historical_prefix() -> None:
+    base = render([entry("config-a")])
+    appended = base + b"\n" + render([entry("config-b", "XXX")])
+
+    validate_raw_change(base, appended, additions=1, corrections=0)
+
+    changed_history = appended.replace(b"Update config-a", b"Update config-a ")
+    with pytest.raises(ChangelogValidationError, match="historical"):
+        validate_raw_change(
+            base,
+            changed_history,
+            additions=1,
+            corrections=0,
+        )
+
+
+def test_raw_append_requires_exact_separator_and_final_newline() -> None:
+    base = render([entry("config-a")])
+    first = render([entry("config-b", "XXX")])
+    second = render([entry("config-c", "XXX")])
+
+    with pytest.raises(ChangelogValidationError, match="separator line"):
+        validate_raw_change(
+            base,
+            base + b"\n" + first + b"\n\n" + second,
+            additions=2,
+            corrections=0,
+        )
+
+    with pytest.raises(ChangelogValidationError, match="end with one newline"):
+        validate_raw_change(
+            base,
+            base + b"\n" + first + b"\n",
+            additions=1,
+            corrections=0,
+        )
+
+
+def test_raw_correction_rejects_whitespace_only_history_change() -> None:
+    base = render([entry("config-a", "XXX")])
+    corrected = base.replace(
+        b"  pr-link: XXX\n",
+        b"  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/42\n",
+    )
+
+    validate_raw_change(base, corrected, additions=0, corrections=1)
+
+    changed_whitespace = corrected.replace(
+        b"  - Update config-a\n",
+        b"  - Update config-a  \n",
+    )
+    with pytest.raises(ChangelogValidationError, match="outside a pr-link"):
+        validate_raw_change(
+            base,
+            changed_whitespace,
+            additions=0,
+            corrections=1,
+        )
+
+
 def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     workflow = yaml.load(
@@ -135,11 +210,20 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         Loader=yaml.BaseLoader,
     )
     jobs = workflow["jobs"]
+    pull_request_types = workflow["on"]["pull_request"]["types"]
 
     assert "needs" not in jobs["check-changelog"]
+    assert {"opened", "reopened"}.issubset(set(pull_request_types))
+    assert jobs["check-changelog"]["outputs"]["has-additions"] == (
+        "${{ steps.validate.outputs.has-additions }}"
+    )
     assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
     assert (
         "needs.check-changelog.result == 'success'"
+        in jobs["reuse-sweep-gate"]["if"]
+    )
+    assert (
+        "needs.check-changelog.outputs.has-additions == 'true'"
         in jobs["reuse-sweep-gate"]["if"]
     )
     assert jobs["setup"]["needs"] == [
@@ -147,6 +231,10 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         "reuse-sweep-gate",
     ]
     assert "needs.check-changelog.result == 'success'" in jobs["setup"]["if"]
+    assert (
+        "needs.check-changelog.outputs.has-additions == 'true'"
+        in jobs["setup"]["if"]
+    )
 
 
 def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
@@ -162,3 +250,5 @@ def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
     )
 
     assert push_index < wait_index < merge_index
+    assert "prepare_perf_changelog_merge.py" in script
+    assert "git commit --allow-empty" in script
