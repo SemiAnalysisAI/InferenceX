@@ -3852,14 +3852,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
 
 - config-keys:
-    - minimaxm3-fp8-gb200-dynamo-vllm
-  description:
-    - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), drop extra_mount workaround"
-    - "NixlConnector handshake block_len validation now uses per-rank KV head ratio instead of tp_ratio, fixing GQA-replicated disagg (M3 TEP8: TP4→TP8, 4 KV heads)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
-  evals-only: true
-
-- config-keys:
     - minimaxm3-fp8-b200-vllm
   description:
     - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
@@ -3958,3 +3950,11 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), drop extra_mount workaround"
+    - "NixlConnector handshake block_len validation now uses per-rank KV head ratio instead of tp_ratio, fixing GQA-replicated disagg (M3 TEP8: TP4→TP8, 4 KV heads)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
+  evals-only: true
