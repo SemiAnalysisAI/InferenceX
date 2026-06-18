@@ -92,8 +92,12 @@ elif [ "$EP_SIZE" -gt 1 ]; then
 fi
 
 PROFILE_ARGS=()
+benchmark_output_len="$OSL"
+benchmark_random_range_ratio="$RANDOM_RANGE_RATIO"
 if [ "${PROFILE:-0}" = "1" ]; then
     profile_token_budget="${M3_PROFILE_TOKEN_BUDGET:-8192}"
+    profile_active_iterations=5
+    profile_tail_margin=32
     case "$profile_token_budget" in
         8192|16384|32768)
             ;;
@@ -108,26 +112,37 @@ if [ "${PROFILE:-0}" = "1" ]; then
         decode)
             profile_prefill_iterations=$(((ISL * CONC + profile_token_budget - 1) / profile_token_budget))
             profile_delay=$((profile_prefill_iterations + 16))
-            profile_description="one steady-state decode iteration after $profile_delay engine iterations"
+            # The first admitted request can decode while later requests are
+            # still prefilling. Keep every request alive through the capture
+            # window, then stop instead of generating the full benchmark OSL.
+            profile_output_len=$((profile_delay + profile_active_iterations + profile_tail_margin))
+            profile_description="a steady-state decode window after $profile_delay engine iterations"
             ;;
         prefill)
             profile_delay=0
-            profile_description="the first chunked-prefill iteration"
+            profile_output_len=64
+            profile_description="the opening chunked-prefill window"
             ;;
         *)
             echo "Invalid M3_PROFILE_PHASE: $profile_phase" >&2
             exit 2
             ;;
     esac
+    if [ "$profile_output_len" -gt "$OSL" ]; then
+        echo "Profile output length $profile_output_len exceeds configured OSL $OSL; increase the token budget" >&2
+        exit 2
+    fi
 
     benchmark_num_prompts="$CONC"
+    benchmark_output_len="$profile_output_len"
+    benchmark_random_range_ratio="1.0"
     export VLLM_TORCH_PROFILER_DIR="${VLLM_TORCH_PROFILER_DIR:-/tmp/inferencex-profile/${RESULT_FILENAME}}"
     rm -rf "$VLLM_TORCH_PROFILER_DIR"
     mkdir -p "$VLLM_TORCH_PROFILER_DIR"
 
     profiler_config="$(
-        printf '{"profiler":"torch","torch_profiler_dir":"%s","torch_profiler_with_stack":false,"torch_profiler_with_flops":false,"torch_profiler_use_gzip":true,"torch_profiler_dump_cuda_time_total":false,"torch_profiler_record_shapes":false,"torch_profiler_with_memory":false,"ignore_frontend":true,"delay_iterations":%d,"max_iterations":1}' \
-            "$VLLM_TORCH_PROFILER_DIR" "$profile_delay"
+        printf '{"profiler":"torch","torch_profiler_dir":"%s","torch_profiler_with_stack":false,"torch_profiler_with_flops":false,"torch_profiler_use_gzip":true,"torch_profiler_dump_cuda_time_total":false,"torch_profiler_record_shapes":false,"torch_profiler_with_memory":false,"ignore_frontend":true,"delay_iterations":%d,"active_iterations":%d,"max_iterations":1}' \
+            "$VLLM_TORCH_PROFILER_DIR" "$profile_delay" "$profile_active_iterations"
     )"
     PROFILE_ARGS=(
         --max-num-batched-tokens "$profile_token_budget"
@@ -135,7 +150,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
         --compilation-config '{"cudagraph_mode":"NONE"}'
     )
     # ROCTracer does not expose every kernel launched inside a HIP graph.
-    echo "Profiling $profile_description with a $profile_token_budget-token budget."
+    echo "Profiling $profile_description with a $profile_token_budget-token budget and exact output length $profile_output_len."
 else
     benchmark_num_prompts="$((CONC * 10))"
 fi
@@ -163,8 +178,8 @@ run_benchmark_serving \
     --port "$PORT" \
     --backend vllm \
     --input-len "$ISL" \
-    --output-len "$OSL" \
-    --random-range-ratio "$RANDOM_RANGE_RATIO" \
+    --output-len "$benchmark_output_len" \
+    --random-range-ratio "$benchmark_random_range_ratio" \
     --num-prompts "$benchmark_num_prompts" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
