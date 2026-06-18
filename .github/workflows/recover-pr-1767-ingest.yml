@@ -1,0 +1,172 @@
+name: Recover PR 1767 ingest
+run-name: "Recover PR #1767 ingest from run 27595478969"
+
+on:
+    workflow_dispatch:
+        inputs:
+            confirm:
+                description: "Enter recover-pr-1767 to run the artifact-only recovery"
+                required: true
+                type: string
+
+permissions:
+    actions: read
+    contents: read
+
+jobs:
+    recover-ingest:
+        if: ${{ inputs.confirm == 'recover-pr-1767' }}
+        runs-on: ubuntu-latest
+        env:
+            SOURCE_REPO: SemiAnalysisAI/InferenceX
+            SOURCE_RUN_ID: "27595478969"
+            SOURCE_PR_NUMBER: "1767"
+            SOURCE_HEAD_SHA: 728eb321dd4b1decd81b2d460cb39aa369a0c9c8
+            ORIGINAL_BASE_SHA: d99c824b1c4f0b1b007631191657e458ef2a332c
+            ORIGINAL_MERGE_SHA: 7b9843d3a6e1fe7a2d92d327e25aae57ed3506c5
+        steps:
+            - name: Checkout recovery code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              with:
+                  fetch-depth: 0
+
+            - name: Validate reusable source run
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+              run: |
+                  run_json=$(gh api "repos/${SOURCE_REPO}/actions/runs/${SOURCE_RUN_ID}")
+                  jq -e \
+                    --arg expected_head "$SOURCE_HEAD_SHA" \
+                    '.event == "pull_request" and
+                     .status == "completed" and
+                     .conclusion == "success" and
+                     .path == ".github/workflows/run-sweep.yml" and
+                     .head_sha == $expected_head' \
+                    <<<"$run_json" >/dev/null
+
+                  gh api "repos/${SOURCE_REPO}/pulls/${SOURCE_PR_NUMBER}/commits" \
+                    --paginate --jq '.[].sha' \
+                    | grep -Fxq "$SOURCE_HEAD_SHA"
+
+                  artifacts_json=$(gh api \
+                    "repos/${SOURCE_REPO}/actions/runs/${SOURCE_RUN_ID}/artifacts?per_page=100")
+                  for required in results_bmk eval_results_all run-stats; do
+                      jq -e --arg name "$required" \
+                        '.artifacts[] | select(.name == $name and (.expired | not))' \
+                        <<<"$artifacts_json" >/dev/null
+                  done
+
+            - name: Reconstruct corrected merge configuration
+              run: |
+                  git checkout --detach "$ORIGINAL_MERGE_SHA"
+                  test "$(git rev-parse "${ORIGINAL_MERGE_SHA}^")" = "$ORIGINAL_BASE_SHA"
+
+                  perl -0pi -e \
+                    's/^  - config-keys:\n(    - dsr1-fp8-gb300-dynamo-trt\n)/- config-keys:\n$1/m' \
+                    perf-changelog.yaml
+                  grep -A1 '^- config-keys:$' perf-changelog.yaml \
+                    | grep -q 'dsr1-fp8-gb300-dynamo-trt'
+                  if grep -A1 '^  - config-keys:$' perf-changelog.yaml \
+                    | grep -q 'dsr1-fp8-gb300-dynamo-trt'; then
+                      echo "PR #1767 changelog indentation is still malformed" >&2
+                      exit 1
+                  fi
+
+                  git add perf-changelog.yaml
+                  fixed_tree=$(git write-tree)
+                  fixed_sha=$(printf '%s\n' 'Synthetic corrected PR #1767 merge tree' \
+                    | git -c user.name='InferenceX Recovery' \
+                          -c user.email='actions@users.noreply.github.com' \
+                          commit-tree "$fixed_tree" -p "$ORIGINAL_BASE_SHA")
+
+                  pip install pydantic
+                  python3 utils/process_changelog.py \
+                    --changelog-file perf-changelog.yaml \
+                    --base-ref "$ORIGINAL_BASE_SHA" \
+                    --head-ref "$fixed_sha" \
+                    > "$RUNNER_TEMP/full-config.json"
+                  jq empty "$RUNNER_TEMP/full-config.json"
+
+                  mkdir -p "$RUNNER_TEMP/changelog-metadata"
+                  jq \
+                    --arg base "$ORIGINAL_BASE_SHA" \
+                    --arg head "$ORIGINAL_MERGE_SHA" \
+                    '.changelog_metadata | .base_ref = $base | .head_ref = $head' \
+                    "$RUNNER_TEMP/full-config.json" \
+                    > "$RUNNER_TEMP/changelog-metadata/changelog_metadata.json"
+
+            - name: Download reusable benchmark artifacts
+              env:
+                  GH_TOKEN: ${{ secrets.REPO_PAT || github.token }}
+              run: |
+                  artifacts_dir="$RUNNER_TEMP/source-artifacts"
+                  gh run download "$SOURCE_RUN_ID" \
+                    --repo "$SOURCE_REPO" \
+                    -D "$artifacts_dir"
+
+                  rm -rf "$artifacts_dir/changelog-metadata"
+                  for artifact_dir in "$artifacts_dir"/*; do
+                      [ -e "$artifact_dir" ] || continue
+                      name=$(basename "$artifact_dir")
+                      case "$name" in
+                          results_bmk|eval_results_all|run-stats|bmk_*|eval_*|server_logs_*|multinode_server_logs_*|agentic_aggregated)
+                              ;;
+                          *)
+                              rm -rf "$artifact_dir"
+                              ;;
+                      esac
+                  done
+
+                  mkdir -p "$artifacts_dir/reused-ingest-metadata"
+                  jq -n \
+                    --arg source_run_id "$SOURCE_RUN_ID" \
+                    --arg source_run_attempt "1" \
+                    --arg source_run_url "https://github.com/${SOURCE_REPO}/actions/runs/${SOURCE_RUN_ID}" \
+                    --arg source_pr_number "$SOURCE_PR_NUMBER" \
+                    --arg source_head_sha "$SOURCE_HEAD_SHA" \
+                    --arg ingest_run_id "$GITHUB_RUN_ID" \
+                    --arg ingest_run_attempt "$GITHUB_RUN_ATTEMPT" \
+                    --arg ingest_run_url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+                    '{
+                      source_run_id: $source_run_id,
+                      source_run_attempt: $source_run_attempt,
+                      source_run_url: $source_run_url,
+                      source_pr_number: $source_pr_number,
+                      source_head_sha: $source_head_sha,
+                      ingest_run_id: $ingest_run_id,
+                      ingest_run_attempt: $ingest_run_attempt,
+                      ingest_run_url: $ingest_run_url
+                    }' \
+                    > "$artifacts_dir/reused-ingest-metadata/reuse_source_run.json"
+
+            - name: Validate reusable artifacts
+              run: |
+                  python3 utils/validate_reusable_sweep_artifacts.py \
+                    --config-json "$RUNNER_TEMP/full-config.json" \
+                    --artifacts-dir "$RUNNER_TEMP/source-artifacts"
+
+            - name: Upload reusable ingest artifacts
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: reused-ingest-artifacts
+                  path: ${{ runner.temp }}/source-artifacts/*
+
+            - name: Upload corrected changelog metadata
+              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+              with:
+                  name: changelog-metadata
+                  path: ${{ runner.temp }}/changelog-metadata/changelog_metadata.json
+
+            - name: Trigger database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
+                    -d '{
+                      "event_type": "ingest-results",
+                      "client_payload": {
+                        "run-id": "${{ github.run_id }}",
+                        "run-attempt": "${{ github.run_attempt }}"
+                      }
+                    }'
