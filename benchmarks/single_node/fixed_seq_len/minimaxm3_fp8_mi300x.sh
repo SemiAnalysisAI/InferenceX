@@ -24,6 +24,46 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
+if ! VLLM_PACKAGE_ROOT="$(
+    python3 - <<'PY'
+from pathlib import Path
+
+import vllm
+
+print(Path(vllm.__file__).resolve().parent.parent)
+PY
+)"; then
+    echo "Failed to locate the installed vLLM package" >&2
+    exit 1
+fi
+if [[ -z "$VLLM_PACKAGE_ROOT" || ! -d "$VLLM_PACKAGE_ROOT/vllm" ]]; then
+    echo "Invalid installed vLLM package root: $VLLM_PACKAGE_ROOT" >&2
+    exit 1
+fi
+
+INDEX_SCORE_PATCH="$(dirname "$0")/minimaxm3_mi300x_index_score.patch"
+if [[ ! -f "$INDEX_SCORE_PATCH" ]]; then
+    echo "MI300X sparse-index scorer patch is missing: $INDEX_SCORE_PATCH" >&2
+    exit 1
+fi
+
+PATCH_CHECK_ARGS=(--batch --silent -d "$VLLM_PACKAGE_ROOT" -p1 --dry-run)
+if patch "${PATCH_CHECK_ARGS[@]}" --reverse --forward < "$INDEX_SCORE_PATCH"; then
+    echo "MI300X sparse-index scorer patch is already fully applied"
+elif patch "${PATCH_CHECK_ARGS[@]}" --forward < "$INDEX_SCORE_PATCH"; then
+    if ! patch --batch --forward -d "$VLLM_PACKAGE_ROOT" -p1 < "$INDEX_SCORE_PATCH"; then
+        echo "Failed to apply the MI300X sparse-index scorer patch" >&2
+        exit 1
+    fi
+else
+    echo "Installed vLLM cannot cleanly apply the MI300X sparse-index scorer patch" >&2
+    exit 1
+fi
+if ! patch "${PATCH_CHECK_ARGS[@]}" --reverse --forward < "$INDEX_SCORE_PATCH"; then
+    echo "MI300X sparse-index scorer patch verification failed" >&2
+    exit 1
+fi
+
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
