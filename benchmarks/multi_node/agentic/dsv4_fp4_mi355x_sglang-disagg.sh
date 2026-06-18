@@ -74,12 +74,11 @@ export OFFLOADING="${OFFLOADING:-none}"
 # HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$OFFLOADING" == "hicache" ]]; then
   export HICACHE_TIER="${HICACHE_TIER:-L3}"
-  export HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-64}"
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
-  # Per-rank L2 host pool in GB.
-  export HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-100}"
+  # HiCache ratio (host pool = ratio * GPU KV pool). Default derived in server_sglang.sh.
+  export HICACHE_RATIO="${HICACHE_RATIO:-}"
 
   # ── HiCache layout/backend by tier ──
   #   L3 (Mooncake): page_first + direct + write_through     + storage=mooncake
