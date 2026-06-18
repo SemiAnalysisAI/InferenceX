@@ -7,7 +7,7 @@ name: "minimax-m3-vllm-disagg-gb200-1p2d-tp4-1k1k"
 
 model:
   path: "minimax-m3-mxfp8"
-  container: "vllm/vllm-openai:minimax-m3"
+  container: "vllm/vllm-openai:minimax-m3-0618"
   precision: "fp8"
 
 dynamo:
