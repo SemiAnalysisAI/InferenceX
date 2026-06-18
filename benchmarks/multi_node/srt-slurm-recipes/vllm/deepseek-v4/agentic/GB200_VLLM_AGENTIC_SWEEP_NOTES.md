@@ -86,7 +86,7 @@ NATS/etcd node.
   collisions across decode replicas while vLLM synchronizes the generated ID
   across the two nodes of each TP8 replica.
 
-### GB200 NIXL VMM registration
+### GB200 NIXL VMM registration (`84be7898`)
 
 - Enabled vLLM's CuMem allocator on every prefill and decode worker in all
   four topology recipes.
@@ -135,6 +135,7 @@ NATS/etcd node.
 | `27732541012` | 4P/1D c64, old Dynamo/NATS | Failed warmup | 45/85 errors; empty router indexes; KV-event decode errors; HTTP 503 overloads |
 | `27734909066` | 4P/1D c64, new Dynamo/TCP | Success | Official artifact; clean 85/85 warmup and 99/99 profiled requests |
 | `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
+| `27738234911` | c64 topology sweep, VMM enabled | Queued | Four P/D topologies, 900-second scenario-compliant duration |
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
