@@ -151,6 +151,33 @@ NATS/etcd node.
   large evidence has appeared in job `19243`; additional buffer tuning will be
   evidence-driven rather than applied speculatively.
 
+#### Successful direct canary (`19244`)
+
+- The corrected manual checkout initialized submodules and ran 2P/3D c64 for
+  900 profiling seconds from commit `193692e7`. Slurm completed successfully.
+- AIPerf completed 489/489 profiled requests with no recorded request errors.
+  The 489 records covered 239 conversations; 112 conversations completed at
+  least two consecutive turns and the longest completed five, so this run
+  reached genuine multi-turn behavior rather than the all-first-turn state of
+  the earlier 300-second run.
+- NIXL/UCX was healthy throughout. Representative 146 MiB--1.4 GiB transfers
+  sustained roughly 13--43 GB/s with typical average transfer latency of
+  8--35 ms. There were no expired producer leases, failed notifications,
+  invalid-block reports, HTTP 503s, NIXL/UCX errors, or payload truncations
+  during profiling. The one frontend prefill-disconnect error occurred during
+  the post-duration drain/worker teardown and is not present in the 489
+  profiled records.
+- Performance was 48,811 total tok/s (48,323 input + 488 output), 1,220
+  tok/s/GPU, 187.8 s mean TTFT, 13.34 ms mean TPOT, and 200.1 s mean E2E.
+  Transport is no longer the bottleneck, but this 2P/3D point is still below
+  the B200 aggregate c64 baseline of 81,863 tok/s and 13.85 s mean TTFT.
+- Final vLLM prefix-hit counters were only about 5.6% and 2.1% on the two
+  prefills despite 96.9% theoretical reuse. Dynamo did route some requests
+  with nonzero effective cached blocks, while many selections still reported
+  zero. The official c64 topology gate is therefore required to determine
+  whether more prefill replicas recover throughput; a green transport canary
+  alone is not treated as the final performance result.
+
 ### Slurm job-name prefix (branch-only historical workaround)
 
 - This branch prefixes GB200 Slurm jobs with `ifx-` in
