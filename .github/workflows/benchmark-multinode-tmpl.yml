@@ -173,7 +173,14 @@ jobs:
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
             scancel --name="${{ runner.name }}" || true
+            _drain_deadline=$((SECONDS + 120))
             while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              if [ "$SECONDS" -ge "$_drain_deadline" ]; then
+                echo "[Slurm] drain exceeded 120s; force-cancelling (KILL) and proceeding (zombie job won't reap)"
+                scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
+                sleep 5
+                break
+              fi
               squeue --name="${{ runner.name }}"
               sleep 5
             done
@@ -184,7 +191,7 @@ jobs:
           # root-owned dirs that actions/checkout (clean: true) can't rmdir
           # (EACCES) — which then poison-fails EVERY subsequent job on that
           # runner. Runs in both pre- and post-run cleanup (shared anchor).
-          sudo rm -rf "${GITHUB_WORKSPACE}/benchmark_logs" 2>/dev/null || true
+          timeout 60 sudo rm -rf "${GITHUB_WORKSPACE}/benchmark_logs" 2>/dev/null || true
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
