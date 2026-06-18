@@ -3943,3 +3943,9 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang-disagg
+  description:
+    - "init submission of dsv4 sglang disagg "
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1818
