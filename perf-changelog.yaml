@@ -3950,3 +3950,11 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-mtp
+  description:
+    - "Update the MI325X MiniMax-M3 EAGLE3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Use FP8 KV cache"
+    - "Exclude chi-mi325x-pod2-120, which lacks the required populated /raid/hf-hub-cache"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1838
