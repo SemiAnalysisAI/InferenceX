@@ -211,6 +211,18 @@ NATS/etcd node.
 | `27738234911` | c64 topology sweep, VMM enabled | Failed | All four decode workers OOM during NVFP4 weight conversion before serving; no benchmark results |
 | `27770234988` | c64 topology sweep, RDMA + bounded registration cache | In progress | Official 900-second 4P/1D, 3P/2D, 2P/3D, and 1P/4D gate dispatched from `96f6346a` after direct canary `19244` validated the data plane |
 
+### Official RDMA topology gate: completed points
+
+- The 3P/2D c64 job in `27770234988` completed successfully with an official
+  aggregate and raw artifact: 682/682 requests, 71,625 total tok/s (70,954
+  input + 671 output), 1,791 tok/s/GPU, 115.8 s mean TTFT, 15.34 ms mean
+  TPOT, and 129.7 s mean E2E. NIXL remained in the tens-of-GB/s range.
+- This is 47% more total throughput and 72 seconds lower mean TTFT than the
+  direct 2P/3D c64 canary, confirming that c64 is prefill-limited. It remains
+  12.5% below the 81,863 tok/s B200 aggregate c64 baseline and has much higher
+  TTFT, so the more prefill-heavy 4P/1D point remains necessary before choosing
+  the final curve topologies.
+
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
 Functional results:
