@@ -209,6 +209,7 @@ NATS/etcd node.
 | `27734909066` | 4P/1D c64, new Dynamo/TCP | Success | Official artifact; clean 85/85 warmup and 99/99 profiled requests |
 | `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
 | `27738234911` | c64 topology sweep, VMM enabled | Failed | All four decode workers OOM during NVFP4 weight conversion before serving; no benchmark results |
+| `27770234988` | c64 topology sweep, RDMA + bounded registration cache | In progress | Official 900-second 4P/1D, 3P/2D, 2P/3D, and 1P/4D gate dispatched from `96f6346a` after direct canary `19244` validated the data plane |
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
