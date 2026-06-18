@@ -84,7 +84,7 @@ if [ "${PROFILE:-0}" = "1" ]; then
         --chdir=/tmp \
         --container-image="$SQUASH_FILE" \
         --container-mounts="$PROFILE_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" \
-        --no-container-mount-home \
+        --container-mount-home \
         --container-writable \
         --container-remap-root \
         --container-workdir=/workspace/ \
