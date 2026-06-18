@@ -172,16 +172,20 @@ jobs:
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
+            timeout 30 scancel --name="${{ runner.name }}" 2>/dev/null || true
             _drain_deadline=$((SECONDS + 120))
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+            # Wrap EVERY slurm call in `timeout`: on the NVIDIA clusters squeue
+            # itself hangs (unresponsive slurmctld / zombie), and a hang in the
+            # while-condition's $(squeue ...) never reaches the deadline check
+            # below. timeout 30 forces each call to return so the loop progresses.
+            while [ -n "$(timeout 30 squeue --name='${{ runner.name }}' --noheader --format='%i' 2>/dev/null)" ]; do
               if [ "$SECONDS" -ge "$_drain_deadline" ]; then
-                echo "[Slurm] drain exceeded 120s; force-cancelling (KILL) and proceeding (zombie job won't reap)"
-                scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
+                echo "[Slurm] drain exceeded 120s; force-cancelling (KILL) and proceeding (zombie/unresponsive slurm)"
+                timeout 30 scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
                 sleep 5
                 break
               fi
-              squeue --name="${{ runner.name }}"
+              timeout 30 squeue --name="${{ runner.name }}" 2>/dev/null || true
               sleep 5
             done
           fi
