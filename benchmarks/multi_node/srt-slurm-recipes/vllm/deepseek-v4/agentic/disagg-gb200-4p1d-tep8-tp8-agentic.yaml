@@ -11,9 +11,10 @@ name: "svf-vllm-disagg-gb200-4p1d-tep8-tp8-agentic"
 # Dynamo KV routing plus explicit vLLM KV-event publication preserves cache
 # affinity across the four prefill replicas. Unlike DEP, TEP does not put
 # unrelated, highly variable agentic requests behind one attention barrier.
-# The 2026-05-26 Dynamo wheel is required for vLLM v0.23 KV-event tuples. The
-# older 2026-04-26 wheel rejects every BlockStored event's trailing metadata,
-# which leaves the router trees empty and destroys prefix affinity.
+# The 2026-06-18 Dynamo wheel is required both for vLLM v0.23 KV-event tuples
+# and router-only session_control `bind` affinity. The 2026-05-26 wheel parses
+# the KV events but only accepts `open|close`, so it rejects AIPerf's vLLM-safe
+# `bind` requests before routing.
 
 model:
   path: "deepseek-v4-pro"
@@ -22,7 +23,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260526"
+  wheel: "1.3.0.dev20260618"
 
 setup_script: vllm-container-deps.sh
 

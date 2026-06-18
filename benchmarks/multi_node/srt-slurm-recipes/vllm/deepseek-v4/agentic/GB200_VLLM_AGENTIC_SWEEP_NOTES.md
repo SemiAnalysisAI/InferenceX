@@ -212,7 +212,7 @@ NATS/etcd node.
 | `27770234988` | c64 topology sweep, RDMA + bounded registration cache | Success | All four 900-second topology jobs and aggregate/raw/server-log artifacts completed successfully |
 | `27785852838` | selected 4P/1D + 3P/2D curves, c32 | Cancelled | 4P/1D completed, but the run was stopped after proving AIPerf omitted Dynamo `nvext.session_control` |
 | `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | Cancelled | Stopped for the same missing conversation-binding metadata; three matrix jobs had separately failed checkout before using GPUs |
-| `27790985904` | corrected 4P/1D + 3P/2D c64 gate | In progress | First official run with AIPerf `--use-dynamo-conv-aware-routing`, dispatched from `ddc3de01` |
+| `27790985904` | attempted affinity-enabled 4P/1D + 3P/2D c64 gate | Cancelled / invalid | The May 26 Dynamo wheel rejected all AIPerf `session_control.action=bind` warmup requests; 4P/1D Slurm job `19259` had 85/85 errors and 3P/2D job `19260` was cancelled pending |
 
 ### Official RDMA topology gate: completed points
 
@@ -242,7 +242,7 @@ NATS/etcd node.
   final c32/c64/c128/c192 sweep does not spend GPU time on proven prefill-
   starved shapes.
 
-### Missing Dynamo conversation binding
+### Dynamo conversation binding
 
 - Recipe-side routing was configured correctly: the Dynamo frontend used
   `router-mode: kv`, every prefill published KV events, and vLLM prefix caching
@@ -252,8 +252,8 @@ NATS/etcd node.
 - The pinned AIPerf branch supports `--use-dynamo-conv-aware-routing`, which
   adds Dynamo's `nvext.session_control` bind/close block to OpenAI request
   bodies using the stable conversation correlation ID. The InferenceX replay
-  command did not enable the option. `X-Correlation-ID` was present, but it is
-  tracing metadata and does not establish a Dynamo session binding.
+  command originally did not enable the option. `X-Correlation-ID` is tracing
+  metadata and does not establish a Dynamo session binding.
 - This explains the official 4P/1D c64 evidence: the four prefill engines
   reported only 3.2--4.2% local prefix hits, token-weighted cache-read usage
   was 3.75M / 88.45M = 4.24%, and only 250/2,172 (11.5%) frontend prefill
@@ -269,6 +269,21 @@ NATS/etcd node.
   affinity lease to expire would silently destroy the cache locality being
   measured. This setting does not change HTTP error handling or server health
   deadlines.
+- Compatibility audit after run `27790985904` found that AIPerf's router-only
+  `action: bind` and the pinned `1.2.0.dev20260526` frontend were incompatible:
+  that Dynamo build only deserializes `open|close`, and all 85 4P/1D warmup
+  requests failed before routing. `open` is not a substitute for vLLM because
+  it is an engine-backed SGLang streaming-session operation; without a worker
+  `session_control` endpoint it does not create router affinity.
+- Dynamo added router-only `SessionAction::Bind` specifically for this case.
+  The GB200 recipes now pin `1.3.0.dev20260618`, the first available cluster
+  nightly containing that implementation. The same release remains newer than
+  the May build already validated for vLLM v0.23 KV-event decoding.
+- AIPerf's `AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID` option was also
+  audited. Dynamo only added that coding-agent header on June 18, and it maps
+  to passive `agent_context`; it does not populate `session_control` or create
+  KV affinity. It is therefore intentionally not used as a replacement for
+  `bind`.
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
