@@ -130,3 +130,32 @@ def test_conflict_resolution_rejects_duplicate_remaining_contribution() -> None:
             42,
             "SemiAnalysisAI/InferenceX",
         )
+
+
+def test_conflict_resolution_separates_multiple_contributions_by_one_blank_line() -> None:
+    base = block("base-config", "https://github.com/SemiAnalysisAI/InferenceX/pull/1")
+    pr = base + b"\n" + block("new-a", "XXX") + b"\n" + block("new-b", "XXX")
+    main = base + b"\n" + block(
+        "main-config",
+        "https://github.com/SemiAnalysisAI/InferenceX/pull/41",
+    )
+
+    # resolve_conflict_bytes self-validates via validate_raw_change, which
+    # requires exactly one blank line between appended entries — so a wrong
+    # separator would raise here rather than return.
+    result = resolve_conflict_bytes(
+        base, pr, main, 42, "SemiAnalysisAI/InferenceX"
+    )
+
+    assert result.startswith(main)
+    assert [e["config-keys"][0] for e in parse_changelog(result, "result")] == [
+        "base-config",
+        "main-config",
+        "new-a",
+        "new-b",
+    ]
+    # 4 entries -> 3 single-blank-line separators, no double blanks, one trailing newline
+    assert result.count(b"- config-keys:") == 4
+    assert result.count(b"\n\n- config-keys:") == 3
+    assert b"\n\n\n" not in result
+    assert result.endswith(b"\n") and not result.endswith(b"\n\n")
