@@ -14,10 +14,8 @@ model:
   container: "lmsysorg/sglang:v0.5.11-cu130"
   precision: "fp4"
 
-# Released dynamo wheel — upstream recipe uses dynamo.version: "1.1.0".
-# launch_gb300-cw.sh stages /configs/dynamo-wheels for `hash:` source
-# builds (dsv4 path); the version path uses a released wheel and does
-# not depend on that cache.
+# Released dynamo wheel; unlike hash-based sources, this recipe does not
+# require a persistent /configs/dynamo-wheels build cache.
 dynamo:
   version: "1.1.0"
 
