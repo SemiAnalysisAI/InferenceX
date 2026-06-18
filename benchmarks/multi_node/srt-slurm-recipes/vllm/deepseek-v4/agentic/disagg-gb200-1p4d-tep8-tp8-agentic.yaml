@@ -115,6 +115,10 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
+      # GB200 multi-node NVLink requires VMM-backed KV allocations so NIXL can
+      # register CUDA IPC memory across NVLink domains instead of falling back
+      # to the host network transport.
+      enable-cumem-allocator: true
       tokenizer-mode: deepseek_v4
     decode:
       # Generated IDs are distinct per decode replica and synchronized across
@@ -136,6 +140,7 @@ backend:
       stream-interval: 50
       all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
+      enable-cumem-allocator: true
       tokenizer-mode: deepseek_v4
 
 sbatch_directives:

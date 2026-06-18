@@ -86,6 +86,25 @@ NATS/etcd node.
   collisions across decode replicas while vLLM synchronizes the generated ID
   across the two nodes of each TP8 replica.
 
+### GB200 NIXL VMM registration
+
+- Enabled vLLM's CuMem allocator on every prefill and decode worker in all
+  four topology recipes.
+- Evidence: the corrected 4P/1D run transferred hundreds of MiB per request,
+  but NIXL throughput degraded to roughly 14--25 MiB/s under load. P90 transfer
+  latency reached 50--92 seconds, and prefill workers released hundreds of
+  expired transfer leases; 495 expiration messages reported that zero remote
+  workers had retrieved the blocks.
+- vLLM 0.23 documents that GB-series multi-node NVLink requires VMM-backed KV
+  cache registration via `--enable-cumem-allocator` or sleep mode together
+  with `UCX_CUDA_IPC_ENABLE_MNNVL=y`. The environment variable was present,
+  but the allocator flag was missing from the four new topology recipes.
+- The existing fixed-sequence DeepSeek V4 GB200 recipes enable sleep mode,
+  which implicitly enables the same CuMem allocator. The explicit allocator
+  flag is used here because the benchmark does not need sleep/wake behavior.
+- `kv_buffer_size` was not changed: in vLLM 0.23 it does not size the
+  `NixlConnector` transfer path, so changing it would not address this fault.
+
 ### Slurm job-name prefix (branch-only historical workaround)
 
 - This branch prefixes GB200 Slurm jobs with `ifx-` in
@@ -115,7 +134,7 @@ NATS/etcd node.
 | `27732316539` | TEP4 prefill attempt | Failed | Model-load OOM at 182.54 GiB/GPU plus 1.97 GiB allocation |
 | `27732541012` | 4P/1D c64, old Dynamo/NATS | Failed warmup | 45/85 errors; empty router indexes; KV-event decode errors; HTTP 503 overloads |
 | `27734909066` | 4P/1D c64, new Dynamo/TCP | Success | Official artifact; clean 85/85 warmup and 99/99 profiled requests |
-| `27737167704` | c64 topology sweep | Running/queued | 4P/1D, 3P/2D, 2P/3D, 1P/4D |
+| `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
 
 ## Corrected 4P/1D c64 Gate (`27734909066`)
 
@@ -140,11 +159,13 @@ Performance from `results_bmk/agg_bmk.json`:
 - Theoretical cache hit: 96.5%.
 - Final vLLM GPU prefix-hit rates by prefill: approximately 1.3% to 3.5%.
 
-Conclusion: this run proves the compatibility and transport fixes, but it is
-not a satisfactory performance result. It is slower than the earlier 1P/1D
-c64 point and far below the B200 aggregate baseline. The gap between 96.5%
-theoretical reuse and low single-digit measured reuse remains an open root
-cause; a green workflow alone is not acceptance.
+Conclusion: this run proves the Dynamo compatibility and request-plane fixes,
+but not a healthy NIXL data plane. It is slower than the earlier 1P/1D c64
+point and far below the B200 aggregate baseline. Server logs show multi-second
+to multi-minute KV transfers and expired producer leases, consistent with the
+missing GB200 VMM registration. The gap between 96.5% theoretical reuse and
+low single-digit measured reuse must be re-evaluated after correcting that
+transport defect; a green workflow alone is not acceptance.
 
 ## Baseline
 
@@ -160,11 +181,13 @@ detecting clearly invalid performance.
 
 ## Open Investigation
 
-1. Complete the c64 P/D topology comparison. The 4P/1D result is strongly
-   decode-limited, so D-heavy layouts are expected to improve latency and
-   completed-request rate.
-2. Determine why Dynamo observes only small cached overlaps even though the
-   trace reports about 96% theoretical reuse and the prefills have spare KV
+1. Re-run the c64 P/D topology comparison with VMM-backed NIXL transfers and
+   verify transfer throughput, latency, and lease-expiration counters in the
+   prefill/decode logs. The 4P/1D result was strongly decode-limited, so
+   D-heavy layouts are expected to improve latency and completed-request rate.
+2. Determine whether Dynamo still observes only small cached overlaps even
+   though the trace reports about 96% theoretical reuse and the prefills have
+   spare KV
    capacity. Candidate causes must be proven from token/hash/routing evidence;
    no cache-hit metric bypass or synthetic workload substitution is acceptable.
 3. Select viable topologies and run official c32/c64/c128/c192 curves.
