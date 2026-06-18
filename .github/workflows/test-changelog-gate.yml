@@ -21,6 +21,7 @@ on:
       - "utils/validate_perf_changelog.py"
       - "utils/validate_reusable_sweep_artifacts.py"
       - "utils/test_validate_perf_changelog.py"
+      - "utils/test_run_sweep_gating.py"
       - "utils/merge_with_reuse.sh"
       - "utils/matrix_logic/**"
 
@@ -62,6 +63,7 @@ jobs:
             utils/test_prepare_perf_changelog_merge.py \
             utils/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
+            utils/test_run_sweep_gating.py \
             -v
 
       - name: Publish simulated append result
