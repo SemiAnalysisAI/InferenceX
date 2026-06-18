@@ -123,6 +123,26 @@ NATS/etcd node.
 - TCP is intentionally omitted so an unavailable RDMA transport fails visibly
   instead of silently reproducing the 14--25 MiB/s data path.
 
+### Direct-cluster RDMA canary and registration-cache limit
+
+- Manual Slurm job `19243` launched the 2P/3D c64 topology for 900 seconds
+  from commit `7979c6b1` on eleven Watchtower nodes. A two-node host probe
+  first confirmed six `mlx5` RDMA devices per node. The worker launch logs
+  confirm `UCX_TLS=cuda_copy,rc` with no TCP fallback. This job is a transport
+  canary only; official results still require GitHub Actions artifacts.
+- During initialization, vLLM 0.23 warned on every decode process that Dynamo
+  had imported NIXL before vLLM could set `UCX_RCACHE_MAX_UNRELEASED=1024`.
+  The repository's existing vLLM disaggregated recipes set this variable on
+  both prefill and decode workers for the same reason. All four GB200 agentic
+  topology recipes now set it explicitly so UCX does not retain an unbounded
+  number of released memory registrations during long, high-churn KV runs.
+- Message capacity is already separated by plane: the recipes raise NATS
+  `max_payload` to 32 MiB for long agentic control messages, vLLM's KV-event
+  publisher reports a 100,000-event high-water mark and queue, and bulk KV
+  bytes travel through NIXL/UCX rather than NATS. No truncation or payload-too-
+  large evidence has appeared in job `19243`; additional buffer tuning will be
+  evidence-driven rather than applied speculatively.
+
 ### Slurm job-name prefix (branch-only historical workaround)
 
 - This branch prefixes GB200 Slurm jobs with `ifx-` in

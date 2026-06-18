@@ -74,6 +74,7 @@ backend:
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
     # TP8 NVFP4 exhausts device memory when vLLM's CuMem allocator wraps model
     # loading. Use the cluster's RDMA transport for NIXL KV transfers instead.
     UCX_TLS: "cuda_copy,rc"
@@ -89,6 +90,7 @@ backend:
     VLLM_SERVER_DEV_MODE: "1"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
     UCX_TLS: "cuda_copy,rc"
     NCCL_P2P_LEVEL: NVL
 
