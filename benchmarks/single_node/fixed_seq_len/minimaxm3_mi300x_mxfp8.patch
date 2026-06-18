@@ -1,0 +1,439 @@
+diff --git a/vllm/model_executor/layers/fused_moe/config.py b/vllm/model_executor/layers/fused_moe/config.py
+index 0755699d1a4545649e8f5af5de77bbf2c6b24fab..905a9bea3c59ee3ef14a5acede345ffc2fd4a36d 100644
+--- a/vllm/model_executor/layers/fused_moe/config.py
++++ b/vllm/model_executor/layers/fused_moe/config.py
+@@ -603,6 +603,8 @@ def fp8_w8a8_moe_quant_config(
+     a2_gscale: torch.Tensor | None = None,
+     g1_alphas: torch.Tensor | None = None,
+     g2_alphas: torch.Tensor | None = None,
++    gemm1_alpha: float | None = None,
++    gemm1_beta: float | None = None,
+     gemm1_clamp_limit: float | None = None,
+ ) -> FusedMoEQuantConfig:
+     """
+@@ -623,5 +625,7 @@ def fp8_w8a8_moe_quant_config(
+         per_act_token_quant=per_act_token_quant,
+         per_out_ch_quant=per_out_ch_quant,
+         block_shape=block_shape,
++        gemm1_alpha=gemm1_alpha,
++        gemm1_beta=gemm1_beta,
+         gemm1_clamp_limit=gemm1_clamp_limit,
+     )
+diff --git a/vllm/model_executor/layers/fused_moe/configs/E=128,N=384,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json b/vllm/model_executor/layers/fused_moe/configs/E=128,N=384,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json
+index c275cecc1591f16e91791e9b007cdb6fcaac40b4..f20c20c4d2a475ca00926c98608edc6b645dd4c1 100644
+--- a/vllm/model_executor/layers/fused_moe/configs/E=128,N=384,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json
++++ b/vllm/model_executor/layers/fused_moe/configs/E=128,N=384,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json
+@@ -1,28 +1,28 @@
+ {
+     "1": {
+-        "BLOCK_SIZE_M": 16,
+-        "BLOCK_SIZE_N": 128,
+-        "BLOCK_SIZE_K": 256,
+-        "GROUP_SIZE_M": 1,
+-        "num_warps": 8,
++        "BLOCK_SIZE_M": 32,
++        "BLOCK_SIZE_N": 16,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 16,
++        "num_warps": 2,
+         "num_stages": 2,
+         "waves_per_eu": 0
+     },
+     "2": {
+-        "BLOCK_SIZE_M": 16,
+-        "BLOCK_SIZE_N": 128,
+-        "BLOCK_SIZE_K": 256,
++        "BLOCK_SIZE_M": 32,
++        "BLOCK_SIZE_N": 16,
++        "BLOCK_SIZE_K": 128,
+         "GROUP_SIZE_M": 1,
+-        "num_warps": 8,
++        "num_warps": 2,
+         "num_stages": 2,
+         "waves_per_eu": 0
+     },
+     "4": {
+-        "BLOCK_SIZE_M": 16,
+-        "BLOCK_SIZE_N": 128,
+-        "BLOCK_SIZE_K": 256,
+-        "GROUP_SIZE_M": 1,
+-        "num_warps": 8,
++        "BLOCK_SIZE_M": 32,
++        "BLOCK_SIZE_N": 16,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 8,
++        "num_warps": 2,
+         "num_stages": 2,
+         "waves_per_eu": 0
+     },
+@@ -36,11 +36,11 @@
+         "waves_per_eu": 0
+     },
+     "16": {
+-        "BLOCK_SIZE_M": 16,
+-        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_M": 32,
++        "BLOCK_SIZE_N": 32,
+         "BLOCK_SIZE_K": 128,
+         "GROUP_SIZE_M": 1,
+-        "num_warps": 8,
++        "num_warps": 1,
+         "num_stages": 2,
+         "waves_per_eu": 0
+     },
+diff --git a/vllm/model_executor/layers/fused_moe/configs/E=16,N=3072,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json b/vllm/model_executor/layers/fused_moe/configs/E=16,N=3072,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json
+new file mode 100644
+index 0000000000000000000000000000000000000000..b1bfee7fc386385fa8b8f06e561d528ea4762d87
+--- /dev/null
++++ b/vllm/model_executor/layers/fused_moe/configs/E=16,N=3072,device_name=AMD_Instinct_MI300X,dtype=fp8_w8a8,block_shape=[128,128].json
+@@ -0,0 +1,74 @@
++{
++    "64": {
++        "BLOCK_SIZE_M": 32,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 4,
++        "num_warps": 2,
++        "num_stages": 2,
++        "waves_per_eu": 2
++    },
++    "128": {
++        "BLOCK_SIZE_M": 32,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 256,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 2,
++        "num_stages": 2,
++        "waves_per_eu": 1
++    },
++    "256": {
++        "BLOCK_SIZE_M": 64,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 256,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 4,
++        "num_stages": 2,
++        "waves_per_eu": 2
++    },
++    "512": {
++        "BLOCK_SIZE_M": 64,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 4,
++        "num_stages": 2,
++        "waves_per_eu": 2
++    },
++    "1024": {
++        "BLOCK_SIZE_M": 64,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 4,
++        "num_stages": 2,
++        "waves_per_eu": 2
++    },
++    "2048": {
++        "BLOCK_SIZE_M": 64,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 4,
++        "num_stages": 2,
++        "waves_per_eu": 2
++    },
++    "4096": {
++        "BLOCK_SIZE_M": 256,
++        "BLOCK_SIZE_N": 128,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 4,
++        "num_stages": 2,
++        "waves_per_eu": 0
++    },
++    "8192": {
++        "BLOCK_SIZE_M": 128,
++        "BLOCK_SIZE_N": 256,
++        "BLOCK_SIZE_K": 128,
++        "GROUP_SIZE_M": 1,
++        "num_warps": 4,
++        "num_stages": 2,
++        "waves_per_eu": 0
++    }
++}
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
+index d0d7c76481b0a315e9c57810d40394822f62594c..e82429b8ecddc9b8e44f003a537de08b5cb7a045 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/mxfp8.py
+@@ -7,8 +7,11 @@ from vllm.model_executor.layers.fused_moe.config import FusedMoEConfig
+ from vllm.model_executor.layers.fused_moe.oracle.fp8 import (
+     Fp8MoeBackend,
+     backend_to_kernel_cls,
++    select_fp8_moe_backend,
+ )
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
++    kFp8Dynamic128Sym,
++    kFp8Static128BlockSym,
+     kMxfp8Dynamic,
+     kMxfp8Static,
+ )
+@@ -101,13 +104,31 @@ def _select_rocm_mxfp8_backend() -> tuple[Fp8MoeBackend, type[mk.FusedMoEExperts
+
+ def select_mxfp8_moe_backend(
+     config: FusedMoEConfig,
++    *,
++    block_fp8_on_fnuz: bool = False,
+ ) -> tuple[Fp8MoeBackend, type[mk.FusedMoEExperts]]:
+     """Select the MXFP8 MoE backend and the best expert class.
+
++    ``block_fp8_on_fnuz`` must only be enabled by quantization methods that
++    convert their MXFP8 weights to 128x128 block FP8 before kernel setup.
++
+     Returns:
+         A tuple of (fp8_backend, experts_cls).
+     """
+
++    if block_fp8_on_fnuz and current_platform.is_fp8_fnuz():
++        logger.info_once(
++            "MXFP8 MoE weights will be converted to 128x128 block FP8 at load time."
++        )
++        block_fp8_backend, experts_cls = select_fp8_moe_backend(
++            config=config,
++            weight_key=kFp8Static128BlockSym,
++            activation_key=kFp8Dynamic128Sym,
++        )
++        assert block_fp8_backend is not None
++        assert experts_cls is not None
++        return block_fp8_backend, experts_cls
++
+     runner_backend = config.moe_backend
+     if runner_backend != "auto":
+         backend = _BACKEND_NAME_MAP.get(runner_backend)
+diff --git a/vllm/model_executor/layers/fused_moe/oracle/fp8.py b/vllm/model_executor/layers/fused_moe/oracle/fp8.py
+index acbf2cb46ad42927fa344363059fe37a970d132b..1b5030b190960dd3758a25d156389be749f31530 100644
+--- a/vllm/model_executor/layers/fused_moe/oracle/fp8.py
++++ b/vllm/model_executor/layers/fused_moe/oracle/fp8.py
+@@ -568,5 +568,7 @@ def make_fp8_moe_quant_config(
+         block_shape=block_shape,
+         per_act_token_quant=per_act_token_quant,
+         per_out_ch_quant=per_out_ch_quant,
++        gemm1_alpha=gemm1_alpha,
++        gemm1_beta=gemm1_beta,
+         gemm1_clamp_limit=swiglu_limit,
+     )
+diff --git a/vllm/model_executor/layers/quantization/modelopt.py b/vllm/model_executor/layers/quantization/modelopt.py
+index 33c7c7532a0ba823e4e7a23538300a5977a4553e..9b9d73f7b5fc138cac3dc3349a24a473d2c1faf6 100644
+--- a/vllm/model_executor/layers/quantization/modelopt.py
++++ b/vllm/model_executor/layers/quantization/modelopt.py
+@@ -69,6 +69,7 @@ from vllm.model_executor.layers.quantization.utils.mxfp8_utils import (
+     MXFP8_BLOCK_SIZE,
+     MXFP8_SCALE_DTYPE,
+     MXFP8_VALUE_DTYPE,
++    convert_mxfp8_to_block_fp8,
+ )
+ from vllm.model_executor.layers.quantization.utils.quant_utils import (
+     GroupShape,
+@@ -92,6 +93,7 @@ from vllm.model_executor.parameter import (
+     PerTensorScaleParameter,
+ )
+ from vllm.model_executor.utils import replace_parameter, set_weight_attrs
++from vllm.platforms import current_platform
+
+ if TYPE_CHECKING:
+     from vllm.model_executor.models.utils import WeightsMapper
+@@ -1876,7 +1878,7 @@ class ModelOptMxFp8LinearMethod(LinearMethodBase):
+
+
+ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+-    """FlashInfer TRTLLM MXFP8 block-scale MoE for ModelOpt checkpoints."""
++    """ModelOpt MXFP8 MoE quantization."""
+
+     def __init__(
+         self,
+@@ -1884,11 +1886,17 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+         moe_config: FusedMoEConfig,
+     ) -> None:
+         super().__init__(moe_config)
+-        self.weight_block_size = [1, MXFP8_BLOCK_SIZE]
++        self.requantize_mxfp8_to_block_fp8 = current_platform.is_fp8_fnuz()
++        self.weight_block_size = (
++            [128, 128] if self.requantize_mxfp8_to_block_fp8 else [1, MXFP8_BLOCK_SIZE]
++        )
+         self.quant_config = quant_config
+         assert self.quant_config.is_checkpoint_mxfp8_serialized
+
+-        self.mxfp8_backend, self.experts_cls = select_mxfp8_moe_backend(config=self.moe)
++        self.mxfp8_backend, self.experts_cls = select_mxfp8_moe_backend(
++            config=self.moe,
++            block_fp8_on_fnuz=self.requantize_mxfp8_to_block_fp8,
++        )
+
+     def create_weights(
+         self,
+@@ -2129,15 +2137,35 @@ class ModelOptMxFp8FusedMoE(FusedMoEMethodBase):
+
+         self._check_weight_dtypes(layer)
+
++        if self.requantize_mxfp8_to_block_fp8:
++            w13, w13_scale = convert_mxfp8_to_block_fp8(
++                layer.w13_weight,
++                layer.w13_weight_scale,
++                block_size=(128, 128),
++            )
++            w2, w2_scale = convert_mxfp8_to_block_fp8(
++                layer.w2_weight,
++                layer.w2_weight_scale,
++                block_size=(128, 128),
++            )
++            logger.info_once(
++                "Converted MXFP8 MoE weights to 128x128 block FP8 at load time."
++            )
++        else:
++            w13 = layer.w13_weight
++            w2 = layer.w2_weight
++            w13_scale = layer.w13_weight_scale
++            w2_scale = layer.w2_weight_scale
++
+         layer.weight_block_size = self.weight_block_size
+
+         w13, w2, w13_scale, w2_scale = convert_to_fp8_moe_kernel_format(
+             fp8_backend=self.mxfp8_backend,
+             layer=layer,
+-            w13=layer.w13_weight,
+-            w2=layer.w2_weight,
+-            w13_scale=layer.w13_weight_scale,
+-            w2_scale=layer.w2_weight_scale,
++            w13=w13,
++            w2=w2,
++            w13_scale=w13_scale,
++            w2_scale=w2_scale,
+             w13_input_scale=None,
+             w2_input_scale=None,
+         )
+diff --git a/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py b/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
+index e6063b463284f912f6cd923d9cf65ff9515d56f2..27d7be0a1740630269c305cfe7377eebdbd54285 100644
+--- a/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
++++ b/vllm/model_executor/layers/quantization/utils/mxfp8_utils.py
+@@ -227,6 +227,122 @@ def dequant_mxfp8_to_bf16(x: torch.Tensor, scales: torch.Tensor) -> torch.Tensor
+     return dequantized.to(torch.bfloat16)
+
+
++def _quantize_block_fp8_ocp(
++    weight: torch.Tensor,
++    block_size: tuple[int, int],
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Quantize a matrix to OCP E4M3 with per-block FP32 scales."""
++    block_m, block_k = block_size
++    n, k = weight.shape
++    padded_n = ((n + block_m - 1) // block_m) * block_m
++    padded_k = ((k + block_k - 1) // block_k) * block_k
++    padded = torch.zeros(
++        (padded_n, padded_k),
++        dtype=torch.float32,
++        device=weight.device,
++    )
++    padded[:n, :k] = weight.float()
++
++    blocks = padded.view(
++        padded_n // block_m,
++        block_m,
++        padded_k // block_k,
++        block_k,
++    )
++    amax = blocks.abs().amax(dim=(1, 3), keepdim=True).clamp(min=1e-4)
++    scales = amax / torch.finfo(torch.float8_e4m3fn).max
++    quantized = (blocks / scales).to(torch.float8_e4m3fn)
++    return (
++        quantized.view(padded_n, padded_k)[:n, :k].contiguous(),
++        scales.view(padded_n // block_m, padded_k // block_k).contiguous(),
++    )
++
++
++def convert_mxfp8_to_block_fp8(
++    weight: torch.Tensor,
++    scales: torch.Tensor,
++    block_size: tuple[int, int] = (128, 128),
++) -> tuple[torch.Tensor, torch.Tensor]:
++    """Convert MXFP8 matrices to block-scaled FP8.
++
++    Each matrix is dequantized and requantized independently to bound the
++    temporary BF16 memory used while loading MoE weights.
++    """
++    from vllm.model_executor.layers.quantization.utils.w8a8_utils import (
++        normalize_e4m3fn_to_e4m3fnuz,
++    )
++    from vllm.platforms import current_platform
++
++    if weight.ndim < 2:
++        raise ValueError(
++            f"MXFP8 weight must have at least 2 dimensions, got {weight.ndim}."
++        )
++    if weight.dtype != MXFP8_VALUE_DTYPE:
++        raise ValueError(
++            f"MXFP8 weight must use {MXFP8_VALUE_DTYPE}, got {weight.dtype}."
++        )
++    if scales.dtype != MXFP8_SCALE_DTYPE:
++        raise ValueError(
++            f"MXFP8 scales must use {MXFP8_SCALE_DTYPE}, got {scales.dtype}."
++        )
++    if weight.shape[-1] % MXFP8_BLOCK_SIZE != 0:
++        raise ValueError(
++            f"MXFP8 weight K dimension must be divisible by {MXFP8_BLOCK_SIZE}, "
++            f"got {weight.shape[-1]}."
++        )
++
++    expected_scale_shape = (*weight.shape[:-1], weight.shape[-1] // MXFP8_BLOCK_SIZE)
++    if scales.shape != expected_scale_shape:
++        raise ValueError(
++            f"Expected MXFP8 scale shape {expected_scale_shape}, "
++            f"got {tuple(scales.shape)}."
++        )
++
++    block_m, block_k = block_size
++    if block_m <= 0 or block_k <= 0:
++        raise ValueError(f"Block dimensions must be positive, got {block_size}.")
++
++    n, k = weight.shape[-2:]
++    scale_shape = (
++        *weight.shape[:-2],
++        (n + block_m - 1) // block_m,
++        (k + block_k - 1) // block_k,
++    )
++    quantized = torch.empty_like(weight, dtype=current_platform.fp8_dtype())
++    block_scales = torch.empty(
++        scale_shape,
++        dtype=torch.float32,
++        device=weight.device,
++    )
++
++    weight_view = weight.reshape(-1, n, k)
++    scales_view = scales.reshape(-1, n, k // MXFP8_BLOCK_SIZE)
++    quantized_view = quantized.reshape(-1, n, k)
++    block_scales_view = block_scales.reshape(
++        -1,
++        scale_shape[-2],
++        scale_shape[-1],
++    )
++    for matrix_idx in range(weight_view.shape[0]):
++        dequantized = dequant_mxfp8_to_bf16(
++            weight_view[matrix_idx],
++            scales_view[matrix_idx],
++        )
++        matrix, matrix_scales = _quantize_block_fp8_ocp(
++            dequantized,
++            block_size=(block_m, block_k),
++        )
++        if current_platform.is_fp8_fnuz():
++            matrix, matrix_scales, _ = normalize_e4m3fn_to_e4m3fnuz(
++                matrix,
++                matrix_scales,
++            )
++        quantized_view[matrix_idx].copy_(matrix)
++        block_scales_view[matrix_idx].copy_(matrix_scales)
++
++    return quantized.contiguous(), block_scales.contiguous()
++
++
+ def mxfp8_e4m3_quantize_fake(
+     x: torch.Tensor,
+     is_sf_swizzled_layout: bool = False,

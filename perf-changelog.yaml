@@ -3943,3 +3943,11 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Convert checkpoint MXFP8 MoE weights once at load time to 128x128 block FP8 on gfx942."
+    - "Normalize OCP E4M3 values to FNUZ and use the regular Triton block-FP8 backend."
+    - "Use measured low-token TP tiles and a tuned local-expert table without changing the TP8/TP8+EP8 matrix."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1753
