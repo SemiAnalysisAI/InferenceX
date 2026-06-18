@@ -276,14 +276,6 @@ CASES = [
     ("PR-ready-for-review",
      {**_PR, "action": "ready_for_review", "labels": ["full-sweep-enabled"],
       "has": "true", "reuse_auth": False}, ("success", "skipped", "RUN")),
-    # opened/reopened are triggers added alongside check-changelog; with a
-    # sweep label already present they start a sweep at open/reopen time.
-    ("PR-opened-with-label",
-     {**_PR, "action": "opened", "labels": ["full-sweep-enabled"],
-      "has": "true"}, ("success", "skipped", "RUN")),
-    ("PR-reopened-with-label",
-     {**_PR, "action": "reopened", "labels": ["full-sweep-enabled"],
-      "has": "true"}, ("success", "skipped", "RUN")),
     ("PR-sync-metadata-only",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "has": "false"}, ("success", "skipped", "SKIP")),
@@ -345,8 +337,10 @@ def test_engine_self_consistency() -> None:
 
 
 def test_trigger_types_enable_gated_events() -> None:
-    assert {"opened", "reopened", "synchronize", "labeled",
-            "unlabeled", "ready_for_review"} <= PR_TYPES
+    assert {"synchronize", "labeled", "unlabeled", "ready_for_review"} <= PR_TYPES
+    # opened/reopened are intentionally excluded so opening or reopening a PR
+    # that already carries a sweep label does not start a sweep.
+    assert {"opened", "reopened"}.isdisjoint(PR_TYPES)
 
 
 # --------------------------------------------------------------------------
@@ -407,8 +401,7 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-enabled", "full-sweep-fail-fast"],
     ]
     pr_axes = itertools.product(
-        ["opened", "reopened", "ready_for_review", "synchronize",
-         "labeled", "unlabeled"],          # action
+        ["ready_for_review", "synchronize", "labeled", "unlabeled"],  # action
         [False, True],                      # draft
         label_cfgs,                         # labels
         ["full-sweep-enabled", "sweep-enabled", "documentation", None],  # label.name
@@ -442,9 +435,9 @@ def test_exhaustive_cross_product() -> None:
     ]
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
-    # (6 actions x 2 draft x 9 label-configs x 4 label-names x 2 check x
-    # 2 has-additions x 2 reuse = 3456 PR cases, plus 8 push cases).
-    assert len(scenarios) == 3464
+    # (4 actions x 2 draft x 9 label-configs x 4 label-names x 2 check x
+    # 2 has-additions x 2 reuse = 2304 PR cases, plus 8 push cases).
+    assert len(scenarios) == 2312
 
 
 def test_named_cases_match_reference_spec() -> None:

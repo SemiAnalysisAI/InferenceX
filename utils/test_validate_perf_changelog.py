@@ -213,7 +213,12 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     pull_request_types = workflow["on"]["pull_request"]["types"]
 
     assert "needs" not in jobs["check-changelog"]
-    assert {"opened", "reopened"}.issubset(set(pull_request_types))
+    # opened/reopened are intentionally excluded so opening or reopening a PR
+    # that already carries a sweep label does not start a sweep.
+    assert {"synchronize", "labeled", "unlabeled", "ready_for_review"}.issubset(
+        set(pull_request_types)
+    )
+    assert {"opened", "reopened"}.isdisjoint(set(pull_request_types))
     check_step_names = [
         step.get("name")
         for step in jobs["check-changelog"]["steps"]
