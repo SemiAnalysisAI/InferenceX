@@ -210,6 +210,8 @@ NATS/etcd node.
 | `27737167704` | c64 topology sweep | Cancelled before allocation | Server-log audit found the four recipes lacked VMM-backed KV registration required for GB200 multi-node NVLink |
 | `27738234911` | c64 topology sweep, VMM enabled | Failed | All four decode workers OOM during NVFP4 weight conversion before serving; no benchmark results |
 | `27770234988` | c64 topology sweep, RDMA + bounded registration cache | Success | All four 900-second topology jobs and aggregate/raw/server-log artifacts completed successfully |
+| `27785852838` | selected 4P/1D + 3P/2D curves, c32 | In progress | Official 900-second low-concurrency points dispatched from `9a7aff39` |
+| `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | In progress | Official 900-second saturation points dispatched from `9a7aff39` |
 
 ### Official RDMA topology gate: completed points
 
