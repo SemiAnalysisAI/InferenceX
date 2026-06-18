@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import yaml
 
@@ -124,3 +126,39 @@ def test_compare_entries_rejects_correction_mixed_with_append() -> None:
 
     with pytest.raises(ChangelogValidationError, match="do not mix"):
         compare_entries(base, head, 42)
+
+
+def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    workflow = yaml.load(
+        (repo_root / ".github/workflows/run-sweep.yml").read_text(),
+        Loader=yaml.BaseLoader,
+    )
+    jobs = workflow["jobs"]
+
+    assert "needs" not in jobs["check-changelog"]
+    assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
+    assert (
+        "needs.check-changelog.result == 'success'"
+        in jobs["reuse-sweep-gate"]["if"]
+    )
+    assert jobs["setup"]["needs"] == [
+        "check-changelog",
+        "reuse-sweep-gate",
+    ]
+    assert "needs.check-changelog.result == 'success'" in jobs["setup"]["if"]
+
+
+def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    script = (repo_root / "utils/merge_with_reuse.sh").read_text()
+
+    push_index = script.index('git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"')
+    wait_index = script.index(
+        'wait_for_check "$POST_MERGE" "check-changelog"'
+    )
+    merge_index = script.index(
+        'gh pr merge "$PR" --repo "$REPO" --squash --admin'
+    )
+
+    assert push_index < wait_index < merge_index
