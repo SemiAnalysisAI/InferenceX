@@ -1,3 +1,9 @@
+<div align="center">
+
+**English** | [中文](./README_zh.md)
+
+</div>
+
 #  InferenceX™, Open Source Continuous Inference Standard and Research Platform 
 ## Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Microsoft, Oracle, etc, & ML Community such as PyTorch Foundation, vLLM, SGLang, Tri Dao
 
