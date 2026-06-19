@@ -13,11 +13,11 @@
 
 ## News
 
-- **[2026/06]** 🔥 MiniMax M3: continuous benchmarks live since Day 0 ([dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)).
-- **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T: continuous benchmarks live since Day 0 ([article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance), [dashboard](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)).
-- **[2026/02]** GB300 NVL72: added to InferenceX & continuously benchmarked ([SGLang Maintainer Lmsys Blog](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)).
-- **[2026/02]** 🔥 InferenceX v2 launch — NVIDIA Blackwell vs AMD vs Hopper ([article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)).
-- **[2025/10]** 🔥 InferenceX (formerly InferenceMAX) v1 launch ([article](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)).
+- **[2026/06]** 🔥 MiniMax M3: continuous benchmarks live since Day 0 [dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
+- **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T: continuous benchmarks live since Day 0 [article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance), [dashboard](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)
+- **[2026/02]** GB300 NVL72: added to InferenceX & continuously benchmarked [SGLang Maintainer Lmsys Blog](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)
+- **[2026/02]** 🔥 InferenceX v2 launch — NVIDIA Blackwell vs AMD vs Hopper [article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
+- **[2025/10]** 🔥 InferenceX (formerly InferenceMAX) v1 launch [article](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
 
 ## Introduction
 
@@ -26,10 +26,6 @@ InferenceX™ (formerly InferenceMAX) is an inference performance research platf
 > [!IMPORTANT]
 > Only [SemiAnalysisAI/InferenceX](https://github.com/SemiAnalysisAI/InferenceX) repo contains the Official InferenceX™ result, all other forks & repos are Unofficial. The benchmark setup & quality of machines/clouds in unofficial repos may be differ leading to subpar benchmarking. Unofficial must be explicitly labelled as Unofficial.
 > Forks may not remove this disclaimer
-
-[Full Article Write Up for InferenceXv2](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
-[Full Article Write Up for InferenceXv1](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
-
 
 <img width="1150" height="665" alt="image" src="https://github.com/user-attachments/assets/1e9738d4-6fb2-4cd7-a3e9-e6b2e03faed1" />
 <img width="1098" height="655" alt="image" src="https://github.com/user-attachments/assets/5b363271-69b9-4bd2-b85d-b33b9c16f50f" />

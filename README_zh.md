@@ -13,11 +13,11 @@
 
 ## 新闻
 
-- **[2026/06]** 🔥 MiniMax M3：自 Day 0 起持续进行基准测试（[仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)）。
-- **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T：自 Day 0 起持续进行基准测试（[文章](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)，[仪表盘](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)）。
-- **[2026/02]** GB300 NVL72：已加入 InferenceX 并持续进行基准测试（[SGLang 维护者 LMSYS 博客](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)）。
-- **[2026/02]** 🔥 InferenceX v2 发布——NVIDIA Blackwell 对比 AMD 对比 Hopper（[文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)）。
-- **[2025/10]** 🔥 InferenceX（前身为 InferenceMAX）v1 发布（[文章](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)）。
+- **[2026/06]** 🔥 MiniMax M3：自 Day 0 起持续进行基准测试 [仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
+- **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T：自 Day 0 起持续进行基准测试 [文章](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)，[仪表盘](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)
+- **[2026/02]** GB300 NVL72：已加入 InferenceX 并持续进行基准测试 [SGLang 维护者 LMSYS 博客](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)
+- **[2026/02]** 🔥 InferenceX v2 发布——NVIDIA Blackwell 对比 AMD 对比 Hopper [文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
+- **[2025/10]** 🔥 InferenceX（前身为 InferenceMAX）v1 发布 [文章](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
 
 ## 简介
 
@@ -26,10 +26,6 @@ InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致
 > [!IMPORTANT]
 > 只有 [SemiAnalysisAI/InferenceX](https://github.com/SemiAnalysisAI/InferenceX) 仓库才包含官方的 InferenceX™ 结果，所有其他派生（fork）与仓库均为非官方。非官方仓库的基准测试设置以及机器/云环境的质量可能存在差异，从而导致基准测试结果欠佳。非官方仓库必须明确标注为“非官方（Unofficial）”。
 > 派生仓库不得移除本免责声明。
-
-[InferenceXv2 完整文章解读](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
-[InferenceXv1 完整文章解读](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
-
 
 <img width="1150" height="665" alt="image" src="https://github.com/user-attachments/assets/1e9738d4-6fb2-4cd7-a3e9-e6b2e03faed1" />
 <img width="1098" height="655" alt="image" src="https://github.com/user-attachments/assets/5b363271-69b9-4bd2-b85d-b33b9c16f50f" />
