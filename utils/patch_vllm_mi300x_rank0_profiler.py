@@ -16,10 +16,10 @@ from pathlib import Path
 RELATIVE_PATH = "vllm/v1/worker/gpu_worker.py"
 PATCH_MARKER = "InferenceX MI300X profiling: keep ROCTracer on rank 0."
 EXPECTED_SOURCE_SHA256 = (
-    "61eb2c62031337ca131d5610b5d5b2998630e159b48e1066b8d80bb68b4594ef"
+    "98a44d4a89d99b46304e651ca3a31508cff2920889adaf9584daf7e60609e8d7"
 )
 EXPECTED_PATCHED_SHA256 = (
-    "2e3eade99ba27dee35edf6d404a3490e57b2b288b8916fef514ac20da7d40a8c"
+    "df692a65f2354f13a6b7933ff6051d302cb9c7c08fa2ab8c837f13cdda9c1af0"
 )
 
 
