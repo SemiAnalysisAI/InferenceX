@@ -35,7 +35,7 @@
  
          role = "producer" if self.is_producer else "consumer"
          engine_suffix = (
-@@ -1085,6 +1100,40 @@
+@@ -1085,6 +1100,44 @@
                          req_id.decode(),
                      )
  
