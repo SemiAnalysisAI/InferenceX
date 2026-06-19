@@ -826,15 +826,17 @@ class TestChangelogEntry:
         assert entry.all_evals is True
         assert entry.evals_only is False
 
-    def test_eval_only_modes_are_mutually_exclusive(self):
-        with pytest.raises(ValueError, match="mutually exclusive"):
-            ChangelogEntry.model_validate({
-                "config-keys": ["test-config"],
-                "description": ["Invalid duplicate eval modes"],
-                "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
-                "evals-only": True,
-                "all-evals": True,
-            })
+    def test_all_evals_can_extend_evals_only(self):
+        entry = ChangelogEntry.model_validate({
+            "config-keys": ["test-config"],
+            "description": ["Run the expanded eval-only matrix"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+            "evals-only": True,
+            "all-evals": True,
+        })
+
+        assert entry.evals_only is True
+        assert entry.all_evals is True
 
 
 # =============================================================================

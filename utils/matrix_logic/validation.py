@@ -492,12 +492,6 @@ class ChangelogEntry(BaseModel):
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
     )
 
-    @model_validator(mode="after")
-    def validate_eval_modes(self):
-        if self.evals_only and self.all_evals:
-            raise ValueError("'evals-only' and 'all-evals' are mutually exclusive")
-        return self
-
 
 class ChangelogMetadata(BaseModel):
     """Pydantic model for validating changelog metadata structure."""

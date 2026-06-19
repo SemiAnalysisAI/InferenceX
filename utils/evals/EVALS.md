@@ -17,9 +17,9 @@ Generator eval modes:
 - Default: run throughput for every generated config and eval-only jobs for the selected subset above.
 - `--no-evals`: generate throughput jobs only.
 - `--evals-only`: generate eval-only jobs for the selected subset above.
-- `--all-evals`: generate eval-only jobs for every generated fixed-sequence config. Agentic configs are excluded. Multi-node jobs use the upper median of each entry's full concurrency list as `eval-conc`.
+- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. Existing `eval-conc` choices from the default policy are preserved; newly added multi-node jobs use the upper median of each entry's full concurrency list.
 
-The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. These changelog fields are mutually exclusive and both suppress throughput jobs for that entry.
+The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
 
 ## Why?
 To verify how model outputs are affected by throughput optimizations.

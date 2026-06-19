@@ -187,7 +187,9 @@ def main():
         eval_configs = [c for c in all_configs if c not in eval_configs_seen]
         if eval_configs:
             eval_configs_seen.update(eval_configs)
-            eval_mode = "--all-evals" if entry.all_evals else "--evals-only"
+            eval_flags = ["--evals-only"]
+            if entry.all_evals:
+                eval_flags.append("--all-evals")
             base_cmd = [
                 "python3",
                 GENERATE_SWEEPS_PY_SCRIPT,
@@ -196,7 +198,7 @@ def main():
                 *eval_configs,
                 "--config-files",
                 *MASTER_CONFIGS,
-                eval_mode,
+                *eval_flags,
             ]
             if entry.scenario_type:
                 base_cmd.extend(["--scenario-type", *entry.scenario_type])

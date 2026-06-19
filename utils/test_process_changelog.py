@@ -49,7 +49,7 @@ def test_all_evals_skips_benchmarks_and_uses_all_evals_generator_flag(
 
     assert len(commands) == 1
     assert "--all-evals" in commands[0]
-    assert "--evals-only" not in commands[0]
+    assert "--evals-only" in commands[0]
     assert "--no-evals" not in commands[0]
 
     output = json.loads(capsys.readouterr().out)
@@ -148,6 +148,6 @@ def test_all_evals_takes_precedence_for_duplicate_configs(
 
     assert len(commands) == 2
     assert "--all-evals" in commands[0]
+    assert "--evals-only" in commands[0]
     assert "--no-evals" in commands[1]
-    assert all("--evals-only" not in command for command in commands)
     json.loads(capsys.readouterr().out)

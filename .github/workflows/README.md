@@ -36,7 +36,7 @@ The `full-sweep` command generates benchmark configurations with optional filter
 usage: generate_sweep_configs.py full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
-    [--no-evals | --evals-only | --all-evals]
+    [--no-evals | --evals-only] [--all-evals]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -51,7 +51,7 @@ usage: generate_sweep_configs.py full-sweep
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
 
-Eval modes are mutually exclusive. By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and `--all-evals` emits every fixed-sequence config as an eval-only job.
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand; it cannot be combined with `--no-evals`.
 
 ### Examples
 
@@ -98,7 +98,7 @@ The `runner-model-sweep` command validates that all runner nodes of a specific t
 usage: generate_sweep_configs.py runner-model-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
-    [--no-evals | --evals-only | --all-evals]
+    [--no-evals | --evals-only] [--all-evals]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
     [--single-node] [--multi-node]
@@ -139,7 +139,7 @@ The `test-config` command generates the full sweep for one or more specific conf
 usage: generate_sweep_configs.py test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
-    [--no-evals | --evals-only | --all-evals]
+    [--no-evals | --evals-only] [--all-evals]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
 ```
@@ -185,7 +185,7 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 
 **Run eval-only jobs for every generated fixed-sequence config:**
 ```
-test-config --config-keys dsr1-fp8-h200-sglang --all-evals --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files .github/configs/nvidia-master.yaml
 ```
 
 ## Reusing an Approved PR Full Sweep

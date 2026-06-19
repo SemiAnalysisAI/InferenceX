@@ -136,7 +136,7 @@ Update the image tag in the relevant `.github/configs/*-master.yaml` and/or `ben
 
 Optional accuracy checks ensuring inference optimizations do not degrade outputs. See `utils/evals/EVALS.md` for the full reference.
 
-Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`; evals run by default on the 8k1k subset. Workflow jobs run separately from throughput jobs in `EVAL_ONLY=true` mode. Flags on `generate_sweep_configs.py`: `--no-evals` to skip, `--evals-only` for the selected eval subset only, and `--all-evals` for eval-only jobs across every generated fixed-sequence config. Changelog entries support mutually exclusive `evals-only: true` and `all-evals: true` modes. Aggregated output produced by `utils/collect_eval_results.py`.
+Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`; evals run by default on the 8k1k subset. Workflow jobs run separately from throughput jobs in `EVAL_ONLY=true` mode. Flags on `generate_sweep_configs.py`: `--no-evals` to skip, `--evals-only` for the selected eval subset only, and `--all-evals` to expand eval-only selection across every generated fixed-sequence config. `--all-evals` composes with `--evals-only` and remains a standalone shorthand. Changelog `all-evals: true` has the same layered behavior and suppresses throughput jobs for that entry. Aggregated output produced by `utils/collect_eval_results.py`.
 
 ## Key Files
 

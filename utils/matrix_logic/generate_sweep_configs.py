@@ -134,18 +134,22 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Mark every fixed-sequence entry for eval-only execution.
+    """Expand eval selection to every fixed-sequence entry.
 
     Agentic entries are left untouched because they do not support lm-eval.
     Multi-node entries use the upper median of their concurrency list for the
-    eval request concurrency.
+    eval request concurrency unless the default eval policy already selected
+    an eval concurrency.
     """
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
             continue
 
         entry[Fields.RUN_EVAL.value] = True
-        if Fields.PREFILL.value in entry:
+        if (
+            Fields.PREFILL.value in entry
+            and Fields.EVAL_CONC.value not in entry
+        ):
             conc = entry[Fields.CONC.value]
             conc_values = conc if isinstance(conc, list) else [conc]
             sorted_concs = sorted(conc_values)
@@ -961,10 +965,13 @@ def main():
         action='store_true',
         help='When specified, run ONLY the eval subset (excludes non-eval configs).'
     )
-    eval_group.add_argument(
+    parent_parser.add_argument(
         '--all-evals',
         action='store_true',
-        help='When specified, run ONLY evals for every generated fixed-sequence config.'
+        help=(
+            'Expand eval selection to every generated fixed-sequence config. '
+            'Can be combined with --evals-only; used alone, it also emits eval-only jobs.'
+        )
     )
     parent_parser.add_argument(
         '--runner-node-filter',
@@ -1162,6 +1169,8 @@ def main():
 
     args = parser.parse_args()
     apply_node_type_defaults(args)
+    if args.no_evals and args.all_evals:
+        parser.error("--all-evals cannot be combined with --no-evals")
 
     # Load and validate configuration files (validation happens by default in load functions)
     all_config_data = load_config_files(args.config_files)
@@ -1178,11 +1187,11 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Handle mutually exclusive eval modes.
-    if args.all_evals:
-        matrix_values = mark_all_eval_entries(matrix_values)
-    elif not args.no_evals:
+    # Apply the existing eval policy first, then expand it when requested.
+    if not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
+        if args.all_evals:
+            matrix_values = mark_all_eval_entries(matrix_values)
 
     if args.evals_only or args.all_evals:
         matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]

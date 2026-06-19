@@ -440,6 +440,23 @@ class TestMarkAllEvalEntries:
         assert result[0]['eval-conc'] == 8
         assert result[1]['eval-conc'] == 32
 
+    def test_preserves_eval_conc_selected_by_default_policy(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [1, 4, 8, 16, 32],
+                'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(mark_eval_entries(entries))
+
+        assert result[0]['run-eval'] is True
+        assert result[0]['eval-conc'] == 32
+
     def test_skips_agentic_entries(self):
         entries = [
             {
@@ -1646,7 +1663,41 @@ class TestArgumentDefaults:
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 
-    def test_eval_modes_are_mutually_exclusive(self, monkeypatch):
+    def test_all_evals_composes_with_evals_only(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--evals-only',
+            '--all-evals',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 10
+        assert all(entry['run-eval'] is True for entry in result)
+        assert all(entry['eval-only'] is True for entry in result)
+
+    def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
         import sys
         import generate_sweep_configs
 
@@ -1655,7 +1706,7 @@ class TestArgumentDefaults:
             'test-config',
             '--config-files', 'dummy.yaml',
             '--config-keys', 'dummy',
-            '--evals-only',
+            '--no-evals',
             '--all-evals',
         ])
 
