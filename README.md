@@ -5,6 +5,12 @@
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/SemiAnalysisAI/InferenceX/pulls)
 [![GitHub Stars](https://img.shields.io/github/stars/SemiAnalysisAI/InferenceX?style=social)](https://github.com/SemiAnalysisAI/InferenceX)
 
+<div align="center">
+
+**English** | [中文](./README_zh.md)
+
+</div>
+
 InferenceX™ (formerly InferenceMAX) is an inference performance research platform dedicated to continually analyzing & benchmarking the world’s most popular open-source inference frameworks used by major token factories and models to track real performance in real time. As these software stacks improve, InferenceX™ captures that progress in near real-time, providing a live indicator of inference performance progress. A [open sourced](https://github.com/SemiAnalysisAI/InferenceX-app) live dashboard  is available for free publicly at https://inferencex.com/. 
 
 > [!IMPORTANT]
