@@ -3972,3 +3972,12 @@
     - "Use FP8 KV cache"
     - "Remove the runtime SupportsEagle3 source patch now included in the pinned nightly"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Reopen #1837 to run and ingest the MI300X MiniMax-M3 STP sweep from main"
+    - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Use FP8 KV cache"
+    - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/0
