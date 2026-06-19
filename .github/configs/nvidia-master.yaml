@@ -12818,7 +12818,7 @@ minimaxm2.5-fp8-b300-dynamo-vllm:
           dp-attn: true
 
 minimaxm3-fp8-b300-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3
+  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300

@@ -2,7 +2,7 @@ name: "minimax-m3-vllm-disagg-b300-3p2d-fp8-dep2-tep8-1k1k"
 
 model:
   path: "MiniMaxAI/MiniMax-M3-MXFP8"
-  container: "vllm/vllm-openai:minimax-m3"
+  container: "vllm/vllm-openai:minimax-m3-0618-x86_64-cu130"
   precision: "fp8"
 
 resources:
