@@ -23,7 +23,7 @@ set -x
 #
 # OFFLOADING values:
 #   none - vLLM GPU KV only.
-#   cpu  - MooncakeStoreConnector with a shared 2.5 TB host-memory KV tier.
+#   cpu  - MooncakeStoreConnector with a proportional host-memory KV tier.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -91,12 +91,8 @@ OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # B200 DGXC compute nodes have about 3.9 TB host RAM. Leave enough
-        # headroom for model workers and the runtime.
-        #
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
-        TOTAL_CPU_DRAM_GB=2500
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
         MOONCAKE_VERSION=0.3.11.post1

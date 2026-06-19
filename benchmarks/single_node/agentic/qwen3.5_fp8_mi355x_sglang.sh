@@ -52,12 +52,13 @@ case "$OFFLOADING" in
         # replay needs it; --disable-radix-cache would zero the hit rate.
         ;;
     hicache)
-        # MI355X nodes have about 3 TB of host DRAM, but Qwen3.5's hybrid
-        # GDN/Mamba path allocates two HiCache host pools per TP rank: one for
-        # hierarchical KV cache and one for hierarchical Mamba cache. A 2 TB
-        # node-total target at TP=8 is therefore 2000 / (8 * 2) = 125 GB per
-        # host pool, not 250 GB. Keep overrides for one-off tuning.
-        TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-2000}"
+        # Qwen3.5 allocates one KV and one Mamba host pool per TP rank.
+        REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
+        if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
+            echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB}GiB exceeds proportional budget ${TOTAL_CPU_DRAM_GB}GiB" >&2
+            exit 1
+        fi
+        TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
         HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
         HICACHE_MAX_SIZE_GB_PER_RANK_POOL="${HICACHE_MAX_SIZE_GB_PER_RANK_POOL:-${HICACHE_MAX_SIZE_GB_PER_RANK:-180}}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
@@ -72,7 +73,12 @@ case "$OFFLOADING" in
         # SGLang --hicache-size is per rank per host pool, while the workflow
         # input is a node-total DRAM budget. Divide by TP and the number of
         # host pools unless HICACHE_SIZE_GB is set directly for one-off tuning.
-        HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))}"
+        MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
+        HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
+        if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
+            echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds proportional per-pool limit $MAX_HICACHE_SIZE_GB" >&2
+            exit 1
+        fi
         if [ "$HICACHE_SIZE_GB" -gt "$HICACHE_MAX_SIZE_GB_PER_RANK_POOL" ]; then
             HICACHE_SIZE_GB="$HICACHE_MAX_SIZE_GB_PER_RANK_POOL"
         fi

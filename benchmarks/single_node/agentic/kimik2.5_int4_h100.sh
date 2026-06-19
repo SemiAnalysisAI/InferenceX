@@ -41,10 +41,6 @@ OFFLOAD_ARGS=""
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # H100 nodes have ~1.5-2 TiB host DRAM. Reserve up to 1.4 TB for the
-        # simple CPU offload connector (leaves headroom for worker RSS +
-        # page cache).
-        TOTAL_CPU_DRAM_GB=1400
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
         ;;

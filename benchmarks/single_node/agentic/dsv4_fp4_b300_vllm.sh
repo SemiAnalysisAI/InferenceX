@@ -90,13 +90,9 @@ OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # Leave enough host-memory headroom for model workers and the runtime.
-        # Use the 2.5 TB host-memory budget across all GPU ranks.
-        #
         # Mooncake embedded mode contributes one global segment per GPU rank to
         # a shared distributed store. Pre-divide the aggregate host budget
         # across those rank-contributed segments.
-        TOTAL_CPU_DRAM_GB=2500
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
         MOONCAKE_VERSION=0.3.11.post1

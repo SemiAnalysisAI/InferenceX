@@ -41,10 +41,6 @@ OFFLOAD_ARGS=""
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # H200 nodes — reserve up to 1 TB for the simple CPU offload
-        # connector. Conservative because Hopper-class clusters typically
-        # have smaller host RAM envelopes than the Blackwell side.
-        TOTAL_CPU_DRAM_GB=1000
         # Kimi K2.5 is pure TP (no DP-attn): single engine, world_size=TP.
         # SimpleCPUOffloadConnector internally divides cpu_bytes_to_use by
         # world_size, so pass the full TOTAL_CPU_DRAM_GB; TP-shared mmap

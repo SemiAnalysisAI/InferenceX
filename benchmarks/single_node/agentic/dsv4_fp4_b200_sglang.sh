@@ -65,23 +65,15 @@ case "$OFFLOADING" in
     hicache)
         # DeepSeek V4 HiCache currently rejects --hicache-size and supports
         # capacity control only through a host/device token-capacity ratio.
-        # DSv4 allocates several physical host sub-pools for each logical host
-        # token. On B300 TP8, ratio=4 consumes about 237 GB/rank (1.9 TB total)
-        # while model loading/page cache is still resident and the OS kills a
-        # rank, so leave transient startup headroom with ratio=2. B200 has a
-        # smaller device KV pool and 3.8 TiB of host RAM, so ratio=8 provides a
-        # substantially larger useful CPU tier while staying within its node
-        # budget.
-        # TP4 ratio=4 works at C32 but fills its roughly 500 GB host tier at
-        # C48/C64. Ratio=8 still cannot retain the C64 session working set long
-        # enough to produce host hits. Ratio=16 provides roughly 21M logical
-        # host tokens while remaining below the B300 node's host budget.
-        if [ "$TP" -ge 8 ]; then
-            DEFAULT_HICACHE_RATIO=8
-        else
-            DEFAULT_HICACHE_RATIO=16
-        fi
+        # DSv4 exposes capacity as a host/device token ratio rather than bytes.
+        # B200 ratio=8 stays below the generated proportional host-memory
+        # budget for the currently supported TP8 shape.
+        DEFAULT_HICACHE_RATIO=8
         HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
+        if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
+            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds proportional limit $DEFAULT_HICACHE_RATIO" >&2
+            exit 1
+        fi
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
@@ -93,7 +85,7 @@ case "$OFFLOADING" in
             --hicache-io-backend "$HICACHE_IO_BACKEND"
             --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
         )
-        echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+        echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, budget=${TOTAL_CPU_DRAM_GB}GiB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, hicache)" >&2

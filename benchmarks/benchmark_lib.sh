@@ -24,6 +24,14 @@ if [[ "$_benchmark_caller" == */agentic/* ||
       "${IS_AGENTIC:-0}" == "1" ||
       "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     unset MAX_MODEL_LEN
+    case "${OFFLOADING:-none}" in
+        cpu|lmcache|lmcache-mp|hicache)
+            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: CPU KV offloading requires a positive proportional TOTAL_CPU_DRAM_GB budget" >&2
+                exit 1
+            fi
+            ;;
+    esac
 fi
 unset _benchmark_caller
 

@@ -328,6 +328,7 @@ class TestAgenticMatrixEntries:
             "dp-attn": False,
             "conc": 1,
             "offloading": "lmcache-mp",
+            "total-cpu-dram-gb": 2949,
             "duration": 1800,
             "exp-name": "dsv4_tp8_conc1_offloadlmcache-mp",
             "scenario-type": "agentic-coding",

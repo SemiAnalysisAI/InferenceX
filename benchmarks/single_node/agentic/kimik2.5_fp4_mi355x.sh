@@ -114,7 +114,7 @@ if os.environ.get("LMCACHE_ROCM_DEMAND_PINNED_ALLOCATOR") == "1":
 
             # LMCache MP's upstream LazyMemoryAllocator currently expands to
             # the final pinned size in a background thread. On ROCm Kimi TP4,
-            # vLLM reaches KV-cache registration only after that 2.5 TB pool
+            # vLLM reaches KV-cache registration only after the full CPU pool
             # is fully pinned, and the server-side IPC open path can stall
             # before acknowledging register_kv_caches. Keep the same final
             # capacity, but pin/commit extra host memory only when L1
@@ -637,10 +637,6 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
-        # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
-        # worker RSS / page cache / slurm cgroup).
-        TOTAL_CPU_DRAM_GB=2500
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
         # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
@@ -722,11 +718,9 @@ PY
         export PYTHONPATH="$LMCACHE_ROCM_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
-        # pool, but let the external MP server own that pool so vLLM does not
-        # split --kv-offloading-size across TP ranks through the integrated
-        # LMCache backend.
-        TOTAL_CPU_DRAM_GB=2500
+        # Match the B200 Kimi LMCache setup: let the external MP server own the
+        # proportional CPU pool so vLLM does not split --kv-offloading-size
+        # across TP ranks through the integrated LMCache backend.
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -735,13 +729,17 @@ PY
         # ZMQ-style host string.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
+            echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds proportional budget $TOTAL_CPU_DRAM_GB" >&2
+            exit 1
+        fi
         LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
         # LMCache read locks are leases on chunks that lookup has promised
         # vLLM can retrieve. The default 300s TTL is too short for this
         # long-context agentic queue: TP8/conc32 can spend >300s between
         # lookup and retrieve while GPU KV is saturated, which leaves the
-        # object present in L1 but no longer readable. Keep the 2.5 TB pool
-        # size unchanged and only extend the lookup-to-retrieve lease.
+        # object present in L1 but no longer readable. Keep the pool size
+        # unchanged and only extend the lookup-to-retrieve lease.
         LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-3600}"
         LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"

@@ -45,9 +45,6 @@ OFFLOAD_ARGS=""
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        # B200-dgxc nodes have substantial DRAM; override workflow default (600 GB)
-        # so we offload up to 1.5 TB of KV cache (1.95x HBM total at tp=4).
-        TOTAL_CPU_DRAM_GB=1500
         export VLLM_USE_SIMPLE_KV_OFFLOAD=1
         OFFLOAD_ARGS="--kv_offloading_backend native --kv_offloading_size $TOTAL_CPU_DRAM_GB --disable-hybrid-kv-cache-manager"
         ;;

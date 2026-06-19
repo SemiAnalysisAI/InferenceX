@@ -51,6 +51,7 @@ class Fields(Enum):
 
     # Agentic coding fields
     OFFLOADING = 'offloading'
+    TOTAL_CPU_DRAM_GB = 'total-cpu-dram-gb'
     DURATION = 'duration'
 
     # Matrix entry fields
@@ -159,6 +160,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
         alias=Fields.OFFLOADING.value
     )
+    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
