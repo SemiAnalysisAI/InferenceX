@@ -286,7 +286,8 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         for step in jobs["check-changelog"]["steps"]
     )
     assert "validate_perf_changelog.py" in check_script
-    assert "--matrix-compatible" in check_script
+    assert "--base-ref" in check_script
+    assert "--head-ref" in check_script
 
 
 def test_merge_helper_waits_for_pr_checks_before_merge() -> None:

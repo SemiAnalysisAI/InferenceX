@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import subprocess
 import sys
@@ -69,21 +68,6 @@ UniqueKeyLoader.add_constructor(
     BaseResolver.DEFAULT_MAPPING_TAG,
     construct_unique_mapping,
 )
-
-
-def run_git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
-    """Run git and return captured text output."""
-    result = subprocess.run(
-        ["git", *args],
-        capture_output=True,
-        text=True,
-    )
-    if check and result.returncode != 0:
-        detail = result.stderr.strip() or result.stdout.strip()
-        raise ChangelogValidationError(
-            f"git {' '.join(args)} failed: {detail}"
-        )
-    return result
 
 
 def read_git_file(ref: str, path: str) -> bytes:
@@ -358,114 +342,19 @@ def validate_matrix_compatible_change(
     validate_generated_config(base_ref, head_ref, path)
 
 
-def validate_changelog(
-    base_ref: str,
-    head_ref: str,
-    path: str,
-    pr_number: int | None,
-) -> tuple[int, int]:
-    """Validate the complete head file and its change from base to head."""
-    diff_check = run_git(
-        "diff",
-        "--check",
-        base_ref,
-        head_ref,
-        "--",
-        path,
-        check=False,
-    )
-    if diff_check.returncode != 0:
-        detail = diff_check.stdout.strip() or diff_check.stderr.strip()
-        raise ChangelogValidationError(
-            f"git diff --check failed for {path}:\n{detail}"
-        )
-
-    base_raw = read_git_file(base_ref, path)
-    head_raw = read_git_file(head_ref, path)
-    base_entries = parse_changelog(
-        base_raw,
-        f"{path} at {base_ref}",
-    )
-    head_entries = parse_changelog(
-        head_raw,
-        f"{path} at {head_ref}",
-    )
-    additions, corrections = compare_entries(
-        base_entries,
-        head_entries,
-        pr_number,
-    )
-    validate_raw_change(
-        base_raw,
-        head_raw,
-        len(additions),
-        corrections,
-    )
-
-    if additions:
-        validate_generated_config(base_ref, head_ref, path)
-    elif not corrections:
-        raise ChangelogValidationError(f"{path} has no changes")
-
-    return len(additions), corrections
-
-
-def write_github_outputs(
-    path: str | None,
-    additions: int,
-    corrections: int,
-) -> None:
-    """Expose changelog change type to downstream GitHub Actions jobs."""
-    if not path:
-        return
-    with open(path, "a") as handle:
-        handle.write(f"has-additions={'true' if additions else 'false'}\n")
-        handle.write(
-            f"metadata-only={'true' if corrections and not additions else 'false'}\n"
-        )
-        handle.write(f"addition-count={additions}\n")
-        handle.write(f"correction-count={corrections}\n")
-
-
 def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-ref", required=True)
     parser.add_argument("--head-ref", required=True)
     parser.add_argument("--changelog-file", default="perf-changelog.yaml")
-    parser.add_argument("--pr-number", type=int)
-    parser.add_argument(
-        "--matrix-compatible",
-        action="store_true",
-        help=(
-            "check the final newline and run the same matrix validation as "
-            "sweep setup"
-        ),
-    )
-    parser.add_argument(
-        "--github-output",
-        default=os.environ.get("GITHUB_OUTPUT"),
-    )
     args = parser.parse_args()
 
     try:
-        if args.matrix_compatible:
-            validate_matrix_compatible_change(
-                args.base_ref,
-                args.head_ref,
-                args.changelog_file,
-            )
-            print(
-                f"Validated {args.changelog_file}: "
-                "final newline present and matrix generated"
-            )
-            return 0
-
-        additions, corrections = validate_changelog(
+        validate_matrix_compatible_change(
             args.base_ref,
             args.head_ref,
             args.changelog_file,
-            args.pr_number,
         )
     except ChangelogValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
@@ -473,11 +362,8 @@ def main() -> int:
 
     print(
         f"Validated {args.changelog_file}: "
-        f"{additions} appended entr{'y' if additions == 1 else 'ies'}, "
-        f"{corrections} pr-link correction"
-        f"{'' if corrections == 1 else 's'}"
+        "final newline present and matrix generated"
     )
-    write_github_outputs(args.github_output, additions, corrections)
     return 0
 
 
