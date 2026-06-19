@@ -57,6 +57,8 @@ Bash: source shared utilities via `source benchmark_lib.sh` (`check_env_vars`, `
 
 Git: conventional commit messages. `[skip-sweep]` in commit message skips benchmarks (push-to-main only). Changes to `perf-changelog.yaml` trigger benchmark runs.
 
+Docs: the README is bilingual — `README.md` (English, default) and `README_zh.md` (Simplified Chinese), with an `English | 中文` switcher under the badges. **Any edit to `README.md` MUST be mirrored in `README_zh.md`, and vice versa** — keep the two in sync (same sections, links, badges, images) and update both in the same PR.
+
 ### Pull Request Sweep Labels
 
 PRs do not run the sweep automatically - `run-sweep.yml` is gated on a label. Pick exactly one; setting multiple sweep labels is rejected by the workflow's `setup` job.

@@ -3959,3 +3959,11 @@
     - "Switch TP-only configurations from explicit Marlin MoE to the new image's default FlashInfer TRT-LLM MoE backend."
     - "Patch the image's MiniMax M3 MSA prefill path to materialize sliced top-k indices before CSR construction."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1835
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Use FP8 KV cache"
+    - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1837
