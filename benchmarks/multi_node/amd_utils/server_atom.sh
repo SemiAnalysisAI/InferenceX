@@ -138,6 +138,9 @@ if [ "$SPEC_DECODING" = "mtp" ]; then
     SPEC_ARGS=(--method mtp --num-speculative-tokens "$DECODE_MTP_SIZE")
 fi
 
+# HF overrides (single-quoted JSON preserved through eval)
+HF_OVERRIDES_ARG="--hf-overrides '{\"use_index_cache\":true,\"index_topk_freq\":4}'"
+
 cat <<INFO
 === Configuration ===
 PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP:-false}, DP=${PREFILL_ENABLE_DP:-false}, port=${PREFILL_PORT})
@@ -185,7 +188,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
-        --hf-overrides '{"use_index_cache":true,"index_topk_freq":4}' \
+        ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -406,7 +409,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
-        --hf-overrides '{"use_index_cache":true,"index_topk_freq":4}' \
+        ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -473,7 +476,7 @@ else
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
-        --hf-overrides '{"use_index_cache":true,"index_topk_freq":4}' \
+        ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
