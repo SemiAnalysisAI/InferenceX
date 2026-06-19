@@ -1,4 +1,14 @@
 - config-keys:
+    - dsv4-fp4-mi355x-atom-disagg-mtp
+  description:
+    - "Add dsv4-fp4-mi355x-atom-disagg-mtp recipe: multi-node disaggregated PD on MI355X via ATOM with MTP speculative decoding"
+    - "2P1D DPA+TBO+MTP1 sweep at ISL8192 (conc 256-2048)"
+    - "1P1D TP8+MTP3 sweep at ISL8192 (conc 4-128)"
+    - "1P1D TP8+DPA+MTP1 sweep at ISL1024 (conc 64-1024)"
+    - "Image: rocm/atom-dev:nightly_202606181332"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1855
+
+- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
