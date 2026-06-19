@@ -212,3 +212,35 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 - `/merge-prs <N> [<N>...]` — sequential merge via `utils/merge_with_reuse.sh`.
 
 Each command file is self-contained; read them to understand the exact jq filters they use.
+
+---
+
+## 11. MiniMax M3 B300 MSA top-k slice is non-contiguous
+
+**Symptom:** MiniMax M3 fails during MSA kernel warmup with:
+```
+ValueError: q2k_indices must be contiguous with layout [head_kv, total_q, topK]
+```
+The stack ends in `sparse_attention_msa.py -> build_k2q_csr()`. TP4/TP8
+canaries may pass while TP1 data-parallel-attention jobs fail.
+
+**Root cause:** `vllm/vllm-openai:minimax-m3-0618-x86_64-cu130` stores top-k
+indices in a persistent `[head_kv, max_num_batched_tokens, topK]` buffer for
+CUDA graphs. The MSA prefill path slices the token dimension before calling
+`build_k2q_csr()`. That view retains the full-buffer head stride and is not
+contiguous when a worker has multiple local KV/index heads. Data-parallel
+attention forces TP1, exposing all four MiniMax M3 KV/index heads per worker.
+
+**Workaround:** Before server startup, patch the installed
+`vllm/models/minimax_m3/nvidia/sparse_attention_msa.py` assignment from:
+```python
+prefill_topk = topk[:, nd:num_tokens, :]
+```
+to:
+```python
+prefill_topk = topk[:, nd:num_tokens, :].contiguous()
+```
+Use an exact-source guard and remove the workaround once the image includes
+the fix.
+
+Seen on: #1834.
