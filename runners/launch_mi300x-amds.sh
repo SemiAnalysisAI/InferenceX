@@ -22,7 +22,8 @@ set -x
 
 # Exclude known-bad nodes; let Slurm pick from anything else:
 #   chi-mi300x-049: persistent /nvme_home disk-full
-NODE_ARGS=(--exclude=chi-mi300x-049)
+#   chi-mi300x-121: missing required Enroot and RAID storage provisioning
+NODE_ARGS=(--exclude=chi-mi300x-049,chi-mi300x-121)
 if [ "${PROFILE:-0}" = "1" ] && [ -n "${M3_PROFILE_NODE:-}" ]; then
     NODE_ARGS=(--nodelist="$M3_PROFILE_NODE")
 fi
