@@ -151,6 +151,24 @@ NATS/etcd node.
   large evidence has appeared in job `19243`; additional buffer tuning will be
   evidence-driven rather than applied speculatively.
 
+### Sliding-window prefix retention
+
+- The first successful router-only affinity gate (`27794559671`, 3P/2D job
+  `19266`) proved that `bind` worked: 1,244 bindings and 1,012 sticky-session
+  hits were logged, with no request errors. However, final per-prefill vLLM
+  prefix-hit rates remained only 10.7--12.5%, well below the 93.5% B200
+  reference and the trace's roughly 96% theoretical reuse.
+- The validated B200 and B300 DSv4 vLLM agentic launchers both set
+  `VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768`. In vLLM v0.23 this keeps
+  sparse long-lived replay boundaries for the model's sliding-window KV group
+  instead of allowing dense transient SWA entries to evict useful prefixes;
+  the original single-node tuning moved measured hits from approximately 0%
+  to 74% before later improvements.
+- All GB200 disaggregated recipes now set the same 32k retention interval on
+  both prefill and decode workers. The queued 4P/1D sibling in `27794559671`
+  was cancelled before allocation so it would not repeat the known-incomplete
+  server configuration.
+
 #### Successful direct canary (`19244`)
 
 - The corrected manual checkout initialized submodules and ran 2P/3D c64 for
@@ -213,6 +231,7 @@ NATS/etcd node.
 | `27785852838` | selected 4P/1D + 3P/2D curves, c32 | Cancelled | 4P/1D completed, but the run was stopped after proving AIPerf omitted Dynamo `nvext.session_control` |
 | `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | Cancelled | Stopped for the same missing conversation-binding metadata; three matrix jobs had separately failed checkout before using GPUs |
 | `27790985904` | attempted affinity-enabled 4P/1D + 3P/2D c64 gate | Cancelled / invalid | The May 26 Dynamo wheel rejected all AIPerf `session_control.action=bind` warmup requests; 4P/1D Slurm job `19259` had 85/85 errors and 3P/2D job `19260` was cancelled pending |
+| `27794559671` | corrected-Dynamo 3P/2D c64 gate | 3P/2D success; run cancelled before 4P/1D | Job `19266` completed 657 profiled requests with zero errors and 10--38 GB/s KV transfers; affinity worked, but missing SWA retention limited final local hits to 10.7--12.5% |
 
 ### Official RDMA topology gate: completed points
 
