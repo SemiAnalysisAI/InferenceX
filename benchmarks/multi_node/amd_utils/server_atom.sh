@@ -35,6 +35,10 @@ DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
 DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
+# MTP
+SPEC_DECODING="${SPEC_DECODING:-}"
+DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-1}"
+
 # ATOM server ports (different from SGLang which uses 8000 for all)
 PREFILL_PORT="${PREFILL_PORT:-8010}"
 DECODE_PORT="${DECODE_PORT:-8020}"
@@ -42,7 +46,7 @@ ROUTER_PORT="${ROUTER_PORT:-8000}"
 HANDSHAKE_PORT="${HANDSHAKE_PORT:-6301}"
 
 # ATOM server tuning (from reference script defaults)
-MEM_FRACTION="${MEM_FRACTION:-0.85}"
+MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.85}"
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 BLOCK_SIZE="${BLOCK_SIZE:-16}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
@@ -100,20 +104,20 @@ for i in $(seq 0 $((yD - 1))); do
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$idx]}:${DECODE_PORT}"
 done
 
-echo "Prefill IPs : ${PREFILL_IPS[*]}"
-echo "Decode  IPs : ${DECODE_IPS[*]}"
-
 PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
 PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
 DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
+# Parallel args
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$PREFILL_ENABLE_DP" = "true" ]; then
     if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
         PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #DPA+TP
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
+    else #TP+DPA+TBO
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo)
+        export GPU_MAX_HW_QUEUES=5
+        export ATOM_CPU_AFFINITY=1
     fi
 fi 
 
@@ -121,13 +125,38 @@ DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
         DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #DPA+TP
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
+    else #TP+DPA+TBO
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo)
+        export GPU_MAX_HW_QUEUES=5
+        export ATOM_CPU_AFFINITY=1
     fi
 fi 
 
-echo "Prefill Parallel args : ${PREFILL_PARALLEL_ARGS[*]}"
-echo "Decode  Parallel args : ${DECODE_PARALLEL_ARGS[*]}"
+# MTP args
+SPEC_ARGS=() #TP
+if [ "$SPEC_DECODING" = "mtp" ]; then
+    SPEC_ARGS=(--method mtp --num-speculative-tokens "$DECODE_MTP_SIZE")
+fi
+
+# OPT args
+OPT_ARGS=(--hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}')
+
+cat <<INFO
+=== Configuration ===
+PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP:-false}, DP=${PREFILL_ENABLE_DP:-false}, port=${PREFILL_PORT})
+DECODE   : ${DECODE_IPS[*]}  (TP=${DECODE_TP_SIZE},  EP=${DECODE_ENABLE_EP:-false},  DP=${DECODE_ENABLE_DP:-false},  port=${DECODE_PORT})
+ROUTER   : port=${ROUTER_PORT}
+MODEL    : ${MODEL_NAME}
+BACKEND  : atom (PD mooncake KV transfer)
+MTP      : method=mtp num_speculative_tokens=${DECODE_MTP_SIZE}
+xP/yD    : ${xP} / ${yD}
+KV cache : dtype=${KV_CACHE_DTYPE} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_STATIC}
+Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
+Decode  args : ${DECODE_PARALLEL_ARGS[*]}
+Spec    args : ${SPEC_ARGS[*]}
+Opt     args : ${OPT_ARGS[*]}
+=====================
+INFO
 
 # =============================================================================
 # Node Role Assignment
@@ -156,9 +185,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
         "${PREFILL_PARALLEL_ARGS[@]}" \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
-        --gpu-memory-utilization ${MEM_FRACTION} \
+        --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
+        "${OPT_ARGS[@]}" \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -368,11 +398,13 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
         "${PREFILL_PARALLEL_ARGS[@]}" \
+        "${SPEC_ARGS[@]}" \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
-        --gpu-memory-utilization ${MEM_FRACTION} \
+        --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
+        "${OPT_ARGS[@]}" \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -428,35 +460,18 @@ else
     RANK=$((NODE_RANK - NODE_OFFSET))
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
-    _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
-    if [[ "$_MAX_CONC" -gt 2048 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048,4096]'
-    elif [[ "$_MAX_CONC" -gt 1024 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048]'
-    elif [[ "$_MAX_CONC" -gt 512 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,768,1024]'
-    else
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512]'
-    fi
-
-    if [[ "$BENCH_INPUT_LEN" == "1024" && "$BENCH_OUTPUT_LEN" == "1024" ]]; then
-        DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
-    else
-        DECODE_MAX_NUM_SEQS="${MAX_NUM_SEQS}"
-    fi
-
     DECODE_CMD="python3 -m atom.entrypoints.openai_server \
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${DECODE_PORT} \
         --trust-remote-code \
         "${DECODE_PARALLEL_ARGS[@]}" \
+        "${SPEC_ARGS[@]}" \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
-        --gpu-memory-utilization ${MEM_FRACTION} \
-        --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
+        --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --no-enable_prefix_caching \
+        "${OPT_ARGS[@]}" \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
-        --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
