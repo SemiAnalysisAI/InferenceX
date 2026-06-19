@@ -138,9 +138,6 @@ if [ "$SPEC_DECODING" = "mtp" ]; then
     SPEC_ARGS=(--method mtp --num-speculative-tokens "$DECODE_MTP_SIZE")
 fi
 
-# OPT args
-OPT_ARGS=(--hf-overrides '{"use_index_cache":true,"index_topk_freq":4}')
-
 cat <<INFO
 === Configuration ===
 PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP:-false}, DP=${PREFILL_ENABLE_DP:-false}, port=${PREFILL_PORT})
@@ -154,7 +151,6 @@ KV cache : dtype=${KV_CACHE_DTYPE} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_
 Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
 Decode  args : ${DECODE_PARALLEL_ARGS[*]}
 Spec    args : ${SPEC_ARGS[*]}
-Opt     args : ${OPT_ARGS[*]}
 =====================
 INFO
 
@@ -189,7 +185,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
-        "${OPT_ARGS[@]}" \
+        --hf-overrides '{"use_index_cache":true,"index_topk_freq":4}' \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -410,7 +406,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
-        "${OPT_ARGS[@]}" \
+        --hf-overrides '{"use_index_cache":true,"index_topk_freq":4}' \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -475,8 +471,9 @@ else
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
+        --max-num-seqs ${MAX_NUM_SEQS} \
         --no-enable_prefix_caching \
-        "${OPT_ARGS[@]}" \
+        --hf-overrides '{"use_index_cache":true,"index_topk_freq":4}' \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
