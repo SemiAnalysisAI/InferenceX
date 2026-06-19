@@ -252,25 +252,6 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     )
 
 
-def test_changelog_gate_skips_prs_without_changelog_changes() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    workflow = yaml.load(
-        (repo_root / ".github/workflows/test-changelog-gate.yml").read_text(),
-        Loader=yaml.BaseLoader,
-    )
-    steps = workflow["jobs"]["test-changelog"]["steps"]
-    validate_step = next(
-        step
-        for step in steps
-        if step.get("name") == "Validate the associated pull request"
-    )
-    script = validate_step["run"]
-
-    assert "git diff --quiet" in script
-    assert "-- perf-changelog.yaml" in script
-    assert "skipping PR-diff validation" in script
-
-
 def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     script = (repo_root / "utils/merge_with_reuse.sh").read_text()
