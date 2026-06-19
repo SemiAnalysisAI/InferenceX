@@ -50,6 +50,9 @@ MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.85}"
 KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 BLOCK_SIZE="${BLOCK_SIZE:-16}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-}"
+CUDAGRAPH_OPT="${CUDAGRAPH_OPT:-}"
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
 # Benchmark Configuration
@@ -144,6 +147,21 @@ if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
     HF_OVERRIDES_ARG="--hf-overrides '{\"use_index_cache\":true,\"index_topk_freq\":4}'"
 fi
 
+# KV cache dtype (skip if unset or 'auto')
+KV_CACHE_ARG=""
+if [[ -n "$KV_CACHE_DTYPE" && "$KV_CACHE_DTYPE" != "auto" ]]; then
+    KV_CACHE_ARG="--kv_cache_dtype ${KV_CACHE_DTYPE}"
+fi
+
+# Optional model length / batched-token cap
+MODEL_LEN_ARGS=""
+if [[ -n "$MAX_MODEL_LEN" ]]; then
+    MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-model-len ${MAX_MODEL_LEN}"
+fi
+if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
+    MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS}"
+fi
+
 cat <<INFO
 === Configuration ===
 PREFILL  : ${PREFILL_IPS[*]} (TP=${PREFILL_TP_SIZE}, EP=${PREFILL_ENABLE_EP:-false}, DP=${PREFILL_ENABLE_DP:-false}, port=${PREFILL_PORT})
@@ -153,7 +171,8 @@ MODEL    : ${MODEL_NAME}
 BACKEND  : atom (PD mooncake KV transfer)
 MTP      : method=mtp num_speculative_tokens=${DECODE_MTP_SIZE}
 xP/yD    : ${xP} / ${yD}
-KV cache : dtype=${KV_CACHE_DTYPE} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_STATIC}
+KV cache : dtype=${KV_CACHE_DTYPE:-auto} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_STATIC}
+Model len: max_model_len=${MAX_MODEL_LEN:-unset} max_num_batched_tokens=${MAX_NUM_BATCHED_TOKENS:-unset}
 Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
 Decode  args : ${DECODE_PARALLEL_ARGS[*]}
 Spec    args : ${SPEC_ARGS[*]}
@@ -187,10 +206,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --trust-remote-code \
         ${PREFILL_PARALLEL_ARGS[*]} \
         ${SPEC_ARGS[*]} \
-        --kv_cache_dtype ${KV_CACHE_DTYPE} \
+        ${KV_CACHE_ARG} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
+        ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
@@ -408,10 +428,11 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --trust-remote-code \
         ${PREFILL_PARALLEL_ARGS[*]} \
         ${SPEC_ARGS[*]} \
-        --kv_cache_dtype ${KV_CACHE_DTYPE} \
+        ${KV_CACHE_ARG} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${MAX_NUM_SEQS} \
+        ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
@@ -483,10 +504,12 @@ else
         --trust-remote-code \
         ${DECODE_PARALLEL_ARGS[*]} \
         ${SPEC_ARGS[*]} \
-        --kv_cache_dtype ${KV_CACHE_DTYPE} \
+        ${KV_CACHE_ARG} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
+        ${MODEL_LEN_ARGS} \
+        ${CUDAGRAPH_OPT} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
