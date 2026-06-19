@@ -13,11 +13,13 @@
 #
 # Usage: utils/merge_with_reuse.sh <pr-number>
 # Env:   REPO (default SemiAnalysisAI/InferenceX)
+#        CHECK_TIMEOUT_SECONDS (default 900)
 
 set -euo pipefail
 
 REPO="${REPO:-SemiAnalysisAI/InferenceX}"
 CHANGELOG="perf-changelog.yaml"
+CHECK_TIMEOUT_SECONDS="${CHECK_TIMEOUT_SECONDS:-900}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ $# -ne 1 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -31,6 +33,38 @@ ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -z "$(git status --porcelain)" ] || die "Working tree is not clean"
+
+wait_for_check() {
+    local sha="$1"
+    local check_name="$2"
+    local deadline=$((SECONDS + CHECK_TIMEOUT_SECONDS))
+
+    log "Waiting for ${check_name} on ${sha:0:8}"
+    while ((SECONDS < deadline)); do
+        local checks check status conclusion details
+        checks="$(gh api "repos/${REPO}/commits/${sha}/check-runs?per_page=100")"
+        check="$(jq -c --arg name "$check_name" '
+            [.check_runs[] | select(.name == $name)]
+            | sort_by(.started_at)
+            | last // {}
+        ' <<<"$checks")"
+        status="$(jq -r '.status // ""' <<<"$check")"
+        conclusion="$(jq -r '.conclusion // ""' <<<"$check")"
+        details="$(jq -r '.details_url // ""' <<<"$check")"
+
+        if [ "$status" = "completed" ]; then
+            if [ "$conclusion" = "success" ]; then
+                ok "${check_name} passed${details:+ - ${details}}"
+                return 0
+            fi
+            die "${check_name} concluded ${conclusion:-unknown}${details:+ - ${details}}"
+        fi
+
+        sleep 5
+    done
+
+    die "Timed out after ${CHECK_TIMEOUT_SECONDS}s waiting for ${check_name} on ${sha}"
+}
 
 ORIGINAL_BRANCH="$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)"
 LOCAL_BRANCH=""
@@ -175,6 +209,9 @@ ok "Push complete; reuse authorization will be evaluated on the new head"
 CURRENT_HEAD="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq '.headRefOid')"
 [ "$CURRENT_HEAD" = "$POST_MERGE" ] \
     || die "PR head changed to ${CURRENT_HEAD:0:8}; expected ${POST_MERGE:0:8}"
+
+# `gh pr checks --watch` fails if GitHub has not registered any checks yet.
+wait_for_check "$POST_MERGE" "check-changelog"
 
 log "Waiting for all PR checks"
 gh pr checks "$PR" --repo "$REPO" --watch --fail-fast

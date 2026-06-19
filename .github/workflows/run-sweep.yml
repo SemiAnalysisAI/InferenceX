@@ -48,6 +48,28 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast-no-canary'
             )
         steps:
+            - name: Reject conflicting sweep labels
+              env:
+                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+              run: |
+                  count=$(jq '
+                    [
+                      .[] |
+                      select(
+                        . == "sweep-enabled" or
+                        . == "full-sweep-enabled" or
+                        . == "non-canary-full-sweep-enabled" or
+                        . == "full-sweep-fail-fast" or
+                        . == "full-sweep-fail-fast-no-canary"
+                      )
+                    ] |
+                    length
+                  ' <<<"$SWEEP_LABELS")
+                  if [ "$count" -gt 1 ]; then
+                      echo "::error::PR has multiple conflicting sweep labels. Pick exactly one."
+                      exit 1
+                  fi
+
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
@@ -150,29 +172,6 @@ jobs:
             reuse-source-pr-number: ${{ steps.setup.outputs.reuse-source-pr-number }}
             reuse-source-head-sha: ${{ steps.setup.outputs.reuse-source-head-sha }}
         steps:
-            - name: Reject conflicting sweep labels
-              if: github.event_name == 'pull_request'
-              env:
-                  SWEEP_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
-              run: |
-                  count=$(jq '
-                    [
-                      .[] |
-                      select(
-                        . == "sweep-enabled" or
-                        . == "full-sweep-enabled" or
-                        . == "non-canary-full-sweep-enabled" or
-                        . == "full-sweep-fail-fast" or
-                        . == "full-sweep-fail-fast-no-canary"
-                      )
-                    ] |
-                    length
-                  ' <<<"$SWEEP_LABELS")
-                  if [ "$count" -gt 1 ]; then
-                      echo "::error::PR has multiple conflicting sweep labels. Pick exactly one."
-                      exit 1
-                  fi
-
             - name: Checkout code
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:

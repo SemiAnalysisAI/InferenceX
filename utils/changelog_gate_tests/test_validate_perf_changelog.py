@@ -5,11 +5,11 @@ from pathlib import Path
 import pytest
 import yaml
 
-import validate_perf_changelog as validator
 from validate_perf_changelog import (
     ChangelogValidationError,
     compare_entries,
     parse_changelog,
+    validate_matrix_compatible_change,
     validate_raw_change,
 )
 
@@ -208,31 +208,32 @@ def test_matrix_compatible_check_rejects_missing_final_newline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        validator,
-        "read_git_file",
+        "validate_perf_changelog.read_git_file",
         lambda *_args: b"- config-keys: []",
     )
 
     with pytest.raises(ChangelogValidationError, match="end with a newline"):
-        validator.validate_matrix_compatible_change("base", "head", "file")
+        validate_matrix_compatible_change("base", "head", "file")
 
 
 def test_matrix_compatible_check_propagates_matrix_rejection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        validator,
-        "read_git_file",
+        "validate_perf_changelog.read_git_file",
         lambda *_args: b"- config-keys: []\n",
     )
 
     def reject_matrix(*_args: object) -> None:
         raise ChangelogValidationError("matrix rejected")
 
-    monkeypatch.setattr(validator, "validate_generated_config", reject_matrix)
+    monkeypatch.setattr(
+        "validate_perf_changelog.validate_generated_config",
+        reject_matrix,
+    )
 
     with pytest.raises(ChangelogValidationError, match="matrix rejected"):
-        validator.validate_matrix_compatible_change("base", "head", "file")
+        validate_matrix_compatible_change("base", "head", "file")
 
 
 def test_matrix_compatible_check_rejects_pr_1717_conflict_resolution() -> None:
@@ -240,7 +241,7 @@ def test_matrix_compatible_check_rejects_pr_1717_conflict_resolution() -> None:
         ChangelogValidationError,
         match=r"Found deleted line: +pr-link: .*pull/1798",
     ):
-        validator.validate_matrix_compatible_change(
+        validate_matrix_compatible_change(
             "add33814cce15d0b71e3c98eca4bb2f7ad8aba96",
             "60bf726a7f324a01e8850d228c8f0f7a6f203dbd",
             "perf-changelog.yaml",
@@ -264,11 +265,13 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         set(pull_request_types)
     )
     assert {"opened", "reopened"}.isdisjoint(set(pull_request_types))
-    setup_step_names = [
+    check_step_names = [
         step.get("name")
-        for step in jobs["setup"]["steps"]
+        for step in jobs["check-changelog"]["steps"]
     ]
-    assert "Reject conflicting sweep labels" in setup_step_names
+    setup_step_names = [step.get("name") for step in jobs["setup"]["steps"]]
+    assert "Reject conflicting sweep labels" in check_step_names
+    assert "Reject conflicting sweep labels" not in setup_step_names
     assert "needs" not in jobs["check-changelog"]
     assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
     assert jobs["setup"]["needs"] == [
@@ -295,6 +298,9 @@ def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
     script = (repo_root / "utils/merge_with_reuse.sh").read_text()
 
     push_index = script.index('git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"')
+    wait_index = script.index(
+        'wait_for_check "$POST_MERGE" "check-changelog"'
+    )
     checks_index = script.index(
         'gh pr checks "$PR" --repo "$REPO" --watch --fail-fast'
     )
@@ -302,9 +308,8 @@ def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
         'gh pr merge "$PR" --repo "$REPO" --squash --admin'
     )
 
-    assert push_index < checks_index < merge_index
-    assert "wait_for_check" not in script
-    assert "check-changelog" not in script
+    assert push_index < wait_index < checks_index < merge_index
+    assert "CHECK_TIMEOUT_SECONDS" in script
     assert "prepare_perf_changelog_merge.py" in script
     assert "git commit --allow-empty" in script
     assert script.count('CURRENT_HEAD="$(gh pr view') == 2

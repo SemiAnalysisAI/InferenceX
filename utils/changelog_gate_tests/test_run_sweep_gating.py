@@ -203,6 +203,8 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
 
     if not _eval(CHECK_IF, ctx):
         check_result = "skipped"
+    elif len(set(sc.get("labels", [])) & SWEEP_LABELS) > 1:
+        check_result = "failure"
     else:
         check_result = sc.get("check", "success")
     ctx["needs.check-changelog.result"] = check_result
@@ -229,6 +231,10 @@ CASES = [
     ("PR-sync-full-reuse-authorized",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "reuse_auth": True}, ("success", "success", "SKIP")),
+    ("PR-sync-conflicting-labels-reuse-authorized",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "full-sweep-fail-fast"],
+      "reuse_auth": True}, ("failure", "skipped", "SKIP")),
     ("PR-sync-full-changelog-failure",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "check": "failure"}, ("failure", "skipped", "SKIP")),
@@ -319,7 +325,12 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
             or sc.get("label_name") in SWEEP_LABELS
         )
     )
-    check = sc.get("check", "success") if check_runs else "skipped"
+    if not check_runs:
+        check = "skipped"
+    elif len(labels & SWEEP_LABELS) > 1:
+        check = "failure"
+    else:
+        check = sc.get("check", "success")
 
     gate_runs = (
         check == "success"
