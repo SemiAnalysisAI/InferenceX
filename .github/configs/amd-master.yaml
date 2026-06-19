@@ -2895,3 +2895,18 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=0"
+
+minimaxm3-fp8-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 8, ep: 1, offloading: none, conc-list: [8] }
+      - { tp: 8, ep: 1, offloading: lmcache,  conc-list: [8] }
