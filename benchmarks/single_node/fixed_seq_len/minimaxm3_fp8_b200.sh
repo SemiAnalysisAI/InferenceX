@@ -38,21 +38,15 @@ SERVER_LOG=/workspace/server.log
 # 444 GB of MXFP8 weights off shared FS; engine startup can exceed the
 # default 600s readiness window.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_FLOAT32_MATMUL_PRECISION=high
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
 elif [ "$EP_SIZE" -gt 1 ]; then
   PARALLEL_ARGS="--tensor-parallel-size=$TP --enable-expert-parallel"
 else
-  PARALLEL_ARGS="--tensor-parallel-size=$TP"
+  PARALLEL_ARGS="--tensor-parallel-size=$TP --moe-backend marlin"
 fi
-
-# Fixed-seq-len runs don't need graphs past the request concurrency: capture
-# up to the next power of two >= CONC (per-DP-rank batch is CONC/DP but ragged
-# arrival makes the full CONC bound safer), capped at vLLM's 2048 ceiling.
-CAPTURE_SIZE=4
-while (( CAPTURE_SIZE < CONC )); do CAPTURE_SIZE=$((CAPTURE_SIZE * 2)); done
-(( CAPTURE_SIZE > 2048 )) && CAPTURE_SIZE=2048
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -68,7 +62,7 @@ $PARALLEL_ARGS \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --language-model-only \
---max-cudagraph-capture-size $CAPTURE_SIZE \
+--max-cudagraph-capture-size 2048 \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --stream-interval 20 --no-enable-prefix-caching \
 --trust-remote-code > $SERVER_LOG 2>&1 &

@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_HUB_CACHE_MOUNT="/local-nvme/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 
 PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/raid/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
+
+# Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
+# the h200 launchers, which have carried SPEC_SUFFIX since #392).
+SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
@@ -42,6 +46,6 @@ srun --jobid="$JOB_ID" \
 --container-remap-root \
 --container-workdir=/workspace/ \
 --no-container-entrypoint --export=ALL \
-bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi325x.sh
+bash benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_mi325x${SPEC_SUFFIX}.sh
 
 scancel $JOB_ID

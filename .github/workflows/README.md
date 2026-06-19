@@ -192,19 +192,37 @@ comment before merging:
 
 That reuses the latest successful `run-sweep.yml` `pull_request` run whose
 commit is still part of the PR. To select a particular eligible successful
-run, pin the source run explicitly:
+or failed run, pin the source run explicitly:
 
 ```
 /reuse-sweep-run <run_id>
 ```
 
+Only an explicitly pinned run may have a `failure` conclusion. An unpinned
+command always selects the latest successful eligible run. Pinned failed runs
+must still contain complete artifacts for the merge run's expected matrix.
+
 The comment is the reuse authorization, so adding it does not trigger or cancel
-a PR sweep. On the push-to-main run, `run-sweep.yml` resolves the merged PR
-from the merge commit, verifies the source run is a successful `pull_request`
-`run-sweep.yml` run for the same PR, downloads the ingest-relevant artifacts,
-validates that `results_bmk` covers the merge run's expected benchmark matrix,
-and uploads them as `reused-ingest-artifacts`. The normal database ingest then
-publishes those artifacts with the merge run's changelog metadata.
+a PR sweep. Once the comment is present, later commits pushed to a PR with a
+full-sweep label do not start another benchmark sweep. The synchronize run
+checks that the changelog diff can generate the setup matrix before inspecting
+the authorization and continuing to setup. This catches malformed conflict
+resolutions before reuse can skip setup. Removing and re-adding a sweep label
+explicitly starts a new sweep.
+
+`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+It merges `main`, preserves the current main changelog bytes, canonicalizes an
+appended `XXX` link to the PR URL, pushes a fresh synchronization commit, and
+waits for the PR checks before merging.
+
+On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
+commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
+run for the same PR, downloads the ingest-relevant artifacts, validates that
+fixed-sequence, agentic, and eval-only artifacts exactly match the merge run's
+expected matrix, and uploads them as `reused-ingest-artifacts`. The normal
+database ingest then publishes those artifacts with the merge run's changelog
+metadata. Duplicate fixed-sequence, agentic, eval, or raw eval identities are
+rejected rather than collapsed during that comparison.
 
 Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier

@@ -2528,7 +2528,7 @@
     - minimaxm2.5-fp8-mi355x-vllm
   description:
     - "Update vLLM ROCm image from v0.19.0 to v0.21.0"
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1410
 
 - config-keys:
     - gptoss-fp4-h200-vllm
@@ -2582,7 +2582,7 @@
     - dsr1-fp4-b300-sglang
   description:
     - "Update SGLang image from v0.5.11-cu130 to v0.5.12-cu130"
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1418
 
 - config-keys:
     - kimik2.5-int4-h200-vllm
@@ -3611,6 +3611,22 @@
     - "MI355x DSR1-FP4: Include TP4 configurations for 8k1k"
     - "Expand the TP sweep (included TP=4) for 8k/1k configuration for conc=4 to 64"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1692
+
+- config-keys:
+    - qwen3.5-fp4-mi355x-sglang
+    - qwen3.5-fp4-mi355x-sglang-mtp
+  description:
+    - "Bump image from lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260604 to lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612"
+    - "Enable AITER_FLYDSL_FORCE=1 in both non-MTP and MTP benchmark scripts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1716
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612."
+    - "Fix the intermediate_pad setting in the MoE computation in sglang PR#27858. This avoids the unnecessary overhead of computing useless padding."
+    - "Correct the chunk prefill setting size under tp8/dp8 config."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1715
   
 
 - config-keys:
@@ -3650,19 +3666,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1724
 
 - config-keys:
-    - minimaxm3-fp8-gb300-dynamo-vllm
-  description:
-    - "Initial submission: MiniMax-M3 MXFP8 day-zero vLLM sweep for GB300 via Dynamo"
-    - "Model: MiniMaxAI/MiniMax-M3-MXFP8 (427B total / 26B active MoE, MSA sparse attention, ~444 GB MXFP8 checkpoint)"
-    - "Image: vllm/vllm-openai:minimax-m3 (multi-arch arm64+amd64 from m3_release branch, vllm-project/vllm#45381)"
-    - "Dynamo orchestration with NixlConnector for disaggregated prefill/decode"
-    - "7 topologies: TP4 (1n), TP8 (2n), TP4+EP4 (1n), 1P+1D disagg TP4+EP4 (2n), 1P+1D disagg collocated (1n), DEP4 (1n), DEP8 (2n)"
-    - "Concurrency sweep: TP 4-64, TEP 128-512, disagg 64-512, DEP4 256-1024, DEP8 512-2048"
-    - "GB300 recipes require srun_options mem=0 (CW DefMemPerCPU=4096 causes host-RAM OOM) and omit safetensors-load-strategy prefetch (~600 GB host-memory limit)"
-    - "--block-size 128 mandatory everywhere (MSA sparse/index cache alignment); --language-model-only for text-only benchmarks"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1735
-
-- config-keys:
     - minimaxm3-fp8-b200-vllm
   description:
     - "Initial submission: MiniMax-M3 MXFP8 day-zero single-node vLLM benchmark on B200 (model: MiniMaxAI/MiniMax-M3-MXFP8, 427B total / 26B active MoE with MSA sparse attention)"
@@ -3696,7 +3699,7 @@
   description:
     - "Add MiniMax-M2.5 NVFP4 B200 TensorRT-LLM single-node benchmark (1k1k and 8k1k)"
     - "Image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18"
-  pr-link: https://github.com/NVIDIA/InferenceMAX/pull/1722
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1722
 
 - config-keys:
     - minimaxm3-fp8-h200-vllm-mtp
@@ -3796,3 +3799,177 @@
     - "H200-aligned layouts and concurrency ranges: TP4 and TP8 latency, TP4/TP8 expert parallelism, and TP8 data-parallel attention across 1k1k and 8k1k"
     - "Route the MI325X Hugging Face cache and runtime compiler caches to node-local storage, and mount ROCm GPU devices explicitly"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1748
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Run the MiniMax-M3 MXFP8 MI355X EAGLE3 MTP recipe with CUDA graphs instead of --enforce-eager"
+    - "Drop --enforce-eager and set VLLM_USE_BREAKABLE_CUDAGRAPH=0, which avoids the M3-decode breakable-cudagraph path that previously forced eager execution (the non-MTP MI355X recipe already got this in #1754)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1755
+
+- config-keys:
+    - minimaxm3-fp8-mi325x-vllm-mtp
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 MI325X (gfx942) vLLM benchmark with EAGLE3 speculative decoding (target: MiniMaxAI/MiniMax-M3-MXFP8, draft: Inferact/MiniMax-M3-EAGLE3, 3 speculative tokens) — spec-decoding=mtp variant of the MI325X day-zero recipe (#1748)"
+    - "Image: vllm/vllm-openai-rocm:minimax-m3 (same day-zero ROCm build as the non-MTP entry)"
+    - "Serve shape follows minimaxm3-fp8-mi325x-vllm: --block-size 128, --no-enable-prefix-caching, --language-model-only, --attention-backend TRITON_ATTN, minimax_m3 parsers, default BF16 KV cache (gfx942 lacks calibrated ROCm FP8 attention scales). Runs with CUDA graphs (no --enforce-eager, VLLM_USE_BREAKABLE_CUDAGRAPH=0); prompts via chat template for realistic acceptance"
+    - "H200-style search space (TP4/TP8 latency, TP4+EP4/TP8+EP8 TEP, TP8+EP8 dp-attn DEP) trimmed at the extreme-concurrency end with TP-only latency rows started at conc 1"
+    - "[AI generated draft test] The shipped ROCm image's AMD MiniMax-M3 model lacks SupportsEagle3, so the recipe patches it in-place at runtime (functionstackx/vllm#1, upstream vllm-project/vllm#45546; validated green on MI355X/MI300X) before serving; also adds SPEC_SUFFIX to launch_mi325x-amds.sh so spec-decoding=mtp routes to the _mtp script"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1759
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+    - minimaxm3-fp8-mi325x-vllm
+  description:
+    - "Extend the MiniMax-M3 MXFP8 MI300X and MI325X non-MTP sweeps down to concurrency 1 on the TP-only latency rows (was conc 4), to capture the single-request latency point; TEP/DEP rows keep their higher concurrency starts"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1760
+
+- config-keys:
+    - minimaxm3-fp8-h100-vllm
+    - minimaxm3-fp8-h200-vllm
+  description:
+    - "Extend MiniMax-M3 MXFP8 H100/H200 non-MTP sweeps to concurrency 1 on the latency rows (H100: TP8; H200: TP4 and TP8) and add full TEP coverage from conc 1 to 256 (H100: TP8+EP8; H200: TP4+EP4 and TP8+EP8, incl. a new TP4+EP4 row for 8k1k). H200 TP8+EP8 upper bound moves 512->256 (high concurrency stays covered by the TP8+EP8 dp-attn DEP rows). DEP rows unchanged"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1761
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch fixed-seq-len search space from TP8 to TP4 for both isl=1024 and isl=8192 scenarios"
+    - "Expand isl=8192 coverage: add TP4 dp-attn sweep (conc 32–2048) and TP4 TP-only sweep (conc 1–32)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
+  
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-trt
+    - dsv4-fp4-gb300-dynamo-trt-mtp
+  description:
+    - "Add DeepSeek-V4-Pro MXFP4 GB300 disaggregated TRT-LLM benchmarks via Dynamo (27 STP + 27 MTP configs)"
+    - "New configs: dsv4-fp4-gb300-dynamo-trt (STP) and dsv4-fp4-gb300-dynamo-trt-mtp (MTP)"
+    - "Covers ISL 1024/OSL 1024 (14 STP + 14 MTP) and ISL 8192/OSL 1024 (13 STP + 13 MTP)"
+    - "Container: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026"
+    - "Runner script updated to support dsv4 model prefix with dynamo-trt framework on GB300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1689
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Align MiniMax-M3 B200 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 B200 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B200: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1779
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Switch fixed-seq-len search space from TP8 to TP4 for both isl=1024 and isl=8192 scenarios"
+    - "Expand isl=8192 coverage: add TP4 dp-attn sweep (conc 32–2048) and TP4 TP-only sweep (conc 1–32)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Replace triton w4a16 MoE with FlyDSL w4a16 MoE"
+    - "Image: vllm/vllm-openai-rocm:nightly"
+    - "Add more sweep points"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1785
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Align MiniMax-M3 B200/B300 EAGLE3 MTP serving with the MiniMax-M2.5 FP8 serving settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and using max cudagraph capture size 2048."
+    - "Add TP4+EP4 MTP coverage: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1784
+
+- config-keys:
+    - minimaxm3-fp8-b300-vllm
+  description:
+    - "Align MiniMax-M3 B300 vLLM fixed-sequence serving with MiniMax-M2.5 FP8 settings by setting VLLM_FLOAT32_MATMUL_PRECISION=high and restoring max cudagraph capture size 2048."
+    - "Add TP4+EP4 coverage for MiniMax-M3 B300: DP-attention rows for 1k1k/8k1k and the missing non-DP-attention row for 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1781
+
+- config-keys:
+    - qwen3.5-fp4-b200-trt
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark (1k/1k and 8k/1k) with a TP/TEP/DEP parallelism sweep"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1711
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+    - minimaxm3-fp8-b300-vllm
+    - minimaxm3-fp8-b200-vllm-mtp
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Use the Marlin MoE backend for MiniMax-M3 B200/B300 TP-only vLLM configurations by adding --moe-backend marlin when expert parallelism is disabled."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1809
+  
+- config-keys:
+    - dsr1-fp8-gb300-dynamo-trt
+  description:
+    - "Fix gsm8k accuracy at 88% instead of 95% for a single point."
+    - "In previous submission, there was an numeric issue causing accuracy degradation and performance anomaly in some MTP points at certain concurrency."
+    - "This issue is now fixed in the latest TRTLLM release."
+    - "Also update all configs for DSR1 TRTLLM FP8 to reflect latest released image usage"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1767
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+  description:
+    - "Add day-zero MiniMax-M3 MXFP4 (amd/MiniMax-M3-MXFP4) single-node atom benchmark on MI355X, following the ROCm/ATOM MiniMax-M3 recipe (TP4, block size 128 for MSA, default KV cache dtype)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1813
+
+  
+- config-keys:
+    - glm5-fp4-gb300-dynamo-trt
+  description:
+    - "Add GLM-5 NVFP4 GB300 disaggregated TRT-LLM (STP, non-MTP) benchmarks via Dynamo (22 STP configs: 13 for 1K/1K, 9 for 8K/1K)"
+    - "Container: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13"
+    - "Recipes sourced from NVIDIA/srt-slurm branch sa-submission-q2-2026 (gb300_nvfp4 STP recipes)"
+    - "Runner script launch_gb300-nv.sh: added dynamo-trt-specific glm5-fp4 case with SERVED_MODEL_NAME and SRT_SLURM_MODEL_PREFIX=nvidia/GLM-5-NVFP4"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1798
+  
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Update image to rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_20260612"
+    - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
+    - "Update Applied TBO on high concurrencies"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+  
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Update image to rocm/atom:rocm7.2.4_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.4_20260612"
+    - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
+    - "Update Applied TBO on high concurrencies"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Use FP8 KV cache"
+    - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1837
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-mtp
+  description:
+    - "Update the MI300X MiniMax-M3 EAGLE3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Use FP8 KV cache"
+    - "Remove the runtime SupportsEagle3 source patch now included in the pinned nightly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
+
+- config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), avoids gemm1_alpha crash in minimax-m3-0618"
+    - "Add --moe-backend marlin for TP-only prefill/decode workers (no EP, no DP-attention) per PR #1809 pattern"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1735

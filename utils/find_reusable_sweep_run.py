@@ -23,6 +23,10 @@ from typing import Any
 
 API_BASE = "https://api.github.com"
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
+REUSABLE_AGGREGATE_ARTIFACTS = {
+    "results_bmk",
+    "eval_results_all",
+}
 
 
 def github_api(
@@ -100,6 +104,7 @@ def result(
     *,
     enabled: bool,
     reason: str,
+    skip_pr_sweep: bool = False,
     source_run_id: str = "",
     source_run_attempt: str = "",
     source_run_url: str = "",
@@ -109,6 +114,7 @@ def result(
     """Build the result payload."""
     return {
         "reuse-enabled": "true" if enabled else "false",
+        "skip-pr-sweep": "true" if skip_pr_sweep else "false",
         "reuse-source-run-id": source_run_id,
         "reuse-source-run-attempt": source_run_attempt,
         "reuse-source-run-url": source_run_url,
@@ -179,12 +185,18 @@ def find_latest_successful_pr_run(
             "status": "completed",
         },
     )
-    # GitHub returns runs newest-first.
+    # GitHub returns runs newest-first.  Skip gated no-op runs (synchronize
+    # events suppressed by a /reuse-sweep-run comment) which complete as
+    # "success" but produce no benchmark or eval artifacts.
     for run in runs:
         if run.get("conclusion") != "success":
             continue
-        if str(run.get("head_sha") or "") in valid_shas:
-            return run
+        if str(run.get("head_sha") or "") not in valid_shas:
+            continue
+        names = artifact_names(repo, int(run["id"]), token)
+        if not has_reusable_result_artifacts(names):
+            continue
+        return run
     return None
 
 
@@ -224,13 +236,21 @@ def validate_reusable_run(
     pr_number: int,
     run: dict[str, Any],
     token: str,
+    allow_failed: bool = False,
 ) -> None:
     """Fail closed unless an Actions run is a valid reusable source run."""
     run_id = int(run["id"])
     if run.get("event") != "pull_request":
         raise RuntimeError(f"Reusable source run {run_id} is not a pull_request run.")
-    if run.get("status") != "completed" or run.get("conclusion") != "success":
-        raise RuntimeError(f"Reusable source run {run_id} did not complete successfully.")
+    if run.get("status") != "completed":
+        raise RuntimeError(f"Reusable source run {run_id} is not completed.")
+    allowed_conclusions = {"success", "failure"} if allow_failed else {"success"}
+    if run.get("conclusion") not in allowed_conclusions:
+        expected = "success or failure" if allow_failed else "success"
+        raise RuntimeError(
+            f"Reusable source run {run_id} has conclusion {run.get('conclusion')!r}; "
+            f"expected {expected}."
+        )
     expected_path = workflow_path(workflow_id)
     run_path = str(run.get("path") or "")
     if run_path and run_path != expected_path:
@@ -248,14 +268,22 @@ def validate_reusable_run(
         )
 
     names = artifact_names(repo, run_id, token)
-    if "results_bmk" not in names and "eval_results_all" not in names:
+    if not has_reusable_result_artifacts(names):
         raise RuntimeError(
-            f"Reusable source run {run_id} has no results_bmk or eval_results_all artifact."
+            f"Reusable source run {run_id} has no benchmark, eval, or "
+            "agentic result artifact."
         )
 
 
+def has_reusable_result_artifacts(names: set[str]) -> bool:
+    """Return whether a run produced ingest-relevant result artifacts."""
+    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
+        name.startswith("bmk_agentic_") for name in names
+    )
+
+
 def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
-    """Return artifact names from a workflow run."""
+    """Return unexpired artifact names from a workflow run."""
     artifacts = paginated_github_api(
         repo,
         f"/actions/runs/{run_id}/artifacts",
@@ -265,7 +293,9 @@ def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
     return {
         str(artifact.get("name"))
         for artifact in artifacts
-        if isinstance(artifact, dict) and artifact.get("name")
+        if isinstance(artifact, dict)
+        and artifact.get("name")
+        and not artifact.get("expired", False)
     }
 
 
@@ -274,6 +304,8 @@ def main() -> int:
     parser.add_argument("--repo", required=True)
     parser.add_argument("--commit-sha", required=True)
     parser.add_argument("--event-name", required=True)
+    parser.add_argument("--event-action", default="")
+    parser.add_argument("--pr-number", type=int)
     parser.add_argument("--ref", required=True)
     parser.add_argument("--workflow-id", default="run-sweep.yml")
     parser.add_argument(
@@ -298,6 +330,36 @@ def main() -> int:
         for value in args.allowed_author_associations.split(",")
         if value.strip()
     }
+
+    if args.event_name == "pull_request":
+        if args.event_action != "synchronize":
+            outputs = result(
+                enabled=False,
+                reason=f"pull_request action {args.event_action or 'unknown'} is not synchronize",
+            )
+        else:
+            if args.pr_number is None:
+                raise RuntimeError("--pr-number is required for pull_request synchronize")
+            authorized, _ = find_reuse_authorization(
+                args.repo,
+                args.pr_number,
+                token,
+                args.pinned_run_command,
+                allowed_author_associations,
+            )
+            outputs = result(
+                enabled=False,
+                skip_pr_sweep=authorized,
+                reason=(
+                    f"PR #{args.pr_number} has {args.pinned_run_command} authorization"
+                    if authorized
+                    else f"PR #{args.pr_number} has no {args.pinned_run_command} authorization"
+                ),
+                source_pr_number=str(args.pr_number),
+            )
+        write_outputs(args.github_output, outputs)
+        print(json.dumps(outputs, indent=2))
+        return 0
 
     if args.event_name != "push" or args.ref != "refs/heads/main":
         outputs = result(enabled=False, reason="not a push to main")
@@ -397,7 +459,14 @@ def main() -> int:
         )
 
     run_id = int(run["id"])
-    validate_reusable_run(args.repo, args.workflow_id, pr_number, run, token)
+    validate_reusable_run(
+        args.repo,
+        args.workflow_id,
+        pr_number,
+        run,
+        token,
+        allow_failed=pinned_run_id is not None,
+    )
 
     outputs = result(
         enabled=True,

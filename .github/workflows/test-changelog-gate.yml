@@ -1,0 +1,65 @@
+name: Test Changelog Gate
+run-name: Test Changelog Gate - ${{ github.ref_name }} @ ${{ github.sha }}
+
+on:
+  push:
+    branches-ignore:
+      - main
+    paths:
+      - ".claude/commands/recover-failed-ingest.md"
+      - ".github/workflows/run-sweep.yml"
+      - ".github/workflows/test-changelog-gate.yml"
+      - "utils/find_reusable_sweep_run.py"
+      - "utils/test_find_reusable_sweep_run.py"
+      - "utils/process_changelog.py"
+      - "utils/prepare_perf_changelog_merge.py"
+      - "utils/recover_failed_ingest.py"
+      - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
+      - "utils/changelog_gate_tests/test_recover_failed_ingest.py"
+      - "utils/test_validate_reusable_sweep_artifacts.py"
+      - "utils/validate_perf_changelog.py"
+      - "utils/validate_reusable_sweep_artifacts.py"
+      - "utils/changelog_gate_tests/test_validate_perf_changelog.py"
+      - "utils/changelog_gate_tests/test_run_sweep_gating.py"
+      - "utils/changelog_gate_tests/conftest.py"
+      - "utils/merge_with_reuse.sh"
+      - "utils/matrix_logic/**"
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: test-changelog-gate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-changelog:
+    name: Test changelog validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6.2.0
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pydantic pyyaml
+
+      - name: Run validator, reuse, and gating tests
+        run: |
+          python -m pytest \
+            utils/changelog_gate_tests/test_validate_perf_changelog.py \
+            utils/test_find_reusable_sweep_run.py \
+            utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py \
+            utils/changelog_gate_tests/test_recover_failed_ingest.py \
+            utils/test_validate_reusable_sweep_artifacts.py \
+            utils/changelog_gate_tests/test_run_sweep_gating.py \
+            -v

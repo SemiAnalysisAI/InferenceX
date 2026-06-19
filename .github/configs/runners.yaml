@@ -118,6 +118,7 @@ mi325x:
 - 'mi325x-amds_06'
 - 'mi325x-amds_07'
 - 'mi325x-amds_08'
+- 'mi325x-amds_09'
 mi325x-disagg:
 - 'mi325x-amds_00'
 - 'mi325x-amds_01'
@@ -160,8 +161,3 @@ gb300:
 - 'gb300-nv_0'
 - 'gb300-nv_1'
 - 'gb300-nv_2'
-gb300-cw:
-- 'gb300-cw_0'
-- 'gb300-cw_1'
-- 'gb300-cw_2'
-- 'gb300-cw_3'

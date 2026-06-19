@@ -242,8 +242,9 @@ else
     fi
 
     # MiniMax-M3 weights are not staged on the node-local /var/lib NVMe cache;
-    # they are pre-downloaded once to the NFS share instead.
-    if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* ]]; then
+    # they are pre-downloaded once to the NFS share instead. Covers both the
+    # MiniMaxAI MXFP8 checkpoint and the amd MXFP4 atom checkpoint.
+    if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* || "$MODEL" == amd/MiniMax-M3* ]]; then
         export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
     fi
 
