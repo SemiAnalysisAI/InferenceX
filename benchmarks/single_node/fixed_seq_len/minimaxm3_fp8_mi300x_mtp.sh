@@ -8,9 +8,7 @@
 # the text-only benchmark, --attention-backend TRITON_ATTN, and
 # --no-enable-prefix-caching. Runs with CUDA graphs (no --enforce-eager);
 # VLLM_USE_BREAKABLE_CUDAGRAPH=0 avoids the M3-decode breakable-cudagraph path.
-# The default BF16 KV cache is retained (unlike
-# the MI355X recipe's FP8 KV cache): gfx942 has no calibrated q/prob scales for
-# ROCm FP8 attention and vLLM's fallback scale of 1.0 corrupts accuracy.
+# FP8 KV cache reduces memory pressure and increases concurrency headroom.
 #
 # Unlike the CUDA recipes, the drafter needs no attention_backend override:
 # the FlashInfer "page size 128 requires GQA/MQA" limitation that forced
@@ -18,15 +16,9 @@
 # Here the whole server runs on TRITON_ATTN (set globally below), which serves
 # the MHA draft fine.
 #
-# [AI generated draft test] The shipped vllm/vllm-openai-rocm:minimax-m3 image
-# does NOT implement SupportsEagle3 on the AMD MiniMax-M3 model, so EAGLE3
-# engine init fails with "Model does not support EAGLE3 interface but
-# aux_hidden_state_outputs was requested". This recipe applies that fix
-# (functionstackx/vllm#1 — ported from nvidia/model.py, upstreamed as
-# vllm-project/vllm#45546) in-place to the installed vllm before serving, so we
-# can validate EAGLE3 on real MI300X hardware ahead of an image rebuild. The
-# same patch is validated green on MI355X. It is idempotent and fails the job
-# loudly if the installed amd/model.py has drifted from the expected base.
+# Keep the SupportsEagle3 compatibility guard for older images. It exits
+# immediately when the installed AMD MiniMax-M3 model already has the upstream
+# interface and otherwise applies the validated compatibility patch.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -175,6 +167,7 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --block-size 128 \
+    --kv-cache-dtype fp8 \
     --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
