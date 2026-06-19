@@ -13,7 +13,7 @@
 
 ## 新闻
 
-- **[2026/06]** 🔥 MiniMax-M3 Day 0 基准测试已在 InferenceX 上线（[仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)）。
+- **[2026/06]** 🔥 MiniMax M3：自 Day 0 起持续进行基准测试（[仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)）。
 - **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T：自 Day 0 起持续进行基准测试（[文章](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)，[仪表盘](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)）。
 - **[2026/02]** GB300 NVL72：已加入 InferenceX 并持续进行基准测试（[SGLang 维护者 LMSYS 博客](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)）。
 - **[2026/02]** 🔥 InferenceX v2 发布——NVIDIA Blackwell 对比 AMD 对比 Hopper（[文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)）。
