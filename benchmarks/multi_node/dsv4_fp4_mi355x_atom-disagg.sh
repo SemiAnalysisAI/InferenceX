@@ -8,7 +8,6 @@ check_env_vars \
     OSL \
     IMAGE \
     SPEC_DECODING \
-    DECODE_MTP_SIZE \
     MODEL_PATH \
     PREFILL_NUM_WORKERS \
     PREFILL_TP \
