@@ -11,7 +11,7 @@ name: "minimax-m3-vllm-disagg-gb300-5p12d-tp4ep1-1k1k"
 # mandatory (MSA cache); text-only -> language-model-only.
 
 model:
-  path: "hf:MiniMaxAI/MiniMax-M3-MXFP8"
+  path: "minimax-m3-mxfp8"
   container: "vllm/vllm-openai:nightly-aarch64"
   precision: "fp8"
 dynamo:
@@ -27,9 +27,6 @@ slurm:
 health_check:
   max_attempts: 720
   interval_seconds: 10
-extra_mount:
-  - "__M3_HF_HOME__:__M3_HF_HOME__"
-
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
@@ -51,8 +48,6 @@ backend:
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    HF_HOME: "__M3_HF_HOME__"
-    HF_HUB_OFFLINE: "1"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -61,8 +56,6 @@ backend:
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    HF_HOME: "__M3_HF_HOME__"
-    HF_HUB_OFFLINE: "1"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"

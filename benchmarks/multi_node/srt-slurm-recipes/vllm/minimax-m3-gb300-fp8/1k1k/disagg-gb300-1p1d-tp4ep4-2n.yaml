@@ -6,7 +6,7 @@ name: "minimax-m3-vllm-disagg-gb300-1p1d-tp4ep4-2n-1k1k"
 # safetensors-load-strategy omitted — prefetch OOMs on CW GB300 host memory.
 
 model:
-  path: "hf:MiniMaxAI/MiniMax-M3-MXFP8"
+  path: "minimax-m3-mxfp8"
   container: "vllm/vllm-openai:nightly-aarch64"
   precision: "fp8"
 
@@ -33,9 +33,6 @@ health_check:
   max_attempts: 720
   interval_seconds: 10
 
-extra_mount:
-  - "__M3_HF_HOME__:__M3_HF_HOME__"
-
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
@@ -57,8 +54,6 @@ backend:
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    HF_HOME: "__M3_HF_HOME__"
-    HF_HUB_OFFLINE: "1"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -67,8 +62,6 @@ backend:
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
-    HF_HOME: "__M3_HF_HOME__"
-    HF_HUB_OFFLINE: "1"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
