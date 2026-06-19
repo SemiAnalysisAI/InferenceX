@@ -157,6 +157,7 @@ KV cache : dtype=${KV_CACHE_DTYPE} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_
 Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
 Decode  args : ${DECODE_PARALLEL_ARGS[*]}
 Spec    args : ${SPEC_ARGS[*]}
+Opt     args : ${HF_OVERRIDES_ARG}
 =====================
 INFO
 
