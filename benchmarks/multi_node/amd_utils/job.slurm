@@ -416,6 +416,9 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e KV_CACHE_DTYPE=${KV_CACHE_DTYPE:-fp8}
         -e BLOCK_SIZE=${BLOCK_SIZE:-16}
         -e MAX_NUM_SEQS=${MAX_NUM_SEQS:-256}
+        -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
+        -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
+        -e CUDAGRAPH_OPT=${CUDAGRAPH_OPT:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
         -e IBDEVICES=${IBDEVICES:-}
     )
