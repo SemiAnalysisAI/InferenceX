@@ -29,9 +29,9 @@ much shorter prompts and usually disable prefix caching.
 3. Compare P/D balance at a constant 40-inference-GPU budget:
    `4P/1D`, `3P/2D`, `2P/3D`, and `1P/4D`.
 4. Use c64 as a topology gate. Retain c32/c64 for the decode-starved 4P/1D
-   comparison, and run the dense c32/c64/c96/c128/c160/c192/c256/c384 curve
-   on the rate-matched 3P/2D topology. The c256 and c384 points deliberately
-   push through saturation.
+   comparison, and run the dense c16/c24/c32/c40/c48/c56/c64/c72/c80/c96
+   curve on the rate-matched 3P/2D topology. An official c192 point supplies
+   the hard-overload check outside the final dense grid.
 5. Compare total and per-GPU throughput, TTFT, TPOT, E2E latency, request
    errors, and measured cache reuse against the B200 aggregate baseline.
 
@@ -216,12 +216,13 @@ NATS/etcd node.
   - KV routing enabled;
   - TCP request plane on all components;
   - collision-free generated engine IDs for multi-decode topologies.
-- The final sweep generator emits 10 points: 4P/1D at c32/c64, plus 3P/2D at
-  c32/c64/c96/c128/c160/c192/c256/c384. The 2P/3D and 1P/4D recipes remain
-  checked in as topology-gate evidence but are excluded from the final sweep
-  because they were strongly prefill-starved at c64. High-concurrency 4P/1D
-  points are excluded because the affinity-correct c64 gate proved that its
-  single decode replica is already saturated.
+- The final sweep generator emits 12 points: 4P/1D at c32/c64, plus 3P/2D at
+  c16/c24/c32/c40/c48/c56/c64/c72/c80/c96. The 2P/3D and 1P/4D recipes remain
+  checked in as topology-gate evidence but are excluded because they were
+  strongly prefill-starved at c64. High-concurrency 4P/1D points are excluded
+  because the affinity-correct c64 gate proved that its single decode replica
+  is already saturated. The successful c192 artifact is retained as overload
+  evidence rather than spending more runs on dominated c128+ points.
 
 ## Official Runs
 
@@ -242,6 +243,7 @@ NATS/etcd node.
 | `27804547383` | incorrectly broad c64 dispatch | Cancelled before agentic allocation | The broad model/framework/runner filter also selected seven fixed-sequence GB200 configurations. The dispatch was cancelled immediately; no agentic Slurm job started and no benchmark result from this run is used. |
 | `27804604959` | exact-key retention-corrected c64 gate | 3P/2D success; 4P/1D cancelled externally | Slurm job `19278` completed successfully with official aggregate, raw, and server-log artifacts. GitHub cancelled the run while 4P/1D job `19279` was loading; that orphan was cancelled. |
 | `27809946853` | isolated retention-corrected 4P/1D c64 gate | Success | Job `19392` completed with official aggregate, raw, server-log, and collected-result artifacts. Cache affinity worked, but the single decode replica saturated badly. |
+| `27815458708` | initial 10-point wide frontier | Intentionally stopped after four successful points | Official successes: 3P/2D c64, c96, c192 and 4P/1D c32. c96 and c192 were already deeply overloaded, so pending c128/c160/c256/c384 and the duplicate 4P/1D c64 were cancelled before spending additional GPU time. |
 
 ### Unexpected cancellation of the first retention-corrected gate
 
@@ -322,6 +324,25 @@ NATS/etcd node.
   evidence that 4P/1D is decode-starved once cache affinity removes most
   repeated prefill work; it is retained at c32/c64 for comparison but not run
   at higher concurrency.
+
+### Concurrency-knee refinement (`27815458708`)
+
+- 3P/2D c96 completed 1,571 successful requests at 95,705 tok/s, 139.34s mean
+  TTFT, 685.77s p95 TTFT, and 16.25ms mean TPOT. 3P/2D c192 completed 1,851
+  successful requests at 95,344 tok/s, 189.97s mean TTFT, 1,209.01s p95 TTFT,
+  and 15.91ms mean TPOT. Neither point recorded profile request errors.
+- Both are dominated by c64 (269,251 tok/s, 3.27s mean TTFT). At high
+  concurrency, too many scenario-mandated cold first turns are simultaneously
+  resident; conversations progress too slowly to reach their repeated-prefix
+  turns. This creates a cache/locality collapse even though Dynamo affinity,
+  prefix caching, and 32k retention are enabled.
+- c192 is sufficient hard-overload evidence. The pending c128/c160/c256/c384
+  points were cancelled because they cannot resolve the knee and would repeat
+  a dominated operating regime. The final grid instead adds eight-token steps
+  from c16 through c80, plus c96, to resolve the useful frontier around c64.
+- The same run's 4P/1D c32 point completed 1,678 requests at 136,675 tok/s,
+  2.70s mean TTFT, 12.63s p95 TTFT, and 19.83ms mean TPOT. It is a valid
+  low-latency comparison point and remains in the final grid.
 
 ### Official RDMA topology gate: completed points
 
@@ -458,14 +479,15 @@ reference points from the results database:
 - c128 with offload: 98,908 tok/s total and 12,363 tok/s/GPU.
 
 The GB200 disaggregated sweep does not use KV offloading, as requested. Both
-B200 modes remain useful references. The dense 3P/2D grid brackets the useful
-region and intentionally extends into overload at c256/c384.
+B200 modes remain useful references. The dense 3P/2D c16--c96 grid resolves
+the useful region and its first overload transition; the official c192 point
+provides the hard-overload boundary.
 
 ## Remaining Work
 
-1. Run the remaining official 4P/1D c32 and 3P/2D
-   c32/c96/c128/c160/c192/c256/c384 points. The c64 points are complete.
-2. At c256/c384, audit warmup duration, affinity expiry, request latency, and
+1. Run the final official 12-point dense sweep: 4P/1D c32/c64 and 3P/2D
+   c16/c24/c32/c40/c48/c56/c64/c72/c80/c96.
+2. At c80/c96, audit warmup duration, affinity expiry, request latency, and
    server/Slurm/GitHub time limits. Increase a timeout only if measured
    saturation approaches it.
 3. Download every aggregate/raw/server-log artifact, derive the measured
