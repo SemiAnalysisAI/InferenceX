@@ -1771,20 +1771,17 @@ dsv4-fp4-b200-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      # Pure TP loses GPU-cache residency between conc 8 and 16 and is fully
-      # collapsed by conc 32; sample that transition instead of conc 40.
-      - { tp: 8, offloading: none,  conc-list: [1, 4, 8, 10, 12, 14, 16, 32] }
-      # MooncakeStore shifts the pure-TP cliff above conc 52. Fill the old
-      # 52-64 and 64-72 gaps to show the external-cache degradation.
-      - { tp: 8, offloading: cpu,  conc-list: [40, 44, 48, 52, 56, 64, 72] }
-      # DEP cache residency falls sharply above conc 64. Use closely spaced
-      # points through the cliff instead of spending jobs on the fully
-      # collapsed 196/256/512 tail.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 56, 60, 64, 68, 72, 84, 128] }
-      # MooncakeStore is healthy at conc 64 but the old 128/196/256 points
-      # repeatedly crashed in invalid-block recovery; creep toward that
-      # boundary without rerunning the impractical conc-512 endpoint.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,   conc-list: [64, 72, 80, 88, 96, 112, 120] }
+      # Pure TP is only competitive at very low concurrency.
+      - { tp: 8, offloading: none,  conc-list: [1, 2, 3, 4, 5] }
+      # Sample the useful MooncakeStore range without repeating its collapsed
+      # high-concurrency tail.
+      - { tp: 8, offloading: cpu,  conc-list: [8, 10, 16, 32, 40, 44] }
+      # The latest DEP run falls from 10,361 tok/s/GPU at conc 64 to 3,045 at
+      # conc 72. Use two-request steps across that cliff, with sparse baselines.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [16, 32, 38, 44, 50, 56, 60, 64, 66, 68, 70, 72] }
+      # Probe the external-cache transition around conc 64 while retaining
+      # lower-concurrency points needed to establish the throughput frontier.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu,   conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -12736,10 +12733,12 @@ dsv4-fp4-b200-sglang-agentic-hicache:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 8, offloading: none,     conc-list: [1, 4, 8, 10, 12, 14, 16, 32] }
-      - { tp: 8, offloading: hicache,  conc-list: [40, 44, 48, 52, 56, 64, 72] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none,    conc-list: [52, 56, 60, 64, 68, 72, 84, 128] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: hicache, conc-list: [64, 72, 80, 88, 96, 112, 120] }
+      - { tp: 8, offloading: none,     conc-list: [1, 2, 3, 4, 5] }
+      - { tp: 8, offloading: hicache,  conc-list: [8, 10, 16, 32, 40, 44] }
+      # DEP without HiCache is already degraded at conc 52 (2,098 tok/s/GPU),
+      # so resolve its pre-52 cliff instead of repeating the collapsed tail.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none,    conc-list: [16, 24, 32, 38, 44, 48, 50, 52] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: hicache, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
 
 
 dsv4-fp4-b300-sglang-agentic-hicache:
