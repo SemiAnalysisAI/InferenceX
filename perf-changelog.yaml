@@ -3958,3 +3958,11 @@
     - "Use FP8 KV cache"
     - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1837
+
+- config-keys:
+    - minimaxm3-fp8-mi300x-vllm-mtp
+  description:
+    - "Update the MI300X MiniMax-M3 EAGLE3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Use FP8 KV cache"
+    - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1839

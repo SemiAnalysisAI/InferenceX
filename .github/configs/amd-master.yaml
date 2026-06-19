@@ -2901,12 +2901,9 @@ minimaxm3-fp8-mi300x-vllm:
 # Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). Same TP8-only
 # search space as the non-MTP MI300X entry (gfx942 192 GB is memory-tight, like
 # H100), with the TP8 latency rows started at conc 1 to capture single-request
-# latency — matching the H100/MI355X MTP recipes. The shipped ROCm image lacks
-# SupportsEagle3 on the AMD MiniMax-M3 model, so the recipe applies that fix
-# in-place at runtime (functionstackx/vllm#1, upstream vllm-project/vllm#45546;
-# validated green on MI355X) before serving.
+# latency — matching the H100/MI355X MTP recipes.
 minimaxm3-fp8-mi300x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi300x
