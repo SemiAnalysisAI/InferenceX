@@ -66,6 +66,7 @@ fi
 # by a list of numbers delimited by 'x'. This is because of how the underlying launch script
 # expects the concurrencies.
 JOB_ID=$(bash ./submit.sh $PREFILL_NODES \
+    $SPEC_DECODING \
     $PREFILL_NUM_WORKERS \
     $DECODE_NODES \
     $DECODE_NUM_WORKERS \
