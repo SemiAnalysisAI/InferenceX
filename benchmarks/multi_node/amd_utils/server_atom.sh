@@ -115,7 +115,8 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
     if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
         PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
     else #TP+DPA+TBO
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo)
+        # (srok), TBO only on Prefill server
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo )
         export GPU_MAX_HW_QUEUES=5
         export ATOM_CPU_AFFINITY=1
     fi
@@ -126,7 +127,7 @@ if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
         DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
     else #TP+DPA+TBO
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo)
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
         export GPU_MAX_HW_QUEUES=5
         export ATOM_CPU_AFFINITY=1
     fi
@@ -160,6 +161,10 @@ Spec    args : ${SPEC_ARGS[*]}
 Opt     args : ${HF_OVERRIDES_ARG}
 =====================
 INFO
+
+echo "=== Environment Variables ==="
+printenv | sort
+echo "============================="
 
 # =============================================================================
 # Node Role Assignment
@@ -470,6 +475,15 @@ else
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
     _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+    if [[ "$_MAX_CONC" -gt 2048 ]]; then
+        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048,4096]'
+    elif [[ "$_MAX_CONC" -gt 1024 ]]; then
+        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048]'
+    elif [[ "$_MAX_CONC" -gt 512 ]]; then
+        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,768,1024]'
+    else
+        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512]'
+    fi
 
     if [[ "$BENCH_INPUT_LEN" == "1024" && "$BENCH_OUTPUT_LEN" == "1024" ]]; then
         DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
@@ -490,6 +504,7 @@ else
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
+        --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
