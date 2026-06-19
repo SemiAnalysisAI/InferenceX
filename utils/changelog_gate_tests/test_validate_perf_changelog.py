@@ -203,7 +203,7 @@ def test_raw_correction_rejects_whitespace_only_history_change() -> None:
         )
 
 
-def test_run_sweep_does_not_prevalidate_changelog_before_setup() -> None:
+def test_run_sweep_checks_newline_before_reuse_and_setup() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     workflow = yaml.load(
         (repo_root / ".github/workflows/run-sweep.yml").read_text(),
@@ -225,8 +225,18 @@ def test_run_sweep_does_not_prevalidate_changelog_before_setup() -> None:
         for step in jobs["setup"]["steps"]
     ]
     assert "Reject conflicting sweep labels" in setup_step_names
-    assert "needs" not in jobs["reuse-sweep-gate"]
-    assert jobs["setup"]["needs"] == "reuse-sweep-gate"
+    assert "needs" not in jobs["check-newline"]
+    assert jobs["reuse-sweep-gate"]["needs"] == "check-newline"
+    assert jobs["setup"]["needs"] == [
+        "check-newline",
+        "reuse-sweep-gate",
+    ]
+    assert (
+        "needs.check-newline.result == 'success'"
+        in jobs["reuse-sweep-gate"]["if"]
+    )
+    assert "needs.check-newline.result == 'success'" in jobs["setup"]["if"]
+    assert "needs.check-newline.result == 'skipped'" in jobs["setup"]["if"]
     assert "needs.check-changelog" not in jobs["reuse-sweep-gate"]["if"]
     assert "needs.check-changelog" not in jobs["setup"]["if"]
 

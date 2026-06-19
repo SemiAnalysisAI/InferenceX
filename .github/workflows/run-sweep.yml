@@ -34,13 +34,41 @@ on:
             - "perf-changelog.yaml"
 
 jobs:
+    check-newline:
+        runs-on: ubuntu-latest
+        if: >-
+            github.event_name == 'pull_request' &&
+            !github.event.pull_request.draft &&
+            (
+              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+              github.event.label.name == 'sweep-enabled' ||
+              github.event.label.name == 'full-sweep-enabled' ||
+              github.event.label.name == 'non-canary-full-sweep-enabled' ||
+              github.event.label.name == 'full-sweep-fail-fast' ||
+              github.event.label.name == 'full-sweep-fail-fast-no-canary'
+            )
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+            - name: Check perf-changelog.yaml ends with newline
+              run: |
+                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
+                      echo "::error::perf-changelog.yaml must end with a newline character"
+                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
+                      exit 1
+                  fi
+
     reuse-sweep-gate:
+        needs: check-newline
         runs-on: ubuntu-latest
         permissions:
             contents: read
             issues: read
             pull-requests: read
         if: >-
+            always() &&
+            needs.check-newline.result == 'success' &&
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !github.event.pull_request.draft &&
@@ -70,45 +98,15 @@ jobs:
                     --ref "${{ github.ref }}" \
                     --workflow-id "run-sweep.yml"
 
-    check-newline:
-        needs: reuse-sweep-gate
-        runs-on: ubuntu-latest
-        if: >-
-            always() &&
-            (
-              needs.reuse-sweep-gate.result == 'skipped' ||
-              (
-                needs.reuse-sweep-gate.result == 'success' &&
-                needs.reuse-sweep-gate.outputs.skip-pr-sweep != 'true'
-              )
-            ) &&
-            github.event_name == 'pull_request' &&
-            !github.event.pull_request.draft &&
-            (
-              (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-              github.event.label.name == 'sweep-enabled' ||
-              github.event.label.name == 'full-sweep-enabled' ||
-              github.event.label.name == 'non-canary-full-sweep-enabled' ||
-              github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary'
-            )
-        steps:
-            - name: Checkout code
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-            - name: Check perf-changelog.yaml ends with newline
-              run: |
-                  if [ -n "$(tail -c 1 perf-changelog.yaml)" ]; then
-                      echo "::error::perf-changelog.yaml must end with a newline character"
-                      echo "Please add a newline at the end of the file to avoid diff issues in subsequent PRs."
-                      exit 1
-                  fi
-
     setup:
-        needs: reuse-sweep-gate
+        needs: [check-newline, reuse-sweep-gate]
         runs-on: ubuntu-latest
         if: >-
             always() &&
+            (
+              needs.check-newline.result == 'success' ||
+              needs.check-newline.result == 'skipped'
+            ) &&
             (
               needs.reuse-sweep-gate.result == 'skipped' ||
               (
@@ -618,9 +616,9 @@ jobs:
 
     reuse-ingest-artifacts:
         needs: setup
-        # `setup` runs via always() and depends on `reuse-sweep-gate`, which is
-        # skipped on every push-to-main. Without always() here, that skipped
-        # gate poisons this job's implicit
+        # `setup` runs via always() and depends on `check-newline` and
+        # `reuse-sweep-gate`, which are skipped on every push-to-main. Without
+        # always() here, those skipped jobs poison this job's implicit
         # success() check and it is skipped even when setup succeeded with
         # reuse-enabled=true — silently breaking the merge-time ingest. Guard
         # explicitly on setup success instead (same pattern as

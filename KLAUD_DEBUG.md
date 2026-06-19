@@ -34,8 +34,9 @@ python3 -c "import yaml; yaml.safe_load(open('perf-changelog.yaml'))"
 Do **not** try a 3-way merge of `perf-changelog.yaml` — whitespace edits will silently re-trigger the deletion check.
 
 After committing and pushing the resolution, the synchronize run checks the
-reuse authorization before setup. `utils/merge_with_reuse.sh <PR>` performs
-the push and waits for the PR checks automatically.
+changelog's final newline and then the reuse authorization before setup.
+`utils/merge_with_reuse.sh <PR>` performs the push and waits for the PR checks
+automatically.
 
 ---
 
