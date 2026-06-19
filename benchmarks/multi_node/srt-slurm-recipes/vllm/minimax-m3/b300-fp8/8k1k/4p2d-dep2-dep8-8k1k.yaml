@@ -65,7 +65,7 @@ backend:
       max-model-len: 9472
       language-model-only: true
       stream-interval: 32
-      max-num-seqs: 1024
+      max-num-seqs: 1024  # Per DP rank: 2 workers x DP8 = 16 ranks.
       max-num-batched-tokens: 16384
       max-cudagraph-capture-size: 4096
 

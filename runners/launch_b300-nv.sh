@@ -56,6 +56,7 @@ fi
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 SRTCTL_SETUP_SCRIPT=""
+SRTCTL_HOST_PATCH=""
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."
     rm -rf "$SRT_REPO_DIR"
@@ -89,7 +90,8 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISIO
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    SRTCTL_SETUP_SCRIPT="minimax-m3-msa-contiguity.sh"
+    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    SRTCTL_HOST_PATCH="srt-slurm-sanitize-node-ip.patch"
     cp \
         "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
         "configs/$SRTCTL_SETUP_SCRIPT"
@@ -97,6 +99,19 @@ else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
     git checkout sa-submission-q2-2026
+fi
+
+if [[ -n "$SRTCTL_HOST_PATCH" ]]; then
+    SRTCTL_HOST_PATCH_PATH="$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_HOST_PATCH"
+    if git apply --unidiff-zero --check "$SRTCTL_HOST_PATCH_PATH" 2>/dev/null; then
+        git apply --unidiff-zero "$SRTCTL_HOST_PATCH_PATH" || exit 1
+        echo "Applied host patch: $SRTCTL_HOST_PATCH"
+    elif git apply --unidiff-zero --reverse --check "$SRTCTL_HOST_PATCH_PATH" 2>/dev/null; then
+        echo "Host patch already applied: $SRTCTL_HOST_PATCH"
+    else
+        echo "Error: host patch does not apply cleanly: $SRTCTL_HOST_PATCH" >&2
+        exit 1
+    fi
 fi
 
 echo "Installing srtctl..."
