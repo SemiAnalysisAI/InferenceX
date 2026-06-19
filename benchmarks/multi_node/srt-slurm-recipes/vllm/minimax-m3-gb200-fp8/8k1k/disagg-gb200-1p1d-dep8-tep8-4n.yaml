@@ -1,9 +1,8 @@
-name: "minimax-m3-vllm-disagg-gb200-4p1d-dep8-dep16-8k1k"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-dep8-tep8-4n-8k1k"
 
-# MiniMax-M3 disaggregated 4P+1D recipe for GB200 (max throughput, 8k1k).
-# 4x Prefill DEP8 (8 nodes) -> NixlConnector -> 1x Decode DEP16
-# (4 nodes) = 12 nodes within one NVL72 rack. Maximises prefill
-# bandwidth for 8k ISL; rack-scale DEP16 decode. FLASHINFER, block-size 128.
+# 1P DEP8 prefill (TP1 DP8 EP, 2 nodes) + 1D TEP8 decode
+# (TP8+EP8, 2 nodes) = 4 nodes. Low-concurrency latency config.
+# Marlin is intentionally not used on the DEP8 prefill.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -25,12 +24,12 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 8
-  decode_nodes: 4
-  prefill_workers: 4
+  prefill_nodes: 2
+  decode_nodes: 2
+  prefill_workers: 1
   decode_workers: 1
   gpus_per_prefill: 8
-  gpus_per_decode: 16
+  gpus_per_decode: 8
 
 frontend:
   type: dynamo
@@ -79,19 +78,17 @@ backend:
       no-enable-prefix-caching: true
       numa-bind: true
       enable-sleep-mode: true
-      stream-interval: 32
+      stream-interval: 1
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 16
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       max-model-len: 9472
-      max-num-seqs: 512
-      max-num-batched-tokens: 512
-      max-cudagraph-capture-size: 512
+      max-num-seqs: 256
+      max-num-batched-tokens: 256
+      max-cudagraph-capture-size: 128
       block-size: 128
       attention-backend: FLASHINFER
       language-model-only: true
@@ -101,10 +98,10 @@ backend:
       no-enable-prefix-caching: true
       numa-bind: true
       enable-sleep-mode: true
-      stream-interval: 128
+      stream-interval: 1
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1024x2048"
+  concurrencies: "8x16x32x64"

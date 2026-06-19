@@ -1,10 +1,8 @@
-name: "minimax-m3-vllm-disagg-gb200-1p1d-dep8-tp8-8k1k"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-dep8-tp8-4n-8k1k"
 
-# MiniMax-M3 disaggregated 1P+1D recipe for GB200 (low-latency, 8k1k,
-# wider decode). Prefill DEP8 (DP-attn + EP across 8 GPU / 2 nodes) ->
-# NixlConnector -> Decode TEP8 (TP8+EP8, 2 nodes) = 4 nodes. DEP8
-# shards the prefill MoE weights across 8 GPUs so the model fits without
-# Marlin repacking. FLASHINFER attention, block-size 128.
+# 1P DEP8 prefill (TP1 DP8 EP, 2 nodes) + 1D TP8 decode
+# (Marlin MoE, 2 nodes) = 4 nodes. Low-concurrency latency config.
+# Marlin is restricted to the pure TP8 decode worker.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -85,8 +83,8 @@ backend:
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 8
+      moe-backend: marlin
       pipeline-parallel-size: 1
-      enable-expert-parallel: true
       max-model-len: 9472
       max-num-seqs: 256
       max-num-batched-tokens: 256
@@ -106,4 +104,4 @@ benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "1x2x4x8x16"
+  concurrencies: "8x16x32x64"
