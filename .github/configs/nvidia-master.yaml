@@ -12786,7 +12786,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-4p1d:
       search-space:
       # KV-aware agentic curve: 4p1d (TEP=8 / TP=8). 11 nodes incl. infra.
       - spec-decoding: none
-        conc-list: [32, 64, 128, 192, 256, 384]
+        conc-list: [32, 64]
         prefill:
           num-worker: 4
           tp: 8
@@ -12815,7 +12815,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d:
       search-space:
       # Decode-heavier sibling of 4P/1D at the same 40-GPU budget.
       - spec-decoding: none
-        conc-list: [32, 64, 128, 192, 256, 384]
+        conc-list: [32, 64, 96, 128, 160, 192, 256, 384]
         prefill:
           num-worker: 3
           tp: 8
