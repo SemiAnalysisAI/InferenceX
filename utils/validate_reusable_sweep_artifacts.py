@@ -30,11 +30,6 @@ def as_int(value: Any, default: int = 0) -> int:
         return default
 
 
-def bool_str(value: Any) -> str:
-    """Render booleans as GitHub Actions does in filenames."""
-    return "true" if as_bool(value) else "false"
-
-
 def load_json(path: Path) -> Any:
     """Load a JSON file."""
     with open(path) as handle:
@@ -475,7 +470,7 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         return (
             "multi",
             normalized_runner(row.get("hw")),
-            row.get("model_prefix"),
+            row.get("model_prefix", row.get("infmax_model_prefix")),
             row.get("framework"),
             row.get("precision"),
             row.get("spec_decoding", "none"),
@@ -492,7 +487,7 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
     return (
         "single",
         normalized_runner(row.get("hw")),
-        row.get("model_prefix"),
+        row.get("model_prefix", row.get("infmax_model_prefix")),
         row.get("framework"),
         row.get("precision"),
         row.get("spec_decoding", "none"),
@@ -503,111 +498,64 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
-def expected_eval_artifact_prefixes(config: dict[str, Any]) -> list[str]:
-    """Build expected raw eval result artifact prefixes from matrix entries."""
-    prefixes: list[str] = []
-    for entry in config.get("evals", []) or []:
-        exp_name = entry["exp-name"]
-        prefixes.append(
-            f"eval_{exp_name}_{exp_name}_{entry['precision']}_{entry['framework']}_"
-            f"tp{as_int(entry['tp'])}-ep{as_int(entry.get('ep', 1))}-"
-            f"dpa{bool_str(entry.get('dp-attn', False))}_"
-            f"disagg-{bool_str(entry.get('disagg', False))}_"
-            f"spec-{entry.get('spec-decoding', 'none')}_conc{as_int(entry['conc'])}_"
-            f"{entry['runner']}_"
-        )
-
-    for entry in config.get("multinode_evals", []) or []:
-        exp_name = entry["exp-name"]
-        prefill = entry["prefill"]
-        decode = entry["decode"]
-        conc = "x".join(str(as_int(value)) for value in entry["conc"])
-        prefixes.append(
-            f"eval_{exp_name}_{exp_name}_{entry['precision']}_{entry['framework']}_"
-            f"prefill-tp{as_int(prefill['tp'])}-ep{as_int(prefill.get('ep', 1))}-"
-            f"dp{bool_str(prefill.get('dp-attn', False))}-"
-            f"nw{as_int(prefill.get('num-worker', 0))}_"
-            f"decode-tp{as_int(decode.get('tp', 0))}-ep{as_int(decode.get('ep', 0))}-"
-            f"dp{bool_str(decode.get('dp-attn', False))}-"
-            f"nw{as_int(decode.get('num-worker', 0))}_"
-            f"disagg-{bool_str(entry.get('disagg', False))}_"
-            f"spec-{entry.get('spec-decoding', 'none')}_conc{conc}_"
-            f"{entry['runner']}_"
-        )
-    return prefixes
-
-
-def raw_eval_artifact_names(artifacts_dir: Path) -> set[str]:
-    """Return eval result artifacts, excluding aggregate and debug artifacts."""
-    return {
-        path.name
+def raw_eval_artifact_dirs(artifacts_dir: Path) -> list[Path]:
+    """Return raw eval result artifacts, excluding aggregate and debug artifacts."""
+    return sorted(
+        path
         for path in artifacts_dir.iterdir()
         if path.is_dir()
         and path.name.startswith("eval_")
         and path.name != "eval_results_all"
         and not path.name.startswith("eval_server_logs_")
         and not path.name.startswith("eval_gpu_metrics_")
-    }
+    )
+
+
+def raw_eval_key_rows(
+    artifacts_dir: Path,
+) -> tuple[list[tuple[Any, ...]], list[str]]:
+    """Build logical eval identities from each raw artifact's metadata."""
+    rows: list[tuple[Any, ...]] = []
+    errors: list[str] = []
+    for artifact_dir in raw_eval_artifact_dirs(artifacts_dir):
+        meta_path = artifact_dir / "meta_env.json"
+        if not meta_path.is_file():
+            errors.append(
+                f"raw eval artifact {artifact_dir.name!r} is missing meta_env.json"
+            )
+            continue
+        try:
+            meta = load_json(meta_path)
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(
+                f"raw eval artifact {artifact_dir.name!r} has invalid "
+                f"meta_env.json: {exc}"
+            )
+            continue
+        if not isinstance(meta, dict):
+            errors.append(
+                f"raw eval artifact {artifact_dir.name!r} has non-object "
+                "meta_env.json"
+            )
+            continue
+        rows.append(eval_key(meta))
+    return rows, errors
 
 
 def validate_eval_artifacts(
     artifacts_dir: Path,
-    expected_prefixes: list[str],
-    expected_aggregate_keys: set[tuple[Any, ...]] | None = None,
+    expected_keys: set[tuple[Any, ...]],
 ) -> list[str]:
     """Validate exact eval aggregate and raw artifact coverage."""
-    errors: list[str] = []
-    expected = set(expected_prefixes)
-    duplicate_prefixes = [
-        prefix
-        for prefix, count in Counter(expected_prefixes).items()
-        if count > 1
-    ]
-    for prefix in sorted(duplicate_prefixes):
-        errors.append(f"duplicate expected eval artifact prefix: {prefix}")
-
-    actual_names = raw_eval_artifact_names(artifacts_dir)
-    matched: dict[str, list[str]] = {
-        prefix: [] for prefix in expected
-    }
-    unexpected: set[str] = set()
-
-    for name in actual_names:
-        matches = {prefix for prefix in expected if name.startswith(prefix)}
-        if len(matches) == 1:
-            matched[next(iter(matches))].append(name)
-        elif not matches:
-            unexpected.add(name)
-        else:
-            errors.append(
-                f"eval artifact {name!r} matches multiple expected identities"
-            )
-
-    missing = {
-        prefix for prefix, names in matched.items() if not names
-    }
-    if missing:
-        errors.append(f"missing {len(missing)} expected raw eval result artifact dir(s)")
-        for prefix in sorted(missing)[:20]:
-            errors.append(f"  missing eval artifact prefix: {prefix}")
-        if len(missing) > 20:
-            errors.append(f"  ... and {len(missing) - 20} more")
-    if unexpected:
-        errors.append(f"found {len(unexpected)} unexpected raw eval artifact dir(s)")
-        for name in sorted(unexpected)[:20]:
-            errors.append(f"  unexpected eval artifact: {name}")
-        if len(unexpected) > 20:
-            errors.append(f"  ... and {len(unexpected) - 20} more")
-    for prefix, names in sorted(matched.items()):
-        if len(names) > 1:
-            errors.append(
-                f"eval artifact prefix {prefix!r} matched "
-                f"{len(names)} raw result artifact dirs"
-            )
+    raw_rows, errors = raw_eval_key_rows(artifacts_dir)
+    errors.extend(duplicate_identity_errors("raw eval", raw_rows))
+    errors.extend(
+        validate_identity_set("raw eval", expected_keys, set(raw_rows))
+    )
 
     aggregate_dir = artifacts_dir / "eval_results_all"
     aggregate_files = list(aggregate_dir.glob("*.json"))
-    if expected:
+    if expected_keys:
         if not aggregate_files:
             errors.append("missing eval_results_all aggregate artifact")
         else:
@@ -624,20 +572,19 @@ def validate_eval_artifacts(
                     )
             if row_count == 0:
                 errors.append("eval_results_all contains no rows")
-            if expected_aggregate_keys is not None:
-                errors.extend(
-                    duplicate_identity_errors(
-                        "eval aggregate",
-                        aggregate_rows,
-                    )
+            errors.extend(
+                duplicate_identity_errors(
+                    "eval aggregate",
+                    aggregate_rows,
                 )
-                errors.extend(
-                    validate_identity_set(
-                        "eval aggregate",
-                        expected_aggregate_keys,
-                        set(aggregate_rows),
-                    )
+            )
+            errors.extend(
+                validate_identity_set(
+                    "eval aggregate",
+                    expected_keys,
+                    set(aggregate_rows),
                 )
+            )
     elif aggregate_dir.exists():
         errors.append("unexpected eval_results_all aggregate artifact")
 
@@ -670,8 +617,7 @@ def main() -> int:
 
     expected_bmk = expected_benchmark_keys(config)
     expected_agentic = expected_agentic_keys(config)
-    expected_eval_prefixes = expected_eval_artifact_prefixes(config)
-    expected_eval_aggregate = expected_eval_keys(config)
+    expected_eval = expected_eval_keys(config)
 
     errors = validate_fixed_artifacts(args.artifacts_dir, expected_bmk)
     if expected_bmk and not (args.artifacts_dir / "results_bmk").is_dir():
@@ -682,8 +628,7 @@ def main() -> int:
     errors.extend(
         validate_eval_artifacts(
             args.artifacts_dir,
-            expected_eval_prefixes,
-            expected_eval_aggregate,
+            expected_eval,
         )
     )
     errors.extend(validate_run_stats(args.artifacts_dir, bool(expected_bmk)))
