@@ -11,6 +11,16 @@
 
 </div>
 
+## 新闻
+
+- **[2026/06]** 🔥 MiniMax-M3 Day 0 基准测试已在 InferenceX 上线（[仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)）。
+- **[2026/04]** 🔥 DeepSeek V4 1.6T 从 Day 0 到 Day 43 的性能演进，覆盖 GB300 NVL72、MI355X、B200 与华为（[文章](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)）。
+- **[2026/02]** GB300 NVL72：在 InferenceX 上以 SGLang 实现高达 25 倍的推理性能（[博客](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)）。
+- **[2026/02]** 🔥 InferenceX v2 发布——NVIDIA Blackwell 对比 AMD 对比 Hopper（[文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)）。
+- **[2025/10]** 🔥 InferenceX（前身为 InferenceMAX）v1 发布（[文章](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)）。
+
+## 简介
+
 InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致力于持续分析与基准测试全球最受欢迎的开源推理框架——这些框架被各大 Token 工厂与模型广泛采用，以实时追踪其真实性能。随着这些软件栈不断改进，InferenceX™ 会以近乎实时的方式捕捉这些进展，提供一个反映推理性能进步的实时指标。我们在 https://inferencex.com/ 上免费公开提供了一个[开源](https://github.com/SemiAnalysisAI/InferenceX-app)的实时仪表盘。
 
 > [!IMPORTANT]

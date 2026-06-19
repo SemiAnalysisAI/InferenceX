@@ -11,6 +11,16 @@
 
 </div>
 
+## News
+
+- **[2026/06]** 🔥 MiniMax-M3 Day 0 benchmarks live on InferenceX ([dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)).
+- **[2026/04]** 🔥 DeepSeek V4 1.6T Day 0 → Day 43 performance over time across GB300 NVL72, MI355X, B200, and Huawei ([article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)).
+- **[2026/02]** GB300 NVL72: up to 25x inference performance with SGLang on InferenceX ([blog](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)).
+- **[2026/02]** 🔥 InferenceX v2 launch — NVIDIA Blackwell vs AMD vs Hopper ([article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)).
+- **[2025/10]** 🔥 InferenceX (formerly InferenceMAX) v1 launch ([article](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)).
+
+## Introduction
+
 InferenceX™ (formerly InferenceMAX) is an inference performance research platform dedicated to continually analyzing & benchmarking the world’s most popular open-source inference frameworks used by major token factories and models to track real performance in real time. As these software stacks improve, InferenceX™ captures that progress in near real-time, providing a live indicator of inference performance progress. A [open sourced](https://github.com/SemiAnalysisAI/InferenceX-app) live dashboard  is available for free publicly at https://inferencex.com/. 
 
 > [!IMPORTANT]
