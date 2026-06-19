@@ -162,9 +162,9 @@ if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS}"
 fi
 
-if [[ "$MODEL_NAME" != "DeepSeek-V4-Pro" ]]; then
-    export AITER_QUICK_REDUCE_QUANTIZATION=INT4
-fi
+if [[ "$MODEL_NAME" != "DeepSeek-V4-Pro" ]]; then                                                                                                                                          
+      export AITER_QUICK_REDUCE_QUANTIZATION=INT4                                                                                                                                            
+fi   
 
 cat <<INFO
 === Configuration ===
