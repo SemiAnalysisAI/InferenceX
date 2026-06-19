@@ -15,7 +15,8 @@
 
 - **[2026/06]** 🔥 MiniMax M3：自 Day 0 起持续进行基准测试 [仪表盘](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
 - **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T：自 Day 0 起持续进行基准测试 [文章](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)，[仪表盘](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)
-- **[2026/03]** 新增 Kimi K2.5（与 Kimi 2.7-Code 架构相同）、Qwen3.5-397B、GLM5（与 GLM5.1 架构相同）、MiniMax M2.5（与 MiniMax M2.7 架构相同）[仪表盘](https://inferencex.semianalysis.com/)
+- **[2026/03]** 🔥 Qwen3.5 397B：自 Day 0 起持续进行基准测试 [仪表盘](https://inferencex.semianalysis.com/)
+- **[2026/03]** 新增 Kimi K2.5（与 Kimi 2.7-Code 架构相同）、GLM5（与 GLM5.1 架构相同）、MiniMax M2.5（与 MiniMax M2.7 架构相同）[仪表盘](https://inferencex.semianalysis.com/)
 - **[2026/02]** GB300 NVL72：已加入 InferenceX 并持续进行基准测试 [SGLang 维护者 LMSYS 博客](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)
 - **[2026/02]** 🔥 InferenceX v2 发布——NVIDIA Blackwell 对比 AMD 对比 Hopper [文章](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
 - **[2025/10]** 🔥 InferenceX（前身为 InferenceMAX）v1 发布 [文章](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
