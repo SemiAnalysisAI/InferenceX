@@ -3988,3 +3988,4 @@
   description:
     - "Update the MiniMax-M3 B300 Dynamo vLLM container from vllm/vllm-openai:minimax-m3 to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1863
+  evals-only: true
