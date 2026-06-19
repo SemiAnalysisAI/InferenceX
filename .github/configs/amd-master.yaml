@@ -2835,7 +2835,7 @@ dsv4-fp4-mi355x-atom-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
-      # 1P1D TP8+DPA+MTP1 
+      # 1P1D TP8+DPA+TBO+MTP1
     - isl: 1024
       osl: 1024
       search-space:
