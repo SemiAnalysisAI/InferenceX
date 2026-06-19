@@ -133,6 +133,27 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     return matrix_values
 
 
+def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
+    """Mark every fixed-sequence entry for eval-only execution.
+
+    Agentic entries are left untouched because they do not support lm-eval.
+    Multi-node entries use the upper median of their concurrency list for the
+    eval request concurrency.
+    """
+    for entry in matrix_values:
+        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            continue
+
+        entry[Fields.RUN_EVAL.value] = True
+        if Fields.PREFILL.value in entry:
+            conc = entry[Fields.CONC.value]
+            conc_values = conc if isinstance(conc, list) else [conc]
+            sorted_concs = sorted(conc_values)
+            entry[Fields.EVAL_CONC.value] = sorted_concs[len(sorted_concs) // 2]
+
+    return matrix_values
+
+
 def generate_full_sweep(args, all_config_data, runner_data):
     """Generate full sweep configurations with optional filtering.
 
@@ -940,6 +961,11 @@ def main():
         action='store_true',
         help='When specified, run ONLY the eval subset (excludes non-eval configs).'
     )
+    eval_group.add_argument(
+        '--all-evals',
+        action='store_true',
+        help='When specified, run ONLY evals for every generated fixed-sequence config.'
+    )
     parent_parser.add_argument(
         '--runner-node-filter',
         required=False,
@@ -1152,13 +1178,16 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Handle eval options (mutually exclusive: --no-evals or --evals-only)
-    if not args.no_evals:
+    # Handle mutually exclusive eval modes.
+    if args.all_evals:
+        matrix_values = mark_all_eval_entries(matrix_values)
+    elif not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
-        if args.evals_only:
-            matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
-            for e in matrix_values:
-                e[Fields.EVAL_ONLY.value] = True
+
+    if args.evals_only or args.all_evals:
+        matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
+        for entry in matrix_values:
+            entry[Fields.EVAL_ONLY.value] = True
 
     print(json.dumps(matrix_values))
     return matrix_values

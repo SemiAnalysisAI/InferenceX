@@ -13,6 +13,7 @@ from validation import (
     MultiNodeSeqLenConfig,
     SingleNodeMasterConfigEntry,
     MultiNodeMasterConfigEntry,
+    ChangelogEntry,
     validate_matrix_entry,
     validate_master_config,
     validate_runner_config,
@@ -805,6 +806,35 @@ class TestValidateRunnerConfig:
         assert "h200" in result
         assert "mi300x" in result
         assert "gb200" in result
+
+
+# =============================================================================
+# Test changelog entry validation
+# =============================================================================
+
+class TestChangelogEntry:
+    """Tests for changelog eval mode validation."""
+
+    def test_all_evals_is_supported(self):
+        entry = ChangelogEntry.model_validate({
+            "config-keys": ["test-config"],
+            "description": ["Run every eval config"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+            "all-evals": True,
+        })
+
+        assert entry.all_evals is True
+        assert entry.evals_only is False
+
+    def test_eval_only_modes_are_mutually_exclusive(self):
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            ChangelogEntry.model_validate({
+                "config-keys": ["test-config"],
+                "description": ["Invalid duplicate eval modes"],
+                "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+                "evals-only": True,
+                "all-evals": True,
+            })
 
 
 # =============================================================================

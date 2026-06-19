@@ -10,6 +10,7 @@ from generate_sweep_configs import (
     generate_runner_model_sweep_config,
     generate_test_config_sweep,
     mark_eval_entries,
+    mark_all_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
 )
@@ -390,6 +391,69 @@ class TestMarkEvalEntries:
         non_prefill = [x for x in result if 'prefill' not in x]
         assert not all(x['run-eval'] for x in non_prefill), \
             "mark_eval_entries must not mark all entries — would break e2e splitting"
+
+
+class TestMarkAllEvalEntries:
+    """Tests for the all-evals selection policy."""
+
+    def test_marks_all_fixed_sequence_entries_without_policy_filters(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 1,
+                'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
+            },
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 8,
+                'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert all(entry['run-eval'] for entry in result)
+
+    def test_marks_every_multinode_entry_and_sets_upper_median_eval_conc(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [1, 4, 8, 16],
+                'run-eval': False,
+            },
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': True},
+                'decode': {'dp-attn': False},
+                'conc': [32],
+                'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert all(entry['run-eval'] for entry in result)
+        assert result[0]['eval-conc'] == 8
+        assert result[1]['eval-conc'] == 32
+
+    def test_skips_agentic_entries(self):
+        entries = [
+            {
+                'scenario-type': 'agentic-coding',
+                'model': 'm',
+                'runner': 'r',
+                'conc': 64,
+            }
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert 'run-eval' not in result[0]
+        assert 'eval-conc' not in result[0]
 
 
 # =============================================================================
@@ -1543,6 +1607,61 @@ class TestArgumentDefaults:
         # Verify the explicit value
         assert args.runner_config == 'custom/path/runners.yaml'
 
+    def test_all_evals_cli_marks_every_fixed_sequence_entry(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        """--all-evals should bypass the default 8k1k/min-conc policy."""
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--all-evals',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 10
+        assert {(entry['isl'], entry['osl']) for entry in result} == {
+            (1024, 1024),
+            (8192, 1024),
+        }
+        assert min(entry['conc'] for entry in result) == 4
+        assert all(entry['run-eval'] is True for entry in result)
+        assert all(entry['eval-only'] is True for entry in result)
+
+    def test_eval_modes_are_mutually_exclusive(self, monkeypatch):
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dummy',
+            '--evals-only',
+            '--all-evals',
+        ])
+
+        with pytest.raises(SystemExit):
+            generate_sweep_configs.main()
+
 
 # =============================================================================
 # Mixed-mode fixtures
@@ -1934,7 +2053,8 @@ def _split_e2e_configs(data):
 
 class TestE2EConfigSplitting:
     """Verify the e2e-tests.yml config splitting logic handles all flag
-    combinations correctly: default, --no-evals, and --evals-only."""
+    combinations correctly: default, --no-evals, --evals-only, and
+    --all-evals."""
 
     @pytest.fixture
     def mixed_entries(self):
@@ -1987,6 +2107,20 @@ class TestE2EConfigSplitting:
         single, multi, evals = _split_e2e_configs(data)
         assert len(single) == 0, "evals-only should not trigger benchmarks"
         assert len(evals) == 2
+
+    def test_all_evals_routes_every_fixed_sequence_entry_to_evals(self):
+        data = [
+            {'exp-name': 'a', 'isl': 1024, 'conc': 4, 'tp': 2,
+             'run-eval': True, 'eval-only': True},
+            {'exp-name': 'b', 'isl': 8192, 'conc': 8, 'tp': 2,
+             'run-eval': True, 'eval-only': True},
+        ]
+
+        single, multi, evals = _split_e2e_configs(data)
+
+        assert single == []
+        assert multi == []
+        assert evals == data
 
     def test_empty_config(self):
         """Empty input produces empty outputs."""

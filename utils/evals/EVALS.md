@@ -12,6 +12,15 @@ Evals run as **separate workflow jobs** from throughput benchmarks. The selectio
 
 **Multi-node**: One entry per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) with the highest max eligible concurrency, only for 8k1k. The eval job runs at `eval-conc`, the upper median of that config's eligible concurrency list.
 
+Generator eval modes:
+
+- Default: run throughput for every generated config and eval-only jobs for the selected subset above.
+- `--no-evals`: generate throughput jobs only.
+- `--evals-only`: generate eval-only jobs for the selected subset above.
+- `--all-evals`: generate eval-only jobs for every generated fixed-sequence config. Agentic configs are excluded. Multi-node jobs use the upper median of each entry's full concurrency list as `eval-conc`.
+
+The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. These changelog fields are mutually exclusive and both suppress throughput jobs for that entry.
+
 ## Why?
 To verify how model outputs are affected by throughput optimizations.
 - TP/Conc might affect model outputs

@@ -135,18 +135,26 @@ def main():
     all_benchmark_results = []
     all_eval_results = []
     # Deduplicate repeated configs separately for benchmarks and evals.
-    # An evals-only entry should not prevent a later regular entry from
-    # generating benchmarks for the same config, and vice versa.
+    # Eval-only modes should not prevent a regular entry from generating
+    # benchmarks for the same config, and vice versa.
     benchmark_configs_seen = set()
     eval_configs_seen = set()
 
+    master_config = load_config_files(MASTER_CONFIGS)
+    resolved_entries = []
     for entry_data in changelog_data:
         entry = ChangelogEntry.model_validate(entry_data)
         all_configs = get_config_keys_from_master(
-            entry.config_keys, load_config_files(MASTER_CONFIGS)
+            entry.config_keys, master_config
         )
+        resolved_entries.append((entry, all_configs))
 
-        if not entry.evals_only:
+    # Process all-evals entries first so their broader eval matrix wins when
+    # the same config appears in multiple changelog entries.
+    resolved_entries.sort(key=lambda item: not item[0].all_evals)
+
+    for entry, all_configs in resolved_entries:
+        if not entry.evals_only and not entry.all_evals:
             # Generate benchmark entries (no evals)
             benchmark_configs = [c for c in all_configs if c not in benchmark_configs_seen]
             if benchmark_configs:
@@ -179,6 +187,7 @@ def main():
         eval_configs = [c for c in all_configs if c not in eval_configs_seen]
         if eval_configs:
             eval_configs_seen.update(eval_configs)
+            eval_mode = "--all-evals" if entry.all_evals else "--evals-only"
             base_cmd = [
                 "python3",
                 GENERATE_SWEEPS_PY_SCRIPT,
@@ -187,7 +196,7 @@ def main():
                 *eval_configs,
                 "--config-files",
                 *MASTER_CONFIGS,
-                "--evals-only",
+                eval_mode,
             ]
             if entry.scenario_type:
                 base_cmd.extend(["--scenario-type", *entry.scenario_type])

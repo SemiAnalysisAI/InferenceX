@@ -486,10 +486,17 @@ class ChangelogEntry(BaseModel):
     description: list[str] = Field(min_length=1)
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
+    all_evals: bool = Field(alias="all-evals", default=False)
     scenario_type: Optional[List[str]] = Field(
         alias="scenario-type", default=None,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
     )
+
+    @model_validator(mode="after")
+    def validate_eval_modes(self):
+        if self.evals_only and self.all_evals:
+            raise ValueError("'evals-only' and 'all-evals' are mutually exclusive")
+        return self
 
 
 class ChangelogMetadata(BaseModel):
