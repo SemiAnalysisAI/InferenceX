@@ -12761,15 +12761,17 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [52, 64, 72, 84, 100, 128, 144, 160, 196, 256, 512] }
 
 
-# GB200 agentic disaggregation sweeps a constant 40-GPU budget from 4P/1D to
-# 1P/4D. Every prefill uses TEP8 behind Dynamo's KV-aware router and every
-# decode uses TP8. TEP avoids DEP's per-rank request-length imbalance while the
-# topology axis measures the trace's cache-capacity versus decode-rate tradeoff.
+# GB200 agentic disaggregation compares 4P/1D and 3P/2D at a constant 40-GPU
+# budget. Each topology has its own key so an official dispatch can request one
+# 11-node point without another matrix sibling consuming its Slurm/GHA timeout.
+# Every prefill uses TEP8 behind Dynamo's KV-aware router and every decode uses
+# TP8. TEP avoids DEP's per-rank request-length imbalance while the topology
+# axis measures the trace's cache-capacity versus decode-rate tradeoff.
 # Image matches the recipe's `model.container` (v0.23.0, required by the
 # current NVFP4 checkpoint; v0.20.0's NIXL connector also breaks TP8<->TP8
 # transfers, see the recipe header). The recipe also pins a Dynamo wheel new
 # enough to decode v0.23 KV events; keep both runtime pins in lockstep with it.
-dsv4-fp4-gb200-dynamo-vllm-agentic:
+dsv4-fp4-gb200-dynamo-vllm-agentic-4p1d:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
@@ -12798,8 +12800,20 @@ dsv4-fp4-gb200-dynamo-vllm-agentic:
           ep: 1
           dp-attn: false
 
-      # Constant 40-GPU topology sweep: shift one TP8 replica at a time from
-      # prefill to decode to locate the agentic trace's P/D rate-match point.
+dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d:
+  image: vllm/vllm-openai:v0.23.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      # Decode-heavier sibling of 4P/1D at the same 40-GPU budget.
       - spec-decoding: none
         conc-list: [32, 64, 128, 192, 256, 384]
         prefill:

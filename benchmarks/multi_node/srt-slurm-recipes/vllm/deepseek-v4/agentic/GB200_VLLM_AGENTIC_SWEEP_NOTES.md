@@ -285,6 +285,23 @@ NATS/etcd node.
   inference GPUs instead of eight; system throughput and latency are the
   relevant disaggregation acceptance metrics.
 
+### Per-topology dispatch keys
+
+- Run `27804604959` was explicitly cancelled at the workflow level at 06:34
+  UTC, after its 3P/2D artifact succeeded but while 4P/1D Slurm job `19279`
+  was still loading. This was not the workflow's 480-minute timeout or the
+  recipe's eight-hour Slurm limit. The orphaned Slurm job was cancelled.
+- The combined master entry made every exact-key dispatch create two 11-node
+  matrix jobs. Because Watchtower has 18 nodes, those jobs cannot execute
+  concurrently; Slurm queue time consumes the waiting GitHub job's timeout
+  and a whole-run cancellation can discard the sibling still in progress.
+- The master config is therefore split into
+  `dsv4-fp4-gb200-dynamo-vllm-agentic-4p1d` and
+  `dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d`. The recipe, runtime arguments,
+  result labels, 40-GPU budget, and six-point concurrency grid are unchanged.
+  The split only allows each official dispatch to contain one independently
+  schedulable topology point.
+
 ### Official RDMA topology gate: completed points
 
 - The 3P/2D c64 job in `27770234988` completed successfully with an official
