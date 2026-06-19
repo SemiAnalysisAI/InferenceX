@@ -142,7 +142,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --ep-size "$EP_SIZE"
         --moe-a2a-backend deepep
         --deepep-config "$DEEPEP_CONFIG"
-        --enable-prefill-delayer
     )
     CHUNKED_PREFILL_SIZE=32768
 else

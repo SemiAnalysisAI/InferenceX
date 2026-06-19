@@ -138,7 +138,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --ep-size "$EP_SIZE"
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
-        --enable-prefill-delayer
     )
     MEM_FRACTION_STATIC=0.88
     CHUNKED_PREFILL_SIZE=16384
