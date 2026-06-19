@@ -117,9 +117,13 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
     if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
         PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
     else #TP+DPA+TBO
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo)
-        export GPU_MAX_HW_QUEUES=5
-        export ATOM_CPU_AFFINITY=1
+        if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+            PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo )
+            export GPU_MAX_HW_QUEUES=5
+            export ATOM_CPU_AFFINITY=1
+        else
+            PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
+        fi
     fi
 fi 
 
@@ -129,9 +133,13 @@ if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
         DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
     else #TP+DPA+TBO
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo)
-        export GPU_MAX_HW_QUEUES=5
-        export ATOM_CPU_AFFINITY=1
+        if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+            DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo )
+            export GPU_MAX_HW_QUEUES=5
+            export ATOM_CPU_AFFINITY=1
+        else
+            DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
+        fi
     fi
 fi 
 
