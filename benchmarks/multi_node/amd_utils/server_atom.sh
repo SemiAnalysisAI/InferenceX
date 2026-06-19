@@ -139,7 +139,7 @@ if [ "$SPEC_DECODING" = "mtp" ]; then
 fi
 
 # OPT args
-OPT_ARGS=(--hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}')
+OPT_ARGS=(--hf-overrides '{"use_index_cache":true,"index_topk_freq":4}')
 
 cat <<INFO
 === Configuration ===
