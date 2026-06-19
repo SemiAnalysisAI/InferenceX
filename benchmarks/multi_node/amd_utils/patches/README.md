@@ -128,17 +128,24 @@ configs):
 - **heterogeneous-TP addressing + guard:** stock MoRIIOConnector always
   addresses remote rank == local `tp_rank`, which has no listener once
   `DECODE_TP_SIZE > PREFILL_TP_SIZE`. `_remote_tp_rank` maps each decode
-  rank to the prefill rank holding its KV head (`tp_rank // ratio`,
-  mirroring NIXL's `TpKVTopology.get_target_remote_ranks`). This is
-  byte-correct only when KV heads are **replicated** (`tp_size >=
-  total_kv_heads`, i.e. ≤1 distinct head per rank — MiniMax-M3 has 4 KV
-  heads, so any TP≥4 is replicated). The cases MoRIIO can't serve —
-  prefill TP > decode TP (needs multi-rank fan-in) and KV-head splitting
-  (`total_kv_heads > prefill_tp`, which would need per-head slicing of the
-  NHD layout, unrepresentable as one `(offset,len)` per block) — now
-  **raise `NotImplementedError`** in `_compute_block_transfer_offsets`
-  instead of silently transferring corrupt KV. (NIXL likewise only splits
-  heads in HND layout and raises otherwise.)
+  rank to the correct single prefill rank. Two regimes, both requiring
+  **replicated** KV heads (`tp_size >= total_kv_heads`, ≤1 distinct head
+  per rank — MiniMax-M3 has 4 KV heads, so any TP≥4 is replicated):
+  - `D-TP > P-TP` (e.g. P4/D8): `tp_rank // ratio`, mirroring NIXL's
+    `TpKVTopology.get_target_remote_ranks`. Multiple decode ranks read
+    from one prefill rank.
+  - `P-TP > D-TP` (e.g. P8/D4): vLLM distributes heads across prefill
+    ranks in consecutive pairs — (rank0,rank1)→head0, (rank2,rank3)→head1,
+    etc. Decode rank k must connect to the **first** rank of its head group:
+    `tp_rank * ratio`. Using `tp_rank` directly (as the original patch did)
+    is wrong for ranks > 0: decode rank 1 lands on prefill rank 1 (holds
+    head0) instead of prefill rank 2 (holds head1), producing garbage KV.
+  The one unsupported case — KV-head **splitting** (`total_kv_heads >
+  prefill_tp`, where each prefill rank holds a distinct head subset that
+  a decode rank would need to slice from NHD layout, unrepresentable as a
+  single `(offset,len)` per block) — **raises `NotImplementedError`** in
+  `_compute_block_transfer_offsets`. (NIXL likewise only splits heads in
+  HND layout and raises otherwise.)
 - **dup-ack fan-in:** with `DECODE_TP_SIZE > PREFILL_TP_SIZE`, N decode
   ranks read from one prefill rank and each ACKs the same `transfer_id`.
   The producer now counts ACKs per `transfer_id` (consumer embeds its own
