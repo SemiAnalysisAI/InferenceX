@@ -40,6 +40,7 @@ backend:
       tensor-parallel-size: 1
       data-parallel-size: 2
       data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
       trust-remote-code: true
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -55,6 +56,7 @@ backend:
       tensor-parallel-size: 1
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
       trust-remote-code: true
       no-enable-prefix-caching: true
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
