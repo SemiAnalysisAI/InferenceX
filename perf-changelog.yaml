@@ -3974,3 +3974,11 @@
     - "ISL1K/OSL1K: conc 8–8192 across ctx1dep4 and ctx2dep4 topologies"
     - "ISL8K/OSL1K: conc 5–4301 across ctx1dep4 to ctx9dep4 topologies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1797
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-vllm
+  description:
+    - "Refresh GB200 dynamo-vllm disagg sweep: bump image to vllm/vllm-openai:v0.21.0, dynamo 1.2.1, switch to checked-in kimi-k2.5-fp4 recipes"
+    - "1k/1k: 1p1d-dep4-dep8 (conc 4096,12288), 1p4d-dep4-tp8 (conc 4-128), 1p1d-dep4-dep16 (conc 4096,6144)"
+    - "8k/1k: 1p4d-dep4-tep4 (conc 128), 1p4d-dep4-tp8 (conc 4-256), 3p1d-dep4-dep16 (conc 1024), 6p1d-dep4-dep16 (conc 3072), 8p1d-dep4-dep16 (conc 6144)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1862
