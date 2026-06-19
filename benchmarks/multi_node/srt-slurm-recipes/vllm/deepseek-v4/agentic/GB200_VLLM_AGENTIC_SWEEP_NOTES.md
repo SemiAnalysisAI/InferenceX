@@ -232,6 +232,23 @@ NATS/etcd node.
 | `27785854604` | selected 4P/1D + 3P/2D curves, c128/c192 | Cancelled | Stopped for the same missing conversation-binding metadata; three matrix jobs had separately failed checkout before using GPUs |
 | `27790985904` | attempted affinity-enabled 4P/1D + 3P/2D c64 gate | Cancelled / invalid | The May 26 Dynamo wheel rejected all AIPerf `session_control.action=bind` warmup requests; 4P/1D Slurm job `19259` had 85/85 errors and 3P/2D job `19260` was cancelled pending |
 | `27794559671` | corrected-Dynamo 3P/2D c64 gate | 3P/2D success; run cancelled before 4P/1D | Job `19266` completed 657 profiled requests with zero errors and 10--38 GB/s KV transfers; affinity worked, but missing SWA retention limited final local hits to 10.7--12.5% |
+| `27798151112` | retention-corrected 4P/1D + 3P/2D c64 gate | Cancelled externally after allocation | The 4P/1D job `19272` started with `VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768`; 3P/2D job `19273` was pending. GitHub cancelled both matrix jobs at 03:30 UTC, after 97 and 68 minutes respectively. Neither the workflow's 480-minute job timeout nor Slurm's eight-hour limit was reached, so this run produced no valid performance artifact. Both orphaned Slurm jobs were explicitly cancelled. |
+| `27804547383` | incorrectly broad c64 dispatch | Cancelled before agentic allocation | The broad model/framework/runner filter also selected seven fixed-sequence GB200 configurations. The dispatch was cancelled immediately; no agentic Slurm job started and no benchmark result from this run is used. |
+| `27804604959` | exact-key retention-corrected c64 gate | In progress | Generated with `test-config` against the exact agentic config key; the matrix contains only 4P/1D c64 and 3P/2D c64. |
+
+### Unexpected cancellation of the first retention-corrected gate
+
+- Run `27798151112` was cancelled at the workflow level while its two matrix
+  jobs were in `Launch multi-node job script`. GitHub records `cquil11` as the
+  dispatching and triggering actor but does not expose a separate cancellation
+  actor in the run API.
+- This was not a benchmark timeout: the 4P/1D matrix job had run for about 97
+  minutes, the 3P/2D matrix job for about 68 minutes, and the reusable
+  multi-node workflow allows 480 minutes.
+- Slurm job `19272` had allocated its eleven requested nodes and its launch log
+  confirmed the 32k retention environment. Job `19273` was still waiting for
+  resources. GitHub's cancellation left the Slurm allocations orphaned, so
+  both were cancelled manually before the gate was resubmitted.
 
 ### Official RDMA topology gate: completed points
 
