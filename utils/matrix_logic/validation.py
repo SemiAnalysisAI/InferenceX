@@ -345,6 +345,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
         default="none", alias=Fields.OFFLOADING.value
     )
+    total_cpu_dram_gb: int = Field(default=0, alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
@@ -364,6 +365,15 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
             valid = has_complete_multinode
         if not valid:
             raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
+        return self
+
+    @model_validator(mode='after')
+    def validate_cpu_offload_capacity(self):
+        cpu_backends = {"cpu", "lmcache", "lmcache-mp", "hicache"}
+        if self.offloading in cpu_backends and self.total_cpu_dram_gb <= 0:
+            raise ValueError(
+                f"offloading={self.offloading!r} requires a positive total-cpu-dram-gb"
+            )
         return self
 
 

@@ -27,7 +27,7 @@ if [[ "$_benchmark_caller" == */agentic/* ||
     case "${OFFLOADING:-none}" in
         cpu|lmcache|lmcache-mp|hicache)
             if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: CPU KV offloading requires a positive proportional TOTAL_CPU_DRAM_GB budget" >&2
+                echo "Error: CPU KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
                 exit 1
             fi
             ;;

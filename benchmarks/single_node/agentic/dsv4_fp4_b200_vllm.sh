@@ -23,7 +23,7 @@ set -x
 #
 # OFFLOADING values:
 #   none - vLLM GPU KV only.
-#   cpu  - MooncakeStoreConnector with a proportional host-memory KV tier.
+#   cpu  - MooncakeStoreConnector with a configured host-memory KV tier.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 

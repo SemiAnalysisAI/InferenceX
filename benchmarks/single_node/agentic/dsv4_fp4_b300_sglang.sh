@@ -67,7 +67,7 @@ case "$OFFLOADING" in
         # capacity control only through a host/device token-capacity ratio.
         # DSv4 exposes capacity as a host/device token ratio rather than bytes.
         # Measurements put TP8 ratio=2 near 950 GB and TP4 ratio=8 near 1 TB,
-        # both below their generated proportional budgets. The old TP4 ratio=16
+        # both below their configured capacities. The old TP4 ratio=16
         # used roughly 2 TB and violated the half-node allocation rule.
         if [ "$TP" -ge 8 ]; then
             DEFAULT_HICACHE_RATIO=2
@@ -76,7 +76,7 @@ case "$OFFLOADING" in
         fi
         HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
         if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
-            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds proportional limit $DEFAULT_HICACHE_RATIO" >&2
+            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
             exit 1
         fi
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"

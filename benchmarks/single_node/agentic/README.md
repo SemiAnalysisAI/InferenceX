@@ -13,20 +13,22 @@ particular is not yet first-class.
 
 ## CPU offload memory policy
 
-Agentic CPU KV tiers must not consume a full node's DRAM when the server uses
-only part of the node. `generate_sweep_configs.py` computes
-`total-cpu-dram-gb` from the cluster's minimum job-available memory:
+Agentic search-space entries using `cpu`, `lmcache`, `lmcache-mp`, or `hicache`
+must declare their aggregate host-memory capacity explicitly:
 
-```text
-floor(available_mib * 0.80 * tp / gpus_per_node / 1024)
+```yaml
+- tp: 4
+  offloading: cpu
+  total-cpu-dram-gb: 1157
+  conc-list: [16, 32]
 ```
 
-The 20% reserve covers model workers, replay processes, page cache, and
-allocator overhead. The TP fraction preserves fair node sharing: TP4 receives
-half of an eight-GPU node's offload envelope, while TP8 receives the full
-envelope. Generation fails for a CPU-offload configuration whose runner has no
-known memory profile, preventing a new cluster from silently using an unsafe
-default.
+The value is maintained in the NVIDIA or AMD master YAML and is copied into the
+generated matrix unchanged. Configuration authors are responsible for leaving
+enough memory for model workers, replay processes, page cache, and allocator
+overhead, and for scaling partial-node jobs appropriately. For example, a TP4
+job on an eight-GPU node should not receive more than half of the full-node
+offload capacity.
 
 Benchmark scripts must consume `TOTAL_CPU_DRAM_GB`; they must not replace it
 with model-specific constants. Backends with per-rank or per-pool settings must

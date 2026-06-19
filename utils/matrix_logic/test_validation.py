@@ -340,6 +340,7 @@ class TestAgenticMatrixEntries:
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
             "offloading": "lmcache-mp",
+            "total-cpu-dram-gb": 1000,
             "conc-list": [1, 2],
         })
         assert entry.offloading == "lmcache-mp"
@@ -349,6 +350,7 @@ class TestAgenticMatrixEntries:
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
             "offloading": "lmcache",
+            "total-cpu-dram-gb": 1000,
             "conc-list": [1, 2],
         })
         assert entry.offloading == "lmcache"
@@ -358,9 +360,18 @@ class TestAgenticMatrixEntries:
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
             "offloading": "hicache",
+            "total-cpu-dram-gb": 1000,
             "conc-list": [1, 2],
         })
         assert entry.offloading == "hicache"
+
+    def test_cpu_offloading_requires_explicit_capacity(self):
+        with pytest.raises(Exception, match="total-cpu-dram-gb"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 4,
+                "offloading": "cpu",
+                "conc-list": [16],
+            })
 
 
 # =============================================================================

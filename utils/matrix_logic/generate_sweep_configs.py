@@ -22,32 +22,6 @@ seq_len_stoi = {
 
 MIN_EVAL_CONC = 16
 
-# Minimum host memory available to jobs, from Slack canvas F0B69CJ1LLD,
-# verified 2026-06-19.
-# Reserve 20% for model workers, benchmark tooling, page cache, and allocator
-# overhead. Offload-capable agentic jobs receive only the fraction represented
-# by their allocated GPUs (for example, TP4 gets half of an eight-GPU node).
-AGENTIC_HOST_MEMORY_PROFILES = {
-    "h100-cw": (1_998_848, 8),
-    "h100-dgxc": (2_063_837, 8),
-    "h100": (1_998_848, 8),
-    "h200-cw": (1_998_848, 8),
-    "h200-nb": (1_472_512, 8),
-    "h200-dgxc": (1_471_356, 8),
-    "h200": (1_471_356, 8),
-    "b200": (3_774_874, 8),
-    "b300": (2_964_436, 8),
-    "gb200": (860_160, 4),
-    "gb300-cw": (888_832, 4),
-    "mi300x-tw": (2_322_328, 8),
-    "mi300x": (2_321_924, 8),
-    "mi325x-tw": (3_095_792, 8),
-    "mi325x": (3_091_589, 8),
-    "mi355x": (3_095_781, 8),
-}
-AGENTIC_CPU_OFFLOAD_PERCENT = 80
-CPU_MEMORY_OFFLOAD_MODES = {"cpu", "lmcache", "lmcache-mp", "hicache"}
-
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
 
@@ -59,31 +33,6 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
-
-
-def agentic_cpu_offload_gb(runner: str, tp: int, offloading: str) -> int:
-    """Return the proportional host-memory budget for an agentic matrix entry."""
-    if offloading not in CPU_MEMORY_OFFLOAD_MODES:
-        return 0
-
-    profile = next(
-        (value for prefix, value in AGENTIC_HOST_MEMORY_PROFILES.items()
-         if runner.startswith(prefix)),
-        None,
-    )
-    if profile is None:
-        raise ValueError(
-            f"No agentic host-memory profile for offload-capable runner {runner!r}"
-        )
-
-    available_mib, gpus_per_node = profile
-    if tp > gpus_per_node:
-        raise ValueError(
-            f"Agentic TP={tp} exceeds {runner!r} node capacity of {gpus_per_node} GPUs"
-        )
-    offload_mib = available_mib * AGENTIC_CPU_OFFLOAD_PERCENT * tp
-    offload_mib //= 100 * gpus_per_node
-    return offload_mib // 1024
 
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
@@ -447,6 +396,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                total_cpu_dram_gb = bmk.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
 
                 # Get concurrency values
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -510,9 +460,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
                                 Fields.OFFLOADING.value: offloading,
-                                Fields.TOTAL_CPU_DRAM_GB.value: agentic_cpu_offload_gb(
-                                    runner_value, tp, offloading
-                                ),
+                                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
@@ -864,6 +812,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                total_cpu_dram_gb = bmk.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
                 if conc_list:
@@ -921,9 +870,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
                                 Fields.OFFLOADING.value: offloading,
-                                Fields.TOTAL_CPU_DRAM_GB.value: agentic_cpu_offload_gb(
-                                    runner_value, tp, offloading
-                                ),
+                                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",

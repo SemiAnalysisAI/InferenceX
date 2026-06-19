@@ -66,12 +66,12 @@ case "$OFFLOADING" in
         # DeepSeek V4 HiCache currently rejects --hicache-size and supports
         # capacity control only through a host/device token-capacity ratio.
         # DSv4 exposes capacity as a host/device token ratio rather than bytes.
-        # B200 ratio=8 stays below the generated proportional host-memory
-        # budget for the currently supported TP8 shape.
+        # B200 ratio=8 stays below the configured host-memory capacity for the
+        # currently supported TP8 shape.
         DEFAULT_HICACHE_RATIO=8
         HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
         if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
-            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds proportional limit $DEFAULT_HICACHE_RATIO" >&2
+            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
             exit 1
         fi
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"

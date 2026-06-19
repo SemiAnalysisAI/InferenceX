@@ -62,10 +62,10 @@ case "$OFFLOADING" in
         agentic_pip_install --quiet --no-cache-dir lmcache
         python3 -c "import lmcache.integration.vllm.vllm_v1_adapter" >/dev/null
 
-        # vLLM divides the proportional node budget across TP ranks for
+        # vLLM divides the configured node capacity across TP ranks for
         # --kv-offloading-backend=lmcache.
         export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        # Avoid pinning the full proportional pool during startup. LMCache grows
+        # Avoid pinning the full configured pool during startup. LMCache grows
         # the CPU allocator as agentic prefixes accumulate in the replay.
         export LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR="${LMCACHE_ENABLE_LAZY_MEMORY_ALLOCATOR:-true}"
         export LMCACHE_LAZY_MEMORY_INITIAL_RATIO="${LMCACHE_LAZY_MEMORY_INITIAL_RATIO:-0.01}"

@@ -113,7 +113,7 @@ case "$OFFLOADING" in
         agentic_pip_install --quiet --no-cache-dir lmcache
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        # MP mode owns the proportional CPU pool in the external LMCache
+        # MP mode owns the configured CPU pool in the external LMCache
         # server instead of passing
         # --kv-offloading-size through vLLM's integrated LMCache convenience
         # path, which divides the value by TP and then hits a large single-shot
@@ -128,7 +128,7 @@ case "$OFFLOADING" in
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
         if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-            echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds proportional budget $TOTAL_CPU_DRAM_GB" >&2
+            echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
             exit 1
         fi
         # Initial allocation is deliberately small; --l1-size-gb above is the

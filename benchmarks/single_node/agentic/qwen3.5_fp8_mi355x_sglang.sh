@@ -55,7 +55,7 @@ case "$OFFLOADING" in
         # Qwen3.5 allocates one KV and one Mamba host pool per TP rank.
         REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
         if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-            echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB}GiB exceeds proportional budget ${TOTAL_CPU_DRAM_GB}GiB" >&2
+            echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB}GiB exceeds configured capacity ${TOTAL_CPU_DRAM_GB}GiB" >&2
             exit 1
         fi
         TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
@@ -76,7 +76,7 @@ case "$OFFLOADING" in
         MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
         HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
         if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
-            echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds proportional per-pool limit $MAX_HICACHE_SIZE_GB" >&2
+            echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-pool limit $MAX_HICACHE_SIZE_GB" >&2
             exit 1
         fi
         if [ "$HICACHE_SIZE_GB" -gt "$HICACHE_MAX_SIZE_GB_PER_RANK_POOL" ]; then

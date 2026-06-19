@@ -6,7 +6,6 @@ from generate_sweep_configs import (
     seq_len_stoi,
     seq_len_itos,
     seq_len_to_str,
-    agentic_cpu_offload_gb,
     generate_full_sweep,
     generate_runner_model_sweep_config,
     generate_test_config_sweep,
@@ -14,22 +13,6 @@ from generate_sweep_configs import (
     apply_node_type_defaults,
     expand_config_keys,
 )
-
-
-class TestAgenticCpuOffloadBudget:
-    def test_full_node_budget_reserves_overhead(self):
-        assert agentic_cpu_offload_gb("b200-dgxc_00", 8, "cpu") == 2949
-
-    def test_partial_node_budget_scales_with_tp(self):
-        assert agentic_cpu_offload_gb("b300-nv_0", 4, "hicache") == 1157
-
-    def test_non_cpu_offload_has_no_dram_budget(self):
-        assert agentic_cpu_offload_gb("b300-nv_0", 4, "none") == 0
-        assert agentic_cpu_offload_gb("unknown-runner", 4, "ssd") == 0
-
-    def test_unknown_cpu_offload_runner_is_rejected(self):
-        with pytest.raises(ValueError, match="host-memory profile"):
-            agentic_cpu_offload_gb("unknown-runner", 4, "cpu")
 
 
 # =============================================================================
@@ -1656,6 +1639,7 @@ class TestGenerateTestConfigSweep:
                                     "tp": 8,
                                     "ep": 1,
                                     "offloading": "hicache",
+                                    "total-cpu-dram-gb": 1814,
                                     "conc-list": [64],
                                 }
                             ],
