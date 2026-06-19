@@ -3986,4 +3986,3 @@
     - "Backport NVIDIA/srt-slurm#38 to sanitize Slurm node-IP discovery output on the pinned submission branch."
     - "Backport vllm-project/vllm#45879 so NIXL validates heterogeneous-TP KV block lengths using the GQA KV-head ratio."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1863
-  evals-only: true
