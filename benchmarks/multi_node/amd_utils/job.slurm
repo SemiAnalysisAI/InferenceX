@@ -640,7 +640,7 @@ fi
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         set -o pipefail
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
-        '"${_MORIIO_PATCH_CMD:-}"'
+        ${_MORIIO_PATCH_CMD:-}
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 
