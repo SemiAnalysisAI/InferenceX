@@ -62,6 +62,7 @@ backend:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 4
+      moe-backend: marlin
       pipeline-parallel-size: 1
       enforce-eager: true
       max-model-len: 2304
@@ -81,6 +82,7 @@ backend:
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 4
+      moe-backend: marlin
       pipeline-parallel-size: 1
       max-model-len: 2304
       max-num-seqs: 256

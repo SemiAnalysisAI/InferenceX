@@ -3956,4 +3956,5 @@
   description:
     - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), drop extra_mount workaround"
     - "NixlConnector handshake block_len validation now uses per-rank KV head ratio instead of tp_ratio, fixing GQA-replicated disagg (M3 TEP8: TP4→TP8, 4 KV heads)"
+    - "Add --moe-backend marlin for TP-only prefill/decode workers (no EP, no DP-attention) per PR #1809 pattern"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1734
