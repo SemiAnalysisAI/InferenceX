@@ -3952,16 +3952,16 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang
-  description:
-    - "Bump image to lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618."
-    - "Enable SGLANG_DP_USE_GATHERV=1. Change to use all_gatherv + reduce_scatterv for tp + dp config."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1824
-
-- config-keys:
     - minimaxm3-fp8-mi300x-vllm
   description:
     - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
     - "Use FP8 KV cache"
     - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1837
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618."
+    - "Enable SGLANG_DP_USE_GATHERV=1. Change to use all_gatherv + reduce_scatterv for tp + dp config."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1824
