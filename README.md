@@ -14,7 +14,7 @@
 ## News
 
 - **[2026/06]** 🔥 MiniMax-M3 Day 0 benchmarks live on InferenceX ([dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)).
-- **[2026/04]** 🔥 DeepSeek V4 1.6T Day 0 → Day 43 performance over time across GB300 NVL72, MI355X, B200, and Huawei ([article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance)).
+- **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T: continuous benchmarks live since Day 0 ([article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance), [dashboard](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)).
 - **[2026/02]** GB300 NVL72: added to InferenceX & continuously benchmarked ([SGLang Maintainer Lmsys Blog](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)).
 - **[2026/02]** 🔥 InferenceX v2 launch — NVIDIA Blackwell vs AMD vs Hopper ([article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)).
 - **[2025/10]** 🔥 InferenceX (formerly InferenceMAX) v1 launch ([article](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)).
