@@ -1,7 +1,7 @@
-name: "minimax-m3-vllm-disagg-gb200-2p8d-tep4-tep8-18n-8k1k"
+name: "minimax-m3-vllm-disagg-gb200-2p2d-tep4-tep8-6n-8k1k"
 
-# 2P TEP4 prefill (2 nodes) + 8D TEP8 decode (16 nodes) = 18 nodes
-# / 72 GPU. High-concurrency throughput config. B300 optimal at
+# 2P TEP4 prefill (2 nodes) + 2D TEP8 decode (4 nodes) = 6 nodes
+# / 24 GPU. High-concurrency throughput config. B300 optimal at
 # conc 512 is TEP8 (TP8+EP8). Each decode worker spans 2 GB200
 # nodes (8 GPU) over NVL72 NVLink.
 
@@ -26,9 +26,9 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 2
-  decode_nodes: 16
+  decode_nodes: 4
   prefill_workers: 2
-  decode_workers: 8
+  decode_workers: 2
   gpus_per_prefill: 4
   gpus_per_decode: 8
 

@@ -12913,7 +12913,7 @@ qwen3.5-fp4-b200-trt:
 # index-cache alignment); FLASHINFER attention. All prefill is TEP4
 # (TP4+EP4, 1 GB200 node). Decode configs mirror B300 single-node optimal
 # points (run 27630519240): TP4+Marlin at low conc, TEP4 at mid conc,
-# TEP8 (8k1k) / DEP8 (1k1k) at high conc with 8 decode workers.
+# TEP8 (8k1k) / DEP8 (1k1k) at high conc with 2 decode workers.
 minimaxm3-fp8-gb200-dynamo-vllm:
   image: vllm/vllm-openai:nightly-aarch64
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12958,7 +12958,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
     #       ep: 4
     #       dp-attn: false
     #
-    #   # High conc: 2P TEP4 + 8D DEP8, 18 nodes / 72 GPU.
+    #   # High conc: 2P TEP4 + 2D DEP8, 6 nodes / 24 GPU.
     #   - conc-list: [1024]
     #     prefill:
     #       num-worker: 2
@@ -12966,9 +12966,9 @@ minimaxm3-fp8-gb200-dynamo-vllm:
     #       ep: 4
     #       dp-attn: false
     #       additional-settings:
-    #       - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-2p8d-tep4-dep8-18n.yaml"
+    #       - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/disagg-gb200-2p2d-tep4-dep8-6n.yaml"
     #     decode:
-    #       num-worker: 8
+    #       num-worker: 2
     #       tp: 1
     #       ep: 8
     #       dp-attn: true
@@ -13006,7 +13006,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: false
 
-      # High conc: 2P TEP4 + 8D TEP8, 18 nodes / 72 GPU.
+      # High conc: 2P TEP4 + 2D TEP8, 6 nodes / 24 GPU.
       - conc-list: [512]
         prefill:
           num-worker: 2
@@ -13014,9 +13014,9 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 4
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/disagg-gb200-2p8d-tep4-tep8-18n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/disagg-gb200-2p2d-tep4-tep8-6n.yaml"
         decode:
-          num-worker: 8
+          num-worker: 2
           tp: 8
           ep: 8
           dp-attn: false
