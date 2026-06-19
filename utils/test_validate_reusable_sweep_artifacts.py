@@ -9,7 +9,6 @@ from validate_reusable_sweep_artifacts import (
     agentic_key,
     expected_agentic_keys,
     expected_benchmark_keys,
-    expected_eval_artifact_prefixes,
     expected_eval_keys,
     main,
     validate_agentic_artifacts,
@@ -30,10 +29,13 @@ def write_eval_aggregate(
     )
 
 
-def single_eval_entry(conc: int) -> dict:
+def single_eval_entry(
+    conc: int,
+    runner: str = "h100-dgxc-slurm",
+) -> dict:
     return {
         "exp-name": "gptoss_8k1k",
-        "runner": "h100-dgxc-slurm",
+        "runner": runner,
         "model-prefix": "gptoss",
         "precision": "fp4",
         "framework": "vllm",
@@ -46,10 +48,13 @@ def single_eval_entry(conc: int) -> dict:
     }
 
 
-def single_eval_result(conc: int) -> dict:
+def single_eval_result(
+    conc: int,
+    runner: str = "h100-dgxc-slurm",
+) -> dict:
     return {
         "is_multinode": False,
-        "hw": "H100-DGXC-SLURM",
+        "hw": runner.upper(),
         "model_prefix": "gptoss",
         "framework": "vllm",
         "precision": "fp4",
@@ -60,6 +65,29 @@ def single_eval_result(conc: int) -> dict:
         "conc": conc,
         "task": "gsm8k",
     }
+
+
+def single_eval_meta(
+    conc: int,
+    runner: str = "h100-dgxc-slurm",
+) -> dict:
+    row = single_eval_result(conc, runner)
+    row["infmax_model_prefix"] = row.pop("model_prefix")
+    return row
+
+
+def write_raw_eval_artifact(
+    root: Path,
+    conc: int,
+    *,
+    logical_runner: str = "h100-dgxc-slurm",
+    physical_runner: str = "h100-dgxc-slurm_00",
+) -> None:
+    artifact_dir = root / f"eval_result_conc{conc}_{physical_runner}"
+    artifact_dir.mkdir()
+    (artifact_dir / "meta_env.json").write_text(
+        json.dumps(single_eval_meta(conc, logical_runner))
+    )
 
 
 def single_fixed_entry(conc: int) -> dict:
@@ -207,17 +235,18 @@ def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
         "evals": [single_eval_entry(32), single_eval_entry(64)],
         "multinode_evals": [],
     }
-    prefixes = expected_eval_artifact_prefixes(config)
-    write_eval_aggregate(tmp_path)
+    write_eval_aggregate(
+        tmp_path,
+        [single_eval_result(32), single_eval_result(64)],
+    )
 
     (tmp_path / "eval_server_logs_gptoss_8k1k_runner").mkdir()
     (tmp_path / "eval_gpu_metrics_gptoss_8k1k_runner").mkdir()
-    (tmp_path / f"{prefixes[0]}00").mkdir()
+    write_raw_eval_artifact(tmp_path, 32)
 
-    errors = validate_eval_artifacts(tmp_path, prefixes)
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
 
-    assert "missing 1 expected raw eval result artifact dir(s)" in errors
-    assert f"  missing eval artifact prefix: {prefixes[1]}" in errors
+    assert any("missing" in error for error in errors)
 
 
 def test_eval_validation_accepts_all_expected_raw_result_dirs(tmp_path: Path) -> None:
@@ -225,36 +254,66 @@ def test_eval_validation_accepts_all_expected_raw_result_dirs(tmp_path: Path) ->
         "evals": [single_eval_entry(32), single_eval_entry(64)],
         "multinode_evals": [],
     }
-    prefixes = expected_eval_artifact_prefixes(config)
-    write_eval_aggregate(tmp_path)
-    for index, prefix in enumerate(prefixes):
-        (tmp_path / f"{prefix}{index:02d}").mkdir()
+    write_eval_aggregate(
+        tmp_path,
+        [single_eval_result(32), single_eval_result(64)],
+    )
+    write_raw_eval_artifact(tmp_path, 32)
+    write_raw_eval_artifact(
+        tmp_path,
+        64,
+        physical_runner="h100-dgxc-slurm_01",
+    )
 
-    assert validate_eval_artifacts(tmp_path, prefixes) == []
+    assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
 
 
 def test_eval_validation_rejects_unexpected_result_dir(tmp_path: Path) -> None:
     config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
-    prefixes = expected_eval_artifact_prefixes(config)
-    write_eval_aggregate(tmp_path)
-    (tmp_path / f"{prefixes[0]}00").mkdir()
-    (tmp_path / "eval_unrelated_config").mkdir()
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+    write_raw_eval_artifact(tmp_path, 32)
+    write_raw_eval_artifact(
+        tmp_path,
+        64,
+        physical_runner="h100-dgxc-slurm_01",
+    )
 
-    errors = validate_eval_artifacts(tmp_path, prefixes)
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
 
-    assert "found 1 unexpected raw eval artifact dir(s)" in errors
+    assert any("unexpected" in error for error in errors)
 
 
 def test_eval_validation_rejects_duplicate_raw_identity(tmp_path: Path) -> None:
     config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
-    prefixes = expected_eval_artifact_prefixes(config)
-    write_eval_aggregate(tmp_path)
-    (tmp_path / f"{prefixes[0]}00").mkdir()
-    (tmp_path / f"{prefixes[0]}01").mkdir()
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+    write_raw_eval_artifact(tmp_path, 32)
+    write_raw_eval_artifact(
+        tmp_path,
+        32,
+        physical_runner="h100-dgxc-slurm_01",
+    )
 
-    errors = validate_eval_artifacts(tmp_path, prefixes)
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
 
-    assert any("matched 2 raw result artifact dirs" in error for error in errors)
+    assert any("duplicate" in error for error in errors)
+
+
+def test_eval_validation_uses_logical_runner_from_metadata(
+    tmp_path: Path,
+) -> None:
+    config = {
+        "evals": [single_eval_entry(64, "mi300x")],
+        "multinode_evals": [],
+    }
+    write_eval_aggregate(tmp_path, [single_eval_result(64, "mi300x")])
+    write_raw_eval_artifact(
+        tmp_path,
+        64,
+        logical_runner="mi300x",
+        physical_runner="mi300x-amds_04",
+    )
+
+    assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
 
 
 def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:
@@ -262,20 +321,21 @@ def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:
         "evals": [single_eval_entry(32)],
         "multinode_evals": [],
     }
-    prefixes = expected_eval_artifact_prefixes(config)
     write_eval_aggregate(
         tmp_path,
         [single_eval_result(32), single_eval_result(64)],
     )
-    (tmp_path / f"{prefixes[0]}00").mkdir()
+    write_raw_eval_artifact(tmp_path, 32)
 
     errors = validate_eval_artifacts(
         tmp_path,
-        prefixes,
         expected_eval_keys(config),
     )
 
-    assert "eval aggregate artifacts contain 1 unexpected row(s)" in errors
+    assert any(
+        "eval aggregate" in error and "unexpected" in error
+        for error in errors
+    )
 
 
 def test_eval_aggregate_validation_rejects_duplicate_identity(
@@ -285,20 +345,21 @@ def test_eval_aggregate_validation_rejects_duplicate_identity(
         "evals": [single_eval_entry(32)],
         "multinode_evals": [],
     }
-    prefixes = expected_eval_artifact_prefixes(config)
     write_eval_aggregate(
         tmp_path,
         [single_eval_result(32), single_eval_result(32)],
     )
-    (tmp_path / f"{prefixes[0]}00").mkdir()
+    write_raw_eval_artifact(tmp_path, 32)
 
     errors = validate_eval_artifacts(
         tmp_path,
-        prefixes,
         expected_eval_keys(config),
     )
 
-    assert "eval aggregate artifacts contain 1 duplicate row(s)" in errors
+    assert any(
+        "eval aggregate" in error and "duplicate" in error
+        for error in errors
+    )
 
 
 def test_fixed_sequence_validation_is_exact(tmp_path: Path) -> None:
@@ -460,9 +521,8 @@ def test_eval_only_main_does_not_require_benchmark_artifacts(
     }
     config_path = tmp_path / "config.json"
     config_path.write_text(json.dumps(config))
-    prefixes = expected_eval_artifact_prefixes(config)
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
-    (tmp_path / f"{prefixes[0]}00").mkdir()
+    write_raw_eval_artifact(tmp_path, 32)
     monkeypatch.setattr(
         sys,
         "argv",

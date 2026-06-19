@@ -121,6 +121,13 @@ jobs:
           git fetch --no-tags origin \
             "+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}"
 
+          if git diff --quiet \
+            "origin/${BASE_BRANCH}...${GITHUB_SHA}" \
+            -- perf-changelog.yaml; then
+              echo "::notice::PR #${PR_NUMBER} does not change perf-changelog.yaml; skipping PR-diff validation"
+              exit 0
+          fi
+
           python utils/validate_perf_changelog.py \
             --changelog-file perf-changelog.yaml \
             --base-ref "origin/${BASE_BRANCH}" \
