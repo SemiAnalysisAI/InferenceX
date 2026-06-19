@@ -185,8 +185,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        "${PREFILL_PARALLEL_ARGS[@]}" \
-        "${SPEC_ARGS[@]}" \
+        ${PREFILL_PARALLEL_ARGS[*]} \
+        ${SPEC_ARGS[*]} \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
@@ -406,8 +406,8 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
-        "${PREFILL_PARALLEL_ARGS[@]}" \
-        "${SPEC_ARGS[@]}" \
+        ${PREFILL_PARALLEL_ARGS[*]} \
+        ${SPEC_ARGS[*]} \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
@@ -469,16 +469,25 @@ else
     RANK=$((NODE_RANK - NODE_OFFSET))
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
+    _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+
+    if [[ "$BENCH_INPUT_LEN" == "1024" && "$BENCH_OUTPUT_LEN" == "1024" ]]; then
+        DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
+    else
+        DECODE_MAX_NUM_SEQS="${MAX_NUM_SEQS}"
+    fi
+
     DECODE_CMD="python3 -m atom.entrypoints.openai_server \
         --model ${MODEL_DIR}/${MODEL_NAME} \
         --host 0.0.0.0 --server-port ${DECODE_PORT} \
         --trust-remote-code \
-        "${DECODE_PARALLEL_ARGS[@]}" \
-        "${SPEC_ARGS[@]}" \
+        ${DECODE_PARALLEL_ARGS[*]} \
+        ${SPEC_ARGS[*]} \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
-        --max-num-seqs ${MAX_NUM_SEQS} \
+        --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
+        ${CUDAGRAPH_OPT} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
