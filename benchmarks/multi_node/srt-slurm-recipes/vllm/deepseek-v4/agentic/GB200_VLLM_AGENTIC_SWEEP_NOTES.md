@@ -28,8 +28,10 @@ much shorter prompts and usually disable prefix caching.
    performance.
 3. Compare P/D balance at a constant 40-inference-GPU budget:
    `4P/1D`, `3P/2D`, `2P/3D`, and `1P/4D`.
-4. Use c64 as a topology gate, then run c32/c64/c128/c192 curves for viable
-   topologies.
+4. Use c64 as a topology gate, then run c32/c64/c128/c192/c256/c384 curves for
+   the viable 4P/1D and 3P/2D topologies. The c256 and c384 points deliberately
+   push through saturation; c192 resolves the transition from the B200-scale
+   c128 point.
 5. Compare total and per-GPU throughput, TTFT, TPOT, E2E latency, request
    errors, and measured cache reuse against the B200 aggregate baseline.
 
@@ -214,8 +216,10 @@ NATS/etcd node.
   - KV routing enabled;
   - TCP request plane on all components;
   - collision-free generated engine IDs for multi-decode topologies.
-- The sweep generator emits 16 points: four topologies times four
-  concurrencies.
+- The final sweep generator emits 12 points: the selected 4P/1D and 3P/2D
+  topologies times c32/c64/c128/c192/c256/c384. The 2P/3D and 1P/4D recipes
+  remain checked in as topology-gate evidence but are excluded from the final
+  concurrency sweep because they were strongly prefill-starved at c64.
 
 ## Official Runs
 
@@ -234,7 +238,7 @@ NATS/etcd node.
 | `27794559671` | corrected-Dynamo 3P/2D c64 gate | 3P/2D success; run cancelled before 4P/1D | Job `19266` completed 657 profiled requests with zero errors and 10--38 GB/s KV transfers; affinity worked, but missing SWA retention limited final local hits to 10.7--12.5% |
 | `27798151112` | retention-corrected 4P/1D + 3P/2D c64 gate | Cancelled externally after allocation | The 4P/1D job `19272` started with `VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768`; 3P/2D job `19273` was pending. GitHub cancelled both matrix jobs at 03:30 UTC, after 97 and 68 minutes respectively. Neither the workflow's 480-minute job timeout nor Slurm's eight-hour limit was reached, so this run produced no valid performance artifact. Both orphaned Slurm jobs were explicitly cancelled. |
 | `27804547383` | incorrectly broad c64 dispatch | Cancelled before agentic allocation | The broad model/framework/runner filter also selected seven fixed-sequence GB200 configurations. The dispatch was cancelled immediately; no agentic Slurm job started and no benchmark result from this run is used. |
-| `27804604959` | exact-key retention-corrected c64 gate | In progress | Generated with `test-config` against the exact agentic config key; the matrix contains only 4P/1D c64 and 3P/2D c64. |
+| `27804604959` | exact-key retention-corrected c64 gate | 3P/2D success; 4P/1D in progress | Generated with `test-config` against the exact agentic config key; the matrix contains only 4P/1D c64 and 3P/2D c64. Slurm job `19278` completed successfully with official aggregate, raw, and server-log artifacts; job `19279` is the 4P/1D sibling. |
 
 ### Unexpected cancellation of the first retention-corrected gate
 
@@ -249,6 +253,37 @@ NATS/etcd node.
   confirmed the 32k retention environment. Job `19273` was still waiting for
   resources. GitHub's cancellation left the Slurm allocations orphaned, so
   both were cancelled manually before the gate was resubmitted.
+- The cancelled self-hosted jobs later resurfaced from the runner work queue as
+  Slurm jobs `19280` and `19281`, despite the GitHub run already being marked
+  completed/cancelled. Their process environments identified
+  `GITHUB_RUN_ID=27798151112`. Both were cancelled before allocation, and the
+  stale runner workers then exited; no jobs from the active gate were touched.
+
+### Retention-corrected 3P/2D c64 result (`27804604959`, job `19278`)
+
+- Official aggregate: 4,145/4,145 successful requests, 269,251 total tok/s
+  (267,172 input + 2,078 output), 6,731 tok/s per inference GPU, 3.27s mean
+  TTFT, 20.95ms mean TPOT, and 22.49s mean E2E.
+- The three prefill engines finished at 92.9%, 92.3%, and 94.9% vLLM prefix
+  cache hit rate. This is the expected steady-state cache regime and confirms
+  that `VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768` fixed the prior
+  10.7--12.5% result.
+- Dynamo logged 7,384 affinity bindings and 7,202 sticky-session/cache-aware
+  selections. There were no bind failures or unsupported session actions.
+- Across 394 sampled decode log windows, NIXL transferred at 7.6--42.8 GB/s
+  (23.3 GB/s mean). There were no expired transfer leases, NIXL/UCX errors,
+  payload truncations, or NATS payload-too-large errors during the measured
+  run.
+- The frontend cancelled residual in-flight requests when AIPerf's fixed
+  1,800-second profile and 30-second drain ended, and distributed ranks logged
+  expected TCPStore disconnects during Slurm teardown. These occurred after
+  measurement; the aggregate contains only successful requests.
+- Compared with the B200 aggregate c64 no-offload reference (81,863 tok/s,
+  13.85s mean TTFT, 82.1ms TPOT, 93.5% cache hit), this point has 3.29x system
+  throughput, 4.24x lower mean TTFT, comparable cache reuse, and 3.92x lower
+  TPOT. Per-GPU throughput is lower because the disaggregated system uses 40
+  inference GPUs instead of eight; system throughput and latency are the
+  relevant disaggregation acceptance metrics.
 
 ### Official RDMA topology gate: completed points
 
@@ -386,8 +421,9 @@ reference points from the results database:
 - c128 with offload: 98,908 tok/s total and 12,363 tok/s/GPU.
 
 The GB200 disaggregated sweep does not use KV offloading, as requested. Both
-B200 modes remain useful references, and the c32/c64/c128/c192 grid brackets
-the aggregate system's useful operating region.
+B200 modes remain useful references. The c32/c64/c128/c192/c256/c384 grid
+brackets the aggregate system's useful region and intentionally extends into
+overload.
 
 ## Open Investigation
 
