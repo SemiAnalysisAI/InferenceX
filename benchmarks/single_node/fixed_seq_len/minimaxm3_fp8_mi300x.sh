@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
 
 # MiniMax-M3 MXFP8 MI300X (gfx942) single-node vLLM recipe.
-# Reuses the dedicated ROCm image and the MI355X serving shape. Block size 128
-# is mandatory for MSA sparse attention. Keep the default BF16 KV cache on
-# gfx942: the checkpoint has no calibrated q/prob scales for ROCm FP8
-# attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
+# Block size 128 is mandatory for MSA sparse attention. Use FP8 KV cache to
+# reduce memory pressure and increase the available concurrency headroom.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -55,6 +53,7 @@ set -x
 vllm serve "$MODEL" --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --block-size 128 \
+    --kv-cache-dtype fp8 \
     --no-enable-prefix-caching \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
