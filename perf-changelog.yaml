@@ -3952,6 +3952,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom
+  description:
+    - "Expand search space for minimaxm3-fp4-mi355x-atom: add TP2 and TP8 configurations, extend concurrency range to 256 for ISL1024 and ISL8192, and add TP8 conc=1-2 for ISL8192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
+
+- config-keys:
     - minimaxm3-fp8-mi300x-vllm
   description:
     - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
