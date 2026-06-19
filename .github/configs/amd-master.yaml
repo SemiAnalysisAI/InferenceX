@@ -2880,7 +2880,7 @@ minimaxm3-fp4-mi355x-atom-disagg:
   image: rocm/atom-dev:MiniMax-M3-20260619
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
-  runner: mi355x
+  runner: mi355x-disagg
   precision: fp4
   framework: atom-disagg
   multinode: true
