@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate perf-changelog.yaml before sweep reuse can skip setup."""
+"""Validate append-only perf-changelog.yaml changes."""
 
 from __future__ import annotations
 

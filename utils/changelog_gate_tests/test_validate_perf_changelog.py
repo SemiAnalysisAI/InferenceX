@@ -203,7 +203,7 @@ def test_raw_correction_rejects_whitespace_only_history_change() -> None:
         )
 
 
-def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
+def test_run_sweep_does_not_prevalidate_changelog_before_setup() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     workflow = yaml.load(
         (repo_root / ".github/workflows/run-sweep.yml").read_text(),
@@ -212,59 +212,40 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     jobs = workflow["jobs"]
     pull_request_types = workflow["on"]["pull_request"]["types"]
 
-    assert "needs" not in jobs["check-changelog"]
+    assert "check-changelog" not in jobs
+    assert "check-newline" in jobs
     # opened/reopened are intentionally excluded so opening or reopening a PR
     # that already carries a sweep label does not start a sweep.
     assert {"synchronize", "labeled", "unlabeled", "ready_for_review"}.issubset(
         set(pull_request_types)
     )
     assert {"opened", "reopened"}.isdisjoint(set(pull_request_types))
-    check_step_names = [
-        step.get("name")
-        for step in jobs["check-changelog"]["steps"]
-    ]
     setup_step_names = [
         step.get("name")
         for step in jobs["setup"]["steps"]
     ]
-    assert "Reject conflicting sweep labels" in check_step_names
-    assert "Reject conflicting sweep labels" not in setup_step_names
-    assert jobs["check-changelog"]["outputs"]["has-additions"] == (
-        "${{ steps.validate.outputs.has-additions }}"
-    )
-    assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
-    assert (
-        "needs.check-changelog.result == 'success'"
-        in jobs["reuse-sweep-gate"]["if"]
-    )
-    assert (
-        "needs.check-changelog.outputs.has-additions == 'true'"
-        in jobs["reuse-sweep-gate"]["if"]
-    )
-    assert jobs["setup"]["needs"] == [
-        "check-changelog",
-        "reuse-sweep-gate",
-    ]
-    assert "needs.check-changelog.result == 'success'" in jobs["setup"]["if"]
-    assert (
-        "needs.check-changelog.outputs.has-additions == 'true'"
-        in jobs["setup"]["if"]
-    )
+    assert "Reject conflicting sweep labels" in setup_step_names
+    assert "needs" not in jobs["reuse-sweep-gate"]
+    assert jobs["setup"]["needs"] == "reuse-sweep-gate"
+    assert "needs.check-changelog" not in jobs["reuse-sweep-gate"]["if"]
+    assert "needs.check-changelog" not in jobs["setup"]["if"]
 
 
-def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
+def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     script = (repo_root / "utils/merge_with_reuse.sh").read_text()
 
     push_index = script.index('git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"')
-    wait_index = script.index(
-        'wait_for_check "$POST_MERGE" "check-changelog"'
+    checks_index = script.index(
+        'gh pr checks "$PR" --repo "$REPO" --watch --fail-fast'
     )
     merge_index = script.index(
         'gh pr merge "$PR" --repo "$REPO" --squash --admin'
     )
 
-    assert push_index < wait_index < merge_index
+    assert push_index < checks_index < merge_index
+    assert "wait_for_check" not in script
+    assert "check-changelog" not in script
     assert "prepare_perf_changelog_merge.py" in script
     assert "git commit --allow-empty" in script
     assert script.count('CURRENT_HEAD="$(gh pr view') == 2

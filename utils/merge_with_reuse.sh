@@ -6,21 +6,18 @@
 #   2. Merge origin/main into the PR branch.  Any `perf-changelog.yaml`
 #      conflict is auto-resolved by accepting main's entries and re-appending
 #      the PR's entry at the bottom with `XXX` -> the canonical PR URL.
-#   3. Canonicalize appended links, push a fresh commit, and wait for
-#      `check-changelog` on that exact SHA.
-#      The PR synchronize run then observes the reuse authorization and skips
-#      sweep setup and benchmark jobs.
-#   4. Squash-merge the PR to main (--admin) only after validation succeeds.
+#   3. Canonicalize appended links and push a fresh synchronization commit.
+#      The PR run observes the reuse authorization and skips sweep setup and
+#      benchmark jobs.
+#   4. Wait for the PR checks, then squash-merge the PR to main (--admin).
 #
 # Usage: utils/merge_with_reuse.sh <pr-number>
 # Env:   REPO (default SemiAnalysisAI/InferenceX)
-#        CHECK_TIMEOUT_SECONDS (default 900)
 
 set -euo pipefail
 
 REPO="${REPO:-SemiAnalysisAI/InferenceX}"
 CHANGELOG="perf-changelog.yaml"
-CHECK_TIMEOUT_SECONDS="${CHECK_TIMEOUT_SECONDS:-900}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [ $# -ne 1 ] || ! [[ "$1" =~ ^[0-9]+$ ]]; then
@@ -34,38 +31,6 @@ ok()  { printf '\033[1;32m✓\033[0m %s\n' "$*"; }
 die() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
 [ -z "$(git status --porcelain)" ] || die "Working tree is not clean"
-
-wait_for_check() {
-    local sha="$1"
-    local check_name="$2"
-    local deadline=$((SECONDS + CHECK_TIMEOUT_SECONDS))
-
-    log "Waiting for ${check_name} on ${sha:0:8}"
-    while ((SECONDS < deadline)); do
-        local checks check status conclusion details
-        checks="$(gh api "repos/${REPO}/commits/${sha}/check-runs?per_page=100")"
-        check="$(jq -c --arg name "$check_name" '
-            [.check_runs[] | select(.name == $name)]
-            | sort_by(.started_at)
-            | last // {}
-        ' <<<"$checks")"
-        status="$(jq -r '.status // ""' <<<"$check")"
-        conclusion="$(jq -r '.conclusion // ""' <<<"$check")"
-        details="$(jq -r '.details_url // ""' <<<"$check")"
-
-        if [ "$status" = "completed" ]; then
-            if [ "$conclusion" = "success" ]; then
-                ok "${check_name} passed${details:+ — ${details}}"
-                return 0
-            fi
-            die "${check_name} concluded ${conclusion:-unknown}${details:+ — ${details}}"
-        fi
-
-        sleep 5
-    done
-
-    die "Timed out after ${CHECK_TIMEOUT_SECONDS}s waiting for ${check_name} on ${sha}"
-}
 
 ORIGINAL_BRANCH="$(git symbolic-ref --quiet --short HEAD || git rev-parse HEAD)"
 LOCAL_BRANCH=""
@@ -194,19 +159,17 @@ if ! git diff --quiet -- "$CHANGELOG"; then
 fi
 
 # Always create a synchronize event when the branch was already prepared.
-# This guarantees that check-changelog exists for the exact SHA we validate.
+# This guarantees the reuse gate sees the authorization on the current SHA.
 if [ "$PRE_MERGE" = "$(git rev-parse HEAD)" ]; then
     git commit --allow-empty \
-        -m "chore: validate PR #${PR} changelog before reuse [skip-sweep]"
+        -m "chore: refresh PR #${PR} for sweep reuse [skip-sweep]"
 fi
 
 # --- step 3: push prepared commit --------------------------------------------
 POST_MERGE="$(git rev-parse HEAD)"
 log "Pushing prepared commit ${POST_MERGE:0:8}"
 git push origin "${LOCAL_BRANCH}:${HEAD_BRANCH}"
-ok "Push complete; changelog validation will run before the reuse gate"
-
-wait_for_check "$POST_MERGE" "check-changelog"
+ok "Push complete; reuse authorization will be evaluated on the new head"
 
 # --- step 4: squash-merge to main -------------------------------------------
 CURRENT_HEAD="$(gh pr view "$PR" --repo "$REPO" --json headRefOid --jq '.headRefOid')"

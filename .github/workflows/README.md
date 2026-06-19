@@ -204,20 +204,14 @@ must still contain complete artifacts for the merge run's expected matrix.
 
 The comment is the reuse authorization, so adding it does not trigger or cancel
 a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. GitHub still runs the
-CPU-only `check-changelog` job on the new commit before inspecting the reuse
-authorization. That job validates the complete YAML/schema, append-only entry
-ordering, duplicate YAML keys, byte-for-byte preservation of historical
-content, PR links, the generated sweep config, and sweep-label exclusivity.
-Link-only correction PRs stop after this CPU check because they have no
-benchmark matrix to generate. Only appended entries can continue to the reuse
-gate and sweep setup. Removing and re-adding a sweep label explicitly starts a
-new sweep.
+full-sweep label do not start another benchmark sweep. The synchronize run
+checks the authorization before setup. Removing and re-adding a sweep label
+explicitly starts a new sweep.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves the current main changelog bytes, canonicalizes an
 appended `XXX` link to the PR URL, pushes a fresh synchronization commit, and
-waits for `check-changelog` on that exact SHA before merging.
+waits for the PR checks before merging.
 
 On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
 commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
