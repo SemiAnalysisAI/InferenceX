@@ -3981,10 +3981,10 @@
     - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP."
     - "Add local srt-slurm recipes under benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/b300-fp8 and wire the B300 launcher to overlay them into srt-slurm."
     - "Add TP8 decode variants with expert parallelism disabled and the Marlin MoE backend for selected low-concurrency 1k1k and 8k1k shapes."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1787
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1863
 
 - config-keys:
     - minimaxm3-fp8-b300-dynamo-vllm
   description:
     - "Update the MiniMax-M3 B300 Dynamo vLLM container from vllm/vllm-openai:minimax-m3 to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1787
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1863
