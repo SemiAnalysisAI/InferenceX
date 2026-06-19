@@ -148,7 +148,7 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
         entry[Fields.RUN_EVAL.value] = True
         if (
             Fields.PREFILL.value in entry
-            and Fields.EVAL_CONC.value not in entry
+            and entry.get(Fields.EVAL_CONC.value) is None
         ):
             conc = entry[Fields.CONC.value]
             conc_values = conc if isinstance(conc, list) else [conc]
@@ -168,6 +168,15 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
     Assumes all_config_data has been validated by validate_master_config().
     """
+    if args.step_size <= 1:
+        raise ValueError("step_size must be greater than 1")
+    if (
+        args.min_conc is not None
+        and args.max_conc is not None
+        and args.min_conc > args.max_conc
+    ):
+        raise ValueError("min_conc must be less than or equal to max_conc")
+
     # Validate runner types if specified
     if args.runner_type:
         valid_runner_types = set(runner_data.keys())
@@ -322,8 +331,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
-                    conc_start = bmk[Fields.CONC_START.value]
-                    conc_end = bmk[Fields.CONC_END.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
@@ -343,31 +350,68 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         if ep is not None and ep > args.max_ep:
                             ep = args.max_ep
 
-                    # Apply min-conc filter if specified
-                    # If conc_end < min_conc, skip this config entirely
-                    if args.min_conc is not None:
-                        if args.min_conc <= 0:
-                            continue  # Skip if min_conc is not positive
-                        if conc_end < args.min_conc:
-                            continue  # Skip if entire range is below min_conc
-                        conc_start = max(conc_start, args.min_conc)
+                    conc_list = bmk.get(Fields.CONC_LIST.value)
+                    if conc_list:
+                        conc_values = list(conc_list)
 
-                    # Apply max-conc filter if specified
-                    # If conc_start > max_conc, use max_conc as both start and end (if valid)
-                    if args.max_conc is not None:
-                        if args.max_conc <= 0:
-                            continue  # Skip if max_conc is not positive
-                        if conc_start > args.max_conc:
-                            conc_start = args.max_conc
-                            conc_end = args.max_conc
-                        else:
-                            conc_end = min(conc_end, args.max_conc)
+                        if args.min_conc is not None:
+                            if args.min_conc <= 0:
+                                continue
+                            conc_values = [
+                                conc for conc in conc_values
+                                if conc >= args.min_conc
+                            ]
+                            if not conc_values:
+                                continue
+
+                        if args.max_conc is not None:
+                            if args.max_conc <= 0:
+                                continue
+                            filtered_conc = [
+                                conc for conc in conc_values
+                                if conc <= args.max_conc
+                            ]
+                            conc_values = (
+                                filtered_conc
+                                if filtered_conc
+                                else [args.max_conc]
+                            )
+                    else:
+                        conc_start = bmk[Fields.CONC_START.value]
+                        conc_end = bmk[Fields.CONC_END.value]
+
+                        # If conc_end < min_conc, skip this config entirely.
+                        if args.min_conc is not None:
+                            if args.min_conc <= 0:
+                                continue
+                            if conc_end < args.min_conc:
+                                continue
+                            conc_start = max(conc_start, args.min_conc)
+
+                        # If conc_start > max_conc, use max_conc directly.
+                        if args.max_conc is not None:
+                            if args.max_conc <= 0:
+                                continue
+                            if conc_start > args.max_conc:
+                                conc_start = args.max_conc
+                                conc_end = args.max_conc
+                            else:
+                                conc_end = min(conc_end, args.max_conc)
+
+                        conc_values = []
+                        conc = conc_start
+                        while conc <= conc_end:
+                            conc_values.append(conc)
+                            if conc == conc_end:
+                                break
+                            conc *= args.step_size
+                            if conc > conc_end:
+                                conc = conc_end
 
                     seq_len_str = seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                    conc = conc_start
-                    while conc <= conc_end:
+                    for conc in conc_values:
                         for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
@@ -396,12 +440,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                             validate_matrix_entry(entry, is_multinode)
                             matrix_values.append(entry)
-
-                        if conc == conc_end:
-                            break
-                        conc *= args.step_size
-                        if conc > conc_end:
-                            conc = conc_end
 
         # ---- Agentic-coding scenarios ----
         agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
@@ -1169,6 +1207,15 @@ def main():
 
     args = parser.parse_args()
     apply_node_type_defaults(args)
+    if args.command == 'full-sweep' and args.step_size <= 1:
+        parser.error("--step-size must be greater than 1")
+    if (
+        args.command == 'full-sweep'
+        and args.min_conc is not None
+        and args.max_conc is not None
+        and args.min_conc > args.max_conc
+    ):
+        parser.error("--min-conc must be less than or equal to --max-conc")
     if args.no_evals and args.all_evals:
         parser.error("--all-evals cannot be combined with --no-evals")
 

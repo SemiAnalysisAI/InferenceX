@@ -13,6 +13,8 @@ from matrix_logic.validation import (
     load_config_files,
 )
 
+SCENARIO_TYPES = ("fixed-seq-len", "agentic-coding")
+
 
 def get_added_lines(base_ref: str, head_ref: str, filepath: str) -> str:
     result = subprocess.run(
@@ -85,7 +87,7 @@ def trim_conc(entries: list[dict]) -> list[dict]:
 def get_config_keys_from_master(
     config_keys: list[str], master_config: dict
 ) -> list[str]:
-    resolved_keys = set()
+    resolved_keys = {}
     for key in config_keys:
         if "*" in key:
             pattern = re.compile(re.escape(key).replace(r"\*", ".*"))
@@ -94,11 +96,12 @@ def get_config_keys_from_master(
                 raise ValueError(
                     f"No config keys matched the wildcard pattern '{key}' in master configs."
                 )
-            resolved_keys.update(matched_keys)
+            for matched_key in matched_keys:
+                resolved_keys.setdefault(matched_key, None)
         elif key not in master_config:
             raise ValueError(f"Config key '{key}' not found in master configs.")
         else:
-            resolved_keys.add(key)
+            resolved_keys.setdefault(key, None)
     return list(resolved_keys)
 
 
@@ -134,10 +137,9 @@ def main():
 
     all_benchmark_results = []
     all_eval_results = []
-    # Deduplicate repeated configs separately for benchmarks and evals.
-    # Eval-only modes should not prevent a regular entry from generating
-    # benchmarks for the same config, and vice versa.
-    benchmark_configs_seen = set()
+    # Track benchmark coverage per scenario so overlapping changelog entries
+    # with disjoint scenario filters do not suppress each other.
+    benchmark_scenarios_seen = defaultdict(set)
     eval_configs_seen = set()
 
     master_config = load_config_files(MASTER_CONFIGS)
@@ -154,11 +156,24 @@ def main():
     resolved_entries.sort(key=lambda item: not item[0].all_evals)
 
     for entry, all_configs in resolved_entries:
+        entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+
         if not entry.evals_only and not entry.all_evals:
             # Generate benchmark entries (no evals)
-            benchmark_configs = [c for c in all_configs if c not in benchmark_configs_seen]
-            if benchmark_configs:
-                benchmark_configs_seen.update(benchmark_configs)
+            benchmark_groups = defaultdict(list)
+            for config in all_configs:
+                unseen_scenarios = tuple(
+                    scenario for scenario in SCENARIO_TYPES
+                    if (
+                        scenario in entry_scenarios
+                        and scenario not in benchmark_scenarios_seen[config]
+                    )
+                )
+                if unseen_scenarios:
+                    benchmark_scenarios_seen[config].update(unseen_scenarios)
+                    benchmark_groups[unseen_scenarios].append(config)
+
+            for scenarios, benchmark_configs in benchmark_groups.items():
                 base_cmd = [
                     "python3",
                     GENERATE_SWEEPS_PY_SCRIPT,
@@ -169,8 +184,8 @@ def main():
                     *MASTER_CONFIGS,
                     "--no-evals",
                 ]
-                if entry.scenario_type:
-                    base_cmd.extend(["--scenario-type", *entry.scenario_type])
+                if scenarios != SCENARIO_TYPES:
+                    base_cmd.extend(["--scenario-type", *scenarios])
                 try:
                     result = subprocess.run(
                         base_cmd,
@@ -183,7 +198,11 @@ def main():
                     raise
                 all_benchmark_results.extend(json.loads(result.stdout))
 
-        # Generate eval entries separately
+        # Evals only apply to fixed-sequence scenarios. Do not mark a config as
+        # seen when an agentic-only entry generates no eval matrix.
+        if "fixed-seq-len" not in entry_scenarios:
+            continue
+
         eval_configs = [c for c in all_configs if c not in eval_configs_seen]
         if eval_configs:
             eval_configs_seen.update(eval_configs)
@@ -199,9 +218,9 @@ def main():
                 "--config-files",
                 *MASTER_CONFIGS,
                 *eval_flags,
+                "--scenario-type",
+                "fixed-seq-len",
             ]
-            if entry.scenario_type:
-                base_cmd.extend(["--scenario-type", *entry.scenario_type])
             try:
                 eval_result = subprocess.run(
                     base_cmd,

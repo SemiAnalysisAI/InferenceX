@@ -21,6 +21,8 @@ Generator eval modes:
 
 The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
 
+When multiple appended changelog entries reference the same config, benchmark deduplication is scenario-aware: a `fixed-seq-len` entry does not suppress a separate `agentic-coding` entry. Eval deduplication only consumes fixed-sequence coverage, and a broader `all-evals` entry takes precedence over the default eval subset for overlapping configs.
+
 ## Why?
 To verify how model outputs are affected by throughput optimizations.
 - TP/Conc might affect model outputs

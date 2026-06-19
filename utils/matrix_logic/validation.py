@@ -252,6 +252,12 @@ def _validate_conc_fields(self):
                 "must be provided together."
             )
 
+        if self.conc_start <= 0 or self.conc_end <= 0:
+            raise ValueError(
+                f"Input '{Fields.CONC_START.value}' and "
+                f"'{Fields.CONC_END.value}' must be greater than 0."
+            )
+
         if self.conc_start > self.conc_end:
             raise ValueError(
                 f"'{Fields.CONC_START.value}' ({self.conc_start}) must be <= "
@@ -487,8 +493,8 @@ class ChangelogEntry(BaseModel):
     pr_link: str = Field(alias="pr-link")
     evals_only: bool = Field(alias="evals-only", default=False)
     all_evals: bool = Field(alias="all-evals", default=False)
-    scenario_type: Optional[List[str]] = Field(
-        alias="scenario-type", default=None,
+    scenario_type: Optional[List[Literal["fixed-seq-len", "agentic-coding"]]] = Field(
+        alias="scenario-type", default=None, min_length=1,
         description="Restrict to specific scenario types (e.g., ['fixed-seq-len', 'agentic-coding'])"
     )
 

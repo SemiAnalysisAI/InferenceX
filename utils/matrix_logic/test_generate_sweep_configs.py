@@ -457,6 +457,23 @@ class TestMarkAllEvalEntries:
         assert result[0]['run-eval'] is True
         assert result[0]['eval-conc'] == 32
 
+    def test_replaces_null_eval_conc(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [4, 8, 16],
+                'run-eval': False,
+                'eval-conc': None,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert result[0]['eval-conc'] == 8
+
     def test_skips_agentic_entries(self):
         entries = [
             {
@@ -1193,7 +1210,7 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "conc-start": 4, "conc-end": 16}
+                                {"tp": 8, "conc-list": [4, 16, 64]}
                             ]
                         }
                     ]
@@ -1206,9 +1223,76 @@ class TestEdgeCases:
             sample_runner_config
         )
         conc_values = [entry["conc"] for entry in result]
-        assert 4 in conc_values
-        assert 8 in conc_values
-        assert 16 in conc_values
+        assert conc_values == [4, 16, 64]
+
+    def test_conc_list_in_single_node_honors_filters(
+        self,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        config = {
+            "test-config": {
+                "image": "test-image",
+                "model": "test-model",
+                "model-prefix": "test",
+                "precision": "fp8",
+                "framework": "sglang",
+                "runner": "mi300x",
+                "multinode": False,
+                "scenarios": {
+                    "fixed-seq-len": [
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "conc-list": [4, 16, 64]}
+                            ],
+                        }
+                    ]
+                },
+            }
+        }
+        full_sweep_args_single_node.min_conc = 8
+        full_sweep_args_single_node.max_conc = 32
+
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            config,
+            sample_runner_config,
+        )
+
+        assert [entry["conc"] for entry in result] == [16]
+
+    def test_step_size_must_advance(
+        self,
+        sample_single_node_config,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        full_sweep_args_single_node.step_size = 1
+
+        with pytest.raises(ValueError, match="greater than 1"):
+            generate_full_sweep(
+                full_sweep_args_single_node,
+                sample_single_node_config,
+                sample_runner_config,
+            )
+
+    def test_min_conc_cannot_exceed_max_conc(
+        self,
+        sample_single_node_config,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        full_sweep_args_single_node.min_conc = 16
+        full_sweep_args_single_node.max_conc = 8
+
+        with pytest.raises(ValueError, match="less than or equal"):
+            generate_full_sweep(
+                full_sweep_args_single_node,
+                sample_single_node_config,
+                sample_runner_config,
+            )
 
     def test_disagg_defaults_to_false(self, sample_runner_config, full_sweep_args_single_node):
         """disagg should default to False when not specified."""
