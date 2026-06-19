@@ -279,6 +279,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     cd $ATOM_WS_PATH
 
+    export IS_MTP="false"
+    if [ "$SPEC_DECODING" = "mtp" ]; then
+        export IS_MTP="true"
+    fi
+
     BENCH_CMD="bash $ATOM_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
