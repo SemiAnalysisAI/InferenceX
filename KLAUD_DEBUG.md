@@ -33,6 +33,12 @@ python3 -c "import yaml; yaml.safe_load(open('perf-changelog.yaml'))"
 
 Do **not** try a 3-way merge of `perf-changelog.yaml` — whitespace edits will silently re-trigger the deletion check.
 
+After committing and pushing the resolution, the synchronize run checks the
+changelog with the same matrix processor used by setup, then checks the reuse
+authorization. This catches deleted history or malformed appended entries
+before reuse can skip setup. `utils/merge_with_reuse.sh <PR>` performs the push
+and waits for the PR checks automatically.
+
 ---
 
 ## 2. vLLM v0.21.x / v0.20.x: GPU OOM at model-load
