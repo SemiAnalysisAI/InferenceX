@@ -44,7 +44,9 @@ gpt-oss-120b:
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ROCM_USE_AITER_TRITON_BF16_GEMM=0 VLLM_USE_AITER_UNIFIED_ATTENTION=1 VLLM_ROCM_USE_AITER_MHA=0 ROCM_TRITON_MOE_PRESHUFFLE_SCALES=0"
 
 MiniMax-M3-MXFP8:
-  # MiniMax-M3 MXFP8 disagg smoke test (TP8 prefill + TP8 decode, no EP).
+  # MiniMax-M3 MXFP8 disagg, no EP. The --tensor-parallel-size 8 below is just a
+  # placeholder: server_vllm.sh sed-rewrites it to PREFILL_TP_SIZE/DECODE_TP_SIZE
+  # from the master-config prefill/decode tp (the sweep mixes TP8 and TP4 layouts).
   # --block-size 128 is mandatory (MSA sparse/index cache); text-only benchmark
   # so --language-model-only frees the vision encoder. gfx950 uses FP8 KV cache.
   prefill_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
