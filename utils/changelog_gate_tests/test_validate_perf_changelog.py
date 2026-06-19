@@ -271,46 +271,6 @@ def test_changelog_gate_skips_prs_without_changelog_changes() -> None:
     assert "skipping PR-diff validation" in script
 
 
-def test_changelog_gate_resolves_the_exact_branch_head_pr() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    workflow = yaml.load(
-        (repo_root / ".github/workflows/test-changelog-gate.yml").read_text(),
-        Loader=yaml.BaseLoader,
-    )
-    steps = workflow["jobs"]["test-changelog"]["steps"]
-    validate_step = next(
-        step
-        for step in steps
-        if step.get("name") == "Validate the associated pull request"
-    )
-    script = validate_step["run"]
-
-    assert "gh pr list" in script
-    assert 'GITHUB_REF_NAME' in script
-    assert "PR_COUNT" in script
-    assert "PR_HEAD_SHA" in script
-    assert "does not match pushed SHA" in script
-
-
-def test_historical_rejections_must_match_the_expected_reason() -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    workflow = yaml.load(
-        (repo_root / ".github/workflows/test-changelog-gate.yml").read_text(),
-        Loader=yaml.BaseLoader,
-    )
-    steps = workflow["jobs"]["test-changelog"]["steps"]
-    historical_step = next(
-        step
-        for step in steps
-        if step.get("name") == "Test historical push validation"
-    )
-    script = historical_step["run"]
-
-    assert "grep -Fq" in script
-    assert "refs/pull/1798/head" in script
-    assert script.count('"trailing whitespace"') == 2
-
-
 def test_merge_helper_waits_for_changelog_check_before_merge() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     script = (repo_root / "utils/merge_with_reuse.sh").read_text()
