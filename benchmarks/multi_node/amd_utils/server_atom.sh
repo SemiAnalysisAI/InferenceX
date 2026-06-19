@@ -487,7 +487,6 @@ else
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
-        ${CUDAGRAPH_OPT} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
