@@ -3974,16 +3974,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
 
 - config-keys:
-    - dsv4-fp4-mi355x-atom-disagg-mtp
-  description:
-    - "Add dsv4-fp4-mi355x-atom-disagg-mtp recipe: multi-node disaggregated PD on MI355X via ATOM with MTP speculative decoding"
-    - "2P1D DPA+TBO+MTP1 sweep at ISL8192 (conc 256-2048)"
-    - "1P1D TP8+MTP3 sweep at ISL8192 (conc 4-128)"
-    - "1P1D TP8+DPA+MTP1 sweep at ISL1024 (conc 64-1024)"
-    - "Image: rocm/atom-dev:nightly_202606181332"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1855
-
-- config-keys:
     - minimaxm3-fp4-mi355x-atom-disagg
   description:
     - "Add minimaxm3-fp4-mi355x-atom-disagg CI script: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP4"
