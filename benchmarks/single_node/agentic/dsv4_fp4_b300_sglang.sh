@@ -179,6 +179,9 @@ if [ -n "$TRITON_PTXAS_PATH" ]; then
     export TRITON_PTXAS_PATH
     echo "Using ptxas for Triton: $TRITON_PTXAS_PATH"
 fi
+if [ "$DP_ATTENTION" = "true" ]; then
+    "$SGLANG_PYTHON" "$SCRIPT_DIR/patch_sglang_dp_idle_tree_check.py"
+fi
 SGLANG_CMD=(
     "$SGLANG_PYTHON" -m sglang.launch_server
     --model-path "$MODEL_PATH"
