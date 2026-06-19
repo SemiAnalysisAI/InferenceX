@@ -343,61 +343,19 @@ def validate_generated_config(base_ref: str, head_ref: str, path: str) -> None:
         ) from exc
 
 
-def is_pr_link_only_correction(
-    base_ref: str,
-    head_ref: str,
-    path: str,
-) -> bool:
-    """Return whether every substantive changed line is a pr-link replacement."""
-    diff = run_git(
-        "diff",
-        "--unified=0",
-        base_ref,
-        head_ref,
-        "--",
-        path,
-    ).stdout
-    removed: list[str] = []
-    added: list[str] = []
-
-    for line in diff.splitlines():
-        if line.startswith("---") or line.startswith("+++"):
-            continue
-        if line.startswith("-") and line[1:].strip():
-            removed.append(line[1:])
-        elif line.startswith("+") and line[1:].strip():
-            added.append(line[1:])
-
-    return (
-        bool(removed)
-        and bool(added)
-        and len(removed) == len(added)
-        and all(line.startswith("  pr-link:") for line in [*removed, *added])
-    )
-
-
 def validate_matrix_compatible_change(
     base_ref: str,
     head_ref: str,
     path: str,
-) -> bool:
-    """Validate the diff accepted by sweep setup, or a pr-link-only correction.
-
-    Returns whether the change generated a sweep matrix.
-    """
+) -> None:
+    """Validate the final newline and the diff accepted by sweep setup."""
     head_raw = read_git_file(head_ref, path)
     if not head_raw.endswith(b"\n"):
         raise ChangelogValidationError(
             f"{path} at {head_ref} does not end with a newline"
         )
 
-    try:
-        validate_generated_config(base_ref, head_ref, path)
-    except ChangelogValidationError:
-        if is_pr_link_only_correction(base_ref, head_ref, path):
-            return False
-        raise
-    return True
+    validate_generated_config(base_ref, head_ref, path)
 
 
 def validate_changelog(
@@ -480,8 +438,8 @@ def main() -> int:
         "--matrix-compatible",
         action="store_true",
         help=(
-            "run the same matrix validation as sweep setup, while allowing "
-            "pr-link-only corrections that do not produce a matrix"
+            "check the final newline and run the same matrix validation as "
+            "sweep setup"
         ),
     )
     parser.add_argument(
@@ -492,17 +450,15 @@ def main() -> int:
 
     try:
         if args.matrix_compatible:
-            generated_matrix = validate_matrix_compatible_change(
+            validate_matrix_compatible_change(
                 args.base_ref,
                 args.head_ref,
                 args.changelog_file,
             )
-            detail = (
-                "matrix generated"
-                if generated_matrix
-                else "pr-link-only correction; no matrix required"
+            print(
+                f"Validated {args.changelog_file}: "
+                "final newline present and matrix generated"
             )
-            print(f"Validated {args.changelog_file}: {detail}")
             return 0
 
         additions, corrections = validate_changelog(

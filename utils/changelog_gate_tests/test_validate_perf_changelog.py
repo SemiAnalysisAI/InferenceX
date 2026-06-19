@@ -204,26 +204,35 @@ def test_raw_correction_rejects_whitespace_only_history_change() -> None:
         )
 
 
-def test_matrix_compatible_check_allows_pr_link_only_correction(
+def test_matrix_compatible_check_rejects_missing_final_newline(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
         validator,
         "read_git_file",
-        lambda *_args: b"  pr-link: https://example.com\n",
+        lambda *_args: b"- config-keys: []",
+    )
+
+    with pytest.raises(ChangelogValidationError, match="end with a newline"):
+        validator.validate_matrix_compatible_change("base", "head", "file")
+
+
+def test_matrix_compatible_check_propagates_matrix_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        validator,
+        "read_git_file",
+        lambda *_args: b"- config-keys: []\n",
     )
 
     def reject_matrix(*_args: object) -> None:
         raise ChangelogValidationError("matrix rejected")
 
     monkeypatch.setattr(validator, "validate_generated_config", reject_matrix)
-    monkeypatch.setattr(
-        validator,
-        "is_pr_link_only_correction",
-        lambda *_args: True,
-    )
 
-    assert not validator.validate_matrix_compatible_change("base", "head", "file")
+    with pytest.raises(ChangelogValidationError, match="matrix rejected"):
+        validator.validate_matrix_compatible_change("base", "head", "file")
 
 
 def test_matrix_compatible_check_rejects_pr_1717_conflict_resolution() -> None:
