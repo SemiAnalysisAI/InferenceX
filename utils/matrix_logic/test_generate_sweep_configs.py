@@ -168,11 +168,13 @@ class TestSeqLenMappings:
         """Verify seq_len_stoi has expected mappings."""
         assert seq_len_stoi["1k1k"] == (1024, 1024)
         assert seq_len_stoi["8k1k"] == (8192, 1024)
+        assert seq_len_stoi["32k1k"] == (32768, 1024)
 
     def test_seq_len_itos_reverse_mapping(self):
         """Verify seq_len_itos is reverse of stoi."""
         assert seq_len_itos[(1024, 1024)] == "1k1k"
         assert seq_len_itos[(8192, 1024)] == "8k1k"
+        assert seq_len_itos[(32768, 1024)] == "32k1k"
 
 
 class TestSeqLenToStr:
