@@ -1,0 +1,479 @@
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_common.py
+@@ -80,6 +80,10 @@
+     writes_done: int = 0
+     decode_dp_rank: int = 0
+     transfer_offset: tuple[list[int], list[int], list[int]] | None = None
++    # Per-layer-geometry offset cache (keyed by shape/stride/dtype) for
++    # heterogeneous-KV (hybrid/sparse) models. Homogeneous models populate a
++    # single entry. See MoRIIOWriter._prepare_transfer_plan.
++    transfer_offsets: dict = field(default_factory=dict)
+ 
+ 
+ class ROLE(Enum):
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_connector.py
+@@ -740,6 +740,21 @@
+         # Completions that arrived before transfer_id_to_request_id was populated.
+         # Retried each step until the mapping is established.
+         self._unmatched_write_completions: set[str] = set()
++        # Producer side: with heterogeneous-TP P/D (DECODE_TP_SIZE >
++        # PREFILL_TP_SIZE), more than one decode rank reads this rank's KV
++        # slice and each sends its own completion notify for the SAME
++        # transfer_id once its own read finishes. We must not report
++        # finished_sending (which lets the core scheduler free/reuse the
++        # blocks) until *all* of them have acked -- otherwise a still-in-
++        # flight slower reader can read corrupted/reused memory. This counts
++        # per-transfer_id notifies against the expected fan-in count (derived
++        # from the consumer's own tp_size, sent alongside the transfer_id --
++        # see send_notify call sites) and only resolves once it's complete.
++        # Mirrors NIXL's consumer_notification_counts_by_req. Pruned in
++        # start_load_kv() once a transfer_id drops out of the live mapping
++        # (e.g. force-freed by the scheduler's defer_timeout without ever
++        # reaching full count).
++        self._consumer_notification_counts: dict[str, int] = {}
+ 
+         role = "producer" if self.is_producer else "consumer"
+         engine_suffix = (
+@@ -1085,6 +1100,30 @@
+                         req_id.decode(),
+                     )
+ 
++    def _remote_tp_rank(self, remote_tp_size: int) -> int:
++        """Map this worker's local tp_rank to the remote tp_rank it must
++        address when local and remote TP sizes differ (heterogeneous-TP P/D,
++        e.g. PREFILL_TP_SIZE=4 / DECODE_TP_SIZE=8).
++
++        vLLM replicates KV heads across TP ranks in groups of size
++        local_tp_size/remote_tp_size (see ModelConfig.get_num_kv_heads:
++        max(1, total_kv_heads // tp_size)), so every local rank within a
++        replica group must address the SAME single remote rank --
++        floor(local_tp_rank / ratio) -- instead of its own raw tp_rank, which
++        has no listener once local tp_size > remote tp_size. Mirrors vLLM's
++        NIXL connector (TpKVTopology.get_target_remote_ranks). The reverse
++        case (remote tp_size > local tp_size, e.g. P-TP > D-TP) would need
++        multi-rank fan-in reads and is not handled here.
++        """
++        if remote_tp_size == self.world_size:
++            return self.tp_rank
++        assert self.world_size % remote_tp_size == 0, (
++            f"local tp_size {self.world_size} must be a multiple of remote "
++            f"tp_size {remote_tp_size} for heterogeneous-TP P/D (remote "
++            "tp_size > local tp_size is not supported)"
++        )
++        return self.tp_rank // (self.world_size // remote_tp_size)
++
+     def _moriio_handshake(
+         self,
+         host: str,
+@@ -1101,7 +1140,9 @@
+         # a hack to keep us moving. We will switch when moving to etcd
+         # or where we have a single ZMQ socket in the scheduler.
+ 
+-        port_offset = get_port_offset(remote_dp_rank, self.tp_rank)
++        port_offset = get_port_offset(
++            remote_dp_rank, self._remote_tp_rank(remote_tp_size)
++        )
+         path = make_zmq_path("tcp", host, port + port_offset)
+         logger.debug("handshake Querying metadata on path: %s", path)
+ 
+@@ -1233,8 +1274,10 @@
+             block_size, kv_latent_dim = block_shape
+             self.slot_size_bytes = kv_elem_size * kv_latent_dim
+         else:
+-            # [2 (k and v), num_blocks, ...]
+-            self.num_blocks = first_kv_cache.shape[1]
++            # Layout (num_blocks, 2, block_size, kv_heads, head_dim): the K/V
++            # axis is INNER (axis 1) and num_blocks is axis 0. (The old code read
++            # shape[1] here, which is the size-2 K/V axis, not num_blocks.)
++            self.num_blocks = first_kv_cache.shape[0]
+             block_rank = 3  # [block_size, kv_heads, head_dim]
+             block_shape = first_kv_cache.shape[-block_rank:]
+             block_size, n_kv_heads, head_dim = block_shape[-3:]
+@@ -1257,10 +1300,17 @@
+         caches_data = []
+ 
+         for cache_or_caches in kv_caches.values():
+-            cache_list = [cache_or_caches] if use_mla else cache_or_caches
++            # Per-layer rank: rank-3 (MLA / sparse indexer, single tensor) vs
++            # rank-5 (full attention, [K, V]). A single global use_mla flag
++            # mis-iterates the rank-3 indexer cache (over its num_blocks dim) for
++            # hybrid models, so detect per cache. region_len is the actual tensor
++            # (or K/V half) byte size -- equivalent to num_blocks * block_len for
++            # homogeneous models, correct for heterogeneous ones.
++            cache_is_mla = cache_or_caches.dim() == 3
++            cache_list = [cache_or_caches] if cache_is_mla else cache_or_caches
+             for cache in cache_list:
+                 base_addr = cache.data_ptr()
+-                region_len = self.num_blocks * self.block_len
++                region_len = cache.numel() * cache.element_size()
+                 caches_data.append((base_addr, region_len, cache.device.index, ""))
+                 kv_caches_base_addr.append(base_addr)
+ 
+@@ -1338,13 +1388,45 @@
+         done_sending, done_recving = set(), set()
+ 
+         if self.is_producer:
+-            # pop_finished_req_ids returns transfer_ids (the ZMQ payload sent
+-            # by decode via send_notify); map back to req_ids for the scheduler.
+-            finished_transfer_ids = self.moriio_wrapper.pop_finished_req_ids()
++            # pop_finished_req_ids returns every completion message received
++            # since the last call (NOT deduped -- with heterogeneous-TP
++            # fan-out, two different decode ranks legitimately send
++            # byte-identical messages for the same transfer_id and each one
++            # must be counted). Payload is "<transfer_id>:<consumer_tp_size>"
++            # (see send_notify call sites); plain transfer_id with no ":" is
++            # treated as a 1:1 ack (internal WRITE-mode completions).
++            finished_transfer_msgs = self.moriio_wrapper.pop_finished_req_ids()
++            resolved_transfer_ids: set[str] = set()
++            for raw_msg in finished_transfer_msgs:
++                xfer_id, _, tp_size_str = raw_msg.rpartition(":")
++                if not xfer_id:
++                    xfer_id, tp_size_str = raw_msg, str(self.world_size)
++                if xfer_id not in self.transfer_id_to_request_id:
++                    logger.warning(
++                        "Could not find %s in transfer_id_to_request_id "
++                        "lookup table. This could lead to a possible hang.",
++                        xfer_id,
++                    )
++                    continue
++                consumer_tp_size = int(tp_size_str)
++                if consumer_tp_size > self.world_size:
++                    assert consumer_tp_size % self.world_size == 0, (
++                        f"consumer tp_size {consumer_tp_size} must be a "
++                        f"multiple of producer tp_size {self.world_size} "
++                        "for heterogeneous-TP P/D"
++                    )
++                    expected_acks = consumer_tp_size // self.world_size
++                else:
++                    expected_acks = 1
++                count = self._consumer_notification_counts.get(xfer_id, 0) + 1
++                if count >= expected_acks:
++                    self._consumer_notification_counts.pop(xfer_id, None)
++                    resolved_transfer_ids.add(xfer_id)
++                else:
++                    self._consumer_notification_counts[xfer_id] = count
+             done_sending = {
+                 self.transfer_id_to_request_id[xfer_id]
+-                for xfer_id in finished_transfer_ids
+-                if xfer_id in self.transfer_id_to_request_id
++                for xfer_id in resolved_transfer_ids
+             }
+         else:
+             if self.mode == MoRIIOMode.WRITE:
+@@ -1389,7 +1471,13 @@
+                 if last.Succeeded():
+                     host, port, xfer_id = self._recving_transfers_callback_addr[req_id]
+                     done_req_ids.add(xfer_id)
+-                    self.moriio_wrapper.send_notify(xfer_id, host, port)
++                    # Embed our own tp_size so the producer can tell, with
++                    # heterogeneous-TP fan-out, how many consumer acks to
++                    # expect for this transfer_id before it's safe to free
++                    # the blocks (see _consumer_notification_counts).
++                    self.moriio_wrapper.send_notify(
++                        f"{xfer_id}:{self.world_size}", host, port
++                    )
+                     to_remove.append(req_id)
+                 elif last.Failed():
+                     logger.error(
+@@ -1402,7 +1490,9 @@
+                     )
+                     host, port, xfer_id = self._recving_transfers_callback_addr[req_id]
+                     try:
+-                        self.moriio_wrapper.send_notify(xfer_id, host, port)
++                        self.moriio_wrapper.send_notify(
++                            f"{xfer_id}:{self.world_size}", host, port
++                        )
+                     except Exception:
+                         logger.exception(
+                             "Failed to send error notification for request %s",
+@@ -1488,6 +1578,15 @@
+         """
+         self.transfer_id_to_request_id = metadata.transfer_id_to_request_id
+         if self.is_producer:
++            # Drop counts for transfer_ids that dropped out of the live
++            # mapping without ever reaching full ack count (e.g. force-freed
++            # by the scheduler's defer_timeout) -- they can never resolve via
++            # get_finished() anymore, so stop tracking them to bound memory.
++            self._consumer_notification_counts = {
++                xfer_id: count
++                for xfer_id, count in self._consumer_notification_counts.items()
++                if xfer_id in self.transfer_id_to_request_id
++            }
+             self.moriio_wrapper.async_wait_reqid()
+             return
+         if self.mode == MoRIIOMode.WRITE:
+@@ -1560,6 +1659,7 @@
+             remote_block_ids=meta.remote_block_ids,
+             remote_host=meta.remote_host,
+             remote_notify_port=meta.remote_notify_port,
++            remote_tp_size=meta.tp_size,
+         )
+ 
+     def _write_blocks_for_req(self, req_id: ReqId, meta: ReqMeta, layer_name, kv_layer):
+@@ -1653,6 +1753,7 @@
+         local_block_ids: list[int],
+         remote_block_ids: list[int],
+         remote_moriio_meta: MoRIIOAgentMetadata,
++        remote_tp_size: int | None = None,
+     ) -> tuple[list[int], list[int], list[int]]:
+         """Compute transfer offsets for block data.
+ 
+@@ -1661,25 +1762,110 @@
+             local_block_ids: IDs of local blocks
+             remote_block_ids: IDs of remote blocks
+             remote_moriio_meta: Metadata of the remote MoRIIO agent
++            remote_tp_size: tp_size of the remote (producer/prefill) instance.
++                Defaults to this worker's world_size (homogeneous P/D TP). When
++                it differs, used to validate that KV heads are replicated (the
++                only heterogeneous-TP regime MoRIIO supports) -- see the guard
++                below.
+         Returns:
+             Tuple of (local_offsets, remote_offsets, transfer_sizes)
+         """
+         assert self.kv_cache_shape is not None, "KV caches shape not initialized"
+-        is_mla = len(self.kv_cache_shape) == 3
+-        stride = self.kv_caches[layer_name].stride()
+-        sz = self.kv_caches[layer_name].element_size()
+-        if is_mla:
+-            blknum, blksize, hs = self.kv_cache_shape
+-            hn = 1
+-            block_stride = stride[0]
+-        else:
+-            _, blknum, blksize, hn, hs = self.kv_cache_shape
+-            local_ktov_stride = stride[0]
+-            block_stride = stride[1]
+-            remote_ktov_stride = block_stride * remote_moriio_meta.num_blocks
++        # Per-layer, axis-aware geometry.
++        #
++        # The KV tensors vLLM hands the connector are laid out (verified on
++        # MiniMax-M3 / TRITON_ATTN, vLLM 0.22.1):
++        #   * main attention (GQA, dense + sparse layers):
++        #       shape (num_blocks, 2, block_size, num_kv_heads, head_dim)
++        #       -- the K/V axis (size 2) is INNER (axis 1), num_blocks is axis 0.
++        #   * sparse lightning-indexer (key-only, bf16):
++        #       shape (num_blocks, block_size, head_dim)  -- rank 3, no K/V axis.
++        #
++        # The legacy code assumed the FlashAttention-style [2, num_blocks, ...]
++        # layout (K/V axis OUTER) and indexed blocks with stride[1] (the K/V
++        # stride) -- transposing block vs K/V so every block read the wrong
++        # region (corruption invisible to throughput-only benchmarks). Instead,
++        # detect the block axis (size == num_blocks) and the optional K/V axis
++        # (size 2) from THIS layer's own shape, and derive strides from them. The
++        # per-block stride is independent of num_blocks, so no remote-num_blocks
++        # scaling is needed.
++        layer_cache = self.kv_caches[layer_name]
++        layer_shape = tuple(layer_cache.shape)
++        stride = layer_cache.stride()
++        sz = layer_cache.element_size()
++        rank = len(layer_shape)
++
++        # K/V axis = the size-2 axis among the two outermost dims (if any).
++        kv_axis: int | None = None
++        if rank >= 4:
++            if layer_shape[0] == 2:
++                kv_axis = 0
++            elif layer_shape[1] == 2:
++                kv_axis = 1
++        # Block axis = outermost non-K/V axis (the one indexed by block_id).
++        block_axis = 0
++        if kv_axis == 0:
++            block_axis = 1
++        block_stride = stride[block_axis]
++        kv_stride = stride[kv_axis] if kv_axis is not None else 0
++        per_block = layer_shape[kv_axis] if kv_axis is not None else 1  # 2 (K,V) or 1
++
++        # One transferred slab = all dims except the block and K/V axes.
++        slot_elems = 1
++        for ax in range(rank):
++            if ax == block_axis or ax == kv_axis:
++                continue
++            slot_elems *= layer_shape[ax]
++
++        # --- Heterogeneous-TP guard (mirrors NIXL add_remote_agent) -----------
++        # When local (decode) and remote (prefill) tp_size differ, _remote_tp_rank
++        # maps each local rank to the single remote rank it reads from. That
++        # whole-block read is byte-correct *only* when KV heads are REPLICATED,
++        # i.e. the remote rank holds exactly the head(s) this rank owns and no
++        # more. vLLM replicates KV heads whenever tp_size >= total_kv_heads
++        # (ModelConfig.get_num_kv_heads -> max(1, total//tp)); with the
++        # r // tp_ratio rank mapping, head ownership then lines up exactly, so
++        # no head offset is needed. This is MiniMax-M3's regime (4 KV heads,
++        # TP>=4) and is the only heterogeneous-TP case MoRIIO supports.
++        #
++        # If instead a remote rank packs MORE distinct KV heads than this local
++        # rank owns (total_kv_heads > remote_tp, i.e. heads are SPLIT on the
++        # producer), each fan-in rank would have to read only its head slice of
++        # the remote block. MoRIIO's per-block tensors are NHD
++        # ([block_size, kv_heads, head_dim] -- heads interleaved per token), so
++        # a head slice is NOT a contiguous sub-region and cannot be expressed as
++        # a single (offset, len) per block. NIXL only supports head splitting in
++        # HND layout and raises otherwise; we do the same -- fail loud rather
++        # than silently corrupt KV. MLA / rank-3 indexer caches are always
++        # replicated (no K/V axis) and never hit this path.
++        local_tp = self.world_size
++        remote_tp = remote_tp_size if remote_tp_size is not None else local_tp
++        if remote_tp != local_tp and not self.use_mla and kv_axis is not None:
++            total_kv_heads = self.model_config.get_total_num_kv_heads()
++            if remote_tp > local_tp:
++                # Prefill TP > decode TP: this rank would need to fan IN reads
++                # from multiple remote ranks (NIXL's negative-tp_ratio path).
++                raise NotImplementedError(
++                    f"Heterogeneous-TP with remote (prefill) tp_size {remote_tp} "
++                    f"> local (decode) tp_size {local_tp} requires multi-rank "
++                    "fan-in reads, not supported by MoRIIOConnector."
++                )
++            remote_heads = max(1, total_kv_heads // remote_tp)
++            local_heads = max(1, total_kv_heads // local_tp)
++            if remote_heads > local_heads:
++                # KV heads are split (not replicated) on the producer -> would
++                # need NHD head slicing, which MoRIIO can't express per block.
++                raise NotImplementedError(
++                    f"Heterogeneous-TP head splitting (total_kv_heads "
++                    f"{total_kv_heads} > prefill tp_size {remote_tp}: "
++                    f"{remote_heads} heads/rank on prefill vs {local_heads} on "
++                    "decode) requires per-head slicing of an NHD KV layout, not "
++                    "supported by MoRIIOConnector. Use PREFILL_TP_SIZE >= "
++                    "total_kv_heads so KV heads are replicated."
++                )
++
++        transfer_size_byte = slot_elems * sz
+ 
+-        transfer_size_byte = blksize * hn * hs * sz
+-        per_block = 1 if is_mla else 2
+         total = len(local_block_ids) * per_block
+         offset_local = [0] * total
+         offset_remote = [0] * total
+@@ -1688,17 +1874,9 @@
+         w = 0
+         for i, lb in enumerate(local_block_ids):
+             rb = remote_block_ids[i]
+-            # K
+-            offset_local[w] = sz * (lb * block_stride)
+-            offset_remote[w] = sz * (rb * block_stride)
+-            w += 1
+-            if not is_mla:
+-                # V
+-                # Handle num_block variations originating from PD (different kv strides)
+-                # TODO: address block_sz differences in heterogeneous TP scenarios
+-                # In MLA, we don't need to consider these two cases.
+-                offset_local[w] = sz * (1 * local_ktov_stride + lb * block_stride)
+-                offset_remote[w] = sz * (1 * remote_ktov_stride + rb * block_stride)
++            for kv in range(per_block):
++                offset_local[w] = sz * (lb * block_stride + kv * kv_stride)
++                offset_remote[w] = sz * (rb * block_stride + kv * kv_stride)
+                 w += 1
+ 
+         merged_l, merged_r, merged_s = self.merge_contiguous_blocks(
+@@ -1715,6 +1893,7 @@
+         transfer_id: str,
+         remote_host: str,
+         remote_notify_port: int,
++        remote_tp_size: int,
+     ) -> None:
+         if self.mode == MoRIIOMode.WRITE:
+             return
+@@ -1722,15 +1901,30 @@
+         dp0_engine_id = self.get_engine_name_with_dp(dst_engine_id, 0)
+         sessions, remote_moriio_meta = self._get_built_session(dp0_engine_id)
+ 
+-        first_layer = list(self.layer_name_to_local_kv_cache_metadata.keys())[0]
+-        offs = self._compute_block_transfer_offsets(
+-            first_layer, local_block_ids, remote_block_ids, remote_moriio_meta
+-        )
+-
+-        for layer_name in self.layer_name_to_local_kv_cache_metadata:
+-            sess_idx = list(self.layer_name_to_local_kv_cache_metadata.keys()).index(
+-                layer_name
++        # Heterogeneous-KV models register layers with different shapes/dtypes in
++        # a single KV-cache group sharing one block table, so block_ids match
++        # across layers but per-block byte geometry does not. Compute offsets per
++        # distinct layer geometry (memoized by shape/stride/dtype) so the rank-3
++        # bf16 indexer cache isn't read with the rank-5 fp8 main-cache sizing.
++        layer_names = list(self.layer_name_to_local_kv_cache_metadata.keys())
++        offs_by_geom: dict = {}
++        for sess_idx, layer_name in enumerate(layer_names):
++            layer_cache = self.kv_caches[layer_name]
++            geom_key = (
++                tuple(layer_cache.shape),
++                tuple(layer_cache.stride()),
++                layer_cache.dtype,
+             )
++            offs = offs_by_geom.get(geom_key)
++            if offs is None:
++                offs = self._compute_block_transfer_offsets(
++                    layer_name,
++                    local_block_ids,
++                    remote_block_ids,
++                    remote_moriio_meta,
++                    remote_tp_size=remote_tp_size,
++                )
++                offs_by_geom[geom_key] = offs
+             # TODO : apply multi-session batch-read when moriio support it
+             transfer_status = self.moriio_wrapper.read_remote_data(
+                 offs[2], offs[0], offs[1], sessions[sess_idx]
+@@ -1739,6 +1933,6 @@
+                 self._recving_transfers[request_id].append(transfer_status)
+                 self._recving_transfers_callback_addr[request_id] = (
+                     remote_host,
+-                    str(remote_notify_port + self.tp_rank),
++                    str(remote_notify_port + self._remote_tp_rank(remote_tp_size)),
+                     transfer_id,
+                 )
+--- a/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py
++++ b/vllm/distributed/kv_transfer/kv_connector/v1/moriio/moriio_engine.py
+@@ -279,21 +279,33 @@
+         Returns:
+             The transfer plan
+         """
+-        # Compute offsets if not cached
+-        if request_info.transfer_offset is None:
++        # Compute offsets per distinct layer geometry. Heterogeneous-KV models
++        # (e.g. MiniMax-M3's sparse indexer) place rank-3 bf16 and rank-5 fp8
++        # caches in one KV-cache group; caching a single offset set per request
++        # and reusing it for every layer corrupts the indexer cache. Block_ids
++        # are shared (single block table), so offsets depend only on the layer's
++        # shape/stride/dtype -- memoize by that geometry key.
++        layer_cache = self.worker.kv_caches[task.layer_name]
++        geom_key = (
++            tuple(layer_cache.shape),
++            tuple(layer_cache.stride()),
++            layer_cache.dtype,
++        )
++        offsets = request_info.transfer_offsets.get(geom_key)
++        if offsets is None:
+             offsets = self.worker._compute_block_transfer_offsets(
+                 task.layer_name,
+                 task.local_block_ids,
+                 request_info.block_ids,
+                 remote_moriio_meta,
+             )
+-            request_info.transfer_offset = offsets
++            request_info.transfer_offsets[geom_key] = offsets
+ 
+         # Get session index
+         layer_names = list(self.worker.layer_name_to_local_kv_cache_metadata.keys())
+         sess_idx = layer_names.index(task.layer_name)
+ 
+-        local_off, remote_off, sizes = request_info.transfer_offset
++        local_off, remote_off, sizes = offsets
+ 
+         return LayerTransferPlan(
+             request_id=task.request_id,
+@@ -671,9 +683,14 @@
+             raise
+ 
+     def pop_finished_req_ids(self):
+-        # producer invocation: get the set of completed requests at the decode
++        # Producer invocation: get all completion messages received since the
++        # last call. Returned as a list, NOT deduped -- with heterogeneous-TP
++        # fan-out, two different decode ranks can send byte-identical
++        # messages for the same transfer_id, and the caller (get_finished())
++        # needs to count every individual occurrence to know when all
++        # expected consumers have acked.
+         with self.lock:
+-            done_send = set(self.done_req_ids)
++            done_send = list(self.done_req_ids)
+             self.done_req_ids = []
+         return done_send
+ 

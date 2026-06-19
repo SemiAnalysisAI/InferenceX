@@ -84,8 +84,9 @@ container behavior is byte-identical to the unpatched path.
 
 ## `moriio/` (vLLM MoRIIO connector, MiniMax-M3)
 
-A unified diff (`moriio-kv-layout-fix.diff`), applied with `patch -p1`
-against the vLLM package dir inside the container, touching three files:
+A single unified diff (`moriio-minimax-m3-disagg.diff`), applied with
+`patch -p1` against the vLLM package dir inside the container, touching
+three files:
 
 ```
 /usr/local/lib/python3.12/dist-packages/vllm/distributed/kv_transfer/kv_connector/v1/moriio/
@@ -117,9 +118,35 @@ indexer cache), `num_blocks = shape[0]`; the WRITE path memoizes offsets
 per geometry. Result: disagg gsm8k `strict-match 0.9583 /
 flexible-extract 0.9575` (matches single-node). Homogeneous models
 (uniform layout) are unaffected — one geometry, one offset set, same
-result. Heterogeneous-TP P/D (prefill TP ≠ decode TP) is still a TODO
-(same as upstream). Full write-up in
+result. Full write-up in
 `/apps/ditian12/m3_disagg_manual/moriio_hetkv_fix/README.md`.
+
+The diff also bundles two heterogeneous-TP layers (no-op for homogeneous
+TP, exercised by `nvidia/amd-master.yaml`'s TP4-prefill + TP8-decode
+configs):
+
+- **heterogeneous-TP addressing + guard:** stock MoRIIOConnector always
+  addresses remote rank == local `tp_rank`, which has no listener once
+  `DECODE_TP_SIZE > PREFILL_TP_SIZE`. `_remote_tp_rank` maps each decode
+  rank to the prefill rank holding its KV head (`tp_rank // ratio`,
+  mirroring NIXL's `TpKVTopology.get_target_remote_ranks`). This is
+  byte-correct only when KV heads are **replicated** (`tp_size >=
+  total_kv_heads`, i.e. ≤1 distinct head per rank — MiniMax-M3 has 4 KV
+  heads, so any TP≥4 is replicated). The cases MoRIIO can't serve —
+  prefill TP > decode TP (needs multi-rank fan-in) and KV-head splitting
+  (`total_kv_heads > prefill_tp`, which would need per-head slicing of the
+  NHD layout, unrepresentable as one `(offset,len)` per block) — now
+  **raise `NotImplementedError`** in `_compute_block_transfer_offsets`
+  instead of silently transferring corrupt KV. (NIXL likewise only splits
+  heads in HND layout and raises otherwise.)
+- **dup-ack fan-in:** with `DECODE_TP_SIZE > PREFILL_TP_SIZE`, N decode
+  ranks read from one prefill rank and each ACKs the same `transfer_id`.
+  The producer now counts ACKs per `transfer_id` (consumer embeds its own
+  `tp_size` in the notify payload) and only reports `finished_sending`
+  once all expected consumers have ACKed — preventing both the late-ACK
+  `EngineCore` crash and freeing/reusing KV blocks while a slower decode
+  rank is still reading. Mirrors NIXL's
+  `consumer_notification_counts_by_req`.
 
 ### How to enable
 
@@ -131,7 +158,7 @@ caller sets `MORIIO_KV_PATCH=skip`. To wire it by hand (e.g. the
 
 ```bash
 patch -p1 -d /usr/local/lib/python3.12/dist-packages \
-  < $DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-kv-layout-fix.diff
+  < $DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-minimax-m3-disagg.diff
 ```
 
 (`$DI_REPO_DIR` is the InferenceX checkout root that `job.slurm` already

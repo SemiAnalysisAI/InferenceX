@@ -97,14 +97,35 @@ fi
 # diff needs no extra mount -- just an in-container `patch` call. A failed
 # apply aborts the container: silently running unpatched would silently
 # corrupt accuracy, not just skip a feature.
-_MORIIO_DIFF="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-kv-layout-fix.diff"
+#
+# The single diff bundles three layered fixes (all in patches/moriio/,
+# see patches/README.md):
+#   1. KV-layout: the load-bearing accuracy fix (axis-aware per-layer offsets;
+#      gsm8k 0.0008 -> 0.958). Required for homogeneous TP too.
+#   2. heterogeneous-TP (no-op for homogeneous TP, required for
+#      PREFILL_TP_SIZE != DECODE_TP_SIZE -- see nvidia/amd-master.yaml's TP4+TP8
+#      configs): handshake/notify port addressing maps each decode rank to the
+#      correct prefill rank instead of its own raw tp_rank (stock
+#      MoRIIOConnector has no fan-out concept at all), and guards (fail loud)
+#      the KV-head-split / prefill-TP>decode-TP cases MoRIIO can't serve.
+#   3. dup-ack: with DECODE_TP_SIZE > PREFILL_TP_SIZE, N decode ranks fan in to
+#      1 prefill rank and each sends its own completion ack for the same
+#      transfer_id. Freeing KV blocks on the first ack (the original
+#      MoRIIOConnector behavior) both crashes EngineCore on the late second ack
+#      (AssertionError in Scheduler._update_from_kv_xfer_finished) and risks
+#      silently corrupting KV if the slower decode rank's read is still in
+#      flight when the blocks are reused. Fix mirrors NIXL's
+#      consumer_notification_counts_by_req: producer counts acks per
+#      transfer_id (consumer embeds its own tp_size in the notify message) and
+#      only frees once all expected consumers have acked.
+_MORIIO_DIFF="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-minimax-m3-disagg.diff"
 _MORIIO_PATCH_CMD=""
 if [[ "${MORIIO_KV_PATCH:-auto}" != "skip" ]] \
    && [[ -f "$_MORIIO_DIFF" ]] \
    && [[ "${DOCKER_IMAGE_NAME:-}" == *"minimax-m3"* ]] \
    && [[ "${DOCKER_IMAGE_NAME:-}" != *"hetkv"* ]]; then
-    _MORIIO_PATCH_CMD="patch -p1 -d /usr/local/lib/python3.12/dist-packages < /workspace/benchmarks/multi_node/amd_utils/patches/moriio/moriio-kv-layout-fix.diff || exit 1"
-    echo "[job.slurm] will auto-apply vLLM MoRIIO KV-layout diff inside container: ${_MORIIO_DIFF}"
+    _MORIIO_PATCH_CMD="patch -p1 -d /usr/local/lib/python3.12/dist-packages < /workspace/benchmarks/multi_node/amd_utils/patches/moriio/moriio-minimax-m3-disagg.diff || exit 1"
+    echo "[job.slurm] will auto-apply vLLM MoRIIO KV-layout + heterogeneous-TP + dup-ack diff inside container: ${_MORIIO_DIFF}"
 fi
 
 xP="${xP:-1}"
