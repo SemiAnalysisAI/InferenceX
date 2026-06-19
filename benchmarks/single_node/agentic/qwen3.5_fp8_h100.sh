@@ -66,7 +66,7 @@ case "$OFFLOADING" in
         # Hybrid GDN/Mamba allocates one KV and one Mamba host pool per rank.
         REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
         if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-            echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB}GiB exceeds configured capacity ${TOTAL_CPU_DRAM_GB}GiB" >&2
+            echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
             exit 1
         fi
         TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"

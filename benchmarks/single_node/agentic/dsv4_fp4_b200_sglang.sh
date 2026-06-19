@@ -85,7 +85,7 @@ case "$OFFLOADING" in
             --hicache-io-backend "$HICACHE_IO_BACKEND"
             --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
         )
-        echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, budget=${TOTAL_CPU_DRAM_GB}GiB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+        echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
         ;;
     *)
         echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, hicache)" >&2

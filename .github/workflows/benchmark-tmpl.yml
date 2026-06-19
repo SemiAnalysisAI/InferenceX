@@ -78,7 +78,7 @@ on:
         type: string
         default: 'none'
       total-cpu-dram-gb:
-        description: "Configured CPU DRAM capacity in GiB for KV offloading"
+        description: "Configured CPU DRAM capacity in GB for KV offloading"
         required: false
         type: string
         default: '0'
