@@ -69,9 +69,6 @@ export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
 export MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
 export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
-# only for MiniMax-M3-MXFP4
-export AITER_QUICK_REDUCE_QUANTIZATION=INT4
-
 # Launch jobs based on ISL/OSL
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
 # by a list of numbers delimited by 'x'. This is because of how the underlying launch script
