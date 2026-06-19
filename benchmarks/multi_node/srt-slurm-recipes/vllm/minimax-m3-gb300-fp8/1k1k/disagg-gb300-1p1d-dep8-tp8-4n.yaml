@@ -1,38 +1,40 @@
-name: "minimax-m3-vllm-disagg-gb300-10p7d-tp4ep1-8k1k"
+name: "minimax-m3-vllm-disagg-gb300-1p1d-dep8-tp8-4n-1k1k"
 
-# MiniMax-M3 GB300 prefill-heavy max-throughput disagg, 17 nodes / 68 GPU.
-# At 8k context, prefill is 8x heavier per request: the 5P:12D ratio (tuned
-# for light 1k1k prefill) is prefill-bound — 616 reqs queued behind 5 workers.
-# This config rebalances to 10P:7D per DSR1/DSV4 GB300 patterns (DSR1 8k1k
-# uses 6P:1D; DSV4 uses 10P:8D at 18 nodes). TP4 ep1 decode (no wide EP —
-# M3's MoE all-to-all overhead makes it slower). MNNVL KV + cumem.
+# 1P DEP8 prefill (TP1 DP8 EP, 2 nodes) + 1D TP8 decode (Marlin MoE, 2 nodes) = 4 nodes.
+# Low-concurrency latency config, TP-only decode. TP8 (not TP4) to avoid Marlin OOM.
+# block-size 128 mandatory (MSA sparse cache).
 
 model:
   path: "minimax-m3-mxfp8"
   container: "vllm/vllm-openai:nightly-aarch64"
   precision: "fp8"
+
 dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
+
 sbatch_directives:
   mem: "0"
   cpus-per-task: "72"
 srun_options:
   mem: "0"
+
 slurm:
   time_limit: "8:00:00"
+
 health_check:
   max_attempts: 720
   interval_seconds: 10
+
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 10
-  decode_nodes: 7
-  prefill_workers: 10
-  decode_workers: 7
-  gpus_per_prefill: 4
-  gpus_per_decode: 4
+  prefill_nodes: 2
+  decode_nodes: 2
+  prefill_workers: 1
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
 
 frontend:
   type: dynamo
@@ -61,15 +63,16 @@ backend:
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 4
-      moe-backend: marlin
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
-      enable-cumem-allocator: true
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13346
+      enable-expert-parallel: true
       enforce-eager: true
+      max-model-len: 2304
       max-num-seqs: 16
       max-num-batched-tokens: 16384
       kv-cache-dtype: fp8
-      max-model-len: 9472
       block-size: 128
       language-model-only: true
       gpu-memory-utilization: 0.9
@@ -77,19 +80,19 @@ backend:
       no-enable-prefix-caching: true
       no-disable-hybrid-kv-cache-manager: true
       enable-ep-weight-filter: true
+      enable-sleep-mode: true
       stream-interval: 32
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 4
+      tensor-parallel-size: 8
       moe-backend: marlin
       pipeline-parallel-size: 1
-      enable-cumem-allocator: true
+      max-model-len: 2304
       max-num-seqs: 512
       max-num-batched-tokens: 512
       max-cudagraph-capture-size: 512
       kv-cache-dtype: fp8
-      max-model-len: 9472
       block-size: 128
       language-model-only: true
       gpu-memory-utilization: 0.9
@@ -102,6 +105,6 @@ backend:
 
 benchmark:
   type: "sa-bench"
-  isl: 8192
+  isl: 1024
   osl: 1024
-  concurrencies: "1024x2048x4096"
+  concurrencies: "16x32x64"

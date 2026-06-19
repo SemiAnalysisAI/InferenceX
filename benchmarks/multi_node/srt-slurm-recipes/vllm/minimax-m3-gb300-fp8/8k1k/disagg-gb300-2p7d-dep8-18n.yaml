@@ -1,9 +1,8 @@
-name: "minimax-m3-vllm-disagg-gb300-1p1d-tp4ep4-2n-8k1k"
+name: "minimax-m3-vllm-disagg-gb300-2p7d-dep8-18n-8k1k"
 
-# MiniMax-M3 disaggregated 1P+1D recipe for GB300, 2 nodes.
-# 1 node prefill (4 GPUs, TP4+EP4) → NixlConnector → 1 node decode (4 GPUs, TP4+EP4).
-# --block-size 128 is mandatory (MSA sparse/index cache alignment).
-# safetensors-load-strategy omitted — prefetch OOMs on CW GB300 host memory.
+# 2P DEP8 prefill (4 nodes) + 7D DEP8 decode (14 nodes) = 18 nodes / 72 GPU.
+# High-concurrency throughput config. DEP8 = TP1 DP8 EP on both sides.
+# block-size 128 mandatory (MSA sparse cache).
 
 model:
   path: "minimax-m3-mxfp8"
@@ -14,12 +13,6 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
-# CW gb300 has no per-GPU Slurm defaults: without sbatch-level mem=0 the
-# job allocation is ntasks x DefMemPerCPU = 4 GB/node and worker cgroups
-# OOM-kill during engine init; srun_options.mem=0 alone only grants a
-# step what the job already holds. cpus-per-task=72 (one NUMA socket)
-# keeps the gpu-less infra step (etcd/nats) off the 1-CPU default.
-# Full rationale: vllm/deepseek-v4/agentic/disagg-gb300-1p6d-dep4-tp4-agentic.yaml.
 sbatch_directives:
   mem: "0"
   cpus-per-task: "72"
@@ -36,12 +29,12 @@ health_check:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 1
-  decode_nodes: 1
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 4
-  gpus_per_decode: 4
+  prefill_nodes: 4
+  decode_nodes: 14
+  prefill_workers: 2
+  decode_workers: 7
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
 
 frontend:
   type: dynamo
@@ -70,10 +63,11 @@ backend:
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 4
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13346
       enable-expert-parallel: true
-      enable-cumem-allocator: true
       enforce-eager: true
       max-model-len: 9472
       max-num-seqs: 16
@@ -86,14 +80,16 @@ backend:
       no-enable-prefix-caching: true
       no-disable-hybrid-kv-cache-manager: true
       enable-ep-weight-filter: true
+      enable-sleep-mode: true
       stream-interval: 32
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 4
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      enable-cumem-allocator: true
       max-model-len: 9472
       max-num-seqs: 512
       max-num-batched-tokens: 512
@@ -107,10 +103,11 @@ backend:
       no-enable-prefix-caching: true
       no-disable-hybrid-kv-cache-manager: true
       enable-ep-weight-filter: true
+      enable-sleep-mode: true
       stream-interval: 50
 
 benchmark:
   type: "sa-bench"
   isl: 8192
   osl: 1024
-  concurrencies: "16x32x64x128x256"
+  concurrencies: "128x256x512x1024"
