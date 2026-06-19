@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import validate_perf_changelog as validator
 from validate_perf_changelog import (
     ChangelogValidationError,
     compare_entries,
@@ -203,7 +204,41 @@ def test_raw_correction_rejects_whitespace_only_history_change() -> None:
         )
 
 
-def test_run_sweep_checks_newline_before_reuse_and_setup() -> None:
+def test_matrix_compatible_check_allows_pr_link_only_correction(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        validator,
+        "read_git_file",
+        lambda *_args: b"  pr-link: https://example.com\n",
+    )
+
+    def reject_matrix(*_args: object) -> None:
+        raise ChangelogValidationError("matrix rejected")
+
+    monkeypatch.setattr(validator, "validate_generated_config", reject_matrix)
+    monkeypatch.setattr(
+        validator,
+        "is_pr_link_only_correction",
+        lambda *_args: True,
+    )
+
+    assert not validator.validate_matrix_compatible_change("base", "head", "file")
+
+
+def test_matrix_compatible_check_rejects_pr_1717_conflict_resolution() -> None:
+    with pytest.raises(
+        ChangelogValidationError,
+        match=r"Found deleted line: +pr-link: .*pull/1798",
+    ):
+        validator.validate_matrix_compatible_change(
+            "add33814cce15d0b71e3c98eca4bb2f7ad8aba96",
+            "60bf726a7f324a01e8850d228c8f0f7a6f203dbd",
+            "perf-changelog.yaml",
+        )
+
+
+def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     workflow = yaml.load(
         (repo_root / ".github/workflows/run-sweep.yml").read_text(),
@@ -212,8 +247,8 @@ def test_run_sweep_checks_newline_before_reuse_and_setup() -> None:
     jobs = workflow["jobs"]
     pull_request_types = workflow["on"]["pull_request"]["types"]
 
-    assert "check-changelog" not in jobs
-    assert "check-newline" in jobs
+    assert "check-changelog" in jobs
+    assert "check-newline" not in jobs
     # opened/reopened are intentionally excluded so opening or reopening a PR
     # that already carries a sweep label does not start a sweep.
     assert {"synchronize", "labeled", "unlabeled", "ready_for_review"}.issubset(
@@ -225,20 +260,24 @@ def test_run_sweep_checks_newline_before_reuse_and_setup() -> None:
         for step in jobs["setup"]["steps"]
     ]
     assert "Reject conflicting sweep labels" in setup_step_names
-    assert "needs" not in jobs["check-newline"]
-    assert jobs["reuse-sweep-gate"]["needs"] == "check-newline"
+    assert "needs" not in jobs["check-changelog"]
+    assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
     assert jobs["setup"]["needs"] == [
-        "check-newline",
+        "check-changelog",
         "reuse-sweep-gate",
     ]
     assert (
-        "needs.check-newline.result == 'success'"
+        "needs.check-changelog.result == 'success'"
         in jobs["reuse-sweep-gate"]["if"]
     )
-    assert "needs.check-newline.result == 'success'" in jobs["setup"]["if"]
-    assert "needs.check-newline.result == 'skipped'" in jobs["setup"]["if"]
-    assert "needs.check-changelog" not in jobs["reuse-sweep-gate"]["if"]
-    assert "needs.check-changelog" not in jobs["setup"]["if"]
+    assert "needs.check-changelog.result == 'success'" in jobs["setup"]["if"]
+    assert "needs.check-changelog.result == 'skipped'" in jobs["setup"]["if"]
+    check_script = "\n".join(
+        step.get("run", "")
+        for step in jobs["check-changelog"]["steps"]
+    )
+    assert "validate_perf_changelog.py" in check_script
+    assert "--matrix-compatible" in check_script
 
 
 def test_merge_helper_waits_for_pr_checks_before_merge() -> None:

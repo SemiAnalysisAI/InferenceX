@@ -205,9 +205,10 @@ must still contain complete artifacts for the merge run's expected matrix.
 The comment is the reuse authorization, so adding it does not trigger or cancel
 a PR sweep. Once the comment is present, later commits pushed to a PR with a
 full-sweep label do not start another benchmark sweep. The synchronize run
-checks the changelog's final newline before inspecting the authorization and
-continuing to setup. Removing and re-adding a sweep label explicitly starts a
-new sweep.
+checks that the changelog diff can generate the setup matrix before inspecting
+the authorization and continuing to setup. This catches malformed conflict
+resolutions before reuse can skip setup. Removing and re-adding a sweep label
+explicitly starts a new sweep.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
 It merges `main`, preserves the current main changelog bytes, canonicalizes an

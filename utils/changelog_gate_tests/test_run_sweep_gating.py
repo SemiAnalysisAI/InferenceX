@@ -2,7 +2,7 @@
 
 The simulation jobs in `.github/workflows/test-changelog-gate.yml` hand-copy
 two of the gating `if` conditions and exercise two scenarios. This test parses
-the real `check-newline` -> `reuse-sweep-gate` -> `setup` conditions out of
+the real `check-changelog` -> `reuse-sweep-gate` -> `setup` conditions out of
 `run-sweep.yml` and evaluates them with a minimal GitHub Actions expression
 engine, so it cannot drift from production and it covers every distinct
 skip/run decision.
@@ -23,7 +23,7 @@ _WF = yaml.load(
     (REPO_ROOT / ".github/workflows/run-sweep.yml").read_text(),
     Loader=yaml.BaseLoader,
 )
-NEWLINE_IF = _WF["jobs"]["check-newline"]["if"]
+CHECK_IF = _WF["jobs"]["check-changelog"]["if"]
 GATE_IF = _WF["jobs"]["reuse-sweep-gate"]["if"]
 SETUP_IF = _WF["jobs"]["setup"]["if"]
 PR_TYPES = set(_WF["on"]["pull_request"]["types"])
@@ -184,7 +184,7 @@ def _eval(expr: str, ctx: dict) -> bool:
 
 
 # --------------------------------------------------------------------------
-# DAG evaluation: check-newline -> reuse-sweep-gate -> setup
+# DAG evaluation: check-changelog -> reuse-sweep-gate -> setup
 # --------------------------------------------------------------------------
 def _ctx(sc: dict) -> dict:
     return {
@@ -198,14 +198,14 @@ def _ctx(sc: dict) -> dict:
 
 
 def run_dag(sc: dict) -> tuple[str, str, str]:
-    """Return (check-newline result, reuse-sweep-gate result, setup decision)."""
+    """Return (check-changelog result, reuse-sweep-gate result, setup decision)."""
     ctx = _ctx(sc)
 
-    if not _eval(NEWLINE_IF, ctx):
-        newline_result = "skipped"
+    if not _eval(CHECK_IF, ctx):
+        check_result = "skipped"
     else:
-        newline_result = sc.get("newline", "success")
-    ctx["needs.check-newline.result"] = newline_result
+        check_result = sc.get("check", "success")
+    ctx["needs.check-changelog.result"] = check_result
 
     if not _eval(GATE_IF, ctx):
         gate_result, skip = "skipped", ""
@@ -216,12 +216,12 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
     ctx["needs.reuse-sweep-gate.outputs.skip-pr-sweep"] = skip
 
     setup = "RUN" if _eval(SETUP_IF, ctx) else "SKIP"
-    return newline_result, gate_result, setup
+    return check_result, gate_result, setup
 
 
 _PR = {"event": "pull_request", "draft": False}
 
-# (id, scenario, expected (newline, reuse, setup))
+# (id, scenario, expected (check, reuse, setup))
 CASES = [
     ("PR-sync-full-noreuse",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
@@ -229,9 +229,9 @@ CASES = [
     ("PR-sync-full-reuse-authorized",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
       "reuse_auth": True}, ("success", "success", "SKIP")),
-    ("PR-sync-full-newline-failure",
+    ("PR-sync-full-changelog-failure",
      {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
-      "newline": "failure"}, ("failure", "skipped", "SKIP")),
+      "check": "failure"}, ("failure", "skipped", "SKIP")),
     ("PR-sync-trim-sweep-enabled",
      {**_PR, "action": "synchronize", "labels": ["sweep-enabled"]},
      ("success", "skipped", "RUN")),
@@ -305,13 +305,13 @@ def test_trigger_types_enable_gated_events() -> None:
 # strings; any disagreement is either a spec error or a gating bug.
 # --------------------------------------------------------------------------
 def reference_gate(sc: dict) -> tuple[str, str, str]:
-    """Hand-written reference for (newline, reuse, setup) from intent."""
+    """Hand-written reference for (check, reuse, setup) from intent."""
     labels = set(sc.get("labels", []))
     draft = sc.get("draft", False)
     is_pr = sc["event"] == "pull_request"
     action = sc.get("action")
 
-    newline_runs = (
+    check_runs = (
         is_pr
         and not draft
         and (
@@ -319,10 +319,10 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
             or sc.get("label_name") in SWEEP_LABELS
         )
     )
-    newline = sc.get("newline", "success") if newline_runs else "skipped"
+    check = sc.get("check", "success") if check_runs else "skipped"
 
     gate_runs = (
-        newline == "success"
+        check == "success"
         and is_pr
         and sc.get("action") == "synchronize"
         and not draft
@@ -340,9 +340,9 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
     else:
         event_ok = "[skip-sweep]" not in sc.get("msg", "")
 
-    newline_clause = newline in ("success", "skipped")
-    runs = newline_clause and reuse_clause and event_ok
-    return newline, reuse, ("RUN" if runs else "SKIP")
+    check_clause = check in ("success", "skipped")
+    runs = check_clause and reuse_clause and event_ok
+    return check, reuse, ("RUN" if runs else "SKIP")
 
 
 def _all_scenarios() -> list[dict]:
@@ -363,12 +363,12 @@ def _all_scenarios() -> list[dict]:
         label_cfgs,                         # labels
         ["full-sweep-enabled", "sweep-enabled", "documentation", None],  # label.name
         [False, True],                      # reuse authorized
-        ["success", "failure"],             # newline outcome when it runs
+        ["success", "failure"],             # changelog outcome when it runs
     )
     scenarios = [
         {"event": "pull_request", "action": a, "draft": d, "labels": labs,
-         "label_name": ln, "reuse_auth": r, "newline": nl}
-        for a, d, labs, ln, r, nl in pr_axes
+         "label_name": ln, "reuse_auth": r, "check": chk}
+        for a, d, labs, ln, r, chk in pr_axes
     ]
     scenarios += [
         {"event": "push", "msg": msg}
@@ -387,7 +387,7 @@ def test_exhaustive_cross_product() -> None:
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
     # (4 actions x 2 draft x 9 label-configs x 4 label-names x 2 reuse x
-    # 2 newline outcomes = 1152 PR cases, plus 2 push cases).
+    # 2 changelog outcomes = 1152 PR cases, plus 2 push cases).
     assert len(scenarios) == 1154
 
 

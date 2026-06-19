@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate append-only perf-changelog.yaml changes."""
+"""Validate perf-changelog.yaml changes."""
 
 from __future__ import annotations
 
@@ -343,6 +343,63 @@ def validate_generated_config(base_ref: str, head_ref: str, path: str) -> None:
         ) from exc
 
 
+def is_pr_link_only_correction(
+    base_ref: str,
+    head_ref: str,
+    path: str,
+) -> bool:
+    """Return whether every substantive changed line is a pr-link replacement."""
+    diff = run_git(
+        "diff",
+        "--unified=0",
+        base_ref,
+        head_ref,
+        "--",
+        path,
+    ).stdout
+    removed: list[str] = []
+    added: list[str] = []
+
+    for line in diff.splitlines():
+        if line.startswith("---") or line.startswith("+++"):
+            continue
+        if line.startswith("-") and line[1:].strip():
+            removed.append(line[1:])
+        elif line.startswith("+") and line[1:].strip():
+            added.append(line[1:])
+
+    return (
+        bool(removed)
+        and bool(added)
+        and len(removed) == len(added)
+        and all(line.startswith("  pr-link:") for line in [*removed, *added])
+    )
+
+
+def validate_matrix_compatible_change(
+    base_ref: str,
+    head_ref: str,
+    path: str,
+) -> bool:
+    """Validate the diff accepted by sweep setup, or a pr-link-only correction.
+
+    Returns whether the change generated a sweep matrix.
+    """
+    head_raw = read_git_file(head_ref, path)
+    if not head_raw.endswith(b"\n"):
+        raise ChangelogValidationError(
+            f"{path} at {head_ref} does not end with a newline"
+        )
+
+    try:
+        validate_generated_config(base_ref, head_ref, path)
+    except ChangelogValidationError:
+        if is_pr_link_only_correction(base_ref, head_ref, path):
+            return False
+        raise
+    return True
+
+
 def validate_changelog(
     base_ref: str,
     head_ref: str,
@@ -420,12 +477,34 @@ def main() -> int:
     parser.add_argument("--changelog-file", default="perf-changelog.yaml")
     parser.add_argument("--pr-number", type=int)
     parser.add_argument(
+        "--matrix-compatible",
+        action="store_true",
+        help=(
+            "run the same matrix validation as sweep setup, while allowing "
+            "pr-link-only corrections that do not produce a matrix"
+        ),
+    )
+    parser.add_argument(
         "--github-output",
         default=os.environ.get("GITHUB_OUTPUT"),
     )
     args = parser.parse_args()
 
     try:
+        if args.matrix_compatible:
+            generated_matrix = validate_matrix_compatible_change(
+                args.base_ref,
+                args.head_ref,
+                args.changelog_file,
+            )
+            detail = (
+                "matrix generated"
+                if generated_matrix
+                else "pr-link-only correction; no matrix required"
+            )
+            print(f"Validated {args.changelog_file}: {detail}")
+            return 0
+
         additions, corrections = validate_changelog(
             args.base_ref,
             args.head_ref,
