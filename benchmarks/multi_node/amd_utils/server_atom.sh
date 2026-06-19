@@ -52,7 +52,6 @@ BLOCK_SIZE="${BLOCK_SIZE:-16}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
 MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-}"
-CUDAGRAPH_OPT="${CUDAGRAPH_OPT:-}"
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
 # Benchmark Configuration
@@ -124,6 +123,7 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
     fi
 fi 
 
+# (srok), split DPA & TBO cases
 DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
@@ -160,6 +160,10 @@ if [[ -n "$MAX_MODEL_LEN" ]]; then
 fi
 if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS}"
+fi
+
+if [[ "$MODEL_NAME" != "DeepSeek-V4-Pro" ]]; then
+    export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 fi
 
 cat <<INFO
@@ -509,7 +513,6 @@ else
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
         --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
-        ${CUDAGRAPH_OPT} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
