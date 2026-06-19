@@ -1,15 +1,15 @@
-<div align="center">
-
-[English](./README.md) | **中文**
-
-</div>
-
 #  InferenceX™，开源持续推理标准与研究平台
 ## 受到 OpenAI、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/SemiAnalysisAI/InferenceX/pulls)
 [![GitHub Stars](https://img.shields.io/github/stars/SemiAnalysisAI/InferenceX?style=social)](https://github.com/SemiAnalysisAI/InferenceX)
+
+<div align="center">
+
+[English](./README.md) | **中文**
+
+</div>
 
 InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致力于持续分析与基准测试全球最受欢迎的开源推理框架——这些框架被各大 Token 工厂与模型广泛采用，以实时追踪其真实性能。随着这些软件栈不断改进，InferenceX™ 会以近乎实时的方式捕捉这些进展，提供一个反映推理性能进步的实时指标。我们在 https://inferencex.com/ 上免费公开提供了一个[开源](https://github.com/SemiAnalysisAI/InferenceX-app)的实时仪表盘。
 
