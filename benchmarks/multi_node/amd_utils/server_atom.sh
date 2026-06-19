@@ -183,6 +183,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --host 0.0.0.0 --server-port ${PREFILL_PORT} \
         --trust-remote-code \
         "${PREFILL_PARALLEL_ARGS[@]}" \
+        "${SPEC_ARGS[@]}" \
         --kv_cache_dtype ${KV_CACHE_DTYPE} \
         --block-size ${BLOCK_SIZE} \
         --gpu-memory-utilization ${MEM_FRAC_STATIC} \
