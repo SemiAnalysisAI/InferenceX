@@ -2801,11 +2801,29 @@ minimaxm3-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
-    # 8k1k disagg sweep across three P/D layouts (1P TP8 + 1D TP8 conc 1..1024;
-    # 1P TP4 + 1D TP8 conc 1..256; 1P TP4 + 1D TP4 conc 64..1024). The multi-node
-    # eval policy (8k1k + conc >= 16) marks one lm-eval on the highest-max-conc
-    # layout (TP8+TP8, eval-conc=median=128) — validating the M3 MoRI-IO disagg
-    # pipeline's correctness end-to-end.
+      # 2P TP4 + 1D TP8: two half-node TP4 prefill workers (PREFILL_NODES=2)
+      # feeding one full-node TP8 decode, at high conc 256,512,768,1024.
+      - spec-decoding: "none"
+        conc-list: [ 256, 512, 768, 1024 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+    # 8k1k disagg sweep across four P/D layouts (1P TP8 + 1D TP8 conc 1..1024;
+    # 1P TP4 + 1D TP8 conc 1..256; 1P TP4 + 1D TP4 conc 64..1024; 2P TP4 + 1D TP8
+    # conc 256..1024). The multi-node eval policy (8k1k + conc >= 16) marks one
+    # lm-eval on the highest-max-conc layout (TP8+TP8, eval-conc=median=128) —
+    # validating the M3 MoRI-IO disagg pipeline's correctness end-to-end.
     - isl: 8192
       osl: 1024
       search-space:
@@ -2856,6 +2874,24 @@ minimaxm3-fp8-mi355x-vllm-disagg:
         decode:
           num-worker: 1
           tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+      # 2P TP4 + 1D TP8: two half-node TP4 prefill workers (PREFILL_NODES=2)
+      # feeding one full-node TP8 decode, at high conc 256,512,768,1024.
+      - spec-decoding: "none"
+        conc-list: [ 256, 512, 768, 1024 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
