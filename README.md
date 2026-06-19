@@ -1,5 +1,5 @@
 #  InferenceX™, Open Source Continuous Inference Standard and Research Platform 
-## Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Microsoft, Oracle, etc, & ML Community such as PyTorch Foundation, vLLM, SGLang, Tri Dao
+## Trusted by Operators of Trillion Dollar Token Factories such as OpenAI, Meta, Microsoft, Oracle, etc, & ML Community such as PyTorch Foundation, vLLM, SGLang, Tri Dao
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/SemiAnalysisAI/InferenceX/pulls)
@@ -15,7 +15,8 @@
 
 - **[2026/06]** 🔥 MiniMax M3: continuous benchmarks live since Day 0 [dashboard](https://inferencex.semianalysis.com/inference?preset=minimax-m3-launch)
 - **[2026/04]** 🔥 DeepSeek V4 Pro 1.6T: continuous benchmarks live since Day 0 [article](https://newsletter.semianalysis.com/p/deepseekv4-16t-day-0-to-day-43-performance), [dashboard](https://inferencex.semianalysis.com/inference?preset=dsv4-launch)
-- **[2026/03]** Added Kimi K2.5 (same architecture as Kimi 2.7-Code), Qwen3.5-397B, GLM5 (same arch as GLM5.1), and MiniMax M2.5 (same arch as MiniMax M2.7) [dashboard](https://inferencex.semianalysis.com/)
+- **[2026/03]** 🔥 Qwen3.5 397B: continuous benchmarks live since Day 0 [dashboard](https://inferencex.semianalysis.com/)
+- **[2026/03]** Added Kimi K2.5 (same architecture as Kimi 2.7-Code), GLM5 (same arch as GLM5.1), and MiniMax M2.5 (same arch as MiniMax M2.7) [dashboard](https://inferencex.semianalysis.com/)
 - **[2026/02]** GB300 NVL72: added to InferenceX & continuously benchmarked [SGLang Maintainer Lmsys Blog](https://www.lmsys.org/blog/2026-02-20-gb300-inferencex/)
 - **[2026/02]** 🔥 InferenceX v2 launch — NVIDIA Blackwell vs AMD vs Hopper [article](https://newsletter.semianalysis.com/p/inferencex-v2-nvidia-blackwell-vs)
 - **[2025/10]** 🔥 InferenceX (formerly InferenceMAX) v1 launch [article](https://newsletter.semianalysis.com/p/inferencemax-open-source-inference)
