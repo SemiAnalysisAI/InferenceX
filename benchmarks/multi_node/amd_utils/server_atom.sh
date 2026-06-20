@@ -502,6 +502,7 @@ else
     RANK=$((NODE_RANK - NODE_OFFSET))
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
+    _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
     if [[ "$_MAX_CONC" -gt 2048 ]]; then
         CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048,4096]'
     elif [[ "$_MAX_CONC" -gt 1024 ]]; then
