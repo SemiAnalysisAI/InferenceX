@@ -55,7 +55,7 @@ YAML: kebab-case field names (`model-prefix`, `conc-start`, `dp-attn`). Master c
 
 Bash: source shared utilities via `source benchmark_lib.sh` (`check_env_vars`, `wait_for_server_ready`, `run_benchmark_serving`, `run_eval`, `append_lm_eval_summary`); parameters passed via env vars. **MTP scripts MUST pass `--use-chat-template` to `run_benchmark_serving`** - EAGLE-style spec decoding is trained against chat-formatted inputs; benchmarking against raw prompts silently regresses acceptance rate. Applies to every `*_mtp.sh`.
 
-Git: conventional commit messages. `[skip-sweep]` in commit message skips benchmarks (push-to-main only). Changes to `perf-changelog.yaml` trigger benchmark runs.
+Git: conventional commit messages. `[skip-sweep]` in the latest PR head commit skips that PR's benchmark setup after changelog validation. It is ignored on pushes to `main`. Changes to `perf-changelog.yaml` trigger benchmark runs.
 
 Docs: the README is bilingual — `README.md` (English, default) and `README_zh.md` (Simplified Chinese), with an `English | 中文` switcher under the badges. **Any edit to `README.md` MUST be mirrored in `README_zh.md`, and vice versa** — keep the two in sync (same sections, links, badges, images) and update both in the same PR.
 
@@ -71,7 +71,7 @@ PRs do not run the sweep automatically - `run-sweep.yml` is gated on a label. Pi
 
 **The sweep does not trigger while the PR has merge conflicts.** Even with `sweep-enabled`, `full-sweep-enabled`, `non-canary-full-sweep-enabled`, or `full-sweep-fail-fast` applied, the `run-sweep.yml` workflow will not start until the PR cleanly merges into main — a stale claude/* or update-* branch with a `perf-changelog.yaml` conflict (the common case) will sit in NO_SWEEP / NO_SUCCESS until rebased. Resolution recipe is documented in `KLAUD_DEBUG.md §1.1`: `git merge origin/main`, then `git checkout origin/main -- perf-changelog.yaml`, then re-append the PR's own changelog entry at the tail. Don't 3-way merge `perf-changelog.yaml`; whitespace edits silently re-trigger the deletion check.
 
-Push-to-main always runs the full untrimmed sweep unless `[skip-sweep]` is in the commit message. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the lowest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[min(conc)]`.
+Push-to-main always enters sweep setup: it either reuses approved full-sweep artifacts or runs the full untrimmed sweep. `[skip-sweep]` never suppresses a main-branch sweep. For PR runs, the marker in the latest head commit skips benchmark setup while still allowing changelog validation and reuse authorization checks. Trim logic lives in `trim_conc()` in `utils/process_changelog.py`: single-node entries are grouped by every non-`conc` field and only the lowest-`conc` entry per group is kept; multi-node entries have their `conc` list collapsed to `[min(conc)]`.
 
 ## Common Tasks
 
@@ -136,7 +136,7 @@ Update the image tag in the relevant `.github/configs/*-master.yaml` and/or `ben
 
 Optional accuracy checks ensuring inference optimizations do not degrade outputs. See `utils/evals/EVALS.md` for the full reference.
 
-Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`; evals run by default on the 8k1k subset. Workflow jobs run separately from throughput jobs in `EVAL_ONLY=true` mode. Flags on `generate_sweep_configs.py full-sweep`: `--no-evals` to skip, `--evals-only` for the eval subset only. Aggregated output produced by `utils/collect_eval_results.py`.
+Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generate_sweep_configs.py`; evals run by default on the 8k1k subset. Workflow jobs run separately from throughput jobs in `EVAL_ONLY=true` mode. Flags on `generate_sweep_configs.py`: `--no-evals` to skip, `--evals-only` for the selected eval subset only, and `--all-evals` to expand eval-only selection across every generated fixed-sequence config. `--all-evals` composes with `--evals-only` and remains a standalone shorthand. Changelog `all-evals: true` has the same layered behavior and suppresses throughput jobs for that entry. Aggregated output produced by `utils/collect_eval_results.py`.
 
 ## Key Files
 

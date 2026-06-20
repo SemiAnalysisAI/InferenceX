@@ -208,6 +208,9 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
     else:
         check_result = sc.get("check", "success")
     ctx["needs.check-changelog.result"] = check_result
+    ctx["needs.check-changelog.outputs.skip-pr-sweep"] = (
+        "true" if "[skip-sweep]" in sc.get("msg", "") else "false"
+    )
 
     if not _eval(GATE_IF, ctx):
         gate_result, skip = "skipped", ""
@@ -259,12 +262,16 @@ CASES = [
     ("PR-ready-for-review",
      {**_PR, "action": "ready_for_review", "labels": ["full-sweep-enabled"],
       "reuse_auth": False}, ("success", "skipped", "RUN")),
+    ("PR-sync-skip-sweep-tag",
+     {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
+      "msg": "fix: docs [skip-sweep]"},
+     ("success", "success", "SKIP")),
     ("push-additions-no-skip",
      {"event": "push", "msg": "feat: add model"},
      ("skipped", "skipped", "RUN")),
-    ("push-skip-sweep-tag",
+    ("push-skip-sweep-tag-ignored",
      {"event": "push", "msg": "fix: x [skip-sweep]"},
-     ("skipped", "skipped", "SKIP")),
+     ("skipped", "skipped", "RUN")),
 ]
 
 
@@ -347,9 +354,14 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
         action_ok = action not in ("labeled", "unlabeled") or (
             sc.get("label_name") in SWEEP_LABELS
         )
-        event_ok = (not draft) and bool(labels & SWEEP_LABELS) and action_ok
+        event_ok = (
+            (not draft)
+            and bool(labels & SWEEP_LABELS)
+            and action_ok
+            and "[skip-sweep]" not in sc.get("msg", "")
+        )
     else:
-        event_ok = "[skip-sweep]" not in sc.get("msg", "")
+        event_ok = True
 
     check_clause = check in ("success", "skipped")
     runs = check_clause and reuse_clause and event_ok
@@ -375,11 +387,12 @@ def _all_scenarios() -> list[dict]:
         ["full-sweep-enabled", "sweep-enabled", "documentation", None],  # label.name
         [False, True],                      # reuse authorized
         ["success", "failure"],             # changelog outcome when it runs
+        ["feat: add model", "fix: thing [skip-sweep]"],  # head commit message
     )
     scenarios = [
         {"event": "pull_request", "action": a, "draft": d, "labels": labs,
-         "label_name": ln, "reuse_auth": r, "check": chk}
-        for a, d, labs, ln, r, chk in pr_axes
+         "label_name": ln, "reuse_auth": r, "check": chk, "msg": msg}
+        for a, d, labs, ln, r, chk, msg in pr_axes
     ]
     scenarios += [
         {"event": "push", "msg": msg}
@@ -398,8 +411,8 @@ def test_exhaustive_cross_product() -> None:
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
     # (4 actions x 2 draft x 9 label-configs x 4 label-names x 2 reuse x
-    # 2 changelog outcomes = 1152 PR cases, plus 2 push cases).
-    assert len(scenarios) == 1154
+    # 2 changelog outcomes x 2 messages = 2304 PR cases, plus 2 push cases).
+    assert len(scenarios) == 2306
 
 
 def test_named_cases_match_reference_spec() -> None:

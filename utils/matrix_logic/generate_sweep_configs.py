@@ -41,11 +41,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         - Ignore entries with conc < MIN_EVAL_CONC
         - Mark all entries at the highest CONC (all TPs)
         - Mark all entries at the median CONC (all TPs)
-    - Multi-node: for each unique (model, runner, framework, precision,
-      spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
-      Ignore entries with all conc values < MIN_EVAL_CONC. Mark the entry with
-      the highest max concurrency among the remaining entries. Sets eval-conc to
-      the median of the eligible conc list to avoid OOM during eval.
+    - Multi-node: only consider 8k1k entries. For every distinct parallelism
+      configuration:
+        - Ignore entries with all conc values < MIN_EVAL_CONC
+        - Mark the entry containing its highest eligible concurrency
+        - Set eval-conc to that highest eligible concurrency
     """
     from collections import defaultdict
 
@@ -58,8 +58,27 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         conc_values = conc if isinstance(conc, list) else [conc]
         return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
 
-    def _max_eval_conc(ie):
-        return max(_eligible_eval_concs(ie[1]))
+    def _freeze(value):
+        if isinstance(value, dict):
+            return tuple(sorted((key, _freeze(item)) for key, item in value.items()))
+        if isinstance(value, list):
+            return tuple(_freeze(item) for item in value)
+        return value
+
+    def _parallelism_key(entry):
+        # Keep complete prefill/decode dictionaries so worker count, TP, EP,
+        # DP-attention, and launch settings all distinguish configurations.
+        ignored_fields = {
+            Fields.CONC.value,
+            Fields.RUN_EVAL.value,
+            Fields.EVAL_ONLY.value,
+            Fields.EVAL_CONC.value,
+        }
+        return tuple(sorted(
+            (key, _freeze(value))
+            for key, value in entry.items()
+            if key not in ignored_fields
+        ))
 
     # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
     # Only 8k1k entries with a top-level TP (single-node schema).
@@ -91,9 +110,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
-    # Multi-node: group by (model, runner, framework, precision, spec-decoding, prefill-dp, decode-dp).
-    # Only 8k1k entries with a prefill key (multi-node schema).
-    # Pick the entry with the highest max concurrency per group.
+    # Multi-node: group rows that differ only in concurrency, then evaluate each
+    # distinct parallelism configuration at its highest configured concurrency.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -102,25 +120,15 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             continue
-        if not _eligible_eval_concs(entry):
+        eval_concs = _eligible_eval_concs(entry)
+        if not eval_concs:
             continue
-        key = (
-            entry[Fields.MODEL.value],
-            entry[Fields.RUNNER.value],
-            entry[Fields.FRAMEWORK.value],
-            entry[Fields.PRECISION.value],
-            entry[Fields.SPEC_DECODING.value],
-            entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value),
-            entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value),
-        )
-        mn_groups[key].append((i, entry))
+        mn_groups[_parallelism_key(entry)].append((i, eval_concs[-1]))
 
     for entries in mn_groups.values():
-        best_idx, best_entry = max(entries, key=_max_eval_conc)
+        best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
         eval_indices.add(best_idx)
-        # Set eval-conc to median of eligible conc values to avoid OOM during eval
-        eval_concs = _eligible_eval_concs(best_entry)
-        mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
+        mn_eval_conc[best_idx] = best_eval_conc
 
     # Mark the selected entries (skip agentic entries which don't support evals)
     for i, entry in enumerate(matrix_values):
@@ -129,6 +137,31 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         entry[Fields.RUN_EVAL.value] = i in eval_indices
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
+
+    return matrix_values
+
+
+def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
+    """Expand eval selection to every fixed-sequence entry.
+
+    Agentic entries are left untouched because they do not support lm-eval.
+    Multi-node entries use the upper median of their concurrency list for the
+    eval request concurrency unless the default eval policy already selected
+    an eval concurrency.
+    """
+    for entry in matrix_values:
+        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            continue
+
+        entry[Fields.RUN_EVAL.value] = True
+        if (
+            Fields.PREFILL.value in entry
+            and entry.get(Fields.EVAL_CONC.value) is None
+        ):
+            conc = entry[Fields.CONC.value]
+            conc_values = conc if isinstance(conc, list) else [conc]
+            sorted_concs = sorted(conc_values)
+            entry[Fields.EVAL_CONC.value] = sorted_concs[len(sorted_concs) // 2]
 
     return matrix_values
 
@@ -143,6 +176,15 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
     Assumes all_config_data has been validated by validate_master_config().
     """
+    if args.step_size <= 1:
+        raise ValueError("step_size must be greater than 1")
+    if (
+        args.min_conc is not None
+        and args.max_conc is not None
+        and args.min_conc > args.max_conc
+    ):
+        raise ValueError("min_conc must be less than or equal to max_conc")
+
     # Validate runner types if specified
     if args.runner_type:
         valid_runner_types = set(runner_data.keys())
@@ -297,8 +339,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
-                    conc_start = bmk[Fields.CONC_START.value]
-                    conc_end = bmk[Fields.CONC_END.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
@@ -318,31 +358,68 @@ def generate_full_sweep(args, all_config_data, runner_data):
                         if ep is not None and ep > args.max_ep:
                             ep = args.max_ep
 
-                    # Apply min-conc filter if specified
-                    # If conc_end < min_conc, skip this config entirely
-                    if args.min_conc is not None:
-                        if args.min_conc <= 0:
-                            continue  # Skip if min_conc is not positive
-                        if conc_end < args.min_conc:
-                            continue  # Skip if entire range is below min_conc
-                        conc_start = max(conc_start, args.min_conc)
+                    conc_list = bmk.get(Fields.CONC_LIST.value)
+                    if conc_list:
+                        conc_values = list(conc_list)
 
-                    # Apply max-conc filter if specified
-                    # If conc_start > max_conc, use max_conc as both start and end (if valid)
-                    if args.max_conc is not None:
-                        if args.max_conc <= 0:
-                            continue  # Skip if max_conc is not positive
-                        if conc_start > args.max_conc:
-                            conc_start = args.max_conc
-                            conc_end = args.max_conc
-                        else:
-                            conc_end = min(conc_end, args.max_conc)
+                        if args.min_conc is not None:
+                            if args.min_conc <= 0:
+                                continue
+                            conc_values = [
+                                conc for conc in conc_values
+                                if conc >= args.min_conc
+                            ]
+                            if not conc_values:
+                                continue
+
+                        if args.max_conc is not None:
+                            if args.max_conc <= 0:
+                                continue
+                            filtered_conc = [
+                                conc for conc in conc_values
+                                if conc <= args.max_conc
+                            ]
+                            conc_values = (
+                                filtered_conc
+                                if filtered_conc
+                                else [args.max_conc]
+                            )
+                    else:
+                        conc_start = bmk[Fields.CONC_START.value]
+                        conc_end = bmk[Fields.CONC_END.value]
+
+                        # If conc_end < min_conc, skip this config entirely.
+                        if args.min_conc is not None:
+                            if args.min_conc <= 0:
+                                continue
+                            if conc_end < args.min_conc:
+                                continue
+                            conc_start = max(conc_start, args.min_conc)
+
+                        # If conc_start > max_conc, use max_conc directly.
+                        if args.max_conc is not None:
+                            if args.max_conc <= 0:
+                                continue
+                            if conc_start > args.max_conc:
+                                conc_start = args.max_conc
+                                conc_end = args.max_conc
+                            else:
+                                conc_end = min(conc_end, args.max_conc)
+
+                        conc_values = []
+                        conc = conc_start
+                        while conc <= conc_end:
+                            conc_values.append(conc)
+                            if conc == conc_end:
+                                break
+                            conc *= args.step_size
+                            if conc > conc_end:
+                                conc = conc_end
 
                     seq_len_str = seq_len_to_str(isl, osl)
                     runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                    conc = conc_start
-                    while conc <= conc_end:
+                    for conc in conc_values:
                         for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
@@ -371,12 +448,6 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                             validate_matrix_entry(entry, is_multinode)
                             matrix_values.append(entry)
-
-                        if conc == conc_end:
-                            break
-                        conc *= args.step_size
-                        if conc > conc_end:
-                            conc = conc_end
 
         # ---- Agentic-coding scenarios ----
         agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
@@ -941,6 +1012,14 @@ def main():
         help='When specified, run ONLY the eval subset (excludes non-eval configs).'
     )
     parent_parser.add_argument(
+        '--all-evals',
+        action='store_true',
+        help=(
+            'Expand eval selection to every generated fixed-sequence config. '
+            'Can be combined with --evals-only; used alone, it also emits eval-only jobs.'
+        )
+    )
+    parent_parser.add_argument(
         '--runner-node-filter',
         required=False,
         help='Filter runner nodes by substring match (e.g., "amd" to only include nodes containing that string). Expands each config to individual matching nodes.'
@@ -1136,6 +1215,17 @@ def main():
 
     args = parser.parse_args()
     apply_node_type_defaults(args)
+    if args.command == 'full-sweep' and args.step_size <= 1:
+        parser.error("--step-size must be greater than 1")
+    if (
+        args.command == 'full-sweep'
+        and args.min_conc is not None
+        and args.max_conc is not None
+        and args.min_conc > args.max_conc
+    ):
+        parser.error("--min-conc must be less than or equal to --max-conc")
+    if args.no_evals and args.all_evals:
+        parser.error("--all-evals cannot be combined with --no-evals")
 
     # Load and validate configuration files (validation happens by default in load functions)
     all_config_data = load_config_files(args.config_files)
@@ -1152,13 +1242,16 @@ def main():
     else:
         parser.error(f"Unknown command: {args.command}")
         
-    # Handle eval options (mutually exclusive: --no-evals or --evals-only)
+    # Apply the existing eval policy first, then expand it when requested.
     if not args.no_evals:
         matrix_values = mark_eval_entries(matrix_values)
-        if args.evals_only:
-            matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
-            for e in matrix_values:
-                e[Fields.EVAL_ONLY.value] = True
+        if args.all_evals:
+            matrix_values = mark_all_eval_entries(matrix_values)
+
+    if args.evals_only or args.all_evals:
+        matrix_values = [e for e in matrix_values if e.get(Fields.RUN_EVAL.value, False)]
+        for entry in matrix_values:
+            entry[Fields.EVAL_ONLY.value] = True
 
     print(json.dumps(matrix_values))
     return matrix_values

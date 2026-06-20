@@ -12,6 +12,7 @@ on:
       - "utils/find_reusable_sweep_run.py"
       - "utils/test_find_reusable_sweep_run.py"
       - "utils/process_changelog.py"
+      - "utils/test_process_changelog.py"
       - "utils/prepare_perf_changelog_merge.py"
       - "utils/recover_failed_ingest.py"
       - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
@@ -62,4 +63,5 @@ jobs:
             utils/changelog_gate_tests/test_recover_failed_ingest.py \
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
+            utils/test_process_changelog.py \
             -v

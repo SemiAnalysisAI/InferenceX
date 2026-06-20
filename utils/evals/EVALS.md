@@ -10,7 +10,18 @@ Evals run as **separate workflow jobs** from throughput benchmarks. The selectio
 
 **Single-node**: At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k.
 
-**Multi-node**: One entry per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) with the highest max eligible concurrency, only for 8k1k. The eval job runs at `eval-conc`, the upper median of that config's eligible concurrency list.
+**Multi-node**: Every distinct parallelism configuration, only for 8k1k. Rows that differ only by concurrency are treated as one configuration. Each eval job runs at `eval-conc`, the highest eligible concurrency across those rows.
+
+Generator eval modes:
+
+- Default: run throughput for every generated config and eval-only jobs for the selected subset above.
+- `--no-evals`: generate throughput jobs only.
+- `--evals-only`: generate eval-only jobs for the selected subset above.
+- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. Existing `eval-conc` choices from the default policy are preserved; newly added multi-node jobs use the upper median of each entry's full concurrency list.
+
+The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
+
+When multiple appended changelog entries reference the same config, benchmark deduplication is scenario-aware: a `fixed-seq-len` entry does not suppress a separate `agentic-coding` entry. Eval deduplication only consumes fixed-sequence coverage, and a broader `all-evals` entry takes precedence over the default eval subset for overlapping configs.
 
 ## Why?
 To verify how model outputs are affected by throughput optimizations.
