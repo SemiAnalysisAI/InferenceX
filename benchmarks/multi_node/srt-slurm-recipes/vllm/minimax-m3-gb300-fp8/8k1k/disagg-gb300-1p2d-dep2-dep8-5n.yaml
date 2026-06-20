@@ -1,9 +1,7 @@
-name: "minimax-m3-vllm-disagg-gb300-2p2d-tep4-dep8-6n-1k1k"
+name: "minimax-m3-vllm-disagg-gb300-1p2d-dep2-dep8-fp8-8k1k"
 
-# 2P TEP4 prefill (2 nodes) + 2D DEP8 decode (4 nodes) = 6 nodes
-# / 24 GPU. High-concurrency throughput config. B300 optimal at
-# conc 1024 is DEP8 (TP1 DP8 EP, dp-attn). Each decode worker
-# spans 2 GB300 nodes (8 GPU) over NVL72 NVLink.
+# 1P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 2D DEP8 (TP1 DP8 EP)
+# decode = 5 nodes (1P + 4D). Adapted from NV B300 PR #1863.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -30,11 +28,11 @@ health_check:
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
-  prefill_nodes: 2
+  prefill_nodes: 1
   decode_nodes: 4
-  prefill_workers: 2
+  prefill_workers: 1
   decode_workers: 2
-  gpus_per_prefill: 4
+  gpus_per_prefill: 2
   gpus_per_decode: 8
 
 frontend:
@@ -47,6 +45,7 @@ backend:
 
   prefill_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
@@ -55,6 +54,7 @@ backend:
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
+    VLLM_FLOAT32_MATMUL_PRECISION: "high"
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
@@ -64,49 +64,42 @@ backend:
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
-      tensor-parallel-size: 4
-      pipeline-parallel-size: 1
+      tensor-parallel-size: 1
+      data-parallel-size: 2
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      enforce-eager: true
-      max-model-len: 2304
-      max-num-seqs: 16
-      max-num-batched-tokens: 16384
-      kv-cache-dtype: fp8
-      block-size: 128
-      language-model-only: true
-      gpu-memory-utilization: 0.9
       trust-remote-code: true
       no-enable-prefix-caching: true
-      no-disable-hybrid-kv-cache-manager: true
-      enable-ep-weight-filter: true
-      enable-sleep-mode: true
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      max-model-len: 9472
+      language-model-only: true
+      kv-cache-dtype: fp8
       stream-interval: 32
+      max-cudagraph-capture-size: 2048
+      max-num-batched-tokens: 16384
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 1
-      pipeline-parallel-size: 1
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-model-len: 2304
-      max-num-seqs: 512
-      max-num-batched-tokens: 512
-      max-cudagraph-capture-size: 512
-      kv-cache-dtype: fp8
-      block-size: 128
-      language-model-only: true
-      gpu-memory-utilization: 0.9
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       trust-remote-code: true
       no-enable-prefix-caching: true
-      no-disable-hybrid-kv-cache-manager: true
-      enable-ep-weight-filter: true
-      enable-sleep-mode: true
-      stream-interval: 128
+      block-size: 128
+      gpu-memory-utilization: 0.90
+      max-model-len: 9472
+      language-model-only: true
+      kv-cache-dtype: fp8
+      stream-interval: 32
+      max-num-seqs: 1024
+      max-num-batched-tokens: 16384
+      max-cudagraph-capture-size: 4096
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
-  concurrencies: "1024"
+  concurrencies: "128"
+  req_rate: "inf"
