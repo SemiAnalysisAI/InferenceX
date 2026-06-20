@@ -42,8 +42,6 @@ set -x
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    -tp $TP \
-    --max-model-len $MAX_MODEL_LEN \
     "${PARALLEL_ARGS[@]}" \
     "${SPEC_ARGS[@]}" \
     --block-size 128 \
