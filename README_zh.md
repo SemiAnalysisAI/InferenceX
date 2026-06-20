@@ -52,3 +52,7 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 最后，我们衷心感谢 Crusoe、CoreWeave、Nebius、TensorWave、Oracle 与 TogetherAI 通过提供计算资源支持开源创新，使这一切成为可能。
 
 完整支持者名单与引言：https://inferencex.semianalysis.com/quotes
+
+<img width="1400" height="682" alt="image" src="https://github.com/user-attachments/assets/589bfdda-905d-425f-94dc-f2551746dd9d" />
+
+
