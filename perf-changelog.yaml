@@ -3976,6 +3976,21 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1797
 
 - config-keys:
+    - kimik2.5-fp4-gb300-dynamo-vllm
+  description:
+    - "Add Kimi-K2.5 NVFP4 GB300 disaggregated multinode vLLM benchmarks via Dynamo"
+    - "1k/1k topologies (5 shapes): 1p1d-dep4-dep16 (conc 2048,4096), 1p1d-dep4-dep24 (conc 1024), 1p2d-dep4-dep4 (conc 6144), 1p7d-tep4-tp4 (conc 8-128), 2p3d-dep4-dep8 (conc 8192)"
+    - "8k/1k topologies (6 shapes): 1p4d-dep4-tp8 (conc 4), 1p8d-dep4-tp4 (conc 32,128), 2p1d-dep4-dep24 (conc 2048), 3p1d-dep4-dep16 (conc 2048), 4p1d-dep4-dep8 (conc 3072, multi-frontend), 8p1d-dep4-dep24 (conc 15360, multi-frontend)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1861
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Recover the skipped official ingest for PR #1797 from validated sweep run 27591355916 (attempt 6)"
+    - "No benchmark configuration change; reuse the exact 25-point fixed-sequence matrix and 2 eval jobs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1869
+
+- config-keys:
     - minimaxm3-fp8-b300-dynamo-vllm
   description:
     - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP."
