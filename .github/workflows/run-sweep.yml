@@ -47,6 +47,8 @@ jobs:
               github.event.label.name == 'full-sweep-fail-fast' ||
               github.event.label.name == 'full-sweep-fail-fast-no-canary'
             )
+        outputs:
+            skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
         steps:
             - name: Reject conflicting sweep labels
               env:
@@ -74,6 +76,17 @@ jobs:
               uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
               with:
                   fetch-depth: 0
+
+            - name: Read PR sweep policy
+              id: sweep_policy
+              env:
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  if git log -1 --format=%B "$HEAD_SHA" | grep -Fq '[skip-sweep]'; then
+                      echo "skip-pr-sweep=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "skip-pr-sweep=false" >> "$GITHUB_OUTPUT"
+                  fi
 
             - name: Validate perf-changelog matrix
               run: |
@@ -142,6 +155,7 @@ jobs:
               (
                 github.event_name == 'pull_request' &&
                 !github.event.pull_request.draft &&
+                needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
                 (
                   contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
                   contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
@@ -159,8 +173,7 @@ jobs:
                 )
               ) ||
               (
-                github.event_name != 'pull_request' &&
-                !contains(github.event.head_commit.message, '[skip-sweep]')
+                github.event_name == 'push'
               )
             )
         outputs:

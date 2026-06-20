@@ -273,6 +273,10 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     assert "Reject conflicting sweep labels" in check_step_names
     assert "Reject conflicting sweep labels" not in setup_step_names
     assert "needs" not in jobs["check-changelog"]
+    assert (
+        jobs["check-changelog"]["outputs"]["skip-pr-sweep"]
+        == "${{ steps.sweep_policy.outputs.skip-pr-sweep }}"
+    )
     assert jobs["reuse-sweep-gate"]["needs"] == "check-changelog"
     assert jobs["setup"]["needs"] == [
         "check-changelog",
@@ -291,6 +295,12 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     assert "validate_perf_changelog.py" in check_script
     assert "--base-ref" in check_script
     assert "--head-ref" in check_script
+    assert "git log -1 --format=%B" in check_script
+    assert "[skip-sweep]" in check_script
+    setup_if = jobs["setup"]["if"]
+    assert "needs.check-changelog.outputs.skip-pr-sweep != 'true'" in setup_if
+    assert "github.event_name == 'push'" in setup_if
+    assert "github.event.head_commit.message" not in setup_if
 
 
 def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
