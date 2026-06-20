@@ -93,9 +93,9 @@ backend:
       language-model-only: true
       kv-cache-dtype: fp8
       stream-interval: 32
-      max-num-seqs: 4096
+      max-num-seqs: 512
       max-num-batched-tokens: 16384
-      max-cudagraph-capture-size: 8192
+      max-cudagraph-capture-size: 2048
 
 benchmark:
   type: "sa-bench"
