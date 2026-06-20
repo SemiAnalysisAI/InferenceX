@@ -344,6 +344,44 @@ class TestMarkEvalEntries:
         assert result[1]["run-eval"] is True
         assert result[1]["eval-conc"] == 64
 
+    def test_multi_node_worker_counts_define_parallelism(self):
+        """Prefill and decode worker counts should each define a distinct eval target."""
+        def entry(prefill_workers, decode_workers, conc):
+            return {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "mi355x-disagg",
+                "framework": "vllm-disagg",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": prefill_workers,
+                    "tp": 4,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": decode_workers,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [16, conc],
+            }
+
+        result = mark_eval_entries([
+            entry(prefill_workers=1, decode_workers=1, conc=32),
+            entry(prefill_workers=2, decode_workers=1, conc=64),
+            entry(prefill_workers=1, decode_workers=2, conc=128),
+        ])
+
+        assert [(e["run-eval"], e["eval-conc"]) for e in result] == [
+            (True, 32),
+            (True, 64),
+            (True, 128),
+        ]
+
     def test_multi_node_split_parallelism_uses_only_highest_concurrency_entry(self):
         """Split concurrency rows for one parallelism should produce one eval job."""
         base_entry = {

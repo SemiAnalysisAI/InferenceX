@@ -66,6 +66,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         return value
 
     def _parallelism_key(entry):
+        # Keep complete prefill/decode dictionaries so worker count, TP, EP,
+        # DP-attention, and launch settings all distinguish configurations.
         ignored_fields = {
             Fields.CONC.value,
             Fields.RUN_EVAL.value,
