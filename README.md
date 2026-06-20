@@ -52,3 +52,6 @@ We also want to recognize the SGLang, vLLM, and TensorRT-LLM maintainers for bui
 Finally, we’re grateful to Crusoe, CoreWeave, Nebius, TensorWave, Oracle and TogetherAI for supporting open-source innovation through compute resources, enabling this.
 
 Full list of supporters & quotes: https://inferencex.semianalysis.com/quotes
+
+<img width="1400" height="682" alt="image" src="https://github.com/user-attachments/assets/dcbda40c-4a6e-43a3-aca2-c830d3f2fb8d" />
+
