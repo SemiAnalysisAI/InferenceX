@@ -3974,3 +3974,10 @@
     - "ISL1K/OSL1K: conc 8–8192 across ctx1dep4 and ctx2dep4 topologies"
     - "ISL8K/OSL1K: conc 5–4301 across ctx1dep4 to ctx9dep4 topologies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1797
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Recover the skipped official ingest for PR #1797 from validated sweep run 27591355916 (attempt 6)"
+    - "No benchmark configuration change; reuse the exact 25-point fixed-sequence matrix and 2 eval jobs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1869
