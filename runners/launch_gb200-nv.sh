@@ -81,7 +81,7 @@ NGINX_IMAGE="nginx:1.27.4"
 # squash dir on a path that's also visible to compute nodes. Falls
 # back to the legacy sa-shared path so other configs are untouched.
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
     echo "=== cluster diagnostic (minimax sweep) ==="
     echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
     echo "HOME=$HOME"
@@ -202,7 +202,7 @@ SRT_REPO_DIR="srt-slurm"
 # cross-mounted to compute nodes. Put the srt-slurm workspace and staged
 # InferenceX checkout on a writable shared-FS path that compute can see.
 # Per-run-unique paths avoid races between parallel sweep jobs.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
     SHARED_BASE=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared/gha-runs \
@@ -298,7 +298,7 @@ source $HOME/.local/bin/env
 # under a head-node-only path, .venv/bin/python3 becomes a broken
 # symlink on compute. Pin the venv to /usr/bin/python3 — a system
 # path that exists at the same location on both head and compute.
-if [[ $MODEL_PREFIX == "minimaxm2.5" && -x /usr/bin/python3 ]]; then
+if [[ ($MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5") && -x /usr/bin/python3 ]]; then
     uv venv --seed --python /usr/bin/python3
 else
     uv venv --seed
@@ -318,7 +318,7 @@ SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 # Minimax on watchtower: SRT_REPO_DIR was moved to a shared-FS path
 # above so srtctl's outputs/ directory (which lives under
 # SRTCTL_ROOT) is visible to compute nodes.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 echo "Creating srtslurm.yaml configuration..."
@@ -360,7 +360,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # can't see. Stage the relevant subset to shared FS and repoint
 # INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
 # on shared FS) and .git (not needed in container) for speed.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
     mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \
