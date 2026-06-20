@@ -45,6 +45,29 @@ AI software like SGLang, vLLM, TensorRT-LLM, CUDA, ROCm and achieve this continu
 This pace of software advancement creates a challenge: benchmarks conducted at a fixed point in time quickly go stale and do not represent the performance that can be achieved with the latest software packages.
 
 
+## Officially Supported Hardware
+
+| SKU | Status |
+| --- | --- |
+| GB300 NVL72 | ✅ |
+| GB200 NVL72 | ✅ |
+| MI355X | ✅ |
+| B300 | ✅ |
+| B200 | ✅ |
+| MI325X | ✅ |
+| MI300X | ✅ |
+| H200 | ✅ |
+| H100 | ✅ |
+| MI455 UALoE72 | Coming Soon 🔜 |
+| Vera Rubin NVL72 | Coming Soon 🔜 |
+| Rubin NVL8 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #1 | Coming Soon 🔜 |
+| Chip #2 from Hardware Vendor #1 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #2 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #3 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #4 | Coming Soon 🔜 |
+
+
 ## Acknowledgements & Supporters
 Thank you to Lisa Su and Anush Elangovan for providing the MI355X and CDNA3 GPUs for this free and open-source project. We want to recognize the many AMD contributors for their responsiveness and for debugging, optimizing, and validating performance across AMD GPUs. 
 We’re also grateful to Jensen Huang and Ian Buck for supporting this open source with access to a GB200 NVL72 rack (through OCI) and B200 GPUs. Thank you to the many NVIDIA contributors from the NVIDIA inference team, NVIDIA Dynamo team.

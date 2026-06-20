@@ -45,6 +45,29 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 这种软件演进的速度带来了一个挑战：在某个固定时间点进行的基准测试很快就会过时，无法代表使用最新软件包所能达到的性能。
 
 
+## 官方支持硬件
+
+| SKU | 状态 |
+| --- | --- |
+| GB300 NVL72 | ✅ |
+| GB200 NVL72 | ✅ |
+| MI355X | ✅ |
+| B300 | ✅ |
+| B200 | ✅ |
+| MI325X | ✅ |
+| MI300X | ✅ |
+| H200 | ✅ |
+| H100 | ✅ |
+| MI455 UALoE72 | Coming Soon 🔜 |
+| Vera Rubin NVL72 | Coming Soon 🔜 |
+| Rubin NVL8 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #1 | Coming Soon 🔜 |
+| Chip #2 from Hardware Vendor #1 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #2 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #3 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #4 | Coming Soon 🔜 |
+
+
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
 我们同样感谢 Jensen Huang 与 Ian Buck 通过提供 GB200 NVL72 机架（经由 OCI）与 B200 GPU 来支持本开源项目。感谢来自 NVIDIA 推理团队与 NVIDIA Dynamo 团队的众多 NVIDIA 贡献者。
