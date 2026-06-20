@@ -29,8 +29,7 @@ InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致
 > 只有 [SemiAnalysisAI/InferenceX](https://github.com/SemiAnalysisAI/InferenceX) 仓库才包含官方的 InferenceX™ 结果，所有其他派生（fork）与仓库均为非官方。非官方仓库的基准测试设置以及机器/云环境的质量可能存在差异，从而导致基准测试结果欠佳。非官方仓库必须明确标注为“非官方（Unofficial）”。
 > 派生仓库不得移除本免责声明。
 
-<img width="1150" height="665" alt="image" src="https://github.com/user-attachments/assets/1e9738d4-6fb2-4cd7-a3e9-e6b2e03faed1" />
-<img width="1098" height="655" alt="image" src="https://github.com/user-attachments/assets/5b363271-69b9-4bd2-b85d-b33b9c16f50f" />
+<img width="2544" height="1424" alt="InferenceX DeepSeekv4 MXFP4 Performance Curve" src="https://github.com/user-attachments/assets/cc50b671-0a54-40b6-b184-19d5a59590cb" />
 
 
 ## 为什么？
