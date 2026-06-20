@@ -575,6 +575,11 @@ a fixed budget.
   14,400 seconds. This is not a request timeout and does not hide failures; it
   only prevents early warmup bindings from expiring before a long warmup and
   1,800-second profile finish.
+- A 1P/2D candidate uses 24 inference GPUs to test whether a second decode can
+  raise the saturation ceiling without paying for additional cache-fragmenting
+  prefill replicas. It must exceed 158,766 total tok/s to beat 3P/2D c64 on
+  throughput per GPU. c144 is its isolated first canary; the wider candidate
+  grid spans c96--c384.
 
 ## Acceptance Criteria
 
