@@ -1,5 +1,5 @@
 #  InferenceX™，开源持续推理标准与研究平台
-## 受到 OpenAI、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
+## 受到 OpenAI、Meta、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/SemiAnalysisAI/InferenceX/pulls)

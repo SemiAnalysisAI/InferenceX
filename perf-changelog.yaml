@@ -3950,11 +3950,27 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+  description:
+    - "Expand search space for minimaxm3-fp4-mi355x-atom: add TP2 and TP8 configurations, extend concurrency range to 256 for ISL1024 and ISL8192, and add TP8 conc=1-2 for ISL8192."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
 
 - config-keys:
-    - minimaxm3-fp8-mi300x-vllm
+    - minimaxm3-fp8-mi300x-vllm-mtp
   description:
-    - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
+    - "Update the MI300X MiniMax-M3 EAGLE3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
     - "Use FP8 KV cache"
-    - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1837
+    - "Remove the runtime SupportsEagle3 source patch now included in the pinned nightly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Update Kimi K2.5 NVFP4 GB200 TRT-LLM Dynamo disaggregated configurations"
+    - "Bump image from nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2 to 1.3.0-dev.1-cuda13"
+    - "Replace allconc-style recipes with 25 per-concurrency STP recipes (13 ISL1K/OSL1K + 12 ISL8K/OSL1K)"
+    - "Recipes from srt-slurm sa-submission-q2-2026 branch (srt-slurm PR#89)"
+    - "ISL1K/OSL1K: conc 8–8192 across ctx1dep4 and ctx2dep4 topologies"
+    - "ISL8K/OSL1K: conc 5–4301 across ctx1dep4 to ctx9dep4 topologies"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1797
