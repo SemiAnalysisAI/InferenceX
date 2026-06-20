@@ -3950,20 +3950,11 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
-
 - config-keys:
     - minimaxm3-fp4-mi355x-atom
   description:
     - "Expand search space for minimaxm3-fp4-mi355x-atom: add TP2 and TP8 configurations, extend concurrency range to 256 for ISL1024 and ISL8192, and add TP8 conc=1-2 for ISL8192."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
-
-- config-keys:
-    - minimaxm3-fp8-mi300x-vllm
-  description:
-    - "Update the MI300X MiniMax-M3 vLLM image to vllm/vllm-openai-rocm:nightly-b53b1c7ffe7aebdafd0876350f30e51d1226c92a"
-    - "Use FP8 KV cache"
-    - "Exclude unprovisioned chi-mi300x-121 from Slurm allocation"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1837
 
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm-mtp
@@ -3979,3 +3970,29 @@
     - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), avoids gemm1_alpha crash in minimax-m3-0618"
     - "Add --moe-backend marlin for TP-only prefill/decode workers (no EP, no DP-attention) per PR #1809 pattern"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1735
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Update Kimi K2.5 NVFP4 GB200 TRT-LLM Dynamo disaggregated configurations"
+    - "Bump image from nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2 to 1.3.0-dev.1-cuda13"
+    - "Replace allconc-style recipes with 25 per-concurrency STP recipes (13 ISL1K/OSL1K + 12 ISL8K/OSL1K)"
+    - "Recipes from srt-slurm sa-submission-q2-2026 branch (srt-slurm PR#89)"
+    - "ISL1K/OSL1K: conc 8–8192 across ctx1dep4 and ctx2dep4 topologies"
+    - "ISL8K/OSL1K: conc 5–4301 across ctx1dep4 to ctx9dep4 topologies"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1797
+
+- config-keys:
+    - kimik2.5-fp4-gb300-dynamo-vllm
+  description:
+    - "Add Kimi-K2.5 NVFP4 GB300 disaggregated multinode vLLM benchmarks via Dynamo"
+    - "1k/1k topologies (5 shapes): 1p1d-dep4-dep16 (conc 2048,4096), 1p1d-dep4-dep24 (conc 1024), 1p2d-dep4-dep4 (conc 6144), 1p7d-tep4-tp4 (conc 8-128), 2p3d-dep4-dep8 (conc 8192)"
+    - "8k/1k topologies (6 shapes): 1p4d-dep4-tp8 (conc 4), 1p8d-dep4-tp4 (conc 32,128), 2p1d-dep4-dep24 (conc 2048), 3p1d-dep4-dep16 (conc 2048), 4p1d-dep4-dep8 (conc 3072, multi-frontend), 8p1d-dep4-dep24 (conc 15360, multi-frontend)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1861
+
+- config-keys:
+    - kimik2.5-fp4-gb200-dynamo-trt
+  description:
+    - "Recover the skipped official ingest for PR #1797 from validated sweep run 27591355916 (attempt 6)"
+    - "No benchmark configuration change; reuse the exact 25-point fixed-sequence matrix and 2 eval jobs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1869
