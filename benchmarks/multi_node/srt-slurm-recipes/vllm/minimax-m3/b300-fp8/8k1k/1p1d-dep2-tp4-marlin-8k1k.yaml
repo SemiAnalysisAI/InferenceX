@@ -26,14 +26,15 @@ frontend:
 backend:
   type: vllm
   connector: null
+  allow_prefill_decode_colocation: true
 
   prefill_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: "cuda_copy,rc"
+    UCX_TLS: "cuda_ipc,cuda_copy,rc"
 
   decode_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: "cuda_copy,rc"
+    UCX_TLS: "cuda_ipc,cuda_copy,rc"
 
   vllm_config:
     prefill:
