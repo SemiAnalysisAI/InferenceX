@@ -12,6 +12,19 @@ Evals run as **separate workflow jobs** from throughput benchmarks. The selectio
 
 **Multi-node**: Every distinct parallelism configuration, only for 8k1k. Rows that differ only by concurrency are treated as one configuration. Each eval job runs at `eval-conc`, the highest eligible concurrency across those rows.
 
+Generator eval modes:
+
+- Default: run throughput for every generated config and eval-only jobs for the selected subset above.
+- `--no-evals`: generate throughput jobs only.
+- `--evals-only`: generate eval-only jobs for the selected subset above.
+- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. For multi-node configs, every distinct value in each `conc-list` becomes its own eval job.
+
+The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
+
+For PR validation, add `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection for every appended changelog entry without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset. Combining both runs every fixed-sequence eval and no throughput. Runs with either modifier are not eligible for full-sweep artifact reuse.
+
+When multiple appended changelog entries reference the same config, benchmark deduplication is scenario-aware: a `fixed-seq-len` entry does not suppress a separate `agentic-coding` entry. Eval deduplication only consumes fixed-sequence coverage, and a broader `all-evals` entry takes precedence over the default eval subset for overlapping configs.
+
 ## Why?
 To verify how model outputs are affected by throughput optimizations.
 - TP/Conc might affect model outputs

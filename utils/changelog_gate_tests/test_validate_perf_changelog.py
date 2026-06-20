@@ -224,7 +224,7 @@ def test_matrix_compatible_check_propagates_matrix_rejection(
         lambda *_args: b"- config-keys: []\n",
     )
 
-    def reject_matrix(*_args: object) -> None:
+    def reject_matrix(*_args: object, **_kwargs: object) -> None:
         raise ChangelogValidationError("matrix rejected")
 
     monkeypatch.setattr(
@@ -234,6 +234,41 @@ def test_matrix_compatible_check_propagates_matrix_rejection(
 
     with pytest.raises(ChangelogValidationError, match="matrix rejected"):
         validate_matrix_compatible_change("base", "head", "file")
+
+
+def test_matrix_compatible_check_forwards_eval_modifiers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "validate_perf_changelog.read_git_file",
+        lambda *_args: b"- config-keys: []\n",
+    )
+    calls: list[tuple[bool, bool]] = []
+
+    def capture_matrix(
+        _base_ref: str,
+        _head_ref: str,
+        _path: str,
+        *,
+        all_evals: bool = False,
+        evals_only: bool = False,
+    ) -> None:
+        calls.append((all_evals, evals_only))
+
+    monkeypatch.setattr(
+        "validate_perf_changelog.validate_generated_config",
+        capture_matrix,
+    )
+
+    validate_matrix_compatible_change(
+        "base",
+        "head",
+        "file",
+        all_evals=True,
+        evals_only=True,
+    )
+
+    assert calls == [(True, True)]
 
 
 def test_matrix_compatible_check_rejects_pr_1717_conflict_resolution() -> None:
@@ -272,6 +307,13 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     setup_step_names = [step.get("name") for step in jobs["setup"]["steps"]]
     assert "Reject conflicting sweep labels" in check_step_names
     assert "Reject conflicting sweep labels" not in setup_step_names
+    conflict_script = next(
+        step["run"]
+        for step in jobs["check-changelog"]["steps"]
+        if step.get("name") == "Reject conflicting sweep labels"
+    )
+    assert '"all-evals"' not in conflict_script
+    assert '"evals-only"' not in conflict_script
     assert "needs" not in jobs["check-changelog"]
     assert (
         jobs["check-changelog"]["outputs"]["skip-pr-sweep"]
@@ -295,8 +337,20 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
     assert "validate_perf_changelog.py" in check_script
     assert "--base-ref" in check_script
     assert "--head-ref" in check_script
+    assert "--all-evals" in check_script
+    assert "--evals-only" in check_script
     assert "git log -1 --format=%B" in check_script
     assert "[skip-sweep]" in check_script
+    setup_script = "\n".join(
+        step.get("run", "")
+        for step in jobs["setup"]["steps"]
+    )
+    assert "--all-evals" in setup_script
+    assert "--evals-only" in setup_script
+    assert (
+        "!contains(github.event.pull_request.labels.*.name, 'evals-only')"
+        in jobs["reuse-sweep-gate"]["if"]
+    )
     setup_if = jobs["setup"]["if"]
     assert "needs.check-changelog.outputs.skip-pr-sweep != 'true'" in setup_if
     assert "github.event_name == 'push'" in setup_if
@@ -322,5 +376,7 @@ def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
     assert "CHECK_TIMEOUT_SECONDS" in script
     assert "prepare_perf_changelog_merge.py" in script
     assert "git commit --allow-empty" in script
+    assert "uses all-evals, which is not eligible for artifact reuse" in script
+    assert "uses evals-only, which is not eligible for artifact reuse" in script
     assert script.count('CURRENT_HEAD="$(gh pr view') == 2
     assert "must have exactly one sweep label" in script
