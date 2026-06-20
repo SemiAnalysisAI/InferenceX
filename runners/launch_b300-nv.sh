@@ -215,6 +215,15 @@ if [ -z "$JOB_ID" ]; then
     exit 1
 fi
 
+if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+    SBATCH_SCRIPT="outputs/$JOB_ID/logs/sbatch_script.sh"
+    if ! grep -Fq "#SBATCH --exclude=${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}" "$SBATCH_SCRIPT"; then
+        echo "Error: Slurm node exclusion was not rendered in $SBATCH_SCRIPT" >&2
+        scancel "$JOB_ID" || true
+        exit 1
+    fi
+fi
+
 echo "Extracted JOB_ID: $JOB_ID"
 
 # Use the JOB_ID to find the logs directory
