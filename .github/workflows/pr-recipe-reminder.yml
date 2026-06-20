@@ -46,6 +46,22 @@ jobs:
 
             As a rule of thumb, generally, PR authors should request a review & get a PR approval from the respective companies' [CODEOWNERS](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) before requesting a review from core maintainers.
 
-            If additional help is needed, PR authors can reach out to core maintainers over Slack.`.replace(/^            /gm, '');
+            If additional help is needed, PR authors can reach out to core maintainers over Slack.
+
+            ---
+
+            感谢你的贡献！对于 vLLM 与 SGLang，请确保你的 recipe 与官方 vLLM recipes 和/或 SGLang cookbook 保持一致
+            - https://docs.sglang.io/cookbook/intro
+            - https://recipes.vllm.ai/
+
+            如果不一致，请先创建一个 PR，之后我们才能将你的单节点 PR 合并到 master 分支。让我们确保文档保持一流水准，使整个 ML 社区都能从你的辛勤工作中受益！谢谢
+            - https://github.com/vllm-project/recipes
+            - https://github.com/sgl-project/sglang/tree/main/docs_new
+
+            **PR 作者有责任确保合并后所有 GitHub Action 任务完全通过。** 很多时候失败只是偶发抖动（flake），重新运行失败的任务即可解决。如果选择重新运行失败的任务，PR 作者有责任确保其最终通过。参见 GitHub 关于重新运行失败任务的文档：https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
+
+            一般而言，PR 作者应先向相应公司的 [CODEOWNERS](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 请求审阅并获得 PR 批准，然后再请求核心维护者审阅。
+
+            如需更多帮助，PR 作者可通过 Slack 联系核心维护者。`.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
