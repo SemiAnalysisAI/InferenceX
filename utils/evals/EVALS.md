@@ -10,7 +10,7 @@ Evals run as **separate workflow jobs** from throughput benchmarks. The selectio
 
 **Single-node**: At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k.
 
-**Multi-node**: One entry per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) with the highest max eligible concurrency, only for 8k1k. The eval job runs at `eval-conc`, the upper median of that config's eligible concurrency list.
+**Multi-node**: Every distinct parallelism configuration, only for 8k1k. Rows that differ only by concurrency are treated as one configuration. Each eval job runs at `eval-conc`, the highest eligible concurrency across those rows.
 
 ## Why?
 To verify how model outputs are affected by throughput optimizations.
