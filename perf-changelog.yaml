@@ -3965,6 +3965,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-mtp
+  description:
+    - "Add minimaxm3-fp4-mi355x-atom-mtp CI recipe: single-node ATOM with EAGLE3 speculative decoding (3 draft tokens) for MiniMax-M3-MXFP4 on MI355X"
+    - "Supports TP/EP/DP-attention combinations; search space mirrors minimaxm3-fp4-mi355x-atom (ISL=1024,8192 OSL=1024 TP2/TP4/TP8)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1866
+
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Update Kimi K2.5 NVFP4 GB200 TRT-LLM Dynamo disaggregated configurations"
