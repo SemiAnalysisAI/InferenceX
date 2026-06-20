@@ -3,6 +3,8 @@
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
+# b300-018 repeatedly times out UCX/NIXL transfers; allow an empty override to disable this.
+MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018}"
 
 set -x
 
@@ -190,6 +192,9 @@ fi
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
+fi
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
