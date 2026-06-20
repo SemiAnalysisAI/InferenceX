@@ -47,7 +47,8 @@ HANDSHAKE_PORT="${HANDSHAKE_PORT:-6301}"
 
 # ATOM server tuning (from reference script defaults)
 MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.85}"
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
+#  KV_CACHE_DTYPE- - treats only unset as "use default" — empty string is left as-is
+KV_CACHE_DTYPE="${KV_CACHE_DTYPE-fp8}"
 BLOCK_SIZE="${BLOCK_SIZE:-16}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
