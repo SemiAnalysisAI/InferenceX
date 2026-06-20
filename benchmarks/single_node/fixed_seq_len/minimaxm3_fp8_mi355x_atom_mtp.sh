@@ -11,7 +11,7 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
     EP_SIZE \
-    DP_ATTENTION Expand commentComment on line R14Resolved
+    DP_ATTENTION 
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -42,12 +42,12 @@ set -x
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
-    "${PARALLEL_ARGS[@]}" \Expand commentComment on line R45Resolved
+    "${PARALLEL_ARGS[@]}" \
     "${SPEC_ARGS[@]}" \
     --block-size 128 \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --trust-remote-code \
-    > $SERVER_LOG 2>&1 &Expand commentComment on line R50ResolvedExpand commentComment on line R50Resolved
+    > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
