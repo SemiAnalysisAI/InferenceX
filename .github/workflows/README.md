@@ -180,6 +180,12 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 
 ## Reusing an Approved PR Full Sweep
 
+`[skip-sweep]` is a PR-only benchmark opt-out. When it appears in the latest
+PR head commit, `check-changelog` still validates the matrix and the reuse gate
+still runs, but benchmark setup is skipped. Pushes to `main` ignore the marker
+and always enter setup, where they either reuse approved artifacts or run the
+full untrimmed sweep.
+
 If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
 sequential canary, `non-canary-full-sweep-enabled` without one, or a
 fail-fast variant — `full-sweep-fail-fast` / `full-sweep-fail-fast-no-canary`), a

@@ -288,8 +288,8 @@ class TestMarkEvalEntries:
         assert result[0]["run-eval"] is False
         assert "eval-conc" not in result[0]
 
-    def test_multi_node_eval_conc_uses_only_conc_values_at_or_above_min_conc(self):
-        """Multinode eval-conc should be chosen from conc values >= MIN_EVAL_CONC."""
+    def test_multi_node_marks_each_parallelism_at_highest_eligible_conc(self):
+        """Each multinode parallelism should eval at its highest eligible concurrency."""
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -322,18 +322,18 @@ class TestMarkEvalEntries:
                 "osl": 1024,
                 "spec-decoding": "none",
                 "prefill": {
-                    "num-worker": 1,
-                    "tp": 8,
+                    "num-worker": 2,
+                    "tp": 4,
                     "ep": 1,
                     "dp-attn": True,
                 },
                 "decode": {
-                    "num-worker": 4,
-                    "tp": 8,
+                    "num-worker": 2,
+                    "tp": 4,
                     "ep": 1,
                     "dp-attn": False,
                 },
-                "conc": [8],
+                "conc": [8, 16, 64],
             },
         ]
 
@@ -341,7 +341,84 @@ class TestMarkEvalEntries:
 
         assert result[0]["run-eval"] is True
         assert result[0]["eval-conc"] == 32
-        assert result[1]["run-eval"] is False
+        assert result[1]["run-eval"] is True
+        assert result[1]["eval-conc"] == 64
+
+    def test_multi_node_worker_counts_define_parallelism(self):
+        """Prefill and decode worker counts should each define a distinct eval target."""
+        def entry(prefill_workers, decode_workers, conc):
+            return {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "mi355x-disagg",
+                "framework": "vllm-disagg",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": prefill_workers,
+                    "tp": 4,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": decode_workers,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [16, conc],
+            }
+
+        result = mark_eval_entries([
+            entry(prefill_workers=1, decode_workers=1, conc=32),
+            entry(prefill_workers=2, decode_workers=1, conc=64),
+            entry(prefill_workers=1, decode_workers=2, conc=128),
+        ])
+
+        assert [(e["run-eval"], e["eval-conc"]) for e in result] == [
+            (True, 32),
+            (True, 64),
+            (True, 128),
+        ]
+
+    def test_multi_node_split_parallelism_uses_only_highest_concurrency_entry(self):
+        """Split concurrency rows for one parallelism should produce one eval job."""
+        base_entry = {
+            "model": "deepseek-ai/DeepSeek-R1-0528",
+            "runner": "mi355x-disagg",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "isl": 8192,
+            "osl": 1024,
+            "spec-decoding": "none",
+            "prefill": {
+                "num-worker": 1,
+                "tp": 8,
+                "ep": 1,
+                "dp-attn": False,
+                "additional-settings": ["PREFILL_NODES=1"],
+            },
+            "decode": {
+                "num-worker": 2,
+                "tp": 8,
+                "ep": 1,
+                "dp-attn": False,
+                "additional-settings": ["DECODE_NODES=2"],
+            },
+            "run-eval": False,
+        }
+        matrix_values = [
+            {**base_entry, "conc": [2, 4, 8, 16, 32]},
+            {**base_entry, "conc": [64, 128, 256]},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is False
+        assert "eval-conc" not in result[0]
+        assert result[1]["run-eval"] is True
+        assert result[1]["eval-conc"] == 256
 
     def test_marks_highest_and_median_conc(self):
         """Should mark highest and median concurrency for 8k1k entries."""

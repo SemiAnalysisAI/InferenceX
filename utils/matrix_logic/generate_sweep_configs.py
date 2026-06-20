@@ -41,11 +41,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         - Ignore entries with conc < MIN_EVAL_CONC
         - Mark all entries at the highest CONC (all TPs)
         - Mark all entries at the median CONC (all TPs)
-    - Multi-node: for each unique (model, runner, framework, precision,
-      spec-decoding, prefill-dp-attn, decode-dp-attn), only 8k1k entries.
-      Ignore entries with all conc values < MIN_EVAL_CONC. Mark the entry with
-      the highest max concurrency among the remaining entries. Sets eval-conc to
-      the median of the eligible conc list to avoid OOM during eval.
+    - Multi-node: only consider 8k1k entries. For every distinct parallelism
+      configuration:
+        - Ignore entries with all conc values < MIN_EVAL_CONC
+        - Mark the entry containing its highest eligible concurrency
+        - Set eval-conc to that highest eligible concurrency
     """
     from collections import defaultdict
 
@@ -58,8 +58,27 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         conc_values = conc if isinstance(conc, list) else [conc]
         return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
 
-    def _max_eval_conc(ie):
-        return max(_eligible_eval_concs(ie[1]))
+    def _freeze(value):
+        if isinstance(value, dict):
+            return tuple(sorted((key, _freeze(item)) for key, item in value.items()))
+        if isinstance(value, list):
+            return tuple(_freeze(item) for item in value)
+        return value
+
+    def _parallelism_key(entry):
+        # Keep complete prefill/decode dictionaries so worker count, TP, EP,
+        # DP-attention, and launch settings all distinguish configurations.
+        ignored_fields = {
+            Fields.CONC.value,
+            Fields.RUN_EVAL.value,
+            Fields.EVAL_ONLY.value,
+            Fields.EVAL_CONC.value,
+        }
+        return tuple(sorted(
+            (key, _freeze(value))
+            for key, value in entry.items()
+            if key not in ignored_fields
+        ))
 
     # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
     # Only 8k1k entries with a top-level TP (single-node schema).
@@ -91,9 +110,8 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             if e[Fields.CONC.value] in target_concs:
                 eval_indices.add(i)
 
-    # Multi-node: group by (model, runner, framework, precision, spec-decoding, prefill-dp, decode-dp).
-    # Only 8k1k entries with a prefill key (multi-node schema).
-    # Pick the entry with the highest max concurrency per group.
+    # Multi-node: group rows that differ only in concurrency, then evaluate each
+    # distinct parallelism configuration at its highest configured concurrency.
     mn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
         if Fields.TP.value in entry:
@@ -102,25 +120,15 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
             continue
-        if not _eligible_eval_concs(entry):
+        eval_concs = _eligible_eval_concs(entry)
+        if not eval_concs:
             continue
-        key = (
-            entry[Fields.MODEL.value],
-            entry[Fields.RUNNER.value],
-            entry[Fields.FRAMEWORK.value],
-            entry[Fields.PRECISION.value],
-            entry[Fields.SPEC_DECODING.value],
-            entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value),
-            entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value),
-        )
-        mn_groups[key].append((i, entry))
+        mn_groups[_parallelism_key(entry)].append((i, eval_concs[-1]))
 
     for entries in mn_groups.values():
-        best_idx, best_entry = max(entries, key=_max_eval_conc)
+        best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
         eval_indices.add(best_idx)
-        # Set eval-conc to median of eligible conc values to avoid OOM during eval
-        eval_concs = _eligible_eval_concs(best_entry)
-        mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
+        mn_eval_conc[best_idx] = best_eval_conc
 
     # Mark the selected entries (skip agentic entries which don't support evals)
     for i, entry in enumerate(matrix_values):
