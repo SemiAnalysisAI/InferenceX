@@ -580,6 +580,9 @@ a fixed budget.
   prefill replicas. It must exceed 158,766 total tok/s to beat 3P/2D c64 on
   throughput per GPU. c144 is its isolated first canary; the wider candidate
   grid spans c96--c384.
+- A balanced 2P/2D candidate uses 32 inference GPUs and must exceed 211,687
+  total tok/s to beat 3P/2D c64 on throughput per GPU. c176 is its isolated
+  canary, with a wider c128--c384 grid available if it clears that gate.
 
 ## Acceptance Criteria
 
