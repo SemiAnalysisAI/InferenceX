@@ -56,6 +56,28 @@ and waits for the PR checks automatically.
 
 Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi300x-vllm — needed 0.90), #1461 (dsv4-fp8-h200-vllm — needed 0.90).
 
+### 2.1 DEP CUDA-graph capture OOM on GB300
+
+**Symptom:** TP1 + data/expert-parallel decode workers load successfully and
+allocate the KV cache, then fail in `breakable_cudagraph.py` at
+`torch.cuda.graph.capture_end()` with `CUDA error: out of memory`. Large GB300
+VRAM does not prevent this because vLLM fills the configured memory budget with
+KV cache before capturing hundreds of persistent graphs.
+
+**Root cause:** `max-num-seqs` and `max-cudagraph-capture-size` were sized from
+global benchmark concurrency instead of per-DP-rank concurrency. MiniMax-M3
+DEP4/DEP8 recipes requested capture sizes of 4096-8192 and up to 4096 sequences,
+creating 358-806 graphs per GPU.
+
+**First-line tuning:** keep `gpu-memory-utilization: 0.90`, but size graph limits
+to the per-rank load. For the GB300 MiniMax-M3 sweep, use
+`max-num-seqs: 512` and `max-cudagraph-capture-size: 2048` on DEP decoders.
+This matches the single-node GB300 recipe and still covers the largest 512
+requests per DP rank. If capture still OOMs, lower decode
+`gpu-memory-utilization` to `0.85`.
+
+Seen on: #1735 (MiniMax-M3 MXFP8 GB300 dynamo-vLLM).
+
 ---
 
 ## 3. Custom DSV4 image → generic v0.5.12 OOMs
