@@ -40,7 +40,7 @@ model:
 
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260426"
+  wheel: "1.3.0.dev20260618"
 
 setup_script: vllm-container-deps.sh
 
@@ -71,11 +71,17 @@ infra:
 frontend:
   type: dynamo
   enable_multiple_frontends: false
+  env:
+    DYN_REQUEST_PLANE: "tcp"
+  args:
+    router-mode: "kv"
+    router-reset-states: true
 
 backend:
   type: vllm
   connector: null
   prefill_environment:
+    DYN_REQUEST_PLANE: "tcp"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -83,14 +89,16 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
+    UCX_TLS: "cuda_copy,rc"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
+    DYN_REQUEST_PLANE: "tcp"
     TILELANG_CLEANUP_TEMP_FILES: "1"
     VLLM_USE_NCCL_SYMM_MEM: "1"
     TORCH_SYMMMEM: "NVSHMEM"
@@ -98,23 +106,18 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
-    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
+    UCX_TLS: "cuda_copy,rc"
     NCCL_P2P_LEVEL: NVL
 
   vllm_config:
     prefill:
-      # Static engine_id (one per worker, distinct between prefill/decode):
-      # the TP8 workers span 2 GB200 nodes, which srtctl launches as two
-      # processes (--node-rank 0 + --node-rank 1 --headless). Without a
-      # pinned engine_id each process generates its own random NIXL UUID, so
-      # ranks 0-3 and ranks 4-7 of the SAME worker register under different
-      # engine ids and the consumer's handshake dies with "Remote NIXL agent
-      # engine ID mismatch" on the first transfer (R7, both shards).
-      # Single-node-per-worker topologies (all gb300 recipes) never hit this.
-      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "11111111-1111-4111-8111-111111111111"}'
+      # vLLM v0.23 synchronizes the generated ID across both TP8 nodes.
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
@@ -138,13 +141,9 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
-      enable-sleep-mode: true
-      numa-bind: true
       tokenizer-mode: deepseek_v4
     decode:
-      # See prefill: static engine_id shared by both node processes of this
-      # 2-node TP8 worker (distinct from the prefill worker's id).
-      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both", "engine_id": "22222222-2222-4222-8222-222222222222"}'
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
@@ -188,6 +187,9 @@ benchmark:
     RESULT_DIR: /logs/agentic
     PORT: "8000"
     IS_MULTINODE: "true"
+    # Hundreds of long-context trajectories can spend well over an hour in
+    # warmup and profiling. Keep Dynamo affinity alive for the entire run.
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     # Container-side path of the aiperf mmap dataset cache; the host-side
     # mount is wired via launch_gb200-nv.sh's srtslurm.yaml default_mounts.
     # Without this, aiperf re-tokenizes + re-writes ~65 GB of mmap files

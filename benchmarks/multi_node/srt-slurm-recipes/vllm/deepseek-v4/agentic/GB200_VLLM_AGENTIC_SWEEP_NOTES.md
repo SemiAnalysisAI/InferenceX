@@ -541,9 +541,40 @@ provides the hard-overload boundary.
 
 ## Completion
 
-The final official sweep, artifact audit, topology comparison, concurrency
-knee analysis, and B200 comparison are complete. No additional timeout or
-message-buffer change is supported by the final logs.
+The final official 40-GPU sweep, artifact audit, topology comparison,
+concurrency knee analysis, and B200 comparison are complete. No additional
+timeout or message-buffer change was needed for that c16--c96 sweep.
+
+## High-Concurrency Per-GPU Optimization
+
+The next phase changes the objective from maximizing the 40-GPU system's
+absolute throughput to maximizing throughput per inference GPU at hundreds of
+concurrent trajectories. Replica count is therefore a search axis rather than
+a fixed budget.
+
+### Initial diagnosis and 1P/1D candidate
+
+- The c64--c96 3P/2D logs show that high concurrency is not a decode-only
+  capacity problem. At c96, local prefill cache reuse fell to 54--57%, decode
+  generation throughput collapsed, and TTFT reached 141 seconds even though
+  both decode workers continued to report healthy external-cache transfers.
+- AIPerf did perform its trajectory-aware warmup. At c96 it dispatched 131
+  warmup credits and waited 397 seconds for all of them before profiling. The
+  high-concurrency collapse is therefore not an accidentally cold measured
+  phase, although larger future runs need longer affinity leases because their
+  warmup can take substantially longer.
+- The existing 1P/1D recipe predated the fixes validated by the final sweep.
+  It has been brought to the same runtime contract: Dynamo June 18 nightly,
+  TCP request plane, KV router and reset, vLLM KV-event publication, 32k prefix
+  retention, UCX RC/NIXL, bounded registration cache, generated synchronized
+  engine IDs, and no CuMem/sleep-mode allocator.
+- 1P/1D uses only 16 inference GPUs. It must exceed 105,844 total tok/s to beat
+  the final 3P/2D c64 result's 6,615 tok/s/GPU. Its initial grid is
+  c64/c96/c128/c160/c192/c256/c384.
+- The high-concurrency recipe sets the Dynamo affinity inactivity timeout to
+  14,400 seconds. This is not a request timeout and does not hide failures; it
+  only prevents early warmup bindings from expiring before a long warmup and
+  1,800-second profile finish.
 
 ## Acceptance Criteria
 

@@ -12760,9 +12760,11 @@ dsv4-fp4-b300-sglang-agentic-hicache:
       - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [52, 64, 72, 84, 100, 128, 144, 160, 196, 256, 512] }
 
 
-# GB200 agentic disaggregation compares 4P/1D and 3P/2D at a constant 40-GPU
-# budget. Each topology has its own key so an official dispatch can request one
-# 11-node point without another matrix sibling consuming its Slurm/GHA timeout.
+# GB200 high-concurrency agentic search. The 1P/1D topology tests whether
+# cache-affinitized replay can maximize normalized throughput with the minimum
+# viable two TP8 replicas (16 inference GPUs). Larger 4P/1D and 3P/2D shapes
+# retain the completed constant-40-GPU reference curves below. Each topology
+# has its own key so an official dispatch can schedule it independently.
 # Every prefill uses TEP8 behind Dynamo's KV-aware router and every decode uses
 # TP8. TEP avoids DEP's per-rank request-length imbalance while the topology
 # axis measures the trace's cache-capacity versus decode-rate tradeoff.
@@ -12770,6 +12772,35 @@ dsv4-fp4-b300-sglang-agentic-hicache:
 # current NVFP4 checkpoint; v0.20.0's NIXL connector also breaks TP8<->TP8
 # transfers, see the recipe header). The recipe also pins a Dynamo wheel new
 # enough to decode v0.23 KV events; keep both runtime pins in lockstep with it.
+dsv4-fp4-gb200-dynamo-vllm-agentic-1p1d:
+  image: vllm/vllm-openai:v0.23.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      # Minimum viable topology: one TEP8 prefill + one TP8 decode.
+      - spec-decoding: none
+        conc-list: [64, 96, 128, 160, 192, 256, 384]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/agentic/disagg-gb200-1p1d-tep8-tp8-agentic.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+
 dsv4-fp4-gb200-dynamo-vllm-agentic-4p1d:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
