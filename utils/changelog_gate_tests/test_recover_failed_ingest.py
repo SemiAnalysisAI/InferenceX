@@ -17,6 +17,9 @@ from recover_failed_ingest import (
 from validate_perf_changelog import ChangelogValidationError
 
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
 def block(key: str, link: str) -> bytes:
     return f"""- config-keys:
     - {key}
@@ -307,3 +310,18 @@ def test_synthetic_commit_uses_base_tree_plus_only_changelog(
         "perf-changelog.yaml"
     )
     assert git("show", f"{fixed_sha}:other.txt") == "base"
+
+
+def test_recovery_command_uses_normal_sweep_reuse_path() -> None:
+    command = (
+        REPO_ROOT / ".claude/commands/recover-failed-ingest.md"
+    ).read_text()
+
+    assert "git commit-tree" in command
+    assert '-p "$TARGET_PARENT"' in command
+    assert '-p "$SOURCE_HEAD_SHA"' in command
+    assert "/reuse-sweep-run $SOURCE_RUN_ID" in command
+    assert "full-sweep-enabled" in command
+    assert "Create the guarded recovery workflow" not in command
+    assert "validate-workflow" not in command
+    assert 'gh workflow run "recover-pr-' not in command
