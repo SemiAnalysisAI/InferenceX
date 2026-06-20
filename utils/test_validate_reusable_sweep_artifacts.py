@@ -32,6 +32,8 @@ def write_eval_aggregate(
 def single_eval_entry(
     conc: int,
     runner: str = "h100-dgxc-slurm",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> dict:
     return {
         "exp-name": "gptoss_8k1k",
@@ -44,6 +46,8 @@ def single_eval_entry(
         "dp-attn": False,
         "disagg": False,
         "spec-decoding": "none",
+        "isl": isl,
+        "osl": osl,
         "conc": conc,
     }
 
@@ -51,6 +55,8 @@ def single_eval_entry(
 def single_eval_result(
     conc: int,
     runner: str = "h100-dgxc-slurm",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> dict:
     return {
         "is_multinode": False,
@@ -59,6 +65,8 @@ def single_eval_result(
         "framework": "vllm",
         "precision": "fp4",
         "spec_decoding": "none",
+        "isl": isl,
+        "osl": osl,
         "tp": 2,
         "ep": 1,
         "dp_attention": False,
@@ -70,8 +78,10 @@ def single_eval_result(
 def single_eval_meta(
     conc: int,
     runner: str = "h100-dgxc-slurm",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> dict:
-    row = single_eval_result(conc, runner)
+    row = single_eval_result(conc, runner, isl, osl)
     row["infmax_model_prefix"] = row.pop("model_prefix")
     return row
 
@@ -82,11 +92,13 @@ def write_raw_eval_artifact(
     *,
     logical_runner: str = "h100-dgxc-slurm",
     physical_runner: str = "h100-dgxc-slurm_00",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> None:
     artifact_dir = root / f"eval_result_conc{conc}_{physical_runner}"
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(
-        json.dumps(single_eval_meta(conc, logical_runner))
+        json.dumps(single_eval_meta(conc, logical_runner, isl, osl))
     )
 
 
@@ -265,6 +277,33 @@ def test_eval_validation_accepts_all_expected_raw_result_dirs(tmp_path: Path) ->
         physical_runner="h100-dgxc-slurm_01",
     )
 
+    assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
+
+
+def test_eval_validation_distinguishes_sequence_lengths(tmp_path: Path) -> None:
+    config = {
+        "evals": [
+            single_eval_entry(32, isl=1024),
+            single_eval_entry(32, isl=8192),
+        ],
+        "multinode_evals": [],
+    }
+    write_eval_aggregate(
+        tmp_path,
+        [
+            single_eval_result(32, isl=1024),
+            single_eval_result(32, isl=8192),
+        ],
+    )
+    write_raw_eval_artifact(tmp_path, 32, isl=1024)
+    write_raw_eval_artifact(
+        tmp_path,
+        32,
+        physical_runner="h100-dgxc-slurm_01",
+        isl=8192,
+    )
+
+    assert len(expected_eval_keys(config)) == 2
     assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
 
 
