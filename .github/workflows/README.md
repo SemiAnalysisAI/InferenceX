@@ -190,6 +190,10 @@ test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvi
 test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files .github/configs/nvidia-master.yaml
 ```
 
+## PR Eval Modifiers
+
+Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration, including every distinct value in each multi-node `conc-list`. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Runs with either modifier are not eligible for artifact reuse.
+
 ## Reusing an Approved PR Full Sweep
 
 `[skip-sweep]` is a PR-only benchmark opt-out. When it appears in the latest

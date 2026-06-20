@@ -125,6 +125,288 @@ def test_regular_changelog_entry_keeps_benchmark_and_subset_eval_commands(
     json.loads(capsys.readouterr().out)
 
 
+def test_cli_all_evals_expands_evals_and_preserves_benchmarks(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Run every eval configuration through a PR label
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+    commands = []
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout="[]")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+        "--all-evals",
+    ])
+
+    process_changelog.main()
+
+    assert len(commands) == 2
+    assert "--no-evals" in commands[0]
+    assert "--all-evals" not in commands[0]
+    assert "--all-evals" in commands[1]
+    assert "--evals-only" in commands[1]
+    assert _scenario_values(commands[1]) == ["fixed-seq-len"]
+    json.loads(capsys.readouterr().out)
+
+
+def test_cli_all_evals_expands_evals_only_entry_without_benchmarks(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Expand an eval-only entry through a PR label
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+  evals-only: true
+"""
+    commands = []
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout="[]")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+        "--all-evals",
+    ])
+
+    process_changelog.main()
+
+    assert len(commands) == 1
+    assert "--all-evals" in commands[0]
+    assert "--evals-only" in commands[0]
+    assert "--no-evals" not in commands[0]
+    json.loads(capsys.readouterr().out)
+
+
+def test_cli_evals_only_suppresses_benchmarks_and_keeps_default_subset(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Run only the default eval subset through a PR label
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+    commands = []
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout="[]")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+        "--evals-only",
+    ])
+
+    process_changelog.main()
+
+    assert len(commands) == 1
+    assert "--evals-only" in commands[0]
+    assert "--all-evals" not in commands[0]
+    assert "--no-evals" not in commands[0]
+    assert _scenario_values(commands[0]) == ["fixed-seq-len"]
+    json.loads(capsys.readouterr().out)
+
+
+def test_cli_eval_modifiers_compose_as_all_evals_without_benchmarks(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Run every eval and no throughput through PR labels
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+"""
+    commands = []
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout="[]")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+        "--all-evals",
+        "--evals-only",
+    ])
+
+    process_changelog.main()
+
+    assert len(commands) == 1
+    assert "--evals-only" in commands[0]
+    assert "--all-evals" in commands[0]
+    assert "--no-evals" not in commands[0]
+    json.loads(capsys.readouterr().out)
+
+
+def test_cli_evals_only_is_noop_for_agentic_only_entry(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Agentic-only work with the evals-only PR modifier
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+  scenario-type:
+    - agentic-coding
+"""
+    commands = []
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout="[]")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+        "--evals-only",
+    ])
+
+    process_changelog.main()
+
+    assert commands == []
+    json.loads(capsys.readouterr().out)
+
+
+def test_cli_all_evals_is_noop_for_agentic_only_entry(
+    monkeypatch,
+    capsys,
+):
+    added_yaml = """
+- config-keys:
+    - test-config
+  description:
+    - Agentic-only work with the all-evals PR modifier
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1
+  scenario-type:
+    - agentic-coding
+"""
+    commands = []
+
+    monkeypatch.setattr(
+        process_changelog,
+        "get_added_lines",
+        lambda *_: added_yaml,
+    )
+    monkeypatch.setattr(
+        process_changelog,
+        "load_config_files",
+        lambda _: {"test-config": {}},
+    )
+
+    def fake_run(command, **kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout="[]")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(sys, "argv", [
+        "process_changelog.py",
+        "--base-ref", "base",
+        "--head-ref", "head",
+        "--changelog-file", "perf-changelog.yaml",
+        "--all-evals",
+    ])
+
+    process_changelog.main()
+
+    assert len(commands) == 1
+    assert "--no-evals" in commands[0]
+    assert "--all-evals" not in commands[0]
+    assert _scenario_values(commands[0]) == ["agentic-coding"]
+    json.loads(capsys.readouterr().out)
+
+
 def test_all_evals_takes_precedence_for_duplicate_configs(
     monkeypatch,
     capsys,

@@ -13,6 +13,8 @@ on:
       - "utils/test_find_reusable_sweep_run.py"
       - "utils/process_changelog.py"
       - "utils/test_process_changelog.py"
+      - "utils/collect_eval_results.py"
+      - "utils/test_collect_eval_results.py"
       - "utils/prepare_perf_changelog_merge.py"
       - "utils/recover_failed_ingest.py"
       - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
@@ -52,7 +54,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pydantic pyyaml
+          python -m pip install pytest pydantic pyyaml tabulate
 
       - name: Run validator, reuse, and gating tests
         run: |
@@ -64,4 +66,5 @@ jobs:
             utils/test_validate_reusable_sweep_artifacts.py \
             utils/changelog_gate_tests/test_run_sweep_gating.py \
             utils/test_process_changelog.py \
+            utils/test_collect_eval_results.py \
             -v

@@ -491,7 +491,7 @@ class TestMarkAllEvalEntries:
 
         assert all(entry['run-eval'] for entry in result)
 
-    def test_marks_every_multinode_entry_and_sets_upper_median_eval_conc(self):
+    def test_expands_every_multinode_concurrency_into_a_distinct_eval(self):
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
@@ -513,11 +513,16 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(entries)
 
+        assert len(result) == 5
         assert all(entry['run-eval'] for entry in result)
-        assert result[0]['eval-conc'] == 8
-        assert result[1]['eval-conc'] == 32
+        assert [entry['conc'] for entry in result] == [
+            [1], [4], [8], [16], [32],
+        ]
+        assert [entry['eval-conc'] for entry in result] == [
+            1, 4, 8, 16, 32,
+        ]
 
-    def test_preserves_eval_conc_selected_by_default_policy(self):
+    def test_default_eval_selection_does_not_collapse_all_evals_expansion(self):
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
@@ -531,10 +536,10 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(mark_eval_entries(entries))
 
-        assert result[0]['run-eval'] is True
-        assert result[0]['eval-conc'] == 32
+        assert [entry['eval-conc'] for entry in result] == [1, 4, 8, 16, 32]
+        assert all(entry['run-eval'] is True for entry in result)
 
-    def test_replaces_null_eval_conc(self):
+    def test_deduplicates_overlapping_concurrency_rows_for_same_parallelism(self):
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
@@ -545,11 +550,21 @@ class TestMarkAllEvalEntries:
                 'run-eval': False,
                 'eval-conc': None,
             },
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [16, 32],
+                'run-eval': True,
+                'eval-conc': 32,
+            },
         ]
 
         result = mark_all_eval_entries(entries)
 
-        assert result[0]['eval-conc'] == 8
+        assert [entry['eval-conc'] for entry in result] == [4, 8, 16, 32]
+        assert [entry['conc'] for entry in result] == [[4], [8], [16], [32]]
 
     def test_skips_agentic_entries(self):
         entries = [
@@ -1855,6 +1870,47 @@ class TestArgumentDefaults:
         result = generate_sweep_configs.main()
 
         assert len(result) == 10
+        assert all(entry['run-eval'] is True for entry in result)
+        assert all(entry['eval-only'] is True for entry in result)
+
+    def test_all_evals_expands_each_multinode_concurrency(
+        self,
+        monkeypatch,
+        sample_multinode_config,
+        sample_runner_config,
+    ):
+        import sys
+        import generate_sweep_configs
+
+        config = sample_multinode_config
+        search_space = (
+            config['dsr1-fp4-gb200-dynamo-trt']['scenarios']
+            ['fixed-seq-len'][0]['search-space']
+        )
+        search_space[0]['conc-list'] = [4, 16, 64]
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp4-gb200-dynamo-trt',
+            '--all-evals',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert [entry['conc'] for entry in result] == [[4], [16], [64]]
+        assert [entry['eval-conc'] for entry in result] == [4, 16, 64]
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 

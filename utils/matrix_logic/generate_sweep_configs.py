@@ -34,6 +34,34 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
+
+def _freeze_matrix_value(value):
+    """Convert nested matrix values into hashable equivalents."""
+    if isinstance(value, dict):
+        return tuple(sorted(
+            (key, _freeze_matrix_value(item))
+            for key, item in value.items()
+        ))
+    if isinstance(value, list):
+        return tuple(_freeze_matrix_value(item) for item in value)
+    return value
+
+
+def _multinode_parallelism_key(entry: dict) -> tuple:
+    """Identify a multi-node config independently of eval/concurrency fields."""
+    ignored_fields = {
+        Fields.CONC.value,
+        Fields.RUN_EVAL.value,
+        Fields.EVAL_ONLY.value,
+        Fields.EVAL_CONC.value,
+    }
+    return tuple(sorted(
+        (key, _freeze_matrix_value(value))
+        for key, value in entry.items()
+        if key not in ignored_fields
+    ))
+
+
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
@@ -57,28 +85,6 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         conc = entry[Fields.CONC.value]
         conc_values = conc if isinstance(conc, list) else [conc]
         return sorted(c for c in conc_values if c >= MIN_EVAL_CONC)
-
-    def _freeze(value):
-        if isinstance(value, dict):
-            return tuple(sorted((key, _freeze(item)) for key, item in value.items()))
-        if isinstance(value, list):
-            return tuple(_freeze(item) for item in value)
-        return value
-
-    def _parallelism_key(entry):
-        # Keep complete prefill/decode dictionaries so worker count, TP, EP,
-        # DP-attention, and launch settings all distinguish configurations.
-        ignored_fields = {
-            Fields.CONC.value,
-            Fields.RUN_EVAL.value,
-            Fields.EVAL_ONLY.value,
-            Fields.EVAL_CONC.value,
-        }
-        return tuple(sorted(
-            (key, _freeze(value))
-            for key, value in entry.items()
-            if key not in ignored_fields
-        ))
 
     # Single-node: group by (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn).
     # Only 8k1k entries with a top-level TP (single-node schema).
@@ -123,7 +129,7 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_concs = _eligible_eval_concs(entry)
         if not eval_concs:
             continue
-        mn_groups[_parallelism_key(entry)].append((i, eval_concs[-1]))
+        mn_groups[_multinode_parallelism_key(entry)].append((i, eval_concs[-1]))
 
     for entries in mn_groups.values():
         best_idx, best_eval_conc = max(entries, key=lambda item: item[1])
@@ -145,25 +151,38 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Expand eval selection to every fixed-sequence entry.
 
     Agentic entries are left untouched because they do not support lm-eval.
-    Multi-node entries use the upper median of their concurrency list for the
-    eval request concurrency unless the default eval policy already selected
-    an eval concurrency.
+    Each distinct concurrency in a multi-node entry becomes a separate eval
+    row with a singleton concurrency list so jobs and artifacts stay unique.
     """
+    expanded_entries = []
+    seen_multinode_points = set()
+
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            expanded_entries.append(entry)
+            continue
+
+        if Fields.PREFILL.value in entry:
+            conc = entry[Fields.CONC.value]
+            conc_values = conc if isinstance(conc, list) else [conc]
+            parallelism_key = _multinode_parallelism_key(entry)
+            for eval_conc in conc_values:
+                point_key = (parallelism_key, eval_conc)
+                if point_key in seen_multinode_points:
+                    continue
+                seen_multinode_points.add(point_key)
+                expanded_entries.append({
+                    **entry,
+                    Fields.CONC.value: [eval_conc],
+                    Fields.RUN_EVAL.value: True,
+                    Fields.EVAL_CONC.value: eval_conc,
+                })
             continue
 
         entry[Fields.RUN_EVAL.value] = True
-        if (
-            Fields.PREFILL.value in entry
-            and entry.get(Fields.EVAL_CONC.value) is None
-        ):
-            conc = entry[Fields.CONC.value]
-            conc_values = conc if isinstance(conc, list) else [conc]
-            sorted_concs = sorted(conc_values)
-            entry[Fields.EVAL_CONC.value] = sorted_concs[len(sorted_concs) // 2]
+        expanded_entries.append(entry)
 
-    return matrix_values
+    return expanded_entries
 
 
 def generate_full_sweep(args, all_config_data, runner_data):

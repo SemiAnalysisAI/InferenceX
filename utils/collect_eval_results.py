@@ -9,7 +9,8 @@ from tabulate import tabulate
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from summarize import (
     load_json, MODEL, HARDWARE, FRAMEWORK, PRECISION,
-    TP, EP, CONC, DP_ATTENTION, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF,
+    ISL, OSL, TP, EP, CONC, DP_ATTENTION, TASK, SCORE,
+    EM_STRICT, EM_FLEXIBLE, N_EFF,
     SPEC_DECODING, PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
     DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS
 )
@@ -210,6 +211,8 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'framework': meta.get('framework', 'unknown').lower(),
         'precision': meta.get('precision', 'unknown').lower(),
         'spec_decoding': meta.get('spec_decoding', 'unknown'),
+        'isl': as_int(meta.get('isl', 0), 0),
+        'osl': as_int(meta.get('osl', 0), 0),
         'tp': as_int(meta.get('tp', prefill_tp), prefill_tp),
         'ep': as_int(meta.get('ep', prefill_ep), prefill_ep),
         'prefill_tp': prefill_tp,
@@ -283,24 +286,26 @@ def main():
     single_node_sort_key = (
         (lambda r: (
             r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
-            r['tp'], r['ep'], r['conc'],
+            r['isl'], r['osl'], r['tp'], r['ep'], r['conc'],
         ))
         if sort_by == 'hw'
         else (lambda r: (
             r['model_prefix'], r['hw'], r['framework'], r['precision'],
-            r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc'],
+            r.get('spec_decoding', ''), r['isl'], r['osl'],
+            r['tp'], r['ep'], r['conc'],
         ))
     )
     multinode_sort_key = (
         (lambda r: (
             r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
+            r['isl'], r['osl'],
             r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
             r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
         ))
         if sort_by == 'hw'
         else (lambda r: (
             r['model_prefix'], r['hw'], r['framework'], r['precision'],
-            r.get('spec_decoding', ''),
+            r.get('spec_decoding', ''), r['isl'], r['osl'],
             r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
             r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
         ))
@@ -317,7 +322,7 @@ def main():
         if single_node_rows:
             headers = [
                 MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
-                TP, EP, CONC, DP_ATTENTION,
+                ISL, OSL, TP, EP, CONC, DP_ATTENTION,
                 TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
             ]
             table_rows = [
@@ -327,6 +332,8 @@ def main():
                     r['framework'].upper(),
                     r['precision'].upper(),
                     r['spec_decoding'],
+                    r['isl'],
+                    r['osl'],
                     r['tp'],
                     r['ep'],
                     r['conc'],
@@ -346,6 +353,7 @@ def main():
         if multinode_rows:
             headers = [
                 MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
+                ISL, OSL,
                 PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
                 DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS,
                 CONC, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
@@ -357,6 +365,8 @@ def main():
                     r['framework'].upper(),
                     r['precision'].upper(),
                     r['spec_decoding'],
+                    r['isl'],
+                    r['osl'],
                     r['prefill_tp'],
                     r['prefill_ep'],
                     r['prefill_dp_attention'],

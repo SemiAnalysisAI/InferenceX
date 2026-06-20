@@ -111,6 +111,16 @@ def main():
     parser.add_argument("--head-ref", type=str, required=True)
     parser.add_argument("--changelog-file", type=str, required=True)
     parser.add_argument("--trim-conc", action="store_true")
+    parser.add_argument(
+        "--all-evals",
+        action="store_true",
+        help="Expand every changelog entry's eval selection without changing throughput.",
+    )
+    parser.add_argument(
+        "--evals-only",
+        action="store_true",
+        help="Suppress throughput for every changelog entry without expanding eval selection.",
+    )
     args = parser.parse_args()
 
     added_yaml = get_added_lines(args.base_ref, args.head_ref, args.changelog_file)
@@ -157,8 +167,14 @@ def main():
 
     for entry, all_configs in resolved_entries:
         entry_scenarios = tuple(entry.scenario_type or SCENARIO_TYPES)
+        expand_all_evals = args.all_evals or entry.all_evals
+        suppress_throughput = (
+            args.evals_only
+            or entry.evals_only
+            or entry.all_evals
+        )
 
-        if not entry.evals_only and not entry.all_evals:
+        if not suppress_throughput:
             # Generate benchmark entries (no evals)
             benchmark_groups = defaultdict(list)
             for config in all_configs:
@@ -207,7 +223,7 @@ def main():
         if eval_configs:
             eval_configs_seen.update(eval_configs)
             eval_flags = ["--evals-only"]
-            if entry.all_evals:
+            if expand_all_evals:
                 eval_flags.append("--all-evals")
             base_cmd = [
                 "python3",
