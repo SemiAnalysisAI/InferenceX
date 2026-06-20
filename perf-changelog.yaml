@@ -1,14 +1,4 @@
 - config-keys:
-    - dsv4-fp4-mi355x-atom-disagg-mtp
-  description:
-    - "Add dsv4-fp4-mi355x-atom-disagg-mtp recipe: multi-node disaggregated PD on MI355X via ATOM with MTP speculative decoding"
-    - "2P1D DPA+TBO+MTP1 sweep at ISL8192 (conc 256-2048)"
-    - "1P1D TP8+MTP3 sweep at ISL8192 (conc 4-128)"
-    - "1P1D TP8+DPA+MTP1 sweep at ISL1024 (conc 64-1024)"
-    - "Image: rocm/atom-dev:nightly_202606181332"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1855
-
-- config-keys:
     - 70b-fp8-*-vllm
   description:
     - 'Add compilation-config ''{"custom_ops": ["-rms_norm", "-quant_fp8", "-silu_and_mul"]}'' as extra config to all benchmarks/70b_fp8_mi*.sh scripts'
@@ -4163,3 +4153,12 @@
     - "Run the PR #1891 MiniMax-M3 MXFP8 B300 Dynamo-vLLM recipe set on top of current main."
     - "Uses the vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image and the TEP4/TEP8 8k1k topologies not covered by PR #1890."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-atom-disagg
+  description:
+    - "Add minimaxm3-fp8-mi355x-atom-disagg CI recipe: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP8"
+    - "Settings aligned with slurm reference: MEM_FRAC_STATIC=0.8, MAX_NUM_SEQS=128, BLOCK_SIZE=128, MAX_MODEL_LEN=32768, KV_CACHE_DTYPE=auto"
+    - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
+    - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1865
