@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-b300-1p1d-fp8-dep2-tp8-marlin-1k1k"
+name: "minimax-m3-vllm-disagg-b300-1p1d-fp8-dep2-tp4-marlin-8k1k"
 
 model:
   path: "MiniMaxAI/MiniMax-M3-MXFP8"
@@ -13,7 +13,7 @@ resources:
   prefill_workers: 1
   decode_workers: 1
   gpus_per_prefill: 2
-  gpus_per_decode: 8
+  gpus_per_decode: 4
 
 dynamo:
   install: true
@@ -28,12 +28,12 @@ backend:
   connector: null
 
   prefill_environment:
+    VLLM_FLOAT32_MATMUL_PRECISION: high
     UCX_TLS: "cuda_copy,rc"
-    VLLM_FLOAT32_MATMUL_PRECISION: "high"
 
   decode_environment:
+    VLLM_FLOAT32_MATMUL_PRECISION: high
     UCX_TLS: "cuda_copy,rc"
-    VLLM_FLOAT32_MATMUL_PRECISION: "high"
 
   vllm_config:
     prefill:
@@ -46,14 +46,14 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       block-size: 128
       gpu-memory-utilization: 0.90
-      max-model-len: 2304
+      max-model-len: 9472
       language-model-only: true
       stream-interval: 32
       max-cudagraph-capture-size: 2048
-      max-num-batched-tokens: 2048
+      max-num-batched-tokens: 16384
 
     decode:
-      tensor-parallel-size: 8
+      tensor-parallel-size: 4
       enable-expert-parallel: false
       moe-backend: marlin
       trust-remote-code: true
@@ -61,12 +61,12 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       block-size: 128
       gpu-memory-utilization: 0.90
-      max-model-len: 2304
+      max-model-len: 9472
       language-model-only: true
       stream-interval: 32
-      max-num-seqs: 4096
+      max-num-seqs: 1024
       max-num-batched-tokens: 16384
-      max-cudagraph-capture-size: 8192
+      max-cudagraph-capture-size: 2048
 
 health_check:
   max_attempts: 360
@@ -74,7 +74,7 @@ health_check:
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
   concurrencies: "1x4x8x16"
   req_rate: "inf"
