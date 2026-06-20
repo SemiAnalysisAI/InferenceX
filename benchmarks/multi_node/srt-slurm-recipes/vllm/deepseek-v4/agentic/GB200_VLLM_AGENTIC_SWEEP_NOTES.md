@@ -244,6 +244,7 @@ NATS/etcd node.
 | `27804604959` | exact-key retention-corrected c64 gate | 3P/2D success; 4P/1D cancelled externally | Slurm job `19278` completed successfully with official aggregate, raw, and server-log artifacts. GitHub cancelled the run while 4P/1D job `19279` was loading; that orphan was cancelled. |
 | `27809946853` | isolated retention-corrected 4P/1D c64 gate | Success | Job `19392` completed with official aggregate, raw, server-log, and collected-result artifacts. Cache affinity worked, but the single decode replica saturated badly. |
 | `27815458708` | initial 10-point wide frontier | Intentionally stopped after four successful points | Official successes: 3P/2D c64, c96, c192 and 4P/1D c32. c96 and c192 were already deeply overloaded, so pending c128/c160/c256/c384 and the duplicate 4P/1D c64 were cancelled before spending additional GPU time. |
+| `27834000342` | final 12-point dense sweep | Success | Attempt 2 completed all 12 points with aggregate, raw, and server-log artifacts. The workflow concluded successfully with no failed or cancelled jobs. |
 
 ### Unexpected cancellation of the first retention-corrected gate
 
@@ -343,6 +344,61 @@ NATS/etcd node.
 - The same run's 4P/1D c32 point completed 1,678 requests at 136,675 tok/s,
   2.70s mean TTFT, 12.63s p95 TTFT, and 19.83ms mean TPOT. It is a valid
   low-latency comparison point and remains in the final grid.
+
+### Final dense sweep (`27834000342`)
+
+Attempt 1 completed 3P/2D c16, c32, and c56 before an intentional workflow
+cancellation. Attempt 2 used GitHub's rerun-failed path, retained those green
+artifacts, and completed the other nine points. Stale attempt-1 Slurm jobs
+`19416`, `19420`, and `19421` were cancelled before attempt 2 allocated nodes.
+
+| Topology | Conc. | Successful | Total tok/s | Tok/s/GPU | Mean interactivity | Mean TTFT | P95 TTFT | Mean TPOT |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3P/2D | 16 | 1,058/1,058 | 77,064 | 1,927 | 71.2 tok/s | 2.26s | 13.03s | 14.22ms |
+| 3P/2D | 24 | 1,515/1,515 | 114,823 | 2,871 | 66.8 tok/s | 2.61s | 12.83s | 15.19ms |
+| 3P/2D | 32 | 1,804/1,804 | 147,021 | 3,676 | 60.4 tok/s | 2.64s | 12.06s | 16.71ms |
+| 3P/2D | 40 | 2,362/2,362 | 172,412 | 4,310 | 55.6 tok/s | 2.51s | 11.85s | 18.23ms |
+| 3P/2D | 48 | 3,039/3,039 | 213,778 | 5,344 | 53.2 tok/s | 2.66s | 12.12s | 19.00ms |
+| 3P/2D | 56 | 3,546/3,546 | 237,915 | 5,948 | 50.6 tok/s | 3.23s | 13.02s | 20.09ms |
+| 3P/2D | 64 | 4,099/4,099 | 264,609 | 6,615 | 48.5 tok/s | 3.66s | 13.49s | 20.91ms |
+| 3P/2D | 72 | 4,052/4,052 | 259,002 | 6,475 | 47.8 tok/s | 6.91s | 32.29s | 21.26ms |
+| 3P/2D | 80 | 3,809/3,809 | 268,365 | 6,709 | 47.3 tok/s | 16.19s | 63.37s | 21.49ms |
+| 3P/2D | 96 | 1,601/1,601 | 101,197 | 2,530 | 62.7 tok/s | 140.56s | 728.44s | 16.24ms |
+| 4P/1D | 32 | 1,676/1,676 | 136,519 | 3,413 | 50.8 tok/s | 2.66s | 12.99s | 19.89ms |
+| 4P/1D | 64 | 1,752/1,752 | 96,840 | 2,421 | 30.4 tok/s | 34.48s | 184.37s | 56.31ms |
+
+Conclusions:
+
+- 3P/2D c64 is the practical throughput knee. c72 has lower throughput and
+  worse latency; c80 gains only 1.4% throughput over c64 while mean TTFT rises
+  4.4x; c96 is a hard overload collapse. The c96 interactivity metric is
+  survivor-biased by the smaller set of requests that completed while prompt
+  queueing drove mean TTFT to 141 seconds.
+- The eight useful throughput/interactivity tradeoff points are 3P/2D
+  c16/c24/c32/c40/c48/c56/c64/c80. c72 is dominated and c96 is overload
+  evidence rather than an operating point.
+- 3P/2D dominates 4P/1D. At c32 it delivers 7.7% more throughput with nearly
+  identical TTFT. At c64 it delivers 2.73x throughput, 9.4x lower mean TTFT,
+  and 2.69x lower mean TPOT. One decode replica cannot sustain this workload.
+- Final local prefill cache hit rates were 91.6--95.0% through 3P/2D c64.
+  They fell to 82.8--93.2% at c72/c80 and 54.2--57.4% at c96 as overload
+  prevented conversations from progressing through their reusable turns.
+- NIXL remained healthy at approximately 16.5--28.5 GB/s mean throughput by
+  point, with peaks around 43 GB/s. There were no NIXL/UCX failures, payload
+  truncations, NATS payload-too-large errors, HTTP 503s, or profiled request
+  errors. Expired producer leases at c64/c72/c96 occurred in the fixed-duration
+  post-profile drain/teardown window for requests absent from the successful
+  aggregates; they did not indicate a measured transfer-path failure.
+- Engine startup was audited directly from the cluster. Long TP8 decode loads
+  continued advancing checkpoint-shard, CUDA-graph, DeepGEMM, KV-registration,
+  and worker-registration logs; all workers became healthy before profiling.
+  No startup was silently accepted based only on Slurm RUNNING state.
+- Against the B200 aggregate c64 no-offload reference, 3P/2D c64 has 3.23x
+  total system throughput, 3.78x lower mean TTFT, and 3.93x lower mean TPOT.
+  It is nevertheless 35.4% lower in throughput per inference GPU: 6,615 versus
+  10,233 tok/s/GPU. Forty GB200 inference GPUs deliver 3.23x the throughput of
+  eight B200 GPUs, or 64.6% scaling efficiency. Disaggregation is a system
+  throughput and latency win here, not a GPU-efficiency win.
 
 ### Official RDMA topology gate: completed points
 
@@ -483,16 +539,11 @@ B200 modes remain useful references. The dense 3P/2D c16--c96 grid resolves
 the useful region and its first overload transition; the official c192 point
 provides the hard-overload boundary.
 
-## Remaining Work
+## Completion
 
-1. Run the final official 12-point dense sweep: 4P/1D c32/c64 and 3P/2D
-   c16/c24/c32/c40/c48/c56/c64/c72/c80/c96.
-2. At c80/c96, audit warmup duration, affinity expiry, request latency, and
-   server/Slurm/GitHub time limits. Increase a timeout only if measured
-   saturation approaches it.
-3. Download every aggregate/raw/server-log artifact, derive the measured
-   throughput/latency Pareto frontier, and compare it with the B200 aggregate
-   reference.
+The final official sweep, artifact audit, topology comparison, concurrency
+knee analysis, and B200 comparison are complete. No additional timeout or
+message-buffer change is supported by the final logs.
 
 ## Acceptance Criteria
 
