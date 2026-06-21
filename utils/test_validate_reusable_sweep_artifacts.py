@@ -32,6 +32,8 @@ def write_eval_aggregate(
 def single_eval_entry(
     conc: int,
     runner: str = "h100-dgxc-slurm",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> dict:
     return {
         "exp-name": "gptoss_8k1k",
@@ -44,6 +46,8 @@ def single_eval_entry(
         "dp-attn": False,
         "disagg": False,
         "spec-decoding": "none",
+        "isl": isl,
+        "osl": osl,
         "conc": conc,
     }
 
@@ -51,6 +55,8 @@ def single_eval_entry(
 def single_eval_result(
     conc: int,
     runner: str = "h100-dgxc-slurm",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> dict:
     return {
         "is_multinode": False,
@@ -59,6 +65,8 @@ def single_eval_result(
         "framework": "vllm",
         "precision": "fp4",
         "spec_decoding": "none",
+        "isl": isl,
+        "osl": osl,
         "tp": 2,
         "ep": 1,
         "dp_attention": False,
@@ -70,8 +78,10 @@ def single_eval_result(
 def single_eval_meta(
     conc: int,
     runner: str = "h100-dgxc-slurm",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> dict:
-    row = single_eval_result(conc, runner)
+    row = single_eval_result(conc, runner, isl, osl)
     row["infmax_model_prefix"] = row.pop("model_prefix")
     return row
 
@@ -82,12 +92,78 @@ def write_raw_eval_artifact(
     *,
     logical_runner: str = "h100-dgxc-slurm",
     physical_runner: str = "h100-dgxc-slurm_00",
+    isl: int = 8192,
+    osl: int = 1024,
 ) -> None:
     artifact_dir = root / f"eval_result_conc{conc}_{physical_runner}"
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(
-        json.dumps(single_eval_meta(conc, logical_runner))
+        json.dumps(single_eval_meta(conc, logical_runner, isl, osl))
     )
+
+
+def multinode_eval_entry(concs: list[int]) -> dict:
+    return {
+        "exp-name": "gptoss_8k1k",
+        "runner": "gb200",
+        "model-prefix": "gptoss",
+        "precision": "fp8",
+        "framework": "dynamo-sglang",
+        "spec-decoding": "none",
+        "isl": 8192,
+        "osl": 1024,
+        "prefill": {
+            "tp": 4,
+            "ep": 1,
+            "dp-attn": False,
+            "num-worker": 1,
+        },
+        "decode": {
+            "tp": 8,
+            "ep": 1,
+            "dp-attn": True,
+            "num-worker": 2,
+        },
+        "conc": concs,
+        "eval-all-concs": True,
+    }
+
+
+def multinode_eval_result(conc: int) -> dict:
+    return {
+        "is_multinode": True,
+        "hw": "GB200",
+        "model_prefix": "gptoss",
+        "framework": "dynamo-sglang",
+        "precision": "fp8",
+        "spec_decoding": "none",
+        "isl": 8192,
+        "osl": 1024,
+        "prefill_tp": 4,
+        "prefill_ep": 1,
+        "prefill_dp_attention": False,
+        "prefill_num_workers": 1,
+        "decode_tp": 8,
+        "decode_ep": 1,
+        "decode_dp_attention": True,
+        "decode_num_workers": 2,
+        "conc": conc,
+        "task": "gsm8k",
+    }
+
+
+def write_raw_batched_eval_artifact(
+    root: Path,
+    concs: list[int],
+) -> None:
+    artifact_dir = root / "eval_gptoss_8k1k_batch"
+    artifact_dir.mkdir()
+    meta = multinode_eval_result(concs[0])
+    meta["infmax_model_prefix"] = meta.pop("model_prefix")
+    meta["eval_concs"] = concs
+    meta["completed_eval_concs"] = concs
+    meta["failed_eval_concs"] = []
+    (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
 
 
 def single_fixed_entry(conc: int) -> dict:
@@ -268,6 +344,33 @@ def test_eval_validation_accepts_all_expected_raw_result_dirs(tmp_path: Path) ->
     assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
 
 
+def test_eval_validation_distinguishes_sequence_lengths(tmp_path: Path) -> None:
+    config = {
+        "evals": [
+            single_eval_entry(32, isl=1024),
+            single_eval_entry(32, isl=8192),
+        ],
+        "multinode_evals": [],
+    }
+    write_eval_aggregate(
+        tmp_path,
+        [
+            single_eval_result(32, isl=1024),
+            single_eval_result(32, isl=8192),
+        ],
+    )
+    write_raw_eval_artifact(tmp_path, 32, isl=1024)
+    write_raw_eval_artifact(
+        tmp_path,
+        32,
+        physical_runner="h100-dgxc-slurm_01",
+        isl=8192,
+    )
+
+    assert len(expected_eval_keys(config)) == 2
+    assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
+
+
 def test_eval_validation_rejects_unexpected_result_dir(tmp_path: Path) -> None:
     config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
     write_eval_aggregate(tmp_path, [single_eval_result(32)])
@@ -314,6 +417,26 @@ def test_eval_validation_uses_logical_runner_from_metadata(
     )
 
     assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
+
+
+def test_eval_validation_expands_one_batched_multinode_artifact(
+    tmp_path: Path,
+) -> None:
+    concs = [4, 16, 64]
+    config = {
+        "evals": [],
+        "multinode_evals": [multinode_eval_entry(concs)],
+    }
+    write_eval_aggregate(
+        tmp_path,
+        [multinode_eval_result(conc) for conc in concs],
+    )
+    write_raw_batched_eval_artifact(tmp_path, concs)
+
+    expected = expected_eval_keys(config)
+
+    assert len(expected) == 3
+    assert validate_eval_artifacts(tmp_path, expected) == []
 
 
 def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:

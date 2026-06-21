@@ -38,6 +38,8 @@ SWEEP_LABELS = {
     "full-sweep-fail-fast",
     "full-sweep-fail-fast-no-canary",
 }
+MODIFIER_LABELS = {"all-evals", "evals-only"}
+RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS
 REUSE_ELIGIBLE_LABELS = SWEEP_LABELS - {"sweep-enabled"}
 
 
@@ -208,6 +210,9 @@ def run_dag(sc: dict) -> tuple[str, str, str]:
     else:
         check_result = sc.get("check", "success")
     ctx["needs.check-changelog.result"] = check_result
+    ctx["needs.check-changelog.outputs.skip-pr-sweep"] = (
+        "true" if "[skip-sweep]" in sc.get("msg", "") else "false"
+    )
 
     if not _eval(GATE_IF, ctx):
         gate_result, skip = "skipped", ""
@@ -241,12 +246,44 @@ CASES = [
     ("PR-sync-trim-sweep-enabled",
      {**_PR, "action": "synchronize", "labels": ["sweep-enabled"]},
      ("success", "skipped", "RUN")),
+    ("PR-sync-all-evals-without-sweep-label",
+     {**_PR, "action": "synchronize", "labels": ["all-evals"]},
+     ("success", "skipped", "SKIP")),
+    ("PR-sync-evals-only-without-sweep-label",
+     {**_PR, "action": "synchronize", "labels": ["evals-only"]},
+     ("success", "skipped", "SKIP")),
+    ("PR-sync-full-with-all-evals-ignores-reuse",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "all-evals"],
+      "reuse_auth": True}, ("success", "skipped", "RUN")),
+    ("PR-sync-full-with-evals-only-ignores-reuse",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "evals-only"],
+      "reuse_auth": True}, ("success", "skipped", "RUN")),
+    ("PR-sync-full-with-both-modifiers-ignores-reuse",
+     {**_PR, "action": "synchronize",
+      "labels": ["full-sweep-enabled", "all-evals", "evals-only"],
+      "reuse_auth": True}, ("success", "skipped", "RUN")),
     ("PR-sync-no-sweep-label",
      {**_PR, "action": "synchronize", "labels": []},
      ("success", "skipped", "SKIP")),
     ("PR-labeled-with-sweep-label",
      {**_PR, "action": "labeled", "label_name": "full-sweep-enabled",
       "labels": ["full-sweep-enabled"]}, ("success", "skipped", "RUN")),
+    ("PR-labeled-with-all-evals-without-sweep-label",
+     {**_PR, "action": "labeled", "label_name": "all-evals",
+      "labels": ["all-evals"]}, ("success", "skipped", "SKIP")),
+    ("PR-labeled-with-evals-only-without-sweep-label",
+     {**_PR, "action": "labeled", "label_name": "evals-only",
+      "labels": ["evals-only"]}, ("success", "skipped", "SKIP")),
+    ("PR-labeled-all-evals-modifies-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "all-evals",
+      "labels": ["full-sweep-enabled", "all-evals"]},
+     ("success", "skipped", "RUN")),
+    ("PR-labeled-evals-only-modifies-full-sweep",
+     {**_PR, "action": "labeled", "label_name": "evals-only",
+      "labels": ["full-sweep-enabled", "evals-only"]},
+     ("success", "skipped", "RUN")),
     ("PR-labeled-with-unrelated-label",
      {**_PR, "action": "labeled", "label_name": "documentation",
       "labels": ["full-sweep-enabled"]}, ("skipped", "skipped", "SKIP")),
@@ -259,12 +296,16 @@ CASES = [
     ("PR-ready-for-review",
      {**_PR, "action": "ready_for_review", "labels": ["full-sweep-enabled"],
       "reuse_auth": False}, ("success", "skipped", "RUN")),
+    ("PR-sync-skip-sweep-tag",
+     {**_PR, "action": "synchronize", "labels": ["full-sweep-enabled"],
+      "msg": "fix: docs [skip-sweep]"},
+     ("success", "success", "SKIP")),
     ("push-additions-no-skip",
      {"event": "push", "msg": "feat: add model"},
      ("skipped", "skipped", "RUN")),
-    ("push-skip-sweep-tag",
+    ("push-skip-sweep-tag-ignored",
      {"event": "push", "msg": "fix: x [skip-sweep]"},
-     ("skipped", "skipped", "SKIP")),
+     ("skipped", "skipped", "RUN")),
 ]
 
 
@@ -322,7 +363,7 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
         and not draft
         and (
             action not in ("labeled", "unlabeled")
-            or sc.get("label_name") in SWEEP_LABELS
+            or sc.get("label_name") in RELEVANT_LABELS
         )
     )
     if not check_runs:
@@ -338,6 +379,7 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
         and sc.get("action") == "synchronize"
         and not draft
         and bool(labels & REUSE_ELIGIBLE_LABELS)
+        and labels.isdisjoint(MODIFIER_LABELS)
     )
     reuse = "success" if gate_runs else "skipped"
     authorized = gate_runs and sc.get("reuse_auth", False)
@@ -345,11 +387,16 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
 
     if is_pr:
         action_ok = action not in ("labeled", "unlabeled") or (
-            sc.get("label_name") in SWEEP_LABELS
+            sc.get("label_name") in RELEVANT_LABELS
         )
-        event_ok = (not draft) and bool(labels & SWEEP_LABELS) and action_ok
+        event_ok = (
+            (not draft)
+            and bool(labels & SWEEP_LABELS)
+            and action_ok
+            and "[skip-sweep]" not in sc.get("msg", "")
+        )
     else:
-        event_ok = "[skip-sweep]" not in sc.get("msg", "")
+        event_ok = True
 
     check_clause = check in ("success", "skipped")
     runs = check_clause and reuse_clause and event_ok
@@ -364,22 +411,39 @@ def _all_scenarios() -> list[dict]:
         ["non-canary-full-sweep-enabled"],
         ["full-sweep-fail-fast"],
         ["full-sweep-fail-fast-no-canary"],
+        ["all-evals"],
+        ["evals-only"],
+        ["all-evals", "evals-only"],
         ["documentation"],
         ["sweep-enabled", "full-sweep-enabled"],
         ["full-sweep-enabled", "full-sweep-fail-fast"],
+        ["sweep-enabled", "all-evals"],
+        ["full-sweep-enabled", "all-evals"],
+        ["sweep-enabled", "evals-only"],
+        ["full-sweep-enabled", "evals-only"],
+        ["sweep-enabled", "all-evals", "evals-only"],
+        ["full-sweep-enabled", "all-evals", "evals-only"],
     ]
     pr_axes = itertools.product(
         ["ready_for_review", "synchronize", "labeled", "unlabeled"],  # action
         [False, True],                      # draft
         label_cfgs,                         # labels
-        ["full-sweep-enabled", "sweep-enabled", "documentation", None],  # label.name
+        [
+            "full-sweep-enabled",
+            "sweep-enabled",
+            "all-evals",
+            "evals-only",
+            "documentation",
+            None,
+        ],                                  # label.name
         [False, True],                      # reuse authorized
         ["success", "failure"],             # changelog outcome when it runs
+        ["feat: add model", "fix: thing [skip-sweep]"],  # head commit message
     )
     scenarios = [
         {"event": "pull_request", "action": a, "draft": d, "labels": labs,
-         "label_name": ln, "reuse_auth": r, "check": chk}
-        for a, d, labs, ln, r, chk in pr_axes
+         "label_name": ln, "reuse_auth": r, "check": chk, "msg": msg}
+        for a, d, labs, ln, r, chk, msg in pr_axes
     ]
     scenarios += [
         {"event": "push", "msg": msg}
@@ -397,9 +461,9 @@ def test_exhaustive_cross_product() -> None:
     ]
     assert not mismatches, mismatches[:10]
     # Sanity: confirm the sweep actually covered the whole input space
-    # (4 actions x 2 draft x 9 label-configs x 4 label-names x 2 reuse x
-    # 2 changelog outcomes = 1152 PR cases, plus 2 push cases).
-    assert len(scenarios) == 1154
+    # (4 actions x 2 draft x 18 label-configs x 6 label-names x 2 reuse x
+    # 2 changelog outcomes x 2 messages = 6912 PR cases, plus 2 push cases).
+    assert len(scenarios) == 6914
 
 
 def test_named_cases_match_reference_spec() -> None:

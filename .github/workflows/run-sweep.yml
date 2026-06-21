@@ -11,6 +11,8 @@ concurrency:
           github.event.label.name != 'non-canary-full-sweep-enabled' &&
           github.event.label.name != 'full-sweep-fail-fast' &&
           github.event.label.name != 'full-sweep-fail-fast-no-canary' &&
+          github.event.label.name != 'all-evals' &&
+          github.event.label.name != 'evals-only' &&
           github.run_id ||
           'active'
         }}
@@ -45,8 +47,12 @@ jobs:
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary'
+              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only'
             )
+        outputs:
+            skip-pr-sweep: ${{ steps.sweep_policy.outputs.skip-pr-sweep }}
         steps:
             - name: Reject conflicting sweep labels
               env:
@@ -75,13 +81,36 @@ jobs:
               with:
                   fetch-depth: 0
 
+            - name: Read PR sweep policy
+              id: sweep_policy
+              env:
+                  HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+              run: |
+                  if git log -1 --format=%B "$HEAD_SHA" | grep -Fq '[skip-sweep]'; then
+                      echo "skip-pr-sweep=true" >> "$GITHUB_OUTPUT"
+                  else
+                      echo "skip-pr-sweep=false" >> "$GITHUB_OUTPUT"
+                  fi
+
             - name: Validate perf-changelog matrix
+              env:
+                  ALL_EVALS: ${{ contains(github.event.pull_request.labels.*.name, 'all-evals') }}
+                  EVALS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'evals-only') }}
               run: |
                   pip install pydantic pyyaml
-                  python3 utils/validate_perf_changelog.py \
-                    --changelog-file perf-changelog.yaml \
-                    --base-ref "origin/${{ github.base_ref }}" \
-                    --head-ref "${{ github.event.pull_request.head.sha }}"
+                  CMD=(
+                      python3 utils/validate_perf_changelog.py
+                      --changelog-file perf-changelog.yaml
+                      --base-ref "origin/${{ github.base_ref }}"
+                      --head-ref "${{ github.event.pull_request.head.sha }}"
+                  )
+                  if [ "$ALL_EVALS" = "true" ]; then
+                      CMD+=(--all-evals)
+                  fi
+                  if [ "$EVALS_ONLY" = "true" ]; then
+                      CMD+=(--evals-only)
+                  fi
+                  "${CMD[@]}"
 
     reuse-sweep-gate:
         needs: check-changelog
@@ -96,6 +125,8 @@ jobs:
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !github.event.pull_request.draft &&
+            !contains(github.event.pull_request.labels.*.name, 'all-evals') &&
+            !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
               contains(github.event.pull_request.labels.*.name, 'non-canary-full-sweep-enabled') ||
@@ -142,6 +173,7 @@ jobs:
               (
                 github.event_name == 'pull_request' &&
                 !github.event.pull_request.draft &&
+                needs.check-changelog.outputs.skip-pr-sweep != 'true' &&
                 (
                   contains(github.event.pull_request.labels.*.name, 'sweep-enabled') ||
                   contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
@@ -155,12 +187,13 @@ jobs:
                   github.event.label.name == 'full-sweep-enabled' ||
                   github.event.label.name == 'non-canary-full-sweep-enabled' ||
                   github.event.label.name == 'full-sweep-fail-fast' ||
-                  github.event.label.name == 'full-sweep-fail-fast-no-canary'
+                  github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+                  github.event.label.name == 'all-evals' ||
+                  github.event.label.name == 'evals-only'
                 )
               ) ||
               (
-                github.event_name != 'pull_request' &&
-                !contains(github.event.head_commit.message, '[skip-sweep]')
+                github.event_name == 'push'
               )
             )
         outputs:
@@ -185,6 +218,16 @@ jobs:
                         github.event_name == 'pull_request' &&
                         contains(github.event.pull_request.labels.*.name, 'sweep-enabled')
                       }}
+                  ALL_EVALS: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'all-evals')
+                      }}
+                  EVALS_ONLY: >-
+                      ${{
+                        github.event_name == 'pull_request' &&
+                        contains(github.event.pull_request.labels.*.name, 'evals-only')
+                      }}
               run: |
                   pip install pydantic
 
@@ -204,6 +247,12 @@ jobs:
                   )
                   if [ "$TRIM_CONC" = "true" ]; then
                       CMD+=(--trim-conc)
+                  fi
+                  if [ "$ALL_EVALS" = "true" ]; then
+                      CMD+=(--all-evals)
+                  fi
+                  if [ "$EVALS_ONLY" = "true" ]; then
+                      CMD+=(--evals-only)
                   fi
 
                   CONFIG_JSON=$("${CMD[@]}")
@@ -578,7 +627,7 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config.eval-conc }}
+            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     collect-results:
         needs:
@@ -832,7 +881,9 @@ jobs:
               github.event.label.name == 'full-sweep-enabled' ||
               github.event.label.name == 'non-canary-full-sweep-enabled' ||
               github.event.label.name == 'full-sweep-fail-fast' ||
-              github.event.label.name == 'full-sweep-fail-fast-no-canary'
+              github.event.label.name == 'full-sweep-fail-fast-no-canary' ||
+              github.event.label.name == 'all-evals' ||
+              github.event.label.name == 'evals-only'
             )
         runs-on: ubuntu-latest
         permissions:
