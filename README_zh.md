@@ -1,15 +1,18 @@
 #  InferenceX™，开源持续推理标准与研究平台
-## 受到 OpenAI、Meta、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
-
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/SemiAnalysisAI/InferenceX/pulls)
-[![GitHub Stars](https://img.shields.io/github/stars/SemiAnalysisAI/InferenceX?style=social)](https://github.com/SemiAnalysisAI/InferenceX)
-
+<p align="center">
+  <a href="https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
+  <a href="https://github.com/SemiAnalysisAI/InferenceX/pulls"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
+  <a href="https://inferencex.semianalysis.com/"><img alt="Dashboard" src="https://img.shields.io/badge/Performance-Dashboard-blue"></a>
+  <a href="https://deepwiki.com/SemiAnalysisAI/InferenceX"><img alt="Ask DeepWiki" src="https://deepwiki.com/badge.svg"></a>
+  <a href="https://github.com/SemiAnalysisAI/InferenceX"><img alt="GitHub Stars" src="https://img.shields.io/github/stars/SemiAnalysisAI/InferenceX?style=social"></a>
+</p>
 <div align="center">
 
 [English](./README.md) | **中文**
 
 </div>
+
+受到 OpenAI、Meta、Microsoft、Oracle 等万亿美元级 Token 工厂运营商，以及 PyTorch 基金会、vLLM、SGLang、Tri Dao 等机器学习社区的信赖
 
 ## 新闻
 
@@ -29,8 +32,7 @@ InferenceX™（前身为 InferenceMAX）是一个推理性能研究平台，致
 > 只有 [SemiAnalysisAI/InferenceX](https://github.com/SemiAnalysisAI/InferenceX) 仓库才包含官方的 InferenceX™ 结果，所有其他派生（fork）与仓库均为非官方。非官方仓库的基准测试设置以及机器/云环境的质量可能存在差异，从而导致基准测试结果欠佳。非官方仓库必须明确标注为“非官方（Unofficial）”。
 > 派生仓库不得移除本免责声明。
 
-<img width="1150" height="665" alt="image" src="https://github.com/user-attachments/assets/1e9738d4-6fb2-4cd7-a3e9-e6b2e03faed1" />
-<img width="1098" height="655" alt="image" src="https://github.com/user-attachments/assets/5b363271-69b9-4bd2-b85d-b33b9c16f50f" />
+<img width="2544" height="1424" alt="InferenceX DeepSeekv4 MXFP4 Performance Curve" src="https://github.com/user-attachments/assets/cc50b671-0a54-40b6-b184-19d5a59590cb" />
 
 
 ## 为什么？
@@ -44,6 +46,29 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 这种软件演进的速度带来了一个挑战：在某个固定时间点进行的基准测试很快就会过时，无法代表使用最新软件包所能达到的性能。
 
 
+## 官方支持硬件
+
+| SKU | 状态 |
+| --- | --- |
+| GB300 NVL72 | ✅ |
+| GB200 NVL72 | ✅ |
+| MI355X | ✅ |
+| B300 | ✅ |
+| B200 | ✅ |
+| MI325X | ✅ |
+| MI300X | ✅ |
+| H200 | ✅ |
+| H100 | ✅ |
+| MI455 UALoE72 | Coming Soon 🔜 |
+| Vera Rubin NVL72 | Coming Soon 🔜 |
+| Rubin NVL8 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #1 | Coming Soon 🔜 |
+| Chip #2 from Hardware Vendor #1 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #2 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #3 | Coming Soon 🔜 |
+| Chip #1 from Hardware Vendor #4 | Coming Soon 🔜 |
+
+
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
 我们同样感谢 Jensen Huang 与 Ian Buck 通过提供 GB200 NVL72 机架（经由 OCI）与 B200 GPU 来支持本开源项目。感谢来自 NVIDIA 推理团队与 NVIDIA Dynamo 团队的众多 NVIDIA 贡献者。
@@ -51,8 +76,8 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 我们还要感谢 SGLang、vLLM 与 TensorRT-LLM 的维护者们，他们打造了世界一流的软件栈，并将其开源给全世界。
 最后，我们衷心感谢 Crusoe、CoreWeave、Nebius、TensorWave、Oracle 与 TogetherAI 通过提供计算资源支持开源创新，使这一切成为可能。
 
-“当我们以前所未有的规模构建系统时，对机器学习社区而言，拥有开放、透明、能够反映推理在各类软硬件上真实表现的基准测试至关重要。InferenceX™ 的正面对比基准测试拨开了纷繁的噪音，为 Token 吞吐量、单位美元性能以及每兆瓦 Token 数提供了一幅鲜活的画面。这类开源工作增强了整个生态系统的实力，帮助从研究人员到前沿数据中心运营商的每一个人做出更明智的决策。” —— Peter Hoeschele，OpenAI Stargate 基础设施与工业计算副总裁
+完整支持者名单与引言：https://inferencex.semianalysis.com/quotes
 
-“理论峰值与真实世界推理吞吐量之间的差距，往往由系统软件决定：推理引擎、分布式策略以及底层核函式。InferenceX™ 的价值在于，它对最新软件进行基准测试，展示这些优化在各类硬件上的实际效果。这类开放、可复现的结果有助于整个社区更快地前进。” —— Tri Dao，Together AI 首席科学家、Flash Attention 发明者
+<img width="1400" height="682" alt="image" src="https://github.com/user-attachments/assets/589bfdda-905d-425f-94dc-f2551746dd9d" />
 
-“业界需要许多公开、可复现的推理性能基准测试。我们很高兴能代表 vLLM 团队与 InferenceX™ 展开合作。让所有人都能信赖并引用的、更加多样化的工作负载与场景，将帮助生态系统不断向前发展。公平、透明的测量推动着从模型架构到推理引擎再到硬件的每一层栈的进步。” —— Simon Mo，vLLM 项目联合负责人
+

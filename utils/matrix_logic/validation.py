@@ -64,6 +64,7 @@ class Fields(Enum):
     RUN_EVAL = 'run-eval'
     EVAL_ONLY = 'eval-only'
     EVAL_CONC = 'eval-conc'
+    EVAL_ALL_CONCS = 'eval-all-concs'
 
 
 """
@@ -140,6 +141,9 @@ class MultiNodeMatrixEntry(BaseModel):
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
+    eval_all_concs: bool = Field(
+        default=False, alias=Fields.EVAL_ALL_CONCS.value
+    )
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):

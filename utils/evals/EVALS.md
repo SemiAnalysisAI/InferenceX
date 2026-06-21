@@ -17,7 +17,7 @@ Generator eval modes:
 - Default: run throughput for every generated config and eval-only jobs for the selected subset above.
 - `--no-evals`: generate throughput jobs only.
 - `--evals-only`: generate eval-only jobs for the selected subset above.
-- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. For multi-node configs, every distinct value in each `conc-list` becomes its own eval job.
+- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. For multi-node configs, each engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same live engine.
 
 The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
 
@@ -92,6 +92,8 @@ Multi-node evals support two hardware paths:
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
+
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
 - `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
@@ -143,7 +145,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 
 ### Score validation
 `utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
