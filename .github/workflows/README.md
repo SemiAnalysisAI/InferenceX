@@ -192,7 +192,7 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Eval Modifiers
 
-Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration, including every distinct value in each multi-node `conc-list`. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Runs with either modifier are not eligible for artifact reuse.
+Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration. Each multi-node engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same engine. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Runs with either modifier are not eligible for artifact reuse.
 
 ## Reusing an Approved PR Full Sweep
 

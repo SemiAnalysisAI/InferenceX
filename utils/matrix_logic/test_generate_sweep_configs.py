@@ -491,7 +491,7 @@ class TestMarkAllEvalEntries:
 
         assert all(entry['run-eval'] for entry in result)
 
-    def test_expands_every_multinode_concurrency_into_a_distinct_eval(self):
+    def test_batches_every_multinode_concurrency_per_engine_topology(self):
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
@@ -513,14 +513,13 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(entries)
 
-        assert len(result) == 5
+        assert len(result) == 2
         assert all(entry['run-eval'] for entry in result)
         assert [entry['conc'] for entry in result] == [
-            [1], [4], [8], [16], [32],
+            [1, 4, 8, 16], [32],
         ]
-        assert [entry['eval-conc'] for entry in result] == [
-            1, 4, 8, 16, 32,
-        ]
+        assert all(entry['eval-all-concs'] is True for entry in result)
+        assert all('eval-conc' not in entry for entry in result)
 
     def test_default_eval_selection_does_not_collapse_all_evals_expansion(self):
         entries = [
@@ -536,8 +535,11 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(mark_eval_entries(entries))
 
-        assert [entry['eval-conc'] for entry in result] == [1, 4, 8, 16, 32]
-        assert all(entry['run-eval'] is True for entry in result)
+        assert len(result) == 1
+        assert result[0]['conc'] == [1, 4, 8, 16, 32]
+        assert result[0]['eval-all-concs'] is True
+        assert 'eval-conc' not in result[0]
+        assert result[0]['run-eval'] is True
 
     def test_deduplicates_overlapping_concurrency_rows_for_same_parallelism(self):
         entries = [
@@ -563,8 +565,10 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(entries)
 
-        assert [entry['eval-conc'] for entry in result] == [4, 8, 16, 32]
-        assert [entry['conc'] for entry in result] == [[4], [8], [16], [32]]
+        assert len(result) == 1
+        assert result[0]['conc'] == [4, 8, 16, 32]
+        assert result[0]['eval-all-concs'] is True
+        assert 'eval-conc' not in result[0]
 
     def test_skips_agentic_entries(self):
         entries = [
@@ -580,6 +584,7 @@ class TestMarkAllEvalEntries:
 
         assert 'run-eval' not in result[0]
         assert 'eval-conc' not in result[0]
+        assert 'eval-all-concs' not in result[0]
 
 
 # =============================================================================
@@ -1873,7 +1878,7 @@ class TestArgumentDefaults:
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 
-    def test_all_evals_expands_each_multinode_concurrency(
+    def test_all_evals_batches_each_multinode_concurrency(
         self,
         monkeypatch,
         sample_multinode_config,
@@ -1909,8 +1914,10 @@ class TestArgumentDefaults:
 
         result = generate_sweep_configs.main()
 
-        assert [entry['conc'] for entry in result] == [[4], [16], [64]]
-        assert [entry['eval-conc'] for entry in result] == [4, 16, 64]
+        assert len(result) == 1
+        assert result[0]['conc'] == [4, 16, 64]
+        assert result[0]['eval-all-concs'] is True
+        assert 'eval-conc' not in result[0]
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 
