@@ -12843,10 +12843,11 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d:
     agentic-coding:
     - duration: 1800
       search-space:
-      # One-decode throughput candidate. Start at c52 to preserve the healthy
-      # working-set density observed around the 3P/2D c80 frontier point.
+      # One-decode throughput curve. c52 is the validated metrics canary; the
+      # wider grid resolves the knee and retains explicit hundred-concurrency
+      # overload evidence without assuming additional decode capacity.
       - spec-decoding: none
-        conc-list: [52]
+        conc-list: [16, 24, 32, 40, 52, 64, 80, 96, 128, 160, 192, 256]
         prefill:
           num-worker: 2
           tp: 8
@@ -12873,10 +12874,11 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p1d:
     agentic-coding:
     - duration: 1800
       search-space:
-      # Higher-cache one-decode candidate at c68. If decode remains below
-      # saturation, this removes eight GPUs from the successful 3P/2D shape.
+      # Higher-cache one-decode candidate. Its curve determines whether a
+      # third cache domain can improve system throughput enough to repay the
+      # extra eight prefill GPUs while decode count remains fixed at one.
       - spec-decoding: none
-        conc-list: [68]
+        conc-list: [24, 32, 40, 48, 56, 68, 80, 96, 128, 160, 192, 256]
         prefill:
           num-worker: 3
           tp: 8

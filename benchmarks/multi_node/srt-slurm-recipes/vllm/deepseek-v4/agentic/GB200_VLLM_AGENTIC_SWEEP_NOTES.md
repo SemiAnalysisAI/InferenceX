@@ -694,3 +694,17 @@ fall back to their host and port. This exposes per-worker cache hit rate, KV
 usage, queue depth, preemptions, and token throughput so cache-affinity and
 load-imbalance failures are visible while a sweep is still running. The
 existing aggregate snapshot API and per-endpoint export data remain intact.
+
+Official run `27915217510` attempt 2 / Slurm job `19538` validated the complete
+path on the real 2P/1D DeepSeek configuration. The generated AIPerf command
+contained prefill endpoints `:7500` and `:7502` plus decode endpoint `:7504`.
+Iterative output emitted distinct `srv prefill 0`, `srv prefill 1`, and
+`srv decode 0` rows with populated cache, KV usage, queue, preemption, and
+token-throughput fields. The prefills finished around 91.6% and 92.3% local
+prefix hit rate. The official aggregate completed 2,689 requests at 187,624
+total tok/s, 7,818 tok/s/GPU, 4.78s mean TTFT, 24.69ms mean TPOT, and 40.96
+output tok/s interactivity. This improves normalized throughput by 16.5% over
+the previous GB200 best (3P/2D c80 at 6,709 tok/s/GPU). Decode metrics showed
+roughly 35--52 running requests and up to 89% KV usage while prefills were
+usually lightly queued, so the wider high-throughput search retains one decode
+and sweeps concurrency rather than adding decode GPUs preemptively.
