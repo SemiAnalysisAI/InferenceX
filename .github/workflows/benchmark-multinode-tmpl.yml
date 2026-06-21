@@ -87,7 +87,7 @@ on:
         required: false
         default: false
       eval-conc:
-        description: "Concurrency to use for eval requests (overrides default max-of-conc-list)"
+        description: "Concurrency value or space-separated list for eval requests (overrides default max-of-conc-list)"
         type: string
         required: false
         default: ""

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from tabulate import tabulate
@@ -14,6 +15,8 @@ from summarize import (
     SPEC_DECODING, PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
     DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS
 )
+
+CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def find_eval_sets(root: Path) -> List[Path]:
@@ -37,29 +40,51 @@ def find_eval_sets(root: Path) -> List[Path]:
     return out
 
 
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
-    """Return (lm_eval_json) if present.
-    
-    Checks immediate directory for result JSONs.
+def result_concurrency(path: Path) -> Optional[int]:
+    """Extract a batched eval concurrency from a staged result filename."""
+    match = CONC_SUFFIX_RE.search(path.name)
+    return int(match.group(1)) if match else None
+
+
+def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
+    """Return lm-eval result JSONs from one artifact directory.
+
+    Legacy artifacts contribute their latest result file. Batched artifacts
+    contribute the latest result file for each `_concN` suffix.
     """
-    immediate_jsons = list(d.glob('results*.json')) + [
+    immediate_jsons = set(d.glob('results*.json'))
+    immediate_jsons.update(
         p for p in d.glob('*.json') if p.name != 'meta_env.json'
-    ]
-    
-    lm_path = None
-    le_path = None
-    
+    )
+    lm_paths = []
+
     for p in immediate_jsons:
         data = load_json(p)
         if not isinstance(data, dict):
             continue
-            
         if 'lm_eval_version' in data:
-            # lm-eval harness - pick latest if multiple
-            if lm_path is None or p.stat().st_mtime > lm_path.stat().st_mtime:
-                lm_path = p
-                
-    return lm_path, le_path
+            lm_paths.append(p)
+
+    if not lm_paths:
+        return []
+    if not batched:
+        return [max(lm_paths, key=lambda path: path.stat().st_mtime)]
+
+    latest_by_conc: Dict[int, Path] = {}
+    for path in lm_paths:
+        conc = result_concurrency(path)
+        if conc is None:
+            continue
+        current = latest_by_conc.get(conc)
+        if current is None or path.stat().st_mtime > current.stat().st_mtime:
+            latest_by_conc[conc] = path
+    return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
+
+
+def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], Optional[Path]]:
+    """Return the latest legacy lm-eval JSON and deprecated second slot."""
+    lm_paths = detect_lm_eval_jsons(d)
+    return (lm_paths[0] if lm_paths else None), None
 
 
 def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
@@ -251,6 +276,35 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
+def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
+    """Collect logical eval rows, expanding batched artifacts by concurrency."""
+    rows: List[Dict[str, Any]] = []
+    for d in find_eval_sets(root):
+        meta = load_json(d / 'meta_env.json') or {}
+        batch_concs = meta.get('eval_concs')
+        batched = isinstance(batch_concs, list)
+        allowed_concs: Optional[set[int]] = None
+        if batched:
+            completed_concs = meta.get('completed_eval_concs', batch_concs)
+            if isinstance(completed_concs, list):
+                allowed_concs = {as_int(conc, -1) for conc in completed_concs}
+
+        for lm_path in detect_lm_eval_jsons(d, batched=batched):
+            row_meta = meta
+            if batched:
+                conc = result_concurrency(lm_path)
+                if conc is None or (
+                    allowed_concs is not None and conc not in allowed_concs
+                ):
+                    continue
+                row_meta = {**meta, 'conc': conc}
+
+            metrics_list = extract_lm_metrics(lm_path)
+            for metrics in metrics_list:
+                rows.append(build_row(row_meta, metrics))
+    return rows
+
+
 def main():
     if len(sys.argv) < 3:
         print('Usage: collect_eval_results.py <results_dir> <exp_name> [sort_by: model_prefix|hw]')
@@ -259,24 +313,7 @@ def main():
     root = Path(sys.argv[1])
     exp_name = sys.argv[2]
 
-    rows: List[Dict[str, Any]] = []
-    for d in find_eval_sets(root):
-        meta = load_json(d / 'meta_env.json') or {}
-        lm_path, le_path = detect_eval_jsons(d)
-
-        # Extract metrics (prefer lm-eval) - returns list for multi-task support
-        if lm_path:
-            metrics_list = extract_lm_metrics(lm_path)
-        else:
-            continue
-
-        if not metrics_list:
-            continue
-
-        # Build row for each task in the results
-        for m in metrics_list:
-            row = build_row(meta, m)
-            rows.append(row)
+    rows = collect_eval_rows(root)
 
     single_node_rows = [r for r in rows if not r['is_multinode']]
     multinode_rows = [r for r in rows if r['is_multinode']]
