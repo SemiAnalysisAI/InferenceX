@@ -594,3 +594,45 @@ a fixed budget.
 - Server logs demonstrate working KV-event ingestion and routing.
 - Performance is reviewed against B200 aggregate results and any remaining
   gap is explained by measured evidence rather than workflow success alone.
+
+## High-Concurrency Canary Results and Revised Baseline
+
+Three minimum-replica TEP canaries completed successfully but were rejected
+for performance:
+
+| Run | Topology / concurrency | Total tok/s | Tok/s/GPU | Mean TTFT | Final prefill cache hit |
+| --- | --- | ---: | ---: | ---: | ---: |
+| `27886872533` | 1P/1D c128 | 23,073 | 1,442 | 989s | 2.7% |
+| `27886909223` | 1P/2D c144 | 22,399 | 933 | 993s | 1.5% |
+| `27886930163` | 2P/2D c176 | 53,087 | 1,659 | 343s | 17.9--26.5% |
+
+- Warmup took 1,395s, 1,507s, and 932s respectively, confirming that the
+  four-hour Dynamo session lease is required at these concurrency levels.
+- Prefill workers were the bottleneck (about 97% active for both one-prefill
+  cases and 78% for 2P/2D); decode workers were only 46--66% active. Adding a
+  second decode did not improve a workload that had already evicted its
+  warmed prefix working set.
+- Hundreds of trajectories cannot be made efficient merely by raising
+  concurrency on one or two TEP8 prefill caches. Future points must increase
+  cache domains and/or prefill attention concurrency while reducing excess
+  decode GPU cost.
+
+The complete June 10 B200 single-node aggregate offload curve changes the
+normalized target. Its strongest completed point was c196 at 113,672 tok/s
+total, 14,209 tok/s/GPU, 15.53s mean TTFT, and 279.09ms mean TPOT. c128 was
+98,908 tok/s total and 12,363 tok/s/GPU. The current GB200 3P/2D c64 point
+(6,615 tok/s/GPU) is therefore only 46.6% of the best B200 normalized
+throughput, despite substantially better TPOT. New candidates are compared
+against both the GB200 frontier and this stronger B200 offload reference.
+
+### TP4 x DP2 search
+
+The first DEP candidate uses three prefill workers and one decode worker;
+every eight-GPU worker is TP4 x DP2 with expert parallelism across all eight
+GPUs. Dynamo 1.3.0.dev20260618 routes to `(worker_id, dp_rank)` and forwards
+`data_parallel_rank` to vLLM, so cache affinity is evaluated per DP rank
+instead of relying on round-robin inside the worker. At c112, six prefill DP
+ranks receive roughly 19 active trajectories each while the two decode ranks
+avoid paying for a second eight-GPU decode replica. The topology uses 32
+inference GPUs and must exceed 211,687 tok/s to beat 3P/2D c64 on normalized
+throughput.
