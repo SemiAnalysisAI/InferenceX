@@ -4605,245 +4605,6 @@ gptoss-fp4-b200-vllm-agentic:
       - { tp: 4, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
       - { tp: 8, offloading: cpu,  conc-list: [64, 96, 128, 192, 256] }
 
-minimaxm2.5-fp8-b200-vllm:
-  image: vllm/vllm-openai:v0.22.0
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b200
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, ep: 2, conc-start: 512, conc-end: 512 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 2, conc-start: 4, conc-end: 512 }
-      - { tp: 4, conc-start: 4, conc-end: 512 }
-
-  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
-  # does not have a B300-specific recipe, so this config reuses the existing
-  # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
-# Diverged from minimaxm2.5-fp8-b200-vllm (agentic-coding sibling). Reasons below;
-# the original minimaxm2.5-fp8-b200-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
-#   - runner: 'b200' -> 'b200-dgxc'
-minimaxm2.5-fp8-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b200-dgxc
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # B200 tp=4: compute ceiling ~50 (empirical), KV cliff ~48 (analytical).
-    # Push none past the KV cliff (96, 128) to make the no-offload throughput
-    # collapse visible; cpu range overlaps fully for same-conc comparison.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 56, 64, 96, 128] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 56, 64, 96, 128] }
-
-  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
-  # does not have a B300-specific recipe, so this config reuses the existing
-  # MiniMax-M2.5 FP8 B200 vLLM recipe as-is until B300-specific tuning is available.
-
-minimaxm2.5-fp8-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 4, conc-end: 128 }
-      - { tp: 4, ep: 4, conc-start: 256, conc-end: 512 }
-      - { tp: 2, ep: 2, conc-start: 512, conc-end: 1024 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 1024 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 2, conc-start: 64, conc-end: 256 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-
-# Diverged from minimaxm2.5-fp8-b300-vllm (agentic-coding sibling). Reasons below;
-# the original minimaxm2.5-fp8-b300-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai:v0.19.0-cu130' -> 'vllm/vllm-openai:v0.19.1'
-minimaxm2.5-fp8-b300-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # B300 tp=4: compute ceiling ~60 (empirical), KV cliff ~85 (analytical).
-    # Push none past the KV cliff (96, 128, 192) so the no-offload throughput
-    # collapse is visible; cpu range overlaps fully so each high-conc point
-    # has a same-conc no-offload counterpart for direct comparison.
-    # Dense sampling between 96 and 128 (step=4) to resolve the sharp dropoff
-    # observed in v6 cpu data right past conc=96.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
-      - { tp: 4, offloading: cpu,  conc-list: [48, 64, 96, 100, 104, 108, 112, 116, 120, 124, 128, 192] }
-
-minimaxm2.5-fp4-b200-vllm:
-  image: vllm/vllm-openai:v0.22.0
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b200
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 16 }
-      - { tp: 2, conc-start: 16, conc-end: 16 }
-      - { tp: 2, ep: 2, conc-start: 128, conc-end: 128 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 1024 }
-      - { tp: 4, conc-start: 4, conc-end: 16 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
-      - { tp: 8, conc-start: 4, conc-end: 8 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 32 }
-      - { tp: 1, conc-start: 256, conc-end: 256 }
-      - { tp: 2, ep: 2, conc-start: 128, conc-end: 512 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-
-  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
-  # does not have a B300-specific recipe, so this config reuses the existing
-  # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
-# Diverged from minimaxm2.5-fp4-b200-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's minimaxm2.5-fp4-b200-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original minimaxm2.5-fp4-b200-vllm entry stays byte-identical to origin/main.
-minimaxm2.5-fp4-b200-vllm-agentic:
-  image: vllm/vllm-openai:v0.19.0-cu130
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b200
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-
-  # NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/MiniMax/MiniMax-M2.html
-  # does not have a B300-specific recipe, so this config reuses the existing
-  # MiniMax-M2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
-
-minimaxm2.5-fp4-b200-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b200
-  precision: fp4
-  framework: trt
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 1024, conc-end: 1024 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 1024, conc-end: 1024 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 1024 }
-      - { tp: 1, ep: 1, conc-start: 4, conc-end: 8 }
-      - { tp: 4, ep: 1, conc-start: 4, conc-end: 8 }
-      - { tp: 8, ep: 2, conc-start: 4, conc-end: 4 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 256 }
-      - { tp: 1, ep: 1, conc-start: 4, conc-end: 32 }
-      - { tp: 4, ep: 2, conc-start: 4, conc-end: 4 }
-      - { tp: 8, ep: 2, conc-start: 4, conc-end: 4 }
-
-minimaxm2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 8 }
-      - { tp: 2, ep: 2, conc-start: 128, conc-end: 128 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 256, conc-end: 2048 }
-      - { tp: 4, conc-start: 8, conc-end: 8 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 128 }
-      - { tp: 8, conc-start: 4, conc-end: 8 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 4 }
-
-minimaxm2.5-fp4-b300-trt:
-  image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp4
-  framework: trt
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 1024, conc-end: 2048 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 1024 }
-      - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 8 }
-      - { tp: 4, ep: 2, dp-attn: false, conc-start: 4, conc-end: 8 }
-      - { tp: 8, ep: 2, dp-attn: false, conc-start: 4, conc-end: 4 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 128, conc-end: 512 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 128 }
-      - { tp: 1, ep: 1, dp-attn: false, conc-start: 4, conc-end: 16 }
-      - { tp: 4, ep: 2, dp-attn: false, conc-start: 4, conc-end: 4 }
-      - { tp: 8, ep: 2, dp-attn: false, conc-start: 4, conc-end: 4 }
-
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
@@ -4866,48 +4627,6 @@ gptoss-fp4-h100-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
-
-minimaxm2.5-fp8-h100-vllm:
-  image: vllm/vllm-openai:v0.22.0
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: h100
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 8, ep: 8, conc-start: 4, conc-end: 128 }
-
-# Diverged from minimaxm2.5-fp8-h100-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's minimaxm2.5-fp8-h100-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original minimaxm2.5-fp8-h100-vllm entry stays byte-identical to origin/main.
-minimaxm2.5-fp8-h100-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: h100
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # H100 tp=4 ep=4: compute ceiling ~10 (empirical), KV cliff ~6 (analytical).
-    # Best cpu-offload demo SKU — 4-conc-point window between cliffs.
-    # Dense sampling 4-12 covers both cliffs; conc 16 confirms compute plateau.
-    - duration: 1800
-      search-space:
-      - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, offloading: cpu,  conc-list: [5, 6, 7, 8, 10, 12] }
 
 # Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # M3 support has not shipped in a stable vLLM release; the dedicated
@@ -5127,47 +4846,6 @@ gptoss-fp4-h200-vllm:
       - { tp: 2, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 32 }
-
-minimaxm2.5-fp8-h200-vllm:
-  image: vllm/vllm-openai:v0.22.0
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: h200
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 4, conc-start: 1, conc-end: 256 }
-
-# Diverged from minimaxm2.5-fp8-h200-vllm (agentic-coding sibling). Metadata is
-# identical to origin/main's minimaxm2.5-fp8-h200-vllm; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original minimaxm2.5-fp8-h200-vllm entry stays byte-identical to origin/main.
-minimaxm2.5-fp8-h200-vllm-agentic:
-  image: vllm/vllm-openai:v0.20.2
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: h200
-  precision: fp8
-  framework: vllm
-  multinode: false
-  scenarios:
-    agentic-coding:
-    # H200 tp=4: compute ceiling ~35 (empirical), KV cliff ~29 (analytical).
-    # cpu offload window conc 29-35 — dense sampling 24-40 captures both cliffs.
-    - duration: 1800
-      search-space:
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 28, 32, 36, 48] }
-      - { tp: 4, offloading: cpu,  conc-list: [24, 28, 32, 36, 40, 48] }
 
 # Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # Dedicated vllm/vllm-openai:minimax-m3 image (no stable release has M3 yet).
@@ -8499,7 +8177,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: true
 
 kimik2.5-fp4-gb200-dynamo-trt:
-  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.1.0-dev.2
+  image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: gb200
@@ -8513,34 +8191,104 @@ kimik2.5-fp4-gb200-dynamo-trt:
       osl: 1024
       search-space:
       # Non-MTP configurations (default spec_decoding="none")
-      - conc-list: [ 4, 192, 360, 668 ]
+      - conc-list: [ 8 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch128_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
           ep: 8
           dp-attn: false
-      - conc-list: [ 5, 15, 30, 55 ]
+      - conc-list: [ 12 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch2_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch2_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 24 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 192 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch32_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen4tep8_batch32_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 30 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml"
         decode:
           num-worker: 5
           tp: 4
           ep: 4
           dp-attn: false
+      - conc-list: [ 60 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - conc-list: [ 333 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
       - conc-list: [ 666 ]
         prefill:
           num-worker: 1
@@ -8548,40 +8296,26 @@ kimik2.5-fp4-gb200-dynamo-trt:
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
-        decode:
-          num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - conc-list: [ 2253 ]
-        prefill:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch16_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch16_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
           tp: 32
           ep: 32
           dp-attn: true
-      - conc-list: [ 4301, 6452 ]
+      - conc-list: [ 1127 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep8_batch768_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch32_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx1dep4_gen1dep32_batch32_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
-          tp: 8
-          ep: 8
+          tp: 32
+          ep: 32
           dp-attn: true
       - conc-list: [ 4301 ]
         prefill:
@@ -8596,6 +8330,34 @@ kimik2.5-fp4-gb200-dynamo-trt:
           num-worker: 1
           tp: 16
           ep: 16
+          dp-attn: true
+      - conc-list: [ 8192 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch512_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep16_batch512_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - conc-list: [ 2253 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch64_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL1K_OSL1K/STP/ctx2dep4_gen1dep32_batch64_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
           dp-attn: true
       - conc-list: [ 4301 ]
         prefill:
@@ -8616,43 +8378,85 @@ kimik2.5-fp4-gb200-dynamo-trt:
       osl: 1024
       search-space:
       # Non-MTP configurations (default spec_decoding="none")
-      - conc-list: [ 4 ]
+      - conc-list: [ 8 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch1_eplb0_mtp0.yaml"
         decode:
           num-worker: 4
           tp: 8
           ep: 8
           dp-attn: false
-      - conc-list: [ 156 ]
+      - conc-list: [ 24 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep4_batch32_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen4tep8_batch4_eplb0_mtp0.yaml"
         decode:
           num-worker: 4
+          tp: 8
+          ep: 8
+          dp-attn: false
+      - conc-list: [ 5 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch1_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch1_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
           tp: 4
           ep: 4
           dp-attn: false
-      - conc-list: [ 5, 15, 30, 60, 105 ]
+      - conc-list: [ 30 ]
         prefill:
           num-worker: 1
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_allconc_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch4_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - conc-list: [ 60 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: false
+      - conc-list: [ 105 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx1dep4_gen5tep4_batch16_eplb0_mtp0.yaml"
         decode:
           num-worker: 5
           tp: 4
@@ -8665,40 +8469,54 @@ kimik2.5-fp4-gb200-dynamo-trt:
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep16_batch16_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep32_batch8_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx2dep4_gen1dep32_batch8_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - conc-list: [ 666 ]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep32_batch16_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep32_batch16_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      - conc-list: [ 1229 ]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep16_batch64_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx4dep4_gen1dep16_batch64_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
           tp: 16
           ep: 16
           dp-attn: true
-      - conc-list: [ 615 ]
+      - conc-list: [ 1229 ]
         prefill:
-          num-worker: 3
+          num-worker: 6
           tp: 4
           ep: 4
           dp-attn: true
           additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx3dep4_gen1dep16_batch32_eplb0_mtp0.yaml"
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx6dep4_gen1dep32_batch32_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx6dep4_gen1dep32_batch32_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
-          tp: 16
-          ep: 16
-          dp-attn: true
-      - conc-list: [ 2151 ]
-        prefill:
-          num-worker: 5
-          tp: 4
-          ep: 4
-          dp-attn: true
-          additional-settings:
-          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml
-          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx5dep4_gen1dep8_batch256_allconc_eplb0_mtp0.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
+          tp: 32
+          ep: 32
           dp-attn: true
       - conc-list: [ 2253 ]
         prefill:
@@ -8709,6 +8527,20 @@ kimik2.5-fp4-gb200-dynamo-trt:
           additional-settings:
           # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml
           - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx7dep4_gen1dep16_batch128_eplb0_mtp0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      - conc-list: [ 4301 ]
+        prefill:
+          num-worker: 9
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          # https://github.com/NVIDIA/srt-slurm/blob/sa-submission-q2-2026/recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx9dep4_gen1dep16_batch256_eplb0_mtp0.yaml
+          - "CONFIG_FILE=recipes/kimi2.5/trtllm_dynamo/disagg/gb200Nvfp4/ISL8K_OSL1K/STP/ctx9dep4_gen1dep16_batch256_eplb0_mtp0.yaml"
         decode:
           num-worker: 1
           tp: 16
@@ -10673,180 +10505,6 @@ qwen3.5-fp8-h100-sglang-mtp:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
-minimaxm2.5-fp4-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: gb300-nv
-  precision: fp4
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [2, 4, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [4, 8, 16, 64]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64, 128, 256, 512, 1024]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4ep-1p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [2048]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep2-2p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [6144, 8192]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep2-2p3d-c6144.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [1024, 2048, 4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep8-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [2, 4, 8, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64, 128, 256]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64, 128]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp4ep-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256]
-        prefill:
-          num-worker: 4
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/dep4-4p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 4
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/dep8-4p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-
 glm5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
@@ -11475,1198 +11133,14 @@ qwen3.5-fp8-h100-sglang-agentic:
       - { tp: 8, ep: 8, offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
       - { tp: 8, ep: 8, offloading: hicache, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
-minimaxm2.5-fp8-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: gb200
-  precision: fp8
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [1, 4, 8, 16, 32, 64]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/1k1k/disagg-gb200-1p1d-tp4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [2, 32, 64, 128, 256, 512]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/1k1k/disagg-gb200-1p2d-tp4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [1024]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/1k1k/disagg-gb200-1p3d-tp4ep.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [512, 1024]
-        prefill:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/1k1k/disagg-gb200-2p1d-dep8.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - conc-list: [4096]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/1k1k/disagg-gb200-1p4d-dep2.yaml"
-        decode:
-          num-worker: 4
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [4096, 8192]
-        prefill:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/1k1k/disagg-gb200-2p3d-dep4.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [1, 4, 8, 16, 32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/8k1k/disagg-gb200-1p1d-tp4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [256, 512]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/8k1k/disagg-gb200-1p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [1024, 2048, 4096]
-        prefill:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200-fp8/8k1k/disagg-gb200-3p2d-dep4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-
-
-minimaxm2.5-fp8-b200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b200-multinode
-  precision: fp8
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [32, 64]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/disagg-b200-1p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [128]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [1024]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/disagg-b200-1p3d-tp4ep.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [512, 1024]
-        prefill:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/disagg-b200-2p1d-dep8.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - conc-list: [512]
-        prefill:
-          num-worker: 4
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/dep8.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - conc-list: [4096]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/disagg-b200-1p4d-dep2-hi-conc.yaml"
-        decode:
-          num-worker: 4
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [4096, 8192]
-        prefill:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/1k1k/disagg-b200-2p3d-dep4-hi-conc.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [16, 32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/8k1k/disagg-b200-1p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/8k1k/disagg-b200-1p1d-tp4ep-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp8/8k1k/disagg-b200-3p2d-dep4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-
-minimaxm2.5-fp4-gb200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: gb200
-  precision: fp4
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [4, 8, 16, 32, 64]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4ep-1p1d-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [128, 256]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4ep-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64, 128, 256, 512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4ep-1p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4ep-1p3d-hi-conc.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 1024]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/tp4ep-2p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [2048, 4096, 8192]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/dep2-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/dep2-2p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [6144]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/dep2-2p3d-c6144.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/dep4-3p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [1024, 2048, 4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/1k1k/dep8-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [4, 8, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/8k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/8k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/8k1k/tp4ep-1p1d-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512, 1024, 2048]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-gb200/8k1k/dep4-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-
-minimaxm2.5-fp4-b200-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b200-multinode
-  precision: fp4
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [4, 8, 16, 32, 64]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4ep-1p1d-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [128, 256]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4ep-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64, 128, 256, 512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4ep-1p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4ep-1p3d-hi-conc.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 1024]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/tp4ep-2p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [2048, 4096, 8192]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/dep2-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/dep2-2p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [6144]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/dep2-2p3d-c6144.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/dep4-3p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [1024, 2048, 4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/1k1k/dep8-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [4, 8, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/8k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/8k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/8k1k/tp4ep-1p1d-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512, 1024, 2048]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-b200-fp4/8k1k/dep4-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-
-minimaxm2.5-fp4-b300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: nvidia/MiniMax-M2.5-NVFP4
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp4
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [4, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [4]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp8-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - conc-list: [8, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64, 128, 256, 1024]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/tp4ep-1p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [4096]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep2-1p2d.yaml"
-        decode:
-          num-worker: 2
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [2048, 4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep2-2p3d.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [6144, 8192]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep2-2p3d-c6144.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-      - conc-list: [1024, 1536, 2048, 4096]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/1k1k/dep8-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [2, 4, 8, 16]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp4-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [4]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp8-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp4ep-1p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64, 128, 256, 512]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/tp4ep-2p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [384, 512]
-        prefill:
-          num-worker: 4
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/dep4-4p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [384]
-        prefill:
-          num-worker: 4
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5/8k1k/dep8-4p1d.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-
-minimaxm2.5-fp8-b300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
-  runner: b300
-  precision: fp8
-  framework: dynamo-vllm
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - conc-list: [8, 16, 32, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-1p1d-tp4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [32, 64, 128, 256, 512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-1p2d-tp4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-1p2d-tp4ep.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-2p1d-dep8.yaml"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: true
-      - conc-list: [512, 1024, 2048]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-2p2d-dep4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [4096, 8192]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-2p2d-dep4-hi-conc.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [1024]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-b300-2p3d-dep2.yaml"
-        decode:
-          num-worker: 3
-          tp: 2
-          ep: 2
-          dp-attn: true
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - conc-list: [16, 64, 128]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-1p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-1p1d-tp4ep-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [32]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-2p1d-tp2.yaml"
-        decode:
-          num-worker: 1
-          tp: 2
-          ep: 1
-          dp-attn: false
-      - conc-list: [64, 128, 256, 512]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-2p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-3p1d-tp4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [256, 512]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-3p1d-dep4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-3p1d-dep4-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [512, 1024, 2048]
-        prefill:
-          num-worker: 5
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-b300-5p2d-dep4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
-          dp-attn: true
-
-minimaxm2.5-fp8-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
-  model: MiniMaxAI/MiniMax-M2.5
-  model-prefix: minimaxm2.5
+# MiniMax-M3 GB300 disagg sweep — adapted from NV B300 PR #1863.
+# All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: TP4+Marlin, TEP8,
+# DEP8, DEP4. 4 GPU/node (GB300 NVL72). 4p3d (3 decode workers) skipped.
+# kv-cache-dtype=fp8 added. srun_options mem=0 required.
+minimaxm3-fp8-gb300-dynamo-vllm:
+  image: vllm/vllm-openai:nightly-aarch64
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
   runner: gb300-nv
   precision: fp8
   framework: dynamo-vllm
@@ -12677,204 +11151,233 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - conc-list: [8, 16, 32, 64, 128]
+      # 1p1d DEP2+TEP8, 3n: conc 4,16,64,128,4096
+      - conc-list: [4, 16, 64, 128, 4096]
         prefill:
           num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
+          tp: 2
+          ep: 2
+          dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-1p1d-tp4.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-1p1d-dep2-tep8-3n.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 1p1d DEP2+TP4 Marlin, 2n: conc 1,4,8,16
+      - conc-list: [1, 4, 8, 16]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-1p1d-dep2-tp4-marlin-2n.yaml"
         decode:
           num-worker: 1
           tp: 4
           ep: 1
           dp-attn: false
-      - conc-list: [32, 64, 128, 256, 512]
+
+      # 1p2d DEP2+DEP4, 3n: conc 2048
+      - conc-list: [2048]
         prefill:
           num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
+          tp: 2
+          ep: 2
+          dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-1p2d-tp4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 1
-          dp-attn: false
-      - conc-list: [256, 512, 1024]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-1p2d-tp4ep.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-1p2d-dep2-dep4-3n.yaml"
         decode:
           num-worker: 2
           tp: 4
           ep: 4
-          dp-attn: false
-      - conc-list: [256, 512, 1024]
+          dp-attn: true
+
+      # 2p1d DEP2+DEP8, 3n: conc 512,4096
+      - conc-list: [512, 4096]
         prefill:
           num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
+          tp: 2
+          ep: 2
+          dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-2p1d-dep8.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-2p1d-dep2-dep8-3n.yaml"
         decode:
           num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
-      - conc-list: [512, 1024, 2048]
+
+      # 2p1d DEP2+TEP8, 3n: conc 32
+      - conc-list: [32]
         prefill:
           num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-2p2d-dep4.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
+          tp: 2
+          ep: 2
           dp-attn: true
-      - conc-list: [4096, 8192]
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-2p1d-dep2-tep8-3n.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 2p2d DEP2+TEP8, 5n: conc 16
+      - conc-list: [16]
         prefill:
           num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-2p2d-dep4-hi-conc.yaml"
-        decode:
-          num-worker: 2
-          tp: 4
-          ep: 4
+          tp: 2
+          ep: 2
           dp-attn: true
-      - conc-list: [1024]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/1k1k/disagg-gb300-2p3d-dep2.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-2p2d-dep2-tep8-5n.yaml"
         decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 3p2d DEP2+TEP8, 6n: conc 4
+      - conc-list: [4]
+        prefill:
           num-worker: 3
           tp: 2
           ep: 2
           dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-3p2d-dep2-tep8-6n.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+
     - isl: 8192
       osl: 1024
       search-space:
-      - conc-list: [16, 64, 128]
+      # 1p1d DEP2+TP4 Marlin, 2n: conc 1,4,8,16
+      - conc-list: [1, 4, 8, 16]
         prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-1p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [256, 512]
-        prefill:
-          num-worker: 1
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-1p1d-tp4ep-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [32]
-        prefill:
-          num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-2p1d-tp2.yaml"
-        decode:
           num-worker: 1
           tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-1p1d-dep2-tp4-marlin-2n.yaml"
+        decode:
+          num-worker: 1
+          tp: 4
           ep: 1
           dp-attn: false
-      - conc-list: [64, 128, 256, 512]
+
+      # 1p2d DEP2+DEP8, 5n: conc 128
+      - conc-list: [128]
         prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-1p2d-dep2-dep8-5n.yaml"
+        decode:
           num-worker: 2
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-2p1d-tp4ep.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: false
-      - conc-list: [64]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-3p1d-tp4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 2p2d DEP2+DEP8, 5n: conc 256,512
       - conc-list: [256, 512]
         prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-3p1d-dep4.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
+          num-worker: 2
+          tp: 2
+          ep: 2
           dp-attn: true
-      - conc-list: [1024, 2048]
-        prefill:
-          num-worker: 3
-          tp: 1
-          ep: 1
-          dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-3p1d-dep4-hi-conc.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 4
-          dp-attn: true
-      - conc-list: [512, 1024, 2048]
-        prefill:
-          num-worker: 5
-          tp: 1
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m2.5-fp8/8k1k/disagg-gb300-5p2d-dep4.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-2p2d-dep2-dep8-5n.yaml"
         decode:
           num-worker: 2
-          tp: 4
-          ep: 4
+          tp: 8
+          ep: 8
           dp-attn: true
+
+      # 2p2d DEP2+TEP8, 5n: conc 16
+      - conc-list: [16]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-2p2d-dep2-tep8-5n.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 3p2d DEP2+DEP8, 6n: conc 512
+      - conc-list: [512]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-3p2d-dep2-dep8-6n.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 3p2d DEP2+TEP8, 6n: conc 32
+      - conc-list: [32]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-3p2d-dep2-tep8-6n.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 4p2d DEP2+DEP8, 6n: conc 4096
+      - conc-list: [4096]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-4p2d-dep2-dep8-6n.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 5p2d DEP2+TEP8, 7n: conc 4,64
+      - conc-list: [4, 64]
+        prefill:
+          num-worker: 5
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-5p2d-dep2-tep8-7n.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
 
 qwen3.5-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
@@ -13116,3 +11619,164 @@ minimaxm3-fp8-h100-vllm-mtp:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+
+kimik2.5-fp4-gb300-dynamo-vllm:
+  image: vllm/vllm-openai:v0.21.0
+  model: nvidia/Kimi-K2.5-NVFP4
+  model-prefix: kimik2.5
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - conc-list: [2048, 4096]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p1d-dep4-dep16.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 16
+          dp-attn: true
+      - conc-list: [1024]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p1d-dep4-dep24.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 24
+          dp-attn: true
+      - conc-list: [6144]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p2d-dep4-dep4.yaml"
+        decode:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+      - conc-list: [8, 16, 32, 64, 128]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-1p7d-tep4-tp4.yaml"
+        decode:
+          num-worker: 7
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [8192]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/1k1k/disagg-gb300-2p3d-dep4-dep8.yaml"
+        decode:
+          num-worker: 3
+          tp: 1
+          ep: 8
+          dp-attn: true
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - conc-list: [4]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/disagg-gb300-1p4d-dep4-tp8.yaml"
+        decode:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: false
+      - conc-list: [32, 128]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/disagg-gb300-1p8d-dep4-tp4.yaml"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      - conc-list: [2048]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/disagg-gb300-2p1d-dep4-dep24.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 24
+          dp-attn: true
+      - conc-list: [2048]
+        prefill:
+          num-worker: 3
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/disagg-gb300-3p1d-dep4-dep16.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 16
+          dp-attn: true
+      - conc-list: [3072]
+        prefill:
+          num-worker: 4
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/disagg-gb300-4p1d-dep4-dep8.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+      - conc-list: [15360]
+        prefill:
+          num-worker: 8
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/kimi-k2.5-fp4/8k1k/disagg-gb300-8p1d-dep4-dep24.yaml"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 24
+          dp-attn: true
