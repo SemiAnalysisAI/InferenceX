@@ -87,7 +87,7 @@ on:
         required: false
         default: false
       eval-conc:
-        description: "Concurrency to use for eval requests (overrides default max-of-conc-list)"
+        description: "Concurrency value or space-separated list for eval requests (overrides default max-of-conc-list)"
         type: string
         required: false
         default: ""
@@ -123,6 +123,11 @@ on:
 
 env:
   RANDOM_RANGE_RATIO: 0.8
+  # Day-zero models resolved via hf: ids download from the Hub inside the
+  # slurm job (srtctl pre-download + dynamo hub fetch). Anonymous requests
+  # get 429-rate-limited when several workers pull a 444 GB snapshot at
+  # once; sbatch/srun inherit this env so the token reaches the workers.
+  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   EXP_NAME: ${{ inputs.exp-name }}
   IMAGE: ${{ inputs.image }}
   MODEL_PREFIX: ${{ inputs.model-prefix }}

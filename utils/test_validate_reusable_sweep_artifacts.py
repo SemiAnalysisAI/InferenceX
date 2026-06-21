@@ -102,6 +102,70 @@ def write_raw_eval_artifact(
     )
 
 
+def multinode_eval_entry(concs: list[int]) -> dict:
+    return {
+        "exp-name": "gptoss_8k1k",
+        "runner": "gb200",
+        "model-prefix": "gptoss",
+        "precision": "fp8",
+        "framework": "dynamo-sglang",
+        "spec-decoding": "none",
+        "isl": 8192,
+        "osl": 1024,
+        "prefill": {
+            "tp": 4,
+            "ep": 1,
+            "dp-attn": False,
+            "num-worker": 1,
+        },
+        "decode": {
+            "tp": 8,
+            "ep": 1,
+            "dp-attn": True,
+            "num-worker": 2,
+        },
+        "conc": concs,
+        "eval-all-concs": True,
+    }
+
+
+def multinode_eval_result(conc: int) -> dict:
+    return {
+        "is_multinode": True,
+        "hw": "GB200",
+        "model_prefix": "gptoss",
+        "framework": "dynamo-sglang",
+        "precision": "fp8",
+        "spec_decoding": "none",
+        "isl": 8192,
+        "osl": 1024,
+        "prefill_tp": 4,
+        "prefill_ep": 1,
+        "prefill_dp_attention": False,
+        "prefill_num_workers": 1,
+        "decode_tp": 8,
+        "decode_ep": 1,
+        "decode_dp_attention": True,
+        "decode_num_workers": 2,
+        "conc": conc,
+        "task": "gsm8k",
+    }
+
+
+def write_raw_batched_eval_artifact(
+    root: Path,
+    concs: list[int],
+) -> None:
+    artifact_dir = root / "eval_gptoss_8k1k_batch"
+    artifact_dir.mkdir()
+    meta = multinode_eval_result(concs[0])
+    meta["infmax_model_prefix"] = meta.pop("model_prefix")
+    meta["eval_concs"] = concs
+    meta["completed_eval_concs"] = concs
+    meta["failed_eval_concs"] = []
+    (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
+
+
 def single_fixed_entry(conc: int) -> dict:
     return {
         "runner": "h100",
@@ -353,6 +417,26 @@ def test_eval_validation_uses_logical_runner_from_metadata(
     )
 
     assert validate_eval_artifacts(tmp_path, expected_eval_keys(config)) == []
+
+
+def test_eval_validation_expands_one_batched_multinode_artifact(
+    tmp_path: Path,
+) -> None:
+    concs = [4, 16, 64]
+    config = {
+        "evals": [],
+        "multinode_evals": [multinode_eval_entry(concs)],
+    }
+    write_eval_aggregate(
+        tmp_path,
+        [multinode_eval_result(conc) for conc in concs],
+    )
+    write_raw_batched_eval_artifact(tmp_path, concs)
+
+    expected = expected_eval_keys(config)
+
+    assert len(expected) == 3
+    assert validate_eval_artifacts(tmp_path, expected) == []
 
 
 def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:

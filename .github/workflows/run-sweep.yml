@@ -627,7 +627,7 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config.eval-conc }}
+            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     collect-results:
         needs:

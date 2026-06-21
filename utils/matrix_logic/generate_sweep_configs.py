@@ -54,6 +54,7 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
         Fields.RUN_EVAL.value,
         Fields.EVAL_ONLY.value,
         Fields.EVAL_CONC.value,
+        Fields.EVAL_ALL_CONCS.value,
     }
     return tuple(sorted(
         (key, _freeze_matrix_value(value))
@@ -151,11 +152,11 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     """Expand eval selection to every fixed-sequence entry.
 
     Agentic entries are left untouched because they do not support lm-eval.
-    Each distinct concurrency in a multi-node entry becomes a separate eval
-    row with a singleton concurrency list so jobs and artifacts stay unique.
+    Multi-node rows with the same engine topology are merged into one eval row
+    whose full concurrency list is run sequentially against the same engine.
     """
-    expanded_entries = []
-    seen_multinode_points = set()
+    expanded_entries: list[dict] = []
+    multinode_indices: dict[tuple, int] = {}
 
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
@@ -166,17 +167,22 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
             conc = entry[Fields.CONC.value]
             conc_values = conc if isinstance(conc, list) else [conc]
             parallelism_key = _multinode_parallelism_key(entry)
-            for eval_conc in conc_values:
-                point_key = (parallelism_key, eval_conc)
-                if point_key in seen_multinode_points:
-                    continue
-                seen_multinode_points.add(point_key)
-                expanded_entries.append({
-                    **entry,
-                    Fields.CONC.value: [eval_conc],
-                    Fields.RUN_EVAL.value: True,
-                    Fields.EVAL_CONC.value: eval_conc,
-                })
+            if parallelism_key in multinode_indices:
+                existing = expanded_entries[multinode_indices[parallelism_key]]
+                existing[Fields.CONC.value] = sorted(set(
+                    existing[Fields.CONC.value] + conc_values
+                ))
+                continue
+
+            batched_entry = {
+                **entry,
+                Fields.CONC.value: sorted(set(conc_values)),
+                Fields.RUN_EVAL.value: True,
+                Fields.EVAL_ALL_CONCS.value: True,
+            }
+            batched_entry.pop(Fields.EVAL_CONC.value, None)
+            multinode_indices[parallelism_key] = len(expanded_entries)
+            expanded_entries.append(batched_entry)
             continue
 
         entry[Fields.RUN_EVAL.value] = True

@@ -444,27 +444,33 @@ def expected_eval_keys(config: dict[str, Any]) -> set[tuple[Any, ...]]:
     for entry in config.get("multinode_evals", []) or []:
         prefill = entry["prefill"]
         decode = entry["decode"]
-        expected.add(
-            (
-                "multi",
-                normalized_runner(entry["runner"]),
-                entry["model-prefix"],
-                entry["framework"],
-                entry["precision"],
-                entry.get("spec-decoding", "none"),
-                as_int(entry["isl"]),
-                as_int(entry["osl"]),
-                as_int(prefill.get("tp", 0)),
-                as_int(prefill.get("ep", 1)),
-                as_bool(prefill.get("dp-attn", False)),
-                as_int(prefill.get("num-worker", 0)),
-                as_int(decode.get("tp", 0)),
-                as_int(decode.get("ep", 1)),
-                as_bool(decode.get("dp-attn", False)),
-                as_int(decode.get("num-worker", 0)),
-                as_int(entry.get("eval-conc", entry["conc"][0])),
-            )
+        eval_concs = (
+            entry["conc"]
+            if entry.get("eval-all-concs", False)
+            else [entry.get("eval-conc", entry["conc"][0])]
         )
+        for eval_conc in eval_concs:
+            expected.add(
+                (
+                    "multi",
+                    normalized_runner(entry["runner"]),
+                    entry["model-prefix"],
+                    entry["framework"],
+                    entry["precision"],
+                    entry.get("spec-decoding", "none"),
+                    as_int(entry["isl"]),
+                    as_int(entry["osl"]),
+                    as_int(prefill.get("tp", 0)),
+                    as_int(prefill.get("ep", 1)),
+                    as_bool(prefill.get("dp-attn", False)),
+                    as_int(prefill.get("num-worker", 0)),
+                    as_int(decode.get("tp", 0)),
+                    as_int(decode.get("ep", 1)),
+                    as_bool(decode.get("dp-attn", False)),
+                    as_int(decode.get("num-worker", 0)),
+                    as_int(eval_conc),
+                )
+            )
     return expected
 
 
@@ -546,7 +552,20 @@ def raw_eval_key_rows(
                 "meta_env.json"
             )
             continue
-        rows.append(eval_key(meta))
+        eval_concs = meta.get("completed_eval_concs")
+        if isinstance(meta.get("eval_concs"), list):
+            if not isinstance(eval_concs, list):
+                errors.append(
+                    f"raw eval artifact {artifact_dir.name!r} has invalid "
+                    "batched concurrency metadata"
+                )
+                continue
+            rows.extend(
+                eval_key({**meta, "conc": eval_conc})
+                for eval_conc in eval_concs
+            )
+        else:
+            rows.append(eval_key(meta))
     return rows, errors
 
 

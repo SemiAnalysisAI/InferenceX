@@ -36,8 +36,11 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 from pathlib import Path
+
+CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def load_config(path: str) -> dict:
@@ -83,6 +86,92 @@ def resolve_threshold(config: dict, prefix: str | None, task: str, fallback: flo
     if task in default:
         return default[task], "default"
     return fallback, "min-score"
+
+
+def validate_batch_manifest(
+    meta_env_path: str,
+    result_files: list[str],
+) -> list[str]:
+    """Validate that a batched eval produced every requested concurrency."""
+    try:
+        with open(meta_env_path) as f:
+            meta = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        if any(
+            CONC_SUFFIX_RE.search(Path(result_file).name)
+            for result_file in result_files
+        ):
+            return [
+                "batched eval result files exist but "
+                f"{meta_env_path} is unavailable or invalid: {exc}"
+            ]
+        return []
+
+    if "eval_concs" not in meta:
+        return []
+
+    expected = meta.get("eval_concs")
+    completed = meta.get("completed_eval_concs")
+    failed = meta.get("failed_eval_concs")
+    if not all(isinstance(values, list) for values in (expected, completed, failed)):
+        return ["batched eval metadata must contain list-valued concurrency fields"]
+    if not all(
+        isinstance(value, int) and value > 0
+        for values in (expected, completed, failed)
+        for value in values
+    ):
+        return ["batched eval metadata contains an invalid concurrency"]
+
+    errors = []
+    expected_set = set(expected)
+    completed_set = set(completed)
+    failed_set = set(failed)
+    if len(expected_set) != len(expected):
+        errors.append("batched eval metadata contains duplicate expected concurrencies")
+    if len(completed_set) != len(completed):
+        errors.append("batched eval metadata contains duplicate completed concurrencies")
+    if failed_set:
+        errors.append(
+            "batched eval failed for concurrency: "
+            + ", ".join(str(value) for value in sorted(failed_set))
+        )
+    if completed_set != expected_set:
+        missing = sorted(expected_set - completed_set)
+        unexpected = sorted(completed_set - expected_set)
+        if missing:
+            errors.append(
+                "batched eval is missing completed concurrency: "
+                + ", ".join(str(value) for value in missing)
+            )
+        if unexpected:
+            errors.append(
+                "batched eval completed unexpected concurrency: "
+                + ", ".join(str(value) for value in unexpected)
+            )
+
+    actual_concs = set()
+    for result_file in result_files:
+        match = CONC_SUFFIX_RE.search(Path(result_file).name)
+        if match is None:
+            errors.append(
+                f"batched eval result lacks a concurrency suffix: {result_file}"
+            )
+            continue
+        actual_concs.add(int(match.group(1)))
+
+    missing_results = sorted(expected_set - actual_concs)
+    unexpected_results = sorted(actual_concs - expected_set)
+    if missing_results:
+        errors.append(
+            "batched eval is missing result files for concurrency: "
+            + ", ".join(str(value) for value in missing_results)
+        )
+    if unexpected_results:
+        errors.append(
+            "batched eval has unexpected result files for concurrency: "
+            + ", ".join(str(value) for value in unexpected_results)
+        )
+    return errors
 
 
 def main() -> int:
@@ -138,8 +227,25 @@ def main() -> int:
 
     failed = False
     checked = 0
+    result_files = sorted(glob.glob(args.results_glob))
 
-    for f in sorted(glob.glob(args.results_glob)):
+    manifest_errors = validate_batch_manifest(args.meta_env, result_files)
+    for error in manifest_errors:
+        print(f"FAIL: {error}", file=sys.stderr)
+        failed = True
+    if not manifest_errors:
+        try:
+            with open(args.meta_env) as f:
+                if "eval_concs" in json.load(f):
+                    print("PASS: batched eval produced every requested concurrency")
+        except (json.JSONDecodeError, OSError) as exc:
+            print(
+                "WARN: could not inspect eval metadata for batched concurrency "
+                f"status: {exc}",
+                file=sys.stderr,
+            )
+
+    for f in result_files:
         with open(f) as fh:
             data = json.load(fh)
         for task, metrics in data.get("results", {}).items():

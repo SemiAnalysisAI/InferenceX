@@ -3974,6 +3974,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1867
 
 - config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), avoids gemm1_alpha crash in minimax-m3-0618"
+    - "Add --moe-backend marlin for TP-only prefill/decode workers (no EP, no DP-attention) per PR #1809 pattern"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1735
+
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Update Kimi K2.5 NVFP4 GB200 TRT-LLM Dynamo disaggregated configurations"
