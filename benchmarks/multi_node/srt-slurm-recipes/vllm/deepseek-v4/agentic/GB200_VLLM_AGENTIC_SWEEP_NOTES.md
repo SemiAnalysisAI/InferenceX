@@ -636,3 +636,20 @@ ranks receive roughly 19 active trajectories each while the two decode ranks
 avoid paying for a second eight-GPU decode replica. The topology uses 32
 inference GPUs and must exceed 211,687 tok/s to beat 3P/2D c64 on normalized
 throughput.
+
+Run `27911020056` / Slurm job `19533` rejected the hybrid TP4 x DP2 shape at
+launcher expansion, before model loading or benchmarking. The pinned
+srt-slurm implementation treats a worker with `data-parallel-size > 1` as
+pure DEP and launches one process per assigned GPU. For an eight-GPU worker
+declared as TP4 x DP2 it emitted DP ranks 0--7 while every process still had
+`--data-parallel-size 2 --tensor-parallel-size 4`; ranks 2--7 are invalid and
+the implied allocation is larger than the eight GPUs granted to the worker.
+The run was cancelled after 51 seconds instead of consuming nine nodes on an
+unsupported topology. Supporting hybrid TP x DP requires a first-class
+srt-slurm launcher change and is not emulated with ad-hoc process overrides.
+
+The next supported candidate is 4P/2D TEP8/TP8 at c112. It uses 48 inference
+GPUs, places roughly 28 active trajectories on each prefill cache (close to
+the healthy 3P/2D c80 density), and preserves two decode replicas because the
+4P/1D c64 result already demonstrated a one-decode bottleneck. It must exceed
+322,038 tok/s to improve on 3P/2D c80's 6,709 tok/s/GPU.

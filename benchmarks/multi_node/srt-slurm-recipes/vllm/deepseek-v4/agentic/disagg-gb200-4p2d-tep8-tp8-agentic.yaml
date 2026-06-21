@@ -1,11 +1,11 @@
-name: "svf-vllm-disagg-gb200-3p1d-dep2tp4-dep2tp4-agentic"
+name: "svf-vllm-disagg-gb200-4p2d-tep8-tp8-agentic"
 
-# High-throughput agentic candidate: three prefill workers and one decode
-# worker, each using TP4 x DP2 with EP across all eight GPUs. Attention stays
-# within one four-GPU GB200 node while Dynamo routes to individual DP ranks.
-# At c112 this gives six prefill cache domains (~19 trajectories/rank) and two
-# decode ranks using 32 inference GPUs across eight nodes. A dedicated infra
-# node brings the allocation to nine nodes.
+# Hundred-concurrency candidate: four cache-affinitized TEP8 prefills and
+# two TP8 decodes. The six workers use 48 inference GPUs across twelve GB200
+# nodes; a dedicated infra node brings the allocation to thirteen nodes.
+# c112 gives roughly 28 active trajectories per prefill, close to the healthy
+# 3P/2D c80 working-set density, while retaining the decode capacity that the
+# 4P/1D c64 result showed is necessary.
 
 model:
   path: "deepseek-v4-pro"
@@ -28,10 +28,10 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 6
-  decode_nodes: 2
-  prefill_workers: 3
-  decode_workers: 1
+  prefill_nodes: 8
+  decode_nodes: 4
+  prefill_workers: 4
+  decode_workers: 2
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -78,7 +78,6 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
-    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_RCACHE_MAX_UNRELEASED: "1024"
@@ -91,10 +90,8 @@ backend:
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 4
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 2
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
@@ -112,15 +109,11 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 4
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 2
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
-      enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
-      max-num-seqs: 256
-      max-cudagraph-capture-size: 256
+      max-num-seqs: 512
+      max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
