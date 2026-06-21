@@ -1,18 +1,8 @@
-name: "svf-vllm-disagg-gb200-2p3d-tep8-tp8-agentic"
+name: "svf-vllm-disagg-gb200-2p1d-tep8-tp8-agentic"
 
-# Agentic-coding decode-heavy shape for GB200: two cache-affinitized TEP8
-# prefill workers and three TP8 decode workers. Every worker spans two four-GPU
-# GB200 nodes. A dedicated infra node brings the allocation to eleven nodes /
-# 40 inference GPUs.
-#
-# TEP4 does not fit the DSv4 FP4 checkpoint in 186 GiB GB200 HBM: v0.23.0
-# reached 182.5 GiB/rank and needed another 1.97 GiB while constructing MoE
-# weights (run 27732316539). TP8 is the minimum viable model sharding here.
-# Dynamo KV routing plus explicit vLLM KV-event publication preserves cache
-# affinity across the prefill replicas. Unlike DEP, TEP does not put
-# unrelated, highly variable agentic requests behind one attention barrier.
-# The June 18 Dynamo nightly adds router-only `bind` affinity while retaining
-# the vLLM v0.23 KV-event tuple compatibility validated in the May build.
+# Throughput-per-GPU candidate: two cache-affinitized TEP8 prefills and one
+# TP8 decode. The three replicas use 24 inference GPUs across six GB200 nodes;
+# a dedicated infra node brings the allocation to seven nodes.
 
 model:
   path: "deepseek-v4-pro"
@@ -36,9 +26,9 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 4
-  decode_nodes: 6
+  decode_nodes: 2
   prefill_workers: 2
-  decode_workers: 3
+  decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -50,9 +40,6 @@ frontend:
   type: dynamo
   enable_multiple_frontends: false
   env:
-    # srt-slurm defaults to NATS, whose bounded streaming responders rejected
-    # c64 decode handoffs as "all workers are busy". Dynamo documents TCP as
-    # the fastest request plane; event publication still uses NATS separately.
     DYN_REQUEST_PLANE: "tcp"
   args:
     router-mode: "kv"
@@ -76,8 +63,6 @@ backend:
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
     UCX_RCACHE_MAX_UNRELEASED: "1024"
-    # TP8 NVFP4 exhausts device memory when vLLM's CuMem allocator wraps model
-    # loading. Use the cluster's RDMA transport for NIXL KV transfers instead.
     UCX_TLS: "cuda_copy,rc"
     NCCL_P2P_LEVEL: NVL
   decode_environment:
@@ -98,9 +83,6 @@ backend:
 
   vllm_config:
     prefill:
-      # vLLM v0.23 broadcasts rank zero's generated engine ID across each TP
-      # group. Leaving engine_id unset gives every prefill replica a distinct
-      # ID while keeping both nodes of that replica consistent.
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
@@ -121,8 +103,6 @@ backend:
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
     decode:
-      # Generated IDs are distinct per decode replica and synchronized across
-      # each replica's two-node TP8 group by vLLM v0.23.
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
@@ -159,6 +139,8 @@ benchmark:
     AIPERF_SERVER_METRICS_BASE_PORT: "7500"
     AIPERF_SERVER_METRICS_NODE_OFFSET: "1"
     AIPERF_SERVER_METRICS_NODE_STRIDE: "2"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526"
+

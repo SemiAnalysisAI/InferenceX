@@ -1,9 +1,9 @@
-name: "svf-vllm-disagg-gb200-2p3d-tep8-tp8-agentic"
+name: "svf-vllm-disagg-gb200-3p1d-tep8-tp8-agentic"
 
-# Agentic-coding decode-heavy shape for GB200: two cache-affinitized TEP8
-# prefill workers and three TP8 decode workers. Every worker spans two four-GPU
-# GB200 nodes. A dedicated infra node brings the allocation to eleven nodes /
-# 40 inference GPUs.
+# Throughput-per-GPU shape for GB200: three cache-affinitized TEP8 prefill
+# workers and one TP8 decode worker. Every worker spans two four-GPU GB200
+# nodes. A dedicated infra node brings the allocation to nine nodes / 32
+# inference GPUs.
 #
 # TEP4 does not fit the DSv4 FP4 checkpoint in 186 GiB GB200 HBM: v0.23.0
 # reached 182.5 GiB/rank and needed another 1.97 GiB while constructing MoE
@@ -35,10 +35,10 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 4
-  decode_nodes: 6
-  prefill_workers: 2
-  decode_workers: 3
+  prefill_nodes: 6
+  decode_nodes: 2
+  prefill_workers: 3
+  decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -159,6 +159,7 @@ benchmark:
     AIPERF_SERVER_METRICS_BASE_PORT: "7500"
     AIPERF_SERVER_METRICS_NODE_OFFSET: "1"
     AIPERF_SERVER_METRICS_NODE_STRIDE: "2"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
     WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526"

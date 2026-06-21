@@ -648,11 +648,12 @@ The run was cancelled after 51 seconds instead of consuming nine nodes on an
 unsupported topology. Supporting hybrid TP x DP requires a first-class
 srt-slurm launcher change and is not emulated with ad-hoc process overrides.
 
-The next supported candidate is 4P/2D TEP8/TP8 at c112. It uses 48 inference
-GPUs, places roughly 28 active trajectories on each prefill cache (close to
-the healthy 3P/2D c80 density), and preserves two decode replicas because the
-4P/1D c64 result already demonstrated a one-decode bottleneck. It must exceed
-322,038 tok/s to improve on 3P/2D c80's 6,709 tok/s/GPU.
+Run `27911088706` / Slurm job `19534` completed the 4P/2D TEP8/TP8 c112
+candidate at 176,730 total tok/s, or 3,682 tok/s/GPU. Mean TTFT was 63.34s,
+interactivity was 52.31 output tok/s, and all 2,656 measured requests
+completed without errors. This is substantially below 3P/2D c80's 6,709
+tok/s/GPU, so the 48-GPU topology is rejected despite its clean execution.
+The next search axis removes excess decode capacity: 2P/1D c52 and 3P/1D c68.
 
 ## Multi-node Server Metrics Plumbing
 
@@ -660,10 +661,11 @@ The shared agentic replay builder now accepts
 `AIPERF_SERVER_METRICS_URLS` as a comma-separated list and passes its values
 to AIPerf under one `--server-metrics` option. For GB200, `agentic_srt.sh`
 expands the live Slurm allocation with `scontrol show hostnames` and constructs
-one URL per logical worker leader. The recipes declare srt-slurm's system-port
-base (`8081`), skip the dedicated infra node, and select every second node
+one URL per logical worker leader. The recipes declare the deployed GB200
+srt-slurm system-port base (`7500`), skip the dedicated infra node, and select
+every second node
 because each TEP8/TP8 worker spans two four-GPU nodes. The port advances across
-both leader and follower processes, so the selected ports are 8081, 8083, ...
+both leader and follower processes, so the selected ports are 7500, 7502, ...
 in allocation order. AIPerf continues to auto-scrape the frontend metrics
 endpoint as well. When the variables are unset, existing behavior is
 unchanged.
