@@ -109,7 +109,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
     AIPERF_HTTP_CONNECTION_LIMIT=$((TP / 2))
     if [ "$TP" -le 4 ]; then
-        AIPERF_HTTP_CONNECTION_LIMIT=64
+        AIPERF_HTTP_CONNECTION_LIMIT=24
     fi
     if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -lt 1 ]; then
         AIPERF_HTTP_CONNECTION_LIMIT=1
@@ -136,9 +136,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
     )
-    if [ "$TP" -eq 4 ]; then
-        PARALLEL_ARGS+=(--disable-overlap-schedule)
-    fi
     MEM_FRACTION_STATIC=0.88
     CHUNKED_PREFILL_SIZE=16384
 else
