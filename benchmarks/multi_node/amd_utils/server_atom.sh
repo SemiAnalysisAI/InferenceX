@@ -29,11 +29,11 @@ IPADDRS="${IPADDRS:-localhost}"
 
 # Parallelism
 PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
-PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
-PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
+PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP:-false}"
+PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP:-false}"
 DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
-DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
-DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
+DECODE_ENABLE_EP="${DECODE_ENABLE_EP:-false}"
+DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-false}"
 
 # ATOM server ports (different from SGLang which uses 8000 for all)
 PREFILL_PORT="${PREFILL_PORT:-8010}"
@@ -63,8 +63,14 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 # Dependencies and Environment Setup
 # =============================================================================
 
-source $ATOM_WS_PATH/setup_deps.sh
-source $ATOM_WS_PATH/env_atom.sh
+if ! source "$ATOM_WS_PATH/setup_deps.sh"; then
+    echo "ERROR: failed to initialize ATOM dependencies" >&2
+    exit 1
+fi
+if ! source "$ATOM_WS_PATH/env_atom.sh"; then
+    echo "ERROR: failed to initialize ATOM environment" >&2
+    exit 1
+fi
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 if [[ -z "$host_ip" ]]; then
@@ -103,28 +109,21 @@ done
 echo "Prefill IPs : ${PREFILL_IPS[*]}"
 echo "Decode  IPs : ${DECODE_IPS[*]}"
 
-PREFILL_ENABLE_EP="${PREFILL_ENABLE_EP}"
-PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
-DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
-DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
-
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
-if [ "$PREFILL_ENABLE_DP" = "true" ]; then
-    if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #DPA+TP
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
-    fi
-fi 
+if [[ "$PREFILL_ENABLE_EP" == "true" ]]; then
+    PREFILL_PARALLEL_ARGS+=(--enable-expert-parallel)
+fi
+if [[ "$PREFILL_ENABLE_DP" == "true" ]]; then
+    PREFILL_PARALLEL_ARGS+=(--enable-dp-attention)
+fi
 
-DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
-if [ "$DECODE_ENABLE_DP" = "true" ]; then
-    if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #DPA+TP
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
-    fi
-fi 
+DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE") #TP
+if [[ "$DECODE_ENABLE_EP" == "true" ]]; then
+    DECODE_PARALLEL_ARGS+=(--enable-expert-parallel)
+fi
+if [[ "$DECODE_ENABLE_DP" == "true" ]]; then
+    DECODE_PARALLEL_ARGS+=(--enable-dp-attention)
+fi
 
 echo "Prefill Parallel args : ${PREFILL_PARALLEL_ARGS[*]}"
 echo "Decode  Parallel args : ${DECODE_PARALLEL_ARGS[*]}"
@@ -213,7 +212,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${DECODE_ARGS} \
         --policy random \
         --backend atom \
-        --log-level info \
+        --log-level ${ATOMESH_LOG_LEVEL} \
         --disable-health-check \
         --disable-circuit-breaker \
         --prometheus-port 29100"
@@ -303,26 +302,33 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 else
                     export TP="${PREFILL_TP_SIZE}"
                     export CONC="${EVAL_CONCURRENT_REQUESTS}"
+                    export EP_SIZE=1
+                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && EP_SIZE="${PREFILL_TP_SIZE}"
                     export PREFILL_TP="${PREFILL_TP_SIZE}"
                     export PREFILL_EP=1
+                    [[ "${PREFILL_ENABLE_EP}" == "true" ]] && PREFILL_EP="${PREFILL_TP_SIZE}"
                     export PREFILL_NUM_WORKERS="${xP}"
                     export DECODE_TP="${DECODE_TP_SIZE}"
                     export DECODE_EP=1
+                    [[ "${DECODE_ENABLE_EP}" == "true" ]] && DECODE_EP="${DECODE_TP_SIZE}"
                     export DECODE_NUM_WORKERS="${yD}"
+                    export DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                    export PREFILL_DP_ATTENTION="${PREFILL_ENABLE_DP}"
+                    export DECODE_DP_ATTENTION="${DECODE_ENABLE_DP}"
                     export ISL="${BENCH_INPUT_LEN}"
                     export OSL="${BENCH_OUTPUT_LEN}"
 
-                    MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" append_lm_eval_summary
-
                     EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    if ! MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" append_lm_eval_summary; then
+                        echo "ERROR: failed to finalize eval artifacts" >&2
+                        EVAL_FAILED=1
+                    fi
+                    if ! _copy_lm_eval_artifacts /workspace "$EVAL_COPY_DIR"; then
+                        echo "ERROR: failed to stage eval artifacts in $EVAL_COPY_DIR" >&2
+                        EVAL_FAILED=1
+                    else
+                        echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    fi
                 fi
             fi
 

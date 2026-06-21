@@ -72,6 +72,8 @@ def single_eval_result(
         "dp_attention": False,
         "conc": conc,
         "task": "gsm8k",
+        "score": 0.95,
+        "score_name": "em_strict",
     }
 
 
@@ -83,6 +85,7 @@ def single_eval_meta(
 ) -> dict:
     row = single_eval_result(conc, runner, isl, osl)
     row["infmax_model_prefix"] = row.pop("model_prefix")
+    row["eval_exit_code"] = 0
     return row
 
 
@@ -99,6 +102,9 @@ def write_raw_eval_artifact(
     artifact_dir.mkdir()
     (artifact_dir / "meta_env.json").write_text(
         json.dumps(single_eval_meta(conc, logical_runner, isl, osl))
+    )
+    (artifact_dir / "results_test.json").write_text(
+        json.dumps({"lm_eval_version": "0.4.0", "results": {}})
     )
 
 
@@ -149,6 +155,8 @@ def multinode_eval_result(conc: int) -> dict:
         "decode_num_workers": 2,
         "conc": conc,
         "task": "gsm8k",
+        "score": 0.95,
+        "score_name": "em_strict",
     }
 
 
@@ -163,7 +171,12 @@ def write_raw_batched_eval_artifact(
     meta["eval_concs"] = concs
     meta["completed_eval_concs"] = concs
     meta["failed_eval_concs"] = []
+    meta["eval_exit_code"] = 0
     (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
+    for conc in concs:
+        (artifact_dir / f"results_test_conc{conc}.json").write_text(
+            json.dumps({"lm_eval_version": "0.4.0", "results": {}})
+        )
 
 
 def single_fixed_entry(conc: int) -> dict:
@@ -437,6 +450,97 @@ def test_eval_validation_expands_one_batched_multinode_artifact(
 
     assert len(expected) == 3
     assert validate_eval_artifacts(tmp_path, expected) == []
+
+
+def test_eval_validation_rejects_failed_raw_eval_status(tmp_path: Path) -> None:
+    config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
+    write_eval_aggregate(tmp_path, [single_eval_result(32)])
+    write_raw_eval_artifact(tmp_path, 32)
+    meta_path = next(tmp_path.glob("eval_*/meta_env.json"))
+    meta = json.loads(meta_path.read_text())
+    meta["eval_exit_code"] = 7
+    meta_path.write_text(json.dumps(meta))
+
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
+
+    assert any("eval_exit_code 7" in error for error in errors)
+
+
+def test_eval_validation_rejects_incomplete_batch_metadata(
+    tmp_path: Path,
+) -> None:
+    concs = [4, 16]
+    config = {
+        "evals": [],
+        "multinode_evals": [multinode_eval_entry(concs)],
+    }
+    write_eval_aggregate(
+        tmp_path,
+        [multinode_eval_result(conc) for conc in concs],
+    )
+    write_raw_batched_eval_artifact(tmp_path, concs)
+    meta_path = tmp_path / "eval_gptoss_8k1k_batch" / "meta_env.json"
+    meta = json.loads(meta_path.read_text())
+    meta["completed_eval_concs"] = [4]
+    meta["failed_eval_concs"] = [16]
+    meta_path.write_text(json.dumps(meta))
+
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
+
+    assert any("incomplete batched eval results" in error for error in errors)
+
+
+def test_eval_validation_rejects_missing_raw_batch_result(
+    tmp_path: Path,
+) -> None:
+    concs = [4, 16]
+    config = {
+        "evals": [],
+        "multinode_evals": [multinode_eval_entry(concs)],
+    }
+    write_eval_aggregate(
+        tmp_path,
+        [multinode_eval_result(conc) for conc in concs],
+    )
+    write_raw_batched_eval_artifact(tmp_path, concs)
+    (
+        tmp_path
+        / "eval_gptoss_8k1k_batch"
+        / "results_test_conc16.json"
+    ).unlink()
+
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
+
+    assert any(
+        "missing result files for concurrency: 16" in error
+        for error in errors
+    )
+
+
+def test_eval_validation_rejects_missing_aggregate_score(tmp_path: Path) -> None:
+    config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
+    result = single_eval_result(32)
+    result["score"] = None
+    write_eval_aggregate(tmp_path, [result])
+    write_raw_eval_artifact(tmp_path, 32)
+
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
+
+    assert any("contains invalid score None" in error for error in errors)
+
+
+def test_eval_validation_rejects_below_threshold_aggregate_score(
+    tmp_path: Path,
+) -> None:
+    config = {"evals": [single_eval_entry(32)], "multinode_evals": []}
+    result = single_eval_result(32)
+    result["score"] = 0.80
+    write_eval_aggregate(tmp_path, [result])
+    write_raw_eval_artifact(tmp_path, 32)
+
+    errors = validate_eval_artifacts(tmp_path, expected_eval_keys(config))
+
+    assert any("is below 0.91 from models.gptoss" in error for error in errors)
 
 
 def test_eval_aggregate_validation_is_exact(tmp_path: Path) -> None:

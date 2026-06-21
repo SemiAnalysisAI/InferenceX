@@ -21,6 +21,8 @@ from pathlib import Path
 
 import pytest
 
+from process_agentic_result import _HF_DATASET
+
 
 PROCESSOR = Path(__file__).resolve().parent / "process_agentic_result.py"
 
@@ -405,7 +407,8 @@ def test_processor_loads_traces_jsonl_for_theoretical_cache(tmp_path: Path):
     # Build a fake HF cache with traces.jsonl matching the conv_ids the
     # fixture references (trace-A, trace-B).
     hf_cache = tmp_path / "_hf"
-    snapshot = hf_cache / "datasets--semianalysisai--cc-traces-weka-042026" / "snapshots" / "abc"
+    org, name = _HF_DATASET.split("/", 1)
+    snapshot = hf_cache / f"datasets--{org}--{name}" / "snapshots" / "abc"
     snapshot.mkdir(parents=True)
     # Real corpus uses the ``out`` alias (Pydantic's external name for
     # output_length). Mix both to verify the loader accepts either.

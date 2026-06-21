@@ -46,6 +46,23 @@ def result_concurrency(path: Path) -> Optional[int]:
     return int(match.group(1)) if match else None
 
 
+def valid_concurrency_list(
+    value: object,
+    *,
+    allow_empty: bool = True,
+) -> bool:
+    """Return whether metadata contains unique positive integer concurrencies."""
+    return (
+        isinstance(value, list)
+        and (allow_empty or bool(value))
+        and all(
+            isinstance(conc, int) and not isinstance(conc, bool) and conc > 0
+            for conc in value
+        )
+        and len(set(value)) == len(value)
+    )
+
+
 def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
     """Return lm-eval result JSONs from one artifact directory.
 
@@ -99,60 +116,104 @@ def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
     - Values from results[task][metric,filter]
     """
     data = load_json(json_path) or {}
+    if not isinstance(data, dict):
+        return []
     results = data.get('results', {})
     configs = data.get('configs', {})
 
-    if not results:
+    if not isinstance(results, dict) or not results:
         return []
+    if not isinstance(configs, dict):
+        configs = {}
 
     extracted = []
 
-    for task in results.keys():
-        task_results = results[task]
+    for task, task_results in results.items():
+        if not isinstance(task_results, dict):
+            continue
         task_config = configs.get(task, {})
+        if not isinstance(task_config, dict):
+            task_config = {}
 
         # Base metric: from config's metric_list
         metric_list = task_config.get('metric_list', [])
-        base_metric = metric_list[0]['metric'] if metric_list else 'exact_match'
+        if (
+            isinstance(metric_list, list)
+            and metric_list
+            and isinstance(metric_list[0], dict)
+            and isinstance(metric_list[0].get('metric'), str)
+        ):
+            base_metric = metric_list[0]['metric']
+        else:
+            base_metric = 'exact_match'
 
         # Filters: from config's filter_list
         filter_list = task_config.get('filter_list', [])
+        if not isinstance(filter_list, list):
+            filter_list = []
 
         strict_val, strict_se = None, None
         flex_val, flex_se = None, None
         accuracy_val, accuracy_se = None, None
 
         # Helper to get value/stderr pair for filtered metrics
-        def get_val_se(filter_name: str) -> Tuple[Optional[float], Optional[float]]:
-            val_key = f"{base_metric},{filter_name}"
-            se_key = f"{base_metric}_stderr,{filter_name}"
+        def get_val_se(
+            filter_name: Optional[str],
+        ) -> Tuple[Optional[float], Optional[float]]:
+            suffix = f",{filter_name}" if filter_name else ""
+            val_key = f"{base_metric}{suffix}"
+            se_key = f"{base_metric}_stderr{suffix}"
             return task_results.get(val_key), task_results.get(se_key)
 
         # Extract metrics based on filter_list
         if not filter_list:
-            # No filters - check for accuracy or use base metric
-            if 'acc' in task_results:
-                accuracy_val = task_results.get('acc')
-                accuracy_se = task_results.get('acc_stderr')
+            value, stderr = get_val_se('none')
+            if value is None:
+                value, stderr = get_val_se(None)
+            if base_metric in {'acc', 'accuracy'}:
+                accuracy_val, accuracy_se = value, stderr
             else:
-                strict_val = task_results.get(base_metric)
-                strict_se = task_results.get(f"{base_metric}_stderr")
+                strict_val, strict_se = value, stderr
         else:
             # Extract metrics for each filter
-            for f in filter_list:
-                fname = f['name']
-                if 'strict' in fname:
-                    strict_val, strict_se = get_val_se(fname)
-                elif 'flex' in fname or 'extract' in fname:
-                    flex_val, flex_se = get_val_se(fname)
+            for filter_config in filter_list:
+                if not isinstance(filter_config, dict):
+                    continue
+                filter_name = filter_config.get('name')
+                if not isinstance(filter_name, str):
+                    continue
+                value, stderr = get_val_se(filter_name)
+                normalized_name = filter_name.lower()
+                if 'strict' in normalized_name:
+                    strict_val, strict_se = value, stderr
+                elif (
+                    'flex' in normalized_name
+                    or 'extract' in normalized_name
+                ):
+                    flex_val, flex_se = value, stderr
+                elif base_metric in {'acc', 'accuracy'}:
+                    accuracy_val, accuracy_se = value, stderr
+                elif strict_val is None:
+                    strict_val, strict_se = value, stderr
 
         # N-samples (effective count)
-        n_eff = data.get('n-samples', {}).get(task, {}).get('effective')
+        sample_counts = data.get('n-samples', {})
+        if not isinstance(sample_counts, dict):
+            sample_counts = {}
+        task_counts = sample_counts.get(task, {})
+        n_eff = (
+            task_counts.get('effective')
+            if isinstance(task_counts, dict)
+            else None
+        )
 
         # Model name
+        metadata = task_config.get('metadata', {})
+        if not isinstance(metadata, dict):
+            metadata = {}
         model = (
             data.get('model_name')
-            or task_config.get('metadata', {}).get('model')
+            or metadata.get('model')
         )
 
         extracted.append({
@@ -264,6 +325,10 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         row['score'] = m.get('strict')
         row['score_name'] = 'em_strict'
         row['score_se'] = m.get('strict_se')
+    elif m.get('flex') is not None:
+        row['score'] = m.get('flex')
+        row['score_name'] = 'em_flexible'
+        row['score_se'] = m.get('flex_se')
     elif m.get('accuracy') is not None:
         row['score'] = m.get('accuracy')
         row['score_name'] = 'accuracy'
@@ -281,15 +346,48 @@ def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
     for d in find_eval_sets(root):
         meta = load_json(d / 'meta_env.json') or {}
+        eval_exit_code = meta.get('eval_exit_code')
+        if (
+            not isinstance(eval_exit_code, int)
+            or isinstance(eval_exit_code, bool)
+            or eval_exit_code != 0
+        ):
+            continue
+
         batch_concs = meta.get('eval_concs')
-        batched = isinstance(batch_concs, list)
+        if 'eval_concs' in meta and not valid_concurrency_list(
+            batch_concs,
+            allow_empty=False,
+        ):
+            continue
+        batched = valid_concurrency_list(batch_concs, allow_empty=False)
         allowed_concs: Optional[set[int]] = None
         if batched:
-            completed_concs = meta.get('completed_eval_concs', batch_concs)
-            if isinstance(completed_concs, list):
-                allowed_concs = {as_int(conc, -1) for conc in completed_concs}
+            completed_concs = meta.get('completed_eval_concs')
+            failed_concs = meta.get('failed_eval_concs')
+            if not (
+                valid_concurrency_list(completed_concs)
+                and valid_concurrency_list(failed_concs)
+            ):
+                continue
+            expected_set = set(batch_concs)
+            completed_set = set(completed_concs)
+            failed_set = set(failed_concs)
+            if (
+                completed_set != expected_set
+                or failed_set
+                or completed_set & failed_set
+            ):
+                continue
+            allowed_concs = completed_set
 
-        for lm_path in detect_lm_eval_jsons(d, batched=batched):
+        lm_paths = detect_lm_eval_jsons(d, batched=batched)
+        if batched and {
+            result_concurrency(path) for path in lm_paths
+        } != allowed_concs:
+            continue
+
+        for lm_path in lm_paths:
             row_meta = meta
             if batched:
                 conc = result_concurrency(lm_path)

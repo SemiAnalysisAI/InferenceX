@@ -597,20 +597,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
                     # IS_MULTINODE, FRAMEWORK, PRECISION, MODEL_PREFIX, RUNNER_TYPE,
                     # RESULT_FILENAME are already set via Docker -e flags from job.slurm
 
-                    append_lm_eval_summary
-                    # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
-
-                    # Copy eval artifacts to run_logs for NFS extraction by runner
                     EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    # Use find for glob patterns to avoid "no match" errors
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    if ! append_lm_eval_summary; then
+                        echo "ERROR: failed to finalize eval artifacts" >&2
+                        EVAL_FAILED=1
+                    fi
+                    if ! _copy_lm_eval_artifacts /workspace "$EVAL_COPY_DIR"; then
+                        echo "ERROR: failed to stage eval artifacts in $EVAL_COPY_DIR" >&2
+                        EVAL_FAILED=1
+                    else
+                        echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    fi
                 fi
             fi
 

@@ -752,6 +752,7 @@ _stage_lm_eval_artifacts() {
     local results_dir="$1"
     local eval_conc="$2"
     local moved=0
+    local result_count=0
     local failed=0
     local jf base stem extension target suffix
 
@@ -788,6 +789,9 @@ _stage_lm_eval_artifacts() {
 
         if mv -f "$jf" "$target"; then
             moved=1
+            if [[ "$base" == results*.json ]]; then
+                result_count=$((result_count + 1))
+            fi
         else
             echo "WARN: failed to stage eval artifact ${jf}" >&2
             failed=1
@@ -803,6 +807,10 @@ _stage_lm_eval_artifacts() {
 
     if [ "$moved" -eq 0 ]; then
         echo "WARN: no eval artifacts were produced for concurrency ${eval_conc}" >&2
+        return 1
+    fi
+    if [ "$result_count" -eq 0 ]; then
+        echo "WARN: no results*.json artifact was produced for concurrency ${eval_conc}" >&2
         return 1
     fi
     return "$failed"
@@ -834,6 +842,12 @@ append_lm_eval_summary() {
     local meta_json
     local metadata_conc="${CONC:-1}"
     local batch_metadata=""
+    local eval_exit_code="${EVAL_RUN_EXIT_CODE:-0}"
+
+    if [[ ! "$eval_exit_code" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: invalid eval exit code '${eval_exit_code}'" >&2
+        return 1
+    fi
 
     if [ -n "$batch_concs" ]; then
         meta_json="./meta_env.json"
@@ -864,8 +878,13 @@ append_lm_eval_summary() {
         meta_json="${out_dir}/meta_env.json"
     fi
 
+    if [[ ! "$metadata_conc" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: invalid eval metadata concurrency '${metadata_conc}'" >&2
+        return 1
+    fi
+
     # Write minimal meta for collectors that expect it
-    local model_name="${MODEL_NAME:-$MODEL}"
+    local model_name="${MODEL_NAME:-${MODEL:-}}"
     local is_multinode_json="false"
     if [ "${IS_MULTINODE:-false}" = "true" ]; then
         is_multinode_json="true"
@@ -899,7 +918,7 @@ append_lm_eval_summary() {
     local fw="${FRAMEWORK:-}"
     local prec="${PRECISION:-}"
     if [[ -z "$fw" || -z "$prec" ]]; then
-        if [[ -n "${RESULT_FILENAME}" ]]; then
+        if [[ -n "${RESULT_FILENAME:-}" ]]; then
             # Extract the two fields immediately before "_tp"
             # Handles arbitrary underscores in exp_name by matching from the end
             local parsed
@@ -914,12 +933,13 @@ append_lm_eval_summary() {
             fi
         fi
     fi
-    cat > "${meta_json}" <<META
+    if ! cat > "${meta_json}" <<META
 {
   "is_multinode": ${is_multinode_json},
   "framework": "${fw:-unknown}",
   "precision": "${prec:-unknown}",
-  "spec_decoding": "${SPEC_DECODING}",
+  "spec_decoding": "${SPEC_DECODING:-none}",
+  "eval_exit_code": ${eval_exit_code},
   "tp": ${TP:-1},
   "conc": ${metadata_conc},
 ${batch_metadata}  "ep": ${EP_SIZE:-1},
@@ -939,6 +959,16 @@ ${batch_metadata}  "ep": ${EP_SIZE:-1},
   "osl": "${OSL:-0}"
 }
 META
+    then
+        echo "ERROR: failed to write eval metadata to ${meta_json}" >&2
+        return 1
+    fi
+
+    if ! python3 -m json.tool "${meta_json}" >/dev/null 2>&1; then
+        echo "ERROR: generated invalid eval metadata at ${meta_json}" >&2
+        rm -f "${meta_json}" || true
+        return 1
+    fi
 
     if [ -n "$batch_concs" ]; then
         echo "Prepared batched eval artifacts in: $(pwd)"
@@ -946,24 +976,92 @@ META
     fi
 
     # Move eval artifacts into PWD (no new directories in workspace)
+    local artifact_rc=0
+    local result_count=0
+    local jf base
     if [ -f "${meta_json}" ]; then
-        mv -f "${meta_json}" ./ || echo "WARN: failed to move ${meta_json}" >&2
+        if ! mv -f "${meta_json}" ./; then
+            echo "ERROR: failed to move ${meta_json}" >&2
+            artifact_rc=1
+        fi
     fi
     if [ -d "${out_dir}" ]; then
         while IFS= read -r -d '' jf; do
             base=$(basename "$jf")
             if [ "$base" != "meta_env.json" ]; then
-                mv -f "$jf" ./ || echo "WARN: failed to move ${jf}" >&2
+                if mv -f "$jf" ./; then
+                    if [[ "$base" == results*.json ]]; then
+                        result_count=$((result_count + 1))
+                    fi
+                else
+                    echo "ERROR: failed to move ${jf}" >&2
+                    artifact_rc=1
+                fi
             fi
-        done < <(find "${out_dir}" -type f -name "*.json*" -print0 2>/dev/null)
+        done < <(
+            find "${out_dir}" -type f \
+                \( -name "*.json" -o -name "*.jsonl" \) -print0 2>/dev/null
+        )
+    fi
+    if [ "$result_count" -eq 0 ]; then
+        echo "ERROR: eval produced no results*.json artifact" >&2
+        artifact_rc=1
     fi
 
-    # Best-effort cleanup of the temp directory
-    if [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
+    # Preserve the temp directory when staging fails so the caller can inspect it.
+    if [ "$artifact_rc" -eq 0 ] && [ -n "${out_dir}" ] && [ -d "${out_dir}" ]; then
         rm -rf --one-file-system "${out_dir}" || rm -rf "${out_dir}" || true
     fi
 
+    if [ "$artifact_rc" -ne 0 ]; then
+        echo "ERROR: eval artifact staging was incomplete" >&2
+        return "$artifact_rc"
+    fi
+
     echo "Moved eval artifacts to: $(pwd)"
+}
+
+_copy_lm_eval_artifacts() {
+    local source_dir="$1"
+    local destination_dir="$2"
+    local artifact_path base
+    local result_count=0
+    local copy_rc=0
+
+    if ! mkdir -p "$destination_dir"; then
+        echo "ERROR: failed to create eval artifact directory ${destination_dir}" >&2
+        return 1
+    fi
+
+    if [ ! -f "${source_dir}/meta_env.json" ]; then
+        echo "ERROR: missing ${source_dir}/meta_env.json" >&2
+        copy_rc=1
+    elif ! cp -f "${source_dir}/meta_env.json" "$destination_dir/"; then
+        echo "ERROR: failed to copy ${source_dir}/meta_env.json" >&2
+        copy_rc=1
+    fi
+
+    while IFS= read -r -d '' artifact_path; do
+        base=$(basename "$artifact_path")
+        if cp -f "$artifact_path" "$destination_dir/"; then
+            if [[ "$base" == results*.json ]]; then
+                result_count=$((result_count + 1))
+            fi
+        else
+            echo "ERROR: failed to copy eval artifact ${artifact_path}" >&2
+            copy_rc=1
+        fi
+    done < <(
+        find "$source_dir" -maxdepth 1 -type f \
+            \( -name "results*.json" -o -name "sample*.jsonl" \) \
+            -print0 2>/dev/null
+    )
+
+    if [ "$result_count" -eq 0 ]; then
+        echo "ERROR: no results*.json artifacts found in ${source_dir}" >&2
+        copy_rc=1
+    fi
+    return "$copy_rc"
 }
 
 # ------------------------------
@@ -989,29 +1087,46 @@ run_eval() {
     unset EVAL_BATCHED_CONCS
     unset EVAL_BATCHED_COMPLETED_CONCS
     unset EVAL_BATCHED_FAILED_CONCS
+    export EVAL_RUN_EXIT_CODE=0
 
     local requested_concs="${EVAL_CONCURRENT_REQUESTS:-}"
+    if [ -z "$requested_concs" ] && [ -n "${CONC:-}" ]; then
+        requested_concs="$CONC"
+    fi
+    requested_concs="${requested_concs//$'\n'/ }"
+
     local eval_concs=()
     if [ -n "$requested_concs" ]; then
         read -r -a eval_concs <<< "$requested_concs"
     fi
 
+    local eval_conc seen_concs=" "
+    for eval_conc in "${eval_concs[@]}"; do
+        if [[ ! "$eval_conc" =~ ^[1-9][0-9]*$ ]]; then
+            echo "ERROR: invalid eval concurrency '${eval_conc}'" >&2
+            export EVAL_RUN_EXIT_CODE=2
+            return 2
+        fi
+        if [[ "$seen_concs" == *" ${eval_conc} "* ]]; then
+            echo "ERROR: duplicate eval concurrency '${eval_conc}'" >&2
+            export EVAL_RUN_EXIT_CODE=2
+            return 2
+        fi
+        seen_concs="${seen_concs}${eval_conc} "
+    done
+
     if [ "${#eval_concs[@]}" -gt 1 ]; then
         if [[ "$framework" != "lm-eval" && "$framework" != "lm_eval" ]]; then
             echo "ERROR: batched eval concurrency is only supported for lm-eval" >&2
+            export EVAL_RUN_EXIT_CODE=2
             return 1
         fi
 
-        local eval_conc results_dir eval_rc stage_rc
+        local results_dir eval_rc stage_rc
         local completed_concs=()
         local failed_concs=()
 
         for eval_conc in "${eval_concs[@]}"; do
-            if [[ ! "$eval_conc" =~ ^[1-9][0-9]*$ ]]; then
-                echo "ERROR: invalid eval concurrency '${eval_conc}'" >&2
-                return 1
-            fi
-
             if ! results_dir=$(mktemp -d /tmp/eval_out-conc"${eval_conc}"-XXXXXX); then
                 echo "ERROR: failed to create eval output directory for concurrency ${eval_conc}" >&2
                 failed_concs+=("$eval_conc")
@@ -1043,8 +1158,13 @@ run_eval() {
         export EVAL_BATCHED_FAILED_CONCS="${failed_concs[*]}"
 
         if [ "${#failed_concs[@]}" -gt 0 ]; then
+            export EVAL_RUN_EXIT_CODE=1
             echo "ERROR: batched eval failed for concurrency: ${failed_concs[*]}" >&2
-            echo "Deferring failure until post-upload score validation preserves all artifacts" >&2
+            if [ "${EVAL_ONLY:-false}" = "true" ]; then
+                echo "Deferring failure until post-upload score validation preserves all artifacts" >&2
+                return 0
+            fi
+            return 1
         fi
         return 0
     fi
@@ -1055,11 +1175,12 @@ run_eval() {
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 
+    export EVAL_RUN_EXIT_CODE="$eval_rc"
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
-        if [ "${EVAL_ONLY}" = "true" ]; then
-            echo "Eval-only mode: failing after artifact collection" >&2
-            return "$eval_rc"
+        if [ "${EVAL_ONLY:-false}" = "true" ]; then
+            echo "Deferring failure until post-upload score validation preserves artifacts" >&2
+            return 0
         fi
     fi
     return $eval_rc

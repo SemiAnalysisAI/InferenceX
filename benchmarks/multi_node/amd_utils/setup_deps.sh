@@ -7,9 +7,10 @@
 #                    (base image: vllm/vllm-openai-rocm:v0.18.0)
 #   sglang-disagg -> SGLang aiter gluon patch + per-model installs
 #                    (base image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-*)
+#   atom-disagg   -> ATOM logging controls + shared aiter/model installs
 #
-# Sourced by server_vllm.sh and server_sglang.sh so PATH / LD_LIBRARY_PATH
-# exports persist. Each patch is idempotent: skipped if already applied.
+# Sourced by the engine server launchers so PATH / LD_LIBRARY_PATH exports
+# persist. Each patch is idempotent: skipped if already applied.
 #
 # Build steps run in subshells to avoid CWD pollution between installers.
 # =============================================================================
@@ -77,6 +78,284 @@ install_amd_quark() {
         return 0
     fi
     _SETUP_INSTALLED+=("amd-quark")
+}
+
+# ---------------------------------------------------------------------------
+# 7. Make the pinned ATOM image honor InferenceX logging environment variables.
+#
+# ATOM's Python logger hardcodes its console handler to INFO, and its
+# programmatic uvicorn.run() call enables INFO/access logs without CLI flags.
+# Engine workers use multiprocessing "spawn", so changing only the parent
+# process logger does not affect them. Upstream ATOM does not currently expose
+# these controls. Patch the installed package once so all processes read the
+# inherited environment:
+#   ATOM_LOG_LEVEL              (default WARNING)
+#   ATOM_UVICORN_LOG_LEVEL      (default warning)
+#   ATOM_UVICORN_ACCESS_LOG     (default 0)
+# atomesh has a native --log-level flag and does not need patching.
+#
+# This patch fails closed: after editing, it executes the patched getLogger()
+# function with a root INFO handler installed and verifies that ATOM INFO is
+# suppressed, WARNING is emitted exactly once, and propagation is disabled. It
+# also executes the patched uvicorn.run() expression with a fake server and
+# verifies the effective level/access-log arguments.
+# ---------------------------------------------------------------------------
+patch_atom_logging_controls() {
+    if ! python3 - <<'PY'
+import ast
+import contextlib
+import importlib.util
+import io
+import logging
+import os
+import sys
+import types
+from pathlib import Path
+
+spec = importlib.util.find_spec("atom")
+if spec is None or not spec.submodule_search_locations:
+    raise RuntimeError("could not locate the installed ATOM package")
+
+atom_dir = Path(next(iter(spec.submodule_search_locations)))
+updates: dict[Path, str] = {}
+
+logger_path = atom_dir / "utils" / "__init__.py"
+logger_src = logger_path.read_text()
+logger_marker = "# InferenceX compatibility: make logging environment-driven."
+if logger_marker not in logger_src:
+    old_logger_level = "        logger.setLevel(logging.DEBUG)"
+    old_handler_level = "        console_handler.setLevel(logging.INFO)"
+    if logger_src.count(old_logger_level) != 1:
+        raise RuntimeError(
+            f"{logger_path}: expected one hardcoded logger DEBUG level"
+        )
+    if logger_src.count(old_handler_level) != 1:
+        raise RuntimeError(
+            f"{logger_path}: expected one hardcoded handler INFO level"
+        )
+    new_logger_level = """        # InferenceX compatibility: make logging environment-driven.
+        _atom_log_level = getattr(
+            logging,
+            os.getenv("ATOM_LOG_LEVEL", "WARNING").upper(),
+            logging.WARNING,
+        )
+        logger.setLevel(_atom_log_level)
+        # Prevent another framework's root handler from re-emitting ATOM INFO.
+        logger.propagate = False"""
+    logger_src = logger_src.replace(
+        old_logger_level,
+        new_logger_level,
+        1,
+    ).replace(
+        old_handler_level,
+        "        console_handler.setLevel(_atom_log_level)",
+        1,
+    )
+    updates[logger_path] = logger_src
+
+api_path = atom_dir / "entrypoints" / "openai" / "api_server.py"
+api_src = api_path.read_text()
+if "ATOM_UVICORN_ACCESS_LOG" not in api_src:
+    old = "    uvicorn.run(app, host=args.host, port=args.server_port)"
+    if api_src.count(old) != 1:
+        raise RuntimeError(f"{api_path}: expected one uvicorn.run() call")
+    new = """    uvicorn.run(
+        app,
+        host=args.host,
+        port=args.server_port,
+        log_level=__import__("os").getenv(
+            "ATOM_UVICORN_LOG_LEVEL", "warning"
+        ).lower(),
+        access_log=__import__("os").getenv(
+            "ATOM_UVICORN_ACCESS_LOG", "0"
+        ).strip().lower() in {"1", "true", "yes", "on"},
+    )"""
+    api_src = api_src.replace(old, new, 1)
+    updates[api_path] = api_src
+
+for path, contents in updates.items():
+    compile(contents, str(path), "exec")
+    path.write_text(contents)
+
+logger_src = logger_path.read_text()
+api_src = api_path.read_text()
+
+for required in (
+    logger_marker,
+    'os.getenv("ATOM_LOG_LEVEL", "WARNING")',
+    "logger.setLevel(_atom_log_level)",
+    "console_handler.setLevel(_atom_log_level)",
+    "logger.propagate = False",
+):
+    if required not in logger_src:
+        raise RuntimeError(f"{logger_path}: missing logging control: {required}")
+
+for required in (
+    '"ATOM_UVICORN_LOG_LEVEL", "warning"',
+    '"ATOM_UVICORN_ACCESS_LOG", "0"',
+    "access_log=",
+):
+    if required not in api_src:
+        raise RuntimeError(f"{api_path}: missing logging control: {required}")
+
+
+def verify_logger_behavior() -> None:
+    tree = ast.parse(logger_src, filename=str(logger_path))
+    functions = [
+        node
+        for node in tree.body
+        if isinstance(node, ast.FunctionDef) and node.name == "getLogger"
+    ]
+    if len(functions) != 1:
+        raise RuntimeError(f"{logger_path}: expected one getLogger() function")
+
+    envs_module = types.ModuleType("atom.utils.envs")
+    envs_module.ATOM_LOG_MORE = False
+    atom_module = types.ModuleType("atom")
+    atom_module.__path__ = []
+    utils_module = types.ModuleType("atom.utils")
+    utils_module.__path__ = []
+    utils_module.envs = envs_module
+    module_backups = {
+        name: sys.modules.get(name)
+        for name in ("atom", "atom.utils", "atom.utils.envs")
+    }
+    sys.modules["atom"] = atom_module
+    sys.modules["atom.utils"] = utils_module
+    sys.modules["atom.utils.envs"] = envs_module
+
+    atom_logger = logging.getLogger("atom")
+    old_handlers = atom_logger.handlers[:]
+    old_level = atom_logger.level
+    old_propagate = atom_logger.propagate
+    root_logger = logging.getLogger()
+    root_stream = io.StringIO()
+    root_handler = logging.StreamHandler(root_stream)
+    old_root_level = root_logger.level
+    root_logger.addHandler(root_handler)
+    root_logger.setLevel(logging.DEBUG)
+
+    old_atom_level = os.environ.get("ATOM_LOG_LEVEL")
+    os.environ["ATOM_LOG_LEVEL"] = "WARNING"
+    atom_logger.handlers.clear()
+    try:
+        namespace = {
+            "logger": atom_logger,
+            "logging": logging,
+            "os": os,
+            "torch": types.SimpleNamespace(
+                _dynamo=types.SimpleNamespace(config=types.SimpleNamespace())
+            ),
+        }
+        function_module = ast.Module(body=functions, type_ignores=[])
+        ast.fix_missing_locations(function_module)
+        exec(compile(function_module, str(logger_path), "exec"), namespace)
+
+        atom_stream = io.StringIO()
+        with contextlib.redirect_stderr(atom_stream):
+            configured_logger = namespace["getLogger"]()
+            for handler in configured_logger.handlers:
+                if isinstance(handler, logging.StreamHandler):
+                    handler.setStream(atom_stream)
+            configured_logger.info("INFERENCEX_HIDDEN_ATOM_INFO")
+            configured_logger.warning("INFERENCEX_VISIBLE_ATOM_WARNING")
+
+        output = atom_stream.getvalue()
+        if "INFERENCEX_HIDDEN_ATOM_INFO" in output:
+            raise RuntimeError("ATOM INFO logging is still enabled")
+        if output.count("INFERENCEX_VISIBLE_ATOM_WARNING") != 1:
+            raise RuntimeError("ATOM WARNING was not emitted exactly once")
+        if root_stream.getvalue():
+            raise RuntimeError("ATOM logs still propagate to the root logger")
+        if configured_logger.getEffectiveLevel() != logging.WARNING:
+            raise RuntimeError("ATOM logger effective level is not WARNING")
+        if configured_logger.propagate:
+            raise RuntimeError("ATOM logger propagation is still enabled")
+    finally:
+        atom_logger.handlers[:] = old_handlers
+        atom_logger.setLevel(old_level)
+        atom_logger.propagate = old_propagate
+        root_logger.removeHandler(root_handler)
+        root_logger.setLevel(old_root_level)
+        if old_atom_level is None:
+            os.environ.pop("ATOM_LOG_LEVEL", None)
+        else:
+            os.environ["ATOM_LOG_LEVEL"] = old_atom_level
+        for name, module in module_backups.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
+def verify_uvicorn_behavior() -> None:
+    tree = ast.parse(api_src, filename=str(api_path))
+    calls = [
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and isinstance(node.func.value, ast.Name)
+        and node.func.value.id == "uvicorn"
+        and node.func.attr == "run"
+    ]
+    if len(calls) != 1:
+        raise RuntimeError(f"{api_path}: expected one uvicorn.run() call")
+
+    captured: dict[str, object] = {}
+
+    class FakeUvicorn:
+        @staticmethod
+        def run(*args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+
+    old_level = os.environ.get("ATOM_UVICORN_LOG_LEVEL")
+    old_access = os.environ.get("ATOM_UVICORN_ACCESS_LOG")
+    os.environ["ATOM_UVICORN_LOG_LEVEL"] = "warning"
+    os.environ["ATOM_UVICORN_ACCESS_LOG"] = "0"
+    try:
+        expression = ast.Expression(body=calls[0])
+        ast.fix_missing_locations(expression)
+        eval(
+            compile(expression, str(api_path), "eval"),
+            {
+                "app": object(),
+                "args": types.SimpleNamespace(host="0.0.0.0", server_port=8000),
+                "uvicorn": FakeUvicorn,
+            },
+        )
+        kwargs = captured.get("kwargs")
+        if not isinstance(kwargs, dict):
+            raise RuntimeError("patched uvicorn.run() was not executed")
+        if kwargs.get("log_level") != "warning":
+            raise RuntimeError("Uvicorn log level is not warning")
+        if kwargs.get("access_log") is not False:
+            raise RuntimeError("Uvicorn access logging is still enabled")
+    finally:
+        if old_level is None:
+            os.environ.pop("ATOM_UVICORN_LOG_LEVEL", None)
+        else:
+            os.environ["ATOM_UVICORN_LOG_LEVEL"] = old_level
+        if old_access is None:
+            os.environ.pop("ATOM_UVICORN_ACCESS_LOG", None)
+        else:
+            os.environ["ATOM_UVICORN_ACCESS_LOG"] = old_access
+
+
+verify_logger_behavior()
+verify_uvicorn_behavior()
+
+action = "Patched" if updates else "Verified"
+print(
+    f"[SETUP] {action} ATOM logging controls: "
+    "engine=WARNING propagation=off uvicorn=warning access_log=off"
+)
+PY
+    then
+        return 1
+    fi
+    _SETUP_INSTALLED+=("ATOM-logging-controls")
 }
 
 # ---------------------------------------------------------------------------
@@ -738,6 +1017,16 @@ install_transformers_glm5() {
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
+
+if [[ "$ENGINE" == "atom-disagg" ]]; then
+    if ! patch_atom_logging_controls; then
+        echo "[SETUP] ERROR: failed to enable ATOM logging controls" >&2
+        if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+            return 1
+        fi
+        exit 1
+    fi
+fi
 
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_recipe_deps
