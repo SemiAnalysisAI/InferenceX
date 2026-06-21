@@ -659,16 +659,32 @@ The next search axis removes excess decode capacity: 2P/1D c52 and 3P/1D c68.
 
 The shared agentic replay builder now accepts
 `AIPERF_SERVER_METRICS_URLS` as a comma-separated list and passes its values
-to AIPerf under one `--server-metrics` option. For GB200, `agentic_srt.sh`
-expands the live Slurm allocation with `scontrol show hostnames` and constructs
-one URL per logical worker leader. The recipes declare the deployed GB200
-srt-slurm system-port base (`7500`), skip the dedicated infra node, and select
-every second node
-because each TEP8/TP8 worker spans two four-GPU nodes. The port advances across
-both leader and follower processes, so the selected ports are 7500, 7502, ...
-in allocation order. AIPerf continues to auto-scrape the frontend metrics
-endpoint as well. When the variables are unset, existing behavior is
-unchanged.
+to AIPerf under one `--server-metrics` option. Worker discovery is performed
+by srt-slurm's host-side orchestrator, which already owns the resolved process
+topology and system ports. Agentic custom benchmarks opt in with
+`benchmark.aiperf_server_metrics: true`; srt-slurm injects one URL per logical
+worker leader as `AIPERF_SERVER_METRICS_URLS`. Distributed follower processes
+are excluded because they do not own separate vLLM engines. Stable
+deduplication preserves topology order, so the URLs remain prefill 0, prefill
+1, ..., decode 0, ... regardless of allocated hostnames. AIPerf continues to
+auto-scrape the frontend metrics endpoint as well.
+
+Run `27915217510` / Slurm job `19535` exposed the flaw in the initial
+container-side implementation. All 2P/1D engines became healthy after about
+30 minutes, but the benchmark failed before replay because the vLLM image does
+not contain `scontrol`. That approach was removed rather than installing
+Slurm tooling or parsing compressed hostlists inside the model container.
+srt-slurm commit `de59739b172e507e15ebf145bfe305f606e82fbf` adds the explicit
+custom-benchmark opt-in and leader-only, topology-ordered discovery.
+
+The replacement was validated without loading DeepSeek weights. GB200 mocker
+job `19536` first caught that URL-set sorting scrambled topology order. After
+stable ordering was added, mocker job `19537` registered 2P/1D in 32 seconds,
+injected `7500`, `7501`, and `7502` into the custom benchmark container, and
+successfully fetched all three `/metrics` endpoints. It completed successfully
+in 53 seconds. The real two-node-per-worker topology consequently resolves to
+leader ports `7500`, `7502`, `7504`, and so on from srt-slurm's actual process
+objects, without node-offset or stride assumptions.
 
 AIPerf's iterative realtime block now keeps these worker endpoints separate
 instead of collapsing them into one `srv` row. Dynamo's

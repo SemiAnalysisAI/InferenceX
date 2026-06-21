@@ -181,15 +181,13 @@ srun_options:
 
 benchmark:
   type: custom
+  aiperf_server_metrics: true
   command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
   env:
     INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
     RESULT_DIR: /logs/agentic
     PORT: "8000"
     IS_MULTINODE: "true"
-    AIPERF_SERVER_METRICS_BASE_PORT: "7500"
-    AIPERF_SERVER_METRICS_NODE_OFFSET: "1"
-    AIPERF_SERVER_METRICS_NODE_STRIDE: "2"
     # Hundreds of long-context trajectories can spend well over an hour in
     # warmup and profiling. Keep Dynamo affinity alive for the entire run.
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"

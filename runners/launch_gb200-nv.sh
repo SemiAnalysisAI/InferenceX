@@ -248,7 +248,7 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     #     must reach the agentic_srt.sh srun)
     git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout 6e34b8b83229634d732e41a4e2d6595f46ef60b5
+    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
