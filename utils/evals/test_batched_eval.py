@@ -3,8 +3,10 @@
 import json
 import os
 import subprocess
+import sys
 from pathlib import Path
 
+from validate_scores import main as validate_scores_main
 from validate_scores import validate_batch_manifest
 
 
@@ -127,6 +129,43 @@ def test_batched_eval_requires_a_valid_manifest(tmp_path: Path) -> None:
     )
 
     assert any("unavailable or invalid" in error for error in errors)
+
+
+def test_validate_scores_warns_when_batch_status_metadata_is_unreadable(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    meta_path = tmp_path / "meta_env.json"
+    meta_path.write_text("{invalid")
+    result_path = tmp_path / "results_test.json"
+    result_path.write_text(
+        json.dumps({
+            "results": {
+                "gsm8k": {
+                    "exact_match,strict-match": 1.0,
+                },
+            },
+        })
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate_scores.py",
+            "--meta-env",
+            str(meta_path),
+            "--results-glob",
+            str(result_path),
+        ],
+    )
+
+    assert validate_scores_main() == 0
+    captured = capsys.readouterr()
+    assert (
+        "WARN: could not inspect eval metadata for batched concurrency status"
+        in captured.err
+    )
 
 
 def test_amd_multinode_container_inherits_eval_concurrency_list() -> None:

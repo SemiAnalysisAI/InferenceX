@@ -238,8 +238,12 @@ def main() -> int:
             with open(args.meta_env) as f:
                 if "eval_concs" in json.load(f):
                     print("PASS: batched eval produced every requested concurrency")
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as exc:
+            print(
+                "WARN: could not inspect eval metadata for batched concurrency "
+                f"status: {exc}",
+                file=sys.stderr,
+            )
 
     for f in result_files:
         with open(f) as fh:
