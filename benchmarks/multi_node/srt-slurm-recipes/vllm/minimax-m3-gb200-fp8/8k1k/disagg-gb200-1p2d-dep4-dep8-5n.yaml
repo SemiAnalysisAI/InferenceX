@@ -1,7 +1,7 @@
-name: "minimax-m3-vllm-disagg-gb200-1p2d-dep2-dep8-fp8-8k1k"
+name: "minimax-m3-vllm-disagg-gb200-1p2d-dep4-dep8-fp8-8k1k"
 
-# 1P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 2D DEP8 (TP1 DP8 EP)
-# decode = 5 nodes (1P + 4D). Adapted from NV B300 PR #1863.
+# 1P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 2D DEP8 (TP1 DP8 EP)
+# 5 nodes (1P + 4D). Adapted from NV B300 PR #1863.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -26,7 +26,7 @@ resources:
   decode_nodes: 4
   prefill_workers: 1
   decode_workers: 2
-  gpus_per_prefill: 2
+  gpus_per_prefill: 4
   gpus_per_decode: 8
 
 frontend:
@@ -61,7 +61,7 @@ backend:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 1
-      data-parallel-size: 2
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
@@ -70,6 +70,7 @@ backend:
       gpu-memory-utilization: 0.90
       max-model-len: 9472
       language-model-only: true
+      kv-cache-dtype: fp8
       attention-backend: FLASHINFER
       stream-interval: 32
       max-cudagraph-capture-size: 2048
@@ -87,11 +88,12 @@ backend:
       gpu-memory-utilization: 0.90
       max-model-len: 9472
       language-model-only: true
+      kv-cache-dtype: fp8
       attention-backend: FLASHINFER
       stream-interval: 32
-      max-num-seqs: 1024
+      max-num-seqs: 512
       max-num-batched-tokens: 16384
-      max-cudagraph-capture-size: 4096
+      max-cudagraph-capture-size: 2048
 
 benchmark:
   type: "sa-bench"

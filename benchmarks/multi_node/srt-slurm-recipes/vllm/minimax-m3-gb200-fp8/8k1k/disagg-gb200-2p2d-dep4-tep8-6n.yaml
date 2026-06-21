@@ -1,7 +1,7 @@
-name: "minimax-m3-vllm-disagg-gb200-1p1d-dep2-tep8-fp8-1k1k"
+name: "minimax-m3-vllm-disagg-gb200-2p2d-dep4-tep8-fp8-8k1k"
 
-# 1P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 1D TEP8 (TP8+EP8)
-# decode = 3 nodes (1P + 2D). Adapted from NV B300 PR #1863.
+# 2P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 2D TEP8 (TP8+EP8)
+# 6 nodes (2P + 4D). Adapted from NV B300 PR #1863.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -22,11 +22,11 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 1
-  decode_nodes: 2
-  prefill_workers: 1
-  decode_workers: 1
-  gpus_per_prefill: 2
+  prefill_nodes: 2
+  decode_nodes: 4
+  prefill_workers: 2
+  decode_workers: 2
+  gpus_per_prefill: 4
   gpus_per_decode: 8
 
 frontend:
@@ -61,19 +61,20 @@ backend:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       tensor-parallel-size: 1
-      data-parallel-size: 2
+      data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 128
       gpu-memory-utilization: 0.90
-      max-model-len: 2304
+      max-model-len: 9472
       language-model-only: true
+      kv-cache-dtype: fp8
       attention-backend: FLASHINFER
       stream-interval: 32
       max-cudagraph-capture-size: 2048
-      max-num-batched-tokens: 2048
+      max-num-batched-tokens: 16384
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -83,17 +84,18 @@ backend:
       no-enable-prefix-caching: true
       block-size: 128
       gpu-memory-utilization: 0.90
-      max-model-len: 2304
+      max-model-len: 9472
       language-model-only: true
+      kv-cache-dtype: fp8
       attention-backend: FLASHINFER
       stream-interval: 32
-      max-num-seqs: 4096
+      max-num-seqs: 1024
       max-num-batched-tokens: 16384
-      max-cudagraph-capture-size: 8192
+      max-cudagraph-capture-size: 4096
 
 benchmark:
   type: "sa-bench"
-  isl: 1024
+  isl: 8192
   osl: 1024
-  concurrencies: "4x16x64x128x4096"
+  concurrencies: "16"
   req_rate: "inf"
