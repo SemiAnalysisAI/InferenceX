@@ -69,8 +69,14 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 # Dependencies and Environment Setup
 # =============================================================================
 
-source $ATOM_WS_PATH/setup_deps.sh
-source $ATOM_WS_PATH/env_atom.sh
+if ! source "$ATOM_WS_PATH/setup_deps.sh"; then
+    echo "ERROR: failed to initialize ATOM dependencies" >&2
+    exit 1
+fi
+if ! source "$ATOM_WS_PATH/env_atom.sh"; then
+    echo "ERROR: failed to initialize ATOM environment" >&2
+    exit 1
+fi
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 if [[ -z "$host_ip" ]]; then
