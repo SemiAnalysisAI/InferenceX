@@ -3997,7 +3997,7 @@
     - "No benchmark configuration change; reuse the exact 25-point fixed-sequence matrix and 2 eval jobs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1869
   
-  - config-keys:
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618."
