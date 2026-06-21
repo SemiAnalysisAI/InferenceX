@@ -667,3 +667,12 @@ both leader and follower processes, so the selected ports are 8081, 8083, ...
 in allocation order. AIPerf continues to auto-scrape the frontend metrics
 endpoint as well. When the variables are unset, existing behavior is
 unchanged.
+
+AIPerf's iterative realtime block now keeps these worker endpoints separate
+instead of collapsing them into one `srv` row. Dynamo's
+`dynamo_component=prefill|backend` label produces stable `srv prefill N` and
+`srv decode N` rows (with `backend` presented as `decode`); unlabeled endpoints
+fall back to their host and port. This exposes per-worker cache hit rate, KV
+usage, queue depth, preemptions, and token throughput so cache-affinity and
+load-imbalance failures are visible while a sweep is still running. The
+existing aggregate snapshot API and per-endpoint export data remain intact.
