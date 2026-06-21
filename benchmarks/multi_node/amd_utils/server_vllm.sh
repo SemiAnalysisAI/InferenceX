@@ -372,17 +372,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
                     export ISL="${BENCH_INPUT_LEN}"
                     export OSL="${BENCH_OUTPUT_LEN}"
 
-                    append_lm_eval_summary
-
                     EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
-                    mkdir -p "$EVAL_COPY_DIR"
-                    for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
-                    done
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-
-                    echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    if ! append_lm_eval_summary; then
+                        echo "ERROR: failed to finalize eval artifacts" >&2
+                        EVAL_FAILED=1
+                    fi
+                    if ! _copy_lm_eval_artifacts /workspace "$EVAL_COPY_DIR"; then
+                        echo "ERROR: failed to stage eval artifacts in $EVAL_COPY_DIR" >&2
+                        EVAL_FAILED=1
+                    else
+                        echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
+                    fi
                 fi
             fi
 

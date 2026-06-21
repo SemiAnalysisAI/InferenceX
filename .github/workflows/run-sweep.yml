@@ -438,7 +438,8 @@ jobs:
             conc: ${{ matrix.config.conc }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
-            run-eval: ${{ matrix.config.run-eval }}
+            # Accuracy runs have their own eval-only matrices below.
+            run-eval: false
 
     sweep-single-node-8k1k:
         needs: [setup, canary-select, canary-sweep]

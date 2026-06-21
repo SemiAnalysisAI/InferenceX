@@ -90,9 +90,11 @@ Multi-node evals support two hardware paths:
 - `lm-eval` runner (`benchmarks/lm_eval.py`) is invoked by `do_sweep.py` as a post/eval-only step and sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`)
 - Eval artifacts written to `/logs/eval_results/` inside the container, collected by launch scripts
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
-- Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
+- Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `MODEL_PATH`, `MAX_MODEL_LEN`, `EVAL_CONC`, `EVAL_FRAMEWORK`, `EVAL_TASKS_DIR`, `EVAL_MAX_MODEL_LEN`
 
-For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`. The workflow passes its requested list independently to score validation, so missing metadata, missing concurrency results, result files without a checked score, and scores below threshold all fail the `Verify eval scores` step.
+
+AMD ATOM jobs default engine, Uvicorn, and atomesh output to warning level through `ATOM_LOG_LEVEL`, `ATOM_UVICORN_LOG_LEVEL`, and `ATOMESH_LOG_LEVEL`; Uvicorn access logs default off through `ATOM_UVICORN_ACCESS_LOG=0`. Only atomesh's `--log-level` is currently native upstream. The pinned ATOM image hardcodes its Python logger and `uvicorn.run()` defaults, so `setup_deps.sh` adds the other InferenceX compatibility controls to the installed package and behavior-tests them before serving. Startup fails if ATOM INFO can still reach either its handler or the root logger, or if Uvicorn access logging remains enabled. Set the levels to `INFO`/`info` and `ATOM_UVICORN_ACCESS_LOG=1` for verbose troubleshooting.
 
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
@@ -129,7 +131,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 
 | Field | Description |
 |-------|-------------|
-| `score` | Primary metric (exact match for GSM8K) |
+| `score` | Primary task metric (`em_strict`, then `em_flexible`, then accuracy) |
 | `em_strict` | Strict exact match (requires `####` format) |
 | `em_flexible` | Flexible extraction (looser number matching) |
 | `n_eff` | Number of samples evaluated |
@@ -148,7 +150,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 
 ### Score validation
-`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. The workflow supplies `--expected-concs`, and validation requires matching metadata plus at least one checked score in every result file. It runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 

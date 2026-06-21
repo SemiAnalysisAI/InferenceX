@@ -276,11 +276,16 @@ class TestSingleNodeMatrixEntry:
         assert entry.conc == 4
         assert entry.framework == "sglang"
 
-    def test_conc_as_list(self, valid_single_node_matrix_entry):
-        """Conc can be a list of integers."""
+    def test_conc_as_list_is_rejected(self, valid_single_node_matrix_entry):
+        """Single-node workflow entries require one concurrency integer."""
         valid_single_node_matrix_entry["conc"] = [4, 8, 16, 32, 64]
-        entry = SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
-        assert entry.conc == [4, 8, 16, 32, 64]
+        with pytest.raises(Exception):
+            SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
+
+    def test_eval_only_requires_run_eval(self, valid_single_node_matrix_entry):
+        valid_single_node_matrix_entry["eval-only"] = True
+        with pytest.raises(Exception):
+            SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
     def test_spec_decoding_values(self, valid_single_node_matrix_entry):
         """Spec decoding should accept valid literal values."""
@@ -389,11 +394,33 @@ class TestMultiNodeMatrixEntry:
         self,
         valid_multinode_matrix_entry,
     ):
+        valid_multinode_matrix_entry["run-eval"] = True
         valid_multinode_matrix_entry["eval-all-concs"] = True
 
         entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
         assert entry.eval_all_concs is True
+
+    def test_eval_conc_must_be_in_conc_list(
+        self,
+        valid_multinode_matrix_entry,
+    ):
+        valid_multinode_matrix_entry["run-eval"] = True
+        valid_multinode_matrix_entry["eval-conc"] = 64
+
+        with pytest.raises(Exception):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+    def test_eval_all_concs_rejects_eval_conc(
+        self,
+        valid_multinode_matrix_entry,
+    ):
+        valid_multinode_matrix_entry["run-eval"] = True
+        valid_multinode_matrix_entry["eval-all-concs"] = True
+        valid_multinode_matrix_entry["eval-conc"] = 2150
+
+        with pytest.raises(Exception):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
         """Conc must be a list for multinode."""

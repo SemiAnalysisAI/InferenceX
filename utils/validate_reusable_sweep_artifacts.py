@@ -6,13 +6,23 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import math
 import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
 
+from evals.validate_scores import (
+    load_config,
+    resolve_threshold,
+    validate_batch_manifest,
+)
+
 
 FIXED_SEQ_KEYS = ("1k1k", "8k1k")
+EVAL_THRESHOLD_CONFIG = load_config(
+    str(Path(__file__).resolve().parent / "evals" / "thresholds.json")
+)
 
 
 def as_bool(value: Any) -> bool:
@@ -28,6 +38,23 @@ def as_int(value: Any, default: int = 0) -> int:
         return int(value)
     except (TypeError, ValueError):
         return default
+
+
+def valid_concurrency_list(
+    value: object,
+    *,
+    allow_empty: bool = True,
+) -> bool:
+    """Return whether metadata contains unique positive integer concurrencies."""
+    return (
+        isinstance(value, list)
+        and (allow_empty or bool(value))
+        and all(
+            isinstance(conc, int) and not isinstance(conc, bool) and conc > 0
+            for conc in value
+        )
+        and len(set(value)) == len(value)
+    )
 
 
 def load_json(path: Path) -> Any:
@@ -512,6 +539,40 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
     )
 
 
+def validate_eval_score(path: Path, row: dict[str, Any]) -> list[str]:
+    """Validate one aggregate eval row's primary score."""
+    task = row.get("task")
+    score = row.get("score")
+    if not isinstance(task, str) or not task:
+        return [f"eval aggregate {path.name!r} contains a row without a task"]
+    if (
+        not isinstance(score, (int, float))
+        or isinstance(score, bool)
+        or not math.isfinite(score)
+        or not 0 <= score <= 1
+    ):
+        return [
+            f"eval aggregate {path.name!r} contains invalid score "
+            f"{score!r} for task {task!r}"
+        ]
+
+    prefix = row.get("model_prefix", row.get("infmax_model_prefix"))
+    if not isinstance(prefix, str) or not prefix:
+        prefix = None
+    threshold, source = resolve_threshold(
+        EVAL_THRESHOLD_CONFIG,
+        prefix,
+        task,
+        0.85,
+    )
+    if score < threshold:
+        return [
+            f"eval aggregate {path.name!r} score {score:.4f} for task "
+            f"{task!r} is below {threshold} from {source}"
+        ]
+    return []
+
+
 def raw_eval_artifact_dirs(artifacts_dir: Path) -> list[Path]:
     """Return raw eval result artifacts, excluding aggregate and debug artifacts."""
     return sorted(
@@ -552,19 +613,87 @@ def raw_eval_key_rows(
                 "meta_env.json"
             )
             continue
-        eval_concs = meta.get("completed_eval_concs")
-        if isinstance(meta.get("eval_concs"), list):
-            if not isinstance(eval_concs, list):
+
+        eval_exit_code = meta.get("eval_exit_code")
+        if (
+            not isinstance(eval_exit_code, int)
+            or isinstance(eval_exit_code, bool)
+            or eval_exit_code != 0
+        ):
+            errors.append(
+                f"raw eval artifact {artifact_dir.name!r} records failed "
+                f"eval_exit_code {eval_exit_code!r}"
+            )
+            continue
+
+        metadata_concs = meta.get("eval_concs")
+        if "eval_concs" in meta:
+            completed_concs = meta.get("completed_eval_concs")
+            failed_concs = meta.get("failed_eval_concs")
+            if not (
+                valid_concurrency_list(metadata_concs, allow_empty=False)
+                and valid_concurrency_list(completed_concs)
+                and valid_concurrency_list(failed_concs)
+            ):
                 errors.append(
                     f"raw eval artifact {artifact_dir.name!r} has invalid "
                     "batched concurrency metadata"
                 )
                 continue
+
+            metadata_set = set(metadata_concs)
+            completed_set = set(completed_concs)
+            failed_set = set(failed_concs)
+            if failed_set or completed_set != metadata_set:
+                errors.append(
+                    f"raw eval artifact {artifact_dir.name!r} has incomplete "
+                    "batched eval results"
+                )
+                continue
+            manifest_errors = validate_batch_manifest(
+                str(meta_path),
+                [
+                    str(result_path)
+                    for result_path in artifact_dir.glob("results*.json")
+                ],
+                expected_concs=metadata_concs,
+            )
+            if manifest_errors:
+                errors.extend(
+                    f"raw eval artifact {artifact_dir.name!r}: {error}"
+                    for error in manifest_errors
+                )
+                continue
             rows.extend(
                 eval_key({**meta, "conc": eval_conc})
-                for eval_conc in eval_concs
+                for eval_conc in completed_concs
             )
         else:
+            conc = meta.get("conc")
+            if (
+                not isinstance(conc, int)
+                or isinstance(conc, bool)
+                or conc <= 0
+            ):
+                errors.append(
+                    f"raw eval artifact {artifact_dir.name!r} has invalid "
+                    f"concurrency {conc!r}"
+                )
+                continue
+            manifest_errors = validate_batch_manifest(
+                str(meta_path),
+                [
+                    str(result_path)
+                    for result_path in artifact_dir.glob("results*.json")
+                ],
+                expected_concs=[conc],
+            )
+            if manifest_errors:
+                errors.extend(
+                    f"raw eval artifact {artifact_dir.name!r}: {error}"
+                    for error in manifest_errors
+                )
+                continue
             rows.append(eval_key(meta))
     return rows, errors
 
@@ -597,6 +726,9 @@ def validate_eval_artifacts(
                         for row in data
                         if isinstance(row, dict)
                     )
+                    for row in data:
+                        if isinstance(row, dict):
+                            errors.extend(validate_eval_score(path, row))
             if row_count == 0:
                 errors.append("eval_results_all contains no rows")
             errors.extend(

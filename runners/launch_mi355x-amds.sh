@@ -164,7 +164,7 @@ PY
     fi
 
     # Extract eval results if eval was requested
-    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+    if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
         # Find eval_results in the slurm job logs directory
         EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR/logs" -type d -name eval_results 2>/dev/null | head -1)
         if [ -n "$EVAL_DIR" ] && [ -d "$EVAL_DIR" ]; then
@@ -172,8 +172,13 @@ PY
             shopt -s nullglob
             for eval_file in "$EVAL_DIR"/*; do
                 [ -f "$eval_file" ] || continue
-                cp "$eval_file" "$GITHUB_WORKSPACE/"
-                echo "Copied eval artifact: $(basename "$eval_file")"
+                eval_dest="$GITHUB_WORKSPACE/$(basename "$eval_file")"
+                rm -f "$eval_dest"
+                if cp "$eval_file" "$eval_dest"; then
+                    echo "Copied eval artifact: $(basename "$eval_file")"
+                else
+                    echo "WARNING: Failed to copy eval artifact: $(basename "$eval_file")" >&2
+                fi
             done
             shopt -u nullglob
         else

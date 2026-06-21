@@ -96,12 +96,18 @@ class SingleNodeMatrixEntry(BaseModel):
     tp: int
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
-    conc: Union[int, List[int]]
+    conc: int = Field(gt=0)
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
+
+    @model_validator(mode='after')
+    def validate_eval_fields(self):
+        if self.eval_only and not self.run_eval:
+            raise ValueError("eval-only requires run-eval=true")
+        return self
 
 
 class WorkerConfig(BaseModel):
@@ -134,7 +140,7 @@ class MultiNodeMatrixEntry(BaseModel):
     osl: int
     prefill: WorkerConfig
     decode: WorkerConfig
-    conc: List[int]
+    conc: List[int] = Field(min_length=1)
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -144,6 +150,26 @@ class MultiNodeMatrixEntry(BaseModel):
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
+
+    @model_validator(mode='after')
+    def validate_eval_fields(self):
+        if any(conc <= 0 for conc in self.conc):
+            raise ValueError("conc entries must be greater than 0")
+        if len(set(self.conc)) != len(self.conc):
+            raise ValueError("conc entries must be unique")
+        if self.eval_only and not self.run_eval:
+            raise ValueError("eval-only requires run-eval=true")
+        if self.eval_conc is not None:
+            if not self.run_eval:
+                raise ValueError("eval-conc requires run-eval=true")
+            if self.eval_conc not in self.conc:
+                raise ValueError("eval-conc must be present in conc")
+        if self.eval_all_concs:
+            if not self.run_eval:
+                raise ValueError("eval-all-concs requires run-eval=true")
+            if self.eval_conc is not None:
+                raise ValueError("eval-all-concs cannot be combined with eval-conc")
+        return self
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
@@ -272,6 +298,10 @@ def _validate_conc_fields(self):
         if not all(x > 0 for x in self.conc_list):
             raise ValueError(
                 f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0."
+            )
+        if len(set(self.conc_list)) != len(self.conc_list):
+            raise ValueError(
+                f"Input '{Fields.CONC_LIST.value}' entries must be unique."
             )
 
     return self
