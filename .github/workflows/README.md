@@ -36,6 +36,7 @@ The `full-sweep` command generates benchmark configurations with optional filter
 usage: generate_sweep_configs.py full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -49,6 +50,10 @@ usage: generate_sweep_configs.py full-sweep
 ```
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
+
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand; it cannot be combined with `--no-evals`.
+
+`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided; when both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
 ### Examples
 
@@ -95,6 +100,7 @@ The `runner-model-sweep` command validates that all runner nodes of a specific t
 usage: generate_sweep_configs.py runner-model-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
     [--single-node] [--multi-node]
@@ -135,6 +141,7 @@ The `test-config` command generates the full sweep for one or more specific conf
 usage: generate_sweep_configs.py test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
 ```
@@ -178,7 +185,22 @@ test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/co
 test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
 ```
 
+**Run eval-only jobs for every generated fixed-sequence config:**
+```
+test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files .github/configs/nvidia-master.yaml
+```
+
+## PR Eval Modifiers
+
+Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration. Each multi-node engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same engine. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Runs with either modifier are not eligible for artifact reuse.
+
 ## Reusing an Approved PR Full Sweep
+
+`[skip-sweep]` is a PR-only benchmark opt-out. When it appears in the latest
+PR head commit, `check-changelog` still validates the matrix and the reuse gate
+still runs, but benchmark setup is skipped. Pushes to `main` ignore the marker
+and always enter setup, where they either reuse approved artifacts or run the
+full untrimmed sweep.
 
 If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
 sequential canary, `non-canary-full-sweep-enabled` without one, or a
@@ -204,17 +226,25 @@ must still contain complete artifacts for the merge run's expected matrix.
 
 The comment is the reuse authorization, so adding it does not trigger or cancel
 a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. GitHub still creates a
-lightweight `pull_request` workflow run so it can inspect the PR comments, but
-the sweep setup and benchmark jobs are skipped. Removing and re-adding a sweep
-label explicitly starts a new sweep.
+full-sweep label do not start another benchmark sweep. The synchronize run
+checks that the changelog diff can generate the setup matrix before inspecting
+the authorization and continuing to setup. This catches malformed conflict
+resolutions before reuse can skip setup. Removing and re-adding a sweep label
+explicitly starts a new sweep.
+
+`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+It merges `main`, preserves the current main changelog bytes, canonicalizes an
+appended `XXX` link to the PR URL, pushes a fresh synchronization commit, and
+waits for the PR checks before merging.
 
 On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
 commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
 run for the same PR, downloads the ingest-relevant artifacts, validates that
-`results_bmk` covers the merge run's expected benchmark matrix, and uploads
-them as `reused-ingest-artifacts`. The normal database ingest then publishes
-those artifacts with the merge run's changelog metadata.
+fixed-sequence, agentic, and eval-only artifacts exactly match the merge run's
+expected matrix, and uploads them as `reused-ingest-artifacts`. The normal
+database ingest then publishes those artifacts with the merge run's changelog
+metadata. Duplicate fixed-sequence, agentic, eval, or raw eval identities are
+rejected rather than collapsed during that comparison.
 
 Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier

@@ -10,7 +10,20 @@ Evals run as **separate workflow jobs** from throughput benchmarks. The selectio
 
 **Single-node**: At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k.
 
-**Multi-node**: One entry per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) with the highest max eligible concurrency, only for 8k1k. The eval job runs at `eval-conc`, the upper median of that config's eligible concurrency list.
+**Multi-node**: Every distinct parallelism configuration, only for 8k1k. Rows that differ only by concurrency are treated as one configuration. Each eval job runs at `eval-conc`, the highest eligible concurrency across those rows.
+
+Generator eval modes:
+
+- Default: run throughput for every generated config and eval-only jobs for the selected subset above.
+- `--no-evals`: generate throughput jobs only.
+- `--evals-only`: generate eval-only jobs for the selected subset above.
+- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. For multi-node configs, each engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same live engine.
+
+The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
+
+For PR validation, add `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection for every appended changelog entry without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset. Combining both runs every fixed-sequence eval and no throughput. Runs with either modifier are not eligible for full-sweep artifact reuse.
+
+When multiple appended changelog entries reference the same config, benchmark deduplication is scenario-aware: a `fixed-seq-len` entry does not suppress a separate `agentic-coding` entry. Eval deduplication only consumes fixed-sequence coverage, and a broader `all-evals` entry takes precedence over the default eval subset for overlapping configs.
 
 ## Why?
 To verify how model outputs are affected by throughput optimizations.
@@ -79,6 +92,8 @@ Multi-node evals support two hardware paths:
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
+
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
 - `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
@@ -130,7 +145,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 
 ### Score validation
 `utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
