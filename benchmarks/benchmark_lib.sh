@@ -1171,6 +1171,24 @@ build_replay_cmd() {
     # Without this, aiperf only emits aggregate stats and the 6x2 panels
     # collapse to flat lines.
     REPLAY_CMD+=" --slice-duration 1.0"
+    # Multi-node launchers can provide the Prometheus endpoints for every
+    # inference worker as a comma-separated list. AIPerf accepts multiple
+    # values after one --server-metrics flag and preserves endpoint_url on
+    # every exported series. The inference frontend's automatically detected
+    # /metrics endpoint remains enabled as well.
+    if [ -n "${AIPERF_SERVER_METRICS_URLS:-}" ]; then
+        local metrics_url
+        local -a metrics_urls
+        IFS=',' read -r -a metrics_urls <<< "$AIPERF_SERVER_METRICS_URLS"
+        REPLAY_CMD+=" --server-metrics"
+        for metrics_url in "${metrics_urls[@]}"; do
+            if [ -z "$metrics_url" ] || [[ "$metrics_url" == *[[:space:]]* ]]; then
+                echo "ERROR: AIPERF_SERVER_METRICS_URLS must be a comma-separated list of non-empty URLs" >&2
+                return 1
+            fi
+            REPLAY_CMD+=" $metrics_url"
+        done
+    fi
     REPLAY_CMD+=" --output-artifact-dir $result_dir/aiperf_artifacts"
     # The inferencex-agentx-mvp scenario enforces a 900s minimum
     # benchmark duration. For smoke tests with shorter durations, opt
