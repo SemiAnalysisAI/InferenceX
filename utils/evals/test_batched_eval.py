@@ -1158,6 +1158,39 @@ def test_atom_logging_uses_env_and_native_router_flag_without_stream_filter() ->
     assert not (amd_utils / "filter_atom_logs.sh").exists()
 
 
+def test_atom_server_aborts_when_setup_or_environment_fails(tmp_path: Path) -> None:
+    server = (
+        Path(__file__).resolve().parents[2]
+        / "benchmarks"
+        / "multi_node"
+        / "amd_utils"
+        / "server_atom.sh"
+    )
+
+    for failing_script, expected_error in (
+        ("setup_deps.sh", "failed to initialize ATOM dependencies"),
+        ("env_atom.sh", "failed to initialize ATOM environment"),
+    ):
+        atom_workspace = tmp_path / failing_script
+        atom_workspace.mkdir()
+        (atom_workspace / "setup_deps.sh").write_text("return 0\n")
+        (atom_workspace / "env_atom.sh").write_text("return 0\n")
+        (atom_workspace / failing_script).write_text("return 42\n")
+
+        result = subprocess.run(
+            ["bash", str(server)],
+            env={
+                **os.environ,
+                "ATOM_WS_PATH": str(atom_workspace),
+            },
+            text=True,
+            capture_output=True,
+        )
+
+        assert result.returncode == 1
+        assert expected_error in result.stderr
+
+
 def test_atom_logging_patch_is_idempotent(tmp_path: Path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     setup_deps = (
