@@ -264,6 +264,26 @@ def parse_args() -> argparse.Namespace:
         help="Latest timestamp to consider (ISO).",
     )
     p.add_argument(
+        "--exclude-dynamic-workflow-bug", action="store_true",
+        help=(
+            "Exclude sessions hit by the Claude Code CLI<2.1.174 dynamic-"
+            "workflow bug, where dynamic-workflow subagents were emitted "
+            "WITHOUT a subagent-label/agent-id header and so appear as many "
+            "independent, time-interleaved unlabeled trajectories in one "
+            "session. A session is dropped when its max CLI < 2.1.174 AND its "
+            "unlabeled main-stream requests form >= --dwbug-min-peak "
+            "concurrently-active multi-turn trajectories."
+        ),
+    )
+    p.add_argument(
+        "--dwbug-min-peak", type=int, default=3, metavar="N",
+        help=(
+            "Peak concurrent unlabeled multi-turn trajectories at/above which "
+            "a pre-2.1.174 session is treated as dynamic-workflow-buggy "
+            "(default 3; only used with --exclude-dynamic-workflow-bug)."
+        ),
+    )
+    p.add_argument(
         "--privacy-mode", choices=("anon", "full"), default="anon",
         help="Privacy filter (default: anon — request bodies are redacted; metric columns are intact). Pass `full` to include un-redacted rows. There is no opt-in for mixing both, by design.",
     )
@@ -737,34 +757,138 @@ SELECT
 """
 
 
-def dump_session(
-    conn, session_id: str, privacy_mode: str, model_like: str, out_path: Path
-) -> int:
+# ---------------------------------------------------------------------------
+# Dynamic-workflow subagent-label bug (Claude Code CLI < 2.1.174)
+# ---------------------------------------------------------------------------
+# Claude Code CLI versions BEFORE 2.1.174 failed to attach the subagent-label /
+# x-claude-code-agent-id header to subagents launched via *dynamic workflows*
+# (changelog 2.1.173 -> 2.1.174). Those subagents land in the proxy as ordinary
+# UNLABELED main-stream requests, so a single session carries many independent,
+# time-INTERLEAVED multi-turn trajectories with few/no subagent-label headers.
+# Such sessions are not faithful single-trajectory traces (they inflate the
+# apparent prefix-cache "rollback" rate) and are excluded when
+# --exclude-dynamic-workflow-bug is set.
+#
+# Signature (validated on the 061526 corpus): pre-fix CLI AND the unlabeled
+# main-stream requests cluster into >= N CONCURRENTLY-ACTIVE multi-turn
+# trajectories. Concurrency (sweep-line peak over trajectory time spans), not
+# mere trajectory count, is what separates interleaved unlabeled subagents from
+# sequential context compaction (which restarts a trajectory but never overlaps
+# it). At N=3 this cleanly separates buggy from fixed sessions.
+DYNAMIC_WORKFLOW_FIX_CLI = (2, 1, 174)
+# Tolerate up to this many trailing hash blocks differing when deciding whether
+# a request extends a trajectory (the per-turn ephemeral footer; see the weka
+# converter's small-tail handling).
+_DWBUG_TAIL_TOLERANCE = 6
+
+
+def _parse_cli_tuple(s: str | None) -> tuple[int, int, int] | None:
+    if not s:
+        return None
+    parts = s.split(".")
+    if len(parts) != 3:
+        return None
+    try:
+        return tuple(int(p) for p in parts)  # type: ignore[return-value]
+    except ValueError:
+        return None
+
+
+def _hash_lcp(a: list, b: list) -> int:
+    n = 0
+    for x, y in zip(a, b):
+        if x == y:
+            n += 1
+        else:
+            break
+    return n
+
+
+def is_dynamic_workflow_bug(rows: list[dict], min_peak: int) -> bool:
+    """Return True if a session exhibits the CLI<2.1.174 dynamic-workflow
+    unlabeled-subagent signature (see module note above)."""
+    clis = [c for c in (_parse_cli_tuple(r.get("cli_version")) for r in rows) if c]
+    if not clis or max(clis) >= DYNAMIC_WORKFLOW_FIX_CLI:
+        return False
+    # Main-stream = rows with no effective subagent_label. The buggy
+    # dynamic-workflow subagents are exactly the unlabeled requests here.
+    main = [r for r in rows if not r.get("subagent_label")]
+    trajs: list[list] = []  # [head_hash_ids, [(start_s, dur_s), ...]]
+    for r in main:
+        H = r.get("hash_ids") or []
+        if not H:
+            continue
+        t = r.get("t_sec") or 0.0
+        dur = (r.get("duration_ms") or 0) / 1000.0
+        best, bi = -1, -1
+        for i, (head, _) in enumerate(trajs):
+            lcp = _hash_lcp(head, H)
+            # H extends this trajectory if the trajectory's head is a (near-)
+            # prefix of H: at least one block matches AND at most the trailing
+            # _DWBUG_TAIL_TOLERANCE blocks (the per-turn ephemeral footer) of
+            # the head diverge. max(1, ...) keeps the tail tolerance from
+            # collapsing the threshold below 1 for short heads (which would
+            # wrongly merge unrelated short trajectories).
+            need = max(1, len(head) - _DWBUG_TAIL_TOLERANCE)
+            if lcp >= need and lcp > best:
+                best, bi = lcp, i
+        if bi >= 0:
+            trajs[bi][0] = H
+            trajs[bi][1].append((t, dur))
+        else:
+            trajs.append([H, [(t, dur)]])
+    # Only multi-turn trajectories (>=2 turns) count; single-shot utility
+    # calls are not interleaved subagents.
+    spans = [
+        (min(s for s, _ in rr), max(s + d for s, d in rr))
+        for _, rr in trajs
+        if len(rr) >= 2
+    ]
+    if not spans:
+        return False
+    events: list[tuple[float, int]] = []
+    for start, end in spans:
+        events.append((start, 1))
+        events.append((end, -1))
+    # Ends before starts at equal timestamps (a trajectory starting exactly when
+    # another ends does not count as overlapping).
+    events.sort(key=lambda x: (x[0], x[1]))
+    cur = peak = 0
+    for _, delta in events:
+        cur += delta
+        peak = max(peak, cur)
+    return peak >= min_peak
+
+
+def fetch_session_rows(
+    conn, session_id: str, privacy_mode: str, model_like: str
+) -> list[dict]:
+    """Fetch all filtered rows for a session (ordered by timestamp)."""
     with conn.cursor(row_factory=dict_row) as cur:
         cur.execute(
             REQUESTS_SQL,
-            {
-                "sid": session_id,
-                "model_like": model_like,
-                "privacy": privacy_mode,
-            },
+            {"sid": session_id, "model_like": model_like, "privacy": privacy_mode},
         )
-        n = 0
-        with out_path.open("w") as f:
-            for row in cur:
-                # Belt-and-braces: SQL already filters, but a per-row
-                # check guarantees no mismatched-privacy row hits disk
-                # even if the WHERE clause is ever broken upstream.
-                if row["privacy_mode"] != privacy_mode:
-                    raise RuntimeError(
-                        f"privacy_mode safety check failed for session "
-                        f"{session_id}: row has {row['privacy_mode']!r}, "
-                        f"expected {privacy_mode!r}"
-                    )
-                row["timestamp"] = row["timestamp"].isoformat()
-                f.write(json.dumps(row, default=str) + "\n")
-                n += 1
-    return n
+        rows = cur.fetchall()
+    for row in rows:
+        # Belt-and-braces: SQL already filters, but a per-row check guarantees
+        # no mismatched-privacy row hits disk even if the WHERE clause is ever
+        # broken upstream.
+        if row["privacy_mode"] != privacy_mode:
+            raise RuntimeError(
+                f"privacy_mode safety check failed for session "
+                f"{session_id}: row has {row['privacy_mode']!r}, "
+                f"expected {privacy_mode!r}"
+            )
+        row["timestamp"] = row["timestamp"].isoformat()
+    return rows
+
+
+def write_session_rows(rows: list[dict], out_path: Path) -> int:
+    with out_path.open("w") as f:
+        for row in rows:
+            f.write(json.dumps(row, default=str) + "\n")
+    return len(rows)
 
 
 def main() -> int:
@@ -838,19 +962,33 @@ def main() -> int:
                 "session_id": args.session_id,
                 "security_monitor_excluded": True,
                 "classifier_calls_excluded": True,
+                "dynamic_workflow_bug_excluded": args.exclude_dynamic_workflow_bug,
+                "dwbug_min_peak": (
+                    args.dwbug_min_peak if args.exclude_dynamic_workflow_bug else None
+                ),
             },
             "sessions": [],
         }
 
         total_rows = 0
+        n_excluded_dwbug = 0
         for i, s in enumerate(sessions, 1):
             sid = s["session_id"]
             fname = f"{sid}.jsonl"
             out_path = args.out / fname
             t_dump = time.time()
-            n_rows = dump_session(
-                conn, sid, args.privacy_mode, model_like, out_path
-            )
+            rows = fetch_session_rows(conn, sid, args.privacy_mode, model_like)
+            if args.exclude_dynamic_workflow_bug and is_dynamic_workflow_bug(
+                rows, args.dwbug_min_peak
+            ):
+                n_excluded_dwbug += 1
+                logger.info(
+                    "[%4d/%d] %s  EXCLUDED (dynamic-workflow bug: CLI<2.1.174 + "
+                    ">=%d concurrent unlabeled trajectories)",
+                    i, len(sessions), sid, args.dwbug_min_peak,
+                )
+                continue
+            n_rows = write_session_rows(rows, out_path)
             total_rows += n_rows
             manifest["sessions"].append({
                 "session_id": sid,
@@ -874,9 +1012,15 @@ def main() -> int:
         with manifest_path.open("w") as f:
             json.dump(manifest, f, indent=2, default=str)
         logger.info("wrote manifest: %s", manifest_path)
+        if args.exclude_dynamic_workflow_bug:
+            logger.info(
+                "dynamic-workflow-bug filter: excluded %d session(s) "
+                "(CLI<2.1.174 + >=%d concurrent unlabeled trajectories)",
+                n_excluded_dwbug, args.dwbug_min_peak,
+            )
         logger.info(
-            "done. %d session(s), %d total rows, in %.1fs",
-            len(sessions), total_rows, time.time() - t0,
+            "done. %d session(s) written, %d total rows, in %.1fs",
+            len(sessions) - n_excluded_dwbug, total_rows, time.time() - t0,
         )
 
     return 0
