@@ -72,6 +72,17 @@ fi
 export SLURM_PARTITION="batch"
 export SLURM_ACCOUNT="benchmark"
 
+# The watchtower (Oracle) gb200 cluster does not cross-mount the runner's
+# working dir to compute nodes. Multi-node jobs whose srt-slurm/outputs and
+# INFMAX_WORKSPACE live under the runner home die in ~1s at the batch step
+# because Slurm can't open --output. dsv4 and minimax must therefore stage
+# those onto a compute-visible shared FS. Other models keep the legacy
+# behavior to avoid regressing paths that already work on their clusters.
+USE_SHARED_FS=0
+if [[ $MODEL_PREFIX == "minimaxm2.5" ]] || [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
+    USE_SHARED_FS=1
+fi
+
 NGINX_IMAGE="nginx:1.27.4"
 
 # === Cluster diagnostic probe (minimax only) ===
@@ -202,7 +213,7 @@ SRT_REPO_DIR="srt-slurm"
 # cross-mounted to compute nodes. Put the srt-slurm workspace and staged
 # InferenceX checkout on a writable shared-FS path that compute can see.
 # Per-run-unique paths avoid races between parallel sweep jobs.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ "$USE_SHARED_FS" == "1" ]]; then
     SHARED_BASE=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared/gha-runs \
@@ -292,7 +303,7 @@ source $HOME/.local/bin/env
 # under a head-node-only path, .venv/bin/python3 becomes a broken
 # symlink on compute. Pin the venv to /usr/bin/python3 — a system
 # path that exists at the same location on both head and compute.
-if [[ $MODEL_PREFIX == "minimaxm2.5" && -x /usr/bin/python3 ]]; then
+if [[ "$USE_SHARED_FS" == "1" && -x /usr/bin/python3 ]]; then
     uv venv --seed --python /usr/bin/python3
 else
     uv venv --seed
@@ -309,10 +320,10 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
-# Minimax on watchtower: SRT_REPO_DIR was moved to a shared-FS path
-# above so srtctl's outputs/ directory (which lives under
-# SRTCTL_ROOT) is visible to compute nodes.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+# Shared-FS models (dsv4/minimax) on watchtower: SRT_REPO_DIR was moved
+# to a shared-FS path above so srtctl's outputs/ directory (which lives
+# under SRTCTL_ROOT) is visible to compute nodes.
+if [[ "$USE_SHARED_FS" == "1" ]]; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 echo "Creating srtslurm.yaml configuration..."
@@ -354,7 +365,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # can't see. Stage the relevant subset to shared FS and repoint
 # INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
 # on shared FS) and .git (not needed in container) for speed.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ "$USE_SHARED_FS" == "1" ]]; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
     mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \
@@ -378,6 +389,11 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
+
+# Inject synthetic acceptance into the recipe's speculative-config when
+# SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
+# override and before srtctl apply so the rendered job picks it up.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH"
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)

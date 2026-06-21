@@ -8828,6 +8828,8 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           ep: 1
           dp-attn: false
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/agg-gb200-low-latency-mtp2.yaml"
         decode:
           num-worker: 0
