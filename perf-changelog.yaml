@@ -3972,6 +3972,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1735
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-disagg
+  description:
+    - "Add minimaxm3-fp4-mi355x-atom-disagg CI script: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP4"
+    - "No MTP, KV_CACHE_DTYPE=auto (MXFP4 native, no fp8 override), MAX_MODEL_LEN=32768, MAX_NUM_BATCHED_TOKENS=32768"
+    - "server_atom.sh: conditional --kv_cache_dtype, MAX_MODEL_LEN/MAX_NUM_BATCHED_TOKENS/CUDAGRAPH_OPT support, syntax fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1856
+  
+- config-keys:
     - kimik2.5-fp4-gb200-dynamo-trt
   description:
     - "Update Kimi K2.5 NVFP4 GB200 TRT-LLM Dynamo disaggregated configurations"

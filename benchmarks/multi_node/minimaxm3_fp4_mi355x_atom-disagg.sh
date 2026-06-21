@@ -7,7 +7,6 @@ check_env_vars \
     ISL \
     OSL \
     IMAGE \
-    SPEC_DECODING \
     MODEL_PATH \
     PREFILL_NUM_WORKERS \
     PREFILL_TP \
@@ -60,6 +59,18 @@ export DECODE_ENABLE_DP=true
 else
 export DECODE_ENABLE_DP=false
 fi
+
+# No MTP for MiniMax-M3
+export SPEC_DECODING="none"
+export DECODE_MTP_SIZE=0
+
+# Block size 128
+export KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-auto}"
+export BLOCK_SIZE="${BLOCK_SIZE:-128}"
+export MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.8}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-32768}"
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-128}"
+export MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
 # Launch jobs based on ISL/OSL
 # Replace ' ' in CONC_LIST with 'x' such that the concurrency list is represented
