@@ -109,7 +109,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
     AIPERF_HTTP_CONNECTION_LIMIT=$((TP / 2))
     if [ "$TP" -le 4 ]; then
-        AIPERF_HTTP_CONNECTION_LIMIT=24
+        AIPERF_HTTP_CONNECTION_LIMIT=8
     fi
     if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -lt 1 ]; then
         AIPERF_HTTP_CONNECTION_LIMIT=1
