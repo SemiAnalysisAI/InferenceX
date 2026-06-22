@@ -125,7 +125,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
     )
-    MEM_FRACTION_STATIC=0.88
+    MEM_FRACTION_STATIC=0.95
     CHUNKED_PREFILL_SIZE=16384
 else
     PARALLEL_ARGS+=(
