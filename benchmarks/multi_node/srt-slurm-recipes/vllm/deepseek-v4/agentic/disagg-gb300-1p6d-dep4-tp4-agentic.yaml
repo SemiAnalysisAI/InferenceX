@@ -92,7 +92,7 @@ backend:
       attention-config: '{"use_fp4_indexer_cache": true}'
       moe-backend: "deep_gemm_mega_moe"
       enforce-eager: true
-      max-num-seqs: 256
+      # max-num-seqs: 256
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
@@ -109,7 +109,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
-      max-num-seqs: 512
+      # max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
       trust-remote-code: true

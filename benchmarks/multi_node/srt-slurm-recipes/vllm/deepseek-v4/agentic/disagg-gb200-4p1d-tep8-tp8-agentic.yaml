@@ -113,7 +113,9 @@ backend:
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
-      max-num-seqs: 16
+      # Inherited from fixed-sequence recipes; let vLLM select the scheduler
+      # sequence limit until this is tuned explicitly for the agentic trace.
+      # max-num-seqs: 16
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
@@ -131,7 +133,7 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       attention-config: '{"use_fp4_indexer_cache": true}'
-      max-num-seqs: 512
+      # max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
       trust-remote-code: true
@@ -161,4 +163,4 @@ benchmark:
     IS_MULTINODE: "true"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

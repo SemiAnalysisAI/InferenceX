@@ -126,7 +126,9 @@ backend:
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
-      max-num-seqs: 16
+      # Inherited from fixed-sequence recipes; let vLLM select the scheduler
+      # sequence limit until this is tuned explicitly for the agentic trace.
+      # max-num-seqs: 16
       # 16384 batched tokens + util 0.90 (the fixed-seq megamoe recipes use
       # 32768 + 0.95, tuned for 9k contexts): at 256k contexts the first
       # long prefill's activation spike (sparse indexer logits, mhc fused
@@ -152,7 +154,7 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       attention-config: '{"use_fp4_indexer_cache": true}'
-      max-num-seqs: 512
+      # max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
       trust-remote-code: true
@@ -205,4 +207,4 @@ benchmark:
     HF_HUB_CACHE: "/hf_hub_cache"
     # Match the single-node DSv4 baseline. The model advertises a 1M context
     # window and TP8 shards its hybrid KV across the worker.
-    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

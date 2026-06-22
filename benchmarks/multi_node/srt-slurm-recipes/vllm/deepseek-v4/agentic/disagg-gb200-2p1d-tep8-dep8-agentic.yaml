@@ -1,8 +1,8 @@
-name: "svf-vllm-disagg-gb200-1p2d-tep8-tp8-agentic"
+name: "svf-vllm-disagg-gb200-2p1d-tep8-dep8-agentic"
 
-# Per-GPU-efficiency candidate: one cache-affinitized TEP8 prefill and two
-# TP8 decodes. Every replica spans two four-GPU GB200 nodes; the dedicated
-# infra node brings the allocation to seven nodes / 24 inference GPUs.
+# Decoder-parallelism experiment: retain the validated pair of cache-aware
+# TEP8 prefills, but expose the eight decode GPUs as attention DP8 / expert
+# EP8 instead of one TP8 rank group. Physical GPU count remains 24.
 
 model:
   path: "deepseek-v4-pro"
@@ -25,10 +25,10 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 2
-  decode_nodes: 4
-  prefill_workers: 1
-  decode_workers: 2
+  prefill_nodes: 4
+  decode_nodes: 2
+  prefill_workers: 2
+  decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -108,8 +108,12 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       # max-num-seqs: 512
       max-cudagraph-capture-size: 512
@@ -120,7 +124,6 @@ backend:
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 50
-      all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
 

@@ -96,7 +96,7 @@ backend:
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
-      max-num-seqs: 256
+      # max-num-seqs: 256
       # The 32K candidate reached model warmup but its FlashInfer FP4 MoE
       # intermediate requested 21.65 GiB with 17.56 GiB free. At 16K the
       # token-proportional intermediate is expected to fit without allocator
@@ -116,7 +116,7 @@ backend:
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
       attention-config: '{"use_fp4_indexer_cache": true}'
-      max-num-seqs: 512
+      # max-num-seqs: 512
       max-cudagraph-capture-size: 512
       max-num-batched-tokens: 512
       trust-remote-code: true
@@ -147,4 +147,4 @@ benchmark:
     AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
     HF_HUB_CACHE: "/hf_hub_cache"
-    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_061526"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

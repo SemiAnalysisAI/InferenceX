@@ -87,7 +87,9 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enforce-eager: true
-      max-num-seqs: 16
+      # Inherited from fixed-sequence recipes; let vLLM select the scheduler
+      # sequence limit until this is tuned explicitly for the agentic trace.
+      # max-num-seqs: 16
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
@@ -110,7 +112,7 @@ backend:
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-num-seqs: 512
+      # max-num-seqs: 512
       max-cudagraph-capture-size: 512
       trust-remote-code: true
       block-size: 256
