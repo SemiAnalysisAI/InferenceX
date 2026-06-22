@@ -1663,6 +1663,42 @@ class TestGenerateTestConfigSweep:
         assert result[0]["scenario-type"] == "agentic-coding"
         assert result[0]["total-cpu-dram-gb"] == 1814
 
+    def test_agentic_node_dram_is_normalized_by_tp(self, sample_runner_config):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "b300",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "duration": 1800,
+                        "available-cpu-dram-mib": 2964436,
+                        "cpu-offload-utilization": 0.80,
+                        "search-space": [
+                            {"tp": 4, "offloading": "cpu", "conc-list": [32]},
+                            {"tp": 8, "offloading": "cpu", "conc-list": [64]},
+                        ],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-b300-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
+        assert budgets == {4: 1157, 8: 2315}
+
     def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
         """One server allocation should run the selected concurrency batch."""
         config = {

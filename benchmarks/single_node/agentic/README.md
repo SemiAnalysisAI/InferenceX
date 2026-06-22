@@ -13,22 +13,23 @@ particular is not yet first-class.
 
 ## CPU offload memory policy
 
-Agentic search-space entries using `cpu`, `lmcache`, `lmcache-mp`, or `hicache`
-must declare their aggregate host-memory capacity explicitly:
+Agentic scenarios using `cpu`, `lmcache`, `lmcache-mp`, or `hicache` should
+declare the node's available host memory and the usable offload fraction:
 
 ```yaml
-- tp: 4
-  offloading: cpu
-  total-cpu-dram-gb: 1157
-  conc-list: [16, 32]
+- duration: 1800
+  available-cpu-dram-mib: 2964436
+  cpu-offload-utilization: 0.80
+  search-space:
+  - { tp: 4, offloading: cpu, conc-list: [16, 32] }
+  - { tp: 8, offloading: none, conc-list: [16, 32] }
 ```
 
-The value is maintained in the NVIDIA or AMD master YAML and is copied into the
-generated matrix unchanged. Configuration authors are responsible for leaving
-enough memory for model workers, replay processes, page cache, and allocator
-overhead, and for scaling partial-node jobs appropriately. For example, a TP4
-job on an eight-GPU node should not receive more than half of the full-node
-offload capacity.
+The matrix generator derives the GPU count from the largest `tp` in the search
+space and emits the aggregate budget as
+`floor(available MiB * utilization * tp / max_tp / 1024)`. For example, TP4 in
+an eight-GPU B300 search receives 1,157 GiB while TP8 receives 2,315 GiB.
+Legacy scenarios may continue to specify `total-cpu-dram-gb` per entry.
 
 Benchmark scripts must consume `TOTAL_CPU_DRAM_GB`; they must not replace it
 with model-specific constants. Backends with per-rank or per-pool settings must

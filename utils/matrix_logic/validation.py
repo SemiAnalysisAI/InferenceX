@@ -52,6 +52,8 @@ class Fields(Enum):
     # Agentic coding fields
     OFFLOADING = 'offloading'
     TOTAL_CPU_DRAM_GB = 'total-cpu-dram-gb'
+    AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
+    CPU_OFFLOAD_UTILIZATION = 'cpu-offload-utilization'
     DURATION = 'duration'
 
     # Matrix entry fields
@@ -367,22 +369,48 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
             raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
         return self
 
-    @model_validator(mode='after')
-    def validate_cpu_offload_capacity(self):
-        cpu_backends = {"cpu", "lmcache", "lmcache-mp", "hicache"}
-        if self.offloading in cpu_backends and self.total_cpu_dram_gb <= 0:
-            raise ValueError(
-                f"offloading={self.offloading!r} requires a positive total-cpu-dram-gb"
-            )
-        return self
-
-
 class AgenticCodingConfig(BaseModel):
     """Agentic coding scenario configuration for trace replay benchmarks."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
+    available_cpu_dram_mib: Optional[int] = Field(
+        default=None, alias=Fields.AVAILABLE_CPU_DRAM_MIB.value, gt=0
+    )
+    cpu_offload_utilization: Optional[float] = Field(
+        default=None, alias=Fields.CPU_OFFLOAD_UTILIZATION.value, gt=0, le=1
+    )
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
+
+    @model_validator(mode='after')
+    def validate_cpu_offload_capacity(self):
+        cpu_backends = {"cpu", "lmcache", "lmcache-mp", "hicache"}
+        has_node_capacity = (
+            self.available_cpu_dram_mib is not None
+            and self.cpu_offload_utilization is not None
+        )
+        has_partial_node_capacity = (
+            self.available_cpu_dram_mib is not None
+            or self.cpu_offload_utilization is not None
+        )
+        if has_partial_node_capacity and not has_node_capacity:
+            raise ValueError(
+                "available-cpu-dram-mib and cpu-offload-utilization must be set together"
+            )
+        for entry in self.search_space:
+            if entry.offloading not in cpu_backends:
+                continue
+            if entry.total_cpu_dram_gb > 0 and has_node_capacity:
+                raise ValueError(
+                    "CPU offload capacity must use either total-cpu-dram-gb or "
+                    "scenario-level available-cpu-dram-mib and cpu-offload-utilization"
+                )
+            if entry.total_cpu_dram_gb <= 0 and not has_node_capacity:
+                raise ValueError(
+                    f"offloading={entry.offloading!r} requires total-cpu-dram-gb or "
+                    "scenario-level available-cpu-dram-mib and cpu-offload-utilization"
+                )
+        return self
 
 
 class SingleNodeScenarios(BaseModel):

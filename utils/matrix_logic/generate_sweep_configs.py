@@ -2,6 +2,7 @@ import fnmatch
 import json
 import argparse
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 # Ensure sibling modules are importable regardless of how script is invoked
@@ -22,6 +23,7 @@ seq_len_stoi = {
 
 MIN_EVAL_CONC = 16
 MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
+CPU_MEMORY_OFFLOAD_MODES = {"cpu", "lmcache", "lmcache-mp", "hicache"}
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -34,6 +36,30 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
+
+def agentic_cpu_offload_gb(
+    agentic_config: dict, search_space: list[dict], benchmark: dict
+) -> int:
+    """Return the aggregate CPU offload budget for a single-node entry."""
+    offloading = benchmark.get(Fields.OFFLOADING.value, "none")
+    if offloading not in CPU_MEMORY_OFFLOAD_MODES:
+        return 0
+
+    explicit_total = benchmark.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
+    if explicit_total > 0:
+        return explicit_total
+
+    available_mib = agentic_config[Fields.AVAILABLE_CPU_DRAM_MIB.value]
+    utilization = Decimal(str(agentic_config[Fields.CPU_OFFLOAD_UTILIZATION.value]))
+    tp = benchmark[Fields.TP.value]
+    max_tp = max(
+        entry[Fields.TP.value]
+        for entry in search_space
+        if Fields.TP.value in entry
+    )
+    proportional_mib = int(Decimal(available_mib) * utilization * tp / max_tp)
+    return proportional_mib // 1024
 
 
 def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
@@ -403,7 +429,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
-                total_cpu_dram_gb = bmk.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
+                total_cpu_dram_gb = (
+                    0
+                    if is_multinode
+                    else agentic_cpu_offload_gb(agentic_config, bmk_space, bmk)
+                )
 
                 # Get concurrency values
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -812,8 +842,9 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
         for agentic_config in agentic_configs:
             duration = agentic_config.get(Fields.DURATION.value, 1800)
+            bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
 
-            for bmk in agentic_config[Fields.SEARCH_SPACE.value]:
+            for bmk in bmk_space:
                 if is_multinode:
                     prefill = bmk[Fields.PREFILL.value]
                     decode = bmk[Fields.DECODE.value]
@@ -823,7 +854,11 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
-                total_cpu_dram_gb = bmk.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
+                total_cpu_dram_gb = (
+                    0
+                    if is_multinode
+                    else agentic_cpu_offload_gb(agentic_config, bmk_space, bmk)
+                )
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
                 if conc_list:

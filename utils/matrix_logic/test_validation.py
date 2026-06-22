@@ -7,6 +7,7 @@ from validation import (
     MultiNodeMatrixEntry,
     WorkerConfig,
     SingleNodeSearchSpaceEntry,
+    AgenticCodingConfig,
     AgenticCodingSearchSpaceEntry,
     MultiNodeSearchSpaceEntry,
     SingleNodeSeqLenConfig,
@@ -367,10 +368,36 @@ class TestAgenticMatrixEntries:
 
     def test_cpu_offloading_requires_explicit_capacity(self):
         with pytest.raises(Exception, match="total-cpu-dram-gb"):
-            AgenticCodingSearchSpaceEntry(**{
+            AgenticCodingConfig(**{
+                "search-space": [{
+                    "tp": 4,
+                    "offloading": "cpu",
+                    "conc-list": [16],
+                }],
+            })
+
+    def test_cpu_offloading_accepts_node_capacity(self):
+        config = AgenticCodingConfig(**{
+            "available-cpu-dram-mib": 2964436,
+            "cpu-offload-utilization": 0.80,
+            "search-space": [{
                 "tp": 4,
                 "offloading": "cpu",
                 "conc-list": [16],
+            }],
+        })
+        assert config.available_cpu_dram_mib == 2964436
+        assert config.cpu_offload_utilization == 0.80
+
+    def test_node_capacity_fields_must_be_paired(self):
+        with pytest.raises(Exception, match="must be set together"):
+            AgenticCodingConfig(**{
+                "available-cpu-dram-mib": 2964436,
+                "search-space": [{
+                    "tp": 4,
+                    "offloading": "none",
+                    "conc-list": [16],
+                }],
             })
 
 
