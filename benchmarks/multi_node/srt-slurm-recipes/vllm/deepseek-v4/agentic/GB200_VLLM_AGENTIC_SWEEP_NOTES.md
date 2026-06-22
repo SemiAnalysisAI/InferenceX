@@ -774,3 +774,17 @@ existing vLLM DEP pattern (`TP1 x DP8`, EP8, `deep_gemm_mega_moe`) and raises
 the prefill batch-token ceiling from 16K to 32K. This tests whether eight-way
 attention parallelism can improve raw prefill throughput enough to offset the
 expected per-rank load-balance and cache-affinity penalty.
+
+The initial server-reuse run exposed a missing quiescence boundary after c128.
+AIPerf reached its 30-minute profile deadline with 265 requests still in
+flight, forced phase completion after its cancellation grace period, and the
+shell immediately launched c160. The second warmup stalled while the Dynamo
+frontend still reported hundreds of active/pending requests from both
+invocations, so c160 and later points were invalid and run `27922709353` was
+cancelled.
+
+The grouped runner now polls the Dynamo frontend's active-request gauge plus
+every discovered worker's vLLM running/waiting gauges between points. It
+requires three consecutive idle polls before continuing, waits up to 30
+minutes by default, and fails rather than contaminating the next result if the
+system cannot drain. It does not clear KV state.
