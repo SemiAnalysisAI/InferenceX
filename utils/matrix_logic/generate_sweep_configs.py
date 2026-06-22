@@ -149,8 +149,11 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
 
 def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
-    """Expand eval selection to every fixed-sequence entry.
+    """Expand eval selection to every 8k1k fixed-sequence entry.
 
+    Evals only run at 8k1k (matching mark_eval_entries), so entries at other
+    sequence lengths (e.g. 1k1k) are passed through untouched rather than
+    expanded into eval rows.
     Agentic entries are left untouched because they do not support lm-eval.
     Multi-node rows with the same engine topology are merged into one eval row
     whose full concurrency list is run sequentially against the same engine.
@@ -158,8 +161,19 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     expanded_entries: list[dict] = []
     multinode_indices: dict[tuple, int] = {}
 
+    target_isl, target_osl = seq_len_stoi["8k1k"]
+
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            expanded_entries.append(entry)
+            continue
+
+        # Only 8k1k is eligible for evals; leave other sequence lengths as-is
+        # (their RUN_EVAL stays False, so the evals-only filter drops them).
+        if (
+            entry.get(Fields.ISL.value) != target_isl
+            or entry.get(Fields.OSL.value) != target_osl
+        ):
             expanded_entries.append(entry)
             continue
 

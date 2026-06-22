@@ -4022,3 +4022,10 @@
     - "No MTP, KV_CACHE_DTYPE=auto (MXFP4 native, no fp8 override), MAX_MODEL_LEN=32768, MAX_NUM_BATCHED_TOKENS=32768"
     - "server_atom.sh: conditional --kv_cache_dtype, MAX_MODEL_LEN/MAX_NUM_BATCHED_TOKENS/CUDAGRAPH_OPT support, syntax fixes"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1856
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618."
+    - "Enable SGLANG_DP_USE_GATHERV=1. Change to use all_gatherv + reduce_scatterv for tp + dp config."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1824
