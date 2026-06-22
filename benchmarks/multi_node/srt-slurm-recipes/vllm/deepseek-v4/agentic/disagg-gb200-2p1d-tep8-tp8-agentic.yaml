@@ -94,9 +94,9 @@ backend:
       attention-config: '{"use_fp4_indexer_cache": true}'
       enforce-eager: true
       max-num-seqs: 16
-      # Increase raw prefill batching after c128 showed low KV occupancy and
-      # an uncached-prefill bottleneck rather than decode saturation.
-      max-num-batched-tokens: 32768
+      # Official 32K c52 regressed to 103K total input tok/s versus 187.6K
+      # total throughput with the previously validated 16K setting.
+      max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       no-async-scheduling: true

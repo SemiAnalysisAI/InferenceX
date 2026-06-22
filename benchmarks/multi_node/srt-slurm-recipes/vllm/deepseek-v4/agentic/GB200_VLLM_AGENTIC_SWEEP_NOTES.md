@@ -810,3 +810,29 @@ The c128 audit showed low prefill KV occupancy and no decode saturation, so
 larger compute batches directly target the uncached-prefill bottleneck without
 reducing cache capacity. The selected batches are 1P/1D c32/40/52/64 (16 GPUs)
 and 2P/1D c52/64/80/96 (24 GPUs).
+
+### Grouped 32K prefill-batch experiment
+
+- Official runs `27925769616` (1P/1D c32/40/52/64, Slurm `19550`) and
+  `27925769598` (2P/1D c52/64/80/96, Slurm `19549`) test up to four
+  concurrencies per allocation with a drain boundary between points.
+- The first boundaries worked as designed: after c32 and c52, respectively,
+  the gate observed zero active frontend requests and zero running/waiting
+  worker requests for three consecutive polls before starting the next point.
+- Both first-point profiles completed every recorded request (317/317 for
+  1P/1D c32 and 1,405/1,405 for 2P/1D c52) with no request errors. The AIPerf
+  phase-end cancelled-credit timeout did not remove a successful request.
+- 1P/1D c32 delivered 26,566.9 tok/s total, 1,660.43 tok/s/GPU, 193.21 s mean
+  TTFT, and 13.46 ms mean TPOT. Its prefill local cache hit was only about 7%
+  near profile completion.
+- 2P/1D c52 delivered 103,259.7 tok/s total, 4,302.49 tok/s/GPU, 46.48 s mean
+  TTFT, and 20.21 ms mean TPOT. Its two prefills ended near 44.7% and 65.5%
+  local cache hit and supplied about 44.9K and 57.8K input tok/s. Decode had
+  no sustained queue and supplied about 808 output tok/s, so it was not the
+  throughput limit.
+- The 2P/1D result is a direct regression from the earlier official 16K-batch
+  c52 result (`27915217510`): 187,623.56 tok/s total and 7,817.65 tok/s/GPU.
+  The fixed-length recipe's 32K batch setting therefore does not transfer to
+  this long-context cache-heavy workload. Both TEP8 recipes are restored to
+  16K for the next controlled grouped sweep; the running 32K allocations are
+  retained to finish their remaining comparison points.
