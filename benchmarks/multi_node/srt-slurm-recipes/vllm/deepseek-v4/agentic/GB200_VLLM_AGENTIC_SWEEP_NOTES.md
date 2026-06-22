@@ -832,7 +832,17 @@ and 2P/1D c52/64/80/96 (24 GPUs).
   throughput limit.
 - The 2P/1D result is a direct regression from the earlier official 16K-batch
   c52 result (`27915217510`): 187,623.56 tok/s total and 7,817.65 tok/s/GPU.
+  The earlier run's two prefill logs ended at 91.0% and 90.3% local prefix
+  cache hit. Its aggregate JSON's 92.5% external hit value is primarily the
+  decode worker's transferred-KV path and is not labeled as prefill hit.
   The fixed-length recipe's 32K batch setting therefore does not transfer to
   this long-context cache-heavy workload. Both TEP8 recipes are restored to
   16K for the next controlled grouped sweep; the running 32K allocations are
   retained to finish their remaining comparison points.
+- Commit `63a372c3` restores the validated 16K setting. Official reruns are
+  `27928586423` (1P/1D c40/52/64/80) and `27928587096` (2P/1D
+  c52/64/80/96). Each dry-run generated exactly one four-point allocation.
+  Two earlier dispatches (`27928524345`, `27928524960`) used the workflow from
+  `main`; that version lacks the branch's multi-node agentic wiring, so both
+  ended without creating a benchmark job or allocating a GPU. The corrected
+  dispatches use `chore/agentx-v0.4` as both workflow and benchmark ref.
