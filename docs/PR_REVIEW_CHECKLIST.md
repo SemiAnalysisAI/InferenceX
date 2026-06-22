@@ -1,5 +1,7 @@
 # PR Review Checklist
 
+When reviewing & approving an PR, please fill in the following form in your approval comment before pinging an core maintainer for final approval
+
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
 - [ ] Verified that the general code quality meets the InferenceX standard and does not make the code quality any worse.
