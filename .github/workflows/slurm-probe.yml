@@ -1,108 +1,57 @@
 name: slurm-probe
 
-# Diagnostic: run `squeue` directly on an NVIDIA runner and print it to the
-# GitHub logs. This is a PLAIN job, so it does NOT include the wedge-prone
-# "Slurm cleanup (pre-run)" step (that only lives in the benchmark template) —
-# it just lands on the runner and dumps the Slurm queue. Gives us cluster
-# visibility via the runner, no SSH needed.
-
 on:
   push:
     branches: [chore/slurm-probe]
   workflow_dispatch:
     inputs:
       runner:
-        description: "runner label to probe (e.g. gb300-nv, gb200-nv)"
+        description: "runner label to probe"
         default: gb300-nv
 
 jobs:
   probe:
     runs-on: ${{ github.event.inputs.runner || 'gb300-nv' }}
-    timeout-minutes: 5
+    timeout-minutes: 3
     steps:
-      - name: isolate pre-run cleanup wedge
+      - name: inspect SSSD sudo responder evidence
         run: |
           set +e
-          run_probe() {
-            label="$1"
-            shift
-            echo "=== BEGIN ${label} utc=$(date -u +%FT%TZ) ==="
-            start=$SECONDS
-            timeout --kill-after=3s 10s "$@"
-            rc=$?
-            echo "=== END ${label} rc=${rc} elapsed=$((SECONDS - start))s utc=$(date -u +%FT%TZ) ==="
-            echo
-          }
-
-          echo "=== runner=$RUNNER_NAME host=$(hostname -f 2>/dev/null || hostname) utc=$(date -u +%FT%TZ) ==="
-          echo "workspace=$GITHUB_WORKSPACE"
-          echo "user=$(id)"
+          echo "runner=$RUNNER_NAME host=$(hostname -f 2>/dev/null || hostname) utc=$(date -u +%FT%TZ)"
           echo
 
-          echo "=== pre-existing blocked cleanup processes ==="
-          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args | \
-            awk 'NR == 1 || $3 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
+          echo "=== stuck sudo cleanup count and oldest entries ==="
+          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args |
+            awk '$0 ~ /sudo rm -rf .*benchmark_logs/ || NR == 1' |
+            sort -k5,5r | head -40
           echo
 
-          stuck_sudo_pid=$(pgrep -o -x sudo || true)
-          if [ -n "$stuck_sudo_pid" ]; then
-            echo "=== oldest sudo process: pid=$stuck_sudo_pid ==="
-            ps -o user,euser,group,egroup,stat,wchan:32,etime,pid,ppid,comm,args -p "$stuck_sudo_pid"
-            cat "/proc/$stuck_sudo_pid/status" 2>&1 || true
-            echo "wchan=$(cat "/proc/$stuck_sudo_pid/wchan" 2>&1)"
-            echo "syscall=$(cat "/proc/$stuck_sudo_pid/syscall" 2>&1)"
-            echo "children=$(cat "/proc/$stuck_sudo_pid/task/$stuck_sudo_pid/children" 2>&1)"
-            ls -la "/proc/$stuck_sudo_pid/fd" 2>&1 || true
-            command -v pstree >/dev/null && pstree -aps "$stuck_sudo_pid" 2>&1 || true
-            echo
-          fi
+          echo "=== SSSD sudo socket state ==="
+          ss -xap 2>&1 | grep -E 'sss|sudo' || true
+          echo
 
-          echo "=== sudo / NSS / PAM configuration visible without privilege ==="
-          for config in /etc/sudo.conf /etc/nsswitch.conf /etc/pam.d/sudo /etc/resolv.conf; do
-            echo "--- $config ---"
-            sed -n '1,240p' "$config" 2>&1 || true
+          echo "=== SSSD process state ==="
+          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args |
+            awk 'NR == 1 || $0 ~ /[s]ssd/'
+          echo
+
+          echo "=== SSSD logs and permissions ==="
+          ls -la /var/log/sssd 2>&1 || true
+          for log in /var/log/sssd/sssd_sudo.log /var/log/sssd/sssd_gb300.internal.log; do
+            echo "--- $log ---"
+            tail -200 "$log" 2>&1 || true
           done
           echo
 
-          run_probe "getent-runner-user" getent passwd "$(id -un)"
-          run_probe "getent-runner-group" getent group "$(id -gn)"
-          run_probe "getent-hostname" getent hosts "$(hostname -f 2>/dev/null || hostname)"
-          run_probe "sudo-version" sudo -V
-          echo "=== SSSD process, service, and responder state ==="
-          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args | \
-            awk 'NR == 1 || $0 ~ /[s]ssd/'
-          ls -la /run/sssd /var/lib/sss/pipes /var/lib/sss/pipes/private 2>&1 || true
-          command -v ss >/dev/null && ss -xlpn 2>&1 | grep -E 'sss|sudo' || true
-          run_probe "sssd-active" systemctl is-active sssd
-          run_probe "sssd-status" systemctl status sssd --no-pager
-          if command -v sssctl >/dev/null; then
-            run_probe "sssd-domain-list" sssctl domain-list
-            run_probe "sssd-config-check" sssctl config-check
-            run_probe "sssd-user-checks" sssctl user-checks "$(id -un)" -a sudo
-          else
-            echo "sssctl is not installed"
+          echo "=== system journal (if runner account may read it) ==="
+          journalctl -u sssd --since '2026-06-01' --no-pager -n 200 2>&1 || true
+          echo
+
+          echo "=== sudo responder proc state (if visible) ==="
+          sudo_responder_pid=$(pgrep -x sssd_sudo | head -1)
+          if [ -n "$sudo_responder_pid" ]; then
+            cat "/proc/$sudo_responder_pid/status" 2>&1 || true
+            echo "wchan=$(cat "/proc/$sudo_responder_pid/wchan" 2>&1)"
+            echo "syscall=$(cat "/proc/$sudo_responder_pid/syscall" 2>&1)"
+            command -v pstree >/dev/null && pstree -aps "$sudo_responder_pid" 2>&1 || true
           fi
-          run_probe "sudo-list-policy" sudo -n -l
-
-          run_probe "squeue-by-runner" squeue --name="$RUNNER_NAME" --noheader --format=%i
-          run_probe "full-squeue" squeue
-          run_probe "completing-jobs" squeue --states=CG,CF,CD --noheader
-
-          echo "=== workspace mount candidates (read from /proc; no mount traversal) ==="
-          awk -v p="$GITHUB_WORKSPACE" '$2 == p || index(p, $2 "/") == 1 {print}' /proc/mounts
-          echo
-
-          run_probe "findmnt-workspace" findmnt -T "$GITHUB_WORKSPACE" -o TARGET,SOURCE,FSTYPE,OPTIONS
-          run_probe "stat-workspace" stat "$GITHUB_WORKSPACE"
-          run_probe "sudo-noninteractive" sudo -n true
-          run_probe "stat-benchmark-logs" sudo -n stat "$GITHUB_WORKSPACE/benchmark_logs"
-          run_probe "safe-rm-nonexistent" sudo -n rm -rf "$GITHUB_WORKSPACE/.slurm-probe-nonexistent-$GITHUB_RUN_ID"
-
-          echo "=== benchmark_logs traversal is last: a stale NFS inode may be unkillable ==="
-          run_probe "find-benchmark-logs" sudo -n find "$GITHUB_WORKSPACE/benchmark_logs" -maxdepth 3 -printf '%y %p\n'
-
-          echo "=== final blocked-process snapshot ==="
-          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args | \
-            awk 'NR == 1 || $3 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
-          echo
-          echo "=== done utc=$(date -u +%FT%TZ) ==="
