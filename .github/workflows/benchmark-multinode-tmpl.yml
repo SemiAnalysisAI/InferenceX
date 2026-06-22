@@ -313,7 +313,12 @@ jobs:
 
       - name: Verify eval scores
         if: ${{ (success() || failure()) && inputs.eval-only }}
-        run: python3 utils/evals/validate_scores.py
+        run: |
+          expected_concs="${EVAL_CONC}"
+          if [[ -z "${expected_concs}" ]]; then
+            expected_concs="$(printf '%s\n' "${CONC_LIST}" | tr ' ' '\n' | sort -n | tail -1)"
+          fi
+          python3 utils/evals/validate_scores.py --expected-concs "${expected_concs}"
 
       - name: Cleanup eval outputs (post-upload)
         if: ${{ always() && (inputs.run-eval || inputs.eval-only) }}
