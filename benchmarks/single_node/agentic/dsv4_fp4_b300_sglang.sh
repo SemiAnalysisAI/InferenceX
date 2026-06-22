@@ -109,7 +109,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
     AIPERF_HTTP_CONNECTION_LIMIT=$((TP / 2))
     if [ "$TP" -le 4 ]; then
-        AIPERF_HTTP_CONNECTION_LIMIT=4
+        AIPERF_HTTP_CONNECTION_LIMIT=64
     fi
     if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -lt 1 ]; then
         AIPERF_HTTP_CONNECTION_LIMIT=1
@@ -128,7 +128,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
-        --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
