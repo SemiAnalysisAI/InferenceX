@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export HF_HUB_CACHE_MOUNT="/local-nvme/hf-hub-cache/"
+export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 
 PARTITION="compute"
-SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="/raid/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
