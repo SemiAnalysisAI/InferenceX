@@ -211,7 +211,9 @@ Append recovery entries to the end of `perf-changelog.yaml`. Preserve the
 original entries' `config-keys`, `evals-only`, and `scenario-type` shape so the
 recovery targets the same configuration scope. The current generator may
 produce a different matrix; that does not invalidate reuse. Use the new recovery
-PR URL and state clearly that this is an artifact-only ingest recovery.
+PR URL and state clearly that this is an artifact-only ingest recovery. This is
+not a transient trigger: `InferenceX-app` ingests and displays the entry, so it
+must remain in the append-only changelog after recovery.
 
 Commit without `[skip-sweep]`:
 
