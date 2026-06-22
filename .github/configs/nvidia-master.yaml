@@ -12146,7 +12146,7 @@ kimik2.5-fp4-gb300-dynamo-vllm:
 
 # --- Measured-power campaign (dsr1-disagg-NVIDIA) — gb200 -------------------
 # Single-job validation of the perfmon plumbing on the HEALTHY gb200 runner
-# (the gb300-nv fleet is wedged on stale-NFS pre-run cleanup). Same recipe +
+# (the gb300-nv fleet is wedged on the shared sudo/SSSD pre-run cleanup). Same recipe +
 # disagg topology as the 1k/1k low-latency cell of dsr1-fp4-gb200-dynamo-sglang
 # (1 prefill TP4 + 2 decode TP4), trimmed to one concurrency so the matrix
 # expands to ONE gb200 job. runner: gb200 -> runners/launch_gb200-nv.sh, whose

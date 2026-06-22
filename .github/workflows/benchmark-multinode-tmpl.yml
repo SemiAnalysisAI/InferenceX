@@ -177,30 +177,40 @@ jobs:
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            timeout 30 scancel --name="${{ runner.name }}" 2>/dev/null || true
+            timeout --kill-after=5s 30s scancel --name="${{ runner.name }}" 2>/dev/null || true
             _drain_deadline=$((SECONDS + 120))
-            # Wrap EVERY slurm call in `timeout`: on the NVIDIA clusters squeue
-            # itself hangs (unresponsive slurmctld / zombie), and a hang in the
-            # while-condition's $(squeue ...) never reaches the deadline check
-            # below. timeout 30 forces each call to return so the loop progresses.
-            while [ -n "$(timeout 30 squeue --name='${{ runner.name }}' --noheader --format='%i' 2>/dev/null)" ]; do
-              if [ "$SECONDS" -ge "$_drain_deadline" ]; then
-                echo "[Slurm] drain exceeded 120s; force-cancelling (KILL) and proceeding (zombie/unresponsive slurm)"
-                timeout 30 scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
-                sleep 5
+            # The deadline cannot help while a client call is blocked, so every
+            # Slurm command also gets a hard TERM-then-KILL bound.
+            while true; do
+              _queued_jobs=""
+              _squeue_rc=0
+              _queued_jobs=$(timeout --kill-after=5s 30s squeue --name='${{ runner.name }}' --noheader --format='%i' 2>/dev/null) || _squeue_rc=$?
+              if [ "$_squeue_rc" -ne 0 ]; then
+                echo "[Slurm] squeue failed or timed out (rc=$_squeue_rc); force-cancelling and proceeding"
+                timeout --kill-after=5s 30s scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
                 break
               fi
-              timeout 30 squeue --name="${{ runner.name }}" 2>/dev/null || true
+              if [ -z "$_queued_jobs" ]; then
+                break
+              fi
+              if [ "$SECONDS" -ge "$_drain_deadline" ]; then
+                echo "[Slurm] drain exceeded 120s; force-cancelling and proceeding"
+                timeout --kill-after=5s 30s scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
+                break
+              fi
+              echo "[Slurm] Waiting for job(s): $_queued_jobs"
               sleep 5
             done
           fi
-          # Drop root-owned leftovers from a prior (often cancelled) multinode
-          # run. The benchmark container runs as root and writes benchmark_logs/;
-          # if the job was cancelled its cleanup trap never ran, leaving
-          # root-owned dirs that actions/checkout (clean: true) can't rmdir
-          # (EACCES) — which then poison-fails EVERY subsequent job on that
-          # runner. Runs in both pre- and post-run cleanup (shared anchor).
-          timeout 60 sudo rm -rf "${GITHUB_WORKSPACE}/benchmark_logs" 2>/dev/null || true
+          # Only the AMD multinode path creates root-owned benchmark_logs/.
+          # Avoid sudo entirely on NVIDIA login hosts: their SSSD sudo policy
+          # lookup can hang before execing rm. A plain timeout only sends TERM
+          # and then waits, so retain a hard KILL fallback for the AMD cleanup.
+          case "${{ inputs.runner }}" in
+            mi*)
+              timeout --kill-after=5s 60s sudo -n rm -rf "${GITHUB_WORKSPACE}/benchmark_logs" 2>/dev/null || true
+              ;;
+          esac
 
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
