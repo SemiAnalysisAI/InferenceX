@@ -1,6 +1,8 @@
 # PR Review Checklist
 
-When reviewing & approving an PR, please fill in the following form in your approval comment before pinging an core maintainer for final approval
+When engineers from the respective hardware AI chip company is reviewing & approving an PR, please fill in the following form in your approval comment before pinging an core maintainer for final approval
+
+## Template
 
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
 
@@ -17,3 +19,11 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - [ ] If any of the above criteria cannot reasonably be satisfied, I have provided additional reasoning below.
 
 Signed: `FILL_IN_GITHUB_USERNAME`
+
+## Example
+
+<img width="667" height="701" alt="image" src="https://github.com/user-attachments/assets/0c832d48-c81b-4bdb-bb53-43f39ff18b9b" />
+
+
+<img width="569" height="632" alt="image" src="https://github.com/user-attachments/assets/491d9763-ab09-4734-b0f1-39eefe1ab5c4" />
+
