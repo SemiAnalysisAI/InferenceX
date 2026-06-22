@@ -4021,3 +4021,10 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618."
     - "Enable SGLANG_DP_USE_GATHERV=1. Change to use all_gatherv + reduce_scatterv for tp + dp config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1824
+
+- config-keys:
+    - kimik2.5-fp4-gb300-dynamo-trt
+  description:
+    - "Recover the failed official ingest for PR #1796 from validated sweep run 27663808752 (attempt 2)"
+    - "Artifact-only recovery: reuse 23 fixed-sequence rows and 2 eval rows without rerunning benchmarks"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1884
