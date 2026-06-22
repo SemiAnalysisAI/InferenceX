@@ -107,17 +107,6 @@ if [ "$DP_ATTENTION" = "true" ]; then
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
     SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
-    AIPERF_HTTP_CONNECTION_LIMIT=$((TP / 2))
-    if [ "$TP" -le 4 ]; then
-        AIPERF_HTTP_CONNECTION_LIMIT=64
-    fi
-    if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -lt 1 ]; then
-        AIPERF_HTTP_CONNECTION_LIMIT=1
-    fi
-    if [ "$AIPERF_HTTP_CONNECTION_LIMIT" -gt "$CONC" ]; then
-        AIPERF_HTTP_CONNECTION_LIMIT="$CONC"
-    fi
-    export AIPERF_HTTP_CONNECTION_LIMIT
 fi
 
 PARALLEL_ARGS=(--tp "$TP")
@@ -179,9 +168,6 @@ if [ -n "$TRITON_PTXAS_PATH" ]; then
     export TRITON_PTXAS_PATH
     echo "Using ptxas for Triton: $TRITON_PTXAS_PATH"
 fi
-if [ "$DP_ATTENTION" = "true" ]; then
-    "$SGLANG_PYTHON" "$SCRIPT_DIR/patch_sglang_dp_idle_tree_check.py"
-fi
 SGLANG_CMD=(
     "$SGLANG_PYTHON" -m sglang.launch_server
     --model-path "$MODEL_PATH"
@@ -235,7 +221,8 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "$SGLANG_ROUTER_BIN" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy cache_aware \
+        --policy manual \
+        --assignment-mode min_load \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
