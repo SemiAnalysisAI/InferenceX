@@ -228,8 +228,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "$SGLANG_ROUTER_BIN" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy manual \
-        --assignment-mode min_load \
+        --policy consistent_hashing \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \

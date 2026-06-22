@@ -79,7 +79,7 @@ case "$OFFLOADING" in
             echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
             exit 1
         fi
-        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_back}"
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
         export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
@@ -221,8 +221,7 @@ if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
     "$SGLANG_ROUTER_BIN" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
-        --policy manual \
-        --assignment-mode min_load \
+        --policy consistent_hashing \
         --request-id-headers x-correlation-id \
         --dp-aware \
         --host 0.0.0.0 \
