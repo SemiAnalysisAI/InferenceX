@@ -192,70 +192,51 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Eval Modifiers
 
-Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration. Each multi-node engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same engine. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Runs with either modifier are not eligible for artifact reuse.
+Use `all-evals` and/or `evals-only` with one primary sweep label. `all-evals`
+covers every fixed-sequence config; each multi-node topology runs all
+`conc-list` values on one engine. `evals-only` suppresses throughput; together
+they run all evals only. The primary label still controls canary/fail-fast.
+Modifier runs are not reusable; default full sweeps, including default evals,
+are.
 
 ## Reusing an Approved PR Full Sweep
 
-`[skip-sweep]` is a PR-only benchmark opt-out. When it appears in the latest
-PR head commit, `check-changelog` still validates the matrix and the reuse gate
-still runs, but benchmark setup is skipped. Pushes to `main` ignore the marker
-and always enter setup, where they either reuse approved artifacts or run the
-full untrimmed sweep.
+`[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
+run. Pushes to `main` ignore it.
 
-If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
-sequential canary, `non-canary-full-sweep-enabled` without one, or a
-fail-fast variant — `full-sweep-fail-fast` / `full-sweep-fail-fast-no-canary`), a
-maintainer can avoid running the same sweep again after merge by leaving a PR
-comment before merging:
+After an eligible full sweep (`full-sweep-enabled`,
+`non-canary-full-sweep-enabled`, or either fail-fast variant), an authorized
+maintainer can comment:
 
 ```
 /reuse-sweep-run
 ```
 
-That reuses the latest successful `run-sweep.yml` `pull_request` run whose
-commit is still part of the PR. To select a particular eligible successful
-or failed run, pin the source run explicitly:
+This selects the latest successful `run-sweep.yml` PR run whose commit remains
+in the PR. A run ID can pin an eligible successful or failed run:
 
 ```
 /reuse-sweep-run <run_id>
 ```
 
-Only an explicitly pinned run may have a `failure` conclusion. An unpinned
-command always selects the latest successful eligible run. Pinned failed runs
-must still contain complete artifacts for the merge run's expected matrix.
-
-The comment is the reuse authorization, so adding it does not trigger or cancel
-a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. The synchronize run
-checks that the changelog diff can generate the setup matrix before inspecting
-the authorization and continuing to setup. This catches malformed conflict
-resolutions before reuse can skip setup. Removing and re-adding a sweep label
-explicitly starts a new sweep.
+Failed-run artifacts must still validate. The latest matching comment by an
+`OWNER`, `MEMBER`, or `COLLABORATOR` wins. Comments do not trigger or cancel
+sweeps; later commits skip a new sweep after changelog/matrix validation.
+Remove and re-add the sweep label to force one.
 
 `utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
-It merges `main`, preserves the current main changelog bytes, canonicalizes an
-appended `XXX` link to the PR URL, pushes a fresh synchronization commit, and
-waits for the PR checks before merging.
+It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
+pushes a synchronization commit, waits for checks, then merges.
 
-On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
-commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
-run for the same PR, downloads the ingest-relevant artifacts, validates that
-fixed-sequence, agentic, and eval-only artifacts exactly match the merge run's
-expected matrix, and uploads them as `reused-ingest-artifacts`. The normal
-database ingest then publishes those artifacts with the merge run's changelog
-metadata. Duplicate fixed-sequence, agentic, eval, or raw eval identities are
-rejected rather than collapsed during that comparison.
+The main run verifies the source, validates and uploads its ingest artifacts,
+then ingests them with merge-run changelog metadata. Source coverage is
+authoritative, so later matrix/eval policy changes do not invalidate reuse.
+Validation rejects duplicate fixed rows, missing run stats, inconsistent
+agentic artifacts, malformed eval metadata, and raw/aggregate eval mismatches.
+Batched evals use only `completed_eval_concs`.
 
-Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
-The most recent matching comment wins, so a maintainer can supersede an earlier
-pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
-
-Reuse fails closed: if the comment is present but no full-sweep label
-(`full-sweep-enabled`, `non-canary-full-sweep-enabled`,
-`full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`) is present, or if
-the source PR run or artifacts cannot be validated, the push-to-main workflow
-fails instead of falling back to a cluster sweep. Without the comment, the
-push-to-main workflow runs the normal full sweep.
+Reuse fails closed when authorized but ineligible or invalid; without
+authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 

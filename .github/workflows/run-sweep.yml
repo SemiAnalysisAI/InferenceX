@@ -725,11 +725,7 @@ jobs:
 
             - name: Validate reusable artifacts
               run: |
-                  cat <<'CONFIGEOF' > _full_config.json
-                  ${{ needs.setup.outputs.search-space-config }}
-                  CONFIGEOF
                   python3 utils/validate_reusable_sweep_artifacts.py \
-                    --config-json _full_config.json \
                     --artifacts-dir source-artifacts
 
             - name: Upload reusable ingest artifacts
