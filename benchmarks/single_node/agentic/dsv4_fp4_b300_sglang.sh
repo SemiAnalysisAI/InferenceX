@@ -128,6 +128,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
+        --load-balance-method total_tokens
         --incremental-streaming-output
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
