@@ -846,3 +846,16 @@ and 2P/1D c52/64/80/96 (24 GPUs).
   `main`; that version lacks the branch's multi-node agentic wiring, so both
   ended without creating a benchmark job or allocating a GPU. The corrected
   dispatches use `chore/agentx-v0.4` as both workflow and benchmark ref.
+
+### DEP8 memory-limit correction
+
+The initial interpretation of DEP8 run `27925448660` / Slurm `19548` was too
+broad. The checkpoint loaded and the failure occurred in FlashInfer's TRT-LLM
+NVFP4 MoE kernel warmup, not while loading weights. The 32K-token recipe made
+the token-proportional MoE intermediate request 21.65 GiB while 17.56 GiB was
+free on every rank. The compatible default loader was correct; the batch was
+not. The DEP8 recipe and master entry are restored with a 16K prefill batch,
+which should approximately halve that intermediate. No allocator setting,
+memory-utilization reduction, PP, or custom checkpoint loader is introduced.
+The four-point c64/96/128/160 group will determine whether DEP's attention
+parallelism can repay its cache-affinity/load-balance cost at high concurrency.
