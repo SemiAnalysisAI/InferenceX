@@ -140,7 +140,9 @@ MODEL_ARGS=(
     --disable-shared-experts-fusion
 )
 
-MAX_RUNNING_REQUESTS=$CONC
+# AgentX concurrency counts live session trees, not individual requests.
+# Allow subagent fan-out to exceed CONC without clipping request bursts.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
 CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 

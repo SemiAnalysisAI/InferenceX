@@ -143,9 +143,10 @@ MODEL_ARGS=()
 # full GPU KV cache does not OOM while HiCache is spilling to host memory.
 MEM_FRACTION_STATIC=0.88
 
-PER_ENGINE_MAX_RUNNING=$CONC
-[ "$PER_ENGINE_MAX_RUNNING" -lt 1 ] && PER_ENGINE_MAX_RUNNING=1
-CUDA_GRAPH_MAX_BS=$PER_ENGINE_MAX_RUNNING
+# AgentX concurrency counts live session trees, not individual requests.
+# Allow subagent fan-out to exceed CONC without clipping request bursts.
+MAX_RUNNING_REQUESTS=$((2 * CONC))
+CUDA_GRAPH_MAX_BS=$CONC
 [ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 
 export PYTHONNOUSERSITE=1
@@ -182,7 +183,7 @@ SGLANG_CMD=(
     "${PARALLEL_ARGS[@]}"
     --mem-fraction-static "$MEM_FRACTION_STATIC"
     --swa-full-tokens-ratio 0.1
-    --max-running-requests "$PER_ENGINE_MAX_RUNNING"
+    --max-running-requests "$MAX_RUNNING_REQUESTS"
     --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS"
     --chunked-prefill-size "$CHUNKED_PREFILL_SIZE"
     --tool-call-parser deepseekv4

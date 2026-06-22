@@ -99,6 +99,8 @@ case "$OFFLOADING" in
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
+        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -167,16 +169,10 @@ if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-# --max-num-seqs is per-engine. With DP-attn each DP engine handles only
-# CONC/$TP sequences in steady state (the trace replay tool's CONC users
-# load-balance across DP ranks), so size the per-engine cap to that.
-# Pure TP is a single engine and sees all CONC sequences itself.
-if [ "$DP_ATTENTION" = "true" ]; then
-    PER_ENGINE_MAX_NUM_SEQS=$(( CONC / TP ))
-    [ "$PER_ENGINE_MAX_NUM_SEQS" -lt 1 ] && PER_ENGINE_MAX_NUM_SEQS=1
-else
-    PER_ENGINE_MAX_NUM_SEQS=$CONC
-fi
+# AgentX concurrency counts live session trees, not individual requests.
+# Subagent fan-out can push instantaneous request concurrency above CONC, so
+# leave 2x headroom rather than clipping those bursts at the scheduler.
+MAX_NUM_SEQS=$((2 * CONC))
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
@@ -201,7 +197,7 @@ VLLM_CMD=(
     --reasoning-parser deepseek_v4
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
-    --max-num-seqs "$PER_ENGINE_MAX_NUM_SEQS"
+    --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
