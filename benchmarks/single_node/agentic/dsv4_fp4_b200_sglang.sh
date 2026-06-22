@@ -101,7 +101,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export AIPERF_HTTP_X_SMG_ROUTING_KEY_FROM_CORRELATION_ID=true
     SGLANG_BACKEND_PORT=$((PORT + 1))
     SGLANG_ROUTER_METRICS_PORT=$((PORT + 10000))
-    SGLANG_ROUTER_BIN="$(command -v sgl-model-gateway)"
+    SGLANG_ROUTER_CMD=("$SGLANG_PYTHON" -m sglang_router.launch_router)
 fi
 
 PARALLEL_ARGS=(--tp "$TP")
@@ -226,7 +226,7 @@ wait_for_server_ready --port "$SGLANG_BACKEND_PORT" --server-log "$SERVER_LOG" -
 
 if [ "$USE_SGLANG_ROUTER" = "true" ]; then
     echo "Starting SGLang router on port $PORT for $TP DP ranks..."
-    "$SGLANG_ROUTER_BIN" \
+    "${SGLANG_ROUTER_CMD[@]}" \
         --worker-urls "http://localhost:$SGLANG_BACKEND_PORT" \
         --policy consistent_hashing \
         --request-id-headers x-correlation-id \
