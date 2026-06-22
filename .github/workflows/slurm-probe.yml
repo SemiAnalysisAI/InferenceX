@@ -40,9 +40,35 @@ jobs:
           echo
 
           echo "=== pre-existing blocked cleanup processes ==="
-          ps -eo stat,wchan:32,etime,pid,ppid,comm,args | \
-            awk 'NR == 1 || $1 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
+          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args | \
+            awk 'NR == 1 || $3 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
           echo
+
+          stuck_sudo_pid=$(pgrep -o -x sudo || true)
+          if [ -n "$stuck_sudo_pid" ]; then
+            echo "=== oldest sudo process: pid=$stuck_sudo_pid ==="
+            ps -o user,euser,group,egroup,stat,wchan:32,etime,pid,ppid,comm,args -p "$stuck_sudo_pid"
+            cat "/proc/$stuck_sudo_pid/status" 2>&1 || true
+            echo "wchan=$(cat "/proc/$stuck_sudo_pid/wchan" 2>&1)"
+            echo "syscall=$(cat "/proc/$stuck_sudo_pid/syscall" 2>&1)"
+            echo "children=$(cat "/proc/$stuck_sudo_pid/task/$stuck_sudo_pid/children" 2>&1)"
+            ls -la "/proc/$stuck_sudo_pid/fd" 2>&1 || true
+            command -v pstree >/dev/null && pstree -aps "$stuck_sudo_pid" 2>&1 || true
+            echo
+          fi
+
+          echo "=== sudo / NSS / PAM configuration visible without privilege ==="
+          for config in /etc/sudo.conf /etc/nsswitch.conf /etc/pam.d/sudo /etc/resolv.conf; do
+            echo "--- $config ---"
+            sed -n '1,240p' "$config" 2>&1 || true
+          done
+          echo
+
+          run_probe "getent-runner-user" getent passwd "$(id -un)"
+          run_probe "getent-runner-group" getent group "$(id -gn)"
+          run_probe "getent-hostname" getent hosts "$(hostname -f 2>/dev/null || hostname)"
+          run_probe "sudo-version" sudo -V
+          run_probe "sudo-list-policy" sudo -n -l
 
           run_probe "squeue-by-runner" squeue --name="$RUNNER_NAME" --noheader --format=%i
           run_probe "full-squeue" squeue
@@ -62,7 +88,7 @@ jobs:
           run_probe "find-benchmark-logs" sudo -n find "$GITHUB_WORKSPACE/benchmark_logs" -maxdepth 3 -printf '%y %p\n'
 
           echo "=== final blocked-process snapshot ==="
-          ps -eo stat,wchan:32,etime,pid,ppid,comm,args | \
-            awk 'NR == 1 || $1 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
+          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args | \
+            awk 'NR == 1 || $3 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
           echo
           echo "=== done utc=$(date -u +%FT%TZ) ==="
