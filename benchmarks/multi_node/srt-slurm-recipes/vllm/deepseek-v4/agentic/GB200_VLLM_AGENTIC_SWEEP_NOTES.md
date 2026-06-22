@@ -859,3 +859,102 @@ which should approximately halve that intermediate. No allocator setting,
 memory-utilization reduction, PP, or custom checkpoint loader is introduced.
 The four-point c64/96/128/160 group will determine whether DEP's attention
 parallelism can repay its cache-affinity/load-balance cost at high concurrency.
+
+## Final Minimum-Replica Throughput Results
+
+All five grouped workflows completed successfully after the monitoring
+connection was interrupted. Each workflow published aggregate, raw replay,
+server-log, collected-result, and run-stat artifacts. Every one of the 20
+measured points reports all recorded requests successful.
+
+| Run | Topology | Batch | Conc. | Successful | Total tok/s | Tok/s/GPU | Mean TTFT | P95 TTFT | Mean TPOT | Interactivity |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| `27925769616` | 1P/1D TEP8 | 32K | 32 | 317/317 | 26,567 | 1,660 | 193.21s | 249.91s | 13.46ms | 74.3 tok/s |
+| `27925769616` | 1P/1D TEP8 | 32K | 40 | 347/347 | 27,667 | 1,729 | 222.02s | 303.68s | 13.69ms | 73.1 tok/s |
+| `27925769616` | 1P/1D TEP8 | 32K | 52 | 313/313 | 25,597 | 1,600 | 304.37s | 383.61s | 13.84ms | 72.2 tok/s |
+| `27925769616` | 1P/1D TEP8 | 32K | 64 | 583/583 | 26,514 | 1,657 | 421.53s | 524.18s | 14.75ms | 67.8 tok/s |
+| `27928586423` | 1P/1D TEP8 | 16K | 40 | 451/451 | 36,324 | 2,270 | 158.15s | 297.57s | 15.06ms | 66.4 tok/s |
+| `27928586423` | 1P/1D TEP8 | 16K | 52 | 326/326 | 26,748 | 1,672 | 291.26s | 384.70s | 14.13ms | 70.8 tok/s |
+| `27928586423` | 1P/1D TEP8 | 16K | 64 | 584/584 | 27,443 | 1,715 | 406.14s | 515.79s | 14.96ms | 66.9 tok/s |
+| `27928586423` | 1P/1D TEP8 | 16K | 80 | 465/465 | 24,319 | 1,520 | 644.29s | 856.19s | 14.83ms | 67.4 tok/s |
+| `27925769598` | 2P/1D TEP8 | 32K | 52 | 1,405/1,405 | 103,260 | 4,302 | 46.48s | 118.91s | 20.21ms | 49.5 tok/s |
+| `27925769598` | 2P/1D TEP8 | 32K | 64 | 1,250/1,250 | 67,753 | 2,823 | 121.56s | 320.44s | 18.27ms | 54.7 tok/s |
+| `27925769598` | 2P/1D TEP8 | 32K | 80 | 1,020/1,020 | 61,616 | 2,567 | 207.72s | 589.69s | 17.86ms | 56.0 tok/s |
+| `27925769598` | 2P/1D TEP8 | 32K | 96 | 1,133/1,133 | 63,235 | 2,635 | 231.16s | 706.87s | 17.96ms | 55.7 tok/s |
+| `27928587096` | 2P/1D TEP8 | 16K | 52 | 2,576/2,576 | 180,055 | 7,502 | 5.39s | 24.26s | 25.13ms | 39.8 tok/s |
+| `27928587096` | 2P/1D TEP8 | 16K | 64 | 2,413/2,413 | 142,163 | 5,923 | 31.74s | 208.79s | 24.54ms | 40.7 tok/s |
+| `27928587096` | 2P/1D TEP8 | 16K | 80 | 1,037/1,037 | 62,011 | 2,584 | 172.85s | 597.55s | 17.84ms | 56.0 tok/s |
+| `27928587096` | 2P/1D TEP8 | 16K | 96 | 1,112/1,112 | 62,598 | 2,608 | 242.54s | 766.37s | 17.82ms | 56.1 tok/s |
+| `27928732675` | 1P/1D DEP8 | 16K | 64 | 1,720/1,720 | 89,816 | 5,614 | 71.80s | 284.00s | 19.77ms | 50.6 tok/s |
+| `27928732675` | 1P/1D DEP8 | 16K | 96 | 1,710/1,710 | 97,121 | 6,070 | 102.20s | 1,010.47s | 19.83ms | 50.4 tok/s |
+| `27928732675` | 1P/1D DEP8 | 16K | 128 | 1,959/1,959 | 110,723 | 6,920 | 105.47s | 1,029.32s | 20.51ms | 48.8 tok/s |
+| `27928732675` | 1P/1D DEP8 | 16K | 160 | 1,968/1,968 | 112,308 | 7,019 | 119.14s | 1,014.78s | 20.26ms | 49.4 tok/s |
+
+### Interpretation
+
+- The reproducible moderate-concurrency winner is 2P/1D TEP8 16K c52:
+  180,055 tok/s total and 7,502 tok/s/GPU. The independent earlier c52 run
+  `27915217510` reached 187,624 tok/s and 7,818 tok/s/GPU, a 4.0% difference.
+  Its prefills ended at 90.6% and 92.2% local prefix hit in the grouped rerun.
+- c52 is a sharp locality knee. At c64 those same prefills ended near 76%
+  local hit and normalized throughput fell 21%. At c80 they ended at
+  46.5--50.3% and throughput fell 66% from c52. c96 remained in the same
+  collapsed regime. More admitted trajectories delay repeated turns and
+  replace reusable prefixes with cold first-turn working sets.
+- Raising the TEP prefill scheduler batch from 16,384 to 32,768 tokens is
+  harmful for this trace. At 2P/1D c52 it reduced total throughput 42.7%,
+  increased mean TTFT from 5.39s to 46.48s, and reduced end-of-profile local
+  prefill hit from roughly 91% to 45--66%. The larger active chunk improves
+  neither useful batching nor cache residency for long agentic prompts.
+- A single TEP8 prefill is not viable for this workload. It remains nearly
+  continuously occupied by one long chunk while cold trajectories accumulate;
+  changing 32K to 16K only improves the lowest point and does not prevent
+  cache collapse. Its high output-token interactivity is survivor-biased:
+  very few requests complete and TTFT grows to hundreds of seconds.
+- DEP8 16K is valid and materially better than single-prefill TEP8. The
+  32K OOM was a batch-sized MoE workspace issue, not a checkpoint-fit limit.
+  DEP scales monotonically through c160, reaches 112,308 tok/s total on 16
+  inference GPUs, and holds TPOT near 20ms. However, c160 gains only 1.4%
+  throughput over c128 while mean TTFT rises 13%; c128 is the practical DEP
+  knee and c160 is the maximum-throughput endpoint.
+- DEP's c128/c160 local prefill hit was about 72%/56%, respectively. Its eight
+  attention DP ranks expose more raw prefill concurrency, but distributing
+  requests and cache blocks across ranks loses locality. This matches the
+  predicted DEP cache-affinity/load-balance tradeoff.
+- The one decode replica was active but not the primary limit in the rejected
+  high-concurrency cases. DEP delivered about 0.95K output tok/s at c128/c160;
+  the good TEP c52 point delivered about 1.30K output tok/s. Prefill locality
+  collapsed before decode reached the demonstrated c52 output rate.
+
+### Baseline and acceptance result
+
+The target remains the database's B200 aggregate vLLM c196 offload record,
+workflow `2022` / GHA `27297117163`: 113,671.86 tok/s total, 14,208.98
+tok/s/GPU, 15.526s mean TTFT, and 279.09ms mean TPOT on eight inference GPUs.
+
+- Best GB200 normalized result observed: 7,817.65 tok/s/GPU from the earlier
+  2P/1D TEP8 16K c52 run, 45.0% below the B200 target.
+- Best result in the final grouped reruns: 7,502.28 tok/s/GPU, 47.2% below.
+- Best hundreds-concurrency result: DEP8 c160 at 7,019.27 tok/s/GPU, 50.6%
+  below, with unacceptable 119s mean and 1,015s p95 TTFT.
+- Disaggregation clearly improves total system throughput and TPOT in the
+  3P/2D low-latency curve, but no tested GB200 vLLM topology beats the B200
+  aggregate result after normalization by all inference GPUs.
+
+### Final infrastructure audit
+
+- The grouped drain gate reached frontend and worker idle state between
+  points; every final workflow concluded green with five expected artifact
+  groups and no missing aggregate JSON.
+- Worker metrics discovery produced distinct frontend, prefill, and decode
+  collectors. The TEP 2P/1D runs reported four collectors; 1P/1D reported
+  three. DEP's single logical prefill endpoint aggregates its internal DP
+  engine metrics.
+- No profiled NIXL, UCX, HTTP 503, NATS payload, or request errors were found
+  in the final 16K server logs. Expired producer-lease messages correspond to
+  fixed-duration cancellation/drain requests absent from the successful
+  aggregates, not failed measured transfers.
+- No larger message buffer was required. NATS retained its 32 MiB control
+  payload limit; bulk KV data used NIXL over UCX RC rather than NATS.
+- Every Slurm allocation exited, and no orphaned job remained after workflow
+  completion.
