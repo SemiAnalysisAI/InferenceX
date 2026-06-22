@@ -125,6 +125,14 @@ METRICS_ARGS=(--enable-metrics)
 MEM_FRACTION_STATIC=0.88
 CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
+    DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
+    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_OPT_USE_FAST_MASK_EP=1
+    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
+    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
+    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
@@ -133,29 +141,11 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --stream-interval 20
         --dist-init-addr "127.0.0.1:$((PORT + 2000))"
         --ep-size "$EP_SIZE"
+        --moe-a2a-backend deepep
+        --deepep-config "$DEEPEP_CONFIG"
     )
-    if [ "$TP" -eq 4 ]; then
-        DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
-        export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-        export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
-        export SGLANG_OPT_USE_FAST_MASK_EP=1
-        export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-        export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-        export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-        export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
-        PARALLEL_ARGS+=(
-            --moe-a2a-backend deepep
-            --deepep-config "$DEEPEP_CONFIG"
-        )
-        CHUNKED_PREFILL_SIZE=32768
-    else
-        PARALLEL_ARGS+=(
-            --moe-runner-backend flashinfer_mxfp4
-            --disable-flashinfer-autotune
-        )
-        CHUNKED_PREFILL_SIZE=16384
-    fi
     MEM_FRACTION_STATIC=0.88
+    CHUNKED_PREFILL_SIZE=32768
 else
     PARALLEL_ARGS+=(
         --moe-runner-backend flashinfer_mxfp4
