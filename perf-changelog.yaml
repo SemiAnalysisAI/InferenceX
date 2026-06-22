@@ -4038,3 +4038,4 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1791
 # re-arm 2026-06-22b: validate perfmon teardown fix (srt-slurm@b9526e5) — probe for pre-existing CG job
 # re-arm 2026-06-22c: cancel+re-arm gamble for a healthy runner — _0 squeue/scancel hang confirmed LIVE (concurrent probe on gb300-nv_2 clean, squeue 37ms, queue empty; _0 wedged 8min in pre-run cleanup with empty queue = host-local slurm-client hang, not a stuck job)
+# re-arm 2026-06-22d: REAL fix (94c2addd) — wedge was the AMD-only `sudo rm benchmark_logs` hanging on GB300 SSSD sudo policy. `timeout 60` sends only SIGTERM; the stuck root sudo ignores it, so timeout waits in sigsuspend forever (process pairs stuck 4+ days, probe 27988714413). Scoped that cleanup to mi* runners + --kill-after; NVIDIA now skips it entirely. (22c "slurm-client hang" was wrong — squeue was always fast; the step label hid the trailing sudo rm.)
