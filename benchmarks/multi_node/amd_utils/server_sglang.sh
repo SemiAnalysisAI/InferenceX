@@ -78,6 +78,34 @@ else:
 " 2>/dev/null || true
 fi
 
+# Fix: prevent TP-rank collective desync deadlock in disaggregation prefill.
+# resolve_waiting_queue_bootstrap() runs poll_and_all_reduce_attn_cp_tp_group()
+# over `candidates`. The upstream candidate set (all non-aborted waiting reqs)
+# can differ across TP ranks, so some ranks enter the all_reduce while others
+# skip it -> hang. Narrow candidates to optimistic (pending_bootstrap) requests,
+# which is consistent across ranks and is the only set finalize_bootstrap acts on.
+echo "[Patch] Narrowing resolve_waiting_queue_bootstrap candidates on ${host_name} ..."
+python3 -c "
+import pathlib
+f = pathlib.Path('/sgl-workspace/sglang/python/sglang/srt/disaggregation/prefill.py')
+src = f.read_text()
+old = '        candidates = [req for req in self.waiting_queue if not is_aborted(req)]'
+new = (
+    '        candidates = [\n'
+    '            req\n'
+    '            for req in self.waiting_queue\n'
+    '            if req.pending_bootstrap and not is_aborted(req)\n'
+    '        ]'
+)
+if new in src:
+    print('Patched prefill.py: resolve_waiting_queue_bootstrap candidates (already patched)')
+elif old in src:
+    f.write_text(src.replace(old, new))
+    print('Patched prefill.py: resolve_waiting_queue_bootstrap candidates')
+else:
+    print('prefill.py: patch target not found (skipping)')
+" 2>/dev/null || true
+
 # MORI_RDMA_TC configuration (optional)
 # If set by runner, use it for RDMA traffic class configuration
 # If not set, RDMA operations will proceed without QoS/traffic class settings
@@ -668,12 +696,21 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
+    # Router resilience: a single prefill worker doing huge long-context prefills
+    # (256K+ token agentic prompts in 65280-token chunks) can be slow to drain a
+    # concurrent burst. With defaults the circuit breaker opens after 10 failures
+    # and short-circuits the whole worker, so the aiperf profiling burst sees
+    # "No available prefill workers (all circuits open or unhealthy)" and aborts
+    # with 100% errors. Disable the breaker and relax health-check sensitivity so
+    # a busy-but-alive worker is not ejected. Override via ROUTER_RESILIENCE_FLAGS.
+    ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 5 --health-check-timeout-secs 60 --health-check-interval-secs 30}"
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
         --port 30000 \
         --policy random \
         --prefill-policy random \
         --decode-policy random \
+        ${ROUTER_RESILIENCE_FLAGS} \
         ${PREFILL_ARGS} \
         ${DECODE_ARGS}"
 
