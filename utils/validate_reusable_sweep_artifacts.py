@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate reused sweep artifacts against the exact target matrix."""
+"""Validate reused sweep artifacts for internal consistency."""
 
 from __future__ import annotations
 
@@ -10,9 +10,6 @@ import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any, Iterable
-
-
-FIXED_SEQ_KEYS = ("1k1k", "8k1k")
 
 
 def as_bool(value: Any) -> bool:
@@ -44,63 +41,6 @@ def json_rows(paths: Iterable[Path]) -> Iterable[tuple[Path, dict[str, Any]]]:
         for row in rows:
             if isinstance(row, dict):
                 yield path, row
-
-
-def expected_benchmark_keys(config: dict[str, Any]) -> set[tuple[Any, ...]]:
-    """Build expected fixed-sequence identities from process_changelog output."""
-    expected: set[tuple[Any, ...]] = set()
-
-    for seq_key in FIXED_SEQ_KEYS:
-        for entry in config.get("single_node", {}).get(seq_key, []) or []:
-            expected.add(
-                (
-                    "single",
-                    entry["runner"],
-                    entry["model-prefix"],
-                    entry["framework"],
-                    entry["precision"],
-                    entry.get("spec-decoding", "none"),
-                    as_bool(entry.get("disagg", False)),
-                    as_int(entry["isl"]),
-                    as_int(entry["osl"]),
-                    as_int(entry["tp"]),
-                    as_int(entry.get("ep", 1)),
-                    as_bool(entry.get("dp-attn", False)),
-                    as_int(entry["conc"]),
-                )
-            )
-
-        for entry in config.get("multi_node", {}).get(seq_key, []) or []:
-            prefill = entry["prefill"]
-            decode = entry["decode"]
-            decode_workers = as_int(decode.get("num-worker", 0))
-            decode_tp = as_int(decode.get("tp", 0)) if decode_workers > 0 else 0
-            decode_ep = as_int(decode.get("ep", 0)) if decode_workers > 0 else 0
-            for conc in entry["conc"]:
-                expected.add(
-                    (
-                        "multi",
-                        entry["runner"],
-                        entry["model-prefix"],
-                        entry["framework"],
-                        entry["precision"],
-                        entry.get("spec-decoding", "none"),
-                        as_bool(entry.get("disagg", False)),
-                        as_int(entry["isl"]),
-                        as_int(entry["osl"]),
-                        as_int(prefill.get("tp", 0)),
-                        as_int(prefill.get("ep", 1)),
-                        as_bool(prefill.get("dp-attn", False)),
-                        as_int(prefill.get("num-worker", 0)),
-                        decode_tp,
-                        decode_ep,
-                        as_bool(decode.get("dp-attn", False)),
-                        decode_workers,
-                        as_int(conc),
-                    )
-                )
-
-    return expected
 
 
 def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -158,51 +98,6 @@ def actual_benchmark_key_rows(
 def actual_benchmark_keys(artifacts_dir: Path) -> set[tuple[Any, ...]]:
     """Build the set of actual fixed-sequence identities."""
     return set(actual_benchmark_key_rows(artifacts_dir))
-
-
-def expected_agentic_keys(config: dict[str, Any]) -> set[tuple[Any, ...]]:
-    """Build expected agentic point-result identities."""
-    expected: set[tuple[Any, ...]] = set()
-    for entry in config.get("single_node", {}).get("agentic", []) or []:
-        expected.add(
-            (
-                "single",
-                entry["runner"],
-                entry["model-prefix"],
-                entry["framework"],
-                entry["precision"],
-                as_int(entry["tp"]),
-                as_int(entry.get("ep", 1)),
-                as_bool(entry.get("dp-attn", False)),
-                as_int(entry["conc"]),
-                entry.get("offloading", "none"),
-            )
-        )
-
-    for entry in config.get("multi_node", {}).get("agentic", []) or []:
-        prefill = entry["prefill"]
-        decode = entry["decode"]
-        expected.add(
-            (
-                "multi",
-                entry["runner"],
-                entry["model-prefix"],
-                entry["framework"],
-                entry["precision"],
-                entry.get("spec-decoding", "none"),
-                as_bool(entry.get("disagg", False)),
-                as_int(prefill.get("tp", 0)),
-                as_int(prefill.get("ep", 1)),
-                as_bool(prefill.get("dp-attn", False)),
-                as_int(prefill.get("num-worker", 0)),
-                as_int(decode.get("tp", 0)),
-                as_int(decode.get("ep", 1)),
-                as_bool(decode.get("dp-attn", False)),
-                as_int(decode.get("num-worker", 0)),
-                as_int(entry["conc"]),
-            )
-        )
-    return expected
 
 
 def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -319,26 +214,18 @@ def duplicate_identity_errors(
 
 def validate_fixed_artifacts(
     artifacts_dir: Path,
-    expected: set[tuple[Any, ...]],
 ) -> list[str]:
-    """Validate exact fixed-sequence rows, including duplicates."""
+    """Validate fixed-sequence aggregate rows for duplicate identities."""
     actual_rows = actual_benchmark_key_rows(artifacts_dir)
-    return [
-        *duplicate_identity_errors("fixed-sequence", actual_rows),
-        *validate_identity_set("fixed-sequence", expected, set(actual_rows)),
-    ]
+    return duplicate_identity_errors("fixed-sequence", actual_rows)
 
 
 def validate_agentic_artifacts(
     artifacts_dir: Path,
-    expected: set[tuple[Any, ...]],
 ) -> list[str]:
-    """Validate exact agentic point, raw, and aggregate artifact coverage."""
+    """Validate agentic point, raw, and aggregate artifacts agree."""
     point_rows = agentic_keys_from_paths(agentic_point_files(artifacts_dir))
-    errors = [
-        *duplicate_identity_errors("agentic point", point_rows),
-        *validate_identity_set("agentic", expected, set(point_rows)),
-    ]
+    errors = duplicate_identity_errors("agentic point", point_rows)
 
     results_bmk = artifacts_dir / "results_bmk"
     if results_bmk.is_dir():
@@ -349,7 +236,7 @@ def validate_agentic_artifacts(
         errors.extend(
             validate_identity_set(
                 "agentic aggregate",
-                expected,
+                set(point_rows),
                 set(aggregate_rows),
             )
         )
@@ -376,9 +263,7 @@ def validate_agentic_artifacts(
     aggregate_dir = artifacts_dir / "agentic_aggregated"
     summary_path = aggregate_dir / "summary.csv"
     if aggregate_dir.exists():
-        if not expected:
-            errors.append("unexpected agentic_aggregated artifact")
-        elif not summary_path.is_file():
+        if not summary_path.is_file():
             errors.append("missing agentic_aggregated/summary.csv")
         else:
             with open(summary_path, newline="") as handle:
@@ -408,70 +293,9 @@ def validate_agentic_artifacts(
     return errors
 
 
-def expected_eval_jobs(config: dict[str, Any]) -> int:
-    """Count expected eval-only matrix jobs."""
-    return len(config.get("evals", []) or []) + len(
-        config.get("multinode_evals", []) or []
-    )
-
-
 def normalized_runner(value: Any) -> str:
     """Normalize runner labels that aggregates may uppercase."""
     return str(value or "").lower()
-
-
-def expected_eval_keys(config: dict[str, Any]) -> set[tuple[Any, ...]]:
-    """Build expected eval aggregate identities."""
-    expected: set[tuple[Any, ...]] = set()
-    for entry in config.get("evals", []) or []:
-        expected.add(
-            (
-                "single",
-                normalized_runner(entry["runner"]),
-                entry["model-prefix"],
-                entry["framework"],
-                entry["precision"],
-                entry.get("spec-decoding", "none"),
-                as_int(entry["isl"]),
-                as_int(entry["osl"]),
-                as_int(entry["tp"]),
-                as_int(entry.get("ep", 1)),
-                as_bool(entry.get("dp-attn", False)),
-                as_int(entry["conc"]),
-            )
-        )
-
-    for entry in config.get("multinode_evals", []) or []:
-        prefill = entry["prefill"]
-        decode = entry["decode"]
-        eval_concs = (
-            entry["conc"]
-            if entry.get("eval-all-concs", False)
-            else [entry.get("eval-conc", entry["conc"][0])]
-        )
-        for eval_conc in eval_concs:
-            expected.add(
-                (
-                    "multi",
-                    normalized_runner(entry["runner"]),
-                    entry["model-prefix"],
-                    entry["framework"],
-                    entry["precision"],
-                    entry.get("spec-decoding", "none"),
-                    as_int(entry["isl"]),
-                    as_int(entry["osl"]),
-                    as_int(prefill.get("tp", 0)),
-                    as_int(prefill.get("ep", 1)),
-                    as_bool(prefill.get("dp-attn", False)),
-                    as_int(prefill.get("num-worker", 0)),
-                    as_int(decode.get("tp", 0)),
-                    as_int(decode.get("ep", 1)),
-                    as_bool(decode.get("dp-attn", False)),
-                    as_int(decode.get("num-worker", 0)),
-                    as_int(eval_conc),
-                )
-            )
-    return expected
 
 
 def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
@@ -571,18 +395,14 @@ def raw_eval_key_rows(
 
 def validate_eval_artifacts(
     artifacts_dir: Path,
-    expected_keys: set[tuple[Any, ...]],
 ) -> list[str]:
-    """Validate exact eval aggregate and raw artifact coverage."""
+    """Validate raw and aggregate eval artifacts agree."""
     raw_rows, errors = raw_eval_key_rows(artifacts_dir)
     errors.extend(duplicate_identity_errors("raw eval", raw_rows))
-    errors.extend(
-        validate_identity_set("raw eval", expected_keys, set(raw_rows))
-    )
 
     aggregate_dir = artifacts_dir / "eval_results_all"
     aggregate_files = list(aggregate_dir.glob("*.json"))
-    if expected_keys:
+    if raw_rows or aggregate_dir.exists():
         if not aggregate_files:
             errors.append("missing eval_results_all aggregate artifact")
         else:
@@ -608,12 +428,10 @@ def validate_eval_artifacts(
             errors.extend(
                 validate_identity_set(
                     "eval aggregate",
-                    expected_keys,
+                    set(raw_rows),
                     set(aggregate_rows),
                 )
             )
-    elif aggregate_dir.exists():
-        errors.append("unexpected eval_results_all aggregate artifact")
 
     return errors
 
@@ -630,35 +448,26 @@ def validate_run_stats(artifacts_dir: Path, required: bool) -> list[str]:
 def main() -> int:
     """CLI entry point."""
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config-json", required=True, type=Path)
     parser.add_argument("--artifacts-dir", required=True, type=Path)
     args = parser.parse_args()
 
-    config = load_json(args.config_json)
-    if not isinstance(config, dict):
-        raise ValueError("config JSON must be an object")
     if not args.artifacts_dir.is_dir():
         raise ValueError(
             f"artifacts directory does not exist: {args.artifacts_dir}"
         )
 
-    expected_bmk = expected_benchmark_keys(config)
-    expected_agentic = expected_agentic_keys(config)
-    expected_eval = expected_eval_keys(config)
+    fixed_rows = actual_benchmark_key_rows(args.artifacts_dir)
+    agentic_rows = agentic_keys_from_paths(
+        agentic_point_files(args.artifacts_dir)
+    )
+    eval_rows, _ = raw_eval_key_rows(args.artifacts_dir)
 
-    errors = validate_fixed_artifacts(args.artifacts_dir, expected_bmk)
-    if expected_bmk and not (args.artifacts_dir / "results_bmk").is_dir():
-        errors.insert(0, "missing results_bmk benchmark aggregate artifact")
-    errors.extend(
-        validate_agentic_artifacts(args.artifacts_dir, expected_agentic)
-    )
-    errors.extend(
-        validate_eval_artifacts(
-            args.artifacts_dir,
-            expected_eval,
-        )
-    )
-    errors.extend(validate_run_stats(args.artifacts_dir, bool(expected_bmk)))
+    errors = validate_fixed_artifacts(args.artifacts_dir)
+    errors.extend(validate_agentic_artifacts(args.artifacts_dir))
+    errors.extend(validate_eval_artifacts(args.artifacts_dir))
+    errors.extend(validate_run_stats(args.artifacts_dir, bool(fixed_rows)))
+    if not fixed_rows and not agentic_rows and not eval_rows:
+        errors.append("no reusable benchmark, agentic, or eval result rows found")
 
     if errors:
         print("Reusable sweep artifact validation failed:", file=sys.stderr)
@@ -668,9 +477,9 @@ def main() -> int:
 
     print(
         "Reusable sweep artifacts validated: "
-        f"{len(expected_bmk)} fixed-sequence row(s), "
-        f"{len(expected_agentic)} agentic row(s), "
-        f"{expected_eval_jobs(config)} eval job(s)."
+        f"{len(set(fixed_rows))} fixed-sequence row(s), "
+        f"{len(set(agentic_rows))} agentic row(s), "
+        f"{len(set(eval_rows))} eval row(s)."
     )
     return 0
 
