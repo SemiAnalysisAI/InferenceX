@@ -170,7 +170,9 @@ else
 
     export MORI_EP_LAUNCH_CONFIG_MODE=AUTO
 
-    export MORI_APP_LOG_LEVEL=INFO
+    # Default to WARNING to cut per-op MoRI log spam on long multinode/eval
+    # runs; override with MORI_APP_LOG_LEVEL=INFO when debugging.
+    export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-WARNING}"
 
     # Router logging control:
     # 0 (default) keeps noisy per-request access logs out of stdout while still logging to file.
