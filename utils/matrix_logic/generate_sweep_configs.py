@@ -24,6 +24,8 @@ seq_len_stoi = {
 MIN_EVAL_CONC = 16
 MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
 CPU_MEMORY_OFFLOAD_MODES = {"cpu", "lmcache", "lmcache-mp", "hicache"}
+BYTES_PER_MIB = 1024 * 1024
+BYTES_PER_GB = 1_000_000_000
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -58,8 +60,10 @@ def agentic_cpu_offload_gb(
         for entry in search_space
         if Fields.TP.value in entry
     )
-    proportional_mib = int(Decimal(available_mib) * utilization * tp / max_tp)
-    return proportional_mib // 1024
+    proportional_bytes = (
+        Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / max_tp
+    )
+    return int(proportional_bytes / BYTES_PER_GB)
 
 
 def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:

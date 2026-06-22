@@ -1697,7 +1697,7 @@ class TestGenerateTestConfigSweep:
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
         budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
-        assert budgets == {4: 1157, 8: 2315}
+        assert budgets == {4: 1243, 8: 2486}
 
     def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
         """One server allocation should run the selected concurrency batch."""
