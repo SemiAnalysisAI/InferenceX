@@ -121,13 +121,12 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
             PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo )
             export GPU_MAX_HW_QUEUES=5
             export ATOM_CPU_AFFINITY=1
-        else
+        else #TP+DPA
             PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
         fi
     fi
 fi 
 
-# (srok), split DPA & TBO cases
 DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
@@ -137,7 +136,7 @@ if [ "$DECODE_ENABLE_DP" = "true" ]; then
             DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo )
             export GPU_MAX_HW_QUEUES=5
             export ATOM_CPU_AFFINITY=1
-        else
+        else #TP+DPA
             DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
         fi
     fi
@@ -200,24 +199,6 @@ INFO
 #   rank 1 .. (NODE_OFFSET-1)       -> remaining prefill nodes
 #   rank NODE_OFFSET ..             -> decode nodes
 # =============================================================================
-
-# (srok), temp fix
-_CAR_TARGET="/app/aiter-test/aiter/dist/device_communicators/custom_all_reduce.py"
-if [[ -f "$_CAR_TARGET" ]]; then
-    _TMP_DIR=$(mktemp -d)
-    _AITER_COMMIT="6af67c273d774198e9f5815dbaa93991ffc69602"
-    git -C "$_TMP_DIR" init \
-        && git -C "$_TMP_DIR" remote add origin https://github.com/ROCm/aiter.git \
-        && git -C "$_TMP_DIR" sparse-checkout set aiter/dist/device_communicators/custom_all_reduce.py \
-        && git -C "$_TMP_DIR" fetch --depth 1 origin "$_AITER_COMMIT" \
-        && git -C "$_TMP_DIR" checkout FETCH_HEAD \
-        && cp "$_TMP_DIR/aiter/dist/device_communicators/custom_all_reduce.py" "$_CAR_TARGET" \
-        || echo "[warn] failed to patch custom_all_reduce.py; using existing file"
-    rm -rf "$_TMP_DIR"
-else
-    echo "[warn] $_CAR_TARGET not found; skipping patch"
-fi
-
 if [ "$NODE_RANK" -eq 0 ]; then
     # ──────────────────────────────────────────────────────────────────────────
     # Node 0: prefill server (producer) + atomesh router
