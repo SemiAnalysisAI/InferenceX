@@ -125,7 +125,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
-      enforce-eager: true
+      # enforce-eager: true
       # Inherited from fixed-sequence recipes; let vLLM select the scheduler
       # sequence limit until this is tuned explicitly for the agentic trace.
       # max-num-seqs: 16

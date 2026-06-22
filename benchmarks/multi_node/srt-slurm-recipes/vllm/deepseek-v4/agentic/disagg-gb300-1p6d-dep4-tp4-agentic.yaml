@@ -91,7 +91,7 @@ backend:
       enable-expert-parallel: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       moe-backend: "deep_gemm_mega_moe"
-      enforce-eager: true
+      # enforce-eager: true
       # max-num-seqs: 256
       max-num-batched-tokens: 16384
       trust-remote-code: true

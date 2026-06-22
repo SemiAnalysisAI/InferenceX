@@ -86,7 +86,7 @@ backend:
       data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      enforce-eager: true
+      # enforce-eager: true
       # Inherited from fixed-sequence recipes; let vLLM select the scheduler
       # sequence limit until this is tuned explicitly for the agentic trace.
       # max-num-seqs: 16
