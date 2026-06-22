@@ -185,28 +185,6 @@ install_transformers_glm5() {
     _SETUP_INSTALLED+=("transformers-glm5")
 }
 
-# ---------------------------------------------------------------------------
-# vLLM: Patch MoRIIOConnector for heterogeneous (hybrid sparse-attn) KV caches.
-#
-# MiniMax-M3 registers a bf16 key-only rank-3 lightning-indexer cache alongside
-# the fp8 K+V rank-5 main cache. Upstream MoRIIO derives one uniform block
-# geometry from the first cache and reuses the first layer's transfer offsets
-# for every layer, corrupting the index cache on the decode worker -> garbage
-# output (gsm8k ~= 0). The overlay makes the READ path compute geometry/offsets
-# per layer. Idempotent; no-op on connector versions that don't match.
-# See patches/moriio_heterogeneous_kv.py and patches/README.md.
-# ---------------------------------------------------------------------------
-patch_moriio_heterogeneous_kv() {
-    local patcher
-    patcher="$(dirname "${BASH_SOURCE[0]}")/patches/moriio_heterogeneous_kv.py"
-    if [[ ! -f "$patcher" ]]; then
-        echo "[SETUP] moriio heterogeneous-kv patcher not found, skipping"
-        return 0
-    fi
-    python3 "$patcher" || echo "[SETUP] WARN: moriio heterogeneous-kv patch returned non-zero"
-    _SETUP_INSTALLED+=("moriio-heterogeneous-kv")
-}
-
 # =============================================================================
 # Run installers (engine-gated)
 # =============================================================================
@@ -214,7 +192,6 @@ patch_moriio_heterogeneous_kv() {
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_recipe_deps
     install_amd_quark
-    patch_moriio_heterogeneous_kv
 
     # =========================================================================
     # vLLM: Export UCX/RIXL paths (persists since this file is sourced)
