@@ -4030,6 +4030,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1884
 
 - config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc"
+    - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1810
+
+- config-keys:
     - dsr1-fp4-gb200-dynamo-sglang-powercheck
     - dsr1-fp4-b200-dynamo-sglang-powercheck
   description:
@@ -4040,3 +4048,4 @@
 # re-arm 2026-06-22b: validate perfmon teardown fix (srt-slurm@b9526e5) — probe for pre-existing CG job
 # re-arm 2026-06-22c: cancel+re-arm gamble for a healthy runner — _0 squeue/scancel hang confirmed LIVE (concurrent probe on gb300-nv_2 clean, squeue 37ms, queue empty; _0 wedged 8min in pre-run cleanup with empty queue = host-local slurm-client hang, not a stuck job)
 # re-arm 2026-06-22d: REAL fix (94c2addd) — wedge was the AMD-only `sudo rm benchmark_logs` hanging on GB300 SSSD sudo policy. `timeout 60` sends only SIGTERM; the stuck root sudo ignores it, so timeout waits in sigsuspend forever (process pairs stuck 4+ days, probe 27988714413). Scoped that cleanup to mi* runners + --kill-after; NVIDIA now skips it entirely. (22c "slurm-client hang" was wrong — squeue was always fast; the step label hid the trailing sudo rm.)
+# re-arm 2026-06-22e: fan out to gb200 + b200 (gb300 validated run 27989491427 + graphed)
