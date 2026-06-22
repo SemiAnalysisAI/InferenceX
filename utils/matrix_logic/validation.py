@@ -54,6 +54,7 @@ class Fields(Enum):
     TOTAL_CPU_DRAM_GB = 'total-cpu-dram-gb'
     AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
     CPU_OFFLOAD_UTILIZATION = 'cpu-offload-utilization'
+    GPUS_PER_NODE = 'gpus-per-node'
     DURATION = 'duration'
 
     # Matrix entry fields
@@ -380,6 +381,9 @@ class AgenticCodingConfig(BaseModel):
     cpu_offload_utilization: Optional[float] = Field(
         default=None, alias=Fields.CPU_OFFLOAD_UTILIZATION.value, gt=0, le=1
     )
+    gpus_per_node: Optional[int] = Field(
+        default=None, alias=Fields.GPUS_PER_NODE.value, gt=0
+    )
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
 
     @model_validator(mode='after')
@@ -388,27 +392,40 @@ class AgenticCodingConfig(BaseModel):
         has_node_capacity = (
             self.available_cpu_dram_mib is not None
             and self.cpu_offload_utilization is not None
+            and self.gpus_per_node is not None
         )
         has_partial_node_capacity = (
             self.available_cpu_dram_mib is not None
             or self.cpu_offload_utilization is not None
+            or self.gpus_per_node is not None
         )
         if has_partial_node_capacity and not has_node_capacity:
             raise ValueError(
-                "available-cpu-dram-mib and cpu-offload-utilization must be set together"
+                "available-cpu-dram-mib, cpu-offload-utilization, and "
+                "gpus-per-node must be set together"
             )
         for entry in self.search_space:
+            if (
+                self.gpus_per_node is not None
+                and entry.tp is not None
+                and entry.tp > self.gpus_per_node
+            ):
+                raise ValueError(
+                    f"tp={entry.tp} exceeds gpus-per-node={self.gpus_per_node}"
+                )
             if entry.offloading not in cpu_backends:
                 continue
             if entry.total_cpu_dram_gb > 0 and has_node_capacity:
                 raise ValueError(
                     "CPU offload capacity must use either total-cpu-dram-gb or "
-                    "scenario-level available-cpu-dram-mib and cpu-offload-utilization"
+                    "scenario-level available-cpu-dram-mib, cpu-offload-utilization, "
+                    "and gpus-per-node"
                 )
             if entry.total_cpu_dram_gb <= 0 and not has_node_capacity:
                 raise ValueError(
                     f"offloading={entry.offloading!r} requires total-cpu-dram-gb or "
-                    "scenario-level available-cpu-dram-mib and cpu-offload-utilization"
+                    "scenario-level available-cpu-dram-mib, cpu-offload-utilization, "
+                    "and gpus-per-node"
                 )
         return self
 

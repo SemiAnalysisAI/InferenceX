@@ -20,14 +20,14 @@ declare the node's available host memory and the usable offload fraction:
 - duration: 1800
   available-cpu-dram-mib: 2964436
   cpu-offload-utilization: 0.80
+  gpus-per-node: 8
   search-space:
   - { tp: 4, offloading: cpu, conc-list: [16, 32] }
   - { tp: 8, offloading: none, conc-list: [16, 32] }
 ```
 
-The matrix generator derives the GPU count from the largest `tp` in the search
-space and emits the aggregate budget as
-`floor(available MiB * 1,048,576 * utilization * tp / max_tp / 1,000,000,000)`.
+The matrix generator emits the aggregate budget as
+`floor(available MiB * 1,048,576 * utilization * tp / gpus-per-node / 1,000,000,000)`.
 For example, TP4 in an eight-GPU B300 search receives 1,243 GB while TP8
 receives 2,486 GB.
 Legacy scenarios may continue to specify `total-cpu-dram-gb` per entry.

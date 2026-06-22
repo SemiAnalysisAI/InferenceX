@@ -380,6 +380,7 @@ class TestAgenticMatrixEntries:
         config = AgenticCodingConfig(**{
             "available-cpu-dram-mib": 2964436,
             "cpu-offload-utilization": 0.80,
+            "gpus-per-node": 8,
             "search-space": [{
                 "tp": 4,
                 "offloading": "cpu",
@@ -388,6 +389,7 @@ class TestAgenticMatrixEntries:
         })
         assert config.available_cpu_dram_mib == 2964436
         assert config.cpu_offload_utilization == 0.80
+        assert config.gpus_per_node == 8
 
     def test_node_capacity_fields_must_be_paired(self):
         with pytest.raises(Exception, match="must be set together"):
@@ -396,6 +398,19 @@ class TestAgenticMatrixEntries:
                 "search-space": [{
                     "tp": 4,
                     "offloading": "none",
+                    "conc-list": [16],
+                }],
+            })
+
+    def test_tp_cannot_exceed_gpus_per_node(self):
+        with pytest.raises(Exception, match="exceeds gpus-per-node"):
+            AgenticCodingConfig(**{
+                "available-cpu-dram-mib": 2964436,
+                "cpu-offload-utilization": 0.80,
+                "gpus-per-node": 4,
+                "search-space": [{
+                    "tp": 8,
+                    "offloading": "cpu",
                     "conc-list": [16],
                 }],
             })

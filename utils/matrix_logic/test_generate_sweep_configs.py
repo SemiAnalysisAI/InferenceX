@@ -1663,7 +1663,7 @@ class TestGenerateTestConfigSweep:
         assert result[0]["scenario-type"] == "agentic-coding"
         assert result[0]["total-cpu-dram-gb"] == 1814
 
-    def test_agentic_node_dram_is_normalized_by_tp(self, sample_runner_config):
+    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
         config = {
             "dsv4-b300-agentic": {
                 "image": "vllm/vllm-openai:v0.23.0",
@@ -1678,9 +1678,9 @@ class TestGenerateTestConfigSweep:
                         "duration": 1800,
                         "available-cpu-dram-mib": 2964436,
                         "cpu-offload-utilization": 0.80,
+                        "gpus-per-node": 8,
                         "search-space": [
                             {"tp": 4, "offloading": "cpu", "conc-list": [32]},
-                            {"tp": 8, "offloading": "cpu", "conc-list": [64]},
                         ],
                     }],
                 },
@@ -1697,7 +1697,7 @@ class TestGenerateTestConfigSweep:
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
         budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
-        assert budgets == {4: 1243, 8: 2486}
+        assert budgets == {4: 1243}
 
     def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
         """One server allocation should run the selected concurrency batch."""

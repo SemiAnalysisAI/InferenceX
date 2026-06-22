@@ -40,9 +40,7 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 
-def agentic_cpu_offload_gb(
-    agentic_config: dict, search_space: list[dict], benchmark: dict
-) -> int:
+def agentic_cpu_offload_gb(agentic_config: dict, benchmark: dict) -> int:
     """Return the aggregate CPU offload budget for a single-node entry."""
     offloading = benchmark.get(Fields.OFFLOADING.value, "none")
     if offloading not in CPU_MEMORY_OFFLOAD_MODES:
@@ -54,14 +52,10 @@ def agentic_cpu_offload_gb(
 
     available_mib = agentic_config[Fields.AVAILABLE_CPU_DRAM_MIB.value]
     utilization = Decimal(str(agentic_config[Fields.CPU_OFFLOAD_UTILIZATION.value]))
+    gpus_per_node = agentic_config[Fields.GPUS_PER_NODE.value]
     tp = benchmark[Fields.TP.value]
-    max_tp = max(
-        entry[Fields.TP.value]
-        for entry in search_space
-        if Fields.TP.value in entry
-    )
     proportional_bytes = (
-        Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / max_tp
+        Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / gpus_per_node
     )
     return int(proportional_bytes / BYTES_PER_GB)
 
@@ -436,7 +430,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
-                    else agentic_cpu_offload_gb(agentic_config, bmk_space, bmk)
+                    else agentic_cpu_offload_gb(agentic_config, bmk)
                 )
 
                 # Get concurrency values
@@ -861,7 +855,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
-                    else agentic_cpu_offload_gb(agentic_config, bmk_space, bmk)
+                    else agentic_cpu_offload_gb(agentic_config, bmk)
                 )
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
