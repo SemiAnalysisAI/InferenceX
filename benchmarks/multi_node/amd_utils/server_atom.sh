@@ -201,9 +201,22 @@ INFO
 #   rank NODE_OFFSET ..             -> decode nodes
 # =============================================================================
 
-# (srok), temp fix 
-curl -fsSL "https://raw.githubusercontent.com/ROCm/aiter/Jasen/fix_custom_allreduce/aiter/dist/device_communicators/custom_all_reduce.py" \
-    -o /app/aiter-test/aiter/dist/device_communicators/custom_all_reduce.py
+# (srok), temp fix
+_CAR_TARGET="/app/aiter-test/aiter/dist/device_communicators/custom_all_reduce.py"
+if [[ -f "$_CAR_TARGET" ]]; then
+    _TMP_DIR=$(mktemp -d)
+    _AITER_COMMIT="6af67c273d774198e9f5815dbaa93991ffc69602"
+    git -C "$_TMP_DIR" init \
+        && git -C "$_TMP_DIR" remote add origin https://github.com/ROCm/aiter.git \
+        && git -C "$_TMP_DIR" sparse-checkout set aiter/dist/device_communicators/custom_all_reduce.py \
+        && git -C "$_TMP_DIR" fetch --depth 1 origin "$_AITER_COMMIT" \
+        && git -C "$_TMP_DIR" checkout FETCH_HEAD \
+        && cp "$_TMP_DIR/aiter/dist/device_communicators/custom_all_reduce.py" "$_CAR_TARGET" \
+        || echo "[warn] failed to patch custom_all_reduce.py; using existing file"
+    rm -rf "$_TMP_DIR"
+else
+    echo "[warn] $_CAR_TARGET not found; skipping patch"
+fi
 
 if [ "$NODE_RANK" -eq 0 ]; then
     # ──────────────────────────────────────────────────────────────────────────
