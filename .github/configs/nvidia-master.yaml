@@ -1770,7 +1770,7 @@ dsv4-fp4-b200-vllm-agentic:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 3774874
+      available-cpu-dram-mib: 3_774_874
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
@@ -2987,7 +2987,7 @@ dsv4-fp4-b300-vllm-agentic:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 2964436
+      available-cpu-dram-mib: 2_964_436
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
@@ -12738,7 +12738,7 @@ dsv4-fp4-b200-sglang-agentic-hicache:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 3774874
+      available-cpu-dram-mib: 3_774_874
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
@@ -12761,7 +12761,7 @@ dsv4-fp4-b300-sglang-agentic-hicache:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 2964436
+      available-cpu-dram-mib: 2_964_436
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
