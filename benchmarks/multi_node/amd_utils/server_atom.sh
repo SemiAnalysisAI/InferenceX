@@ -201,6 +201,10 @@ INFO
 #   rank NODE_OFFSET ..             -> decode nodes
 # =============================================================================
 
+# (srok), temp fix 
+curl -fsSL "https://raw.githubusercontent.com/ROCm/aiter/Jasen/fix_custom_allreduce/aiter/dist/device_communicators/custom_all_reduce.py" \
+    -o /app/aiter-test/aiter/dist/device_communicators/custom_all_reduce.py
+
 if [ "$NODE_RANK" -eq 0 ]; then
     # ──────────────────────────────────────────────────────────────────────────
     # Node 0: prefill server (producer) + atomesh router
