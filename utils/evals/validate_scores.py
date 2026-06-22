@@ -200,6 +200,8 @@ def main() -> int:
         try:
             _stream.reconfigure(line_buffering=True)
         except (AttributeError, ValueError):
+            # Best-effort only: some wrapped streams (e.g. pytest's capture
+            # object) don't support reconfigure; leave their buffering as-is.
             pass
 
     parser = argparse.ArgumentParser(description="Validate eval scores")
