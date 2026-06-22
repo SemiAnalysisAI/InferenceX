@@ -208,12 +208,19 @@ Keep exactly one of `full-sweep-enabled`,
 ## 5. Append the recovery changelog and validate source artifacts
 
 Append recovery entries to the end of `perf-changelog.yaml`. Preserve the
-original entries' `config-keys`, `evals-only`, and `scenario-type` shape so the
-recovery targets the same configuration scope. The current generator may
-produce a different matrix; that does not invalidate reuse. Use the new recovery
-PR URL and state clearly that this is an artifact-only ingest recovery. This is
-not a transient trigger: `InferenceX-app` ingests and displays the entry, so it
-must remain in the append-only changelog after recovery.
+original entries' `config-keys`, `description`, `evals-only`, and
+`scenario-type` values so the recovery targets the same scope and the
+`InferenceX-app` changelog UI shows the meaningful configuration change. Copy
+each original description verbatim; put source-run IDs and recovery/retrigger
+details in the recovery PR body and final audit comment instead. Use the new
+recovery PR URL. The current generator may produce a different matrix; that does
+not invalidate reuse.
+
+This is not a transient trigger: `InferenceX-app` persists and displays the
+entry, so it must remain in the append-only changelog. Changing a description
+after ingest does not update the UI: historical changelog entries are immutable,
+and app ingest leaves an existing `(workflow_run_id, base_ref, head_ref)` row
+unchanged. Existing UI text requires an explicit database correction.
 
 Commit without `[skip-sweep]`:
 
