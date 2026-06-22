@@ -135,6 +135,9 @@ if [ "$DP_ATTENTION" = "true" ]; then
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
     )
+    if [ "$TP" -eq 4 ]; then
+        PARALLEL_ARGS+=(--disable-overlap-schedule)
+    fi
     MEM_FRACTION_STATIC=0.88
     CHUNKED_PREFILL_SIZE=16384
 else
