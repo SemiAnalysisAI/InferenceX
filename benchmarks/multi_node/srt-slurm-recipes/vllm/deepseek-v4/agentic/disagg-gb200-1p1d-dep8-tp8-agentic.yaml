@@ -95,7 +95,6 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
-      moe-backend: "deep_gemm_mega_moe"
       enforce-eager: true
       max-num-seqs: 256
       max-num-batched-tokens: 32768

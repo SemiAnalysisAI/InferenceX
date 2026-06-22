@@ -770,7 +770,7 @@ the high-reuse steady state.
 Added a separate 1P/1D DEP8-prefill experiment using 16 inference GPUs. It
 keeps Dynamo KV routing, prefix caching, the 32K retention interval, KV event
 publication, and the validated TP8 decode path. Its prefill follows the repo's
-existing vLLM DEP pattern (`TP1 x DP8`, EP8, `deep_gemm_mega_moe`) and raises
+existing vLLM DEP pattern (`TP1 x DP8`, EP8) and raises
 the prefill batch-token ceiling from 16K to 32K. This tests whether eight-way
 attention parallelism can improve raw prefill throughput enough to offset the
 expected per-rank load-balance and cache-affinity penalty.
@@ -788,3 +788,11 @@ every discovered worker's vLLM running/waiting gauges between points. It
 requires three consecutive idle polls before continuing, waits up to 30
 minutes by default, and fails rather than contaminating the next result if the
 system cannot drain. It does not clear KV state.
+
+The first DEP8 bring-up (`27925198626`, Slurm `19547`) failed during model
+load with `KeyError: layers.0.ffn.experts.w13_input_scale`. EP filtering had
+already selected the expected 48/384 experts per rank. The failure came from
+the explicitly inherited `deep_gemm_mega_moe` loader, whose expected scale
+layout does not match the current v0.23 NVFP4 checkpoint. The override was
+removed so DEP8 uses the same checkpoint-compatible default MoE backend as the
+successful TEP8 recipes; no topology or cache setting changed.
