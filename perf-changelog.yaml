@@ -4037,3 +4037,4 @@
     - "Success criteria: job green AND the agg JSON patched with avg_power_w + per-stage prefill_avg_power_w/decode_avg_power_w + workers[] (role-labelled prefill/decode) from utils/aggregate_power.py. If those fields are absent the plumbing is not yet proven and the full dsr1-disagg-NVIDIA sweep stays gated. Remove this key (or keep as a GB300 power canary) once validated."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1791
 # re-arm 2026-06-22b: validate perfmon teardown fix (srt-slurm@b9526e5) — probe for pre-existing CG job
+# re-arm 2026-06-22c: cancel+re-arm gamble for a healthy runner — _0 squeue/scancel hang confirmed LIVE (concurrent probe on gb300-nv_2 clean, squeue 37ms, queue empty; _0 wedged 8min in pre-run cleanup with empty queue = host-local slurm-client hang, not a stuck job)
