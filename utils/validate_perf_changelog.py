@@ -297,20 +297,32 @@ def validate_raw_change(
         )
 
 
-def validate_generated_config(base_ref: str, head_ref: str, path: str) -> None:
+def validate_generated_config(
+    base_ref: str,
+    head_ref: str,
+    path: str,
+    *,
+    all_evals: bool = False,
+    evals_only: bool = False,
+) -> None:
     """Run the same changelog processor used by sweep setup."""
     processor = Path(__file__).with_name("process_changelog.py")
+    command = [
+        sys.executable,
+        str(processor),
+        "--changelog-file",
+        path,
+        "--base-ref",
+        base_ref,
+        "--head-ref",
+        head_ref,
+    ]
+    if all_evals:
+        command.append("--all-evals")
+    if evals_only:
+        command.append("--evals-only")
     result = subprocess.run(
-        [
-            sys.executable,
-            str(processor),
-            "--changelog-file",
-            path,
-            "--base-ref",
-            base_ref,
-            "--head-ref",
-            head_ref,
-        ],
+        command,
         capture_output=True,
         text=True,
     )
@@ -331,6 +343,9 @@ def validate_matrix_compatible_change(
     base_ref: str,
     head_ref: str,
     path: str,
+    *,
+    all_evals: bool = False,
+    evals_only: bool = False,
 ) -> None:
     """Validate the final newline and the diff accepted by sweep setup."""
     head_raw = read_git_file(head_ref, path)
@@ -339,7 +354,13 @@ def validate_matrix_compatible_change(
             f"{path} at {head_ref} does not end with a newline"
         )
 
-    validate_generated_config(base_ref, head_ref, path)
+    validate_generated_config(
+        base_ref,
+        head_ref,
+        path,
+        all_evals=all_evals,
+        evals_only=evals_only,
+    )
 
 
 def main() -> int:
@@ -348,6 +369,8 @@ def main() -> int:
     parser.add_argument("--base-ref", required=True)
     parser.add_argument("--head-ref", required=True)
     parser.add_argument("--changelog-file", default="perf-changelog.yaml")
+    parser.add_argument("--all-evals", action="store_true")
+    parser.add_argument("--evals-only", action="store_true")
     args = parser.parse_args()
 
     try:
@@ -355,6 +378,8 @@ def main() -> int:
             args.base_ref,
             args.head_ref,
             args.changelog_file,
+            all_evals=args.all_evals,
+            evals_only=args.evals_only,
         )
     except ChangelogValidationError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
