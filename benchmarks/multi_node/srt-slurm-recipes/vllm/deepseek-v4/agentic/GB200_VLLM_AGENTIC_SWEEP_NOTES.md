@@ -753,3 +753,24 @@ while the first production 2P/1D batch is the end-to-end validation.
 The B200 database baseline was re-queried before the high-throughput launch.
 Workflow `2022` c196 with offload remains the normalized target at 113,671.86
 tok/s total and 14,208.98 tok/s/GPU (15.526s mean TTFT, 279.09ms mean TPOT).
+
+## High-Concurrency Server-Reuse Run
+
+Official run `27922709353` uses one 2P/1D allocation for c128, c160, c192,
+and c256. The first point completed successfully but established that c128 is
+already deep overload for this topology: 59,345.29 tok/s total, 2,472.72
+tok/s/GPU, 337.97s mean TTFT, and 21.82% aggregate server GPU cache hit rate.
+The theoretical trace reuse remained 96.65%. Decode generally had only 6--28
+running requests and roughly 15--30% KV usage; both prefills stayed near 20%
+KV usage. There were no NIXL errors, and all decode ranks passed compatibility
+checks. This rules out decode saturation and KV-capacity thrashing at c128;
+the fixed-duration run admitted too many distinct long trajectories to reach
+the high-reuse steady state.
+
+Added a separate 1P/1D DEP8-prefill experiment using 16 inference GPUs. It
+keeps Dynamo KV routing, prefix caching, the 32K retention interval, KV event
+publication, and the validated TP8 decode path. Its prefill follows the repo's
+existing vLLM DEP pattern (`TP1 x DP8`, EP8, `deep_gemm_mega_moe`) and raises
+the prefill batch-token ceiling from 16K to 32K. This tests whether eight-way
+attention parallelism can improve raw prefill throughput enough to offset the
+expected per-rank load-balance and cache-affinity penalty.
