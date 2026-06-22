@@ -18,30 +18,51 @@ on:
 jobs:
   probe:
     runs-on: ${{ github.event.inputs.runner || 'gb300-nv' }}
-    timeout-minutes: 8
+    timeout-minutes: 5
     steps:
-      - name: dump slurm state
+      - name: isolate pre-run cleanup wedge
         run: |
           set +e
-          echo "=== runner=$RUNNER_NAME  host=$(hostname)  utc=$(date -u) ==="
+          run_probe() {
+            label="$1"
+            shift
+            echo "=== BEGIN ${label} utc=$(date -u +%FT%TZ) ==="
+            start=$SECONDS
+            timeout --kill-after=3s 10s "$@"
+            rc=$?
+            echo "=== END ${label} rc=${rc} elapsed=$((SECONDS - start))s utc=$(date -u +%FT%TZ) ==="
+            echo
+          }
+
+          echo "=== runner=$RUNNER_NAME host=$(hostname -f 2>/dev/null || hostname) utc=$(date -u +%FT%TZ) ==="
+          echo "workspace=$GITHUB_WORKSPACE"
+          echo "user=$(id)"
           echo
-          echo "=== [1] squeue --name=$RUNNER_NAME  (exactly what the cleanup drain checks) ==="
-          echo "    (timeout-wrapped: if squeue HANGS, we see rc=124 instead of blocking)"
-          time timeout 30 squeue --name="$RUNNER_NAME"
-          echo "    rc=$?"
+
+          echo "=== pre-existing blocked cleanup processes ==="
+          ps -eo stat,wchan:32,etime,pid,ppid,comm,args | \
+            awk 'NR == 1 || $1 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
           echo
-          echo "=== [2] full squeue (whole cluster queue) ==="
-          timeout 30 squeue
-          echo "    rc=$?"
+
+          run_probe "squeue-by-runner" squeue --name="$RUNNER_NAME" --noheader --format=%i
+          run_probe "full-squeue" squeue
+          run_probe "completing-jobs" squeue --states=CG,CF,CD --noheader
+
+          echo "=== workspace mount candidates (read from /proc; no mount traversal) ==="
+          awk -v p="$GITHUB_WORKSPACE" '$2 == p || index(p, $2 "/") == 1 {print}' /proc/mounts
           echo
-          echo "=== [3] CG / completing jobs anywhere (the 'zombie' state) ==="
-          timeout 30 squeue --states=CG,CF,CD --noheader || true
-          echo "    (empty above = no completing/zombie jobs)"
+
+          run_probe "findmnt-workspace" findmnt -T "$GITHUB_WORKSPACE" -o TARGET,SOURCE,FSTYPE,OPTIONS
+          run_probe "stat-workspace" stat "$GITHUB_WORKSPACE"
+          run_probe "sudo-noninteractive" sudo -n true
+          run_probe "stat-benchmark-logs" sudo -n stat "$GITHUB_WORKSPACE/benchmark_logs"
+          run_probe "safe-rm-nonexistent" sudo -n rm -rf "$GITHUB_WORKSPACE/.slurm-probe-nonexistent-$GITHUB_RUN_ID"
+
+          echo "=== benchmark_logs traversal is last: a stale NFS inode may be unkillable ==="
+          run_probe "find-benchmark-logs" sudo -n find "$GITHUB_WORKSPACE/benchmark_logs" -maxdepth 3 -printf '%y %p\n'
+
+          echo "=== final blocked-process snapshot ==="
+          ps -eo stat,wchan:32,etime,pid,ppid,comm,args | \
+            awk 'NR == 1 || $1 ~ /^D/ || $0 ~ /(squeue|scancel|sudo rm|rm -rf).*benchmark_logs/'
           echo
-          echo "=== [4] my own jobs (by user) ==="
-          timeout 30 squeue --user="$(whoami)" || true
-          echo
-          echo "=== [5] this node's state ==="
-          timeout 30 scontrol show node "$(hostname)" 2>/dev/null | head -25 || true
-          echo
-          echo "=== done ==="
+          echo "=== done utc=$(date -u +%FT%TZ) ==="
