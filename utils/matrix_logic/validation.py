@@ -181,7 +181,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     runner: str
     prefill: WorkerConfig
     decode: WorkerConfig
-    conc: int
+    conc: list[int]
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool

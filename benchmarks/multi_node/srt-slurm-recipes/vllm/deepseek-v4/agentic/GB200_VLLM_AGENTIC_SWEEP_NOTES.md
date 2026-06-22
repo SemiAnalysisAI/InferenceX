@@ -708,3 +708,48 @@ the previous GB200 best (3P/2D c80 at 6,709 tok/s/GPU). Decode metrics showed
 roughly 35--52 running requests and up to 89% KV usage while prefills were
 usually lightly queued, so the wider high-throughput search retains one decode
 and sweeps concurrency rather than adding decode GPUs preemptively.
+
+## Server-Reuse Concurrency Batches
+
+Multi-node agentic matrix entries now retain each search entry's concurrency
+list instead of expanding it into one GitHub/Slurm job per point. The custom
+benchmark installs AIPerf once, then runs every concurrency sequentially
+against the same healthy server allocation. Each point gets its own result
+directory, command log, raw artifacts, and aggregate JSON; the workflow checks
+that the number of successful aggregates equals the requested concurrency
+count and uploads all of them under the normal official artifact paths.
+
+This does not inherit warmed trajectory prefixes across points. The locked
+AgentX scenario injects `first_turn_prefix` cache-bust markers, and their digest
+includes AIPerf's automatically generated per-invocation benchmark UUID. Each
+concurrency process therefore occupies a disjoint KV keyspace, while that
+process's warmup and measured phases intentionally share markers. Conversation
+correlation IDs are also unique per invocation and completed trajectories emit
+Dynamo session `close`. Old cache blocks are naturally evictable and cannot
+match a later point's salted prefix.
+
+The 2P/1D and 3P/1D grids are split into low, mid, and high-concurrency batches
+of four points. This caps the number of sequential profiles sharing an engine
+allocation and bounds the cost of a late benchmark failure or engine
+degradation. Each allocation stays below the eight-hour Actions limit: two
+hours of measured profile time plus one engine startup and per-point
+warmup/drain. This replaces twelve 30-minute model startups per topology with
+three, without weakening per-point artifact or cache-isolation semantics.
+
+The generator also enforces a maximum of four sequential concurrency points
+per multi-node agentic allocation. This applies to pre-existing configurations
+as well as the new one-decode grids, preventing an unrelated long concurrency
+list from silently becoming one oversized server-reuse batch.
+
+Manual GB200 mocker jobs `19542`--`19544` exercised the production custom
+benchmark launch and discovered the frontend plus all three worker metrics
+endpoints in topology order. The mocker could not complete an AgentX
+trajectory: its disaggregated prefill worker advertised the cross-node
+bootstrap endpoint as `127.0.1.1:7200`, so decode failed to connect. This is a
+mocker-only transport limitation, not the production vLLM/NIXL path; the
+grouped shell loop remains covered by a local stub execution and matrix tests,
+while the first production 2P/1D batch is the end-to-end validation.
+
+The B200 database baseline was re-queried before the high-throughput launch.
+Workflow `2022` c196 with offload remains the normalized target at 113,671.86
+tok/s total and 14,208.98 tok/s/GPU (15.526s mean TTFT, 279.09ms mean TPOT).

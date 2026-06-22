@@ -1663,6 +1663,50 @@ class TestGenerateTestConfigSweep:
         assert result[0]["scenario-type"] == "agentic-coding"
         assert result[0]["total-cpu-dram-gb"] == 1814
 
+    def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
+        """One server allocation should run the selected concurrency batch."""
+        config = {
+            "dsv4-agentic-2p1d": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "dynamo-vllm",
+                "runner": "gb200",
+                "multinode": True,
+                "disagg": True,
+                "scenarios": {
+                    "agentic-coding": [
+                        {
+                            "duration": 1800,
+                            "search-space": [
+                                {
+                                    "conc-list": [16, 32, 64, 128, 256],
+                                    "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                    "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-agentic-2p1d"],
+            seq_lens=None,
+            conc=[16, 32, 64, 128, 256],
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config)
+
+        assert len(result) == 2
+        assert result[0]["conc"] == [16, 32, 64, 128]
+        assert result[0]["exp-name"] == "dsv4_p2x8_d1x8_conc16x32x64x128"
+        assert result[1]["conc"] == [256]
+        assert result[1]["exp-name"] == "dsv4_p2x8_d1x8_conc256"
+
 
 # =============================================================================
 # Test apply_node_type_defaults

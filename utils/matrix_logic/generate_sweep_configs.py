@@ -21,6 +21,7 @@ seq_len_stoi = {
 }
 
 MIN_EVAL_CONC = 16
+MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -33,6 +34,12 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
+
+def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
+    """Bound sequential agentic profiles sharing one server allocation."""
+    size = MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION
+    return [conc_values[index:index + size] for index in range(0, len(conc_values), size)]
 
 
 def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
@@ -425,9 +432,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                 runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                for conc in conc_values:
+                if is_multinode:
                     for runner_value in runners_for_entry:
-                        if is_multinode:
+                        for conc_batch in chunk_multinode_agentic_concurrencies(conc_values):
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -438,16 +445,21 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
-                                Fields.CONC.value: conc,
+                                Fields.CONC.value: conc_batch,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_conc{conc}"
+                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
+                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-                        else:
+                            validate_agentic_matrix_entry(entry)
+                            matrix_values.append(entry)
+                else:
+                    for conc in conc_values:
+                        for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -465,9 +477,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-
-                        validate_agentic_matrix_entry(entry)
-                        matrix_values.append(entry)
+                            validate_agentic_matrix_entry(entry)
+                            matrix_values.append(entry)
 
     return matrix_values
 
@@ -835,9 +846,9 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 if not conc_values:
                     continue
 
-                for conc in conc_values:
+                if is_multinode:
                     for runner_value in runners_for_entry:
-                        if is_multinode:
+                        for conc_batch in chunk_multinode_agentic_concurrencies(conc_values):
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -848,16 +859,20 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
-                                Fields.CONC.value: conc,
+                                Fields.CONC.value: conc_batch,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_conc{conc}"
+                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
+                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-                        else:
+                            matrix_values.append(validate_agentic_matrix_entry(entry))
+                else:
+                    for conc in conc_values:
+                        for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -875,7 +890,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-                        matrix_values.append(validate_agentic_matrix_entry(entry))
+                            matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values
 

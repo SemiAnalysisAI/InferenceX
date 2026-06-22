@@ -97,7 +97,7 @@ on:
         required: false
         default: fixed-seq-len
       conc:
-        description: "Concurrency for agentic-coding scenarios (single value per matrix entry)"
+        description: "First concurrency for agentic-coding scenarios; CONC_LIST carries the full batch"
         type: string
         required: false
         default: ""
@@ -223,22 +223,25 @@ jobs:
               exit 1
             fi
           elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
-            if [ -f "${RESULT_FILENAME}.json" ]; then
-              echo "Found agentic result file: ${RESULT_FILENAME}.json"
-              # Existence is not enough: process_agentic_result.py writes the
-              # aggregate even when aiperf recorded zero valid requests (e.g.
-              # the server 500'd every request — gb200 R8 went green on an
-              # all-null result this way). Require at least one successful
-              # request.
-              ok=$(python3 -c "import json,sys; d=json.load(open('${RESULT_FILENAME}.json')); print(int(bool(d.get('num_requests_successful'))))" 2>/dev/null || echo 0)
-              if [ "$ok" != "1" ]; then
-                echo "Run failed: ${RESULT_FILENAME}.json has zero successful requests." >&2
-                exit 1
-              fi
-            else
-              echo "Run failed: Agentic benchmark result ${RESULT_FILENAME}.json not found." >&2
+            expected_count=$(wc -w <<< "$CONC_LIST" | tr -d ' ')
+            shopt -s nullglob
+            agentic_results=("${RESULT_FILENAME}"_conc*.json)
+            shopt -u nullglob
+            if [ "${#agentic_results[@]}" -ne "$expected_count" ]; then
+              echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
               exit 1
             fi
+            # Existence is not enough: process_agentic_result.py writes the
+            # aggregate even when aiperf recorded zero valid requests. Require
+            # successful requests in every concurrency result.
+            for result_file in "${agentic_results[@]}"; do
+              echo "Found agentic result file: $result_file"
+              ok=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get('num_requests_successful'))))" "$result_file" 2>/dev/null || echo 0)
+              if [ "$ok" != "1" ]; then
+                echo "Run failed: $result_file has zero successful requests." >&2
+                exit 1
+              fi
+            done
           else
             # Check if at least one result file was created
             if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
@@ -296,7 +299,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}.json
+          path: ${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -304,12 +307,12 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            LOGS/agentic/benchmark.log
-            LOGS/agentic/benchmark_command.txt
-            LOGS/agentic/workload_distribution_summary.txt
-            LOGS/agentic/workload_distribution_plots.png
-            LOGS/agentic/aiperf_artifacts/detailed_results.csv
-            LOGS/agentic/aiperf_artifacts/debug_trace.jsonl
+            LOGS/agentic/conc_*/benchmark.log
+            LOGS/agentic/conc_*/benchmark_command.txt
+            LOGS/agentic/conc_*/workload_distribution_summary.txt
+            LOGS/agentic/conc_*/workload_distribution_plots.png
+            LOGS/agentic/conc_*/aiperf_artifacts/detailed_results.csv
+            LOGS/agentic/conc_*/aiperf_artifacts/debug_trace.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)
