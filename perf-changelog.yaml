@@ -4023,7 +4023,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1824
 
 - config-keys:
-    - dsv4-fp4-mi355x-sglang-disagg
+    - dsv4-fp4-mi355x-atom-disagg
   description:
-    - "init submission of dsv4 sglang disagg "
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1818
+    - "Eval-only all-evals run to validate reduced ATOM multinode logging (VLLM_LOGGING_LEVEL + uvicorn/atomesh)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1882
