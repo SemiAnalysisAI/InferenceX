@@ -192,7 +192,7 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Eval Modifiers
 
-Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration. Each multi-node engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same engine. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Runs with either modifier are not eligible for artifact reuse.
+Apply `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection to every generated fixed-sequence configuration. Each multi-node engine topology gets one eval job that runs every distinct value in its `conc-list` sequentially against the same engine. `evals-only` suppresses throughput jobs while keeping the selected eval subset; combining both runs every eval and no throughput. The primary label still controls canary and fail-fast behavior. Default full sweeps remain eligible for reuse, including their selected eval subset; runs with either modifier are not eligible. See the [eval reuse contract](../../utils/evals/EVALS.md#artifact-reuse).
 
 ## Reusing an Approved PR Full Sweep
 
@@ -241,11 +241,16 @@ On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
 commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
 run for the same PR, downloads the ingest-relevant artifacts, validates their
 internal consistency, and uploads them as `reused-ingest-artifacts`. The source
-run is authoritative, so matrix-generation policy changes between the PR sweep
-and merge do not invalidate reuse. The normal database ingest then publishes
-those artifacts with the merge run's changelog metadata. Duplicate identities,
-malformed eval metadata, and disagreement between raw and aggregate artifacts
-are still rejected.
+run is authoritative for benchmark, agentic, and eval coverage, so matrix or
+eval-selection policy changes between the PR sweep and merge do not invalidate
+reuse. The normal database ingest then publishes those artifacts with the merge
+run's changelog metadata.
+
+For evals, raw result artifacts and `eval_results_all` must contain the same
+logical identities. Batched artifacts contribute the points listed in
+`completed_eval_concs`; points listed only as failed are not expected. Missing
+or invalid raw `meta_env.json`, duplicate identities, and raw/aggregate
+disagreement fail validation.
 
 Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier

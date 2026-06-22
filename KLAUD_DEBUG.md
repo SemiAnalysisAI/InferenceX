@@ -212,8 +212,10 @@ match a matrix regenerated from the merge commit. A generator-policy change
 between the PR sweep and merge therefore does not require another GPU sweep.
 
 Raw and aggregate eval identities must still match, as must agentic point/raw
-artifacts and summaries. Malformed metadata, duplicate identities, or
-internally incomplete artifacts still fail reuse.
+artifacts and summaries. Batched eval identities come from
+`completed_eval_concs`, so an explicitly pinned failed run may reuse only the
+points it completed. Missing or invalid metadata, duplicate identities, and
+raw/aggregate disagreement still fail reuse.
 
 ---
 

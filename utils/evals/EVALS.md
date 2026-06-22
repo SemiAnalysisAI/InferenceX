@@ -21,9 +21,17 @@ Generator eval modes:
 
 The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
 
-For PR validation, add `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection for every appended changelog entry without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset. Combining both runs every fixed-sequence eval and no throughput. Runs with either modifier are not eligible for full-sweep artifact reuse.
+For PR validation, add `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection for every appended changelog entry without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset. Combining both runs every fixed-sequence eval and no throughput. Default full sweeps remain eligible for reuse, including their selected eval subset; runs with either modifier are not eligible.
 
 When multiple appended changelog entries reference the same config, benchmark deduplication is scenario-aware: a `fixed-seq-len` entry does not suppress a separate `agentic-coding` entry. Eval deduplication only consumes fixed-sequence coverage, and a broader `all-evals` entry takes precedence over the default eval subset for overlapping configs.
+
+### Artifact reuse
+
+Merge-time reuse treats the source PR run's eval coverage as authoritative. It does not regenerate an expected eval matrix, so eval-selection policy changes between the PR sweep and merge do not require another GPU run.
+
+Reuse downloads both the raw eval result artifacts and `eval_results_all`. Logical identities are derived from each raw artifact's `meta_env.json` and must match the aggregate exactly. Batched artifacts expand from `completed_eval_concs`, so an explicitly pinned failed run can reuse its completed points without requiring failed points. Missing or invalid metadata, duplicate identities, and raw/aggregate disagreement fail validation.
+
+See [Reusing an Approved PR Full Sweep](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for authorization, source-run selection, and merge behavior.
 
 ## Why?
 To verify how model outputs are affected by throughput optimizations.

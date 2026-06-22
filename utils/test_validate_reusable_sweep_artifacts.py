@@ -100,14 +100,21 @@ def multinode_eval_result(conc: int) -> dict:
 def write_raw_batched_eval_artifact(
     root: Path,
     concs: list[int],
+    *,
+    completed_concs: list[int] | None = None,
+    failed_concs: list[int] | None = None,
 ) -> None:
     artifact_dir = root / "eval_gptoss_8k1k_batch"
     artifact_dir.mkdir()
     meta = multinode_eval_result(concs[0])
     meta["infmax_model_prefix"] = meta.pop("model_prefix")
     meta["eval_concs"] = concs
-    meta["completed_eval_concs"] = concs
-    meta["failed_eval_concs"] = []
+    meta["completed_eval_concs"] = (
+        concs if completed_concs is None else completed_concs
+    )
+    meta["failed_eval_concs"] = (
+        [] if failed_concs is None else failed_concs
+    )
     (artifact_dir / "meta_env.json").write_text(json.dumps(meta))
 
 
@@ -311,6 +318,25 @@ def test_eval_validation_expands_one_batched_multinode_artifact(
         [multinode_eval_result(conc) for conc in concs],
     )
     write_raw_batched_eval_artifact(tmp_path, concs)
+
+    assert validate_eval_artifacts(tmp_path) == []
+
+
+def test_eval_validation_accepts_completed_points_from_failed_batch(
+    tmp_path: Path,
+) -> None:
+    requested_concs = [4, 16, 64]
+    completed_concs = [4, 64]
+    write_eval_aggregate(
+        tmp_path,
+        [multinode_eval_result(conc) for conc in completed_concs],
+    )
+    write_raw_batched_eval_artifact(
+        tmp_path,
+        requested_concs,
+        completed_concs=completed_concs,
+        failed_concs=[16],
+    )
 
     assert validate_eval_artifacts(tmp_path) == []
 
