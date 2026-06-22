@@ -1,0 +1,47 @@
+name: slurm-probe
+
+# Diagnostic: run `squeue` directly on an NVIDIA runner and print it to the
+# GitHub logs. This is a PLAIN job, so it does NOT include the wedge-prone
+# "Slurm cleanup (pre-run)" step (that only lives in the benchmark template) —
+# it just lands on the runner and dumps the Slurm queue. Gives us cluster
+# visibility via the runner, no SSH needed.
+
+on:
+  push:
+    branches: [chore/slurm-probe]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: "runner label to probe (e.g. gb300-nv, gb200-nv)"
+        default: gb300-nv
+
+jobs:
+  probe:
+    runs-on: ${{ github.event.inputs.runner || 'gb300-nv' }}
+    timeout-minutes: 8
+    steps:
+      - name: dump slurm state
+        run: |
+          set +e
+          echo "=== runner=$RUNNER_NAME  host=$(hostname)  utc=$(date -u) ==="
+          echo
+          echo "=== [1] squeue --name=$RUNNER_NAME  (exactly what the cleanup drain checks) ==="
+          echo "    (timeout-wrapped: if squeue HANGS, we see rc=124 instead of blocking)"
+          time timeout 30 squeue --name="$RUNNER_NAME"
+          echo "    rc=$?"
+          echo
+          echo "=== [2] full squeue (whole cluster queue) ==="
+          timeout 30 squeue
+          echo "    rc=$?"
+          echo
+          echo "=== [3] CG / completing jobs anywhere (the 'zombie' state) ==="
+          timeout 30 squeue --states=CG,CF,CD --noheader || true
+          echo "    (empty above = no completing/zombie jobs)"
+          echo
+          echo "=== [4] my own jobs (by user) ==="
+          timeout 30 squeue --user="$(whoami)" || true
+          echo
+          echo "=== [5] this node's state ==="
+          timeout 30 scontrol show node "$(hostname)" 2>/dev/null | head -25 || true
+          echo
+          echo "=== done ==="
