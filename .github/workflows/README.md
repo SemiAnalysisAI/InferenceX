@@ -222,7 +222,7 @@ or failed run, pin the source run explicitly:
 
 Only an explicitly pinned run may have a `failure` conclusion. An unpinned
 command always selects the latest successful eligible run. Pinned failed runs
-must still contain complete artifacts for the merge run's expected matrix.
+must still contain readable, internally consistent artifacts.
 
 The comment is the reuse authorization, so adding it does not trigger or cancel
 a PR sweep. Once the comment is present, later commits pushed to a PR with a
@@ -239,12 +239,13 @@ waits for the PR checks before merging.
 
 On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
 commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
-run for the same PR, downloads the ingest-relevant artifacts, validates that
-fixed-sequence, agentic, and eval-only artifacts exactly match the merge run's
-expected matrix, and uploads them as `reused-ingest-artifacts`. The normal
-database ingest then publishes those artifacts with the merge run's changelog
-metadata. Duplicate fixed-sequence, agentic, eval, or raw eval identities are
-rejected rather than collapsed during that comparison.
+run for the same PR, downloads the ingest-relevant artifacts, validates their
+internal consistency, and uploads them as `reused-ingest-artifacts`. The source
+run is authoritative, so matrix-generation policy changes between the PR sweep
+and merge do not invalidate reuse. The normal database ingest then publishes
+those artifacts with the merge run's changelog metadata. Duplicate identities,
+malformed eval metadata, and disagreement between raw and aggregate artifacts
+are still rejected.
 
 Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
 The most recent matching comment wins, so a maintainer can supersede an earlier
