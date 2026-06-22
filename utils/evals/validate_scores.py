@@ -191,6 +191,17 @@ def validate_batch_manifest(
 
 
 def main() -> int:
+    # CI merges this script's stdout and stderr into a single log.  When stdout
+    # is a pipe it is block-buffered by default and only flushes at exit, which
+    # pushes the informational header (e.g. "Loaded thresholds...") below the
+    # unbuffered stderr FAIL lines.  Force line buffering on both streams so
+    # every line reaches the log in emission order.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError):
+            pass
+
     parser = argparse.ArgumentParser(description="Validate eval scores")
     parser.add_argument(
         "--min-score", type=float, default=0.85,
@@ -285,6 +296,8 @@ def main() -> int:
             )
 
     for f in result_files:
+        match = CONC_SUFFIX_RE.search(Path(f).name)
+        conc_label = f"[conc={match.group(1)}] " if match else ""
         with open(f) as fh:
             data = json.load(fh)
         for task, metrics in data.get("results", {}).items():
@@ -297,12 +310,14 @@ def main() -> int:
                 checked += 1
                 if val < min_score:
                     print(
-                        f"FAIL: {task} {name} = {val:.4f} (< {min_score} from {source})",
+                        f"FAIL: {conc_label}{task} {name} = {val:.4f} (< {min_score} from {source})",
                         file=sys.stderr,
                     )
                     failed = True
                 else:
-                    print(f"PASS: {task} {name} = {val:.4f} (>= {min_score} from {source})")
+                    print(
+                        f"PASS: {conc_label}{task} {name} = {val:.4f} (>= {min_score} from {source})"
+                    )
 
     if checked == 0:
         print("WARN: no metrics matched prefix '{}'".format(args.metric_prefix), file=sys.stderr)

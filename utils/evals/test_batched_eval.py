@@ -193,6 +193,7 @@ def test_workflow_concurrencies_are_independent_of_eval_metadata(
 def test_validate_scores_checks_threshold_for_every_concurrency(
     tmp_path: Path,
     monkeypatch,
+    capsys,
 ) -> None:
     (tmp_path / "meta_env.json").write_text(json.dumps({
         "eval_concs": [1, 4],
@@ -218,6 +219,12 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
     ])
 
     assert validate_scores_main() == 1
+
+    # Each score line is attributed to the concurrency that produced it, so a
+    # failing concurrency is identifiable from the log (conc 4 here).
+    captured = capsys.readouterr()
+    assert "PASS: [conc=1] gsm8k exact_match,strict-match" in captured.out
+    assert "FAIL: [conc=4] gsm8k exact_match,strict-match" in captured.err
 
 
 def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
