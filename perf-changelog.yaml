@@ -4021,3 +4021,9 @@
     - "Bump image to lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618."
     - "Enable SGLANG_DP_USE_GATHERV=1. Change to use all_gatherv + reduce_scatterv for tp + dp config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1824
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-disagg
+  description:
+    - "Eval-only all-evals run to validate reduced ATOM multinode logging (VLLM_LOGGING_LEVEL + uvicorn/atomesh)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1882

@@ -213,7 +213,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${DECODE_ARGS} \
         --policy random \
         --backend atom \
-        --log-level info \
+        --log-level ${ATOMESH_LOG_LEVEL:-warn} \
         --disable-health-check \
         --disable-circuit-breaker \
         --prometheus-port 29100"
