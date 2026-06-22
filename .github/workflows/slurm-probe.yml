@@ -68,6 +68,20 @@ jobs:
           run_probe "getent-runner-group" getent group "$(id -gn)"
           run_probe "getent-hostname" getent hosts "$(hostname -f 2>/dev/null || hostname)"
           run_probe "sudo-version" sudo -V
+          echo "=== SSSD process, service, and responder state ==="
+          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args | \
+            awk 'NR == 1 || $0 ~ /[s]ssd/'
+          ls -la /run/sssd /var/lib/sss/pipes /var/lib/sss/pipes/private 2>&1 || true
+          command -v ss >/dev/null && ss -xlpn 2>&1 | grep -E 'sss|sudo' || true
+          run_probe "sssd-active" systemctl is-active sssd
+          run_probe "sssd-status" systemctl status sssd --no-pager
+          if command -v sssctl >/dev/null; then
+            run_probe "sssd-domain-list" sssctl domain-list
+            run_probe "sssd-config-check" sssctl config-check
+            run_probe "sssd-user-checks" sssctl user-checks "$(id -un)" -a sudo
+          else
+            echo "sssctl is not installed"
+          fi
           run_probe "sudo-list-policy" sudo -n -l
 
           run_probe "squeue-by-runner" squeue --name="$RUNNER_NAME" --noheader --format=%i
