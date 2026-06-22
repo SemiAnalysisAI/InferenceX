@@ -796,3 +796,17 @@ the explicitly inherited `deep_gemm_mega_moe` loader, whose expected scale
 layout does not match the current v0.23 NVFP4 checkpoint. The override was
 removed so DEP8 uses the same checkpoint-compatible default MoE backend as the
 successful TEP8 recipes; no topology or cache setting changed.
+
+The compatible default backend then loaded far enough to establish the actual
+DEP8 limit (`27925448660`, Slurm `19548`): every prefill rank used 166.43 GiB
+and OOMed requesting another 21.65 GiB with 17.56 GiB free. DEP replicates the
+attention weights that TEP8 shards, so the current checkpoint cannot run DEP8
+on the 184 GiB GB200 GPUs. The failed DEP recipe and master entry were removed
+rather than leaving a known-broken official configuration.
+
+The next TEP experiments raise prefill `max-num-batched-tokens` from 16K to
+32K, matching the repo's established GB200 high-throughput prefill setting.
+The c128 audit showed low prefill KV occupancy and no decode saturation, so
+larger compute batches directly target the uncached-prefill bottleneck without
+reducing cache capacity. The selected batches are 1P/1D c32/40/52/64 (16 GPUs)
+and 2P/1D c52/64/80/96 (24 GPUs).

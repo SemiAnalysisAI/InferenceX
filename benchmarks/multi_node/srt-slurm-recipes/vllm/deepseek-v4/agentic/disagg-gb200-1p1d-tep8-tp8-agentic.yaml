@@ -134,7 +134,9 @@ backend:
       # R5 job 18603 died with "CUDA out of memory. Tried to allocate
       # 1.98 GiB ... 1.53 GiB free" on the first scheduled request. Matches
       # the green gb300 agentic prefill (0.9 / 16384).
-      max-num-batched-tokens: 16384
+      # High-throughput prefill batch used by the validated GB200 fixed-length
+      # recipes; agentic KV usage leaves sufficient headroom at 0.9 utility.
+      max-num-batched-tokens: 32768
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       no-async-scheduling: true
