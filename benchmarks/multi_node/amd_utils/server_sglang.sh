@@ -119,12 +119,14 @@ def parse_range(cuda_range, default_start, default_end):
 print(f'MODEL_BASE_FLAGS=\"{m.get(\"base_flags\", \"\")}\"')
 print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
 print(f'MODEL_DP_FLAGS=\"{m.get(\"dp_flags\", \"\")}\"')
+print(f'MODEL_EP_FLAGS=\"{m.get(\"ep_flags\", \"\")}\"')
 
 prefill = m.get('prefill', {})
 decode = m.get('decode', {})
 
 print(f'PREFILL_MEM_FRACTION_STATIC=\"{prefill.get(\"mem_fraction_static\", 0.8)}\"')
 print(f'PREFILL_DISABLE_RADIX_CACHE=\"{prefill.get(\"disable_radix_cache\", True)}\"')
+print(f'PREFILL_DISABLE_CUDA_GRAPH=\"{prefill.get(\"disable_cuda_graph\", False)}\"')
 
 dp = prefill.get('dp', {})
 no_dp = prefill.get('no_dp', {})
@@ -136,6 +138,8 @@ print(f'PREFILL_MAX_TOTAL_TOKENS_DP=\"{dp.get(\"max_total_tokens\", \"\")}\"')
 print(f'PREFILL_ENABLE_TWO_BATCH_OVERLAP_DP=\"{dp.get(\"enable_two_batch_overlap\", False)}\"')
 print(f'PREFILL_MAX_RUNNING_REQUESTS_NO_DP=\"{no_dp.get(\"max_running_requests\", 128)}\"')
 print(f'PREFILL_CHUNKED_PREFILL_SIZE_NO_DP=\"{eval_formula(no_dp.get(\"chunked_prefill_size\", 262144))}\"')
+print(f'PREFILL_CONTEXT_LENGTH_NO_DP=\"{no_dp.get(\"context_length\", \"\")}\"')
+print(f'PREFILL_MAX_TOTAL_TOKENS_NO_DP=\"{no_dp.get(\"max_total_tokens\", \"\")}\"')
 s, e = parse_range(no_dp.get('cuda_graph_bs_range', '1-128'), 1, 128)
 print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_START=\"{s}\"')
 print(f'PREFILL_CUDA_GRAPH_BS_NO_DP_END=\"{e}\"')
@@ -183,8 +187,8 @@ else
     prefill_cuda_graph_bs=($(seq $PREFILL_CUDA_GRAPH_BS_NO_DP_START $PREFILL_CUDA_GRAPH_BS_NO_DP_END))
     prefill_max_running_requests=$PREFILL_MAX_RUNNING_REQUESTS_NO_DP
     prefill_chunked_prefill_size=$PREFILL_CHUNKED_PREFILL_SIZE_NO_DP
-    prefill_context_length=""
-    prefill_max_total_tokens=""
+    prefill_context_length=$PREFILL_CONTEXT_LENGTH_NO_DP
+    prefill_max_total_tokens=$PREFILL_MAX_TOTAL_TOKENS_NO_DP
     prefill_enable_two_batch_overlap="false"
 fi
 
@@ -193,7 +197,7 @@ if [[ "$PREFILL_ENABLE_DP" == "true" ]] && [[ "$PREFILL_ENABLE_EP" == "true" ]];
     prefill_max_running_requests=$BENCH_MAX_CONC_VALUE
     prefill_dp_ranks=$PREFILL_TP_SIZE
     # MORI_MAX_DISPATCH_TOKENS_PREFILL stays at 8192 (no change)
-    MORI_MOE_MAX_INPUT_TOKENS_PREFILL=$((MORI_MAX_DISPATCH_TOKENS_PREFILL * prefill_dp_ranks / 2))
+    # MORI_MOE_MAX_INPUT_TOKENS_PREFILL=$((MORI_MAX_DISPATCH_TOKENS_PREFILL * prefill_dp_ranks / 2))
     echo "[DP+EP override] Prefill: max-running-requests=$prefill_max_running_requests, MOE_MAX_INPUT=$MORI_MOE_MAX_INPUT_TOKENS_PREFILL"
 fi
 
@@ -214,7 +218,7 @@ if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; t
     decode_max_running_requests=$BENCH_MAX_CONC_VALUE
     decode_dp_ranks=$DECODE_TP_SIZE
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((BENCH_MAX_CONC_VALUE / decode_dp_ranks))
-    MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
+    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * decode_dp_ranks * 7 / 10))
     # Update derived variable
     SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=$((MORI_MAX_DISPATCH_TOKENS_DECODE * 2))
     export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD
@@ -222,7 +226,12 @@ if [[ "$DECODE_ENABLE_DP" == "true" ]] && [[ "$DECODE_ENABLE_EP" == "true" ]]; t
 fi
 
 # Build the composed config strings (equivalent to the old MODEL_PREFILL_CONFIGS / MODEL_DECODE_CONFIGS)
-PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
+# disable_cuda_graph (model-level) routes prefill to --disable-cuda-graph instead of --cuda-graph-bs.
+if [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "True" ]] || [[ "$PREFILL_DISABLE_CUDA_GRAPH" == "true" ]]; then
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --disable-cuda-graph "
+else
+    PREFILL_MODE_FLAGS="--mem-fraction-static ${PREFILL_MEM_FRACTION_STATIC} --max-running-requests ${prefill_max_running_requests} --chunked-prefill-size ${prefill_chunked_prefill_size} --cuda-graph-bs ${prefill_cuda_graph_bs[*]} "
+fi
 if [[ "$PREFILL_DISABLE_RADIX_CACHE" == "True" ]] || [[ "$PREFILL_DISABLE_RADIX_CACHE" == "true" ]]; then
     PREFILL_MODE_FLAGS="$PREFILL_MODE_FLAGS --disable-radix-cache"
 fi
@@ -245,7 +254,7 @@ fi
 
 if [[ "$DECODE_MTP_SIZE" -gt 0 ]]; then
     MORI_MAX_DISPATCH_TOKENS_DECODE=$((MORI_MAX_DISPATCH_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
-    MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
+    # MORI_MOE_MAX_INPUT_TOKENS_DECODE=$((MORI_MOE_MAX_INPUT_TOKENS_DECODE * (DECODE_MTP_SIZE + 1)))
 fi
 
 # =============================================================================
@@ -318,6 +327,7 @@ build_server_config() {
     local base_config="$MODEL_BASE_FLAGS"
     local mtp_config=""
     local dp_config=""
+    local ep_config=""
     local specific_config=""
 
     # MTP config (only if MTP is enabled and mode is decode)
@@ -328,6 +338,13 @@ build_server_config() {
     # DP config (only if DP is enabled)
     if [[ "$enable_dp" == "true" ]]; then
         dp_config="$MODEL_DP_FLAGS"
+    fi
+
+    # EP config (only if EP is enabled): a2a backend, deepep mode, ep-dispatch algo.
+    # With ep=1 (EP disabled) these are dropped, so the MoE runs tensor-parallel (TP)
+    # instead of expert-parallel — even when dp-attention is on.
+    if [[ "$enable_ep" == "true" ]]; then
+        ep_config="$MODEL_EP_FLAGS"
     fi
 
     # Mode-specific config
@@ -341,6 +358,9 @@ build_server_config() {
     local full_config="$parallel_args"
     if [[ -n "$base_config" ]]; then
         full_config="$full_config $base_config"
+    fi
+    if [[ -n "$ep_config" ]]; then
+        full_config="$full_config $ep_config"
     fi
     if [[ -n "$mtp_config" ]] && [[ "$mode" == "decode" ]]; then
         full_config="$full_config $mtp_config"
@@ -418,7 +438,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
     fi
     set +x
-    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/$MODEL_NAME \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -651,7 +671,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         PREFILL_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_PREFILL}"
     fi
     set +x
-    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_PREFILL} python3 -m sglang.launch_server \
+    PREFILL_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_PREFILL} ${PREFILL_SDMA_ENV} ${PREFILL_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL:-${MORI_MAX_DISPATCH_TOKENS_PREFILL}} python3 -m sglang.launch_server \
         --model-path $MODEL_DIR/${MODEL_NAME} \
         --disaggregation-mode prefill \
         --disaggregation-ib-device ${IBDEVICES} \
@@ -720,7 +740,7 @@ else
         DECODE_MORI_MOE_ENV="SGLANG_MORI_MOE_MAX_INPUT_TOKENS=${MORI_MOE_MAX_INPUT_TOKENS_DECODE}"
     fi
     set +x
-    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_MAX_DISPATCH_TOKENS_DECODE} python3 -m sglang.launch_server \
+    DECODE_CMD="SGLANG_MORI_COMBINE_DTYPE=${MORI_COMBINE_DTYPE_DECODE} ${DECODE_MORI_MOE_ENV} SGLANG_MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK=${MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE:-${MORI_MAX_DISPATCH_TOKENS_DECODE}} python3 -m sglang.launch_server \
         --model-path ${MODEL_DIR}/${MODEL_NAME} \
         --disaggregation-mode decode \
         --disaggregation-ib-device ${IBDEVICES} \
