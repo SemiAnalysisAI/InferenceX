@@ -5,6 +5,12 @@ on:
     paths:
       - 'utils/process_result.py'
       - 'utils/test_process_result.py'
+      - 'utils/validate_agg_result.py'
+      - 'utils/test_validate_agg_result.py'
+      - 'benchmarks/benchmark_lib.sh'
+      - '.github/workflows/benchmark-tmpl.yml'
+      - '.github/workflows/benchmark-multinode-tmpl.yml'
+      - '.github/workflows/test-process-result.yml'
 
 permissions:
   contents: read
@@ -33,4 +39,4 @@ jobs:
       - name: Run pytest
         run: |
           cd utils
-          pytest test_process_result.py -v
+          pytest test_process_result.py test_validate_agg_result.py -v

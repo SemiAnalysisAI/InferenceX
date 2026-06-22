@@ -6,11 +6,15 @@ Since process_result.py executes code at module import time, we test it by:
 """
 import pytest
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 
 SCRIPT_PATH = Path(__file__).parent / "process_result.py"
+BENCHMARK_LIB_PATH = (
+    Path(__file__).resolve().parents[1] / "benchmarks" / "benchmark_lib.sh"
+)
 
 
 # =============================================================================
@@ -100,6 +104,20 @@ def run_script(tmp_path, env, benchmark_result, result_filename="benchmark_resul
         capture_output=True,
         text=True,
     )
+
+
+# =============================================================================
+# Test benchmark command contract
+# =============================================================================
+
+def test_benchmark_serving_requests_summary_percentiles():
+    """Benchmark production must request every percentile summarize.py reads."""
+    script = BENCHMARK_LIB_PATH.read_text(encoding="utf-8")
+
+    match = re.search(r"--metric-percentiles\s+['\"]([^'\"]+)['\"]", script)
+
+    assert match, "run_benchmark_serving must pass --metric-percentiles"
+    assert match.group(1).split(",") == ["75", "90", "95", "99", "99.9"]
 
 
 # =============================================================================

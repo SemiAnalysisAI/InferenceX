@@ -218,6 +218,11 @@ jobs:
         run: |
           python3 utils/process_result.py
 
+      - name: Validate agg result
+        if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
+        run: |
+          python3 utils/validate_agg_result.py "agg_${RESULT_FILENAME}.json"
+
       - name: Upload result
         if: ${{ !inputs.eval-only && inputs.scenario-type != 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -225,8 +230,13 @@ jobs:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}.json
 
+      - name: Validate agentic aggregated result
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        run: |
+          python3 utils/validate_agg_result.py "${RESULT_FILENAME}.json"
+
       - name: Upload agentic aggregated result
-        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}

@@ -260,6 +260,8 @@ jobs:
                 fi
                 echo "Extracted: gpus=$gpus, prefill_gpus=$prefill_gpus, decode_gpus=$decode_gpus"
                 RESULT_FILENAME=${result_file%.json} IS_MULTINODE=true PREFILL_GPUS="$prefill_gpus" DECODE_GPUS="$decode_gpus" python3 utils/process_result.py
+                agg_file="agg_${result_file%.json}.json"
+                python3 utils/validate_agg_result.py "$agg_file"
               fi
             fi
           done
@@ -278,6 +280,11 @@ jobs:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           path: multinode_server_logs.tar.gz
           if-no-files-found: ignore
+
+      - name: Validate agentic aggregated result
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        run: |
+          python3 utils/validate_agg_result.py "${RESULT_FILENAME}.json"
 
       - name: Upload agentic aggregated result
         if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}

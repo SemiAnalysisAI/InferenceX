@@ -373,6 +373,7 @@ run_benchmark_serving() {
         --save-result
         --num-warmups "$((2 * max_concurrency))" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
+        --metric-percentiles '75,90,95,99,99.9'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
     )
