@@ -33,8 +33,17 @@ fi
 export IBDEVICES
 
 export SAFETENSORS_FAST_GPU=1
+# The atom engine (atom.entrypoints.openai_server) is vLLM-based; vLLM reads
+# VLLM_LOGGING_LEVEL (not VLLM_LOG_LEVEL), so the latter alone was a no-op and
+# the engine logged its per-request KV-connector flood at INFO. Set the real
+# lever to WARNING (overridable for debugging).
+export VLLM_LOGGING_LEVEL="${VLLM_LOGGING_LEVEL:-WARNING}"
 export VLLM_LOG_LEVEL=WARNING
-export ATOM_LOG_LEVEL=WARNING
+export ATOM_LOG_LEVEL="${ATOM_LOG_LEVEL:-WARNING}"
+# Quiet uvicorn (per-request access logs) and atomesh router.
+export ATOM_UVICORN_LOG_LEVEL="${ATOM_UVICORN_LOG_LEVEL:-warning}"
+export ATOM_UVICORN_ACCESS_LOG="${ATOM_UVICORN_ACCESS_LOG:-0}"
+export ATOMESH_LOG_LEVEL="${ATOMESH_LOG_LEVEL:-warn}"
 export AITER_LOG_LEVEL=WARNING
 export LOG_LEVEL=WARNING
 export LOGLEVEL=WARNING
