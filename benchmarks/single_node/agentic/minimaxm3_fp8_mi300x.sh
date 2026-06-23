@@ -181,6 +181,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --block-size 128 \
     --language-model-only \
     --attention-backend TRITON_ATTN \
+    --kv-cache-dtype fp8 \
     --enable-prefix-caching \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --tool-call-parser minimax_m3 \
@@ -191,6 +192,75 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
 SERVER_PID=$!
 
 wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+FP8_KV_METRICS_BEFORE="$RESULT_DIR/fp8_kv_metrics_before.txt"
+FP8_KV_METRICS_FIRST="$RESULT_DIR/fp8_kv_metrics_first.txt"
+FP8_KV_METRICS_SECOND="$RESULT_DIR/fp8_kv_metrics_second.txt"
+FP8_KV_SMOKE_FIRST="$RESULT_DIR/fp8_kv_smoke_first.json"
+FP8_KV_SMOKE_SECOND="$RESULT_DIR/fp8_kv_smoke_second.json"
+FP8_KV_REQUEST="$RESULT_DIR/fp8_kv_request.json"
+python3 - "$MODEL" "$FP8_KV_REQUEST" <<'PY'
+import json
+import sys
+
+model, output_path = sys.argv[1:]
+prefix = "Stable prefix token sequence for cache validation. " * 192
+payload = {
+    "model": model,
+    "temperature": 0,
+    "max_tokens": 512,
+    "messages": [
+        {
+            "role": "user",
+            "content": prefix
+            + "\nQuestion: Janet's ducks lay 16 eggs per day. She eats three for breakfast "
+            + "and uses four for muffins. She sells the remainder for $2 each. "
+            + "How much does she make per day? End your response with: #### [number]",
+        }
+    ],
+}
+with open(output_path, "w") as output_file:
+    json.dump(payload, output_file)
+PY
+curl -fsS "http://localhost:$VLLM_BACKEND_PORT/metrics" > "$FP8_KV_METRICS_BEFORE"
+curl -fsS "http://localhost:$VLLM_BACKEND_PORT/v1/chat/completions" \
+    -H 'Content-Type: application/json' --data-binary "@$FP8_KV_REQUEST" > "$FP8_KV_SMOKE_FIRST"
+curl -fsS "http://localhost:$VLLM_BACKEND_PORT/metrics" > "$FP8_KV_METRICS_FIRST"
+curl -fsS "http://localhost:$VLLM_BACKEND_PORT/v1/chat/completions" \
+    -H 'Content-Type: application/json' --data-binary "@$FP8_KV_REQUEST" > "$FP8_KV_SMOKE_SECOND"
+curl -fsS "http://localhost:$VLLM_BACKEND_PORT/metrics" > "$FP8_KV_METRICS_SECOND"
+python3 - "$FP8_KV_SMOKE_FIRST" "$FP8_KV_SMOKE_SECOND" \
+    "$FP8_KV_METRICS_FIRST" "$FP8_KV_METRICS_SECOND" <<'PY'
+import json
+import re
+import sys
+
+first_response, second_response, first_metrics, second_metrics = sys.argv[1:]
+
+for response_path in (first_response, second_response):
+    with open(response_path) as response_file:
+        response = json.load(response_file)
+    message = response["choices"][0]["message"]
+    text = " ".join(str(message.get(field) or "") for field in ("reasoning_content", "content"))
+    if not re.search(r"####\s*18\b", text):
+        raise RuntimeError(f"FP8 KV correctness probe failed: {text[-1000:]}")
+
+def counter(path: str, metric: str) -> float:
+    total = 0.0
+    with open(path) as metrics_file:
+        for line in metrics_file:
+            if line.startswith(metric + "{") or line.startswith(metric + " "):
+                total += float(line.rsplit(" ", 1)[1])
+    return total
+
+first_hits = counter(first_metrics, "vllm:prefix_cache_hits")
+second_hits = counter(second_metrics, "vllm:prefix_cache_hits")
+if second_hits <= first_hits:
+    raise RuntimeError(
+        f"Prefix-cache probe did not increase hits: first={first_hits}, second={second_hits}"
+    )
+print(f"FP8_KV_DIAGNOSTIC_OK first_hits={first_hits} second_hits={second_hits}")
+PY
 
 if [[ "$DP_ATTENTION" == "true" ]]; then
     vllm-router \
