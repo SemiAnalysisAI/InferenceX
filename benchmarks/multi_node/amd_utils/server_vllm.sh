@@ -168,14 +168,32 @@ fi
 if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
+# vLLM DP-attention: convert "TP n" -> "DP n + TP 1" (one DP rank per GPU; MLA
+# attention runs data-parallel, MoE stays expert-parallel via
+# --enable-expert-parallel). vLLM has no --enable-dp-attention (that is SGLang);
+# it uses --data-parallel-size. Also strip fp8 KV: the fp8-KV DP-attn (qh64)
+# AITER MLA decode kernel (mla_a8w8_qh64_*) faults at cudagraph capture on MI355X,
+# so DP-attention runs auto/bf16 KV.
+if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--data-parallel-size'; then
+    _pdp="${PREFILL_TP_SIZE:-8}"
+    if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--data-parallel-size ${_pdp} --tensor-parallel-size 1/")
+    else
+        PREFILL_SERVER_CONFIG+=" --data-parallel-size ${_pdp} --tensor-parallel-size 1"
+    fi
+    PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/[[:space:]]*--kv-cache-dtype[[:space:]]+fp8//")
 fi
 if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
     DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
 fi
-if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    DECODE_SERVER_CONFIG+=" --enable-dp-attention"
+if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--data-parallel-size'; then
+    _ddp="${DECODE_TP_SIZE:-8}"
+    if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--data-parallel-size ${_ddp} --tensor-parallel-size 1/")
+    else
+        DECODE_SERVER_CONFIG+=" --data-parallel-size ${_ddp} --tensor-parallel-size 1"
+    fi
+    DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/[[:space:]]*--kv-cache-dtype[[:space:]]+fp8//")
 fi
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
