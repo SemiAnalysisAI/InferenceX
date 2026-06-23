@@ -935,9 +935,9 @@ resolve_trace_source() {
     # pin a specific corpus via WEKA_LOADER_OVERRIDE.
     local default_loader
     if [[ "${MODEL_PREFIX:-}" == dsv4* ]]; then
-        default_loader="semianalysis_cc_traces_weka_with_subagents_060826"
+        default_loader="semianalysis_cc_traces_weka_061526"
     else
-        default_loader="semianalysis_cc_traces_weka_with_subagents_060826_256k"
+        default_loader="semianalysis_cc_traces_weka_061526_256k"
     fi
     local loader="${WEKA_LOADER_OVERRIDE:-$default_loader}"
     local dataset
@@ -966,8 +966,20 @@ resolve_trace_source() {
         semianalysis_cc_traces_weka_with_subagents_060826_256k)
             dataset="semianalysisai/cc-traces-weka-with-subagents-060826-256k"
             ;;
+        semianalysis_cc_traces_weka_061326)
+            dataset="semianalysisai/cc-traces-weka-061326"
+            ;;
+        semianalysis_cc_traces_weka_061326_256k)
+            dataset="semianalysisai/cc-traces-weka-061326-256k"
+            ;;
+        semianalysis_cc_traces_weka_061526)
+            dataset="semianalysisai/cc-traces-weka-061526"
+            ;;
+        semianalysis_cc_traces_weka_061526_256k)
+            dataset="semianalysisai/cc-traces-weka-061526-256k"
+            ;;
         *)
-            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k, semianalysis_cc_traces_weka_with_subagents_060226, semianalysis_cc_traces_weka_with_subagents_060226_256k, semianalysis_cc_traces_weka_with_subagents_060526, semianalysis_cc_traces_weka_with_subagents_060526_256k, semianalysis_cc_traces_weka_with_subagents_060826, semianalysis_cc_traces_weka_with_subagents_060826_256k" >&2
+            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k, semianalysis_cc_traces_weka_with_subagents_060226, semianalysis_cc_traces_weka_with_subagents_060226_256k, semianalysis_cc_traces_weka_with_subagents_060526, semianalysis_cc_traces_weka_with_subagents_060526_256k, semianalysis_cc_traces_weka_with_subagents_060826, semianalysis_cc_traces_weka_with_subagents_060826_256k, semianalysis_cc_traces_weka_061326, semianalysis_cc_traces_weka_061326_256k, semianalysis_cc_traces_weka_061526, semianalysis_cc_traces_weka_061526_256k" >&2
             exit 1
             ;;
     esac
