@@ -124,3 +124,33 @@ cx_build_nccl_tests() {
   [ -x "$bin" ] || cx_die "nccl-tests build produced no binary at $bin"
   echo "$dir/build"
 }
+
+# cx_build_rccl_tests <parent_dir> <mpi 0|1>  ->  echoes the build/ dir.
+# AMD/ROCm counterpart of cx_build_nccl_tests: ROCm/rccl-tests is a fork of
+# nccl-tests producing the SAME binary names (<op>_perf) and output format, so
+# run_nccl.py parses it unchanged. `make` defaults to ROCm at /opt/rocm
+# (amdclang++ + librccl); validated building in-container on MI355X. Override
+# CX_ROCM_HOME / CX_RCCL_HOME / CX_MPI_HOME if the toolchain lives elsewhere.
+cx_build_rccl_tests() {
+  local parent="$1" mpi="${2:-0}" dir bin
+  dir="$parent/rccl-tests"
+  bin="$dir/build/all_reduce_perf"
+  if [ -x "$bin" ]; then
+    cx_log "rccl-tests already built: $dir/build"
+    echo "$dir/build"; return 0
+  fi
+  mkdir -p "$parent"
+  if [ ! -d "$dir/.git" ]; then
+    cx_log "cloning rccl-tests -> $dir"
+    git clone --depth 1 https://github.com/ROCm/rccl-tests.git "$dir" >&2 \
+      || cx_die "git clone rccl-tests failed"
+  fi
+  cx_log "building rccl-tests (MPI=$mpi, ROCm ${CX_ROCM_HOME:-/opt/rocm})"
+  make -C "$dir" -j MPI="$mpi" \
+       ${CX_ROCM_HOME:+HIP_HOME="$CX_ROCM_HOME"} \
+       ${CX_RCCL_HOME:+RCCL_HOME="$CX_RCCL_HOME"} \
+       ${CX_MPI_HOME:+MPI_HOME="$CX_MPI_HOME"} >&2 \
+    || cx_die "rccl-tests build failed (need ROCm + librccl; try CX_ROCM_HOME)"
+  [ -x "$bin" ] || cx_die "rccl-tests build produced no binary at $bin"
+  echo "$dir/build"
+}

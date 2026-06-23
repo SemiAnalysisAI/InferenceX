@@ -8,8 +8,8 @@
 #   * squash is NODE-LOCAL (/var/lib/squash), so enroot import runs via srun on
 #     the allocated node (not on the login node like the shared-FS NVIDIA path);
 #   * pyxis flags --container-writable --container-remap-root for the ROCm image.
-# MoRI is the only AMD backend wired (CX_BENCH=mori); rccl-tests primitives are a
-# follow-up.
+# AMD backends: CX_BENCH=mori (MoRI EP dispatch/combine, default) or nccl
+# (collective primitives via rccl-tests, the ROCm nccl-tests fork).
 #
 # !!! NOT yet validated on hardware (no MI355X cluster access at authoring time).
 # Treat the first on-runner run as validation — like run_deepep.py was on GB200.
@@ -37,16 +37,18 @@ EXCLUDE_NODES="${CX_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g11}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
-# MoRI is the only AMD backend wired today; force it.
-if [ "${CX_BENCH:-mori}" != "mori" ]; then
-  cx_log "mi355x: CX_BENCH='${CX_BENCH}' not supported on AMD yet; using mori"
-fi
-export CX_BENCH=mori
+# AMD backends wired: mori (MoRI EP dispatch/combine) and nccl (collective
+# primitives via rccl-tests). Default mori; honor an explicit CX_BENCH.
+export CX_BENCH="${CX_BENCH:-mori}"
+case "$CX_BENCH" in
+  mori|nccl) ;;
+  *) cx_log "mi355x: CX_BENCH='$CX_BENCH' unsupported on AMD (want mori|nccl); using mori"; export CX_BENCH=mori ;;
+esac
 export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
 export CX_TOPO="mi355x-xgmi" CX_TRANSPORT="xgmi"
 export COLLECTIVEX_IMAGE="$IMAGE" COLLECTIVEX_IMAGE_DIGEST="${CX_IMAGE_DIGEST:-}"
 
-cx_log "runner=$RUNNER_NAME partition=$PARTITION ngpus=$NGPUS bench=mori image=$IMAGE"
+cx_log "runner=$RUNNER_NAME partition=$PARTITION ngpus=$NGPUS bench=$CX_BENCH image=$IMAGE"
 # AMD workspace is compute-visible (the serving launcher bind-mounts it directly),
 # so no staging; the node-local squash is handled via srun below.
 MOUNT_SRC="$(cx_stage_repo "$REPO_ROOT" "${CX_STAGE_DIR:-}")"

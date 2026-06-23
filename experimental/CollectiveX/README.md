@@ -21,7 +21,7 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 | `plot.py` | latency/bus-bw curves, B200-vs-GB200 overlay with a comparison guard (matplotlib) |
 | `launchers/common.sh` | shared helpers: image resolve, enroot squash, staging, nccl-tests build |
 | `launchers/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/mori/all) |
-| `launchers/launch_<sku>.sh` | per-SKU adapters: `launch_b200-dgxc.sh` (8× NVLink), `launch_b200-dgxc-slurm.sh` (2-node IB), `launch_gb200-nv.sh` (NVL72 MNNVL), `launch_mi355x-amds.sh` (8× XGMI, AMD MoRI) |
+| `launchers/launch_<sku>.sh` | per-SKU adapters: `launch_b200-dgxc.sh` (8× NVLink), `launch_b200-dgxc-slurm.sh` (2-node IB), `launch_gb200-nv.sh` (NVL72 MNNVL), `launch_mi355x-amds.sh` (8× XGMI, AMD MoRI + rccl) |
 | `CONTAINERS.md` | the pinned multi-arch container + audited library versions |
 | `results/` | flat JSON artifacts (+ `plots/`, raw captures) |
 | `tests/fixtures/` | captured nccl-tests output for offline parser checks |
@@ -33,7 +33,8 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 - **push** to `experimental/CollectiveX/**` → the **MI355X MoRI** dispatch/combine
   run (the "CollectiveX Experimental" job; lands on a free `mi355x-amds` runner).
 - **workflow_dispatch** → pick `sku` (gb200 / b200-dgxc / b200-multinode /
-  mi355x), `benchmark` (nccl / deepep / mori / all — `mori` is AMD-only), ops,
+  mi355x), `benchmark` (nccl / deepep / mori / all — `mori` is AMD-only; `nccl`
+  on MI355X runs rccl-tests), ops,
   sizes, ngpus. Lands on that SKU's self-hosted runner and runs
   `launch_${RUNNER_NAME%%_*}.sh`.
 
@@ -49,7 +50,8 @@ bash experimental/CollectiveX/launchers/launch_gb200-nv.sh                 # GB2
 CX_BENCH=deepep bash experimental/CollectiveX/launchers/launch_gb200-nv.sh # GB200, DeepEP (rebuild)
 bash experimental/CollectiveX/launchers/launch_b200-dgxc.sh               # B200 8× NVLink
 bash experimental/CollectiveX/launchers/launch_b200-dgxc-slurm.sh         # B200 2-node, cross-IB
-bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh             # MI355X 8× XGMI, MoRI EP (AMD; forces CX_BENCH=mori)
+bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh                # MI355X 8× XGMI, MoRI EP (CX_BENCH=mori, default)
+CX_BENCH=nccl bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh   # MI355X primitives via rccl-tests
 ```
 
 Knobs: `CX_BENCH` (nccl|deepep|mori|all), `CX_OPS`, `CX_MIN_BYTES`/`CX_MAX_BYTES`,

@@ -31,8 +31,16 @@ cx_log "in-container: runner=$CX_RUNNER ngpus=$CX_NGPUS bench=$CX_BENCH topo=$CX
 python3 env_capture.py --out "$ENVJSON" --timestamp "$CX_TS"
 
 run_nccl_suite() {
-  local build ops op sfail=0
-  build="$(cx_build_nccl_tests "$PWD/.nccl-tests" 0)" || return 1   # single-node: MPI=0, -g N
+  local build ops op sfail=0 impl=nccl
+  # AMD/ROCm -> rccl-tests (fork; same binaries + output, parsed by run_nccl.py);
+  # NVIDIA/CUDA -> nccl-tests. Both single-node: MPI=0, -g N.
+  if [ -d /opt/rocm ] || command -v hipcc >/dev/null 2>&1; then
+    impl=rccl
+    build="$(cx_build_rccl_tests "$PWD/.nccl-tests" 0)" || return 1
+  else
+    build="$(cx_build_nccl_tests "$PWD/.nccl-tests" 0)" || return 1
+  fi
+  cx_log "collective impl=$impl build=$build"
   ops="${CX_OPS:-all_reduce all_gather reduce_scatter alltoall}"
   for op in $ops; do
     if ! python3 run_nccl.py --op "$op" --nccl-tests-dir "$build" \
@@ -40,7 +48,7 @@ run_nccl_suite() {
         --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
         --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${op}_${CX_TS}.json" \
         --min-bytes "${CX_MIN_BYTES:-8}" --max-bytes "${CX_MAX_BYTES:-8G}" --check 1; then
-      cx_log "WARN: nccl $op failed or invalid"; sfail=1
+      cx_log "WARN: $impl $op failed or invalid"; sfail=1
     fi
   done
   return "$sfail"
