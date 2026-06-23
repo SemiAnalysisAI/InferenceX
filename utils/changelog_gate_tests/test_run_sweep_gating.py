@@ -41,6 +41,7 @@ SWEEP_LABELS = {
 MODIFIER_LABELS = {"all-evals", "evals-only"}
 RELEVANT_LABELS = SWEEP_LABELS | MODIFIER_LABELS
 REUSE_ELIGIBLE_LABELS = SWEEP_LABELS - {"sweep-enabled"}
+REUSE_INCOMPATIBLE_LABELS = {"evals-only"}
 
 
 # --------------------------------------------------------------------------
@@ -252,10 +253,10 @@ CASES = [
     ("PR-sync-evals-only-without-sweep-label",
      {**_PR, "action": "synchronize", "labels": ["evals-only"]},
      ("success", "skipped", "SKIP")),
-    ("PR-sync-full-with-all-evals-ignores-reuse",
+    ("PR-sync-full-with-all-evals-uses-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "all-evals"],
-      "reuse_auth": True}, ("success", "skipped", "RUN")),
+      "reuse_auth": True}, ("success", "success", "SKIP")),
     ("PR-sync-full-with-evals-only-ignores-reuse",
      {**_PR, "action": "synchronize",
       "labels": ["full-sweep-enabled", "evals-only"],
@@ -379,7 +380,7 @@ def reference_gate(sc: dict) -> tuple[str, str, str]:
         and sc.get("action") == "synchronize"
         and not draft
         and bool(labels & REUSE_ELIGIBLE_LABELS)
-        and labels.isdisjoint(MODIFIER_LABELS)
+        and labels.isdisjoint(REUSE_INCOMPATIBLE_LABELS)
     )
     reuse = "success" if gate_runs else "skipped"
     authorized = gate_runs and sc.get("reuse_auth", False)

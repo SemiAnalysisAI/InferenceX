@@ -172,7 +172,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
     git checkout main
     mkdir -p recipes/vllm/minimax-m3-gb300-fp8
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
-    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    SRTCTL_SETUP_SCRIPT="minimax-m3-gb300-vllm-fixes.sh"
     cp \
         "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
         "configs/$SRTCTL_SETUP_SCRIPT"
