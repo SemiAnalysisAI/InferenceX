@@ -4121,4 +4121,4 @@
   description:
     - "Add the MiniMax-M3 MXFP8 B300 Dynamo-vLLM 1k/1k disagg sweep on the vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223 image"
     - "Enable FlashInfer attention (use_trtllm_attention, fp8 indexer KV) and fp8 KV cache on the prefill and decode workers"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1906
