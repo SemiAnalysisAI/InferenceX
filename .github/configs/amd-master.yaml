@@ -2943,8 +2943,10 @@ minimaxm3-fp8-mi325x-vllm-agentic:
       - { tp: 4, ep: 4, offloading: none, conc-list: [2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48] }
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, ep: 8, offloading: none, conc-list: [2, 4, 6, 8, 12, 16, 24, 32, 48, 64] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [8, 12, 16, 24, 32, 48, 64, 96] }
       - { tp: 4, ep: 4, offloading: cpu, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, ep: 8, offloading: cpu, conc-list: [4, 6, 8, 12, 16, 24, 32, 48, 64, 96] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [8, 12, 16, 24, 32, 48, 64, 96, 128] }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi325x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
