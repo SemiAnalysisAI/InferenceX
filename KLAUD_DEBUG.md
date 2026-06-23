@@ -203,6 +203,20 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
   The old run will be auto-cancelled by `workflow/cancel-sweep-on-merge` (provided the head SHA changed).
 - For a `cancelled` run (not `failure`), use `gh run rerun <id>` without `--failed` to re-run everything.
 
+### 7.1 Reuse after matrix-generation policy changes
+
+Reusable source artifacts are authoritative. The merge-time
+`reuse-ingest-artifacts` job validates that downloaded artifacts are readable,
+non-duplicated, and internally consistent, but it does not require them to
+match a matrix regenerated from the merge commit. A generator-policy change
+between the PR sweep and merge therefore does not require another GPU sweep.
+
+Raw and aggregate eval identities must still match, as must agentic point/raw
+artifacts and summaries. Batched eval identities come from
+`completed_eval_concs`, so an explicitly pinned failed run may reuse only the
+points it completed. Missing or invalid metadata, duplicate identities, and
+raw/aggregate disagreement still fail reuse.
+
 ---
 
 ## 8. gh CLI gotchas
