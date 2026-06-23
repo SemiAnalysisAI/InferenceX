@@ -4101,6 +4101,22 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1893
 
 - config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Update the GB300 MiniMax-M3 Dynamo-vLLM image to vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+    - "Use the dedicated ARM64 MiniMax-M3 performance image; benchmark settings unchanged"
+    - "Allocate FlashInfer MNNVL workspace for one-shot TP8 all-reduce during CUDA graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1888
+
+- config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Update the GB300 MiniMax-M3 Dynamo-vLLM image to vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+    - "Use the dedicated ARM64 MiniMax-M3 performance image; benchmark settings unchanged"
+    - "Allocate FlashInfer MNNVL workspace for one-shot TP8 all-reduce during CUDA graph capture"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1897
+
+- config-keys:
     - qwen3.5-fp4-b200-trt-mtp
   description:
     - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark with MTP speculative decode (1k/1k and 8k/1k) across a TP/TEP/DEP parallelism sweep"
