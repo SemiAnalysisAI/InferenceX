@@ -97,7 +97,6 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
-      no-async-scheduling: true
       tokenizer-mode: deepseek_v4
       enable-ep-weight-filter: true
       enable-sleep-mode: true
@@ -113,12 +112,11 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       # max-num-seqs: 512
-      max-cudagraph-capture-size: 512
       trust-remote-code: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
-      stream-interval: 50
+      stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
       enable-ep-weight-filter: true
