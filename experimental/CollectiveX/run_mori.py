@@ -5,12 +5,14 @@ AMD counterpart to run_deepep.py, using ROCm MoRI's EpDispatchCombine op. One
 decode-shaped dispatch+combine point, correctness-gated, CUDA-event timed,
 emitting the same flat-JSON shape (family=moe, backend=mori).
 
-  MoRI's Python API is VERSION-SENSITIVE. The config/dispatch/combine block below
-  follows ROCm/mori examples/ops/dispatch_combine/test_dispatch_combine.py. The
-  first MI355X run (image rocm/sgl-dev:...-mori-0227-2) confirmed the setup +
-  config + dispatch path reach the MoRI kernel; it OOM'd the default 2 GiB
-  symmetric heap, now sized up via MORI_SHMEM_HEAP_SIZE above. The correctness
-  gate and timing are validated by the heap-sized re-run.
+  VALIDATED on MI355X (8x, image rocm/sgl-dev:...-mori-0227-2): dispatch+combine
+  numerically correct (combine within tol, max_rel ~2e-3), ~85 us round-trip at
+  the decode shape. The config/dispatch/combine API follows ROCm/mori's reference
+  test. Three constraints on this ionic_rdma fabric are handled here: (1) MoRI
+  registers the whole symmetric heap as ONE RDMA MR and these NICs cap GPU-memory
+  MRs at ~4 GiB, so the heap is held at 2 GiB (above); (2) max_num_inp_token_per_rank
+  is bounded so the buffers fit that heap (below); (3) MoRI's shmem teardown
+  asserts after finalize, so we hard-exit after writing results (end of main).
 
 Launch (one process per GPU), e.g. single-node 8x MI355X:
     torchrun --nproc_per_node=8 run_mori.py \\
@@ -26,15 +28,15 @@ import json
 import os
 import sys
 
-# MoRI's symmetric-memory heap defaults to 2 GiB (static), too small for the
-# DeepSeek hidden size (7168) across 8 ranks (dispatch/combine buffers overflow
-# it). Set it BEFORE `import mori` (the heap is created at shmem init). Use the
-# reference test's "6G": big enough for the buffers, and small enough to
-# RDMA-register — a 16 GiB heap allocated fine but failed RDMA MR registration
-# (errno 22 EINVAL) on the first heap-bumped MI355X run. Layered override:
-# explicit MORI_SHMEM_HEAP_SIZE > CX_MORI_HEAP_SIZE > "6G".
+# MoRI registers the WHOLE symmetric heap as one RDMA memory region at shmem
+# init (set this BEFORE `import mori`). On the MI355X ionic_rdma NICs the GPU-
+# memory MR registration has a hard size ceiling (~4 GiB): a 6 GiB heap fails
+# (`RegisterRdmaMemoryRegion ... errno 22 EINVAL`, validated on-node), while
+# 2 GiB registers cleanly. So keep the heap at 2 GiB and instead bound the
+# buffers via max_num_inp_token_per_rank below. Layered override:
+# explicit MORI_SHMEM_HEAP_SIZE > CX_MORI_HEAP_SIZE > "2G".
 os.environ.setdefault("MORI_SHMEM_HEAP_SIZE",
-                      os.environ.get("CX_MORI_HEAP_SIZE", "6G"))
+                      os.environ.get("CX_MORI_HEAP_SIZE", "2G"))
 
 SCHEMA_VERSION = 1
 MEASUREMENT_CONTRACT = "mori-normal-v1"
@@ -127,7 +129,12 @@ def main() -> int:
         scale_dim=0,
         scale_type_size=torch.tensor([], dtype=torch.float8_e4m3fnuz).element_size(),
         max_token_type_size=torch.tensor([], dtype=torch.float32).element_size(),
-        max_num_inp_token_per_rank=max(4096, n),
+        # Sizes MoRI's symmetric buffers. The reference test uses 4096, but at
+        # hidden=7168 that overflows the registerable 2 GiB heap (see top). Bound
+        # it to the workload (decode shapes are tens of tokens/rank); 512 fits the
+        # 2 GiB heap and was validated on-node. Larger token counts may need a
+        # heap above the NIC's MR ceiling — out of reach on this fabric for now.
+        max_num_inp_token_per_rank=max(512, n),
         num_experts_per_rank=experts_per_rank,
         num_experts_per_token=topk,
         use_external_inp_buf=False,
@@ -160,25 +167,30 @@ def main() -> int:
         combined, _combined_w = op.combine(
             combine_input, dispatch_weights, dispatch_indices,
             block_num=args.block_num, warp_per_block=args.combine_warps)
-        return combined, recv_num
+        # Return total_recv (read BEFORE combine — combine resets recv_num), not
+        # the tensor: reading recv_num[0] after combine yields 0 (false negative).
+        return combined, total_recv
     # =====================================================================
 
     # ---- correctness gate ----
-    combined, recv_num = run_once()
+    combined, total_recv = run_once()
     torch.cuda.synchronize()
     # MoRI combine sums one copy per destination RANK, so combined[i] ≈
     # input[i] * (#unique destination ranks among the token's topk experts)
-    # (see ROCm/mori .../test_dispatch_combine.py).
+    # (see ROCm/mori .../test_dispatch_combine.py). combine returns the full
+    # max_num_inp_token_per_rank-sized buffer; only the first n rows are our
+    # local input tokens, so slice to [:n] before comparing.
+    combined_valid = combined[:n].float()
     pes = indices.long() // experts_per_rank
     unique_pes = torch.tensor(
         [len(set(row.tolist())) for row in pes], device=device, dtype=torch.float32
     ).unsqueeze(1)
     expected = x.float() * unique_pes
-    max_abs = (combined.float() - expected).abs().max().item()
+    max_abs = (combined_valid - expected).abs().max().item()
     max_rel = max_abs / (expected.abs().max().item() + 1e-6)
     # Validated tolerance from the reference test (bf16 + up-to-topk summation).
-    combine_ok = bool(torch.allclose(combined.float(), expected.float(), atol=1e-2, rtol=1e-2))
-    recv_ok = bool(int(recv_num[0].item()) > 0) if recv_num is not None else True
+    combine_ok = bool(torch.allclose(combined_valid, expected.float(), atol=1e-2, rtol=1e-2))
+    recv_ok = total_recv > 0
     correct = bool(combine_ok and recv_ok)
 
     def time_us(fn, warmup, iters) -> list[float]:
@@ -251,13 +263,17 @@ def main() -> int:
         print(f"mori dispatch-combine: status={doc['status']} rt_p50={rt_p50:.1f}us "
               f"slowest_rank={slowest_rank_us:.1f}us correct={correct} -> {args.out}")
 
+    # MoRI's shmem teardown asserts when the EpDispatchCombineOp is destroyed
+    # after shmem_finalize() (CheckStatusValid abort -> SIGABRT on this build,
+    # validated on-node). The result JSON is already written above, so just sync
+    # the ranks and hard-exit, skipping the buggy finalize/destructor path.
     try:
-        mori.shmem.shmem_finalize()
+        dist.barrier()
     except Exception:
         pass
-    dist.barrier()
-    dist.destroy_process_group()
-    return 0 if correct else 1
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0 if correct else 1)
 
 
 if __name__ == "__main__":

@@ -104,12 +104,13 @@ DeepSeek-V4 fallback images.
   it via `rebuild-deepep` (CX_BENCH=deepep). Its Python API is version-sensitive;
   `run_deepep.py` marks the dispatch/combine block `ADAPT HERE` — validate against
   the built commit. B200 (x86_64) first; GB200 (aarch64) follows.
-- **MoRI / MI355X** (`run_mori.py` + `launch_mi355x-amds.sh`) is **scaffolded, not yet
-  run on hardware** (no MI355X access). It mirrors `ROCm/mori`'s dispatch/combine
-  example — config + the `get_registered_combine_input_buffer` zero-copy path,
-  correctness `expected = input × (#unique destination ranks)`. The API is
-  version-sensitive (`ADAPT HERE`), so the first runner job is the validation, like
-  GB200 was for DeepEP; the AMD ROCm image isn't digest-pinned yet.
+- **MoRI / MI355X** (`run_mori.py` + `launch_mi355x-amds.sh`) is **validated on
+  hardware** (8× MI355X: dispatch+combine numerically correct, ~85 µs round-trip).
+  It mirrors `ROCm/mori`'s example (config + `get_registered_combine_input_buffer`
+  zero-copy path, `expected = input × #unique-destination-ranks`). Three
+  ionic_rdma-fabric constraints are baked in (see `CONTAINERS.md`): a 2 GiB heap
+  (the NICs cap RDMA MRs at ~4 GiB), a bounded `max_num_inp_token_per_rank`, and a
+  hard-exit past MoRI's buggy shmem teardown. The ROCm image isn't digest-pinned yet.
 - **Multi-node** (`launch_b200-dgxc-slurm.sh`) assumes `srun --mpi=pmix` + a
   compute-visible checkout (`CX_STAGE_DIR`); else fall back to mpirun-in-container
   or srt-slurm. CX_BENCH=nccl only for now.
