@@ -26,14 +26,15 @@ import json
 import os
 import sys
 
-# MoRI's symmetric-memory heap defaults to 2 GiB (static) — too small for the
-# DeepSeek hidden size (7168) across 8 ranks: the dispatch/combine buffers
-# overflow it ("Out of static heap memory ... Increase via MORI_SHMEM_HEAP_SIZE",
-# observed on the first MI355X run). Size it generously here, BEFORE `import mori`
-# (the heap is created at shmem init); MI355X HBM is ample. Layered override:
-# explicit MORI_SHMEM_HEAP_SIZE > CX_MORI_HEAP_BYTES > 16 GiB default.
+# MoRI's symmetric-memory heap defaults to 2 GiB (static), too small for the
+# DeepSeek hidden size (7168) across 8 ranks (dispatch/combine buffers overflow
+# it). Set it BEFORE `import mori` (the heap is created at shmem init). Use the
+# reference test's "6G": big enough for the buffers, and small enough to
+# RDMA-register — a 16 GiB heap allocated fine but failed RDMA MR registration
+# (errno 22 EINVAL) on the first heap-bumped MI355X run. Layered override:
+# explicit MORI_SHMEM_HEAP_SIZE > CX_MORI_HEAP_SIZE > "6G".
 os.environ.setdefault("MORI_SHMEM_HEAP_SIZE",
-                      os.environ.get("CX_MORI_HEAP_BYTES", str(16 * 1024**3)))
+                      os.environ.get("CX_MORI_HEAP_SIZE", "6G"))
 
 SCHEMA_VERSION = 1
 MEASUREMENT_CONTRACT = "mori-normal-v1"
