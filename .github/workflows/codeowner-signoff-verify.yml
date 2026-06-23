@@ -193,39 +193,59 @@ jobs:
             instead have an `e2e-tests.yml` run kicked off by a `/sweep` comment — treat that as
             equivalent.)
 
-            IMPORTANT — artifact reuse is normal and valid. After an eligible full sweep, a
+            IMPORTANT — artifact reuse is normal and valid, BUT it must anchor to a real
+            executed sweep on a commit that is still in this PR. After an eligible full sweep, a
             maintainer comments `/reuse-sweep-run [run_id]` to reuse those artifacts. When that
-            happens, the run on the CURRENT head SHA is a "reuse" run: `reuse-sweep-gate` /
-            `check-changelog` run, but every benchmark and eval job is `skipped`. That is NOT a
-            failure — it means the authoritative validation lives in an earlier full-sweep run
-            whose commit is still in this PR. You must trace back to that source run.
+            happens, the run on the CURRENT head SHA is a "reuse" run: `check-changelog` /
+            `reuse-sweep-gate` run, but every benchmark and eval job is `skipped`. That is not a
+            failure by itself — but you MUST confirm the reuse points at a concrete green executed
+            sweep whose commit is part of this PR. A reuse that anchors to nothing, or to a commit
+            that has been force-pushed/rebased out of the PR, does NOT count as validation.
+
+            Key definitions:
+            - EXECUTED run: a `run-sweep.yml` run whose benchmark + eval jobs actually RAN
+              (conclusion `success`), not `skipped`. A run where only `check-changelog` /
+              `reuse-sweep-gate` ran and all `single-node */eval */collect-evals` are `skipped` is
+              a SKIP/REUSE run, never the authoritative run.
+            - IN-PR commit: a commit that is an ancestor of the current head SHA. Verify with the
+              compare API — `ahead`/`identical` means in-PR; `diverged` or `behind` means it was
+              rebased/force-pushed out and does NOT count:
+              ```bash
+              gh api repos/${{ github.repository }}/compare/<candidate-sha>...${{ needs.gate.outputs.head-sha }} \
+                --jq '{status,ahead_by,behind_by}'   # require status ahead|identical, behind_by 0
+              ```
 
             Procedure:
-            - List this PR's full-sweep runs (by branch, since the authoritative run may be on an
-              earlier in-PR commit, not the head SHA):
+            - List this PR's full-sweep runs by branch (the authoritative run may be on an earlier
+              in-PR commit, not the head SHA):
               ```bash
               gh run list --repo ${{ github.repository }} --workflow run-sweep.yml \
                 --branch <headRefName> --limit 30 \
                 --json databaseId,headSha,status,conclusion,event,createdAt,url
               ```
-              Also scan the PR comments for `/reuse-sweep-run [run_id]` (the latest such comment
-              by an OWNER/MEMBER/COLLABORATOR wins; it may pin a specific run id) and for `/sweep`
-              replies containing `Run:` links. Cross-reference those run IDs.
-            - Determine the AUTHORITATIVE run — the run that actually executed the sweep:
+            - Inspect the head-SHA run's jobs:
               ```bash
               gh run view <RUN_ID> --repo ${{ github.repository }} --json jobs,conclusion,status,headSha
               ```
-              If the head-SHA run only has `check-changelog` / `reuse-sweep-gate` and all
-              benchmark/eval jobs are `skipped`, it is a reuse run — follow it to the source full
-              sweep (the pinned `/reuse-sweep-run <id>`, else the latest successful `run-sweep.yml`
-              PR run whose commit is still in the PR). The authoritative run is that source run.
-            - A run counts as GREEN only if `status == completed` and `conclusion == success` and
-              its benchmark jobs actually ran (not all skipped). Confirm the authoritative run's
-              head SHA is a commit that is part of this PR.
-            - PASS if a green authoritative full-sweep run exists (directly on the head SHA, or
-              reused from an earlier in-PR commit). Otherwise FAIL and record which runs you found
-              and why none qualified (failed jobs, not part of the PR, still running, cancelled by
-              infra, reuse pointing at a non-green/non-existent source, etc.).
+              If it is an EXECUTED green run on the head SHA, Check 1 passes.
+            - If the head-SHA run is a SKIP/REUSE run, read what it anchored to from the
+              `reuse-sweep-gate` job log (it prints `skip-pr-sweep`, `reuse-source-run-id`,
+              `reuse-source-head-sha`):
+              ```bash
+              gh run view <HEAD_RUN_ID> --repo ${{ github.repository }} --log \
+                | grep -E 'skip-pr-sweep|reuse-source-run-id|reuse-source-head-sha'
+              ```
+              Also check PR comments for `/reuse-sweep-run [run_id]` (latest by an
+              OWNER/MEMBER/COLLABORATOR wins; may pin a run id). The AUTHORITATIVE run is that
+              anchored source run. If `reuse-source-run-id` is EMPTY (skip with no anchor) and no
+              pinned run is supplied, there is NO validation — FAIL.
+            - Validate the AUTHORITATIVE run: it must be an EXECUTED green run, AND its head SHA
+              must be an IN-PR commit (compare check above). An executed green run that is on a
+              diverged/orphaned commit does NOT satisfy validation.
+            - PASS only if such a run exists (executed green, in-PR, evals run — see Check 2).
+              Otherwise FAIL and state precisely why: e.g. "all runs on the 3 PR commits are
+              skip/failed; head reuse anchored to empty source; the only executed green sweep
+              (<run-url>, sha <x>) is diverged out of the PR."
 
             ## Check 2 — Evals pass on the authoritative run
             Using the AUTHORITATIVE run from Check 1 (the run that actually executed the sweep —
