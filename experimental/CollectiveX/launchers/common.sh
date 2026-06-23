@@ -102,8 +102,12 @@ cx_collect_results() {
 # CX_NCCL_HOME defaults to /usr (system nccl.h in /usr/include on the sglang
 # cu130 images); override CX_CUDA_HOME / CX_NCCL_HOME / CX_MPI_HOME if needed.
 cx_build_nccl_tests() {
-  local parent="$1" mpi="${2:-0}" dir bin
-  dir="$parent/nccl-tests"
+  local parent="$1" mpi="${2:-0}" dir bin sfx=""
+  # Cache MPI=0 and MPI=1 builds in SEPARATE dirs. A single-node (MPI=0) binary
+  # reused under `srun --mpi=pmix` runs as N standalone world=1 procs (busbw=0);
+  # keying the cache by flavor prevents that cross-contamination.
+  [ "$mpi" = "1" ] && sfx="-mpi"
+  dir="$parent/nccl-tests$sfx"
   bin="$dir/build/all_reduce_perf"
   if [ -x "$bin" ]; then
     cx_log "nccl-tests already built: $dir/build"

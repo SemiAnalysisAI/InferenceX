@@ -227,6 +227,11 @@ def main() -> int:
         with open(args.env_json) as fh:
             env = json.load(fh)
 
+    # All-zero busbw means the benchmark didn't actually communicate — e.g. an
+    # MPI=0 binary launched under srun --mpi=pmix runs as N standalone world=1
+    # procs (busbw formula -> 0). Don't let that pass the gate as "valid".
+    peak_busbw = max((r.get("busbw_gbps") or 0.0 for r in rows), default=0.0)
+
     doc = {
         "schema_version": SCHEMA_VERSION,
         "family": "nccl",
@@ -236,7 +241,8 @@ def main() -> int:
         "binary": binary,
         "command": " ".join(command) if command else f"<parse-only {args.parse_only}>",
         "transport": args.transport,
-        "status": ("valid" if (rows and ran_ok and (summary.get("check_passed") is True
+        "status": ("valid" if (rows and ran_ok and peak_busbw > 0.0
+                   and (summary.get("check_passed") is True
                    or (args.check == 0 and summary.get("check_passed") is None))) else "invalid"),
         "comparison_key": comparison_key(meta),
         **meta,
