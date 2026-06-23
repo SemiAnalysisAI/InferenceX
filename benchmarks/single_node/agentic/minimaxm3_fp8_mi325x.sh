@@ -138,6 +138,7 @@ EOF
         export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
         export MC_TCP_ENABLE_CONNECTION_POOL=1
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --default_kv_lease_ttl=120s \
             --eviction_high_watermark_ratio=0.80 \
             --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
         MOONCAKE_MASTER_PID=$!
