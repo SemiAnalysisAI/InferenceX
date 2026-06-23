@@ -1778,13 +1778,10 @@ dsv4-fp4-b200-vllm-agentic:
       - { tp: 8, offloading: none,  conc-list: [1, 2, 3, 4, 5] }
       # Sample the useful MooncakeStore range without repeating its collapsed
       # high-concurrency tail.
-      - { tp: 8, offloading: cpu, conc-list: [8, 10, 16, 32, 40, 44] }
-      # The latest DEP run falls from 10,361 tok/s/GPU at conc 64 to 3,045 at
-      # conc 72. Use two-request steps across that cliff, with sparse baselines.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [16, 32, 38, 44, 50, 56, 60, 64, 66, 68, 70, 72] }
-      # Probe the external-cache transition around conc 64 while retaining
-      # lower-concurrency points needed to establish the throughput frontier.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [16, 32, 38, 44, 50, 56, 64, 66, 68] }
+      - { tp: 8, offloading: cpu, conc-list: [8, 10, 16] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [16, 32, 38, 44, 50] }
+      # Retain the external-cache transition and peak-throughput region.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [16, 38, 44, 56, 64, 66, 68] }
 
 dsv4-fp4-b200-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
@@ -2992,17 +2989,13 @@ dsv4-fp4-b300-vllm-agentic:
       gpus-per-node: 8
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
-      # TP4 falls from 94% cache hit at conc 16 to 2% at conc 32.
-      - { tp: 4, offloading: none,  conc-list: [1, 4, 8, 16, 20, 24, 32] }
-      # TP8 remains cache-resident through conc 52, then declines by conc 72.
-      - { tp: 8, offloading: none,  conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }
-      # TP4 DEP peaks at conc 32 and collapses by conc 40; conc 64 captures the floor.
-      - { tp: 4, ep: 4, dp-attn: true, offloading: none,  conc-list: [8, 16, 24, 32, 40, 64] }
-      # CPU offload moves the cliff to 64-96. Conc 192/256 cannot complete
-      # warmup plus the 30-minute profile within the three-hour allocation.
-      - { tp: 4, ep: 4, dp-attn: true, offloading: cpu, conc-list: [32, 40, 48, 56, 64, 72, 80, 88, 96, 128] }
-      # TP8 DEP retains representative low, peak, transition, and collapsed-tail points.
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 72, 100, 128, 144, 196, 512] }
+      - { tp: 4, offloading: none,  conc-list: [1, 4, 8, 16] }
+      # TP8 remains cache-resident through conc 52.
+      - { tp: 8, offloading: none,  conc-list: [1, 4, 8, 16, 32, 40, 48, 52] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: none,  conc-list: [8, 16] }
+      - { tp: 4, ep: 4, dp-attn: true, offloading: cpu, conc-list: [32] }
+      # TP8 DEP retains representative low, peak, and transition points.
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none,  conc-list: [52, 72, 100, 128, 144] }
 
 dsv4-fp4-b300-trt:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
