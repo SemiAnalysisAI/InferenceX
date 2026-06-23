@@ -3950,11 +3950,48 @@
     - "Update ISL=8192 search-space: TP8-only from conc=4-64, DPA from conc=128-1024 (previously conc=1-64 and DPA conc=64-512)"
     - "Update Applied TBO on high concurrencies"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1717
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm-mtp
+  description:
+    - "Update the MiniMax-M3 B200 single-node image to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
+    - "Enable FlashInfer TRT-LLM attention with FP8 indexer KV and KV cache; use TRITON_ATTN for the EAGLE3 drafter."
+    - "Switch TP-only configurations from explicit Marlin MoE to the new image's default FlashInfer TRT-LLM MoE backend."
+    - "Patch the image's MiniMax M3 MSA prefill path to materialize sliced top-k indices before CSR construction."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1832
+
+- config-keys:
+    - minimaxm3-fp8-b200-vllm
+  description:
+    - "Update the MiniMax-M3 B200 single-node image to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
+    - "Enable FlashInfer TRT-LLM attention with FP8 indexer KV and KV cache."
+    - "Switch TP-only configurations from explicit Marlin MoE to the new image's default FlashInfer TRT-LLM MoE backend."
+    - "Patch the image's MiniMax M3 MSA prefill path to materialize sliced top-k indices before CSR construction."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1833
+
+- config-keys:
+    - minimaxm3-fp8-b300-vllm
+  description:
+    - "Update the MiniMax-M3 B300 single-node image to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
+    - "Enable FlashInfer TRT-LLM attention with FP8 indexer KV and KV cache."
+    - "Switch TP-only configurations from explicit Marlin MoE to the new image's default FlashInfer TRT-LLM MoE backend."
+    - "Patch the image's MiniMax M3 MSA prefill path to materialize sliced top-k indices before CSR construction."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1834
+
 - config-keys:
     - minimaxm3-fp4-mi355x-atom
   description:
     - "Expand search space for minimaxm3-fp4-mi355x-atom: add TP2 and TP8 configurations, extend concurrency range to 256 for ISL1024 and ISL8192, and add TP8 conc=1-2 for ISL8192."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
+
+- config-keys:
+    - minimaxm3-fp8-b300-vllm-mtp
+  description:
+    - "Update the MiniMax-M3 B300 single-node image to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
+    - "Enable FlashInfer TRT-LLM attention with FP8 indexer KV and KV cache; use TRITON_ATTN for the EAGLE3 drafter."
+    - "Switch TP-only configurations from explicit Marlin MoE to the new image's default FlashInfer TRT-LLM MoE backend."
+    - "Patch the image's MiniMax M3 MSA prefill path to materialize sliced top-k indices before CSR construction."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1835
 
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm-mtp
@@ -4041,3 +4078,11 @@
     - "Recover the failed official ingest for PR #1796 from validated sweep run 27663808752 (attempt 2)"
     - "Artifact-only recovery: reuse 23 fixed-sequence rows and 2 eval rows without rerunning benchmarks"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1884
+
+- config-keys:
+    - qwen3.5-fp8-gb200-dynamo-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc"
+    - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1810
