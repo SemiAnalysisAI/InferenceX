@@ -1,0 +1,3 @@
+# CollectiveX result bundles land here as flat *.json (one per runner×op),
+# plus plots/ and raw_*.txt captures (gitignored). Keep this file so the dir
+# exists before the first run.

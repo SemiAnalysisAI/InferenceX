@@ -1,0 +1,108 @@
+name: CollectiveX Experimental
+
+# Orchestration only — all benchmark logic lives in experimental/CollectiveX/.
+# Push to the feature branch runs a small GB200 NCCL smoke (no merge to main
+# needed); workflow_dispatch runs a chosen SKU + benchmark (the lane for B200,
+# DeepEP, and larger sweeps). Each job lands on the SKU's self-hosted runner and
+# invokes that SKU's launch script — the same launch_${RUNNER_NAME%%_*}.sh
+# convention the serving benchmarks use.
+
+on:
+  push:
+    branches:
+      - collectivex
+    paths:
+      - 'experimental/CollectiveX/**'
+      - '.github/workflows/collectivex-experimental.yml'
+  workflow_dispatch:
+    inputs:
+      sku:
+        description: Self-hosted runner pool (label from .github/configs/runners.yaml)
+        type: choice
+        default: gb200
+        options: [gb200, b200, b200-multinode, b300, gb300]
+      benchmark:
+        description: Which benchmark to run
+        type: choice
+        default: nccl
+        options: [nccl, deepep, all]
+      ops:
+        description: NCCL ops (space-separated); blank = default set
+        type: string
+        default: ''
+      min_bytes:
+        description: nccl-tests min message size
+        type: string
+        default: '8'
+      max_bytes:
+        description: nccl-tests max message size
+        type: string
+        default: '8G'
+      ngpus:
+        description: GPUs per node (blank = SKU default)
+        type: string
+        default: ''
+
+concurrency:
+  group: collectivex-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Push -> short GB200 NCCL smoke (idle capacity; never auto-contends with the
+  # B200 serving sweep). GB200 runner workspace is staged to compute-visible
+  # Lustre via CX_STAGE_DIR.
+  smoke:
+    if: github.event_name == 'push'
+    runs-on: gb200
+    timeout-minutes: 60
+    env:
+      CX_BENCH: nccl
+      CX_NGPUS: '4'
+      CX_MAX_BYTES: 1G
+      CX_TIME: '20'
+      CX_STAGE_DIR: /mnt/lustre01/users-public/sa-shared/cx-stage
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
+        with: { clean: true }
+      - name: Launch GB200 NCCL smoke
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collectivex_smoke_gb200_${{ github.run_id }}
+          path: experimental/CollectiveX/results/*.json
+          if-no-files-found: warn
+
+  # Manual dispatch -> chosen SKU + benchmark. Lands on the inputs.sku runner.
+  dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ${{ inputs.sku }}
+    timeout-minutes: 120
+    env:
+      CX_BENCH: ${{ inputs.benchmark }}
+      CX_OPS: ${{ inputs.ops }}
+      CX_MIN_BYTES: ${{ inputs.min_bytes }}
+      CX_MAX_BYTES: ${{ inputs.max_bytes }}
+      CX_NGPUS: ${{ inputs.ngpus }}
+      # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
+      CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
+        with: { clean: true }
+      - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }}
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ github.run_id }}
+          path: experimental/CollectiveX/results/*.json
+          if-no-files-found: warn
