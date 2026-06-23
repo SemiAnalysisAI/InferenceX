@@ -116,6 +116,7 @@ CHUNKED_PREFILL_SIZE=8192
 if [ "$DP_ATTENTION" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
+        --tokenizer-worker-num "$TP"
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
