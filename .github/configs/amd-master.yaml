@@ -2860,8 +2860,10 @@ minimaxm3-fp8-mi300x-vllm-agentic:
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
-      - { tp: 8, offloading: none, conc-list: [4] }
-      - { tp: 8, ep: 8, offloading: cpu, conc-list: [4] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 6, 8, 10, 12, 16, 24, 32] }
+      - { tp: 8, ep: 8, offloading: none, conc-list: [2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48] }
+      - { tp: 8, offloading: cpu, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 48, 64] }
+      - { tp: 8, ep: 8, offloading: cpu, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 48, 64] }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi300x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
