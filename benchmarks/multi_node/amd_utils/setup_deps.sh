@@ -163,6 +163,86 @@ print("[SETUP] Patched: gluon pa_mqa_logits 3D instr_shape for base variant")
 }
 
 # ---------------------------------------------------------------------------
+# SGLang: prevent TP-rank collective desync deadlock in disaggregation prefill.
+#
+# resolve_waiting_queue_bootstrap() runs poll_and_all_reduce_attn_cp_tp_group()
+# over `candidates`. The upstream candidate set (all non-aborted waiting reqs)
+# can differ across TP ranks, so some ranks enter the all_reduce while others
+# skip it -> hang. Narrow candidates to optimistic (pending_bootstrap) requests,
+# which is consistent across ranks and is the only set finalize_bootstrap acts on.
+# ---------------------------------------------------------------------------
+patch_disagg_prefill_bootstrap_desync() {
+    python3 -c '
+import os, sys
+
+target = "/sgl-workspace/sglang/python/sglang/srt/disaggregation/prefill.py"
+if not os.path.isfile(target):
+    print("[SETUP] disaggregation/prefill.py not found, skipping")
+    sys.exit(0)
+
+src = open(target).read()
+
+old = "        candidates = [req for req in self.waiting_queue if not is_aborted(req)]"
+new = (
+    "        candidates = [\n"
+    "            req\n"
+    "            for req in self.waiting_queue\n"
+    "            if req.pending_bootstrap and not is_aborted(req)\n"
+    "        ]"
+)
+
+if new in src:
+    print("[SETUP] prefill bootstrap-desync patch already applied")
+    sys.exit(0)
+
+if old not in src:
+    print("[SETUP] WARN: resolve_waiting_queue_bootstrap pattern not found — sglang version may have changed")
+    sys.exit(0)
+
+open(target, "w").write(src.replace(old, new))
+print("[SETUP] Patched: disaggregation/prefill.py resolve_waiting_queue_bootstrap candidates")
+'
+    _SETUP_INSTALLED+=("prefill-bootstrap-desync-fix")
+}
+
+# ---------------------------------------------------------------------------
+# SGLang: soften host>device KV pool assert (Mooncake / page_first_direct).
+#
+# With page_first_direct + a storage backend, SGLang asserts the host KV pool
+# must be strictly larger than the device pool, which kills startup when the
+# host pool is sized smaller. Turn the hard assert into a warning so the server
+# starts (lower L2 hit rate is acceptable).
+# Gated by MC_PATCH_HOSTPOOL=1 and OFFLOADING=hicache.
+# ---------------------------------------------------------------------------
+patch_memory_pool_host_assert() {
+    if [[ "${MC_PATCH_HOSTPOOL:-0}" != "1" || "${OFFLOADING:-none}" != "hicache" ]]; then
+        return 0
+    fi
+    echo "[SETUP] Patching memory_pool_host.py host>device assert -> warning ..."
+    python3 -c "
+import pathlib
+f = pathlib.Path('/sgl-workspace/sglang/python/sglang/srt/mem_cache/memory_pool_host.py')
+src = f.read_text()
+old = '''        assert (
+            self.size > device_pool.size
+        ), \"The host memory should be larger than the device memory with the current protocol\"'''
+new = '''        if self.size <= device_pool.size:
+            import logging as _lg
+            _lg.getLogger(__name__).warning(
+                \"Host KV pool (%d tokens) <= device pool (%d tokens). L2 hit rate may be low.\",
+                self.size, device_pool.size)'''
+if new in src:
+    print('[SETUP] memory_pool_host.py assert patch already applied')
+elif old in src:
+    f.write_text(src.replace(old, new))
+    print('[SETUP] Patched: memory_pool_host.py assert -> warning')
+else:
+    print('[SETUP] WARN: memory_pool_host.py assert pattern not found — sglang version may have changed')
+" || true
+    _SETUP_INSTALLED+=("memory-pool-host-assert-fix")
+}
+
+# ---------------------------------------------------------------------------
 # SGLang: Install latest transformers for GLM-5 model type support.
 #
 # GLM-5 (zai-org/GLM-5-FP8) requires a transformers build that includes
@@ -203,6 +283,8 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export LD_LIBRARY_PATH="${UCX_HOME}/lib:${RIXL_HOME}/lib:${RIXL_HOME}/lib/x86_64-linux-gnu:${LD_LIBRARY_PATH:-}"
 else
     patch_gluon_pa_mqa_logits_instr_shape
+    patch_disagg_prefill_bootstrap_desync
+    patch_memory_pool_host_assert
     install_transformers_glm5
 fi
 

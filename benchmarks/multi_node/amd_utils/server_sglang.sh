@@ -52,60 +52,6 @@ source $SGLANG_WS_PATH/env.sh
 host_ip=$(ip route get 1.1.1.1 | awk '/src/ {print $7}')
 host_name=$(hostname)
 
-# Workaround: with page_first_direct + a storage backend, SGLang asserts the host
-# KV pool must be strictly larger than the device pool, which kills startup when
-# the host pool is sized smaller.  Soften that hard assert into a warning so the
-# server starts (lower L2 hit rate is acceptable).  Gated by MC_PATCH_HOSTPOOL=1.
-if [[ "${MC_PATCH_HOSTPOOL:-0}" == "1" && "${OFFLOADING:-none}" == "hicache" ]]; then
-    echo "[Mooncake] Patching memory_pool_host.py host>device assert -> warning on ${host_name} ..."
-    python3 -c "
-import pathlib
-f = pathlib.Path('/sgl-workspace/sglang/python/sglang/srt/mem_cache/memory_pool_host.py')
-src = f.read_text()
-old = '''        assert (
-            self.size > device_pool.size
-        ), \"The host memory should be larger than the device memory with the current protocol\"'''
-new = '''        if self.size <= device_pool.size:
-            import logging as _lg
-            _lg.getLogger(__name__).warning(
-                \"Host KV pool (%d tokens) <= device pool (%d tokens). L2 hit rate may be low.\",
-                self.size, device_pool.size)'''
-if old in src:
-    f.write_text(src.replace(old, new))
-    print('Patched memory_pool_host.py: assert -> warning')
-else:
-    print('memory_pool_host.py: already patched or assert not found')
-" 2>/dev/null || true
-fi
-
-# Fix: prevent TP-rank collective desync deadlock in disaggregation prefill.
-# resolve_waiting_queue_bootstrap() runs poll_and_all_reduce_attn_cp_tp_group()
-# over `candidates`. The upstream candidate set (all non-aborted waiting reqs)
-# can differ across TP ranks, so some ranks enter the all_reduce while others
-# skip it -> hang. Narrow candidates to optimistic (pending_bootstrap) requests,
-# which is consistent across ranks and is the only set finalize_bootstrap acts on.
-echo "[Patch] Narrowing resolve_waiting_queue_bootstrap candidates on ${host_name} ..."
-python3 -c "
-import pathlib
-f = pathlib.Path('/sgl-workspace/sglang/python/sglang/srt/disaggregation/prefill.py')
-src = f.read_text()
-old = '        candidates = [req for req in self.waiting_queue if not is_aborted(req)]'
-new = (
-    '        candidates = [\n'
-    '            req\n'
-    '            for req in self.waiting_queue\n'
-    '            if req.pending_bootstrap and not is_aborted(req)\n'
-    '        ]'
-)
-if new in src:
-    print('Patched prefill.py: resolve_waiting_queue_bootstrap candidates (already patched)')
-elif old in src:
-    f.write_text(src.replace(old, new))
-    print('Patched prefill.py: resolve_waiting_queue_bootstrap candidates')
-else:
-    print('prefill.py: patch target not found (skipping)')
-" 2>/dev/null || true
-
 # MORI_RDMA_TC configuration (optional)
 # If set by runner, use it for RDMA traffic class configuration
 # If not set, RDMA operations will proceed without QoS/traffic class settings
