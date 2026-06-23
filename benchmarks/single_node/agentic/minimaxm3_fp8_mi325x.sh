@@ -4,7 +4,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL IMAGE TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -165,6 +165,11 @@ if (( EP_SIZE > 1 )); then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
+KV_CACHE_ARGS=()
+if [[ "$IMAGE" == vllm/vllm-openai-rocm:nightly-* ]]; then
+    KV_CACHE_ARGS=(--kv-cache-dtype fp8)
+fi
+
 VLLM_BACKEND_PORT="$PORT"
 if [[ "$DP_ATTENTION" == "true" ]]; then
     VLLM_BACKEND_PORT=$((PORT + 1))
@@ -193,6 +198,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
     --trust-remote-code \
+    "${KV_CACHE_ARGS[@]}" \
     "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
 
