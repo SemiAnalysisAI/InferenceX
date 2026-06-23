@@ -1,8 +1,8 @@
-name: "svf-vllm-disagg-gb200-1p2d-tep8-tp8-agentic"
+name: "svf-vllm-disagg-gb200-3p1d-dep8-dep8-agentic"
 
-# Per-GPU-efficiency candidate: one cache-affinitized TEP8 prefill and two
-# TP8 decodes. Every replica spans two four-GPU GB200 nodes, for six nodes /
-# 24 inference GPUs; NATS/etcd share the first worker node.
+# High-throughput topology: three DEP8 prefill workers and one DEP8 decode
+# worker. All four workers use attention DP8 / expert EP8, for 32 inference
+# GPUs total.
 
 model:
   path: "deepseek-v4-pro"
@@ -25,10 +25,10 @@ health_check:
 resources:
   gpu_type: "gb200"
   gpus_per_node: 4
-  prefill_nodes: 2
-  decode_nodes: 4
-  prefill_workers: 1
-  decode_workers: 2
+  prefill_nodes: 6
+  decode_nodes: 2
+  prefill_workers: 3
+  decode_workers: 1
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -89,16 +89,18 @@ backend:
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
-      # enforce-eager: true
-      # Inherited from fixed-sequence recipes; let vLLM select the scheduler
-      # sequence limit until this is tuned explicitly for the agentic trace.
-      # max-num-seqs: 16
-      max-num-batched-tokens: 16384
+      # Let vLLM select max-num-seqs for the long-context AgentX trace.
+      # max-num-seqs: 256
+      # DEP8 holds a full model replica per GPU. A 16K prefill step requires
+      # a 9.84 GiB FP4 MoE intermediate and OOMs before serving traffic.
+      max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
@@ -110,17 +112,21 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 8
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_fp4_indexer_cache": true}'
+      # Let vLLM select max-num-seqs and max-num-batched-tokens.
       # max-num-seqs: 512
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 10
-      all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
 

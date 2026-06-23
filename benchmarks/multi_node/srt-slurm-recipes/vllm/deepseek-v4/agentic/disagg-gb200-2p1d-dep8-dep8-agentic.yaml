@@ -1,6 +1,6 @@
-name: "experimental-svf-vllm-disagg-gb200-2p1d-dep8-dep8-agentic"
+name: "svf-vllm-disagg-gb200-2p1d-dep8-dep8-agentic"
 
-# Experimental high-throughput topology: two DEP8 prefill workers and one
+# High-throughput topology: two DEP8 prefill workers and one
 # DEP8 decode worker. All three workers use attention DP8 / expert EP8, for
 # 24 inference GPUs total. This makes the previously manual-only DEP/DEP
 # experiment reproducible while the June 21 AgentX frontier is retuned.
@@ -99,7 +99,9 @@ backend:
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       # Let vLLM select max-num-seqs for the long-context AgentX trace.
       # max-num-seqs: 256
-      max-num-batched-tokens: 16384
+      # DEP8 holds a full model replica per GPU. A 16K prefill step requires
+      # a 9.84 GiB FP4 MoE intermediate and OOMs before serving traffic.
+      max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
@@ -123,7 +125,7 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true

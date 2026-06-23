@@ -958,3 +958,300 @@ tok/s/GPU, 15.526s mean TTFT, and 279.09ms mean TPOT on eight inference GPUs.
   payload limit; bulk KV data used NIXL over UCX RC rather than NATS.
 - Every Slurm allocation exited, and no orphaned job remained after workflow
   completion.
+
+## Full-Sweep Pruning Audit
+
+The completed curves already justify removing configurations that cannot
+contribute a useful throughput/latency frontier point:
+
+- Remove TEP8 1P/1D. Its tested 16K points deliver only 1,520--2,270
+  tok/s/GPU with 158--644 seconds mean TTFT. The apparent high output-token
+  interactivity is survivor bias under severe prefill starvation.
+- Remove 1P/2D. The one-prefill TEP topology is conclusively prefill/locality
+  limited; adding decode capacity cannot repair that bottleneck.
+- Retain 2P/1D low-concurrency points and c52, but remove c64/c80/c96 and the
+  c128+ batch. c52 has higher throughput and radically lower TTFT; c128 is
+  already deep overload and rules out the larger points.
+- Remove 2P/2D. The measured 2P collapse occurs before decode saturation, so
+  the second decode replica adds GPUs without addressing the limiting tier.
+- Remove 4P/2D c112. Its 3,682 tok/s/GPU and 63.34-second mean TTFT are far
+  from the established frontier.
+- Retain the useful 3P/2D c16/c24/c32/c40/c48/c56/c64/c80 curve, but remove
+  dominated c72 and overloaded c96.
+- Retain DEP8 c128/c160 temporarily as the maximum-normalized-throughput
+  endpoints despite their poor TTFT.
+- Remove 3P/1D. Its c56 gate delivered 156,510 tok/s total, 4,891 tok/s/GPU,
+  5.14-second mean TTFT, and 38.95 tok/s interactivity. The validated 2P/1D
+  c52 point uses eight fewer GPUs while delivering both higher total throughput
+  (180,055--187,624 tok/s) and higher normalized throughput
+  (7,502--7,818 tok/s/GPU) at essentially the same TTFT/interactivity. The
+  single TP8 decoder was queued at 83--97% KV occupancy while all three
+  prefills remained mostly unqueued, so c68/c80/c96 were cancelled.
+- Remove 4P/1D. Its measured c32/c64 points were already dominated by 3P/2D,
+  and the 3P/1D gate now proves that adding still more TEP8 prefill replicas
+  behind the same saturated TP8 decoder cannot recover normalized throughput.
+
+The resulting compact full sweep should keep 2P/1D c16/c24/c32/c40/c52,
+3P/2D c16/c24/c32/c40/c48/c56/c64/c80, and provisionally DEP8 c128/c160.
+The DEP8 endpoints remain provisional until the DEP8-decode experiment shows
+whether they contribute information not covered by the replacement topology.
+Whole-entry removals should also delete their now-unreferenced recipe files.
+
+## Full-Rack Manual Tuning Loop
+
+The next tuning phase uses direct srt-slurm submissions on Watchtower rather
+than paying the GitHub Actions feedback-loop cost for every diagnostic point.
+Final accepted frontier points still require an official Actions artifact.
+
+- Watchtower has 18 four-GPU GB200 nodes (72 GPUs). Manual diagnostic recipes
+  set `infra.etcd_nats_dedicated_node: false`, colocating NATS/etcd with the
+  first worker/head node so three independent 24-GPU 2P/1D stacks can run at
+  once. Checked-in recipes remain unchanged pending stability validation.
+- Jobs `19581`, `19582`, and `19583` independently test two TEP8 prefills plus
+  a TP1 x DP8 / EP8 decoder at c52, c64, and c80. Each uses a 900-second replay
+  and has its own frontend, router state, result directory, and logs.
+- The comparison holds the validated 16K prefill batch, prefix retention,
+  Dynamo KV/session-aware routing, and NIXL/UCX transport constant. It tests
+  whether decode DEP moves the c52--c80 knee without conflating prefill
+  changes.
+- Follow-up manual recipes are staged for two and three DEP8 prefill workers,
+  each paired with either TP8 or DEP8 decode. DEP prefill uses the validated
+  16K batch, TP1 x DP8 / EP8, and `max-num-seqs: 256`; no loader, allocator,
+  offload, or custom-kernel workaround is introduced.
+- Promising shapes will use grouped concurrency batches of at most four points
+  and push through c128/c160/c192/c256/c320 until normalized throughput
+  plateaus or TTFT becomes unreasonable. Every grouped point retains the
+  unique cache-bust namespace and idle-drain boundary.
+
+Five-minute interim results from the decode-DEP comparison:
+
+- c52 stabilized near 179.7K total tok/s (7.49K/GPU), 13.7-second p95 TTFT,
+  and 95--96% local prefill hits.
+- c64 stabilized near 172.5K total tok/s (7.19K/GPU), 24.8-second p95 TTFT,
+  and 82--88% local prefill hits. This materially exceeds the earlier TP8
+  decode c64 point (~142K total / 5.92K/GPU) while preserving useful latency.
+- c80 reproduced the collapsed regime: approximately 60.5K total tok/s
+  (2.52K/GPU), 216-second p95 TTFT, and 44--51% prefill hits. Job `19583` was
+  stopped after more than five stable profiling minutes and its complete
+  server/config/log tree was copied to the local `.gb200-manual-results`
+  directory.
+- Jobs `19581`/`19582` continue to full 900-second c52/c64 profiles. Freed
+  nodes immediately started job `19585`, which runs two DEP8 prefills plus a
+  TP8 decoder at grouped c64/c96/c128/c160.
+
+Final 900-second decode-DEP results:
+
+- c52: 177,031 total tok/s, 7,376 tok/s/GPU, 4.00-second mean / 11.74-second
+  p90 TTFT, 38.62 tok/s p90 interactivity, and 94.2--94.5% local prefill
+  hits. All 1,269 recorded requests succeeded. This is effectively neutral
+  versus the validated TP8-decode c52 result rather than a new frontier.
+- c64: 152,623 total tok/s, 6,359 tok/s/GPU, 24.33-second mean /
+  76.96-second p90 TTFT, 39.62 tok/s p90 interactivity, and 78.7--82.9%
+  local prefill hits. All 1,381 recorded requests succeeded. DEP decode is
+  approximately 7% faster than the prior grouped TP8-decode c64 point, but
+  c52 still dominates it after the longer profile exposes continued locality
+  decay.
+- The results confirm that decoder execution only moves the overload knee
+  modestly; prefill cache locality/capacity is the primary high-throughput
+  tuning axis.
+- The final JSONs and complete output trees are preserved under
+  `.gb200-manual-results/2026-06-22/`. Jobs `19585`--`19587` now occupy the
+  full rack: 2xDEP8-prefill/TP8-decode at c64/c96/c128/c160, and two
+  2xDEP8-prefill/DEP8-decode stacks covering c64/c96/c128/c160 and
+  c192/c256/c320.
+
+## June 21 Ground-Up Retune
+
+The results above remain useful topology priors, but they used the June 15
+trace and fixed-sequence-derived vLLM limits. The new frontier must be measured
+again with `semianalysis_cc_traces_weka_062126` and the following common
+contract:
+
+- vLLM v0.23 and Dynamo `1.3.0.dev20260618`.
+- No active `max-num-seqs`, decode `max-num-batched-tokens`, eager execution,
+  async-scheduling disable, or explicit CUDA-graph capture-size override.
+- 16K prefill batching for TEP8. A vLLM maintainer confirmed this is
+  appropriate after the 32K candidate exceeded the available MoE workspace.
+  DEP8 requires 8K because each rank holds a full model replica and its 16K
+  FP4 MoE intermediate OOMs on the first inference step.
+- Model Runner V2 on both tiers. vLLM v0.23 supports it but does not select it
+  automatically for a quantized MoE model.
+- `FLASHINFER_MLA_SPARSE_DSV4` on both tiers and FP8 prefill-query
+  quantization on prefill workers. The v0.23 source specifically recommends
+  query quantization for long-context prefill with FP8 KV.
+- No `VLLM_USE_RUST_FRONTEND`: srt-slurm launches workers through
+  `python -m dynamo.vllm`, behind Dynamo's own frontend, so the standalone
+  vLLM Rust HTTP frontend is not on the request path.
+- Prefix retention 32768, FP4 indexer cache, Dynamo KV routing/events,
+  NIXL/UCX RC, stream interval 10, and no CPU KV offload remain unchanged.
+- NATS/etcd are colocated on the first worker node. The June 15 full-rack
+  experiments showed no control-plane, lease, NIXL, UCX, frontend, or KV
+  transfer failures with this layout. It removes one non-inference node from
+  each allocation and lets three 24-GPU stacks fill the 72-GPU rack.
+
+The previously manual-only 2P/1D DEP8-prefill + DEP8-decode topology is now
+checked in as
+`disagg-gb200-2p1d-dep8-dep8-agentic.yaml`, with synchronized
+master metadata. Initial clean baselines will compare 2P/1D TEP8/TP8,
+TEP8/DEP8, and DEP8/DEP8 in parallel. PR #1789 Actions run `27993108678`
+currently owns all 18 GB200 nodes; it is intentionally left undisturbed.
+
+The first clean-default startup (`19627`) exposed one required exception to
+the default-graph policy. Both TEP8 prefills loaded successfully and completed
+all 51 piecewise CUDA-graph captures. vLLM then began the FULL portion of its
+default `FULL_AND_PIECEWISE` mode. `VLLM_USE_NCCL_SYMM_MEM=1` attempted
+`ncclCommWindowRegister` from the tensor-parallel all-reduce while CUDA capture
+was active, invalidating the stream; the subsequent NCCL and c10d failures
+were teardown effects. No benchmark request ran.
+
+All GB200 recipes now set `cudagraph_mode=PIECEWISE` on both tiers. This keeps
+vLLM compilation, CUDA graphs, and NCCL symmetric-memory collectives while
+leaving graph-incompatible operations outside the graph, matching vLLM's
+documented purpose for PIECEWISE mode. It does not reinstate `mode: 0`, eager
+execution, an explicit capture-size list, or any memory-utilization workaround.
+Replacement direct-Slurm jobs are `19632` (TEP8/TP8), `19633` (TEP8/DEP8),
+and `19634` (DEP8/DEP8).
+
+Job `19634` reached readiness, then every DEP8 prefill rank failed on the first
+16K-token inference step. FlashInfer's TRT-LLM FP4 MoE kernel requested a
+9.84 GiB intermediate tensor with only 5.71--7.93 GiB physically free, while
+PyTorch reported 10.10--12.31 GiB reserved but unallocated. The experimental
+DEP8-prefill recipe now tests PyTorch's documented fragmentation mitigation,
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`, before reducing the
+maintainer-approved 16K prefill batch or sacrificing KV-cache capacity.
+
+That allocator setting is intentionally rejected by vLLM when NIXL is active:
+expandable segments can remap virtual KV addresses and invalidate NIXL's
+pinned/registered memory. Enabling the CuMem allocator is not an acceptable
+substitute because the prior v0.23 GB200 tests showed CuMem exhausting HBM
+during NVFP4 model conversion. The next experimental DEP8-prefill run instead
+uses an 8K prefill batch. This directly halves the failing FP4 MoE intermediate
+while retaining the 0.9 HBM allocation target and NIXL's address guarantees.
+
+The first June 21 TEP8/DEP8 results showed a decode-side regression relative
+to the historical v0.23 configuration: c52 trends near 112K total tok/s with
+~78 ms ITL, versus 177K total and ~27 ms ITL historically, despite healthy
+prefill locality and much lower TTFT. A controlled recipe now tests decode
+MRV2 off while retaining prefill MRV2, FlashInfer DSV4 attention, PIECEWISE
+graphs, topology, dataset, and all other settings. The maintained recipe and
+job `19633` are the MRV2-on arm.
+
+The vLLM maintainer clarified the official PD recipe's prefill settings:
+`enforce-eager` is intentional because long-context prefill is compute-bound
+and already hides kernel-launch latency, so CUDA graphs provide little prefill
+benefit. It should not be generalized to decode, where launch overhead remains
+important. The same maintainer said `max-num-seqs: 2` is not necessary. After
+the active MRV2 A/B, a controlled prefill-eager arm will hold decode and all
+other settings constant; the sequence limit will remain unset.
+
+The first controlled MRV2 result rejects the decode-regression hypothesis.
+At c52, decode MRV2 off (`19639`) delivered 85,786 tok/s total with 21.29s
+p90 TTFT and 13.32 tok/s p90 interactivity, versus MRV2 on (`19633`) at
+102,526 tok/s, 3.80s, and 13.01 tok/s. MRV2 therefore remains enabled on both
+tiers. Job `19640` reuses c52/c64 for the next isolated arm: prefill eager,
+decode MRV2/PIECEWISE unchanged, and every other setting held constant.
+
+The 8K DEP8/DEP8 experiment is materially stronger than the initial TEP
+points. Job `19637` completed c64 at 144,445 tok/s total (6,018/GPU), 13.46s
+p90 TTFT, and 15.58 tok/s p90 interactivity. Its c80 phase is near 194K tok/s
+after nine profiling minutes with ~11.3s p95 TTFT and no errors, making it the
+leading June 21 high-throughput candidate pending the final export.
+
+The final 8K DEP8/DEP8 c80 and c96 exports establish the first strong June 21
+high-throughput curve. c80 delivered 178,668 tok/s total (7,444/GPU), 7.20s
+p90 TTFT, and 15.38 tok/s p90 interactivity. c96 improved to 201,534 tok/s
+(8,397/GPU), 4.70s p90 / 9.98s p95 TTFT, and 14.80 tok/s p90 interactivity.
+c96 completed 1,323 requests without errors; 65 phase-end cancellations are
+4.7% of the measured work and remain below the 10% credibility threshold.
+Job `19642` extends this exact 8K configuration through c112/c128/c160.
+
+Two follow-up parameter A/Bs are also conclusive. Reducing DEP8 prefill to a
+12K batch while lowering `gpu-memory-utilization` to 0.88 (`19641`) produced
+only about 89K tok/s at c64 with roughly 35s p95 TTFT after more than five
+profiling minutes. This is clearly worse than the 8K/0.90 c64 result above, so
+the run was stopped and 8K/0.90 remains the DEP8 prefill setting. Enabling
+prefill `enforce-eager` (`19640`) produced 102,445 tok/s at c52 with 13.61s
+p90 TTFT and 13.72 tok/s p90 interactivity. The non-eager control was 102,526
+tok/s, 3.80s, and 13.01 tok/s respectively. Eager therefore provides no
+measurable throughput gain on this workload and materially regresses TTFT; it
+will not be adopted despite being valid for a compute-bound prefill service in
+general.
+
+The remaining decode-performance isolation changes only the DEP8 decoder from
+PIECEWISE graphs to the historical
+`{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}` while leaving both DEP8
+prefills PIECEWISE. Job `19643` tests c80/c96. In parallel, job `19644` tests a
+16-GPU 1P/1D DEP8/DEP8 service at c32/c48/c64/c80 to establish the
+single-prefill scaling law and determine whether its lower GPU denominator
+adds normalized-throughput frontier points. Job `19642` began c112 warmup
+after a normal (not hung) DeepGEMM and PIECEWISE graph startup.
+
+Job `19642` finalized c112 at 212,671 tok/s total (8,861/GPU), 28.23s p90 /
+38.01s p95 TTFT, and 14.51 tok/s p90 interactivity. All 1,752 recorded
+requests succeeded; its 104 phase-end cancellations are 5.6% and below the
+10% credibility threshold. This is the new June 21 normalized-throughput
+leader, while c96 remains a separate frontier point because it gives up only
+5.2% normalized throughput for a much lower 4.70s p90 TTFT.
+
+The first submissions of the decode-graph and 1P/1D tests (`19643` and
+`19644`) completed model loading and graph capture but then exited before
+traffic. The non-interactive manual shell had omitted the required host
+`INFMAX_WORKSPACE`; srt-slurm therefore did not add the repository's
+`/infmax-workspace` container mount and the custom benchmark returned 127 for
+missing `agentic_srt.sh`. This is a submission-environment error, not an
+engine, graph, Dynamo, or NIXL failure. Corrected jobs `19645` and `19646`
+explicitly export the normal workspace path, and their generated mount lists
+were verified before continuing.
+
+The following c128 phase then moved the frontier materially: 254,766 tok/s
+total (10,615/GPU), 10.59s p90 / 13.30s p95 TTFT, and 14.21 tok/s p90
+interactivity. All 2,049 records succeeded, theoretical reuse was 97.23%, and
+aggregate measured GPU cache hit was 36.25%. It is 19.8% faster than c112
+while also lowering TTFT, so c112 is dominated apart from a negligible 0.30
+tok/s interactivity difference. The c96 point remains useful because it has
+4.70s p90 TTFT and 14.80 tok/s interactivity. The service proceeds to c160 to
+locate the normalized-throughput knee.
+
+The c160 phase completed at 332,410 tok/s total (13,850/GPU), 5.11s p90 /
+10.95s p95 TTFT, and 13.34 tok/s p90 interactivity. All 2,450 records
+succeeded and 148 phase-end cancellations are 5.7%. This is the first cleaned
+June 21 GB200 point to approach the B200 aggregate maximum of 14,209/GPU,
+while its TTFT and interactivity are far better than that B200 c196 point's
+42.70s and 2.11 tok/s.
+
+The corrected FULL_DECODE_ONLY job (`19645`) also completed: c80 delivered
+245,470 tok/s total (10,228/GPU), 27.34s p90 TTFT, and 35.36 tok/s p90
+interactivity; c96 delivered 316,736 tok/s (13,197/GPU), 9.95s, and 32.48
+tok/s. Both had zero request errors and less than 6% phase-end cancellation.
+Startup and all full graph captures succeeded, confirming that
+FULL_DECODE_ONLY is compatible with DEP8; the earlier NCCL registration
+failure was specific to the default FULL_AND_PIECEWISE TP path.
+
+These two graph results are not yet accepted as exact production points. The
+manual launcher exported `FRAMEWORK=vllm` rather than `dynamo-vllm`, so AIPerf
+did not append `--use-dynamo-conv-aware-routing`. Dynamo itself remained in
+KV-router mode, but the request header contract was not identical to the
+official AgentX path. The 1P/1D c32 job (`19646`) likewise omitted the header
+and aborted correctly when nine warmup traces failed; no result was accepted
+and the failure threshold was not weakened. The official master metadata uses
+`framework: dynamo-vllm`, and a corrected manual or official run must retain
+the conversation-aware routing flag.
+
+## Selected Official Frontier Sweep
+
+The diagnostic phase leaves three production DEP8/DEP8 recipes. Prefill stays
+PIECEWISE with an 8K batch; decode uses FULL_DECODE_ONLY. The former avoids
+the 16K DEP MoE-workspace OOM, while the latter completed all captures and
+restored decode throughput. The master YAML now contains exactly four engine
+starts and twelve concurrency points:
+
+- 2P/1D: c32/c48/c64/c80 and c96/c128/c160;
+- 3P/1D: c160/c192/c240;
+- 4P/1D: c256/c320.
+
+This scales prefill replicas with concurrency while retaining one decode
+replica, matching the measured high-throughput bottleneck and avoiding an
+unnecessary GPU-normalization penalty. The older TEP/TP, TEP/DEP, 1P/1D, and
+multi-decode GB200 recipes are no longer referenced by the master sweep and
+were removed. The generated matrix contains four grouped jobs, all recipe
+worker counts match master metadata, and all 164 matrix-logic tests pass.
