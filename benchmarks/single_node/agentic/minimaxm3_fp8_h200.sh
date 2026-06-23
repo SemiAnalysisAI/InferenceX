@@ -149,7 +149,9 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.90 \
+    --gpu-memory-utilization 0.92 \
+    --kv-cache-dtype fp8 \
+    --attention-backend TRITON_ATTN \
     --block-size 128 \
     --language-model-only \
     --enable-prefix-caching \
