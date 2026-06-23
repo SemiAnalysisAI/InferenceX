@@ -63,9 +63,11 @@ python3 plot.py --results-dir results --out-dir results/plots   # needs matplotl
 
 ## Container
 
-One **multi-arch, digest-pinned** image for all NVIDIA SKUs:
-`lmsysorg/sglang:v0.5.12-cu130@sha256:4219…f356` (amd64 + arm64). See
-`CONTAINERS.md` for versions, the DeepEP-rebuild note, and the digest-pinned
+One **multi-arch** image for all NVIDIA SKUs, imported by tag
+`lmsysorg/sglang:v0.5.11-cu130` (amd64 + arm64; index digest `sha256:061fb71f…`
+recorded for provenance). Imported by tag, not digest — enroot's anonymous
+Docker Hub auth needs a tag, and a bare digest ref hangs in CI. See
+`CONTAINERS.md` for versions, the DeepEP-rebuild note, and the bundled-DeepEP
 DeepSeek-V4 fallback images.
 
 ## How it runs (confirmed against the live clusters)

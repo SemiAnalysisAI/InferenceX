@@ -8,17 +8,21 @@
 cx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 cx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
-# Single multi-arch, digest-pinned container for ALL NVIDIA SKUs.
-# This is the OCI image index for tag `v0.5.12-cu130`, covering BOTH linux/amd64
-# (B200) and linux/arm64 (GB200); enroot import on each host pulls the matching
-# arch from the index. (cu130 = CUDA 13, system nccl.h in /usr/include, torch 2.9.x.)
-# Pinned by DIGEST ONLY (no tag): enroot mis-parses a combined `tag@sha256` ref
-# and 400s at auth, so we use `repo@sha256:` — also the stricter pin.
-# NOTE: DeepEP is NOT bundled here -> run_in_container.sh builds it via
-# rebuild-deepep at job setup. (The arch-specific deepseek-v4-{blackwell,
-# grace-blackwell} images DO bundle DeepEP — see CONTAINERS.md — but are not
-# multi-arch and are not used by default.)
-CX_IMAGE_MULTIARCH="lmsysorg/sglang@sha256:42194170546745092e74cd5f81ad32a7c6e944c7111fe7bf13588152277ff356"
+# Single multi-arch container for ALL NVIDIA SKUs: tag `v0.5.11-cu130` is an OCI
+# image index covering linux/amd64 (B200) + linux/arm64 (GB200); enroot import
+# pulls the matching arch. (cu130 = CUDA 13, system nccl.h in /usr/include, torch 2.9.x.)
+# IMPORT BY TAG, not by digest: enroot's anonymous Docker Hub token scope is built
+# from the tag; a bare `repo@sha256:` ref makes enroot prompt for a password and
+# HANG in non-interactive CI (and a combined `tag@sha256` ref 400s). The expected
+# multi-arch index digest is recorded for provenance/verification:
+CX_IMAGE_DIGEST="sha256:061fb71f838e82000a1768c159654d526c2f17ebe751c21e7fc48ca53c8ef975"
+# (v0.5.12-cu130 was rejected: its 62 layers overflow enroot's overlay-based
+# squash creation on these nodes — "failed to mount overlay ... Invalid argument".
+# v0.5.11-cu130 imports cleanly and is pre-staged on GB200.)
+# DeepEP is NOT bundled here -> run_in_container.sh builds it via rebuild-deepep.
+# (The arch-specific deepseek-v4-{blackwell,grace-blackwell} images DO bundle
+# DeepEP — see CONTAINERS.md — but are not multi-arch and are not the default.)
+CX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 
 cx_default_image() {
   case "$1" in
@@ -44,7 +48,10 @@ cx_ensure_squash() {
     else
       cx_log "enroot import docker://$image -> $sq (one-time, multi-GB)"
       rm -f "$sq"
-      enroot import -o "$sq" "docker://$image" >&2 || cx_die "enroot import failed for $image"
+      # </dev/null: never block on enroot's interactive password prompt (a missing
+      # anonymous token must fail fast, not hang the CI job).
+      enroot import -o "$sq" "docker://$image" </dev/null >&2 \
+        || cx_die "enroot import failed for $image (anonymous auth needs a TAG ref, not a bare digest; or pre-stage the squash)"
       unsquashfs -l "$sq" >/dev/null 2>&1 || cx_die "import produced no valid squash: $sq"
     fi
   ) 9>"$locks/${key}.lock"

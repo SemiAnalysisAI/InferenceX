@@ -28,7 +28,7 @@ Existing public benchmarks don't offer trustworthy, like-for-like collective/EP 
 
 The Milestone-0 spike ran for real on **both** B200 (8× NVLink island, x86_64) and GB200 (4× NVL72 MNNVL, aarch64) — 4 NCCL primitives, correctness-passed, topology-keyed distinctly (peak bus-bw: B200 all-reduce 835 GB/s; GB200 689 GB/s). Built on top of that:
 
-- **Multi-arch, digest-pinned container** for all NVIDIA SKUs: `lmsysorg/sglang:v0.5.12-cu130@sha256:4219…f356` (amd64 + arm64) — one reference both arches; DeepEP via `rebuild-deepep`. See `CONTAINERS.md`.
+- **Multi-arch container** for all NVIDIA SKUs: import by tag `lmsysorg/sglang:v0.5.11-cu130` (amd64 + arm64; index digest `sha256:061fb71f…` recorded for provenance) — one reference both arches; DeepEP via `rebuild-deepep`. Imported by tag, not digest (enroot anonymous auth needs a tag); v0.5.12-cu130 avoided (62-layer overlay-mount failure). See `CONTAINERS.md`.
 - **Per-SKU launch adapters** (`launchers/launch_<sku>.sh`, the InferenceX `launch_${RUNNER_NAME%%_*}.sh` convention) that run **any** benchmark via `CX_BENCH` (nccl|deepep|all) through a shared `launchers/run_in_container.sh`.
 - **`on: push` workflow** (`.github/workflows/collectivex-experimental.yml`): push → GB200 NCCL smoke; `workflow_dispatch` → chosen `sku`+`benchmark`. No merge to main; activates when the branch is pushed to GitHub.
 

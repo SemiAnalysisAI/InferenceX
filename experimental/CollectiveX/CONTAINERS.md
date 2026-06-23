@@ -6,15 +6,16 @@ comparison is truly same-image. Set in `launchers/common.sh` (`cx_default_image`
 
 ## Default container (all NVIDIA SKUs)
 
-- **Image (pin by digest):** `lmsysorg/sglang@sha256:42194170546745092e74cd5f81ad32a7c6e944c7111fe7bf13588152277ff356` — the OCI image index for tag `v0.5.12-cu130`.
-- **Multi-arch manifest list:** linux/amd64 (`sha256:015f39a4…`) + linux/arm64 (`sha256:7a76819e…`). One digest; `enroot import` on each host pulls the matching arch. **Use the digest-only ref** (`repo@sha256:`) in `common.sh` — enroot 400s on a combined `tag@sha256:` reference.
-- **Importing needs registry creds:** anonymous Docker Hub pulls return 401 in ad-hoc SSH sessions; the CI runners import with their configured credentials (the serving sweeps pull images routinely), and already-staged squashes need no import. The refactored launcher path was validated on the already-staged `v0.5.11-cu130` (same multi-arch cu130 line).
+- **Image:** import by tag **`lmsysorg/sglang:v0.5.11-cu130`** (multi-arch OCI index). Expected index digest, recorded for provenance/verification: `sha256:061fb71f838e82000a1768c159654d526c2f17ebe751c21e7fc48ca53c8ef975`.
+- **Multi-arch manifest list:** linux/amd64 + linux/arm64; `enroot import` on each host pulls the matching arch.
+- **Import by TAG, not digest.** enroot builds its anonymous Docker Hub token scope from the *tag* and succeeds (no creds needed — same as the serving launchers). A bare `repo@sha256:` ref makes enroot prompt for a password and **hang** in non-interactive CI; a combined `tag@sha256:` ref 400s. `cx_ensure_squash` therefore imports by tag with `</dev/null` (a missing token fails fast instead of hanging). First import is multi-GB (~minutes); subsequent runs reuse the staged squash.
+- **Why v0.5.11-cu130 (chosen):** it's the newest cu130 release **pre-staged on BOTH clusters** — B200 `/home/sa-shared/containers/` (amd64 squash) and GB200 `/mnt/lustre01/users-public/sa-shared/` (arm64 squash), same filename — so neither side imports at all. (Shared cu130 multi-arch squashes across both clusters: v0.5.8.post1, v0.5.9, v0.5.11 — v0.5.11 is newest.) `v0.5.12-cu130` is staged on B200 but **not** GB200: its 62 layers overflow enroot's overlay-based squash creation on the GB200 kernel (`enroot-mksquashovlfs: failed to mount overlay … Invalid argument`), so it can't be the shared default.
 - **DeepEP: NOT bundled** here → `run_in_container.sh` builds it via `rebuild-deepep` at job setup (CX_BENCH=deepep). The NCCL path needs no DeepEP.
 - **nccl-tests build:** in-container (login nodes have no `nvcc`), `CX_NCCL_HOME=/usr` (system `nccl.h` in `/usr/include`), `CX_CUDA_HOME=/usr/local/cuda`. cu130 lineage ⇒ CUDA 13; confirm exact NCCL/torch on first run and append below.
 
 ## Audited reference (cu130 lineage)
 
-Live audit of the sibling DeepSeek-V4 image `lmsysorg/sglang:deepseek-v4-grace-blackwell` (aarch64) on GB200, 2026-06-23 — the multi-arch `v0.5.12-cu130` should match closely (same cu130 base); reconfirm on first run:
+Live audit of the sibling DeepSeek-V4 image `lmsysorg/sglang:deepseek-v4-grace-blackwell` (aarch64) on GB200, 2026-06-23 — the multi-arch `v0.5.11-cu130` should match closely (same cu130 base); reconfirm on first run:
 
 | Component | Version |
 |---|---|
