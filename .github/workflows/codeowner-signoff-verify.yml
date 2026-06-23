@@ -41,13 +41,19 @@ jobs:
   # command for fetching the exact sign-off body.
   # ---------------------------------------------------------------------------
   gate:
+    # Only trusted reviewers can trigger this (a CODEOWNER sign-off only means
+    # something from a member/collaborator anyway). This also limits the blast
+    # radius of any prompt-injection via PR-supplied content.
     if: |
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER') &&
+       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
       (github.event_name == 'pull_request_review' &&
-       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
+       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER') &&
+       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
       (github.event_name == 'pull_request_review_comment' &&
-       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER') &&
+       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -122,11 +128,16 @@ jobs:
       issues: write
       actions: read
     steps:
-      - name: Checkout repository
+      # SECURITY: this is a privileged job (write perms + secrets) triggered by
+      # comment events, so it must NOT check out untrusted PR head code — the
+      # setup step and the MCP server would then execute attacker-controlled
+      # files. Check out the trusted default branch; all PR content is read
+      # read-only via the GitHub API (gh / MCP), never from the working tree.
+      - name: Checkout repository (trusted default branch only)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-          ref: ${{ needs.gate.outputs.head-sha }}
+          ref: ${{ github.event.repository.default_branch }}
           token: ${{ secrets.CLAUDE_PAT }}
 
       - name: Setup MCP Server
@@ -184,6 +195,13 @@ jobs:
             gh pr view ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }} --json title,headRefName,headRefOid,files,body
             gh pr diff ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }}
             ```
+            Anchor everything to the pinned head SHA `${{ needs.gate.outputs.head-sha }}` (the
+            commit that was signed off). First confirm the PR tip has not moved since the gate
+            ran: if `headRefOid` from the command above differs from the pinned SHA, the head
+            advanced mid-verification — assess the recipe at the PINNED SHA (e.g.
+            `gh api repos/${{ github.repository }}/commits/${{ needs.gate.outputs.head-sha }}` and
+            the files at that SHA), and note in your comment that a fresh sign-off is needed for
+            the new commit. This keeps Check 3 (recipe) consistent with Checks 1-2.
 
             ## Check 1 — A passing sweep + evals ran on a commit IN this PR
             The merge standard (and InferenceX's own reuse gate) requires a green full sweep —
