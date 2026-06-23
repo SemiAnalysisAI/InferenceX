@@ -4039,9 +4039,8 @@
 
 - config-keys:
     - dsr1-fp4-gb200-dynamo-sglang-powercheck
-    - dsr1-fp4-b200-dynamo-sglang-powercheck
   description:
-    - "Fan-out of the dsr1-disagg-NVIDIA measured-power campaign to gb200 + b200 after the gb300 validation passed (run 27989491427: agg patched with avg_power_w + per-stage prefill/decode + role-labelled workers[] incl. temp/util/mem; gb300 already graphed into the power canvas). Two more canonical NVIDIA platforms: gb200 (1 prefill TP4 + 2 decode TP4) and b200 (1 prefill TP4 + 5 decode TP8 = 6 nodes / 44 GPU), each trimmed to the 1k/1k low-latency cell."
+    - "Retry gb200 only — gb300 + b200 already captured + graphed into the canvas. gb200's first attempt (run 27991175106, job 19603) was scancel'd by a shared account (uid 1010 slurm-shared) on the contended watchtower cluster at 12min while servers were ~3min from ready (external reaping; preemption OFF, 6h timelimit — NOT code). gb200 = 1 prefill TP4 + 2 decode TP4, 1k/1k low-latency cell, conc trimmed."
     - "Runner-side wiring: launch_gb200-nv.sh and launch_b200-dgxc.sh clone SemiAnalysisAI/srt-slurm@feat/inferencex-perfmon, inject `monitoring:` into the recipes, and stage per-node perf_samples_*.csv before `rm -rf outputs` (GPU_METRICS_CSV_GLOB for Process-result). The pre-run cleanup wedge that blocked this ~1.5 weeks is fixed (94c2addd): the AMD-only `sudo rm benchmark_logs` is scoped to mi* runners so NVIDIA login hosts (where sudo hangs on SSSD policy) skip it entirely."
     - "Success criteria: both legs green AND each agg JSON patched with avg_power_w + per-stage prefill_avg_power_w/decode_avg_power_w + workers[] with avg_temp_c/peak_temp_c/avg_util_pct from utils/aggregate_power.py."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1791
@@ -4049,3 +4048,4 @@
 # re-arm 2026-06-22c: cancel+re-arm gamble for a healthy runner — _0 squeue/scancel hang confirmed LIVE (concurrent probe on gb300-nv_2 clean, squeue 37ms, queue empty; _0 wedged 8min in pre-run cleanup with empty queue = host-local slurm-client hang, not a stuck job)
 # re-arm 2026-06-22d: REAL fix (94c2addd) — wedge was the AMD-only `sudo rm benchmark_logs` hanging on GB300 SSSD sudo policy. `timeout 60` sends only SIGTERM; the stuck root sudo ignores it, so timeout waits in sigsuspend forever (process pairs stuck 4+ days, probe 27988714413). Scoped that cleanup to mi* runners + --kill-after; NVIDIA now skips it entirely. (22c "slurm-client hang" was wrong — squeue was always fast; the step label hid the trailing sudo rm.)
 # re-arm 2026-06-22e: fan out to gb200 + b200 (gb300 validated run 27989491427 + graphed)
+# re-arm 2026-06-22f: retry gb200 only — b200 succeeded (run 27991175106, graphed); gb200 was scancel'd by uid 1010 on watchtower at 12min. Retrying for a clean window.
