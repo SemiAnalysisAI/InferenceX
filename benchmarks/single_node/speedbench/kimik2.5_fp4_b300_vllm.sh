@@ -74,19 +74,26 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
 
-# ---- Download target + draft models ----
+# ---- Download target if it is not pre-staged ----
+# A pre-staged target lands in the read-only staged mount (/scratch/models);
+# only download when MODEL_PATH is an empty writable dir (non-staged run).
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
-    DRAFT_MODEL_PATH="$(dirname "$MODEL_PATH")/${DRAFT_MODEL##*/}"
-    if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
-    fi
 else
     if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
-    hf download "$DRAFT_MODEL"
-    DRAFT_MODEL_PATH="$DRAFT_MODEL"
+fi
+
+# ---- Download EAGLE3 draft model to a WRITABLE dir ----
+# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
+# read-only staged mount (/scratch/models), so writing the draft there fails
+# with PermissionError. Use a writable workspace dir regardless of staging.
+DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+mkdir -p "$DRAFT_DIR"
+DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
+if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
+    hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
 # ---- Download SPEED-Bench dataset ----

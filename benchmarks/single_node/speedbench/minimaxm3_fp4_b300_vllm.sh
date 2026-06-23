@@ -88,18 +88,16 @@ mkdir -p "$RESULTS_DIR"
 nvidia-smi
 if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
 
-# ---- Download EAGLE3 draft model ----
+# ---- Download EAGLE3 draft model to a WRITABLE dir ----
+# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
+# read-only staged mount (/scratch/models), so writing the draft there fails
+# with PermissionError. Use a writable workspace dir regardless of staging.
 echo "=== Downloading EAGLE3 draft model ($DRAFT_MODEL) ==="
-if [[ -n "${MODEL_PATH:-}" ]]; then
-    DRAFT_MODEL_PATH="$(dirname "$MODEL_PATH")/${DRAFT_MODEL##*/}"
-    if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
-        hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
-    fi
-else
-    if [[ "$SERVE_MODEL" != /* ]]; then
-        hf download "$DRAFT_MODEL"
-    fi
-    DRAFT_MODEL_PATH="$DRAFT_MODEL"
+DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+mkdir -p "$DRAFT_DIR"
+DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
+if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
+    hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
 fi
 
 # ---- Download SPEED-Bench dataset ----
