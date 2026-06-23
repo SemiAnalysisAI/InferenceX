@@ -4036,3 +4036,11 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc"
     - "6 topologies across 1k/1k and 8k/1k: 1P1D TP4 STP + wide-EP (DEP4 prefill / DEP16 decode) from 1P1D up to 8P1D, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5/gb200-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1810
+
+- config-keys:
+    - glm5-fp8-gb200-dynamo-sglang
+  description:
+    - "Add GLM-5-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
+    - "Image: lmsysorg/sglang:v0.5.12"
+    - "14 topologies across 1k/1k and 8k/1k: prefill TP8 STP + decode wide-EP (DEP16/DEP32 high-throughput) and per-node TP8 low-latency, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp8/"
+  pr-link: XXX
