@@ -125,7 +125,6 @@ jobs:
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !github.event.pull_request.draft &&
-            !contains(github.event.pull_request.labels.*.name, 'all-evals') &&
             !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||

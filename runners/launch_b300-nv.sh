@@ -3,6 +3,8 @@
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
+# b300-018 repeatedly times out UCX/NIXL transfers; allow an empty override to disable this.
+MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018}"
 
 set -x
 
@@ -45,13 +47,17 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
     export MODEL_PATH="/data/models/MiniMax-M2.5"
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
+    export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
+    export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
     exit 1
 fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
+SRTCTL_SETUP_SCRIPT=""
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."
     rm -rf "$SRT_REPO_DIR"
@@ -79,6 +85,18 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECIS
     git checkout main
     mkdir -p recipes/vllm/minimax-m2.5-fp8
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300-fp8" recipes/vllm/minimax-m2.5-fp8
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/vllm/minimax-m3
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
+    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    # NVIDIA/srt-slurm#38
+    git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+        "configs/$SRTCTL_SETUP_SCRIPT"
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
@@ -161,7 +179,17 @@ fi
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_FILE" --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
+fi
+SRTCTL_APPLY_ARGS=(
+    -f "$CONFIG_FILE"
+    --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
+if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
+fi
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 # Extract JOB_ID from srtctl output
@@ -172,6 +200,15 @@ set +x
 if [ -z "$JOB_ID" ]; then
     echo "Error: Failed to extract JOB_ID from srtctl output"
     exit 1
+fi
+
+if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+    SBATCH_SCRIPT="outputs/$JOB_ID/sbatch_script.sh"
+    if ! grep -Fq "#SBATCH --exclude=${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}" "$SBATCH_SCRIPT"; then
+        echo "Error: Slurm node exclusion was not rendered in $SBATCH_SCRIPT" >&2
+        scancel "$JOB_ID" || true
+        exit 1
+    fi
 fi
 
 echo "Extracted JOB_ID: $JOB_ID"
