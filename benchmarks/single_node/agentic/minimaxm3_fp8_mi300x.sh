@@ -38,11 +38,45 @@ ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
+install_mooncake_rocm() {
+    local mooncake_tag="v0.3.11.post1"
+    local mooncake_src="/tmp/Mooncake-$mooncake_tag"
+    local build_jobs
+    build_jobs=$(nproc)
+    if ((build_jobs > 32)); then
+        build_jobs=32
+    fi
+
+    apt-get update
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+        build-essential cmake git libasio-dev libboost-dev libcurl4-openssl-dev \
+        libgflags-dev libgoogle-glog-dev libibverbs-dev libjsoncpp-dev \
+        libnuma-dev libpython3-dev libssl-dev libunwind-dev liburing-dev \
+        libxxhash-dev libyaml-cpp-dev libzstd-dev ninja-build pybind11-dev
+    rm -rf "$mooncake_src"
+    git clone --depth 1 --branch "$mooncake_tag" --recurse-submodules \
+        --shallow-submodules https://github.com/kvcache-ai/Mooncake.git "$mooncake_src"
+    cmake -S "$mooncake_src/extern/yalantinglibs" \
+        -B "$mooncake_src/extern/yalantinglibs/build" \
+        -DBUILD_EXAMPLES=OFF -DBUILD_BENCHMARK=OFF -DBUILD_UNIT_TESTS=OFF
+    cmake --build "$mooncake_src/extern/yalantinglibs/build" -j "$build_jobs"
+    cmake --install "$mooncake_src/extern/yalantinglibs/build"
+    cmake -S "$mooncake_src" -B "$mooncake_src/build" -G Ninja \
+        -DCMAKE_BUILD_TYPE=Release -DUSE_CUDA=OFF -DUSE_HIP=ON \
+        -DWITH_EP=OFF -DWITH_STORE=ON -DWITH_STORE_RUST=OFF \
+        -DWITH_RUST_EXAMPLE=OFF -DBUILD_EXAMPLES=OFF -DBUILD_UNIT_TESTS=OFF
+    cmake --build "$mooncake_src/build" -j "$build_jobs"
+    cmake --install "$mooncake_src/build"
+}
+
 OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
     cpu)
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        if ! python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null 2>&1; then
+            install_mooncake_rocm
+        fi
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
