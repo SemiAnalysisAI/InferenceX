@@ -185,94 +185,59 @@ jobs:
             gh pr diff ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }}
             ```
 
-            ## Check 1 — PR validation has at least one fully-green full-sweep run
-            "PR validation" is a `run-sweep.yml` run (it shows up named "Run Sweep - <PR title>").
-            It is triggered automatically on push/synchronize when the PR carries a sweep label
-            (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or
-            `full-sweep-fail-fast-no-canary`). It runs the benchmark + eval jobs. (Older PRs may
-            instead have an `e2e-tests.yml` run kicked off by a `/sweep` comment — treat that as
-            equivalent.)
+            ## Check 1 — A passing sweep + evals ran on a commit IN this PR
+            The merge standard (and InferenceX's own reuse gate) requires a green full sweep —
+            including evals — on a commit that is CURRENTLY part of this PR. A sweep that ran on a
+            commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.sh`
+            → `validate_reusable_run` (in `utils/find_reusable_sweep_run.py`) rejects any source
+            whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
+            to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
 
-            IMPORTANT — artifact reuse is normal and valid, BUT it must anchor to a real
-            executed sweep on a commit that is still in this PR. After an eligible full sweep, a
-            maintainer comments `/reuse-sweep-run [run_id]` to reuse those artifacts. When that
-            happens, the run on the CURRENT head SHA is a "reuse" run: `check-changelog` /
-            `reuse-sweep-gate` run, but every benchmark and eval job is `skipped`. That is not a
-            failure by itself — but you MUST confirm the reuse points at a concrete green executed
-            sweep whose commit is part of this PR. A reuse that anchors to nothing, or to a commit
-            that has been force-pushed/rebased out of the PR, does NOT count as validation.
-
-            Key definitions:
-            - EXECUTED run: a `run-sweep.yml` run whose benchmark + eval jobs actually RAN
-              (conclusion `success`), not `skipped`. A run where only `check-changelog` /
-              `reuse-sweep-gate` ran and all `single-node */eval */collect-evals` are `skipped` is
-              a SKIP/REUSE run, never the authoritative run.
-            - IN-PR commit: a commit whose SHA literally appears in the PR's commit list. This is
-              the SAME check InferenceX's own reuse gate runs at merge time
-              (`validate_reusable_run` in `utils/find_reusable_sweep_run.py` requires the source
-              run's `head_sha` to be in `GET /pulls/<n>/commits`). If the validated commit was
-              rebased/force-pushed out, it is NOT in this list and `merge_with_reuse.sh` will fail
-              closed — so your verdict here exactly predicts whether the reuse can be promoted:
+            The cleanest way to answer is the check-runs attached to each in-PR commit — you do
+            NOT need to list `run-sweep.yml` runs or parse reuse logs.
+            - Get the PR's current commit SHAs:
               ```bash
               gh api repos/${{ github.repository }}/pulls/${{ needs.gate.outputs.pr-number }}/commits \
-                --paginate --jq '.[].sha'   # the authoritative run's head_sha MUST appear here
+                --paginate --jq '.[].sha'
               ```
-              (A `main`-merge that adds a commit keeps the original SHAs in this list, so it stays
-              valid; only a rebase/force-push that drops the validated SHA breaks it.)
+            - For each of those SHAs, list its check-runs and look at the sweep/eval jobs:
+              ```bash
+              gh api repos/${{ github.repository }}/commits/<sha>/check-runs --paginate \
+                --jq '.check_runs[] | {name, conclusion}'
+              ```
+              The per-config benchmark/eval check-runs are named like `single-node 1k1k /`,
+              `single-node 8k1k /`, and `eval /`. A commit satisfies validation only if the actual
+              executed jobs — the `eval /` AND `single-node */` check-runs — have conclusion
+              `success`. `skipped` does NOT count (it means a skip/reuse run that executed nothing
+              on that commit); `failure` does not count.
+              IMPORTANT: do NOT rely on `collect-evals` — it is an aggregator that can report
+              `success` even when every underlying `eval /` job was `skipped` (it just aggregated
+              an empty set). Always key off the per-config `eval /` and `single-node */` jobs.
+            - PASS if ANY commit currently in the PR has green (success, non-skipped) `single-node */`
+              AND `eval /` check-runs. Remember the run id behind a passing `eval /` check (its
+              `details_url` contains `/actions/runs/<run_id>/...`) — Check 2 needs it.
+            - Otherwise FAIL. State the ROOT ISSUE plainly and keep it actionable:
+              "No passing sweep/eval was found on any commit in this PR."
+              Do NOT write a confusing message like "it technically passed but the commit isn't in
+              the PR" — a sweep that ran on a rebased-out commit is irrelevant to the reviewer, so
+              don't lead with it. The fix the author needs is simply: run (or re-anchor via
+              `/reuse-sweep-run`) a passing full sweep on a commit currently in this PR. You may
+              add an offending run/SHA as a short supporting detail AFTER the root-issue line.
 
-            Procedure:
-            - List this PR's full-sweep runs by branch (the authoritative run may be on an earlier
-              in-PR commit, not the head SHA):
-              ```bash
-              gh run list --repo ${{ github.repository }} --workflow run-sweep.yml \
-                --branch <headRefName> --limit 30 \
-                --json databaseId,headSha,status,conclusion,event,createdAt,url
-              ```
-            - Inspect the head-SHA run's jobs:
-              ```bash
-              gh run view <RUN_ID> --repo ${{ github.repository }} --json jobs,conclusion,status,headSha
-              ```
-              If it is an EXECUTED green run on the head SHA, Check 1 passes.
-            - If the head-SHA run is a SKIP/REUSE run, read what it anchored to from the
-              `reuse-sweep-gate` job log (it prints `skip-pr-sweep`, `reuse-source-run-id`,
-              `reuse-source-head-sha`):
-              ```bash
-              gh run view <HEAD_RUN_ID> --repo ${{ github.repository }} --log \
-                | grep -E 'skip-pr-sweep|reuse-source-run-id|reuse-source-head-sha'
-              ```
-              Also check PR comments for `/reuse-sweep-run [run_id]` (latest by an
-              OWNER/MEMBER/COLLABORATOR wins; may pin a run id). The AUTHORITATIVE run is that
-              anchored source run. If `reuse-source-run-id` is EMPTY (skip with no anchor) and no
-              pinned run is supplied, there is NO validation — FAIL.
-            - Validate the AUTHORITATIVE run: it must be an EXECUTED green run, AND its head SHA
-              must be an IN-PR commit (must appear in `GET /pulls/<n>/commits`, per above). An
-              executed green run on a diverged/orphaned commit does NOT satisfy validation — and
-              InferenceX's merge gate would reject it for the same reason.
-            - PASS only if such a run exists (executed green, in-PR, evals run — see Check 2).
-              Otherwise FAIL and state precisely why: e.g. "all runs on the PR's commits are
-              skip/failed; head reuse anchored to empty source; the only executed green sweep
-              (<run-url>, sha <x>) is rebased out of the PR, so reuse cannot be promoted
-              (merge_with_reuse.sh would fail)."
-
-            ## Check 2 — Evals pass on the authoritative run
-            Using the AUTHORITATIVE run from Check 1 (the run that actually executed the sweep —
-            for a reused PR this is the source full-sweep run, NOT the skipped reuse run on the
-            head SHA):
-            - Confirm the eval jobs actually ran (e.g. `eval /` / `collect-evals`) and concluded
-              `success`. If the authoritative run's eval jobs are skipped or failed, FAIL.
-            - Download and inspect the eval results to confirm the numbers are real and passing,
-              not empty or erroring:
+            ## Check 2 — Evals actually pass (accuracy), on that in-PR commit's run
+            For the commit that passed Check 1, confirm the eval numbers are real and meet the bar
+            — not just that the job is green:
+            - Take the run id behind the passing `eval /` / `collect-evals` check-run (from its
+              `details_url`) and download its eval results:
               ```bash
               gh run download <RUN_ID> --repo ${{ github.repository }} -p 'eval_results_*' -D ./evals || \
               gh run download <RUN_ID> --repo ${{ github.repository }} -p 'eval_*' -D ./evals
               find ./evals -name '*.json' | head
               ```
-              Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
-              accuracy is present and meets the expected bar for the model. Also confirm the
-              authoritative run used the same inference-engine image as this PR's config (a reuse
-              is only valid if the validated artifacts match the merged recipe). FAIL if eval jobs
-              are missing, failed, the results are empty/below bar, or the image differs — say
-              exactly which.
+            - Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
+              accuracy is present and meets the expected bar for the model, and that the run used
+              the same inference-engine image as this PR's config. FAIL if evals are
+              skipped/failed/empty/below bar, or the image differs — say exactly which.
 
             ## Check 3 — Recipe linked AND complete
             The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
@@ -312,8 +277,11 @@ jobs:
             - If anything is NOT to standard: the FIRST line of the comment body (after the
               marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`.
               Then list, grouped under "PR validation", "Evals", and "Recipe", each concrete
-              problem with links (run URLs, the recipe link, specific missing fields). Be
-              precise and actionable — tell them exactly what to fix before this PR can merge.
+              problem. Lead each item with the ROOT ISSUE in plain language (e.g. for validation,
+              "No passing sweep/eval was found on any commit in this PR"), then add supporting
+              detail/links (run URLs, the recipe link, specific missing fields) AFTER. Be precise
+              and actionable — tell them exactly what to fix before this PR can merge. Avoid
+              confusing nuance the reviewer can't act on.
 
             Do not use emojis anywhere in the comment. Use only facts you verified. If a required
             artifact or run is inaccessible, say so explicitly rather than assuming pass.
