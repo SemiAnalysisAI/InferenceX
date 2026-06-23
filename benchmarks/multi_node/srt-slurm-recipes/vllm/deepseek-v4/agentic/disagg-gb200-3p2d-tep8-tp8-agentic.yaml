@@ -70,6 +70,7 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
     VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
@@ -89,6 +90,7 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
@@ -109,7 +111,7 @@ backend:
       pipeline-parallel-size: 1
       enable-expert-parallel: true
       enable-ep-weight-filter: true
-      attention-config: '{"use_fp4_indexer_cache": true}'
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       # enforce-eager: true
       # Inherited from fixed-sequence recipes; let vLLM select the scheduler
       # sequence limit until this is tuned explicitly for the agentic trace.
@@ -129,7 +131,7 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      attention-config: '{"use_fp4_indexer_cache": true}'
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_fp4_indexer_cache": true}'
       # max-num-seqs: 512
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
