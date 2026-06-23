@@ -109,7 +109,6 @@ backend:
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
       # max-num-seqs: 512
-      max-num-batched-tokens: 512
       trust-remote-code: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'

@@ -115,7 +115,6 @@ backend:
       enable-ep-weight-filter: true
       attention-config: '{"use_fp4_indexer_cache": true}'
       # max-num-seqs: 512
-      max-num-batched-tokens: 512
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
