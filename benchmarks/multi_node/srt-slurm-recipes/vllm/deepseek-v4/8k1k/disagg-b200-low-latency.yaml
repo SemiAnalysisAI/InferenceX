@@ -134,4 +134,4 @@ identity:
     image: "vllm/vllm-openai:v0.23.0"
   frameworks:
     dynamo: "1.2.0.dev20260426"
-    vllm: "0.20.0"
+    vllm: "0.23.0"
