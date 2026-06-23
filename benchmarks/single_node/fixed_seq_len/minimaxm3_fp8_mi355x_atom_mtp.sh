@@ -47,6 +47,7 @@ python3 -m atom.entrypoints.openai_server \
     --block-size 128 \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --trust-remote-code \
+    --no-enable_prefix_caching \
     > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
