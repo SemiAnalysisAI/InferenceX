@@ -78,6 +78,27 @@ requests per DP rank. If capture still OOMs, lower decode
 
 Seen on: #1735 (MiniMax-M3 MXFP8 GB300 dynamo-vLLM).
 
+### 2.2 Stale MiniMax-M3 NIXL runtime patch on newer images
+
+**Symptom:** every B300 Dynamo-vLLM worker exits from
+`minimax-m3-vllm-fixes.sh` before vLLM starts:
+```
+RuntimeError: missing or ambiguous patch anchor in
+.../vllm/distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py
+```
+
+**Root cause:** newer vLLM images already include vLLM #45879, and subsequent
+refactors changed the formatting around the heterogeneous-TP validation. The
+exact-string patcher no longer recognizes its replacement text and treats the
+already-upstream fix as a missing anchor.
+
+**Fix:** remove the obsolete NIXL edits from the runtime setup script. Retain
+only patches still absent from the image, such as the MiniMax-M3 MSA
+`prefill_topk.contiguous()` fix. Verify the image's source commit before
+dropping each patch.
+
+Seen on: #1890 (MiniMax-M3 MXFP8 B300 image refresh to vLLM `7a67223`).
+
 ---
 
 ## 3. Custom DSV4 image → generic v0.5.12 OOMs

@@ -16,24 +16,6 @@ patches = {
             "            prefill_topk = topk[:, nd:num_tokens, :].contiguous()\n",
         ),
     ],
-    root / "distributed/kv_transfer/kv_connector/v1/nixl/base_worker.py": [
-        (
-            "            for i, local_len in enumerate(self.block_len_per_layer):\n",
-            "            total_kv_heads = self.transfer_topo.total_num_kv_heads\n"
-            "            local_heads = self.transfer_topo.local_physical_heads\n"
-            "            remote_heads = max(1, total_kv_heads // remote_tp_size)\n"
-            "            for i, local_len in enumerate(self.block_len_per_layer):\n",
-        ),
-        (
-            "remote_len == (local_len * tp_ratio) // block_size_ratio,",
-            "remote_len == (local_len * remote_heads // local_heads) "
-            "// block_size_ratio,",
-        ),
-        (
-            "remote_len == local_len // (-tp_ratio),",
-            "remote_len == local_len * remote_heads // local_heads,",
-        ),
-    ],
 }
 for path, edits in patches.items():
     source = path.read_text()
