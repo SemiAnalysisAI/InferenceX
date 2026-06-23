@@ -11835,7 +11835,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
 # DEP8, DEP4. 4 GPU/node (GB300 NVL72). 4p3d (3 decode workers) skipped.
 # kv-cache-dtype=fp8 added. srun_options mem=0 required.
 minimaxm3-fp8-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:nightly-aarch64
+  image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: gb300-nv
