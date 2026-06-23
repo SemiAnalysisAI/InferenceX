@@ -10,13 +10,66 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
+find_complete_model_snapshot() {
+    python3 - "$1" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+snapshots_dir = Path(sys.argv[1])
+if not snapshots_dir.is_dir():
+    raise SystemExit
+
+snapshots = sorted(
+    (path for path in snapshots_dir.iterdir() if path.is_dir()),
+    key=lambda path: path.stat().st_mtime,
+    reverse=True,
+)
+for snapshot in snapshots:
+    index_path = snapshot / "model.safetensors.index.json"
+    required_files = (
+        snapshot / "config.json",
+        snapshot / "tokenizer_config.json",
+        index_path,
+    )
+    if not all(path.is_file() for path in required_files):
+        continue
+    try:
+        weight_map = json.loads(index_path.read_text())["weight_map"]
+    except (KeyError, json.JSONDecodeError, OSError):
+        continue
+    shards = {snapshot / filename for filename in weight_map.values()}
+    if shards and all(path.is_file() for path in shards):
+        print(snapshot)
+        break
+PY
+}
+
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
-    hf download "$MODEL"
-    export MODEL_PATH="$MODEL"
+    MODEL_CACHE_ROOT="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface/hub}}"
+    MODEL_CACHE_DIR="$MODEL_CACHE_ROOT/models--${MODEL//\//--}"
+    mkdir -p "$MODEL_CACHE_ROOT"
+    MODEL_PATH=$(find_complete_model_snapshot "$MODEL_CACHE_DIR/snapshots")
+    if [[ -z "$MODEL_PATH" ]]; then
+        exec 9>"$MODEL_CACHE_ROOT/.minimaxm3-download.lock"
+        flock -w 3600 9
+        MODEL_PATH=$(find_complete_model_snapshot "$MODEL_CACHE_DIR/snapshots")
+        if [[ -z "$MODEL_PATH" ]]; then
+            DOWNLOADED_MODEL_PATH=$(hf download "$MODEL")
+            MODEL_PATH=$(find_complete_model_snapshot "$MODEL_CACHE_DIR/snapshots")
+            if [[ -z "$MODEL_PATH" || "$MODEL_PATH" != "$DOWNLOADED_MODEL_PATH" ]]; then
+                echo "Downloaded model snapshot is incomplete: $DOWNLOADED_MODEL_PATH" >&2
+                exit 1
+            fi
+        fi
+        flock -u 9
+    fi
+    echo "Using complete cached model snapshot: $MODEL_PATH"
+    export MODEL_PATH
 fi
 nvidia-smi
 
