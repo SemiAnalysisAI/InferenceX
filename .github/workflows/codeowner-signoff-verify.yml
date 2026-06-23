@@ -1,0 +1,223 @@
+name: CODEOWNER Sign-off Verify
+
+# Independently re-verifies a CODEOWNER reviewer sign-off comment.
+#
+# A reviewer marks a PR ready by posting the sign-off checklist comment that
+# starts with "As a PR reviewer and CODEOWNER" (see e.g.
+# https://github.com/SemiAnalysisAI/InferenceX/pull/1792#issuecomment-4781799476).
+# When that happens on a non-draft, open PR, this workflow asks Claude to
+# independently confirm the three claims that actually gate a merge:
+#   1. PR validation has at least one fully-green run.
+#   2. Evals pass on that same green run.
+#   3. The single-node recipe(s) are linked in the sign-off comment AND the
+#      linked recipe PR/commit contains all of the reproduction information that
+#      is in this InferenceX PR.
+# If any of those are not to standard, Claude posts a single comment that
+# @-mentions the reviewer who signed off and explains exactly what is wrong.
+
+on:
+  issue_comment:
+    types: [created, edited]
+
+concurrency:
+  group: codeowner-signoff-verify-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: only proceed for the sign-off checklist comment on an OPEN, non-draft
+  # PR. Resolves an immutable head SHA (TOCTOU-safe) and surfaces the comment
+  # metadata the verifier needs.
+  # ---------------------------------------------------------------------------
+  gate:
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, 'As a PR reviewer and CODEOWNER')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      proceed: ${{ steps.resolve.outputs.proceed }}
+      pr-number: ${{ steps.resolve.outputs.pr-number }}
+      head-sha: ${{ steps.resolve.outputs.head-sha }}
+      comment-author: ${{ steps.resolve.outputs.comment-author }}
+      comment-id: ${{ steps.resolve.outputs.comment-id }}
+    steps:
+      - name: Resolve PR state and sign-off metadata
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const prNumber = context.payload.issue.number;
+            const commentAuthor = context.payload.comment.user.login;
+            const commentId = context.payload.comment.id;
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            });
+
+            // "PRs marked ready" => open and not a draft.
+            const ready = pr.state === 'open' && pr.draft === false;
+            if (!ready) {
+              core.info(`PR #${prNumber} is not a ready PR (state=${pr.state}, draft=${pr.draft}); skipping.`);
+            }
+
+            core.setOutput('proceed', ready ? 'true' : 'false');
+            core.setOutput('pr-number', String(prNumber));
+            core.setOutput('head-sha', pr.head.sha);
+            core.setOutput('comment-author', commentAuthor);
+            core.setOutput('comment-id', String(commentId));
+
+  verify:
+    needs: gate
+    if: ${{ needs.gate.outputs.proceed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ needs.gate.outputs.head-sha }}
+          token: ${{ secrets.CLAUDE_PAT }}
+
+      - name: Setup MCP Server
+        run: |
+          pip3 install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
+      - name: Verify sign-off with Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
+          BASH_DEFAULT_TIMEOUT_MS: "1800000"
+          BASH_MAX_TIMEOUT_MS: "3600000"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CLAUDE_PAT }}
+          track_progress: true
+          allowed_bots: ''
+          additional_permissions: |
+            actions: read
+          settings: |
+            {"fastMode": true}
+
+          claude_args: |
+            --model 'claude-opus-4-6'
+            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ needs.gate.outputs.pr-number }}
+            PR HEAD SHA: ${{ needs.gate.outputs.head-sha }}
+            SIGN-OFF COMMENT ID: ${{ needs.gate.outputs.comment-id }}
+            SIGN-OFF AUTHOR: ${{ needs.gate.outputs.comment-author }}
+
+            You are an automated merge-gate auditor for InferenceX.
+
+            A CODEOWNER (`${{ needs.gate.outputs.comment-author }}`) just posted the reviewer
+            sign-off checklist comment that marks PR #${{ needs.gate.outputs.pr-number }} as
+            ready to merge. Your job is to INDEPENDENTLY verify the three claims below. Do not
+            trust the reviewer's checkmarks — re-derive every conclusion from CI runs, the PR
+            diff, and the linked recipe yourself. Be rigorous and specific.
+
+            Read the sign-off comment first so you have its exact contents, especially the
+            "Additional detail section":
+            ```bash
+            gh api repos/${{ github.repository }}/issues/comments/${{ needs.gate.outputs.comment-id }} --jq .body
+            ```
+
+            Get the PR metadata and the full diff (this is the "InferenceX PR recipe" you will
+            compare against later):
+            ```bash
+            gh pr view ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }} --json title,headRefName,headRefOid,files,body
+            gh pr diff ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }}
+            ```
+
+            ## Check 1 — PR validation has at least one fully-green run
+            "PR validation" is an `e2e-tests.yml` run executed for this PR (usually kicked off
+            by a `/sweep` comment, which replies with a `Run:` link, or by workflow_dispatch).
+            - Find validation runs tied to this PR's head SHA `${{ needs.gate.outputs.head-sha }}`.
+              Use the head SHA, not just the branch — stale runs on older commits do NOT count.
+              ```bash
+              gh run list --repo ${{ github.repository }} --workflow e2e-tests.yml --limit 30 \
+                --json databaseId,headSha,status,conclusion,event,createdAt,url
+              ```
+              Also scan the PR's comments for `/sweep` replies containing `Run:` links and
+              cross-reference those run IDs.
+            - A run counts as GREEN only if `status == completed` and `conclusion == success`.
+              Inspect its jobs to confirm there are no failed/cancelled benchmark jobs:
+              ```bash
+              gh run view <RUN_ID> --repo ${{ github.repository }} --json jobs,conclusion,status,headSha
+              ```
+            - PASS if at least one such green run exists on the current head SHA. Otherwise FAIL
+              and record which runs you found and why none qualified (failed jobs, wrong SHA,
+              still running, cancelled by infra, etc.).
+
+            ## Check 2 — Evals pass on that green run
+            Using the green run from Check 1 (the SAME run):
+            - Confirm the eval jobs actually ran (e.g. `test-sweep-evals` / `collect-evals`) and
+              concluded `success`. A green run that ran NO evals does NOT satisfy this check.
+            - Download and inspect the eval results to confirm the numbers are real and passing,
+              not empty or erroring:
+              ```bash
+              gh run download <RUN_ID> --repo ${{ github.repository }} -p 'eval_results_*' -D ./evals || \
+              gh run download <RUN_ID> --repo ${{ github.repository }} -p 'eval_*' -D ./evals
+              find ./evals -name '*.json' | head
+              ```
+              Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
+              accuracy is present and meets the expected bar for the model. FAIL if eval jobs are
+              missing, skipped, failed, or the results are empty/below bar — say exactly which.
+
+            ## Check 3 — Recipe linked AND complete
+            The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
+            (especially `benchmarks/single_node/**/*.sh`) plus its entry in
+            `.github/configs/*-master.yaml`. The merge standard is: the community must be able to
+            reproduce this benchmark from a public recipe.
+            - (a) LINK PRESENT: The sign-off comment's "Additional detail section" MUST contain a
+              link to the corresponding recipe — a PR/commit in
+              `https://github.com/vllm-project/recipes` or
+              `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
+              published recipe page (`https://recipes.vllm.ai/` or
+              `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
+            - (b) RECIPE COMPLETE: Fetch the linked recipe (use the `fetch` MCP tool or WebFetch;
+              for a recipe PR, read its diff via `gh pr diff` against that repo if accessible)
+              and verify it includes ALL of the reproduction-critical information present in this
+              InferenceX PR's recipe. At minimum cross-check: model, hardware/SKU, inference
+              engine + image tag/version, parallelism (TP/EP/DP/PP), quantization, kv-cache
+              dtype, key server launch flags, required env vars, and benchmark settings
+              (concurrency, sequence lengths / ISL-OSL). FAIL and list every detail that is in
+              the InferenceX PR but missing from the linked recipe.
+            - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
+              link does not pass this workflow's standard — a link is required.
+
+            ## Verdict and output
+            Decide PASS only if Checks 1, 2, and 3 ALL pass. Post EXACTLY ONE summary comment on
+            PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
+            the hidden marker so reruns are identifiable:
+            `<!-- codeowner-signoff-verify sha=${{ needs.gate.outputs.head-sha }} -->`
+
+            Before posting, list the PR's comments and, if a prior verification comment with this
+            marker already exists for THIS head SHA, do not post a duplicate — update your
+            assessment only if the conclusion changed.
+
+            - If everything is to standard: post a brief confirmation (2-3 sentences) noting the
+              green run URL, that evals pass, and that the recipe link is present and complete.
+              Do NOT @-mention anyone on a pass.
+            - If anything is NOT to standard: the FIRST line of the comment body (after the
+              marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.comment-author }}`.
+              Then list, grouped under "❌ PR validation", "❌ Evals", and "❌ Recipe", each
+              concrete problem with links (run URLs, the recipe link, specific missing fields).
+              Be precise and actionable — tell them exactly what to fix before this PR can merge.
+
+            Use only facts you verified. If a required artifact or run is inaccessible, say so
+            explicitly rather than assuming pass.
