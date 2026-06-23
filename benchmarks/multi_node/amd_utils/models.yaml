@@ -398,5 +398,5 @@ DeepSeek-V4-Pro:
       max_running_requests: 1024
       cuda_graph_bs_range: "1-128"
     no_dp:
-      max_running_requests: 128
-      cuda_graph_bs_range: "1-128"
+      max_running_requests: 32
+      cuda_graph_bs_range: "1-32"
