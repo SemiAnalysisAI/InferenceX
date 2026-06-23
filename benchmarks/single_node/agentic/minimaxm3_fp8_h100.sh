@@ -33,7 +33,7 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-MODEL_CPU_OFFLOAD_GB=24
+MODEL_CPU_OFFLOAD_GB=26
 MOONCAKE_LOCAL_BUFFER_GIB=4
 case "$OFFLOADING" in
     none) ;;
@@ -104,7 +104,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.955 \
+    --gpu-memory-utilization 0.95 \
     --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
     --block-size 128 \
     --language-model-only \
