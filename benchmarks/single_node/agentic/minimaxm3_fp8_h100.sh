@@ -97,7 +97,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.98 \
+    --gpu-memory-utilization 0.97 \
     --kv-cache-dtype fp8 \
     --calculate-kv-scales \
     --block-size 128 \
