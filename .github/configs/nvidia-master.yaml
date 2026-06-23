@@ -4570,7 +4570,7 @@ minimaxm3-fp8-h100-vllm:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp8-h100-vllm-agentic:
-  image: vllm/vllm-openai:minimax-m3
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: h100-dgxc

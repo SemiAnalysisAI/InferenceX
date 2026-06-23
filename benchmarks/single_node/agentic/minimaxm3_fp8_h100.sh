@@ -33,15 +33,14 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-MODEL_CPU_OFFLOAD_GB=26
 MOONCAKE_LOCAL_BUFFER_GIB=4
 case "$OFFLOADING" in
     none) ;;
     cpu)
         TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
-        PER_RANK_GIB=$((TOTAL_CPU_DRAM_GIB / TP - MODEL_CPU_OFFLOAD_GB - MOONCAKE_LOCAL_BUFFER_GIB))
+        PER_RANK_GIB=$((TOTAL_CPU_DRAM_GIB / TP - MOONCAKE_LOCAL_BUFFER_GIB))
         if (( PER_RANK_GIB <= 0 )); then
-            echo "Error: CPU DRAM budget is too small for model and KV offload" >&2
+            echo "Error: CPU DRAM budget is too small for KV offload" >&2
             exit 1
         fi
         MOONCAKE_VERSION=0.3.11.post1
@@ -105,7 +104,8 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     --gpu-memory-utilization 0.95 \
-    --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
+    --kv-cache-dtype fp8 \
+    --attention-backend TRITON_ATTN \
     --block-size 128 \
     --language-model-only \
     --enable-prefix-caching \
