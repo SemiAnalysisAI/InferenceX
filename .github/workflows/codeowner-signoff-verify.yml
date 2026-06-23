@@ -1,0 +1,305 @@
+name: CODEOWNER Sign-off Verify
+
+# Independently re-verifies a CODEOWNER reviewer sign-off.
+#
+# A reviewer marks a PR ready by posting the sign-off checklist that starts with
+# "As a PR reviewer and CODEOWNER" (see e.g.
+# https://github.com/SemiAnalysisAI/InferenceX/pull/1792#issuecomment-4781799476).
+# That sign-off can be posted three different ways, and all three trigger here:
+#   - a conversation comment            -> issue_comment
+#   - an Approve/Comment review summary  -> pull_request_review
+#   - an inline code-review comment      -> pull_request_review_comment
+#
+# When the sign-off lands on a non-draft, open PR, this workflow asks Claude to
+# independently confirm the three claims that actually gate a merge:
+#   1. PR validation has at least one fully-green run.
+#   2. Evals pass on that same green run.
+#   3. The single-node recipe(s) are linked in the sign-off AND the linked
+#      recipe PR/commit contains all of the reproduction information that is in
+#      this InferenceX PR.
+# If any of those are not to standard, Claude posts a single comment that
+# @-mentions the reviewer who signed off and explains exactly what is wrong.
+
+on:
+  issue_comment:
+    types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
+
+concurrency:
+  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Gate: only proceed for the sign-off checklist on an OPEN, non-draft PR.
+  # Normalizes the three event shapes (issue_comment / pull_request_review /
+  # pull_request_review_comment) into a single set of outputs, resolves an
+  # immutable head SHA (TOCTOU-safe), and hands the verifier a ready-to-run
+  # command for fetching the exact sign-off body.
+  # ---------------------------------------------------------------------------
+  gate:
+    # Only trusted reviewers can trigger this (a CODEOWNER sign-off only means
+    # something from a member/collaborator anyway). This also limits the blast
+    # radius of any prompt-injection via PR-supplied content.
+    if: |
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER') &&
+       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+      (github.event_name == 'pull_request_review' &&
+       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER') &&
+       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER') &&
+       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      proceed: ${{ steps.resolve.outputs.proceed }}
+      pr-number: ${{ steps.resolve.outputs.pr-number }}
+      head-sha: ${{ steps.resolve.outputs.head-sha }}
+      signoff-author: ${{ steps.resolve.outputs.signoff-author }}
+      signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
+      signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
+    steps:
+      - name: Resolve PR state and sign-off metadata
+        id: resolve
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const repoFull = `${owner}/${repo}`;
+            const eventName = context.eventName;
+
+            // Normalize the three event payloads.
+            let prNumber, author, refId, kind, fetchCmd;
+            if (eventName === 'issue_comment') {
+              prNumber = context.payload.issue.number;
+              author = context.payload.comment.user.login;
+              refId = context.payload.comment.id;
+              kind = 'conversation comment';
+              fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
+            } else if (eventName === 'pull_request_review') {
+              prNumber = context.payload.pull_request.number;
+              author = context.payload.review.user.login;
+              refId = context.payload.review.id;
+              kind = 'review summary';
+              fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
+            } else if (eventName === 'pull_request_review_comment') {
+              prNumber = context.payload.pull_request.number;
+              author = context.payload.comment.user.login;
+              refId = context.payload.comment.id;
+              kind = 'inline review comment';
+              fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+            } else {
+              core.setOutput('proceed', 'false');
+              return;
+            }
+
+            const { data: pr } = await github.rest.pulls.get({
+              owner, repo, pull_number: prNumber,
+            });
+
+            // "PRs marked ready" => open and not a draft.
+            const ready = pr.state === 'open' && pr.draft === false;
+            if (!ready) {
+              core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
+            }
+
+            core.setOutput('proceed', ready ? 'true' : 'false');
+            core.setOutput('pr-number', String(prNumber));
+            core.setOutput('head-sha', pr.head.sha);
+            core.setOutput('signoff-author', author);
+            core.setOutput('signoff-kind', kind);
+            core.setOutput('signoff-fetch-cmd', fetchCmd);
+
+  verify:
+    needs: gate
+    if: ${{ needs.gate.outputs.proceed == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: read
+    steps:
+      # SECURITY: this is a privileged job (write perms + secrets) triggered by
+      # comment events, so it must NOT check out untrusted PR head code — the
+      # setup step and the MCP server would then execute attacker-controlled
+      # files. Check out the trusted default branch; all PR content is read
+      # read-only via the GitHub API (gh / MCP), never from the working tree.
+      - name: Checkout repository (trusted default branch only)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.repository.default_branch }}
+          token: ${{ secrets.CLAUDE_PAT }}
+
+      - name: Setup MCP Server
+        run: |
+          pip3 install -r .claude/requirements-mcp.txt
+          mkdir -p /tmp/inferencemax-mcp
+
+      - name: Verify sign-off with Claude
+        uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          GITHUB_TOKEN: ${{ secrets.CLAUDE_PAT }}
+          INFERENCEMAX_ROOT: ${{ github.workspace }}
+          BASH_DEFAULT_TIMEOUT_MS: "1800000"
+          BASH_MAX_TIMEOUT_MS: "3600000"
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.CLAUDE_PAT }}
+          track_progress: false
+          allowed_bots: ''
+          additional_permissions: |
+            actions: read
+          settings: |
+            {"fastMode": true}
+
+          claude_args: |
+            --model 'claude-opus-4-6'
+            --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
+            --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ needs.gate.outputs.pr-number }}
+            PR HEAD SHA: ${{ needs.gate.outputs.head-sha }}
+            SIGN-OFF AUTHOR: ${{ needs.gate.outputs.signoff-author }}
+            SIGN-OFF KIND: ${{ needs.gate.outputs.signoff-kind }}
+
+            You are an automated merge-gate auditor for InferenceX.
+
+            A CODEOWNER (`${{ needs.gate.outputs.signoff-author }}`) just posted the reviewer
+            sign-off checklist (as a ${{ needs.gate.outputs.signoff-kind }}) that marks
+            PR #${{ needs.gate.outputs.pr-number }} as ready to merge. Your job is to
+            INDEPENDENTLY verify the three claims below. Do not trust the reviewer's checkmarks
+            — re-derive every conclusion from CI runs, the PR diff, and the linked recipe
+            yourself. Be rigorous and specific.
+
+            Read the exact sign-off body first (especially its "Additional detail section").
+            The sign-off was posted as a ${{ needs.gate.outputs.signoff-kind }}, so fetch it with:
+            ```bash
+            ${{ needs.gate.outputs.signoff-fetch-cmd }}
+            ```
+
+            Get the PR metadata and the full diff (this is the "InferenceX PR recipe" you will
+            compare against later):
+            ```bash
+            gh pr view ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }} --json title,headRefName,headRefOid,files,body
+            gh pr diff ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }}
+            ```
+            Anchor everything to the pinned head SHA `${{ needs.gate.outputs.head-sha }}` (the
+            commit that was signed off). First confirm the PR tip has not moved since the gate
+            ran: if `headRefOid` from the command above differs from the pinned SHA, the head
+            advanced mid-verification — assess the recipe at the PINNED SHA (e.g.
+            `gh api repos/${{ github.repository }}/commits/${{ needs.gate.outputs.head-sha }}` and
+            the files at that SHA), and note in your comment that a fresh sign-off is needed for
+            the new commit. This keeps Check 3 (recipe) consistent with Checks 1-2.
+
+            ## Check 1 — A passing sweep + evals ran on a commit IN this PR
+            The merge standard (and InferenceX's own reuse gate) requires a green full sweep —
+            including evals — on a commit that is CURRENTLY part of this PR. A sweep that ran on a
+            commit later rebased/force-pushed out does NOT count: at merge, `merge_with_reuse.sh`
+            → `validate_reusable_run` (in `utils/find_reusable_sweep_run.py`) rejects any source
+            whose `head_sha` is not in `GET /pulls/<n>/commits`. So the whole question collapses
+            to one fact: does a commit still in this PR carry green, executed sweep/eval checks?
+
+            The cleanest way to answer is the check-runs attached to each in-PR commit — you do
+            NOT need to list `run-sweep.yml` runs or parse reuse logs.
+            - Get the PR's current commit SHAs:
+              ```bash
+              gh api repos/${{ github.repository }}/pulls/${{ needs.gate.outputs.pr-number }}/commits \
+                --paginate --jq '.[].sha'
+              ```
+            - For each of those SHAs, list its check-runs and look at the sweep/eval jobs:
+              ```bash
+              gh api repos/${{ github.repository }}/commits/<sha>/check-runs --paginate \
+                --jq '.check_runs[] | {name, conclusion}'
+              ```
+              The per-config benchmark/eval check-runs are named like `single-node 1k1k /`,
+              `single-node 8k1k /`, and `eval /`. A commit satisfies validation only if the actual
+              executed jobs — the `eval /` AND `single-node */` check-runs — have conclusion
+              `success`. `skipped` does NOT count (it means a skip/reuse run that executed nothing
+              on that commit); `failure` does not count.
+              IMPORTANT: do NOT rely on `collect-evals` — it is an aggregator that can report
+              `success` even when every underlying `eval /` job was `skipped` (it just aggregated
+              an empty set). Always key off the per-config `eval /` and `single-node */` jobs.
+            - PASS if ANY commit currently in the PR has green (success, non-skipped) `single-node */`
+              AND `eval /` check-runs. Remember the run id behind a passing `eval /` check (its
+              `details_url` contains `/actions/runs/<run_id>/...`) — Check 2 needs it.
+            - Otherwise FAIL. State the ROOT ISSUE plainly and keep it actionable:
+              "No passing sweep/eval was found on any commit in this PR."
+              Do NOT write a confusing message like "it technically passed but the commit isn't in
+              the PR" — a sweep that ran on a rebased-out commit is irrelevant to the reviewer, so
+              don't lead with it. The fix the author needs is simply: run (or re-anchor via
+              `/reuse-sweep-run`) a passing full sweep on a commit currently in this PR. You may
+              add an offending run/SHA as a short supporting detail AFTER the root-issue line.
+
+            ## Check 2 — Evals actually pass (accuracy), on that in-PR commit's run
+            For the commit that passed Check 1, confirm the eval numbers are real and meet the bar
+            — not just that the job is green:
+            - Take the run id behind the passing `eval /` / `collect-evals` check-run (from its
+              `details_url`) and download its eval results:
+              ```bash
+              gh run download <RUN_ID> --repo ${{ github.repository }} -p 'eval_results_*' -D ./evals || \
+              gh run download <RUN_ID> --repo ${{ github.repository }} -p 'eval_*' -D ./evals
+              find ./evals -name '*.json' | head
+              ```
+            - Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
+              accuracy is present and meets the expected bar for the model, and that the run used
+              the same inference-engine image as this PR's config. FAIL if evals are
+              skipped/failed/empty/below bar, or the image differs — say exactly which.
+
+            ## Check 3 — Recipe linked AND complete
+            The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
+            (especially `benchmarks/single_node/**/*.sh`) plus its entry in
+            `.github/configs/*-master.yaml`. The merge standard is: the community must be able to
+            reproduce this benchmark from a public recipe.
+            - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
+              the corresponding recipe — a PR/commit in
+              `https://github.com/vllm-project/recipes` or
+              `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
+              published recipe page (`https://recipes.vllm.ai/` or
+              `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
+            - (b) RECIPE COMPLETE: Fetch the linked recipe (use the `fetch` MCP tool or WebFetch;
+              for a recipe PR, read its diff via `gh pr diff` against that repo if accessible)
+              and verify it includes ALL of the reproduction-critical information present in this
+              InferenceX PR's recipe. At minimum cross-check: model, hardware/SKU, inference
+              engine + image tag/version, parallelism (TP/EP/DP/PP), quantization, kv-cache
+              dtype, key server launch flags, required env vars, and benchmark settings
+              (concurrency, sequence lengths / ISL-OSL). FAIL and list every detail that is in
+              the InferenceX PR but missing from the linked recipe.
+            - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
+              link does not pass this workflow's standard — a link is required.
+
+            ## Verdict and output
+            Decide PASS only if Checks 1, 2, and 3 ALL pass. Post EXACTLY ONE summary comment on
+            PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
+            the hidden marker so reruns are identifiable:
+            `<!-- codeowner-signoff-verify sha=${{ needs.gate.outputs.head-sha }} -->`
+
+            Before posting, list the PR's comments and, if a prior verification comment with this
+            marker already exists for THIS head SHA, do not post a duplicate — update your
+            assessment only if the conclusion changed.
+
+            - If everything is to standard: post a brief confirmation (2-3 sentences) noting the
+              green run URL, that evals pass, and that the recipe link is present and complete.
+              Do NOT @-mention anyone on a pass.
+            - If anything is NOT to standard: the FIRST line of the comment body (after the
+              marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`.
+              Then list, grouped under "PR validation", "Evals", and "Recipe", each concrete
+              problem. Lead each item with the ROOT ISSUE in plain language (e.g. for validation,
+              "No passing sweep/eval was found on any commit in this PR"), then add supporting
+              detail/links (run URLs, the recipe link, specific missing fields) AFTER. Be precise
+              and actionable — tell them exactly what to fix before this PR can merge. Avoid
+              confusing nuance the reviewer can't act on.
+
+            Do not use emojis anywhere in the comment. Use only facts you verified. If a required
+            artifact or run is inaccessible, say so explicitly rather than assuming pass.
