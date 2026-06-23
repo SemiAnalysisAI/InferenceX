@@ -11,12 +11,7 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
-SALLOC_MEMORY_ARGS=()
-if [[ "$SCENARIO_SUBDIR" == "agentic/" && "${EXP_NAME%%_*}" == "minimaxm3" && "${OFFLOADING:-none}" == "cpu" ]]; then
-    SALLOC_MEMORY_ARGS=(--mem=0)
-fi
-
-JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:h100:$TP "${SALLOC_MEMORY_ARGS[@]}" --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(salloc --partition=$PARTITION --gres=gpu:h100:$TP --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
