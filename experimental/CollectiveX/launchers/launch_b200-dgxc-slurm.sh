@@ -40,6 +40,8 @@ TOPO="b200-nvlink-island+cx7-ib"
 WORLD=$((NODES * GPUS_PER_NODE))
 MPI_FLAG="${CX_SRUN_MPI:-pmix}"
 export CX_NCCL_HOME="${CX_NCCL_HOME:-/usr}"
+# Record container identity in env_capture provenance (propagated via --export=ALL).
+export COLLECTIVEX_IMAGE="$IMAGE" COLLECTIVEX_IMAGE_DIGEST="${CX_IMAGE_DIGEST:-}"
 
 declare -A BIN=( [all_reduce]=all_reduce_perf [all_gather]=all_gather_perf
                  [reduce_scatter]=reduce_scatter_perf [alltoall]=alltoall_perf )

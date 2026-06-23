@@ -35,6 +35,8 @@ export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
 export CX_TOPO="b200-nvlink-island" CX_TRANSPORT="nvlink"
 export CX_BENCH="${CX_BENCH:-nccl}"
 export CX_NCCL_HOME="${CX_NCCL_HOME:-/usr}"
+# Record container identity in env_capture provenance.
+export COLLECTIVEX_IMAGE="$IMAGE" COLLECTIVEX_IMAGE_DIGEST="${CX_IMAGE_DIGEST:-}"
 export NCCL_CUMEM_ENABLE=1
 
 cx_log "runner=$RUNNER_NAME partition=$PARTITION ngpus=$NGPUS bench=$CX_BENCH"

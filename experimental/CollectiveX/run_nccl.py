@@ -236,7 +236,8 @@ def main() -> int:
         "binary": binary,
         "command": " ".join(command) if command else f"<parse-only {args.parse_only}>",
         "transport": args.transport,
-        "status": "valid" if (summary.get("check_passed") in (True, None) and ran_ok and rows) else "invalid",
+        "status": ("valid" if (rows and ran_ok and (summary.get("check_passed") is True
+                   or (args.check == 0 and summary.get("check_passed") is None))) else "invalid"),
         "comparison_key": comparison_key(meta),
         **meta,
         "summary": summary,

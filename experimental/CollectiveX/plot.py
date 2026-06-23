@@ -40,7 +40,8 @@ def load_nccl_results(results_dir: str) -> list[dict]:
     docs = []
     for path in sorted(glob.glob(os.path.join(results_dir, "*.json"))):
         try:
-            d = json.load(open(path))
+            with open(path) as _f:
+                d = json.load(_f)
         except (json.JSONDecodeError, OSError):
             continue
         if d.get("family") == "nccl" and d.get("rows"):

@@ -37,6 +37,8 @@ export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
 export CX_TOPO="gb200-nvl72-mnnvl" CX_TRANSPORT="mnnvl"
 export CX_BENCH="${CX_BENCH:-nccl}"
 export CX_NCCL_HOME="${CX_NCCL_HOME:-/usr}"
+# Record container identity in env_capture provenance.
+export COLLECTIVEX_IMAGE="$IMAGE" COLLECTIVEX_IMAGE_DIGEST="${CX_IMAGE_DIGEST:-}"
 # Validated GB200 MNNVL transport env (from serving recipes) — set AND recorded.
 export NCCL_CUMEM_ENABLE=1 NCCL_MNNVL_ENABLE=1 MC_FORCE_MNNVL=1
 

@@ -17,10 +17,12 @@ on:
   workflow_dispatch:
     inputs:
       sku:
-        description: Self-hosted runner pool (label from .github/configs/runners.yaml)
+        # Only SKUs with a matching launchers/launch_<prefix>.sh are offered —
+        # runner.name's prefix selects the script, so an SKU without one fails.
+        description: Self-hosted runner pool (must have a CollectiveX launcher)
         type: choice
         default: gb200
-        options: [gb200, b200, b200-multinode, b300, gb300]
+        options: [gb200, b200-dgxc, b200-multinode]
       benchmark:
         description: Which benchmark to run
         type: choice

@@ -126,6 +126,13 @@ def main() -> int:
     num_nvl_bytes = 1024 * 1024 * 1024
     num_rdma_bytes = 0
     buffer = Buffer(group, num_nvl_bytes, num_rdma_bytes)
+    # Apply the standardized communication-SM budget so the recorded
+    # num_comm_sms reflects the actual run (best-effort across DeepEP versions).
+    try:
+        Buffer.set_num_sms(args.num_sms)
+    except Exception as exc:  # pragma: no cover - API/version dependent
+        if rank == 0:
+            print(f"WARN: could not set num_sms={args.num_sms}: {exc!r}", file=sys.stderr)
 
     def run_once():
         # ===================== ADAPT HERE (DeepEP API) =======================
@@ -207,7 +214,7 @@ def main() -> int:
         }
         meta = {
             "op": "dispatch-combine", "backend": "deepep", "mode": "normal",
-            "world_size": world_size, "nodes": max(1, world_size // 8),
+            "world_size": world_size, "nodes": int(os.environ.get("SLURM_NNODES", "1")),
             "topology_class": args.topology_class, "comparison_class": args.comparison_class,
             "measurement_contract": MEASUREMENT_CONTRACT, "shape": shape,
         }
@@ -215,7 +222,8 @@ def main() -> int:
         rt_p50 = sum(t["roundtrip_us_p50"] for t in trials) / len(trials)
         env = None
         if args.env_json and os.path.exists(args.env_json):
-            env = json.load(open(args.env_json))
+            with open(args.env_json) as _fh:
+                env = json.load(_fh)
         doc = {
             "schema_version": SCHEMA_VERSION,
             "family": "moe",
