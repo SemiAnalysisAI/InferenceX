@@ -5,12 +5,12 @@ AMD counterpart to run_deepep.py, using ROCm MoRI's EpDispatchCombine op. One
 decode-shaped dispatch+combine point, correctness-gated, CUDA-event timed,
 emitting the same flat-JSON shape (family=moe, backend=mori).
 
-  !!! MoRI's Python API is VERSION-SENSITIVE. The config/dispatch/combine block
-  below follows ROCm/mori examples/ops/dispatch_combine/test_dispatch_combine.py
-  and is marked "ADAPT HERE" — validate the signatures against the MoRI build in
-  the image (rocm/sgl-dev:...-mori-...) and record its commit. This file has NOT
-  been run on MI355X yet (no cluster access at authoring time); treat the first
-  on-runner run as the validation, exactly as run_deepep.py was for GB200.
+  MoRI's Python API is VERSION-SENSITIVE. The config/dispatch/combine block below
+  follows ROCm/mori examples/ops/dispatch_combine/test_dispatch_combine.py. The
+  first MI355X run (image rocm/sgl-dev:...-mori-0227-2) confirmed the setup +
+  config + dispatch path reach the MoRI kernel; it OOM'd the default 2 GiB
+  symmetric heap, now sized up via MORI_SHMEM_HEAP_SIZE above. The correctness
+  gate and timing are validated by the heap-sized re-run.
 
 Launch (one process per GPU), e.g. single-node 8x MI355X:
     torchrun --nproc_per_node=8 run_mori.py \\
@@ -25,6 +25,15 @@ import hashlib
 import json
 import os
 import sys
+
+# MoRI's symmetric-memory heap defaults to 2 GiB (static) — too small for the
+# DeepSeek hidden size (7168) across 8 ranks: the dispatch/combine buffers
+# overflow it ("Out of static heap memory ... Increase via MORI_SHMEM_HEAP_SIZE",
+# observed on the first MI355X run). Size it generously here, BEFORE `import mori`
+# (the heap is created at shmem init); MI355X HBM is ample. Layered override:
+# explicit MORI_SHMEM_HEAP_SIZE > CX_MORI_HEAP_BYTES > 16 GiB default.
+os.environ.setdefault("MORI_SHMEM_HEAP_SIZE",
+                      os.environ.get("CX_MORI_HEAP_BYTES", str(16 * 1024**3)))
 
 SCHEMA_VERSION = 1
 MEASUREMENT_CONTRACT = "mori-normal-v1"
