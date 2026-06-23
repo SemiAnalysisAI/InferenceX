@@ -3165,7 +3165,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
     - duration: 1800
       search-space:
       - spec-decoding: "none"
-        conc-list: [ 1,4,8,16,32 ]
+        conc-list: [ 8,16,32 ]
         offloading: none
         prefill:
           num-worker: 1
