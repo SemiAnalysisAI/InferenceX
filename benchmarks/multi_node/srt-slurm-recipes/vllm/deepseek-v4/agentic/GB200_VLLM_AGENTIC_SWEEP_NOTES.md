@@ -1255,3 +1255,34 @@ unnecessary GPU-normalization penalty. The older TEP/TP, TEP/DEP, 1P/1D, and
 multi-decode GB200 recipes are no longer referenced by the master sweep and
 were removed. The generated matrix contains four grouped jobs, all recipe
 worker counts match master metadata, and all 164 matrix-logic tests pass.
+
+## Official June 23 Sweep and Dynamo Lease Hardening
+
+Official workflow `28026900510` uses the June 21 corpus, Dynamo KV routing,
+and AIPerf conversation-aware routing. Its first six completed points are:
+
+| Topology | Conc | Total tok/s | Tok/s/GPU | p90 TTFT | p90 interactivity |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 2P/1D | 96 | 303,416 | 12,642 | 20.23s | 32.40 |
+| 2P/1D | 128 | 423,208 | 17,634 | 2.76s | 30.03 |
+| 2P/1D | 160 | 533,251 | 22,219 | 3.31s | 29.12 |
+| 3P/1D | 160 | 496,397 | 15,512 | 19.47s | 29.55 |
+| 3P/1D | 192 | 492,366 | 15,386 | 10.20s | 26.55 |
+| 3P/1D | 240 | 270,919 | 8,466 | 172.63s | 26.15 |
+
+Every recorded request in these artifacts succeeded. The 2P/1D c160 point is
+56.4% above the B200 aggregate curve's 14,209 tok/s/GPU maximum while also
+having much lower p90 TTFT and much higher p90 interactivity. The 3P/1D c240
+point crossed the overload knee: decode KV usage reached approximately 100%,
+TTFT rose sharply, and normalized throughput collapsed.
+
+Two later engine starts exposed an infrastructure timeout rather than a model
+failure. During slow, concurrent Lustre loading, a brief etcd stall exceeded
+Dynamo's 10-second default discovery lease. Engines continued loading and
+captured their graphs, but endpoint and metrics registration then failed
+because the original lease had expired. CUDA, NCCL, NIXL, and graph capture
+were healthy. Dynamo documents `ETCD_LEASE_TTL` as the supported bare-metal
+lease control, so all GB200 production recipes now set it to 120 seconds on
+the frontend, prefill ranks, and decode ranks. Slurm's critical-process
+monitor still detects hard exits immediately; the longer etcd lease only
+tolerates transient control-plane stalls during startup.
