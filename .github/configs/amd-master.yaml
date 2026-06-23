@@ -2846,7 +2846,7 @@ minimaxm3-fp8-mi300x-vllm:
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
 
 minimaxm3-fp8-mi300x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi300x

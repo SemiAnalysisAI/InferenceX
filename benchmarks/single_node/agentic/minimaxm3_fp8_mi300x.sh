@@ -181,6 +181,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --block-size 128 \
     --language-model-only \
     --attention-backend TRITON_ATTN \
+    --kv-cache-dtype fp8 \
     --enable-prefix-caching \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --tool-call-parser minimax_m3 \
