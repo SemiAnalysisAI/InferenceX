@@ -1366,6 +1366,69 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+# Cross-node 1P1D agentic recipe (L2 + mori-P2P, NO L3 store). A single
+# LMCacheConnectorV1 with transfer_channel=mori does BOTH the cross-node
+# prefill->decode KV transfer (P2P RDMA over the lmcache MoriChannel, GPU dmabuf
+# -> sidesteps the ionic host-MR <=64MiB/MR cap) AND L2 prefix reuse (local_cpu
+# host DRAM). Roles split kv_producer (prefill) / kv_consumer (decode); the
+# LMCache PD proxy (disagg_proxy_server.py) injects the per-request disagg_spec.
+# This OVERRIDES the earlier L3-mooncake recipe of the same name (leaderboard
+# branch) -- L3 is intentionally NOT introduced here yet, only L1(APC)+L2.
+# Shares the kimik2.5_fp4_mi355x_vllm-disagg.sh launcher; the agentic-coding
+# scenario + KV_CONNECTOR=lmcache-mori additional-settings select the path.
+# No MultiConnector (avoids the block-ownership KV corruption); no mooncake.
+kimik2.5-fp4-mi355x-vllm-disagg-agentic:
+  # Self-contained public image: vLLM ROCm + lmcache (with the mori
+  # transfer_channel injected at startup by patch_lmcache.py) + the mori python
+  # pkg. (mooncake is also baked in but unused on this L2-only path.)
+  image: yukiozzz/kimi-lmc-mc-rocm:dmabuf
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      # 1P1D: 1 prefill node (co-located with the in-container LMCache PD proxy) +
+      # 1 decode node = 2 nodes total. conc kept small (agentic is expensive).
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          # --- KV reuse path: unified LMCacheConnectorV1 over mori P2P (L1+L2) ---
+          - "KV_CONNECTOR=lmcache-mori"
+          - "ROUTER_TYPE=lmc-proxy"           # skip external vllm-router; use in-container PD proxy
+          - "ENABLE_PREFIX_CACHING=1"         # L1 vLLM APC on prefill + decode
+          - "MAX_MODEL_LEN=262144"
+          # L2 host-CPU cache (per SA single-node agent recipe ~1200GB/node = 150GB/worker x TP8)
+          - "LMCACHE_LOCAL_CPU=True"
+          - "LMCACHE_MAX_LOCAL_CPU_GB=150"
+          # mori P2P PD control plane (decoder binds these; sender connects per-request)
+          - "LMC_PD_PROXY_PORT=7500"
+          - "LMC_PD_INIT_PORT=7300"
+          - "LMC_PD_ALLOC_PORT=7400"
+          - "LMC_PD_BUFFER_SIZE=8589934592"   # 8 GiB GPU staging buffer / engine
+          - "LMC_CHUNK_SIZE=256"
+          # lmcache + the mori transfer_channel are provided by the image +
+          # patch_lmcache.py (run at startup by server_vllm.sh); no host mounts,
+          # no mooncake master, no L3 store. Cross-node KV = mori dmabuf RDMA.
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
