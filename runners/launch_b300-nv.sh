@@ -411,7 +411,11 @@ else
         SALLOC_MEMORY_ARGS=(--mem=0)
     fi
     DEFAULT_SALLOC_TIME_LIMIT=180
-    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "sglang" ]]; then
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "${DURATION:-0}" -ge 5400 ]]; then
+        # A 90-minute profile plus model startup, warmup, request draining,
+        # and result processing can exceed the normal three-hour lifecycle.
+        DEFAULT_SALLOC_TIME_LIMIT=300
+    elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "sglang" ]]; then
         if [[ "$CONC" -ge 512 || ( "$DP_ATTENTION" == "true" && "$CONC" -ge 96 ) ]]; then
             # C512 and high-concurrency DP replays can spend multiple hours in
             # long-context warmup before the 30-minute profiling phase.
