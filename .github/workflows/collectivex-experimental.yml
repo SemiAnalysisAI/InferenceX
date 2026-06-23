@@ -22,12 +22,13 @@ on:
         description: Self-hosted runner pool (must have a CollectiveX launcher)
         type: choice
         default: gb200
-        options: [gb200, b200-dgxc, b200-multinode]
+        options: [gb200, b200-dgxc, b200-multinode, mi355x]
       benchmark:
+        # mori runs only on mi355x; nccl/deepep/all on the NVIDIA SKUs.
         description: Which benchmark to run
         type: choice
         default: nccl
-        options: [nccl, deepep, all]
+        options: [nccl, deepep, mori, all]
       ops:
         description: NCCL ops (space-separated); blank = default set
         type: string

@@ -24,8 +24,15 @@ CX_IMAGE_DIGEST="sha256:061fb71f838e82000a1768c159654d526c2f17ebe751c21e7fc48ca5
 # DeepEP — see CONTAINERS.md — but are not multi-arch and are not the default.)
 CX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 
+# AMD (ROCm/CDNA): the multi-arch NVIDIA image above is x86_64+aarch64 CUDA and
+# cannot run on MI355X. AMD uses a separate ROCm image that bundles MoRI (the
+# AMD EP library). Single-arch (linux/amd64 host, ROCm runtime); not digest-
+# pinned yet — pin once validated on the runner. See CONTAINERS.md.
+CX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2"
+
 cx_default_image() {
   case "$1" in
+    mi355x*|mi350x*|mi325x*|mi300x*) echo "$CX_IMAGE_AMD_MORI" ;;
     b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$CX_IMAGE_MULTIARCH" ;;
     *) cx_die "no default image for runner prefix: $1" ;;
   esac

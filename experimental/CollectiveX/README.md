@@ -17,10 +17,11 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 | `env_capture.py` | Layer-0 environment + topology fingerprint → JSON (stdlib only) |
 | `run_nccl.py` | run stock `nccl-tests`, parse the text table, emit flat JSON (stdlib only) |
 | `run_deepep.py` | DeepEP dispatch+combine, normal mode, correctness-gated (torch + DeepEP) |
+| `run_mori.py` | MoRI (AMD) dispatch+combine, normal mode, correctness-gated (torch + MoRI) |
 | `plot.py` | latency/bus-bw curves, B200-vs-GB200 overlay with a comparison guard (matplotlib) |
 | `launchers/common.sh` | shared helpers: image resolve, enroot squash, staging, nccl-tests build |
-| `launchers/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/all) |
-| `launchers/launch_<sku>.sh` | per-SKU adapters: `launch_b200-dgxc.sh` (8× NVLink), `launch_b200-dgxc-slurm.sh` (2-node IB), `launch_gb200-nv.sh` (NVL72 MNNVL) |
+| `launchers/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/mori/all) |
+| `launchers/launch_<sku>.sh` | per-SKU adapters: `launch_b200-dgxc.sh` (8× NVLink), `launch_b200-dgxc-slurm.sh` (2-node IB), `launch_gb200-nv.sh` (NVL72 MNNVL), `launch_mi355x-amds.sh` (8× XGMI, AMD MoRI) |
 | `CONTAINERS.md` | the pinned multi-arch container + audited library versions |
 | `results/` | flat JSON artifacts (+ `plots/`, raw captures) |
 | `tests/fixtures/` | captured nccl-tests output for offline parser checks |
@@ -31,9 +32,10 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 
 - **push** to `experimental/CollectiveX/**` → short **GB200 NCCL smoke** (idle
   capacity; never auto-contends with the B200 serving sweep).
-- **workflow_dispatch** → pick `sku` (gb200 / b200-dgxc / b200-multinode),
-  `benchmark` (nccl / deepep / all), ops, sizes, ngpus. Lands on that SKU's
-  self-hosted runner and runs `launch_${RUNNER_NAME%%_*}.sh`.
+- **workflow_dispatch** → pick `sku` (gb200 / b200-dgxc / b200-multinode /
+  mi355x), `benchmark` (nccl / deepep / mori / all — `mori` is AMD-only), ops,
+  sizes, ngpus. Lands on that SKU's self-hosted runner and runs
+  `launch_${RUNNER_NAME%%_*}.sh`.
 
 Each job renders a results table to the **GitHub Actions job summary** (via
 `summarize.py --markdown` → `$GITHUB_STEP_SUMMARY`) and uploads the result JSONs
@@ -47,9 +49,10 @@ bash experimental/CollectiveX/launchers/launch_gb200-nv.sh                 # GB2
 CX_BENCH=deepep bash experimental/CollectiveX/launchers/launch_gb200-nv.sh # GB200, DeepEP (rebuild)
 bash experimental/CollectiveX/launchers/launch_b200-dgxc.sh               # B200 8× NVLink
 bash experimental/CollectiveX/launchers/launch_b200-dgxc-slurm.sh         # B200 2-node, cross-IB
+bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh             # MI355X 8× XGMI, MoRI EP (AMD; forces CX_BENCH=mori)
 ```
 
-Knobs: `CX_BENCH` (nccl|deepep|all), `CX_OPS`, `CX_MIN_BYTES`/`CX_MAX_BYTES`,
+Knobs: `CX_BENCH` (nccl|deepep|mori|all), `CX_OPS`, `CX_MIN_BYTES`/`CX_MAX_BYTES`,
 `CX_NGPUS`, `CX_TIME`, `CX_IMAGE`, `CX_SQUASH_DIR`, `CX_STAGE_DIR` (compute-visible
 staging — needed on GB200/watchtower), `CX_DRYRUN=1` (print plan, allocate
 nothing). Results land in `experimental/CollectiveX/results/`.
@@ -78,6 +81,10 @@ DeepSeek-V4 fallback images.
   missing) → `srun --container-image=… --container-mounts=<repo>:/ix` → in-container
   `run_in_container.sh`. B200 partition `gpu-2`, GB200 partition `batch`, account
   `benchmark`.
+- **AMD MI355X** (`launch_mi355x-amds.sh`, MoRI / `CX_BENCH=mori`) diverges: partition
+  `compute`, no account, pyxis `--container-writable --container-remap-root`, and a
+  **node-local** squash (`/var/lib/squash`) imported via `srun` on the allocated node
+  (not the login node). Workspace is bind-mounted directly (no `CX_STAGE_DIR`).
 - Login nodes have no `nvcc`, so `nccl-tests` is **built in-container** (cached in
   `.nccl-tests/`, `CX_NCCL_HOME=/usr`). Single-node uses `-g N`; the 2-node
   adapter builds `MPI=1` and launches one rank per GPU (`srun --mpi=pmix`).
@@ -97,6 +104,12 @@ DeepSeek-V4 fallback images.
   it via `rebuild-deepep` (CX_BENCH=deepep). Its Python API is version-sensitive;
   `run_deepep.py` marks the dispatch/combine block `ADAPT HERE` — validate against
   the built commit. B200 (x86_64) first; GB200 (aarch64) follows.
+- **MoRI / MI355X** (`run_mori.py` + `launch_mi355x-amds.sh`) is **scaffolded, not yet
+  run on hardware** (no MI355X access). It mirrors `ROCm/mori`'s dispatch/combine
+  example — config + the `get_registered_combine_input_buffer` zero-copy path,
+  correctness `expected = input × (#unique destination ranks)`. The API is
+  version-sensitive (`ADAPT HERE`), so the first runner job is the validation, like
+  GB200 was for DeepEP; the AMD ROCm image isn't digest-pinned yet.
 - **Multi-node** (`launch_b200-dgxc-slurm.sh`) assumes `srun --mpi=pmix` + a
   compute-visible checkout (`CX_STAGE_DIR`); else fall back to mpirun-in-container
   or srt-slurm. CX_BENCH=nccl only for now.

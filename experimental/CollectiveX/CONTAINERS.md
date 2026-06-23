@@ -39,6 +39,18 @@ If a bundled DeepEP is needed before `rebuild-deepep` is wired on the multi-arch
 
 Select via `CX_IMAGE=…@sha256:…` on the launch script.
 
+## AMD container (MI355X) — MoRI EP
+
+AMD CDNA4 cannot run the CUDA multi-arch image; MI355X uses a ROCm image that
+bundles **MoRI** (AMD's EP dispatch/combine library). Set in `cx_default_image`
+for `mi355x*` (also `mi350x*`/`mi325x*`/`mi300x*`).
+
+- **Image:** `rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2` (single-arch ROCm 7.2.0 runtime; from the AMD master serving config). **Not digest-pinned yet** — record the digest here and pin once validated on the runner, like the NVIDIA image.
+- **MoRI:** bundled in-image (build tag `mori-0227`). `run_mori.py` follows the upstream `ROCm/mori` `tests`/`examples` dispatch+combine path; capture the exact MoRI commit (`MORI_COMMIT` env → provenance) on first run.
+- **Squash is NODE-LOCAL** (`/var/lib/squash`), not a shared FS, so `launch_mi355x-amds.sh` imports via `srun` on the allocated node (the NVIDIA adapters import on the login node onto shared FS). pyxis flags `--container-writable --container-remap-root` (matches the AMD serving launcher); workspace is bind-mounted directly (no `CX_STAGE_DIR`).
+- **Transport:** intra-node **XGMI** (8× MI355X). No rccl-tests primitive path is wired on AMD yet — **MoRI only** (`CX_BENCH=mori`); RCCL primitives are a follow-up.
+- **NOT yet validated on hardware** (no MI355X access at authoring). Treat the first runner job as the validation, exactly as `run_deepep.py` was on GB200. Likely first-run touch-ups: MoRI Python API signatures (`EpDispatchCombineConfig` kwargs, `dispatch`/`combine`/`get_registered_combine_input_buffer`), then fill a version table here (ROCm, torch, RCCL, MoRI commit).
+
 ## Cluster access / QOS
 
 - **B200** (`slurm-login-slinky`): account `benchmark`, **only `gpu-2_qos`** → partition `gpu-2` only (shared with the serving sweep). `gpu-1`/`all` (idle) need `gpu-1_qos`/`all_qos`, not associated with this account.

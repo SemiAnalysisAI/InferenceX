@@ -8,9 +8,10 @@
 # results/.
 #
 # Required env (exported by the adapter): CX_RUNNER CX_NGPUS CX_TS CX_TOPO
-# Selector:        CX_BENCH = nccl | deepep | all          (default nccl)
+# Selector:        CX_BENCH = nccl | deepep | mori | all    (default nccl)
+#                  (mori = AMD ROCm EP; nccl/deepep = NVIDIA. `all` = nccl+deepep.)
 # NCCL knobs:      CX_OPS, CX_MIN_BYTES, CX_MAX_BYTES, CX_TRANSPORT, CX_NCCL_HOME
-# DeepEP knobs:    CX_TOKENS_PER_RANK CX_HIDDEN CX_TOPK CX_EXPERTS CX_DISPATCH_DTYPE
+# EP knobs (DeepEP/MoRI): CX_TOKENS_PER_RANK CX_HIDDEN CX_TOPK CX_EXPERTS CX_DISPATCH_DTYPE
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
@@ -67,12 +68,29 @@ run_deepep_suite() {
     || { cx_log "WARN: deepep run failed"; return 1; }
 }
 
+run_mori_suite() {
+  # MoRI (AMD ROCm EP), bundled in the AMD MoRI image. If absent this is a
+  # failure (MoRI is not rebuildable here), not a silent skip. Single-node
+  # 8x MI355X over XGMI; torch.cuda maps onto ROCm/HIP.
+  if ! python3 -c "import mori" 2>/dev/null; then
+    cx_log "WARN: mori not importable — needs the AMD MoRI image (rocm/sgl-dev:...-mori-...); cannot run mori"
+    return 1
+  fi
+  torchrun --nproc_per_node="$CX_NGPUS" run_mori.py \
+    --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
+    --tokens-per-rank "${CX_TOKENS_PER_RANK:-64}" --hidden "${CX_HIDDEN:-7168}" \
+    --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
+    --env-json "$ENVJSON" --out "results/${CX_RUNNER}_mori_${CX_TS}.json" \
+    || { cx_log "WARN: mori run failed"; return 1; }
+}
+
 rc=0
 case "$CX_BENCH" in
   nccl)   run_nccl_suite || rc=1 ;;
   deepep) run_deepep_suite || rc=1 ;;
+  mori)   run_mori_suite || rc=1 ;;
   all)    run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)      cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|all)" ;;
+  *)      cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.
