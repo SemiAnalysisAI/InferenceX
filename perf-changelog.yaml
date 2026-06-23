@@ -4124,4 +4124,3 @@
     - "For DP-attention runs, use TP-sized data parallelism with DP attention local-control broadcast, DP LM head, prefill delayer, scheduler recv interval 1, chunked prefill size 32768, and schedule conservativeness 3.33."
     - "Set SGLANG_RADIX_FORCE_MISS=1, remove --disable-radix-cache, and explicitly pass --disable-piecewise-cuda-graph."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1792
-  
