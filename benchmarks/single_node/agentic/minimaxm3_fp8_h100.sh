@@ -37,6 +37,9 @@ case "$OFFLOADING" in
     none) ;;
     cpu)
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -94,7 +97,9 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.90 \
+    --gpu-memory-utilization 0.98 \
+    --kv-cache-dtype fp8 \
+    --calculate-kv-scales \
     --block-size 128 \
     --language-model-only \
     --enable-prefix-caching \
