@@ -1,38 +1,53 @@
 name: CODEOWNER Sign-off Verify
 
-# Independently re-verifies a CODEOWNER reviewer sign-off comment.
+# Independently re-verifies a CODEOWNER reviewer sign-off.
 #
-# A reviewer marks a PR ready by posting the sign-off checklist comment that
-# starts with "As a PR reviewer and CODEOWNER" (see e.g.
+# A reviewer marks a PR ready by posting the sign-off checklist that starts with
+# "As a PR reviewer and CODEOWNER" (see e.g.
 # https://github.com/SemiAnalysisAI/InferenceX/pull/1792#issuecomment-4781799476).
-# When that happens on a non-draft, open PR, this workflow asks Claude to
+# That sign-off can be posted three different ways, and all three trigger here:
+#   - a conversation comment            -> issue_comment
+#   - an Approve/Comment review summary  -> pull_request_review
+#   - an inline code-review comment      -> pull_request_review_comment
+#
+# When the sign-off lands on a non-draft, open PR, this workflow asks Claude to
 # independently confirm the three claims that actually gate a merge:
 #   1. PR validation has at least one fully-green run.
 #   2. Evals pass on that same green run.
-#   3. The single-node recipe(s) are linked in the sign-off comment AND the
-#      linked recipe PR/commit contains all of the reproduction information that
-#      is in this InferenceX PR.
+#   3. The single-node recipe(s) are linked in the sign-off AND the linked
+#      recipe PR/commit contains all of the reproduction information that is in
+#      this InferenceX PR.
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 
 on:
   issue_comment:
     types: [created, edited]
+  pull_request_review:
+    types: [submitted, edited]
+  pull_request_review_comment:
+    types: [created, edited]
 
 concurrency:
-  group: codeowner-signoff-verify-${{ github.event.issue.number }}
+  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number }}
   cancel-in-progress: false
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Gate: only proceed for the sign-off checklist comment on an OPEN, non-draft
-  # PR. Resolves an immutable head SHA (TOCTOU-safe) and surfaces the comment
-  # metadata the verifier needs.
+  # Gate: only proceed for the sign-off checklist on an OPEN, non-draft PR.
+  # Normalizes the three event shapes (issue_comment / pull_request_review /
+  # pull_request_review_comment) into a single set of outputs, resolves an
+  # immutable head SHA (TOCTOU-safe), and hands the verifier a ready-to-run
+  # command for fetching the exact sign-off body.
   # ---------------------------------------------------------------------------
   gate:
     if: |
-      github.event.issue.pull_request &&
-      contains(github.event.comment.body, 'As a PR reviewer and CODEOWNER')
+      (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
+      (github.event_name == 'pull_request_review' &&
+       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
+      (github.event_name == 'pull_request_review_comment' &&
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,8 +56,9 @@ jobs:
       proceed: ${{ steps.resolve.outputs.proceed }}
       pr-number: ${{ steps.resolve.outputs.pr-number }}
       head-sha: ${{ steps.resolve.outputs.head-sha }}
-      comment-author: ${{ steps.resolve.outputs.comment-author }}
-      comment-id: ${{ steps.resolve.outputs.comment-id }}
+      signoff-author: ${{ steps.resolve.outputs.signoff-author }}
+      signoff-kind: ${{ steps.resolve.outputs.signoff-kind }}
+      signoff-fetch-cmd: ${{ steps.resolve.outputs.signoff-fetch-cmd }}
     steps:
       - name: Resolve PR state and sign-off metadata
         id: resolve
@@ -51,9 +67,33 @@ jobs:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
-            const prNumber = context.payload.issue.number;
-            const commentAuthor = context.payload.comment.user.login;
-            const commentId = context.payload.comment.id;
+            const repoFull = `${owner}/${repo}`;
+            const eventName = context.eventName;
+
+            // Normalize the three event payloads.
+            let prNumber, author, refId, kind, fetchCmd;
+            if (eventName === 'issue_comment') {
+              prNumber = context.payload.issue.number;
+              author = context.payload.comment.user.login;
+              refId = context.payload.comment.id;
+              kind = 'conversation comment';
+              fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
+            } else if (eventName === 'pull_request_review') {
+              prNumber = context.payload.pull_request.number;
+              author = context.payload.review.user.login;
+              refId = context.payload.review.id;
+              kind = 'review summary';
+              fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
+            } else if (eventName === 'pull_request_review_comment') {
+              prNumber = context.payload.pull_request.number;
+              author = context.payload.comment.user.login;
+              refId = context.payload.comment.id;
+              kind = 'inline review comment';
+              fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+            } else {
+              core.setOutput('proceed', 'false');
+              return;
+            }
 
             const { data: pr } = await github.rest.pulls.get({
               owner, repo, pull_number: prNumber,
@@ -62,14 +102,15 @@ jobs:
             // "PRs marked ready" => open and not a draft.
             const ready = pr.state === 'open' && pr.draft === false;
             if (!ready) {
-              core.info(`PR #${prNumber} is not a ready PR (state=${pr.state}, draft=${pr.draft}); skipping.`);
+              core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
             }
 
             core.setOutput('proceed', ready ? 'true' : 'false');
             core.setOutput('pr-number', String(prNumber));
             core.setOutput('head-sha', pr.head.sha);
-            core.setOutput('comment-author', commentAuthor);
-            core.setOutput('comment-id', String(commentId));
+            core.setOutput('signoff-author', author);
+            core.setOutput('signoff-kind', kind);
+            core.setOutput('signoff-fetch-cmd', fetchCmd);
 
   verify:
     needs: gate
@@ -104,7 +145,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.CLAUDE_PAT }}
-          track_progress: true
+          track_progress: false
           allowed_bots: ''
           additional_permissions: |
             actions: read
@@ -119,21 +160,22 @@ jobs:
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ needs.gate.outputs.pr-number }}
             PR HEAD SHA: ${{ needs.gate.outputs.head-sha }}
-            SIGN-OFF COMMENT ID: ${{ needs.gate.outputs.comment-id }}
-            SIGN-OFF AUTHOR: ${{ needs.gate.outputs.comment-author }}
+            SIGN-OFF AUTHOR: ${{ needs.gate.outputs.signoff-author }}
+            SIGN-OFF KIND: ${{ needs.gate.outputs.signoff-kind }}
 
             You are an automated merge-gate auditor for InferenceX.
 
-            A CODEOWNER (`${{ needs.gate.outputs.comment-author }}`) just posted the reviewer
-            sign-off checklist comment that marks PR #${{ needs.gate.outputs.pr-number }} as
-            ready to merge. Your job is to INDEPENDENTLY verify the three claims below. Do not
-            trust the reviewer's checkmarks — re-derive every conclusion from CI runs, the PR
-            diff, and the linked recipe yourself. Be rigorous and specific.
+            A CODEOWNER (`${{ needs.gate.outputs.signoff-author }}`) just posted the reviewer
+            sign-off checklist (as a ${{ needs.gate.outputs.signoff-kind }}) that marks
+            PR #${{ needs.gate.outputs.pr-number }} as ready to merge. Your job is to
+            INDEPENDENTLY verify the three claims below. Do not trust the reviewer's checkmarks
+            — re-derive every conclusion from CI runs, the PR diff, and the linked recipe
+            yourself. Be rigorous and specific.
 
-            Read the sign-off comment first so you have its exact contents, especially the
-            "Additional detail section":
+            Read the exact sign-off body first (especially its "Additional detail section").
+            The sign-off was posted as a ${{ needs.gate.outputs.signoff-kind }}, so fetch it with:
             ```bash
-            gh api repos/${{ github.repository }}/issues/comments/${{ needs.gate.outputs.comment-id }} --jq .body
+            ${{ needs.gate.outputs.signoff-fetch-cmd }}
             ```
 
             Get the PR metadata and the full diff (this is the "InferenceX PR recipe" you will
@@ -183,8 +225,8 @@ jobs:
             (especially `benchmarks/single_node/**/*.sh`) plus its entry in
             `.github/configs/*-master.yaml`. The merge standard is: the community must be able to
             reproduce this benchmark from a public recipe.
-            - (a) LINK PRESENT: The sign-off comment's "Additional detail section" MUST contain a
-              link to the corresponding recipe — a PR/commit in
+            - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
+              the corresponding recipe — a PR/commit in
               `https://github.com/vllm-project/recipes` or
               `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
               published recipe page (`https://recipes.vllm.ai/` or
@@ -214,7 +256,7 @@ jobs:
               green run URL, that evals pass, and that the recipe link is present and complete.
               Do NOT @-mention anyone on a pass.
             - If anything is NOT to standard: the FIRST line of the comment body (after the
-              marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.comment-author }}`.
+              marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`.
               Then list, grouped under "❌ PR validation", "❌ Evals", and "❌ Recipe", each
               concrete problem with links (run URLs, the recipe link, specific missing fields).
               Be precise and actionable — tell them exactly what to fix before this PR can merge.
