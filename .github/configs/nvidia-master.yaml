@@ -4867,9 +4867,7 @@ minimaxm3-fp8-h200-vllm-agentic:
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64] }
       - { tp: 8, ep: 8, offloading: none, conc-list: [2, 4, 6, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [8, 12, 16, 24, 32, 48, 64, 96] }
       - { tp: 8, ep: 8, offloading: cpu, conc-list: [4, 6, 8, 12, 16, 24, 32, 48, 64, 96] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [8, 12, 16, 24, 32, 48, 64, 96, 128] }
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
