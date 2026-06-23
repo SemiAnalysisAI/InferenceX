@@ -10,15 +10,19 @@ name: CODEOWNER Sign-off Verify
 #   - an Approve/Comment review summary  -> pull_request_review
 #   - an inline code-review comment      -> pull_request_review_comment
 #
-# When the sign-off lands on a non-draft, open PR, this workflow asks Claude to
-# independently confirm the three claims that actually gate a merge:
-#   1. PR validation has at least one fully-green run.
+# When the sign-off lands on an open PR, this workflow asks Claude to
+# independently confirm the claims that actually gate a merge:
+#   0. The sign-off author is a CODEOWNER for the files the PR changes.
+#   1. PR validation has at least one fully-green run on a commit in the PR.
 #   2. Evals pass on that same green run.
 #   3. The single-node recipe(s) are linked in the sign-off AND the linked
 #      recipe PR/commit contains all of the reproduction information that is in
 #      this InferenceX PR.
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
+#
+# It can also be run manually via workflow_dispatch by passing the URL of the
+# sign-off comment/review to verify.
 
 on:
   issue_comment:
@@ -27,9 +31,18 @@ on:
     types: [submitted, edited]
   pull_request_review_comment:
     types: [created, edited]
+  workflow_dispatch:
+    inputs:
+      comment_url:
+        description: >-
+          URL of the sign-off comment/review to verify, e.g.
+          https://github.com/OWNER/REPO/pull/123#issuecomment-456 (also accepts
+          #pullrequestreview-<id> and #discussion_r<id> review URLs).
+        required: true
+        type: string
 
 concurrency:
-  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number }}
+  group: codeowner-signoff-verify-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -42,6 +55,7 @@ jobs:
   # ---------------------------------------------------------------------------
   gate:
     if: |
+      github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
        contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
@@ -70,7 +84,7 @@ jobs:
             const repoFull = `${owner}/${repo}`;
             const eventName = context.eventName;
 
-            // Normalize the three event payloads.
+            // Normalize the event payloads (3 comment events + manual dispatch).
             let prNumber, author, refId, kind, fetchCmd;
             if (eventName === 'issue_comment') {
               prNumber = context.payload.issue.number;
@@ -90,6 +104,43 @@ jobs:
               refId = context.payload.comment.id;
               kind = 'inline review comment';
               fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+            } else if (eventName === 'workflow_dispatch') {
+              // Parse a sign-off URL like
+              //   https://github.com/OWNER/REPO/pull/123#issuecomment-456
+              //   .../pull/123#pullrequestreview-456
+              //   .../pull/123#discussion_r456
+              const url = (context.payload.inputs && context.payload.inputs.comment_url) || '';
+              const prMatch = url.match(/\/pull\/(\d+)/);
+              if (!prMatch) {
+                core.setOutput('proceed', 'false');
+                core.setFailed(`comment_url must contain /pull/<number>: ${url}`);
+                return;
+              }
+              prNumber = parseInt(prMatch[1], 10);
+              let m;
+              if ((m = url.match(/#issuecomment-(\d+)/))) {
+                refId = m[1];
+                kind = 'conversation comment';
+                fetchCmd = `gh api repos/${repoFull}/issues/comments/${refId} --jq .body`;
+                const c = await github.rest.issues.getComment({ owner, repo, comment_id: parseInt(refId, 10) });
+                author = c.data.user.login;
+              } else if ((m = url.match(/#pullrequestreview-(\d+)/))) {
+                refId = m[1];
+                kind = 'review summary';
+                fetchCmd = `gh api repos/${repoFull}/pulls/${prNumber}/reviews/${refId} --jq .body`;
+                const r = await github.rest.pulls.getReview({ owner, repo, pull_number: prNumber, review_id: parseInt(refId, 10) });
+                author = r.data.user.login;
+              } else if ((m = url.match(/#discussion_r(\d+)/))) {
+                refId = m[1];
+                kind = 'inline review comment';
+                fetchCmd = `gh api repos/${repoFull}/pulls/comments/${refId} --jq .body`;
+                const rc = await github.rest.pulls.getReviewComment({ owner, repo, comment_id: parseInt(refId, 10) });
+                author = rc.data.user.login;
+              } else {
+                core.setOutput('proceed', 'false');
+                core.setFailed(`comment_url must end with #issuecomment-<id>, #pullrequestreview-<id>, or #discussion_r<id>: ${url}`);
+                return;
+              }
             } else {
               core.setOutput('proceed', 'false');
               return;
@@ -99,8 +150,11 @@ jobs:
               owner, repo, pull_number: prNumber,
             });
 
-            // "PRs marked ready" => open and not a draft.
-            const ready = pr.state === 'open' && pr.draft === false;
+            // Event-triggered: only act on open, non-draft ("ready") PRs.
+            // Manual dispatch is an explicit override, so allow any PR state.
+            const ready = eventName === 'workflow_dispatch'
+              ? true
+              : (pr.state === 'open' && pr.draft === false);
             if (!ready) {
               core.info(`PR #${prNumber} is not ready (state=${pr.state}, draft=${pr.draft}); skipping.`);
             }
@@ -173,9 +227,9 @@ jobs:
             A CODEOWNER (`${{ needs.gate.outputs.signoff-author }}`) just posted the reviewer
             sign-off checklist (as a ${{ needs.gate.outputs.signoff-kind }}) that marks
             PR #${{ needs.gate.outputs.pr-number }} as ready to merge. Your job is to
-            INDEPENDENTLY verify the three claims below. Do not trust the reviewer's checkmarks
-            — re-derive every conclusion from CI runs, the PR diff, and the linked recipe
-            yourself. Be rigorous and specific.
+            INDEPENDENTLY verify the checks below (0-3). Do not trust the reviewer's checkmarks
+            — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, and the linked
+            recipe yourself. Be rigorous and specific.
 
             Read the exact sign-off body first (especially its "Additional detail section").
             The sign-off was posted as a ${{ needs.gate.outputs.signoff-kind }}, so fetch it with:
@@ -196,6 +250,26 @@ jobs:
             `gh api repos/${{ github.repository }}/commits/${{ needs.gate.outputs.head-sha }}` and
             the files at that SHA), and note in your comment that a fresh sign-off is needed for
             the new commit. This keeps Check 3 (recipe) consistent with Checks 1-2.
+
+            ## Check 0 — The sign-off author is a CODEOWNER for the changed files
+            Per InferenceX convention, a sign-off only counts if it comes from a CODEOWNER for
+            what the PR actually changes (see `.github/CODEOWNERS` and the recipe-reminder bot).
+            Verify it yourself — do NOT assume:
+            - Read `.github/CODEOWNERS` (it is in the checked-out default branch).
+            - For EACH file changed in this PR, compute its owners using GitHub's
+              last-matching-pattern-wins rule: the LAST `CODEOWNERS` line whose pattern matches a
+              path determines that path's owners; owners do NOT accumulate across patterns (so a
+              specific line like `.github/configs/nvidia-master.yaml @a @b` overrides the catch-all
+              `* @org/team`).
+            - The sign-off author `@${{ needs.gate.outputs.signoff-author }}` must be an owner of
+              every changed path — either listed directly, or a member of a listed team
+              `@org/team`. Resolve team membership via
+              `gh api orgs/<org>/teams/<team>/memberships/<signer>` (200 = member). If a team can't
+              be resolved, say so rather than assuming membership.
+            - PASS if the signer owns ALL changed paths. Otherwise FAIL: list the changed paths the
+              signer does NOT own and their actual CODEOWNERS, and state those areas need a sign-off
+              from their CODEOWNER. (If other CODEOWNERs have separately signed off elsewhere on the
+              PR so that every changed area is jointly covered, note that and treat it as satisfied.)
 
             ## Check 1 — A passing sweep + evals ran on a commit IN this PR
             The merge standard (and InferenceX's own reuse gate) requires a green full sweep —
@@ -274,7 +348,7 @@ jobs:
               link does not pass this workflow's standard — a link is required.
 
             ## Verdict and output
-            Decide PASS only if Checks 1, 2, and 3 ALL pass. Post EXACTLY ONE summary comment on
+            Decide PASS only if Checks 0, 1, 2, and 3 ALL pass. Post EXACTLY ONE summary comment on
             PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
             the hidden marker so reruns are identifiable:
             `<!-- codeowner-signoff-verify sha=${{ needs.gate.outputs.head-sha }} -->`
@@ -288,7 +362,7 @@ jobs:
               Do NOT @-mention anyone on a pass.
             - If anything is NOT to standard: the FIRST line of the comment body (after the
               marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`.
-              Then list, grouped under "PR validation", "Evals", and "Recipe", each concrete
+              Then list, grouped under "CODEOWNER", "PR validation", "Evals", and "Recipe", each concrete
               problem. Lead each item with the ROOT ISSUE in plain language (e.g. for validation,
               "No passing sweep/eval was found on any commit in this PR"), then add supporting
               detail/links (run URLs, the recipe link, specific missing fields) AFTER. Be precise
