@@ -8714,6 +8714,8 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-low-latency-mtp2.yaml"
         decode:
           num-worker: 4
@@ -8731,6 +8733,8 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe-mtp2.yaml"
         decode:
           num-worker: 1
@@ -8748,6 +8752,8 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           ep: 8
           dp-attn: true
           additional-settings:
+          - "SYNTHETIC_ACCEPTANCE=true"
+          - "SYNTHETIC_ACCEPTANCE_LENGTH=2.27"
           - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb200-high-tpt-megamoe-mtp2.yaml"
         decode:
           num-worker: 1
