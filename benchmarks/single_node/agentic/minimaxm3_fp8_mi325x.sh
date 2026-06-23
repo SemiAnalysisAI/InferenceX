@@ -94,12 +94,17 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
 fi
 
 MAX_NUM_SEQS=$((2 * CONC))
+GPU_MEMORY_UTILIZATION=0.95
+if (( TP == 4 )); then
+    GPU_MEMORY_UTILIZATION=0.98
+fi
+
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --block-size 128 \
     --language-model-only \
     --attention-backend TRITON_ATTN \
