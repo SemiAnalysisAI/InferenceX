@@ -291,6 +291,20 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "kimik2.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" ]]; then
+    # MEASURED-POWER CAMPAIGN (dsr1-disagg-NVIDIA): clone the SemiAnalysisAI
+    # perfmon fork instead of cquil11/srt-slurm-nv. The fork ships the SAME
+    # gb200 dsr1 recipes (recipes/gb200-fp4|fp8/<seq>/*.yaml, model.path
+    # dsr1-fp4 / served deepseek-ai/DeepSeek-R1 — the exact CONFIG_FILE the
+    # dsr1-fp?-gb200-dynamo-sglang configs reference) PLUS the per-node
+    # nvidia-smi perfmon machinery (src/srtctl/monitor/perfmon.py) that writes
+    # perf_samples_*.csv when a recipe declares `monitoring:`. Pointing dsr1 here
+    # is what turns the gb200 dsr1 energy charts MEASURED. Minor recipe/srtctl
+    # drift vs cquil11's validated source is acceptable for a power/temp measure.
+    git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout feat/inferencex-perfmon
+    export PERFMON_ENABLED=1
 else
     git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -393,6 +407,23 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+# MEASURED-POWER CAMPAIGN: enable per-node nvidia-smi perfmon and give the slow
+# dsr1 bring-up headroom. `monitoring:` makes the orchestrator spawn perfmon.py
+# (-> perf_samples_*.csv); `health_check` raises the default 1800s server-ready
+# ceiling (dsr1 warmup = load 671B weights + FlashInfer autotune + CUDA-graph
+# capture ~= 35min > 30min default, which otherwise times out and kills etcd).
+# Idempotent; only the perfmon-fork dsr1 path sets PERFMON_ENABLED.
+if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -f "$CONFIG_PATH" ]; then
+    if ! grep -q '^monitoring:' "$CONFIG_PATH"; then
+        printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$CONFIG_PATH"
+        echo "[perfmon] injected monitoring: into $CONFIG_PATH"
+    fi
+    if ! grep -q '^health_check:' "$CONFIG_PATH"; then
+        printf '\nhealth_check:\n  max_attempts: 540\n  interval_seconds: 10\n' >> "$CONFIG_PATH"
+        echo "[perfmon] injected health_check (90min ceiling) into $CONFIG_PATH"
+    fi
+fi
+
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
@@ -453,6 +484,27 @@ if [ -d "$LOGS_DIR" ]; then
     tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
 else
     echo "Warning: Logs directory not found at $LOGS_DIR"
+fi
+
+# MEASURED-POWER CAMPAIGN: stage per-node perfmon CSVs for the downstream
+# "Process result" step. perfmon writes perf_samples_*.csv under the job logs
+# dir; copy them into $GITHUB_WORKSPACE and export GPU_METRICS_CSV_GLOB so
+# process_result.py runs aggregate_power.py and patches the agg JSON with
+# measured power + temp/util/mem. Guarded on PERFMON_ENABLED (dsr1 path only).
+# NOTE: if perf_samples are missing on this cluster, the per-node CSVs (written
+# by perfmon on COMPUTE nodes) may not be visible in the head-node LOGS_DIR —
+# the Oracle/watchtower gb200 cluster does not cross-mount /home/slurm-shared
+# (see the minimax shared-FS handling above); dsr1 may need the same treatment.
+if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -d "$LOGS_DIR" ]; then
+    if find "$LOGS_DIR" -name 'perf_samples_*.csv' 2>/dev/null | grep -q .; then
+        mkdir -p "$GITHUB_WORKSPACE/perf_samples"
+        find "$LOGS_DIR" -name 'perf_samples_*.csv' -exec cp {} "$GITHUB_WORKSPACE/perf_samples/" \;
+        perf_csv_count=$(ls "$GITHUB_WORKSPACE/perf_samples"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+        echo "GPU_METRICS_CSV_GLOB=$GITHUB_WORKSPACE/perf_samples/perf_samples_*.csv" >> "$GITHUB_ENV"
+        echo "[perfmon] staged $perf_csv_count per-node perf_samples_*.csv to \$GITHUB_WORKSPACE/perf_samples/"
+    else
+        echo "[perfmon] WARNING: monitoring enabled but no perf_samples_*.csv under $LOGS_DIR — measured power aggregation skipped (compute-node visibility? see note above)" >&2
+    fi
 fi
 
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then

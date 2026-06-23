@@ -184,6 +184,39 @@ elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
+elif [[ $MODEL_PREFIX == "dsr1" ]]; then
+    # MEASURED-POWER CAMPAIGN (dsr1-disagg-NVIDIA): clone the SemiAnalysisAI
+    # fork pinned to NVIDIA/srt-slurm PR #35 (feat/inferencex-perfmon) instead
+    # of upstream sa-submission-q2-2026 (the else branch). The fork is a
+    # SUPERSET: byte-identical dsr1 recipes (verified — under recipes/gb300-*
+    # only glm5.yaml differs, never the dsr1 recipes) PLUS the per-node
+    # nvidia-smi perfmon machinery (src/srtctl/monitor/perfmon.py) that writes
+    # perf_samples_*.csv when a recipe declares `monitoring:`. Pointing dsr1
+    # here is what turns the dsr1-disagg-NVIDIA energy charts MEASURED.
+    git clone https://github.com/SemiAnalysisAI/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout feat/inferencex-perfmon
+    export PERFMON_ENABLED=1
+    # Enable per-node GPU perfmon on every recipe. `monitoring` is a top-level
+    # SrtConfig field defaulting to None, so without this the orchestrator's
+    # _start_perf_monitor short-circuits and no perf_samples_*.csv is written.
+    # Idempotent. Use a RECURSIVE find, never a flat *.yaml glob: recipes live
+    # in recipes/<hw>/<seq>/*.yaml, and a flat glob matched zero files in PR
+    # #1574's sweep #26548110246 — it completed "success" with NO power data.
+    FOUND_COUNT=0
+    INJECTED_COUNT=0
+    while IFS= read -r recipe; do
+        FOUND_COUNT=$((FOUND_COUNT + 1))
+        if ! grep -q '^monitoring:' "$recipe"; then
+            printf '\nmonitoring:\n  enabled: true\n  sample_interval: 1.0\n' >> "$recipe"
+            INJECTED_COUNT=$((INJECTED_COUNT + 1))
+        fi
+    done < <(find recipes -type f -name '*.yaml')
+    if [ "$FOUND_COUNT" -eq 0 ]; then
+        echo "[perfmon] WARNING: zero recipe YAMLs found under recipes/ — power data will be MISSING from this run." >&2
+    else
+        echo "[perfmon] injected monitoring: into $INJECTED_COUNT of $FOUND_COUNT recipes."
+    fi
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -436,6 +469,25 @@ fi
 # (it runs AFTER the rm below, since EXIT traps are last-thing-before-exit).
 # Without this inline call, R25 lost both 1p6d shards' logs.
 _snapshot_server_logs
+
+# MEASURED-POWER CAMPAIGN: stage per-node perfmon CSVs to a cleanup-proof
+# location and hand them to the downstream "Process result" step (a SEPARATE
+# workflow job step, run after this launch step finishes). srt-slurm perfmon
+# writes perf_samples_*.csv into $LOGS_DIR; the `rm -rf outputs` below would
+# delete them before Process result reads GPU_METRICS_CSV_GLOB — unlike
+# gb300-cw, which keeps outputs/ — so copy them under $GITHUB_WORKSPACE first.
+# Guarded on PERFMON_ENABLED so non-dsr1 models on this runner stay silent.
+if [ "${PERFMON_ENABLED:-0}" = "1" ] && [ -d "$LOGS_DIR" ]; then
+    perf_csv_count=$(ls "$LOGS_DIR"/perf_samples_*.csv 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$perf_csv_count" -gt 0 ]; then
+        mkdir -p "$GITHUB_WORKSPACE/perf_samples"
+        cp "$LOGS_DIR"/perf_samples_*.csv "$GITHUB_WORKSPACE/perf_samples/"
+        echo "GPU_METRICS_CSV_GLOB=$GITHUB_WORKSPACE/perf_samples/perf_samples_*.csv" >> "$GITHUB_ENV"
+        echo "[perfmon] staged $perf_csv_count per-node perf_samples_*.csv to \$GITHUB_WORKSPACE/perf_samples/"
+    else
+        echo "[perfmon] WARNING: monitoring enabled but no perf_samples_*.csv found in $LOGS_DIR — measured power aggregation will be skipped" >&2
+    fi
+fi
 
 # Clean up srt-slurm outputs to prevent NFS silly-rename lock files
 # from blocking the next job's checkout on this runner
