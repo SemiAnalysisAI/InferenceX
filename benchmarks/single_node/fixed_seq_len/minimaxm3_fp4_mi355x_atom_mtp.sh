@@ -40,7 +40,7 @@ set -x
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export MAX_MODEL_LEN=32768
 export MAX_NUM_BATCHED_TOKENS=32768
-export MAX_NUM_SEQS=128
+export MAX_NUM_SEQS=256
 # (srok), not yet
 #    --kv_cache_dtype fp8 \
 python3 -m atom.entrypoints.openai_server \
