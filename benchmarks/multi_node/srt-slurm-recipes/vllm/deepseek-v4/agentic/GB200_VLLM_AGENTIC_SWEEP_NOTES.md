@@ -1286,3 +1286,21 @@ lease control, so all GB200 production recipes now set it to 120 seconds on
 the frontend, prefill ranks, and decode ranks. Slurm's critical-process
 monitor still detects hard exits immediately; the longer etcd lease only
 tolerates transient control-plane stalls during startup.
+
+## Long AgentX DEP Execution Timeout
+
+Official run `28046060400` finalized clean 2P/1D c32, c48, and c64 points,
+then its c80 phase terminated when prefill DP rank 3 exceeded vLLM's default
+300-second model-execution RPC timeout. The failing scheduler step contained a
+522,809-token request with 520,960 locally cached tokens. No OOM, CUDA, NCCL,
+NIXL, UCX, etcd lease, invalid-block, or HTTP 503 error preceded the timeout.
+
+The engine failed specifically with `RPC call to sample_tokens timed out`.
+This is consistent with DEP's load-imbalance behavior: every expert-parallel
+rank can wait while one DP rank processes a much larger uncached attention
+load. vLLM v0.23 exposes `VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS` for exactly this
+multiprocessing executor deadline. All production GB200 prefill and decode
+worker environments now set it to 1800 seconds. This preserves immediate
+Slurm detection of process exits while allowing the trace's extreme long-tail
+steps to finish. The failed matrix job will be retried through the floating
+branch ref after the remaining first-attempt jobs finish.
