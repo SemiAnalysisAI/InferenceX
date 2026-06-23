@@ -104,7 +104,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.97 \
+    --gpu-memory-utilization 0.96 \
     --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
     --block-size 128 \
     --language-model-only \
