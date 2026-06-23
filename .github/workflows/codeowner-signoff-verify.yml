@@ -207,13 +207,18 @@ jobs:
               (conclusion `success`), not `skipped`. A run where only `check-changelog` /
               `reuse-sweep-gate` ran and all `single-node */eval */collect-evals` are `skipped` is
               a SKIP/REUSE run, never the authoritative run.
-            - IN-PR commit: a commit that is an ancestor of the current head SHA. Verify with the
-              compare API — `ahead`/`identical` means in-PR; `diverged` or `behind` means it was
-              rebased/force-pushed out and does NOT count:
+            - IN-PR commit: a commit whose SHA literally appears in the PR's commit list. This is
+              the SAME check InferenceX's own reuse gate runs at merge time
+              (`validate_reusable_run` in `utils/find_reusable_sweep_run.py` requires the source
+              run's `head_sha` to be in `GET /pulls/<n>/commits`). If the validated commit was
+              rebased/force-pushed out, it is NOT in this list and `merge_with_reuse.sh` will fail
+              closed — so your verdict here exactly predicts whether the reuse can be promoted:
               ```bash
-              gh api repos/${{ github.repository }}/compare/<candidate-sha>...${{ needs.gate.outputs.head-sha }} \
-                --jq '{status,ahead_by,behind_by}'   # require status ahead|identical, behind_by 0
+              gh api repos/${{ github.repository }}/pulls/${{ needs.gate.outputs.pr-number }}/commits \
+                --paginate --jq '.[].sha'   # the authoritative run's head_sha MUST appear here
               ```
+              (A `main`-merge that adds a commit keeps the original SHAs in this list, so it stays
+              valid; only a rebase/force-push that drops the validated SHA breaks it.)
 
             Procedure:
             - List this PR's full-sweep runs by branch (the authoritative run may be on an earlier
@@ -240,12 +245,14 @@ jobs:
               anchored source run. If `reuse-source-run-id` is EMPTY (skip with no anchor) and no
               pinned run is supplied, there is NO validation — FAIL.
             - Validate the AUTHORITATIVE run: it must be an EXECUTED green run, AND its head SHA
-              must be an IN-PR commit (compare check above). An executed green run that is on a
-              diverged/orphaned commit does NOT satisfy validation.
+              must be an IN-PR commit (must appear in `GET /pulls/<n>/commits`, per above). An
+              executed green run on a diverged/orphaned commit does NOT satisfy validation — and
+              InferenceX's merge gate would reject it for the same reason.
             - PASS only if such a run exists (executed green, in-PR, evals run — see Check 2).
-              Otherwise FAIL and state precisely why: e.g. "all runs on the 3 PR commits are
+              Otherwise FAIL and state precisely why: e.g. "all runs on the PR's commits are
               skip/failed; head reuse anchored to empty source; the only executed green sweep
-              (<run-url>, sha <x>) is diverged out of the PR."
+              (<run-url>, sha <x>) is rebased out of the PR, so reuse cannot be promoted
+              (merge_with_reuse.sh would fail)."
 
             ## Check 2 — Evals pass on the authoritative run
             Using the AUTHORITATIVE run from Check 1 (the run that actually executed the sweep —
