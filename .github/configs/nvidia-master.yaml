@@ -4847,7 +4847,7 @@ minimaxm3-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: h200
+  runner: h200-dgxc
   precision: fp8
   framework: vllm
   multinode: false
