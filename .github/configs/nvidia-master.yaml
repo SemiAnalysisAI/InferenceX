@@ -4579,15 +4579,20 @@ minimaxm3-fp8-h100-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
+    # FP8 KV cache is 29,952 bytes/token/GPU for TP/TEP: 60 layers of
+    # sharded FP8 K/V plus 57 layers of BF16 indexer cache. The June-21 trace
+    # has a 269k-token service-time-weighted active request, placing the H100
+    # 1.64M-token HBM cliff near conc 6. Sample every integer through the
+    # cliff; Mooncake extends prefix retention, not active-request HBM.
     - duration: 1800
       available-cpu-dram-mib: 2_063_837
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 6, 8, 10, 12, 16, 24, 32] }
-      - { tp: 8, ep: 8, offloading: none, conc-list: [2, 3, 4, 6, 8, 10, 12, 16, 24, 32, 48] }
-      - { tp: 8, offloading: cpu, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, ep: 8, offloading: cpu, conc-list: [4, 6, 8, 10, 12, 16, 24, 32, 48, 64] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, offloading: cpu, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, offloading: cpu, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
 
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
@@ -4853,14 +4858,18 @@ minimaxm3-fp8-h200-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
+    # The same 29,952-byte FP8 TP/TEP cache layout gives H200 about 2.56M
+    # active tokens. Against the June-21 service-time-weighted 269k-token
+    # request, the expected HBM cliff is near conc 10; sample densely from
+    # 5-14 and retain post-cliff points through 20.
     - duration: 1800
       available-cpu-dram-mib: 1_471_356
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, ep: 8, offloading: none, conc-list: [2, 4, 6, 8, 12, 16, 24, 32, 48, 64] }
-      - { tp: 8, ep: 8, offloading: cpu, conc-list: [4, 6, 8, 12, 16, 24, 32, 48, 64, 96] }
+      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, offloading: cpu, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
