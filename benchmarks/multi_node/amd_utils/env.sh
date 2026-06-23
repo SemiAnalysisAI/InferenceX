@@ -153,7 +153,7 @@ else
 
     export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
     export MORI_IO_QP_MAX_CQE=32768
-    export MORI_IO_QP_MAX_SGE=4
+    export MORI_IO_QP_MAX_SGE=1
 
     export MORI_IO_TC_DISABLE=0
 

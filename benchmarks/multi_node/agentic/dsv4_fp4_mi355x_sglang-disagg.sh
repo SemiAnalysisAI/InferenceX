@@ -73,7 +73,7 @@ export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 export OFFLOADING="${OFFLOADING:-none}"
 # HiCache/Mooncake tunables only matter when KV offloading is enabled.
 if [[ "$OFFLOADING" == "hicache" ]]; then
-  export HICACHE_TIER="${HICACHE_TIER:-L3}"
+  export HICACHE_TIER="${HICACHE_TIER:-L2}"
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.
   export HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-256}"
