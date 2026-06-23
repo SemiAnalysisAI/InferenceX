@@ -118,6 +118,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
     PARALLEL_ARGS+=(
         --dp "$TP"
+        --tokenizer-worker-num "$TP"
         --enable-dp-attention
         --enable-dp-attention-local-control-broadcast
         --incremental-streaming-output
