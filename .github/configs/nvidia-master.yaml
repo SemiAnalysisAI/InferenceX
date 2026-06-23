@@ -11882,12 +11882,12 @@ qwen3.5-fp4-b200-trt:
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
 # (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
 # cores on Blackwell. M3 support has not shipped in a stable vLLM release;
-# the dedicated vllm/vllm-openai:minimax-m3 image is built from the m3_release
-# branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
+# the dedicated vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image is built
+# from the m3_release branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
 # sparse/index cache alignment). Weights are NOT SRE-staged; b300 falls back
 # to writable /data/models (see launch_b300-nv.sh MODEL_PATH split).
 minimaxm3-fp8-b300-vllm:
-  image: vllm/vllm-openai:minimax-m3
+  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
@@ -12002,7 +12002,7 @@ minimaxm3-fp8-b200-vllm-mtp:
 # big batches, and the draft weights + draft KV shave headroom — tp2-ep2 is
 # dropped entirely since its KV headroom was already thin without a draft.
 minimaxm3-fp8-b300-vllm-mtp:
-  image: vllm/vllm-openai:minimax-m3
+  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
