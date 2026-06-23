@@ -48,11 +48,12 @@ case "$OFFLOADING" in
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": "mlx5_0",
+  "device_name": "",
   "enable_offload": false
 }
 EOF
         export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
             --eviction_high_watermark_ratio=0.80 \
             --eviction_ratio=0.10 > "$MOONCAKE_MASTER_LOG" 2>&1 &
