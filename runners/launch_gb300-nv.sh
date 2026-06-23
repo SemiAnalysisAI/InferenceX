@@ -55,8 +55,14 @@ elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH=/data/models/MiniMax-M3-MXFP8
+    export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4"
     exit 1
 fi
 
@@ -159,6 +165,18 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECIS
     git checkout main
     mkdir -p recipes/vllm/minimax-m2.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5" recipes/vllm/minimax-m2.5
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
+    mkdir -p recipes/vllm/minimax-m3-gb300-fp8
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout main
+    mkdir -p recipes/vllm/kimi-k2.5-fp4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4
 elif [[ $FRAMEWORK == "dynamo-trt" && $MODEL_PREFIX == "dsv4" ]]; then
     # DSv4 dynamo-trt recipes use the HuggingFace model ID as model.path,
     # so override SRT_SLURM_MODEL_PREFIX to match the recipe's model path key.

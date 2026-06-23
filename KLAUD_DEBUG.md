@@ -56,6 +56,28 @@ and waits for the PR checks automatically.
 
 Seen on: #1395 (kimik2.5-fp4-b200-vllm — needed env var), #1403 (gptoss-fp4-mi300x-vllm — needed 0.90), #1461 (dsv4-fp8-h200-vllm — needed 0.90).
 
+### 2.1 DEP CUDA-graph capture OOM on GB300
+
+**Symptom:** TP1 + data/expert-parallel decode workers load successfully and
+allocate the KV cache, then fail in `breakable_cudagraph.py` at
+`torch.cuda.graph.capture_end()` with `CUDA error: out of memory`. Large GB300
+VRAM does not prevent this because vLLM fills the configured memory budget with
+KV cache before capturing hundreds of persistent graphs.
+
+**Root cause:** `max-num-seqs` and `max-cudagraph-capture-size` were sized from
+global benchmark concurrency instead of per-DP-rank concurrency. MiniMax-M3
+DEP4/DEP8 recipes requested capture sizes of 4096-8192 and up to 4096 sequences,
+creating 358-806 graphs per GPU.
+
+**First-line tuning:** keep `gpu-memory-utilization: 0.90`, but size graph limits
+to the per-rank load. For the GB300 MiniMax-M3 sweep, use
+`max-num-seqs: 512` and `max-cudagraph-capture-size: 2048` on DEP decoders.
+This matches the single-node GB300 recipe and still covers the largest 512
+requests per DP rank. If capture still OOMs, lower decode
+`gpu-memory-utilization` to `0.85`.
+
+Seen on: #1735 (MiniMax-M3 MXFP8 GB300 dynamo-vLLM).
+
 ---
 
 ## 3. Custom DSV4 image → generic v0.5.12 OOMs
@@ -181,6 +203,20 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
   The old run will be auto-cancelled by `workflow/cancel-sweep-on-merge` (provided the head SHA changed).
 - For a `cancelled` run (not `failure`), use `gh run rerun <id>` without `--failed` to re-run everything.
 
+### 7.1 Reuse after matrix-generation policy changes
+
+Reusable source artifacts are authoritative. The merge-time
+`reuse-ingest-artifacts` job validates that downloaded artifacts are readable,
+non-duplicated, and internally consistent, but it does not require them to
+match a matrix regenerated from the merge commit. A generator-policy change
+between the PR sweep and merge therefore does not require another GPU sweep.
+
+Raw and aggregate eval identities must still match, as must agentic point/raw
+artifacts and summaries. Batched eval identities come from
+`completed_eval_concs`, so an explicitly pinned failed run may reuse only the
+points it completed. Missing or invalid metadata, duplicate identities, and
+raw/aggregate disagreement still fail reuse.
+
 ---
 
 ## 8. gh CLI gotchas
@@ -213,3 +249,35 @@ Or check whether any other recipe on main uses the proposed tag — if zero uses
 - `/merge-prs <N> [<N>...]` — sequential merge via `utils/merge_with_reuse.sh`.
 
 Each command file is self-contained; read them to understand the exact jq filters they use.
+
+---
+
+## 11. MiniMax M3 B300 MSA top-k slice is non-contiguous
+
+**Symptom:** MiniMax M3 fails during MSA kernel warmup with:
+```
+ValueError: q2k_indices must be contiguous with layout [head_kv, total_q, topK]
+```
+The stack ends in `sparse_attention_msa.py -> build_k2q_csr()`. TP4/TP8
+canaries may pass while TP1 data-parallel-attention jobs fail.
+
+**Root cause:** `vllm/vllm-openai:minimax-m3-0618-x86_64-cu130` stores top-k
+indices in a persistent `[head_kv, max_num_batched_tokens, topK]` buffer for
+CUDA graphs. The MSA prefill path slices the token dimension before calling
+`build_k2q_csr()`. That view retains the full-buffer head stride and is not
+contiguous when a worker has multiple local KV/index heads. Data-parallel
+attention forces TP1, exposing all four MiniMax M3 KV/index heads per worker.
+
+**Workaround:** Before server startup, patch the installed
+`vllm/models/minimax_m3/nvidia/sparse_attention_msa.py` assignment from:
+```python
+prefill_topk = topk[:, nd:num_tokens, :]
+```
+to:
+```python
+prefill_topk = topk[:, nd:num_tokens, :].contiguous()
+```
+Use an exact-source guard and remove the workaround once the image includes
+the fix.
+
+Seen on: #1834.
