@@ -313,6 +313,11 @@ def main() -> int:
         default="full-sweep-enabled,non-canary-full-sweep-enabled,full-sweep-fail-fast,full-sweep-fail-fast-no-canary",
         help="Comma-separated PR labels treated as 'full sweep'; reuse requires at least one.",
     )
+    parser.add_argument(
+        "--reuse-incompatible-label",
+        default="all-evals,evals-only",
+        help="Comma-separated PR labels that make sweep artifacts ineligible for reuse.",
+    )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
     parser.add_argument(
         "--allowed-author-associations",
@@ -426,6 +431,18 @@ def main() -> int:
         for value in args.full_sweep_label.split(",")
         if value.strip()
     }
+    incompatible_labels = {
+        value.strip()
+        for value in args.reuse_incompatible_label.split(",")
+        if value.strip()
+    }
+    incompatible_present = incompatible_labels.intersection(labels)
+    if incompatible_present:
+        names = ", ".join(sorted(incompatible_present))
+        raise RuntimeError(
+            f"PR #{pr_number} has {args.pinned_run_command} authorization but "
+            f"uses reuse-incompatible label(s): {names}."
+        )
     if not accepted_full_sweep_labels.intersection(labels):
         accepted = ", ".join(sorted(accepted_full_sweep_labels))
         raise RuntimeError(
