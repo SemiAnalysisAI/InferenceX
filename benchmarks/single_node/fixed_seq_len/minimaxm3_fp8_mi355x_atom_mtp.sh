@@ -37,6 +37,10 @@ start_gpu_monitor
 MEM_FRAC_STATIC=0.8
 
 set -x
+export AITER_QUICK_REDUCE_QUANTIZATION=INT4
+export MAX_MODEL_LEN=32768
+export MAX_NUM_BATCHED_TOKENS=32768
+export MAX_NUM_SEQS=128
 # (srok), not yet
 #    --kv_cache_dtype fp8 \
 python3 -m atom.entrypoints.openai_server \
@@ -46,6 +50,9 @@ python3 -m atom.entrypoints.openai_server \
     "${SPEC_ARGS[@]}" \
     --block-size 128 \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
+    --max-model-len $MAX_MODEL_LEN \
+    --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS \
+    --max-num-seqs $MAX_NUM_SEQS \
     --trust-remote-code \
     --no-enable_prefix_caching \
     > $SERVER_LOG 2>&1 &
@@ -67,8 +74,7 @@ run_benchmark_serving \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/ \
-    --trust-remote-code \
-    --use-chat-template 
+    --trust-remote-code $( [[ ${#SPEC_ARGS[@]} -gt 0 ]] && echo "--use-chat-template" )
 
 # After throughput, run evaluation only if RUN_EVAL is true
 if [ "${RUN_EVAL}" = "true" ]; then
