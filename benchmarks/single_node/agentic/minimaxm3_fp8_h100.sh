@@ -33,10 +33,15 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
+MODEL_CPU_OFFLOAD_GB=24
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP - MODEL_CPU_OFFLOAD_GB))
+        if (( PER_RANK_GB <= 0 )); then
+            echo "Error: CPU DRAM budget is too small for model and KV offload" >&2
+            exit 1
+        fi
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
@@ -98,8 +103,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
     --gpu-memory-utilization 0.97 \
-    --kv-cache-dtype fp8 \
-    --calculate-kv-scales \
+    --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
     --block-size 128 \
     --language-model-only \
     --enable-prefix-caching \
