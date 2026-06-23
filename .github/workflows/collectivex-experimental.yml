@@ -47,7 +47,9 @@ on:
         default: ''
 
 concurrency:
-  group: collectivex-${{ github.ref }}-${{ github.event_name }}
+  # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
+  # not cancel each other; push has no sku input -> shares one 'push' group.
+  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}
   cancel-in-progress: true
 
 permissions:
