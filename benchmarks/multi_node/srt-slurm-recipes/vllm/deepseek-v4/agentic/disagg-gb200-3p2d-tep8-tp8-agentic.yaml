@@ -120,6 +120,7 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
+      compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
@@ -136,6 +137,7 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
+      compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
       gpu-memory-utilization: 0.9
       stream-interval: 10
       all2all-backend: "flashinfer_nvlink_one_sided"
