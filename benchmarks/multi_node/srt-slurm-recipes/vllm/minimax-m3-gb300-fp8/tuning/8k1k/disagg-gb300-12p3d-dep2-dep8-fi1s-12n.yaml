@@ -1,7 +1,7 @@
-name: "minimax-m3-vllm-tune-gb300-12p3d-dep2-dep8-default-fp8-8k1k"
+name: "minimax-m3-vllm-tune-gb300-12p3d-dep2-dep8-fi1s-fp8-8k1k"
 
-# 12P DEP2 prefill (24 GPUs) + 3D DEP8 decode (24 GPUs).
-# Robust steady-state control for the FlashInfer one-sided A2A comparison.
+# Same 48-GPU topology as the control, with FlashInfer one-sided MNNVL A2A.
+# The decode scheduler is bounded to 512 tokens/sequences to right-size workspace.
 
 model:
   path: "minimax-m3-mxfp8"
@@ -68,6 +68,7 @@ backend:
       data-parallel-size: 2
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      all2all-backend: flashinfer_nvlink_one_sided
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 128
@@ -85,6 +86,7 @@ backend:
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
+      all2all-backend: flashinfer_nvlink_one_sided
       trust-remote-code: true
       no-enable-prefix-caching: true
       block-size: 128
