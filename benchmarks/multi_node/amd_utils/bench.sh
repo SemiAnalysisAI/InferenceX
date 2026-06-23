@@ -55,6 +55,87 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
+if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+    export PORT="${ROUTER_PORT}"
+    export MODEL="${MODEL:-${BENCH_MODEL}}"
+    export DURATION="${DURATION:-1800}"
+    export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+    export AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-/workspace}"
+
+    RESULT_DIR="${RESULT_DIR:-/workspace/LOGS/agentic}"
+    RESULT_FILENAME_BASE="${RESULT_FILENAME:-agentic_bench}"
+    mkdir -p "$RESULT_DIR"
+
+    resolve_trace_source
+    install_agentic_deps
+
+    ANY_FAILED=0
+    FIRST_RESULT_FILE=""
+    for max_concurrency in "${chosen_concurrencies[@]}"; do
+        echo "=========================================="
+        echo "Agentic trace replay: conc=$max_concurrency"
+        echo "=========================================="
+
+        CONC_RESULT_DIR="$RESULT_DIR/conc${max_concurrency}"
+        mkdir -p "$CONC_RESULT_DIR"
+
+        export CONC="$max_concurrency"
+        export USERS="$max_concurrency"
+        build_replay_cmd "$CONC_RESULT_DIR"
+        echo "$REPLAY_CMD" > "$CONC_RESULT_DIR/benchmark_command.txt"
+
+        set +e
+        $REPLAY_CMD 2>&1 | tee "$CONC_RESULT_DIR/benchmark.log"
+        REPLAY_RC=${PIPESTATUS[0]}
+        set -e
+
+        PER_CONC_RESULT_FILENAME="${RESULT_FILENAME_BASE}_conc${max_concurrency}"
+        RESULT_DIR="$CONC_RESULT_DIR" \
+            AGENTIC_OUTPUT_DIR="$AGENTIC_OUTPUT_DIR" \
+            RESULT_FILENAME="$PER_CONC_RESULT_FILENAME" \
+            USERS="$max_concurrency" \
+            python3 "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py" || {
+                echo "WARNING: process_agentic_result.py failed for conc=$max_concurrency" >&2
+                ANY_FAILED=1
+            }
+
+        PER_CONC_RESULT_FILE="$AGENTIC_OUTPUT_DIR/${PER_CONC_RESULT_FILENAME}.json"
+        if [[ -z "$FIRST_RESULT_FILE" && -f "$PER_CONC_RESULT_FILE" ]]; then
+            FIRST_RESULT_FILE="$PER_CONC_RESULT_FILE"
+        fi
+
+        python3 "$AGENTIC_DIR/scripts/analyze_benchmark_distributions.py" \
+            "$CONC_RESULT_DIR/aiperf_artifacts" -o "$CONC_RESULT_DIR" 2>&1 || true
+
+        python3 "$INFMAX_CONTAINER_WORKSPACE/utils/generate_aiperf_plots.py" \
+            "$CONC_RESULT_DIR" 2>&1 || true
+
+        if [[ "$REPLAY_RC" -ne 0 ]]; then
+            echo "WARNING: agentic trace replay for conc=$max_concurrency exited with code $REPLAY_RC after writing available results" >&2
+            ANY_FAILED=1
+        fi
+
+        echo "-----------------------------------------"
+
+        if [[ "$ENGINE" == "vllm-disagg" ]]; then
+            echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
+            sleep 10
+        fi
+    done
+
+    # The multinode workflow checks for ${RESULT_FILENAME}.json. Keep the
+    # per-concurrency artifacts and also provide the expected aggregate path.
+    if [[ -n "$FIRST_RESULT_FILE" && ! -f "$AGENTIC_OUTPUT_DIR/${RESULT_FILENAME_BASE}.json" ]]; then
+        cp "$FIRST_RESULT_FILE" "$AGENTIC_OUTPUT_DIR/${RESULT_FILENAME_BASE}.json"
+    fi
+
+    if [[ "$ANY_FAILED" -ne 0 ]]; then
+        echo "WARNING: at least one conc had a non-zero exit; per-conc result files were still written when possible." >&2
+    fi
+
+    exit 0
+fi
+
 for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     export_file="${profile_folder}/concurrency_${max_concurrency}_req_rate_${chosen_req_rate}_gpus_$((prefill_gpus+decode_gpus))_ctx_${prefill_gpus}_gen_${decode_gpus}"
