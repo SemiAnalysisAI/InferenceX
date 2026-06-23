@@ -2521,6 +2521,114 @@ dsv4-fp4-mi355x-atom-disagg:
           additional-settings:
           - "DECODE_NODES=1"
 
+dsv4-fp4-mi355x-atom-disagg-mtp:
+  image: rocm/atom-dev:nightly_202606181332
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: atom-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 2P1D TP8+DPA+TBO+MTP1
+      - spec-decoding: "mtp"
+        conc-list: [ 256, 512, 768, 1024, 2048 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+      # 2P1D TP8+DPA+TBO+MTP3
+      - spec-decoding: "mtp"
+        conc-list: [ 256, 512, 768, 1024, 2048 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      # 1P1D TP8+MTP3 
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+      # 1P1D TP8+DPA+TBO+MTP1
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - spec-decoding: "mtp"
+        conc-list: [ 64, 128, 256, 512, 1024 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=1"
+      # 1P1D TP8+MTP3 
+      - spec-decoding: "mtp"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=3"
+
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
