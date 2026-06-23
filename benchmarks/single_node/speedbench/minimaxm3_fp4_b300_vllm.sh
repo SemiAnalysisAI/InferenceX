@@ -18,9 +18,12 @@
 # sparse/index cache. The benchmark is text-only, so --language-model-only
 # frees the vision encoder's VRAM.
 #
-# Filename *_fp4_* matches the speedbench-al.yml path convention
-# (benchmarks/single_node/speedbench/${model-prefix}_fp4_b300_vllm.sh); the
-# served checkpoint is MXFP8 (MiniMaxAI/MiniMax-M3).
+# Filename *_fp4_* is ONLY a naming convention required by speedbench-al.yml
+# (benchmarks/single_node/speedbench/${model-prefix}_fp4_b300_vllm.sh); it does
+# NOT imply a quantized checkpoint. The staged MiniMax-M3 weights are
+# unquantized BF16 (vLLM reports quantization=None, dtype=bfloat16), so no
+# quantization-specific flags (e.g. --moe-backend marlin, --kv-cache-dtype fp8)
+# apply here.
 #
 # Adapted from speedbench/glm5_fp4_b300_vllm.sh. Differences vs GLM-5 (MTP):
 #   - speculative method  eagle3 + external draft model (was mtp, internal)
@@ -35,7 +38,7 @@
 #   - NO --attention_config.use_fp4_indexer_cache (not applicable)
 #   - Thinking on/off uses the thinking_mode key (was enable_thinking for GLM)
 #   - Sampling: temperature=1.0, top_p=0.95, top_k=40 (official M3 docs)
-#   - EP handling: 3-way branch (DP_ATTENTION / EP / marlin fallback)
+#   - EP handling: 3-way branch (DP_ATTENTION / EP / plain TP)
 #
 # Usage (inside the vLLM container, on a B300 node):
 #   export MODEL=/data/models/MiniMax-M3
@@ -111,18 +114,16 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# NOTE: --chat-template-kwargs is consumed natively by `vllm bench serve` here.
-# MiniMax-M3 only loads on the dedicated vLLM image (>=0.24), which already
-# carries vllm-project/vllm#44244, so no client-side shim is needed (unlike the
-# v0.22 collectors that still patch it in).
-
 # ---- Parallel / EP args (3-way MiniMax-M3 pattern) ----
 if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP" --enable-expert-parallel)
 elif [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS=(--tensor-parallel-size "$TP" --enable-expert-parallel)
 else
-    PARALLEL_ARGS=(--tensor-parallel-size "$TP" --moe-backend marlin)
+    # Plain TP, matching the official MiniMax-M3 recipe. Do NOT force a MoE
+    # backend: the staged checkpoint is unquantized BF16, for which marlin is
+    # rejected; let vLLM auto-select (triton / flashinfer).
+    PARALLEL_ARGS=(--tensor-parallel-size "$TP")
 fi
 
 fetch_metric() {
