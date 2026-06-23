@@ -45,6 +45,10 @@ on:
         description: GPUs per node (blank = SKU default)
         type: string
         default: ''
+      nodes:
+        description: Node count (gb200 multi-node MNNVL; 2 = 8 GPU). Blank/1 = single node.
+        type: string
+        default: ''
 
 concurrency:
   # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
@@ -95,6 +99,7 @@ jobs:
       CX_MIN_BYTES: ${{ inputs.min_bytes }}
       CX_MAX_BYTES: ${{ inputs.max_bytes }}
       CX_NGPUS: ${{ inputs.ngpus }}
+      CX_NODES: ${{ inputs.nodes }}
       # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
       CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
     steps:

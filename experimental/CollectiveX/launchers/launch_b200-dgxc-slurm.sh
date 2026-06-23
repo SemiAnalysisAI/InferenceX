@@ -78,7 +78,7 @@ srun --jobid="$JOB_ID" --ntasks=1 --nodes=1 "${COMMON_MOUNT[@]}" --export=ALL,CX
     python3 env_capture.py --out "results/env_${CX_RUNNER}_${CX_TS}.json" --timestamp "$CX_TS"
   '
 
-BUILD_IN_CTR="$MOUNT_DIR/experimental/CollectiveX/.nccl-tests/build"
+BUILD_IN_CTR="$MOUNT_DIR/experimental/CollectiveX/.nccl-tests/nccl-tests/build"
 OPS="${CX_OPS:-all_reduce all_gather reduce_scatter alltoall}"
 
 # 2) Per op: run across all ranks (one GPU per task), tee raw output to shared FS.

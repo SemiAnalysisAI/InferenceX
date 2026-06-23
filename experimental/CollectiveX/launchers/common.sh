@@ -115,12 +115,20 @@ cx_build_nccl_tests() {
     git clone --depth 1 https://github.com/NVIDIA/nccl-tests.git "$dir" >&2 \
       || cx_die "git clone nccl-tests failed"
   fi
-  cx_log "building nccl-tests (MPI=$mpi, NCCL_HOME=${CX_NCCL_HOME:-/usr})"
+  # MPI=1 needs MPI_HOME. On Debian/Ubuntu OpenMPI the headers live under
+  # /usr/lib/<arch>/openmpi/include (NOT /usr/include), so MPI_HOME=/usr fails;
+  # point it at that openmpi dir (libmpi resolves via the default linker path).
+  # Works for both x86_64 (B200) and aarch64 (GB200). Override with CX_MPI_HOME.
+  local mpi_home="${CX_MPI_HOME:-}"
+  if [ "$mpi" = "1" ] && [ -z "$mpi_home" ]; then
+    mpi_home="$(ls -d /usr/lib/*/openmpi 2>/dev/null | head -n1)"
+  fi
+  cx_log "building nccl-tests (MPI=$mpi, NCCL_HOME=${CX_NCCL_HOME:-/usr}${mpi_home:+, MPI_HOME=$mpi_home})"
   make -C "$dir" -j MPI="$mpi" \
        CUDA_HOME="${CX_CUDA_HOME:-/usr/local/cuda}" \
        NCCL_HOME="${CX_NCCL_HOME:-/usr}" \
-       ${CX_MPI_HOME:+MPI_HOME="$CX_MPI_HOME"} >&2 \
-    || cx_die "nccl-tests build failed (try a different CX_NCCL_HOME; need nccl.h + libnccl)"
+       ${mpi_home:+MPI_HOME="$mpi_home"} >&2 \
+    || cx_die "nccl-tests build failed (try a different CX_NCCL_HOME/CX_MPI_HOME; need nccl.h + libnccl)"
   [ -x "$bin" ] || cx_die "nccl-tests build produced no binary at $bin"
   echo "$dir/build"
 }
