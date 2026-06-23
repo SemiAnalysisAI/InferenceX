@@ -2,7 +2,7 @@ name: "svf-vllm-disagg-gb200-2p1d-tep8-tp8-agentic"
 
 # Throughput-per-GPU candidate: two cache-affinitized TEP8 prefills and one
 # TP8 decode. The three replicas use 24 inference GPUs across six GB200 nodes;
-# a dedicated infra node brings the allocation to seven nodes.
+# NATS/etcd share the first worker node.
 
 model:
   path: "deepseek-v4-pro"
@@ -33,7 +33,7 @@ resources:
   gpus_per_decode: 8
 
 infra:
-  etcd_nats_dedicated_node: true
+  etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
 
 frontend:

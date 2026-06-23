@@ -2,7 +2,7 @@ name: "svf-vllm-disagg-gb200-4p2d-tep8-tp8-agentic"
 
 # Hundred-concurrency candidate: four cache-affinitized TEP8 prefills and
 # two TP8 decodes. The six workers use 48 inference GPUs across twelve GB200
-# nodes; a dedicated infra node brings the allocation to thirteen nodes.
+# nodes; NATS/etcd share the first worker node.
 # c112 gives roughly 28 active trajectories per prefill, close to the healthy
 # 3P/2D c80 working-set density, while retaining the decode capacity that the
 # 4P/1D c64 result showed is necessary.
@@ -36,7 +36,7 @@ resources:
   gpus_per_decode: 8
 
 infra:
-  etcd_nats_dedicated_node: true
+  etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
 
 frontend:

@@ -2,8 +2,8 @@ name: "svf-vllm-disagg-gb200-4p1d-tep8-tp8-agentic"
 
 # Agentic-coding throughput shape for GB200: four cache-affinitized TEP8
 # prefill workers and one TP8 decode worker. Every worker spans two four-GPU
-# GB200 nodes. A dedicated infra node brings the allocation to eleven nodes /
-# 40 inference GPUs.
+# GB200 nodes, for ten nodes / 40 inference GPUs; NATS/etcd share the first
+# worker node.
 #
 # TEP4 does not fit the DSv4 FP4 checkpoint in 186 GiB GB200 HBM: v0.23.0
 # reached 182.5 GiB/rank and needed another 1.97 GiB while constructing MoE
@@ -45,7 +45,7 @@ resources:
   gpus_per_decode: 8
 
 infra:
-  etcd_nats_dedicated_node: true
+  etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
 
 frontend:

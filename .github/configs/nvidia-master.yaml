@@ -13137,7 +13137,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-4p1d:
     agentic-coding:
     - duration: 1800
       search-space:
-      # KV-aware agentic curve: 4p1d (TEP=8 / TP=8). 11 nodes incl. infra.
+      # KV-aware agentic curve: 4p1d (TEP=8 / TP=8), ten GB200 nodes.
       - spec-decoding: none
         conc-list: [32, 64]
         prefill:

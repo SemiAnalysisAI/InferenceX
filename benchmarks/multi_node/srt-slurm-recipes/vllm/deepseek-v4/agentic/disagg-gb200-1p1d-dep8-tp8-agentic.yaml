@@ -34,7 +34,7 @@ resources:
   gpus_per_decode: 8
 
 infra:
-  etcd_nats_dedicated_node: true
+  etcd_nats_dedicated_node: false
   nats_max_payload_mb: 32
 
 frontend:

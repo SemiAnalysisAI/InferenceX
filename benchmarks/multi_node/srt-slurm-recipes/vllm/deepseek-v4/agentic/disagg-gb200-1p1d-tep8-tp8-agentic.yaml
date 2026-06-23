@@ -1,7 +1,7 @@
 name: "svf-vllm-disagg-gb200-1p1d-tep8-tp8-agentic"
 
 # Agentic-coding recipe for GB200: 1 prefill (TEP=8) + 1 decode (TP=8),
-# 16 GPUs across 4 GB200 nodes + 1 dedicated NATS/etcd infra node.
+# 16 GPUs across four GB200 nodes; NATS/etcd share the first worker node.
 #
 # Why TEP/TP instead of the fixed-seq-len DEP8/DEP8 family
 # (disagg-gb200-mid-curve-megamoe.yaml): with data-parallel ranks each rank
@@ -62,7 +62,7 @@ resources:
   gpus_per_decode: 8
 
 infra:
-  etcd_nats_dedicated_node: true
+  etcd_nats_dedicated_node: false
   # See the gb300 1p6d agentic recipe for rationale — NATS' 1 MiB default
   # rejects long agentic prompts; 32 MiB gives ~10x headroom over the
   # largest observed payload.
