@@ -4099,3 +4099,12 @@
     - "Backport NVIDIA/srt-slurm#38 to sanitize Slurm node-IP discovery output on the pinned submission branch."
     - "Backport vllm-project/vllm#45879 so NIXL validates heterogeneous-TP KV block lengths using the GQA KV-head ratio."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1893
+
+- config-keys:
+    - gptoss-fp4-mi355x-vllm
+  description:
+    - "Bump image to rocm/vllm-dev:vllm_main_aiter_0.1.15.post2_main_20260622 (vLLM 0.23.1rc1, aiter 0.1.15.post2, triton 3.6)"
+    - "Revert model to amd/gpt-oss-120b-w-mxfp4-a-fp8 (W4A8): restores the activation-quantized a8w4 Triton MoE path"
+    - "aiter a8w4 opt: updated A8W4 MoE GEMM tuning configs for better pipelining, plus an output allocation correctness fix"
+    - "vLLM a8w4 opt: hybrid CDNA4 MX-scale swizzle gate (swizzle ON for TP<=2, OFF for TP4/8)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
