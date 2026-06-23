@@ -78,7 +78,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi355x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]] || [[ "$FRAMEWORK" == "atom-disagg" ]]; then
-        BENCHMARK_SUBDIR="multi_node"
+        # Agentic recipes live under multi_node/agentic/ and export the
+        # HiCache tunables (page-size, io-backend, ...); fixed-seq-len recipes
+        # live at the multi_node/ root. Honor SCENARIO_SUBDIR so agentic-coding
+        # configs pick the agentic recipe instead of the root one.
+        if [[ "${SCENARIO_SUBDIR}" == "agentic/" ]]; then
+            BENCHMARK_SUBDIR="multi_node/agentic"
+        else
+            BENCHMARK_SUBDIR="multi_node"
+        fi
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
