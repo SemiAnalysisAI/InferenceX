@@ -3985,6 +3985,7 @@
 
 - config-keys:
     - minimaxm3-fp4-mi355x-atom-mtp
+    - minimaxm3-fp4-mi355x-atom
   description:
     - "Add minimaxm3-fp4-mi355x-atom-mtp CI recipe: single-node ATOM with EAGLE3 speculative decoding (3 draft tokens) for MiniMax-M3-MXFP4 on MI355X"
     - "Supports TP/EP/DP-attention combinations; search space mirrors minimaxm3-fp4-mi355x-atom (ISL=1024,8192 OSL=1024 TP2/TP4/TP8)"
