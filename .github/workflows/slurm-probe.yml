@@ -46,3 +46,11 @@ jobs:
 
           echo "=== squeue now: what is contending on this cluster ==="
           timeout 15 squeue -o "%.10i %.34j %.10u %.2t %.10M %.10l %.6D %.20R" 2>&1 | head -40
+          echo
+
+          echo "=== WHO is UID 1010 that cancelled it? (self/automation vs human vs slurm) ==="
+          echo "this runner user: uid=$(id -u) name=$(id -un)"
+          echo "uid 1010 -> $(getent passwd 1010 2>&1 || echo '(no passwd entry)')"
+          scontrol show config 2>&1 | grep -iE "SlurmUser|SlurmctldHost" | head
+          echo "recent scancel in slurmctld (if readable):"
+          journalctl -u slurmctld --since '2026-06-22 23:40' --until '2026-06-22 23:46' --no-pager 2>&1 | grep -iE "19603|cancel|scancel" | head -10 || true
