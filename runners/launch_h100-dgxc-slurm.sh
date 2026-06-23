@@ -3,7 +3,7 @@
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
-SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7"
+SLURM_EXCLUDED_NODELIST="hpc-gpu-1-7,hpc-gpu-1-13"
 
 # Route spec-decoding=mtp configs to the _mtp benchmark script (parity with
 # the h200 launchers, which have carried SPEC_SUFFIX since #392).
