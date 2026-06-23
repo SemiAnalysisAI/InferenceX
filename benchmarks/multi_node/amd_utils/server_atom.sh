@@ -121,7 +121,7 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
             PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo )
             export GPU_MAX_HW_QUEUES=5
             export ATOM_CPU_AFFINITY=1
-        else
+        else #TP+DPA 
             PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
         fi
     fi
@@ -137,7 +137,7 @@ if [ "$DECODE_ENABLE_DP" = "true" ]; then
             DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo )
             export GPU_MAX_HW_QUEUES=5
             export ATOM_CPU_AFFINITY=1
-        else
+        else #TP+DPA 
             DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
         fi
     fi
