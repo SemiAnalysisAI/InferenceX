@@ -169,6 +169,9 @@ fi
 # Subagent fan-out can push instantaneous request concurrency above CONC, so
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS=$((2 * CONC))
+if [ "$MAX_NUM_SEQS" -eq 128 ]; then
+    MAX_NUM_SEQS=136
+fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
