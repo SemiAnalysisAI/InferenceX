@@ -113,6 +113,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
+    --safetensors-load-strategy lazy \
     --trust-remote-code \
     "${OFFLOAD_ARGS[@]}" > "$SERVER_LOG" 2>&1 &
 SERVER_PID=$!
