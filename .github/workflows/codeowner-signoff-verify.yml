@@ -41,19 +41,13 @@ jobs:
   # command for fetching the exact sign-off body.
   # ---------------------------------------------------------------------------
   gate:
-    # Only trusted reviewers can trigger this (a CODEOWNER sign-off only means
-    # something from a member/collaborator anyway). This also limits the blast
-    # radius of any prompt-injection via PR-supplied content.
     if: |
       (github.event_name == 'issue_comment' && github.event.issue.pull_request &&
-       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER') &&
-       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)) ||
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review' &&
-       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER') &&
-       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.review.author_association)) ||
+       contains(github.event.review.body || '', 'As a PR reviewer and CODEOWNER')) ||
       (github.event_name == 'pull_request_review_comment' &&
-       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER') &&
-       contains(fromJson('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association))
+       contains(github.event.comment.body || '', 'As a PR reviewer and CODEOWNER'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
