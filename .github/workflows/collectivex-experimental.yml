@@ -1,11 +1,11 @@
 name: CollectiveX Experimental
 
 # Orchestration only — all benchmark logic lives in experimental/CollectiveX/.
-# Push to the feature branch runs a small GB200 NCCL smoke (no merge to main
-# needed); workflow_dispatch runs a chosen SKU + benchmark (the lane for B200,
-# DeepEP, and larger sweeps). Each job lands on the SKU's self-hosted runner and
-# invokes that SKU's launch script — the same launch_${RUNNER_NAME%%_*}.sh
-# convention the serving benchmarks use.
+# Push to the feature branch runs the MI355X MoRI dispatch/combine benchmark (no
+# merge to main needed); workflow_dispatch runs a chosen SKU + benchmark (the lane
+# for GB200/B200 NCCL, DeepEP, and larger sweeps). Each job lands on the SKU's
+# self-hosted runner and invokes that SKU's launch script — the same
+# launch_${RUNNER_NAME%%_*}.sh convention the serving benchmarks use.
 
 on:
   push:
@@ -54,23 +54,20 @@ permissions:
   contents: read
 
 jobs:
-  # Push -> short GB200 NCCL smoke (idle capacity; never auto-contends with the
-  # B200 serving sweep). GB200 runner workspace is staged to compute-visible
-  # Lustre via CX_STAGE_DIR.
-  smoke:
+  # Push -> MI355X MoRI dispatch/combine. Lands on a free mi355x-amds runner and
+  # runs launch_mi355x-amds.sh (CX_BENCH=mori). The AMD workspace is compute-
+  # visible, so no CX_STAGE_DIR; the launcher defaults to 8 GPUs.
+  experimental:
+    name: CollectiveX Experimental
     if: github.event_name == 'push'
-    runs-on: gb200
-    timeout-minutes: 60
+    runs-on: mi355x
+    timeout-minutes: 90
     env:
-      CX_BENCH: nccl
-      CX_NGPUS: '4'
-      CX_MAX_BYTES: 1G
-      CX_TIME: '20'
-      CX_STAGE_DIR: /mnt/lustre01/users-public/sa-shared/cx-stage
+      CX_BENCH: mori
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
-      - name: Launch GB200 NCCL smoke
+      - name: Launch MI355X MoRI
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
@@ -81,7 +78,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: collectivex_smoke_gb200_${{ github.run_id }}
+          name: collectivex_mi355x_mori_${{ github.run_id }}
           path: experimental/CollectiveX/results/*.json
           if-no-files-found: warn
 

@@ -30,8 +30,8 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 
 ### Via GitHub Actions (`.github/workflows/collectivex-experimental.yml`)
 
-- **push** to `experimental/CollectiveX/**` → short **GB200 NCCL smoke** (idle
-  capacity; never auto-contends with the B200 serving sweep).
+- **push** to `experimental/CollectiveX/**` → the **MI355X MoRI** dispatch/combine
+  run (the "CollectiveX Experimental" job; lands on a free `mi355x-amds` runner).
 - **workflow_dispatch** → pick `sku` (gb200 / b200-dgxc / b200-multinode /
   mi355x), `benchmark` (nccl / deepep / mori / all — `mori` is AMD-only), ops,
   sizes, ngpus. Lands on that SKU's self-hosted runner and runs

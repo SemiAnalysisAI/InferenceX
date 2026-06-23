@@ -17,7 +17,7 @@
 # Run from inside the InferenceX checkout on the MI355X login node:
 #     bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh
 #
-# Env knobs: CX_PARTITION(compute) CX_NGPUS(8) CX_TIME(30) CX_IMAGE
+# Env knobs: CX_PARTITION(compute) CX_NGPUS(8) CX_TIME(60) CX_IMAGE
 #   CX_SQUASH_DIR(/var/lib/squash) CX_EXCLUDE_NODES CX_DRYRUN(0)
 set -euo pipefail
 
@@ -30,7 +30,7 @@ source "$HERE/common.sh"
 RUNNER_NAME="${RUNNER_NAME:-mi355x-amds}"
 PARTITION="${CX_PARTITION:-compute}"
 NGPUS="${CX_NGPUS:-8}"
-TIME_MIN="${CX_TIME:-30}"
+TIME_MIN="${CX_TIME:-60}"   # generous: a cold enroot import of the large ROCm image
 IMAGE="${CX_IMAGE:-$(cx_default_image mi355x)}"
 SQUASH_DIR="${CX_SQUASH_DIR:-/var/lib/squash}"   # node-local on MI355X
 EXCLUDE_NODES="${CX_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g11}"
@@ -59,7 +59,7 @@ command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm lo
 
 salloc --partition="$PARTITION" --exclude="$EXCLUDE_NODES" --gres=gpu:"$NGPUS" \
        --exclusive --cpus-per-task=128 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
-JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
+JOB_ID="$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)"
 [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
 cx_log "JOB_ID=$JOB_ID"
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
@@ -70,7 +70,7 @@ trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 srun --jobid="$JOB_ID" bash -c 'docker stop $(docker ps -aq) 2>/dev/null || true' || true
 srun --jobid="$JOB_ID" bash -c "
   exec 9>\"$LOCK_FILE\"
-  flock -w 900 9 || { echo 'lock timeout for $SQUASH_FILE' >&2; exit 1; }
+  flock -w 600 9 || { echo 'lock timeout for $SQUASH_FILE' >&2; exit 1; }
   if unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1; then
     echo 'squash present: $SQUASH_FILE'
   else
@@ -88,4 +88,7 @@ srun --jobid="$JOB_ID" \
   bash "$MOUNT_DIR/experimental/CollectiveX/launchers/run_in_container.sh"
 
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
+# ROCm can leave gpucore.* dumps in the workdir on a crash; clear them so the
+# next checkout on this runner is clean (mirrors the serving launcher).
+rm -f "$MOUNT_SRC"/experimental/CollectiveX/gpucore.* 2>/dev/null || true
 cx_log "done — JSON artifacts under $MOUNT_SRC/experimental/CollectiveX/results/"

@@ -71,7 +71,7 @@ def render_plain(nccl, moe, n_valid, total) -> str:
             out.append(f"  {d['op']:<16}{d.get('status',''):<9}{_peak_busbw(rows):>12.1f}"
                        f"{_min_lat(rows):>10.2f}{(avg if avg is not None else float('nan')):>11.1f}")
     if moe:
-        out.append("\nMoE / DeepEP dispatch+combine:")
+        out.append("\nMoE dispatch+combine (DeepEP / MoRI):")
         out.append(f"  {'backend':<10}{'mode':<8}{'status':<9}{'rt_p50':>9}{'rt_p99':>9}{'disp_p50':>10}{'tokens/s':>13}  correct")
         for d in sorted(moe, key=lambda x: x.get("backend", "")):
             m, c = d.get("metrics", {}), d.get("correctness", {})
@@ -80,7 +80,6 @@ def render_plain(nccl, moe, n_valid, total) -> str:
                        f"{(m.get('roundtrip_us_p50') or float('nan')):>9.1f}{(m.get('roundtrip_us_p99') or float('nan')):>9.1f}"
                        f"{(m.get('dispatch_us_p50') or float('nan')):>10.1f}"
                        f"{(tps if tps is not None else float('nan')):>13.3e}   {c.get('passed')}")
-    out.append(f"\n{n_valid}/{total} results valid.")
     return "\n".join(out)
 
 
@@ -103,7 +102,7 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
             out.append(f"| `{d['op']}` | {_emoji(d.get('status'))} | {_peak_busbw(rows):.1f} | "
                        f"{_min_lat(rows):.2f} | {_fnum(avg, '.1f')} |")
     if moe:
-        out.append("\n### MoE / DeepEP dispatch+combine\n")
+        out.append("\n### MoE dispatch+combine (DeepEP / MoRI)\n")
         out.append("| backend | mode | status | rt p50 (µs) | rt p99 (µs) | dispatch p50 (µs) | tokens/s | correct |")
         out.append("|---|---|---|--:|--:|--:|--:|:--:|")
         for d in sorted(moe, key=lambda x: x.get("backend", "")):
@@ -112,8 +111,6 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
                        f"{_fnum(m.get('roundtrip_us_p50'), '.1f')} | {_fnum(m.get('roundtrip_us_p99'), '.1f')} | "
                        f"{_fnum(m.get('dispatch_us_p50'), '.1f')} | {_fnum(m.get('tokens_per_second'), '.3e')} | "
                        f"{'✅' if c.get('passed') else '❌'} |")
-    badge = "✅" if (total and n_valid == total) else "⚠️"
-    out.append(f"\n{badge} **{n_valid}/{total} results valid.**")
     if not total:
         out.append("\n> No result files found — the benchmark produced nothing.")
     return "\n".join(out)
