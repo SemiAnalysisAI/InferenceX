@@ -257,9 +257,9 @@ jobs:
               Do NOT @-mention anyone on a pass.
             - If anything is NOT to standard: the FIRST line of the comment body (after the
               marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`.
-              Then list, grouped under "❌ PR validation", "❌ Evals", and "❌ Recipe", each
-              concrete problem with links (run URLs, the recipe link, specific missing fields).
-              Be precise and actionable — tell them exactly what to fix before this PR can merge.
+              Then list, grouped under "PR validation", "Evals", and "Recipe", each concrete
+              problem with links (run URLs, the recipe link, specific missing fields). Be
+              precise and actionable — tell them exactly what to fix before this PR can merge.
 
-            Use only facts you verified. If a required artifact or run is inaccessible, say so
-            explicitly rather than assuming pass.
+            Do not use emojis anywhere in the comment. Use only facts you verified. If a required
+            artifact or run is inaccessible, say so explicitly rather than assuming pass.
