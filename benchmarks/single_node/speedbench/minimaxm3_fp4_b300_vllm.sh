@@ -111,90 +111,10 @@ if [[ ! -f "$SPEEDBENCH_DIR/qualitative.jsonl" ]]; then
     exit 1
 fi
 
-# ---- Temporary shim: add a real --chat-template-kwargs CLI option ----
-# Upstream gap (until vllm-project/vllm#44244 lands): speed_bench/CustomDataset
-# pre-renders the chat template client-side WITHOUT chat_template_kwargs and
-# posts to /v1/completions, so thinking mode cannot be enabled via --extra-body
-# or --default-chat-template-kwargs. This wires a proper --chat-template-kwargs
-# option through get_samples into CustomDataset.sample's apply_chat_template.
-# Model agnostic (forwards whatever dict it is given). TODO: delete once #44244
-# is released in the benchmark image; idempotent (marker check), safe to leave.
-apply_chat_template_kwargs_shim() {
-    echo "=== Patching vLLM benchmark to add --chat-template-kwargs (temporary shim) ==="
-    python3 - <<'PYEOF'
-import vllm.benchmarks.serve as S
-import vllm.benchmarks.datasets.datasets as D
-
-def patch(mod, edits, marker):
-    f = mod.__file__
-    src = open(f).read()
-    if marker in src:
-        print("already patched:", f)
-        return
-    for old, new in edits:
-        n = src.count(old)
-        assert n == 1, f"anchor matched {n} times in {f}, aborting:\n{old[:80]}..."
-        src = src.replace(old, new, 1)
-    open(f, "w").write(src)
-    print("patched OK ->", f)
-
-# Edit 1: serve.py -- declare the --chat-template-kwargs argument before --extra-body
-serve_old = '''    parser.add_argument(
-        "--extra-body",'''
-serve_new = '''    parser.add_argument(
-        "--chat-template-kwargs",
-        type=json.loads,
-        default=None,
-        help="JSON dict forwarded to apply_chat_template during "
-        "client-side prompt rendering, e.g. to enable reasoning mode.",
-    )
-    parser.add_argument(
-        "--extra-body",'''
-patch(S, [(serve_old, serve_new)], marker='"--chat-template-kwargs"')
-
-# Edit 2: datasets.py -- forward args.chat_template_kwargs into the speed_bench .sample() call
-disp_old = '''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-disp_new = '''                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-
-# Edit 3: datasets.py -- forward chat_template_kwargs into CustomDataset.sample's template call
-samp_old = '''                # apply template
-                if not skip_chat_template:
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-samp_new = '''                # apply template
-                if not skip_chat_template:
-                    _ctk = kwargs.get("chat_template_kwargs") or {}
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                        **_ctk,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
-      marker="chat_template_kwargs=args.chat_template_kwargs")
-PYEOF
-}
-
-# Apply the shim once if any cell will pass chat_template_kwargs.
-NEED_SHIM=0
-if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
-if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
-if [[ "$NEED_SHIM" == "1" ]]; then
-    if ! apply_chat_template_kwargs_shim; then
-        echo "CRITICAL: --chat-template-kwargs shim failed — aborting"
-        exit 1
-    fi
-fi
+# NOTE: --chat-template-kwargs is consumed natively by `vllm bench serve` here.
+# MiniMax-M3 only loads on the dedicated vLLM image (>=0.24), which already
+# carries vllm-project/vllm#44244, so no client-side shim is needed (unlike the
+# v0.22 collectors that still patch it in).
 
 # ---- Parallel / EP args (3-way MiniMax-M3 pattern) ----
 if [ "${DP_ATTENTION}" = "true" ]; then
