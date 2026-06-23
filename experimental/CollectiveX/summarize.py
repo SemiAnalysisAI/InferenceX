@@ -45,10 +45,72 @@ def _peak_busbw(rows):
     return max((r.get("busbw_gbps") or 0.0 for r in rows), default=0.0)
 
 
-def _min_lat(rows):
-    vals = [r["out_of_place"]["time_us"] for r in rows
-            if r.get("out_of_place", {}).get("time_us") is not None]
-    return min(vals) if vals else float("nan")
+_OP_ORDER = ["all_reduce", "reduce_scatter", "all_gather", "alltoall"]
+
+
+def _row_lat(r):
+    vals = [(r.get(k) or {}).get("time_us") for k in ("out_of_place", "in_place")]
+    vals = [v for v in vals if v is not None]
+    return min(vals) if vals else None
+
+
+def _lat_floor(rows):
+    # Small-message latency floor: time at the smallest REAL (size>0) message.
+    # (Sub-granularity 0-byte rows are a no-op ~1 us and not a real latency.)
+    real = [r for r in rows if (r.get("size_bytes") or 0) > 0]
+    if not real:
+        return float("nan")
+    v = _row_lat(min(real, key=lambda r: r["size_bytes"]))
+    return v if v is not None else float("nan")
+
+
+def _at_size(rows, size, fn):
+    for r in rows:
+        if r.get("size_bytes") == size:
+            return fn(r)
+    return None
+
+
+def _fmt_bytes(b):
+    for u, s in ((2**30, "GiB"), (2**20, "MiB"), (2**10, "KiB")):
+        if b >= u and b % u == 0:
+            return f"{b // u} {s}"
+    return f"{b} B"
+
+
+def _ops_sorted(nccl):
+    present = {d.get("op") for d in nccl}
+    ordered = [o for o in _OP_ORDER if o in present]
+    return ordered + sorted(present - set(ordered))
+
+
+def _ladder(nccl):
+    sizes = sorted({r["size_bytes"] for d in nccl for r in d.get("rows", [])
+                    if (r.get("size_bytes") or 0) > 0})
+    if not sizes:
+        return []
+    cand = [16384, 262144, 4194304, 67108864, 268435456, 1073741824, 4294967296]
+    lad = [s for s in cand if s in set(sizes) and s < sizes[-1]]
+    lad.append(sizes[-1])
+    return lad
+
+
+def _sweep_table(nccl, title, rowfn, fmt):
+    lad = _ladder(nccl)
+    if not lad:
+        return []
+    ops = _ops_sorted(nccl)
+    rows_by_op = {d.get("op"): d.get("rows", []) for d in nccl}
+    out = [f"\n**{title}**\n",
+           "| bytes/rank | " + " | ".join(f"`{o}`" for o in ops) + " |",
+           "|---" + "|--:" * len(ops) + "|"]
+    for s in lad:
+        cells = []
+        for o in ops:
+            v = _at_size(rows_by_op.get(o, []), s, rowfn)
+            cells.append(format(v, fmt) if isinstance(v, (int, float)) else "—")
+        out.append(f"| {_fmt_bytes(s)} | " + " | ".join(cells) + " |")
+    return out
 
 
 def _fnum(x, fmt):
@@ -64,12 +126,12 @@ def render_plain(nccl, moe, n_valid, total) -> str:
     out += ["=" * len(hdr), hdr, "=" * len(hdr)]
     if nccl:
         out.append(f"\nNCCL primitives (world={nccl[0].get('world_size')}, dtype={nccl[0].get('dtype')}):")
-        out.append(f"  {'op':<16}{'status':<9}{'peak busbw':>12}{'min lat':>10}{'avg busbw':>11}")
+        out.append(f"  {'op':<16}{'status':<9}{'peak busbw':>12}{'lat floor':>10}{'avg busbw':>11}")
         for d in sorted(nccl, key=lambda x: x["op"]):
             rows = d.get("rows", [])
             avg = (d.get("summary") or {}).get("avg_busbw_gbps")
             out.append(f"  {d['op']:<16}{d.get('status',''):<9}{_peak_busbw(rows):>12.1f}"
-                       f"{_min_lat(rows):>10.2f}{(avg if avg is not None else float('nan')):>11.1f}")
+                       f"{_lat_floor(rows):>10.2f}{(avg if avg is not None else float('nan')):>11.1f}")
     if moe:
         out.append("\nMoE dispatch+combine (DeepEP / MoRI):")
         out.append(f"  {'backend':<10}{'mode':<8}{'status':<9}{'rt_p50':>9}{'rt_p99':>9}{'disp_p50':>10}{'tokens/s':>13}  correct")
@@ -93,14 +155,17 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
         d0 = (nccl + moe)[0]
         out.append(f"## CollectiveX results — `{d0.get('runner')}` · {d0.get('topology_class')} · {d0.get('transport') or 'n/a'}")
     if nccl:
-        out.append(f"\n### NCCL primitives (world={nccl[0].get('world_size')}, dtype={nccl[0].get('dtype')})\n")
-        out.append("| op | status | peak busbw (GB/s) | min lat (µs) | avg busbw (GB/s) |")
-        out.append("|---|---|--:|--:|--:|")
-        for d in sorted(nccl, key=lambda x: x["op"]):
+        out.append(f"\n### NCCL/RCCL primitives (world={nccl[0].get('world_size')}, dtype={nccl[0].get('dtype')})\n")
+        out.append("| op | status | peak busbw (GB/s) | lat floor (µs) |")
+        out.append("|---|---|--:|--:|")
+        for d in sorted(nccl, key=lambda x: _OP_ORDER.index(x["op"]) if x["op"] in _OP_ORDER else 99):
             rows = d.get("rows", [])
-            avg = (d.get("summary") or {}).get("avg_busbw_gbps")
-            out.append(f"| `{d['op']}` | {_emoji(d.get('status'))} | {_peak_busbw(rows):.1f} | "
-                       f"{_min_lat(rows):.2f} | {_fnum(avg, '.1f')} |")
+            out.append(f"| `{d['op']}` | {_emoji(d.get('status'))} | {_peak_busbw(rows):.1f} | {_lat_floor(rows):.2f} |")
+        out += _sweep_table(nccl, "Bus bandwidth vs bytes/rank (GB/s)", lambda r: r.get("busbw_gbps"), ".1f")
+        out += _sweep_table(nccl, "Latency vs bytes/rank (µs)", _row_lat, ".2f")
+        out.append("\n> bytes/rank = nccl/rccl-tests message size (= per-rank for all-reduce / "
+                   "reduce-scatter / all-to-all; all-gather input/rank = size ÷ #GPUs). Small "
+                   "sizes are latency-bound (busbw ≈ 0); peak bandwidth is at the largest size.")
     if moe:
         out.append("\n### MoE dispatch+combine (DeepEP / MoRI)\n")
         out.append("| backend | mode | status | rt p50 (µs) | rt p99 (µs) | dispatch p50 (µs) | tokens/s | correct |")
