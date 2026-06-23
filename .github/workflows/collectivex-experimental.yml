@@ -73,6 +73,9 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+      - name: Results summary
+        if: always()
+        run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY"
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -101,6 +104,9 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+      - name: Results summary
+        if: always()
+        run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY"
       - name: Upload results
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

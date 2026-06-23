@@ -31,11 +31,13 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 
 - **push** to `experimental/CollectiveX/**` → short **GB200 NCCL smoke** (idle
   capacity; never auto-contends with the B200 serving sweep).
-- **workflow_dispatch** → pick `sku` (gb200 / b200 / b200-multinode / …),
+- **workflow_dispatch** → pick `sku` (gb200 / b200-dgxc / b200-multinode),
   `benchmark` (nccl / deepep / all), ops, sizes, ngpus. Lands on that SKU's
   self-hosted runner and runs `launch_${RUNNER_NAME%%_*}.sh`.
 
-(The workflow only fires once the branch is pushed to GitHub.)
+Each job renders a results table to the **GitHub Actions job summary** (via
+`summarize.py --markdown` → `$GITHUB_STEP_SUMMARY`) and uploads the result JSONs
+as an artifact. (The workflow only fires once the branch is pushed to GitHub.)
 
 ### Directly on a cluster login node
 
