@@ -11604,8 +11604,11 @@ qwen3.5-fp8-h100-sglang-agentic:
       - { tp: 8, ep: 8, offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
       - { tp: 8, ep: 8, offloading: hicache, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
-minimaxm3-fp8-b300-dynamo-vllm:
-  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+# MiniMax-M3 MXFP8 B300 Dynamo-vLLM, 1k/1k sweep on the vllm-minimax-m3-perf image.
+# Split from the 8k/1k key below only because the two currently run different
+# container images; see the note there.
+minimaxm3-fp8-b300-dynamo-vllm-1k1k:
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: b300
@@ -11709,6 +11712,23 @@ minimaxm3-fp8-b300-dynamo-vllm:
           tp: 8
           ep: 8
           dp-attn: false
+
+# MiniMax-M3 MXFP8 B300 Dynamo-vLLM, 8k/1k sweep (the key name omits the sequence
+# length). The 1k/1k sweep lives in minimaxm3-fp8-b300-dynamo-vllm-1k1k above. The
+# two keys are diverged only because they currently run different container images:
+# 1k/1k on the vllm-minimax-m3-perf image, 8k/1k on the minimax-m3-0618 image. They
+# are to be recombined into one key once 8k/1k moves to the same image as 1k/1k.
+minimaxm3-fp8-b300-dynamo-vllm:
+  image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: b300
+  precision: fp8
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
     - isl: 8192
       osl: 1024
       search-space:

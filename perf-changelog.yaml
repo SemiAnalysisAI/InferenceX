@@ -4115,3 +4115,10 @@
     - "Use the dedicated ARM64 MiniMax-M3 performance image; benchmark settings unchanged"
     - "Allocate FlashInfer MNNVL workspace for one-shot TP8 all-reduce during CUDA graph capture"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1897
+
+- config-keys:
+    - minimaxm3-fp8-b300-dynamo-vllm-1k1k
+  description:
+    - "Add the MiniMax-M3 MXFP8 B300 Dynamo-vLLM 1k/1k disagg sweep on the vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223 image"
+    - "Enable FlashInfer attention (use_trtllm_attention, fp8 indexer KV) and fp8 KV cache on the prefill and decode workers"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
