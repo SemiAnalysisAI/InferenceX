@@ -64,4 +64,5 @@ srun --jobid="$JOB_ID" \
   --no-container-entrypoint --export=ALL \
   bash "$MOUNT_DIR/experimental/CollectiveX/launchers/run_in_container.sh"
 
+cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
 cx_log "done — JSON artifacts under $MOUNT_SRC/experimental/CollectiveX/results/"

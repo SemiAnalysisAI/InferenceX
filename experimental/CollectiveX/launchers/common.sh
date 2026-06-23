@@ -77,6 +77,19 @@ cx_stage_repo() {
   echo "$stage_dir"
 }
 
+# cx_collect_results <mount_src> <repo_root>
+# When the run used a staged (compute-visible) mount, copy result JSONs back to
+# the original checkout's results/ so the workflow's upload-artifact (which reads
+# the checkout, not the stage dir) finds them. No-op when no staging was used.
+cx_collect_results() {
+  local mount_src="$1" repo_root="$2" dst
+  [ "$mount_src" = "$repo_root" ] && return 0
+  dst="$repo_root/experimental/CollectiveX/results"
+  mkdir -p "$dst"
+  cp "$mount_src/experimental/CollectiveX/results/"*.json "$dst/" 2>/dev/null || true
+  cx_log "copied results from stage dir -> $dst (for artifact upload)"
+}
+
 # cx_build_nccl_tests <parent_dir> <mpi 0|1>  ->  echoes the build/ dir.
 # Runs IN-CONTAINER (login nodes have no nvcc). Cached: skips if already built.
 # CX_NCCL_HOME defaults to /usr (system nccl.h in /usr/include on the sglang
