@@ -1,5 +1,5 @@
 # Temporary one-off tuning matrix. Do not add to perf-changelog.yaml.
-minimaxm3-gb300-tune-max-scale-v8:
+minimaxm3-gb300-tune-max-scale-v9:
   image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
@@ -14,15 +14,15 @@ minimaxm3-gb300-tune-max-scale-v8:
       osl: 1024
       search-space:
       - conc-list:
-        - 6144
-        - 8192
+        - 12288
+        - 16384
         prefill:
-          num-worker: 14
+          num-worker: 15
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/tuning/8k1k/disagg-gb300-14p4d-dep2-dep8-multifrontend-15n.yaml
+          - CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/tuning/8k1k/disagg-gb300-15p4d-dep2-dep8-multifrontend-16n.yaml
         decode:
           num-worker: 4
           tp: 8
