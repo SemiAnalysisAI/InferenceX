@@ -252,24 +252,26 @@ jobs:
             the new commit. This keeps Check 3 (recipe) consistent with Checks 1-2.
 
             ## Check 0 — The sign-off author is a CODEOWNER for the changed files
-            Per InferenceX convention, a sign-off only counts if it comes from a CODEOWNER for
-            what the PR actually changes (see `.github/CODEOWNERS` and the recipe-reminder bot).
-            Verify it yourself — do NOT assume:
-            - Read `.github/CODEOWNERS` (it is in the checked-out default branch).
-            - For EACH file changed in this PR, compute its owners using GitHub's
-              last-matching-pattern-wins rule: the LAST `CODEOWNERS` line whose pattern matches a
-              path determines that path's owners; owners do NOT accumulate across patterns (so a
-              specific line like `.github/configs/nvidia-master.yaml @a @b` overrides the catch-all
-              `* @org/team`).
-            - The sign-off author `@${{ needs.gate.outputs.signoff-author }}` must be an owner of
-              every changed path — either listed directly, or a member of a listed team
-              `@org/team`. Resolve team membership via
-              `gh api orgs/<org>/teams/<team>/memberships/<signer>` (200 = member). If a team can't
-              be resolved, say so rather than assuming membership.
-            - PASS if the signer owns ALL changed paths. Otherwise FAIL: list the changed paths the
-              signer does NOT own and their actual CODEOWNERS, and state those areas need a sign-off
-              from their CODEOWNER. (If other CODEOWNERs have separately signed off elsewhere on the
-              PR so that every changed area is jointly covered, note that and treat it as satisfied.)
+            The sign-off must come from a CODEOWNER for what the PR changes. Read
+            `.github/CODEOWNERS` (in the checked-out default branch) and, for each changed file,
+            find its owners via last-matching-pattern-wins (the LAST matching line wins; owners do
+            not accumulate, so `.github/configs/nvidia-master.yaml @a @b` overrides `* @org/team`).
+            Then decide:
+            - A path whose most-specific owner is a SPECIFIC line (named users/team): the signer
+              `@${{ needs.gate.outputs.signoff-author }}` must be one of those owners (listed
+              directly, or a member of that team).
+            - A path whose ONLY owner is the broad catch-all (`* @org/team`): satisfied by ANY
+              recognized CODEOWNER. So if the signer is listed anywhere in CODEOWNERS (e.g. they
+              own one of the specific files in this PR), the catch-all paths are covered too —
+              the catch-all is a default, not a per-file gatekeeper.
+            - Be decisive and DO NOT hard-fail on unreadable team membership. The bot's token
+              often can't read org team membership (403/404) — that is not a failure. If the
+              signer is clearly a CODEOWNER (listed in CODEOWNERS for any changed path, or for a
+              specific changed file), treat Check 0 as PASS. Do not write "if they're a member
+              then OK, otherwise…" hedging.
+            - FAIL only on a genuine mismatch: the signer is not a CODEOWNER for a SPECIFIC
+              (non-catch-all) changed path — e.g. an AMD owner signing an NVIDIA-only change.
+              Name the path and its real owners in one line.
 
             ## Check 1 — A passing sweep + evals ran on a commit IN this PR
             The merge standard (and InferenceX's own reuse gate) requires a green full sweep —
@@ -357,17 +359,22 @@ jobs:
             marker already exists for THIS head SHA, do not post a duplicate — update your
             assessment only if the conclusion changed.
 
-            - If everything is to standard: post a brief confirmation (2-3 sentences) noting the
-              green run URL, that evals pass, and that the recipe link is present and complete.
-              Do NOT @-mention anyone on a pass.
-            - If anything is NOT to standard: the FIRST line of the comment body (after the
-              marker) must @-mention the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`.
-              Then list, grouped under "CODEOWNER", "PR validation", "Evals", and "Recipe", each concrete
-              problem. Lead each item with the ROOT ISSUE in plain language (e.g. for validation,
-              "No passing sweep/eval was found on any commit in this PR"), then add supporting
-              detail/links (run URLs, the recipe link, specific missing fields) AFTER. Be precise
-              and actionable — tell them exactly what to fix before this PR can merge. Avoid
-              confusing nuance the reviewer can't act on.
+            KEEP IT TIGHT — a busy reviewer should get it in ~15 seconds. Not a novel, not a
+            single terse line either. Rules:
+            - First line after the marker: the overall verdict (PASS, or one line naming what
+              blocks merge).
+            - Then ONE short line per check. For a passing check write `PASS — <brief reason>`;
+              spend words only on the checks that fail.
+            - State conclusions, don't narrate your process. No multi-paragraph explanations, no
+              restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
+              run/recipe instead of describing it.
+
+            - If everything is to standard: post the verdict line + the four one-line PASS rows
+              (with the green run URL). Do NOT @-mention anyone on a pass.
+            - If anything is NOT to standard: the FIRST line (after the marker) must @-mention the
+              sign-off author as `@${{ needs.gate.outputs.signoff-author }}` with the blocking
+              summary. Then the per-check lines, each failing one led by its root issue (e.g.
+              "No passing sweep/eval on any commit in this PR") with the supporting link after.
 
             Do not use emojis anywhere in the comment. Use only facts you verified. If a required
             artifact or run is inaccessible, say so explicitly rather than assuming pass.
