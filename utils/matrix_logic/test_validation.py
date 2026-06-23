@@ -385,6 +385,16 @@ class TestMultiNodeMatrixEntry:
         assert entry.decode.tp == 8
         assert entry.decode.dp_attn is True
 
+    def test_all_eval_concurrency_batch_marker(
+        self,
+        valid_multinode_matrix_entry,
+    ):
+        valid_multinode_matrix_entry["eval-all-concs"] = True
+
+        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+        assert entry.eval_all_concs is True
+
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
         """Conc must be a list for multinode."""
         valid_multinode_matrix_entry["conc"] = 2150  # Single int, not list

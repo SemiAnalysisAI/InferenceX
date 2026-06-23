@@ -125,7 +125,6 @@ jobs:
             github.event_name == 'pull_request' &&
             github.event.action == 'synchronize' &&
             !github.event.pull_request.draft &&
-            !contains(github.event.pull_request.labels.*.name, 'all-evals') &&
             !contains(github.event.pull_request.labels.*.name, 'evals-only') &&
             (
               contains(github.event.pull_request.labels.*.name, 'full-sweep-enabled') ||
@@ -627,7 +626,7 @@ jobs:
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
             run-eval: true
             eval-only: true
-            eval-conc: ${{ matrix.config.eval-conc }}
+            eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
 
     collect-results:
         needs:
@@ -725,11 +724,7 @@ jobs:
 
             - name: Validate reusable artifacts
               run: |
-                  cat <<'CONFIGEOF' > _full_config.json
-                  ${{ needs.setup.outputs.search-space-config }}
-                  CONFIGEOF
                   python3 utils/validate_reusable_sweep_artifacts.py \
-                    --config-json _full_config.json \
                     --artifacts-dir source-artifacts
 
             - name: Upload reusable ingest artifacts

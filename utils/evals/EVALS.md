@@ -1,35 +1,41 @@
 # Evals
 
-## What?
-Quick graded QnA which measures model performance. Examples of test suites:
-- **gsm8k**: Grade school math questions
-- **gpqa**: Graduate level, Google-Proof multiple choice questions
+Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
+concurrency, kernels, and other throughput optimizations. They run separately
+from throughput; selection lives in `mark_eval_entries()` in
+`utils/matrix_logic/generate_sweep_configs.py`.
 
-## When?
-Evals run as **separate workflow jobs** from throughput benchmarks. The selection logic is in `mark_eval_entries()` of `utils/matrix_logic/generate_sweep_configs.py`.
+## Selection
 
-**Single-node**: At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k.
-
-**Multi-node**: Every distinct parallelism configuration, only for 8k1k. Rows that differ only by concurrency are treated as one configuration. Each eval job runs at `eval-conc`, the highest eligible concurrency across those rows.
+- **Single-node:** 8k1k only; highest and median concurrency for every model,
+  runner, framework, precision, TP, and decoding configuration.
+- **Multi-node:** 8k1k only; one job per parallelism topology at its highest
+  eligible concurrency. Rows differing only by concurrency share a topology.
 
 Generator eval modes:
 
-- Default: run throughput for every generated config and eval-only jobs for the selected subset above.
-- `--no-evals`: generate throughput jobs only.
-- `--evals-only`: generate eval-only jobs for the selected subset above.
-- `--evals-only --all-evals`: expand the eval-only matrix to every generated fixed-sequence config. `--all-evals` alone remains an equivalent shorthand. Agentic configs are excluded. For multi-node configs, every distinct value in each `conc-list` becomes its own eval job.
+- Default: throughput plus the selected eval subset.
+- `--no-evals`: throughput only.
+- `--evals-only`: selected evals only.
+- `--all-evals`: every fixed-sequence eval only; equivalent to
+  `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
+  sequentially on one engine. Agentic configs are excluded.
 
-The same modes are available to changelog-triggered sweeps through `evals-only: true` and `all-evals: true`. `all-evals: true` extends eval-only selection and implies throughput suppression for that entry, so it works either alone or alongside `evals-only: true`.
+Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
+implies eval-only there. On PRs, the same names are modifier labels:
+`all-evals` expands coverage without suppressing throughput, while `evals-only`
+suppresses it. Modifier runs cannot be reused.
 
-For PR validation, add `all-evals` and/or `evals-only` alongside one primary sweep label. `all-evals` expands eval selection for every appended changelog entry without changing throughput. `evals-only` suppresses throughput while keeping the default eval subset. Combining both runs every fixed-sequence eval and no throughput. Runs with either modifier are not eligible for full-sweep artifact reuse.
+Deduplication is scenario-aware: fixed-sequence coverage does not suppress
+agentic coverage, and `all-evals` wins over default eval coverage.
 
-When multiple appended changelog entries reference the same config, benchmark deduplication is scenario-aware: a `fixed-seq-len` entry does not suppress a separate `agentic-coding` entry. Eval deduplication only consumes fixed-sequence coverage, and a broader `all-evals` entry takes precedence over the default eval subset for overlapping configs.
+### Artifact reuse
 
-## Why?
-To verify how model outputs are affected by throughput optimizations.
-- TP/Conc might affect model outputs
-- Check kernel implementations for correctness
-- If there was a tradeoff in accuracy for performance
+Default full sweeps may reuse their eval subset. Source coverage is
+authoritative: raw `meta_env.json` identities must match `eval_results_all`,
+and batched evals use `completed_eval_concs`. Policy drift is allowed;
+malformed metadata, duplicates, or raw/aggregate mismatches are not. See
+[workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
 `run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
@@ -92,6 +98,8 @@ Multi-node evals support two hardware paths:
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
 
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
+
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
 - `run-sweep.yml`: `sweep-evals` (single-node) and `sweep-multi-node-evals` (multi-node)
@@ -143,7 +151,7 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
 
 ### Score validation
 `utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
