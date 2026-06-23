@@ -185,30 +185,54 @@ jobs:
             gh pr diff ${{ needs.gate.outputs.pr-number }} --repo ${{ github.repository }}
             ```
 
-            ## Check 1 — PR validation has at least one fully-green run
-            "PR validation" is an `e2e-tests.yml` run executed for this PR (usually kicked off
-            by a `/sweep` comment, which replies with a `Run:` link, or by workflow_dispatch).
-            - Find validation runs tied to this PR's head SHA `${{ needs.gate.outputs.head-sha }}`.
-              Use the head SHA, not just the branch — stale runs on older commits do NOT count.
+            ## Check 1 — PR validation has at least one fully-green full-sweep run
+            "PR validation" is a `run-sweep.yml` run (it shows up named "Run Sweep - <PR title>").
+            It is triggered automatically on push/synchronize when the PR carries a sweep label
+            (`full-sweep-enabled`, `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or
+            `full-sweep-fail-fast-no-canary`). It runs the benchmark + eval jobs. (Older PRs may
+            instead have an `e2e-tests.yml` run kicked off by a `/sweep` comment — treat that as
+            equivalent.)
+
+            IMPORTANT — artifact reuse is normal and valid. After an eligible full sweep, a
+            maintainer comments `/reuse-sweep-run [run_id]` to reuse those artifacts. When that
+            happens, the run on the CURRENT head SHA is a "reuse" run: `reuse-sweep-gate` /
+            `check-changelog` run, but every benchmark and eval job is `skipped`. That is NOT a
+            failure — it means the authoritative validation lives in an earlier full-sweep run
+            whose commit is still in this PR. You must trace back to that source run.
+
+            Procedure:
+            - List this PR's full-sweep runs (by branch, since the authoritative run may be on an
+              earlier in-PR commit, not the head SHA):
               ```bash
-              gh run list --repo ${{ github.repository }} --workflow e2e-tests.yml --limit 30 \
+              gh run list --repo ${{ github.repository }} --workflow run-sweep.yml \
+                --branch <headRefName> --limit 30 \
                 --json databaseId,headSha,status,conclusion,event,createdAt,url
               ```
-              Also scan the PR's comments for `/sweep` replies containing `Run:` links and
-              cross-reference those run IDs.
-            - A run counts as GREEN only if `status == completed` and `conclusion == success`.
-              Inspect its jobs to confirm there are no failed/cancelled benchmark jobs:
+              Also scan the PR comments for `/reuse-sweep-run [run_id]` (the latest such comment
+              by an OWNER/MEMBER/COLLABORATOR wins; it may pin a specific run id) and for `/sweep`
+              replies containing `Run:` links. Cross-reference those run IDs.
+            - Determine the AUTHORITATIVE run — the run that actually executed the sweep:
               ```bash
               gh run view <RUN_ID> --repo ${{ github.repository }} --json jobs,conclusion,status,headSha
               ```
-            - PASS if at least one such green run exists on the current head SHA. Otherwise FAIL
-              and record which runs you found and why none qualified (failed jobs, wrong SHA,
-              still running, cancelled by infra, etc.).
+              If the head-SHA run only has `check-changelog` / `reuse-sweep-gate` and all
+              benchmark/eval jobs are `skipped`, it is a reuse run — follow it to the source full
+              sweep (the pinned `/reuse-sweep-run <id>`, else the latest successful `run-sweep.yml`
+              PR run whose commit is still in the PR). The authoritative run is that source run.
+            - A run counts as GREEN only if `status == completed` and `conclusion == success` and
+              its benchmark jobs actually ran (not all skipped). Confirm the authoritative run's
+              head SHA is a commit that is part of this PR.
+            - PASS if a green authoritative full-sweep run exists (directly on the head SHA, or
+              reused from an earlier in-PR commit). Otherwise FAIL and record which runs you found
+              and why none qualified (failed jobs, not part of the PR, still running, cancelled by
+              infra, reuse pointing at a non-green/non-existent source, etc.).
 
-            ## Check 2 — Evals pass on that green run
-            Using the green run from Check 1 (the SAME run):
-            - Confirm the eval jobs actually ran (e.g. `test-sweep-evals` / `collect-evals`) and
-              concluded `success`. A green run that ran NO evals does NOT satisfy this check.
+            ## Check 2 — Evals pass on the authoritative run
+            Using the AUTHORITATIVE run from Check 1 (the run that actually executed the sweep —
+            for a reused PR this is the source full-sweep run, NOT the skipped reuse run on the
+            head SHA):
+            - Confirm the eval jobs actually ran (e.g. `eval /` / `collect-evals`) and concluded
+              `success`. If the authoritative run's eval jobs are skipped or failed, FAIL.
             - Download and inspect the eval results to confirm the numbers are real and passing,
               not empty or erroring:
               ```bash
@@ -217,8 +241,11 @@ jobs:
               find ./evals -name '*.json' | head
               ```
               Read the aggregated eval JSON / the run's "Eval Summary" step summary and confirm
-              accuracy is present and meets the expected bar for the model. FAIL if eval jobs are
-              missing, skipped, failed, or the results are empty/below bar — say exactly which.
+              accuracy is present and meets the expected bar for the model. Also confirm the
+              authoritative run used the same inference-engine image as this PR's config (a reuse
+              is only valid if the validated artifacts match the merged recipe). FAIL if eval jobs
+              are missing, failed, the results are empty/below bar, or the image differs — say
+              exactly which.
 
             ## Check 3 — Recipe linked AND complete
             The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
