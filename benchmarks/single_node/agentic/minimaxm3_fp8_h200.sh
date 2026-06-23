@@ -10,38 +10,37 @@ if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-find_complete_model_snapshot() {
+resolve_complete_model_snapshot() {
     python3 - "$1" <<'PY'
 import json
 import sys
 from pathlib import Path
 
-snapshots_dir = Path(sys.argv[1])
-if not snapshots_dir.is_dir():
+model_cache_dir = Path(sys.argv[1])
+try:
+    revision = model_cache_dir.joinpath("refs/main").read_text().strip()
+except OSError:
     raise SystemExit
 
-snapshots = sorted(
-    (path for path in snapshots_dir.iterdir() if path.is_dir()),
-    key=lambda path: path.stat().st_mtime,
-    reverse=True,
+if not revision or Path(revision).name != revision:
+    raise SystemExit
+
+snapshot = model_cache_dir / "snapshots" / revision
+index_path = snapshot / "model.safetensors.index.json"
+required_files = (
+    snapshot / "config.json",
+    snapshot / "tokenizer_config.json",
+    index_path,
 )
-for snapshot in snapshots:
-    index_path = snapshot / "model.safetensors.index.json"
-    required_files = (
-        snapshot / "config.json",
-        snapshot / "tokenizer_config.json",
-        index_path,
-    )
-    if not all(path.is_file() for path in required_files):
-        continue
-    try:
-        weight_map = json.loads(index_path.read_text())["weight_map"]
-    except (KeyError, json.JSONDecodeError, OSError):
-        continue
-    shards = {snapshot / filename for filename in weight_map.values()}
-    if shards and all(path.is_file() for path in shards):
-        print(snapshot)
-        break
+if not all(path.is_file() for path in required_files):
+    raise SystemExit
+try:
+    weight_map = json.loads(index_path.read_text())["weight_map"]
+except (KeyError, json.JSONDecodeError, OSError):
+    raise SystemExit
+shards = {snapshot / filename for filename in weight_map.values()}
+if shards and all(path.is_file() for path in shards):
+    print(snapshot)
 PY
 }
 
@@ -53,15 +52,15 @@ else
     MODEL_CACHE_ROOT="${HF_HUB_CACHE:-${HF_HOME:-$HOME/.cache/huggingface/hub}}"
     MODEL_CACHE_DIR="$MODEL_CACHE_ROOT/models--${MODEL//\//--}"
     mkdir -p "$MODEL_CACHE_ROOT"
-    MODEL_PATH=$(find_complete_model_snapshot "$MODEL_CACHE_DIR/snapshots")
+    MODEL_PATH=$(resolve_complete_model_snapshot "$MODEL_CACHE_DIR")
     if [[ -z "$MODEL_PATH" ]]; then
         exec 9>"$MODEL_CACHE_ROOT/.minimaxm3-download.lock"
         flock -w 3600 9
-        MODEL_PATH=$(find_complete_model_snapshot "$MODEL_CACHE_DIR/snapshots")
+        MODEL_PATH=$(resolve_complete_model_snapshot "$MODEL_CACHE_DIR")
         if [[ -z "$MODEL_PATH" ]]; then
             DOWNLOADED_MODEL_PATH=$(hf download "$MODEL")
-            MODEL_PATH=$(find_complete_model_snapshot "$MODEL_CACHE_DIR/snapshots")
-            if [[ -z "$MODEL_PATH" || "$MODEL_PATH" != "$DOWNLOADED_MODEL_PATH" ]]; then
+            MODEL_PATH=$(resolve_complete_model_snapshot "$MODEL_CACHE_DIR")
+            if [[ -z "$MODEL_PATH" ]]; then
                 echo "Downloaded model snapshot is incomplete: $DOWNLOADED_MODEL_PATH" >&2
                 exit 1
             fi
