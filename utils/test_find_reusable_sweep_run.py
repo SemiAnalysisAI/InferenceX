@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 import find_reusable_sweep_run as reuse
 
 
@@ -885,6 +887,65 @@ def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None
 
     outputs = dict(line.split("=", 1) for line in output_path.read_text().splitlines())
     assert outputs["reuse-enabled"] == "true"
+
+
+@pytest.mark.parametrize("modifier", ["all-evals", "evals-only"])
+def test_main_rejects_eval_modifier_for_reuse(
+    monkeypatch,
+    tmp_path,
+    modifier,
+) -> None:
+    comments = [
+        {
+            "created_at": "2026-05-13T00:00:00Z",
+            "author_association": "OWNER",
+            "body": "/reuse-sweep-run 25763404168",
+        },
+    ]
+
+    def fake_github_api(repo, path, token, params=None):
+        if path == "/commits/merge-sha/pulls":
+            return [{"number": 1321}]
+        if path == "/pulls/1321":
+            return {
+                "merged_at": "2026-05-13T00:01:00Z",
+                "labels": [
+                    {"name": "full-sweep-enabled"},
+                    {"name": modifier},
+                ],
+                "head": {"sha": "abc123"},
+            }
+        raise AssertionError(f"unexpected GitHub API path: {path}")
+
+    def fake_paginated_github_api(repo, path, token, item_key, params=None):
+        if path == "/issues/1321/comments":
+            return comments
+        raise AssertionError(f"unexpected paginated GitHub API path: {path}")
+
+    output_path = tmp_path / "outputs"
+    monkeypatch.setenv("GITHUB_TOKEN", "token")
+    monkeypatch.setattr(reuse, "github_api", fake_github_api)
+    monkeypatch.setattr(reuse, "paginated_github_api", fake_paginated_github_api)
+    monkeypatch.setattr(
+        reuse.sys,
+        "argv",
+        [
+            "find_reusable_sweep_run.py",
+            "--repo",
+            "SemiAnalysisAI/InferenceX",
+            "--commit-sha",
+            "merge-sha",
+            "--event-name",
+            "push",
+            "--ref",
+            "refs/heads/main",
+            "--github-output",
+            str(output_path),
+        ],
+    )
+
+    with pytest.raises(RuntimeError, match=rf"reuse-incompatible.*{modifier}"):
+        reuse.main()
 
 
 def test_main_rejects_pr_with_neither_full_sweep_label(monkeypatch, tmp_path) -> None:
