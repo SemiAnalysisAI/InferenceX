@@ -473,14 +473,14 @@ class TestMarkEvalEntries:
 class TestMarkAllEvalEntries:
     """Tests for the all-evals selection policy."""
 
-    def test_marks_all_fixed_sequence_entries_without_policy_filters(self):
+    def test_marks_only_8k1k_entries_and_passes_other_seq_lens_through(self):
         entries = [
-            {
+            {  # 1k1k is not eligible for evals -> left unmarked
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
                 'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 1,
                 'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
             },
-            {
+            {  # 8k1k is eligible -> marked for eval
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
                 'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 8,
                 'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
@@ -489,13 +489,15 @@ class TestMarkAllEvalEntries:
 
         result = mark_all_eval_entries(entries)
 
-        assert all(entry['run-eval'] for entry in result)
+        by_isl = {entry['isl']: entry for entry in result}
+        assert by_isl[1024]['run-eval'] is False
+        assert by_isl[8192]['run-eval'] is True
 
     def test_batches_every_multinode_concurrency_per_engine_topology(self):
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
                 'prefill': {'dp-attn': False},
                 'decode': {'dp-attn': False},
                 'conc': [1, 4, 8, 16],
@@ -545,7 +547,7 @@ class TestMarkAllEvalEntries:
         entries = [
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
                 'prefill': {'dp-attn': False},
                 'decode': {'dp-attn': False},
                 'conc': [4, 8, 16],
@@ -554,7 +556,7 @@ class TestMarkAllEvalEntries:
             },
             {
                 'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
-                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
                 'prefill': {'dp-attn': False},
                 'decode': {'dp-attn': False},
                 'conc': [16, 32],
@@ -569,6 +571,40 @@ class TestMarkAllEvalEntries:
         assert result[0]['conc'] == [4, 8, 16, 32]
         assert result[0]['eval-all-concs'] is True
         assert 'eval-conc' not in result[0]
+
+    def test_excludes_1k1k_multinode_entries_from_expansion(self):
+        entries = [
+            {  # 1k1k multinode: left untouched, never batched or eval-marked
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [4, 8, 16],
+                'run-eval': False,
+            },
+            {  # 8k1k multinode: expanded into a batched eval row
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [8, 32],
+                'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert len(result) == 2
+        one_k = next(e for e in result if e['isl'] == 1024)
+        eight_k = next(e for e in result if e['isl'] == 8192)
+        # 1k1k untouched: not eval-marked, not batched, concurrency unchanged
+        assert one_k['run-eval'] is False
+        assert 'eval-all-concs' not in one_k
+        assert one_k['conc'] == [4, 8, 16]
+        # 8k1k expanded into a batched eval row
+        assert eight_k['run-eval'] is True
+        assert eight_k['eval-all-concs'] is True
+        assert eight_k['conc'] == [8, 32]
 
     def test_skips_agentic_entries(self):
         entries = [
@@ -1811,7 +1847,8 @@ class TestArgumentDefaults:
         sample_single_node_config,
         sample_runner_config,
     ):
-        """--all-evals should bypass the default 8k1k/min-conc policy."""
+        """--all-evals bypasses the default min-conc/highest-median policy but
+        still only evaluates 8k1k (1k1k entries are excluded)."""
         import sys
         import generate_sweep_configs
 
@@ -1835,9 +1872,10 @@ class TestArgumentDefaults:
 
         result = generate_sweep_configs.main()
 
-        assert len(result) == 10
+        # Every 8k1k concurrency is marked (5 conc values), and the 1k1k
+        # entries are dropped rather than evaluated.
+        assert len(result) == 5
         assert {(entry['isl'], entry['osl']) for entry in result} == {
-            (1024, 1024),
             (8192, 1024),
         }
         assert min(entry['conc'] for entry in result) == 4
@@ -1874,7 +1912,10 @@ class TestArgumentDefaults:
 
         result = generate_sweep_configs.main()
 
-        assert len(result) == 10
+        assert len(result) == 5
+        assert {(entry['isl'], entry['osl']) for entry in result} == {
+            (8192, 1024),
+        }
         assert all(entry['run-eval'] is True for entry in result)
         assert all(entry['eval-only'] is True for entry in result)
 
@@ -1888,10 +1929,14 @@ class TestArgumentDefaults:
         import generate_sweep_configs
 
         config = sample_multinode_config
-        search_space = (
+        seq_entry = (
             config['dsr1-fp4-gb200-dynamo-trt']['scenarios']
-            ['fixed-seq-len'][0]['search-space']
+            ['fixed-seq-len'][0]
         )
+        # all-evals only evaluates 8k1k, so target that sequence length.
+        seq_entry['isl'] = 8192
+        seq_entry['osl'] = 1024
+        search_space = seq_entry['search-space']
         search_space[0]['conc-list'] = [4, 16, 64]
 
         monkeypatch.setattr(
