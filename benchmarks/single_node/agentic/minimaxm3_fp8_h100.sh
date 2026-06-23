@@ -34,11 +34,13 @@ mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
 MODEL_CPU_OFFLOAD_GB=24
+MOONCAKE_LOCAL_BUFFER_GIB=4
 case "$OFFLOADING" in
     none) ;;
     cpu)
-        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP - MODEL_CPU_OFFLOAD_GB))
-        if (( PER_RANK_GB <= 0 )); then
+        TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
+        PER_RANK_GIB=$((TOTAL_CPU_DRAM_GIB / TP - MODEL_CPU_OFFLOAD_GB - MOONCAKE_LOCAL_BUFFER_GIB))
+        if (( PER_RANK_GIB <= 0 )); then
             echo "Error: CPU DRAM budget is too small for model and KV offload" >&2
             exit 1
         fi
@@ -53,8 +55,8 @@ case "$OFFLOADING" in
   "mode": "embedded",
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
-  "global_segment_size": "${PER_RANK_GB}GB",
-  "local_buffer_size": "4GB",
+  "global_segment_size": "${PER_RANK_GIB}GB",
+  "local_buffer_size": "${MOONCAKE_LOCAL_BUFFER_GIB}GB",
   "protocol": "rdma",
   "device_name": "",
   "enable_offload": false
