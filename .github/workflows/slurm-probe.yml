@@ -7,51 +7,42 @@ on:
     inputs:
       runner:
         description: "runner label to probe"
-        default: gb300-nv
+        default: gb200
+      jobid:
+        description: "slurm job id to sacct"
+        default: "19603"
 
 jobs:
   probe:
-    runs-on: ${{ github.event.inputs.runner || 'gb300-nv' }}
-    timeout-minutes: 3
+    runs-on: ${{ github.event.inputs.runner || 'gb200' }}
+    timeout-minutes: 5
     steps:
-      - name: inspect SSSD sudo responder evidence
+      - name: sacct gb200 job + partition/preempt limits
         run: |
           set +e
+          JOBID="${{ github.event.inputs.jobid || '19603' }}"
           echo "runner=$RUNNER_NAME host=$(hostname -f 2>/dev/null || hostname) utc=$(date -u +%FT%TZ)"
+          echo "querying slurm job $JOBID"
           echo
 
-          echo "=== stuck sudo cleanup count and oldest entries ==="
-          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args |
-            awk '$0 ~ /sudo rm -rf .*benchmark_logs/ || NR == 1' |
-            sort -k5,5r | head -40
+          echo "=== sacct: why did job $JOBID end? (State / Reason / Timelimit / Elapsed) ==="
+          sacct -j "$JOBID" --format=JobID,JobName%28,State%20,Reason%24,Timelimit,Elapsed,Start,End,ExitCode,NodeList%24 2>&1 | head -40
+          echo
+          echo "=== sacct parsable (full state+reason, no truncation) ==="
+          sacct -j "$JOBID" -P --format=JobID,JobName,State,Reason,Timelimit,Elapsed,ExitCode,DerivedExitCode 2>&1 | head -20
           echo
 
-          echo "=== SSSD sudo socket state ==="
-          ss -xap 2>&1 | grep -E 'sss|sudo' || true
+          echo "=== recent gb200/dsr1 jobs (pattern over last 3h) ==="
+          sacct -X --starttime now-3hours --format=JobID,JobName%28,State%18,Timelimit,Elapsed,End 2>&1 | grep -iE "gb200|dsr1|JobID|State|PREEMPT|TIMEOUT|CANCEL" | head -25
           echo
 
-          echo "=== SSSD process state ==="
-          ps -eo user,euser,stat,wchan:32,etime,pid,ppid,comm,args |
-            awk 'NR == 1 || $0 ~ /[s]ssd/'
+          echo "=== partition default/max time + preempt mode (is there a ~12min cap?) ==="
+          scontrol show partition 2>&1 | grep -iE "PartitionName|DefaultTime|MaxTime|PreemptMode|GraceTime|QoS" | head -50
           echo
 
-          echo "=== SSSD logs and permissions ==="
-          ls -la /var/log/sssd 2>&1 || true
-          for log in /var/log/sssd/sssd_sudo.log /var/log/sssd/sssd_gb300.internal.log; do
-            echo "--- $log ---"
-            tail -200 "$log" 2>&1 || true
-          done
+          echo "=== cluster-wide preemption policy ==="
+          scontrol show config 2>&1 | grep -iE "PreemptType|PreemptMode|PreemptExemptTime|KillWait|OverTimeLimit|GraceTime" | head
           echo
 
-          echo "=== system journal (if runner account may read it) ==="
-          journalctl -u sssd --since '2026-06-01' --no-pager -n 200 2>&1 || true
-          echo
-
-          echo "=== sudo responder proc state (if visible) ==="
-          sudo_responder_pid=$(pgrep -x sssd_sudo | head -1)
-          if [ -n "$sudo_responder_pid" ]; then
-            cat "/proc/$sudo_responder_pid/status" 2>&1 || true
-            echo "wchan=$(cat "/proc/$sudo_responder_pid/wchan" 2>&1)"
-            echo "syscall=$(cat "/proc/$sudo_responder_pid/syscall" 2>&1)"
-            command -v pstree >/dev/null && pstree -aps "$sudo_responder_pid" 2>&1 || true
-          fi
+          echo "=== squeue now: what is contending on this cluster ==="
+          timeout 15 squeue -o "%.10i %.34j %.10u %.2t %.10M %.10l %.6D %.20R" 2>&1 | head -40
