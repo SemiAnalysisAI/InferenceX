@@ -194,6 +194,23 @@ jobs:
           clean: true
           submodules: true
 
+      - name: Set result identity
+        id: result-identity
+        env:
+          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_prefill-tp{}-ep{}-dp{}-nw{}_decode-tp{}-ep{}-dp{}-nw{}_disagg-{}_spec-{}_conc{}_{runner}
+          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
+        run: |
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
+          echo "artifact-key=${RESULT_FILENAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Restore prior AgentX concurrency checkpoints
+        if: ${{ inputs.scenario-type == 'agentic-coding' && github.run_attempt > 1 }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: checkpoint_agentic_${{ steps.result-identity.outputs.artifact-key }}_attempt-*
+          path: agentic_checkpoints
+          merge-multiple: true
+
       - name: Cleanup stale eval outputs (pre-run)
         if: ${{ inputs.run-eval || inputs.eval-only }}
         run: |
@@ -205,13 +222,8 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
-          # Hash uniquely on {EXP_NAME}_{PRECISION}_{FRAMEWORK}_prefill-tp{}-ep{}-dp{}-nw{}_decode-tp{}-ep{}-dp{}-nw{}_disagg-{}_spec-{}_conc{}_{runner}
-          RESULT_FILENAME: ${{ env.EXP_NAME }}_${{ env.PRECISION }}_${{ env.FRAMEWORK }}_prefill-tp${{ env.PREFILL_TP }}-ep${{ env.PREFILL_EP }}-dp${{ env.PREFILL_DP_ATTN }}-nw${{ env.PREFILL_NUM_WORKERS }}_decode-tp${{ env.DECODE_TP }}-ep${{ env.DECODE_EP }}-dp${{ env.DECODE_DP_ATTN }}-nw${{ env.DECODE_NUM_WORKERS }}_disagg-${{ env.DISAGG }}_spec-${{ env.SPEC_DECODING }}_conc${{ join(fromJson(inputs.conc-list), 'x') }}_${{ runner.name }}
         run: |
           set -x
-          # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
-          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
-
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
@@ -292,6 +304,14 @@ jobs:
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
           path: multinode_server_logs.tar.gz
+          if-no-files-found: ignore
+
+      - name: Upload AgentX concurrency checkpoints
+        if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: checkpoint_agentic_${{ steps.result-identity.outputs.artifact-key }}_attempt-${{ github.run_attempt }}
+          path: agentic_checkpoints/${{ env.RESULT_FILENAME }}_conc*
           if-no-files-found: ignore
 
       - name: Upload agentic aggregated result

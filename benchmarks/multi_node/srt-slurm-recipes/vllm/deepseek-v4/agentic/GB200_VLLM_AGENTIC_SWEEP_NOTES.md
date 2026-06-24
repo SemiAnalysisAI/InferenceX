@@ -1328,3 +1328,23 @@ point on normalized throughput, p90 TTFT, and p90 interactivity; 4P/1D was
 farther behind and decode-starved. Their master entries and now-unreferenced
 recipes were removed. The retained official space is the 2P/1D DEP8/DEP8
 curve plus the restored 3P/2D middle/high-interactivity curve.
+
+## Batched-Concurrency Retry Checkpoints
+
+GitHub retries reusable-workflow jobs rather than individual iterations inside
+an AgentX concurrency batch. Previously, a late failure therefore reran every
+earlier successful point. The workflow now uploads a run-local checkpoint
+artifact even when the launch step fails. `agentic_srt.sh` stages a processed
+result plus an atomic success marker only after both AIPerf replay and result
+validation succeed; partial output from a failed point never receives a
+marker. On a later attempt of the same Actions run, the workflow restores all
+prior checkpoint artifacts and the benchmark skips only points whose marker,
+matrix identity, concurrency, and successful-request count validate. The
+normal final artifact combines restored and newly measured result JSONs, so
+the official collector still receives the complete batch.
+
+The AIPerf submodule also merges `ajcasagrande/aiperf:ajc/agentx` at
+`0a71faf8` wholesale with the existing SGLang session-affinity commit. The
+resulting merge commit retains both histories and supplies the latest AgentX
+warmup, timing, Weka-loader, metrics, Dynamo-session, and process-lifecycle
+fixes.
