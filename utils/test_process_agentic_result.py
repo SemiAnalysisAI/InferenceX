@@ -167,6 +167,15 @@ def _write_fixture(tmp_path: Path) -> Path:
                 "request_count": len(records),
                 "benchmark_duration": 4.1,
                 "request_latency": {"avg": 1090.0, "unit": "ms"},
+                "metadata": {
+                    "dataset": {
+                        "source_type": "public_dataset",
+                        "loader": "semianalysis_cc_traces_weka_with_subagents",
+                        "hf_dataset_name": "semianalysisai/cc-traces-weka-062126",
+                        "hf_split": "train",
+                        "num_dataset_entries": 393,
+                    }
+                },
             },
             f,
         )
@@ -223,6 +232,19 @@ def test_processor_emits_required_summarize_keys(tmp_path: Path):
     agg = _run_processor(result_dir, output_dir)
     missing = SUMMARIZE_KEYS - set(agg.keys())
     assert not missing, f"agg JSON missing summarize keys: {sorted(missing)}"
+
+
+def test_processor_preserves_dataset_provenance(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    output_dir = tmp_path / "out"
+    agg = _run_processor(result_dir, output_dir)
+    assert agg["dataset"] == {
+        "source_type": "public_dataset",
+        "loader": "semianalysis_cc_traces_weka_with_subagents",
+        "hf_dataset_name": "semianalysisai/cc-traces-weka-062126",
+        "hf_split": "train",
+        "num_dataset_entries": 393,
+    }
 
 
 def test_processor_latency_units_are_seconds(tmp_path: Path):

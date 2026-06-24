@@ -333,6 +333,7 @@ jobs:
             LOGS/agentic/conc_*/benchmark_command.txt
             LOGS/agentic/conc_*/workload_distribution_summary.txt
             LOGS/agentic/conc_*/workload_distribution_plots.png
+            LOGS/agentic/conc_*/aiperf_artifacts/profile_export_aiperf.json
             LOGS/agentic/conc_*/aiperf_artifacts/detailed_results.csv
             LOGS/agentic/conc_*/aiperf_artifacts/debug_trace.jsonl
           if-no-files-found: ignore

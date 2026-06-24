@@ -638,6 +638,12 @@ def build_agg(
         "num_requests_successful": len(records),
     }
 
+    metadata = aggregate.get("metadata")
+    if isinstance(metadata, dict):
+        dataset = metadata.get("dataset")
+        if isinstance(dataset, dict):
+            agg["dataset"] = dataset
+
     if is_multinode:
         agg.update(
             {
