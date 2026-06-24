@@ -85,7 +85,11 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--num-ep-groups", type=int, default=1,
                     help="concurrent EP groups; >1 is REJECTED (real subgroup PGs unimplemented)")
     ap.add_argument("--seed", type=int, default=67)
-    ap.add_argument("--warmup", type=int, default=20)
+    # 32: B300/Blackwell needs ~30 untimed iters to reach steady-state GPU clocks +
+    # establish NVLink/NVSHMEM connections — at warmup=8 its dispatch read ~1787us
+    # (cold), at warmup>=30 it settles to ~85us (faster than H100, reproducible within
+    # ~2.5%). H100/MI355X reach steady state much sooner; the extra iters are harmless.
+    ap.add_argument("--warmup", type=int, default=32)
     ap.add_argument("--iters", type=int, default=200, help=">=100 so p99 is meaningful")
     ap.add_argument("--allow-unknown-provenance", action="store_true",
                     help="permit a run with unpinned backend commit/version (default: fail)")
@@ -228,7 +232,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # ramp through the small ladder shapes untimed — warms clocks/fabric for everyone
     # and is also cold-jump-safe for MoRI.
     warm_T = min(ladder[-1], 128)
-    for wt in [t for t in ladder if t <= warm_T] or [ladder[0]]:
+    warm_shapes = [t for t in ladder if t <= warm_T] or [ladder[0]]
+    for wt in warm_shapes:
         wi, ww = routing.build_global_routing(wt * ep_size, args.experts, args.topk,
                                               args.routing, args.seed, experts_per_rank)
         wsi, wsw = routing.rank_slice(wi, ww, rank, wt)
@@ -236,6 +241,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         wp = backend.make_problem(wt, wsi.to(device), wsw.to(device), wx)
         for _ in range(8):
             wh = backend.dispatch(wp); backend.stage(wp, wh); backend.combine(wp, wh)
+    # Sustained clock-ramp burst at the LARGEST warm shape. Ramping through small shapes
+    # (above) establishes connections but doesn't sustain enough load to boost GPU clocks
+    # on Blackwell (B300): at a short warm-up its FIRST timed points read ~20x cold. A
+    # sustained burst at warm_T pins clocks high so EVERY timed point (incl. small T) is
+    # steady-state. CX_FABRIC_WARM_BURST overrides (0 disables).
+    burst = int(os.environ.get("CX_FABRIC_WARM_BURST", "60"))
+    if burst > 0:
+        bt = warm_shapes[-1]
+        bi, bw = routing.build_global_routing(bt * ep_size, args.experts, args.topk,
+                                              args.routing, args.seed, experts_per_rank)
+        bsi, bsw = routing.rank_slice(bi, bw, rank, bt)
+        bx = routing.rank_activations(bt, args.hidden, args.seed, rank, device, torch.bfloat16)
+        bp = backend.make_problem(bt, bsi.to(device), bsw.to(device), bx)
+        for _ in range(burst):
+            bh = backend.dispatch(bp); backend.stage(bp, bh); backend.combine(bp, bh)
     torch.cuda.synchronize()
     try:
         dist.barrier()

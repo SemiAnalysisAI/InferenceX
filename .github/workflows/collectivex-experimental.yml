@@ -22,7 +22,7 @@ on:
         description: Self-hosted runner pool (must have a CollectiveX launcher)
         type: choice
         default: gb200
-        options: [gb200, b200-dgxc, b200-multinode, mi355x]
+        options: [gb200, b200-dgxc, b200-multinode, mi355x, h100-dgxc, b300]
       benchmark:
         # mori runs only on mi355x; nccl/deepep/all on the NVIDIA SKUs.
         description: Which benchmark to run
@@ -64,6 +64,21 @@ on:
         type: choice
         default: bf16
         options: [bf16, fp8]
+      mode:
+        # normal = high-throughput kernels (decode+prefill); ll = DeepEP low-latency
+        # (decode-shaped, fp8 cast in-kernel). LL is rejected on backends without it
+        # (MoRI) and aborts on fabrics that lack it (B300) — run only where supported.
+        description: EP kernel path — normal or low-latency (LL)
+        type: choice
+        default: normal
+        options: [normal, ll]
+      resource_mode:
+        # normalized = ~sm_fraction of device units (cross-vendor apples-to-apples);
+        # tuned = each backend's own recommended/default launch config.
+        description: Comm resource regime
+        type: choice
+        default: normalized
+        options: [normalized, tuned, default]
 
 concurrency:
   # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
@@ -140,6 +155,8 @@ jobs:
       CX_PHASE: ${{ matrix.phase }}
       CX_TOKENS_LADDER: ${{ inputs.tokens_ladder }}
       CX_DISPATCH_DTYPE: ${{ inputs.dispatch_dtype }}
+      CX_MODE: ${{ inputs.mode }}
+      CX_RESOURCE_MODE: ${{ inputs.resource_mode }}
       # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
       CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
       # MI355X: pin to the warm-squash, writable nodes (see the push job).

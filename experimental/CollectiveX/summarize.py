@@ -197,14 +197,20 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
         out.append("\n### MoE EP dispatch / combine (DeepEP / MoRI)\n")
         out.append("Headline = the reference point (tokens/rank shown as `T*`); the per-line "
                    "sweep tables below carry the full source-tokens-per-rank curve.\n")
-        out.append("| backend | phase | ep | routing (fan-out) | status | T\\* | dispatch p50 (µs) | combine p50 (µs) | serial p50 (µs) | tokens/s | correct |")
-        out.append("|---|---|--:|---|---|--:|--:|--:|--:|--:|:--:|")
+        out.append("| backend | phase | mode | dtype | resource | ep | routing (fan-out) | status | T\\* | dispatch p50 (µs) | combine p50 (µs) | serial p50 (µs) | tokens/s | correct |")
+        out.append("|---|---|---|---|---|--:|---|---|--:|--:|--:|--:|--:|:--:|")
         for d in _moe_sorted(moe):
             m, c = d.get("metrics", {}), d.get("correctness", {})
             rp = d.get("routing_profile", {})
             ser = m.get("serial_us_p50", m.get("roundtrip_us_p50"))
-            fo = f"{(d.get('shape') or {}).get('routing','?')} ({_fnum(rp.get('fanout_mean'), '.1f')})"
-            out.append(f"| `{d.get('backend')}` | {d.get('phase','')} | {d.get('ep_size','')} | {fo} | {_emoji(d.get('status'))} | "
+            sh = d.get("shape") or {}
+            fo = f"{sh.get('routing','?')} ({_fnum(rp.get('fanout_mean'), '.1f')})"
+            # dtype shows whether the fp8 cast was inside the timed dispatch (LL) or not.
+            dt = sh.get("dispatch_dtype", "?")
+            fit = (d.get("reproduction") or {}).get("fp8_quant_in_timing")
+            dt += "*" if fit else ("⁺" if fit is False else "")
+            out.append(f"| `{d.get('backend')}` | {d.get('phase','')} | {d.get('mode','')} | {dt} | "
+                       f"{d.get('resource_mode','')} | {d.get('ep_size','')} | {fo} | {_emoji(d.get('status'))} | "
                        f"{m.get('headline_tokens_per_rank','—')} | {_fnum(m.get('dispatch_us_p50'), '.1f')} | "
                        f"{_fnum(m.get('combine_us_p50'), '.1f')} | {_fnum(ser, '.1f')} | "
                        f"{_fnum(m.get('tokens_per_second'), '.3e')} | {'✅' if c.get('passed') else '❌'} |")
@@ -213,8 +219,9 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
         out.append("\n> EP sweep: only source tokens/rank varies along a line. **fan-out** = mean "
                    "destination ranks/token (representativeness — top-k spread, not a permutation). "
                    "Dispatch & combine timed **separately** (staging untimed); **serial = dispatch + "
-                   "combine** (a sum, not an independently-measured chained op). **Selected stack at each "
-                   "backend's default resource budget — not resource-normalized.**")
+                   "combine** (a sum, not an independently-measured chained op). dtype `fp8*` = fp8 cast "
+                   "IS inside the timed dispatch (LL kernel); `fp8⁺` = cast is untimed preprocessing "
+                   "(normal mode). `mode` ll = DeepEP low-latency; `resource` = comm SM/CU regime.")
     if not total:
         out.append("\n> No result files found — the benchmark produced nothing.")
     return "\n".join(out)

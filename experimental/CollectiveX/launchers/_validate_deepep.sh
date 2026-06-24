@@ -9,8 +9,8 @@ mkdir -p results
 NG="${NG:-8}"
 RUNNER="${RUNNER:-h100-8x}"
 TOPO="${TOPO:-h100-nvlink-island}"
-WARMUP="${WARMUP:-8}"
-ITERS="${ITERS:-40}"
+WARMUP="${WARMUP:-32}"   # B300/Blackwell needs ~30 to reach steady-state clocks
+ITERS="${ITERS:-50}"
 DEC_LADDER="${DEC_LADDER:-1 2 4 8 16 32 64 128}"
 PRE_LADDER="${PRE_LADDER:-128 256 512}"
 export COLLECTIVEX_IMAGE="${COLLECTIVEX_IMAGE:-lmsysorg/sglang:v0.5.11-cu130}"
