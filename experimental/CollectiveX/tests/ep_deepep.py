@@ -59,18 +59,32 @@ class DeepEPBackend:
         # the decode and prefill sweeps). 4 GiB holds T up to 4096 (validated).
         num_nvl_bytes = int(os.environ.get("CX_DEEPEP_NVL_BYTES", str(4 * 1024 * 1024 * 1024)))
         self.buffer = Buffer(self.group, num_nvl_bytes, 0)
+        dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
+        rm = args.resource_mode
+        tuned_src = None
+        if rm == "normalized":
+            num_sms = max(1, round(args.sm_fraction * dev_sms))   # ~same device fraction as MoRI
+        elif rm == "tuned":
+            # Best-available for the installed DeepEP: its OWN default SM count
+            # (Buffer.num_sms — the library's analytic choice; it deliberately uses
+            # fewer SMs). get_dispatch_config(num_ranks) returns the recommended Config
+            # but doesn't expose num_sms to Python, and the default already reflects it.
+            num_sms = int(getattr(Buffer, "num_sms", args.num_sms))
+            tuned_src = "deepep-default-num_sms"
+        else:  # default — the bring-up budget
+            num_sms = args.num_sms
         try:
-            Buffer.set_num_sms(args.num_sms)
+            Buffer.set_num_sms(num_sms)
         except Exception as exc:  # pragma: no cover - version dependent
             if rank == 0:
-                print(f"WARN: could not set num_sms={args.num_sms}: {exc!r}", file=sys.stderr)
+                print(f"WARN: could not set num_sms={num_sms}: {exc!r}", file=sys.stderr)
         ver = _deepep_version()
-        dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
         self.backend_provenance = {
             "deepep_version": ver,
             "deepep_commit": os.environ.get("DEEPEP_COMMIT") or f"pkg-{ver}",
-            "num_sms": args.num_sms, "device_sms": dev_sms,
-            "resource_mode": "fixed-num-sms", "num_nvl_bytes": num_nvl_bytes,
+            "resource_mode": rm, "num_sms": num_sms, "device_sms": dev_sms,
+            "sm_fraction": (num_sms / dev_sms), "tuned_source": tuned_src or "n/a",
+            "num_nvl_bytes": num_nvl_bytes,
         }
 
     def buffer_cap(self, args):

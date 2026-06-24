@@ -52,7 +52,20 @@ class MoRIBackend:
             raise NotImplementedError("MoRI low-latency (LL) path is wired in Phase 3; use --mode normal")
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
-        self.block_num = int(os.environ.get("CX_MORI_BLOCK_NUM", "80"))
+        dev_cus = torch.cuda.get_device_properties(device).multi_processor_count
+        # Resource regime — map the comm budget onto CUs to mirror DeepEP's SM fraction.
+        #   normalized: block_num ≈ sm_fraction · CUs (≈ the same device fraction);
+        #   tuned: MoRI launch auto-tuning (API not present in this build — uses default,
+        #          labeled tuned_source); default: the 80-block bring-up budget.
+        rm = args.resource_mode
+        env_blocks = os.environ.get("CX_MORI_BLOCK_NUM")
+        if env_blocks:
+            self.block_num = int(env_blocks)
+        elif rm == "normalized":
+            self.block_num = max(1, round(args.sm_fraction * dev_cus))
+        else:  # tuned (no auto API in mori-0227-2) / default
+            self.block_num = 80
+        self._tuned_source = "default-80" if rm == "tuned" else "n/a"
         self.dispatch_warps = int(os.environ.get("CX_MORI_DISPATCH_WARPS", "16"))
         self.combine_warps = int(os.environ.get("CX_MORI_COMBINE_WARPS", "8"))
         if args.dispatch_dtype != "bf16":
@@ -82,14 +95,14 @@ class MoRIBackend:
         # provenance gate has something real rather than "unknown".
         img = os.environ.get("COLLECTIVEX_IMAGE", "")
         mori_commit = os.environ.get("MORI_COMMIT") or (f"image:{img}" if img else "unknown")
-        dev_cus = torch.cuda.get_device_properties(device).multi_processor_count
         self.backend_provenance = {
             "mori_commit": mori_commit,
             "heap_size": os.environ.get("MORI_SHMEM_HEAP_SIZE"),
             "max_num_inp_token_per_rank": max(512, self._cap),
-            "block_num": self.block_num, "dispatch_warps": self.dispatch_warps,
-            "combine_warps": self.combine_warps, "device_cus": dev_cus,
-            "resource_mode": "fixed-block-warps",
+            "resource_mode": args.resource_mode, "block_num": self.block_num,
+            "dispatch_warps": self.dispatch_warps, "combine_warps": self.combine_warps,
+            "device_cus": dev_cus, "sm_fraction": (self.block_num / dev_cus),
+            "tuned_source": self._tuned_source,
         }
 
     def buffer_cap(self, args):

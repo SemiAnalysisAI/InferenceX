@@ -71,7 +71,17 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--mode", default="normal", choices=["normal", "ll"],
                     help="kernel path: normal or low-latency (LL); LL is backend-dependent")
     ap.add_argument("--num-sms", type=int, default=24,
-                    help="communication-SM budget for DeepEP (recorded as the actual budget; MoRI uses block_num/warps)")
+                    help="DeepEP comm-SM budget in 'default' resource-mode (MoRI uses block_num/warps)")
+    # Resource regime (review: budgets were neither normalized nor tuned):
+    #   normalized — each backend restricted to ~sm_fraction of its device's units
+    #                (DeepEP set_num_sms(frac·SMs); MoRI block_num≈frac·CUs). Fraction-
+    #                based, recorded — an approximate apples-to-apples, not identical work.
+    #   tuned      — each backend's recommended/auto launch config (best achievable).
+    #   default    — DeepEP --num-sms / MoRI 80 blocks (the bring-up budget).
+    ap.add_argument("--resource-mode", default="normalized",
+                    choices=["normalized", "tuned", "default"])
+    ap.add_argument("--sm-fraction", type=float, default=0.18,
+                    help="normalized mode: fraction of device SMs/CUs dedicated to comms (~24/132)")
     ap.add_argument("--seed", type=int, default=67)
     ap.add_argument("--warmup", type=int, default=20)
     ap.add_argument("--iters", type=int, default=200, help=">=100 so p99 is meaningful")
@@ -145,7 +155,7 @@ def comparison_key(meta: dict) -> str:
     different SKUs are labelled distinct, never silently overlaid."""
     parts = [
         meta["op"], meta["backend"], meta["mode"], meta["phase"],
-        str(meta["ep_size"]), str(meta["nodes"]),
+        str(meta["ep_size"]), str(meta["nodes"]), meta.get("resource_mode", "default"),
         meta["topology_class"], meta["comparison_class"], meta["measurement_contract"],
         json.dumps(meta["shape"], sort_keys=True),
     ]
@@ -332,6 +342,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     meta = {
         "op": "ep-dispatch-combine", "backend": backend.name, "mode": args.mode,
         "phase": args.phase, "world_size": world_size, "ep_size": ep_size,
+        "resource_mode": args.resource_mode,
         "nodes": int(os.environ.get("SLURM_NNODES", "1")),
         "topology_class": args.topology_class, "comparison_class": args.comparison_class,
         "measurement_contract": "comm-only-v1", "shape": shape,
