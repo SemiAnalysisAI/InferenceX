@@ -1601,6 +1601,52 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+# Agentic multinode 1P1D bring-up: Mooncake(tcp) carries the current-request
+# prefill->decode KV transfer; LMCacheMP is enabled only on the prefill engine
+# for local host-DRAM L2 prefix reuse. Decode intentionally uses Mooncake only
+# to avoid decode-side LMCache lookup/retrieve racing the remote-prefill load.
+kimik2.5-fp4-mi355x-vllm-disagg-agentic:
+  image: yukiozzz/kimi-lmc-mc-rocm:dmabuf
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 8, 16, 32 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "ROUTER_TYPE=mc-proxy"
+          - "PREFILL_KV_CONNECTOR=mooncake-lmcachemp"
+          - "DECODE_KV_CONNECTOR=mooncake"
+          - "MC_PROTOCOL=tcp"
+          - "ENABLE_PREFIX_CACHING=1"
+          - "MAX_MODEL_LEN=262144"
+          - "WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k"
+          - "LMCACHE_L1_SIZE_GB=2500"
+          - "LMCACHE_L1_INIT_SIZE_GB=20"
+          - "LMCACHE_L1_READ_TTL_SECONDS=3600"
+          - "LMCACHE_CHUNK_SIZE=256"
+          - "LMCACHE_MAX_WORKERS=8"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
