@@ -92,6 +92,10 @@ jobs:
     env:
       CX_BENCH: mori
       CX_PHASE: ${{ matrix.phase }}
+      # Pin to the MI355X nodes that hold the node-local squash and have a writable
+      # /var/lib/squash; other nodes need a slow cold import that can fail on lock/
+      # cache permissions. Widen once the squash is staged cluster-wide.
+      CX_NODELIST: mia1-p01-g10,mia1-p01-g15
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
@@ -133,6 +137,8 @@ jobs:
       CX_DISPATCH_DTYPE: ${{ inputs.dispatch_dtype }}
       # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
       CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
+      # MI355X: pin to the warm-squash, writable nodes (see the push job).
+      CX_NODELIST: ${{ inputs.sku == 'mi355x' && 'mia1-p01-g10,mia1-p01-g15' || '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
