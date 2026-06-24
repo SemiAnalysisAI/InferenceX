@@ -18,6 +18,13 @@ health_check:
   max_attempts: 720
   interval_seconds: 10
 
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
+
+srun_options:
+  mem: "0"
+
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
