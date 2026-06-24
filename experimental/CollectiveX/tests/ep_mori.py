@@ -57,15 +57,27 @@ class MoRIBackend:
         #   normalized: block_num ≈ sm_fraction · CUs (≈ the same device fraction);
         #   tuned: MoRI launch auto-tuning (API not present in this build — uses default,
         #          labeled tuned_source); default: the 80-block bring-up budget.
+        # MoRI DEADLOCKS at T>=32 when block_num is reduced toward the normalized target
+        # (validated on MI355X g15: block_num=46 wedges, 80 completes T=32/64 with the
+        # realistic fan-out≈5.3 trace). So MoRI cannot be normalized down to DeepEP's
+        # device fraction; floor it at a known-functional minimum and record that the
+        # target fraction was NOT reached.
         rm = args.resource_mode
+        floor = int(os.environ.get("CX_MORI_MIN_BLOCKS", "80"))  # functional minimum (deadlocks lower)
         env_blocks = os.environ.get("CX_MORI_BLOCK_NUM")
+        self._block_floored = False
         if env_blocks:
             self.block_num = int(env_blocks)
+            self._block_target = self.block_num
         elif rm == "normalized":
-            self.block_num = max(1, round(args.sm_fraction * dev_cus))
-        else:  # tuned (no auto API in mori-0227-2) / default
+            self._block_target = max(1, round(args.sm_fraction * dev_cus))
+            self.block_num = max(floor, self._block_target)
+            self._block_floored = self.block_num > self._block_target
+        else:  # tuned (no launch auto-tune API in mori-0227-2) / default
             self.block_num = 80
-        self._tuned_source = "default-80" if rm == "tuned" else "n/a"
+            self._block_target = 80
+        self._tuned_source = ("default-80" if rm == "tuned" else
+                              ("normalized-floored" if self._block_floored else "n/a"))
         self.dispatch_warps = int(os.environ.get("CX_MORI_DISPATCH_WARPS", "16"))
         self.combine_warps = int(os.environ.get("CX_MORI_COMBINE_WARPS", "8"))
         if args.dispatch_dtype != "bf16":
@@ -100,6 +112,7 @@ class MoRIBackend:
             "heap_size": os.environ.get("MORI_SHMEM_HEAP_SIZE"),
             "max_num_inp_token_per_rank": max(512, self._cap),
             "resource_mode": args.resource_mode, "block_num": self.block_num,
+            "block_num_target": self._block_target, "block_num_floored": self._block_floored,
             "dispatch_warps": self.dispatch_warps, "combine_warps": self.combine_warps,
             "device_cus": dev_cus, "sm_fraction": (self.block_num / dev_cus),
             "tuned_source": self._tuned_source,
