@@ -1363,3 +1363,16 @@ ultra-high-interactivity limit. The 2P/1D DEP8/DEP8 topology adds
 c192/c224/c256 beyond the current c160 normalized-throughput leader to locate
 the actual one-decode saturation knee. These are isolated batches so they do
 not force reruns of already selected points when a boundary probe overloads.
+
+## Official Sweep TP8 Decode Graph Correction
+
+Official run `28081231491` exposed that the restored 3P/2D recipe had also
+restored `FULL_DECODE_ONLY` on its TP8 decoder. Decode worker 1 failed while
+capturing the embedding all-reduce with `AssertionError: graph_pool_id is not
+set under graph capture` in `nccl_symm_mem_context`. This is the same TP plus
+NCCL symmetric-memory incompatibility previously isolated for the default
+full-graph path. The successful `FULL_DECODE_ONLY` experiment was DEP8, where
+each attention rank does not execute this TP all-reduce; it does not establish
+compatibility for TP8. TP8 decode is therefore returned to `PIECEWISE`, which
+keeps supported graph regions while executing the incompatible collective
+outside full capture. DEP8 decode retains `FULL_DECODE_ONLY`.

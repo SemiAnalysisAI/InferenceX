@@ -125,9 +125,9 @@ backend:
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
-      # Decode is launch-bound. FULL_DECODE_ONLY produced the historical
-      # high-interactivity TP8 curve while avoiding prefill's FULL capture.
-      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      # TP8 all-reduce uses NCCL symmetric memory, which is incompatible with
+      # the full graph-capture path. Keep graph-incompatible collectives eager.
+      compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
       gpu-memory-utilization: 0.9
       stream-interval: 10
       all2all-backend: "flashinfer_nvlink_one_sided"
