@@ -52,7 +52,11 @@ THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
+# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
+# is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
+# limit. conc=1 made Kimi-K2.5 exceed the 8h budget. 64 captures most of the
+# batch-decode speedup before it saturates / KV pressure grows; override via env.
+CONCURRENCY="${CONCURRENCY:-64}"
 TOP_P="${TOP_P:-0.95}"
 # Kimi thinking toggles via the thinking chat_template key (default ON).
 DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true}'
