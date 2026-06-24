@@ -11955,10 +11955,9 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 8
           dp-attn: false
 
-# MiniMax-M3 GB300 disagg sweep — adapted from NV B300 PR #1863.
-# All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: TP4+Marlin, TEP8,
-# DEP8, DEP4. 4 GPU/node (GB300 NVL72). 4p3d (3 decode workers) skipped.
-# kv-cache-dtype=fp8 added. srun_options mem=0 required.
+# MiniMax-M3 GB300 disagg sweep — refreshed recipe set (no Marlin variants).
+# All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: DEP4, TEP8, DEP8, TEP4.
+# 4 GPU/node (GB300 NVL72). kv-cache-dtype=fp8. srun_options mem=0 required.
 minimaxm3-fp8-gb300-dynamo-vllm:
   image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -11973,67 +11972,37 @@ minimaxm3-fp8-gb300-dynamo-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      # 1p1d DEP2+TEP8, 3n: conc 4,16,64,128,4096
-      - conc-list: [4, 16, 64, 128, 4096]
+      # 1p1d DEP2+DEP4, 2n: conc 8192
+      - conc-list: [8192]
         prefill:
           num-worker: 1
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-1p1d-dep2-tep8-3n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/1p1d-dep2-dep4-1k1k.yaml"
         decode:
           num-worker: 1
-          tp: 8
-          ep: 8
-          dp-attn: false
-
-      # 1p1d DEP2+TP4 Marlin, 2n: conc 1,4,8,16
-      - conc-list: [1, 4, 8, 16]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-1p1d-dep2-tp4-marlin-2n.yaml"
-        decode:
-          num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
-
-      # 1p2d DEP2+DEP4, 3n: conc 2048
-      - conc-list: [2048]
-        prefill:
-          num-worker: 1
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-1p2d-dep2-dep4-3n.yaml"
-        decode:
-          num-worker: 2
           tp: 4
           ep: 4
           dp-attn: true
 
-      # 2p1d DEP2+DEP8, 3n: conc 512,4096
-      - conc-list: [512, 4096]
+      # 1p2d DEP2+TEP8, 5n: conc 4,16,64,128,256
+      - conc-list: [4, 16, 64, 128, 256]
         prefill:
-          num-worker: 2
+          num-worker: 1
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-2p1d-dep2-dep8-3n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/1p2d-dep2-tep8-1k1k.yaml"
         decode:
-          num-worker: 1
+          num-worker: 2
           tp: 8
           ep: 8
-          dp-attn: true
+          dp-attn: false
 
-      # 2p1d DEP2+TEP8, 3n: conc 32
+      # 2p2d DEP2+TEP8, 5n: conc 32
       - conc-list: [32]
         prefill:
           num-worker: 2
@@ -12041,62 +12010,77 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-2p1d-dep2-tep8-3n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p2d-dep2-tep8-1k1k.yaml"
         decode:
-          num-worker: 1
+          num-worker: 2
           tp: 8
           ep: 8
           dp-attn: false
 
-      # 2p2d DEP2+TEP8, 5n: conc 16
-      - conc-list: [16]
+      # 2p3d DEP2+DEP4, 4n: conc 8192
+      - conc-list: [8192]
         prefill:
           num-worker: 2
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-2p2d-dep2-tep8-5n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p3d-dep2-dep4-1k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: false
-
-      # 3p2d DEP2+TEP8, 6n: conc 4
-      - conc-list: [4]
-        prefill:
           num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+
+      # 2p4d DEP2+DEP4, 5n: conc 8192
+      - conc-list: [8192]
+        prefill:
+          num-worker: 2
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/disagg-gb300-3p2d-dep2-tep8-6n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p4d-dep2-dep4-1k1k.yaml"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+
+      # 4p2d DEP2+DEP8, 6n: conc 1024,4096
+      - conc-list: [1024, 4096]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/4p2d-dep2-dep8-1k1k.yaml"
         decode:
           num-worker: 2
           tp: 8
           ep: 8
-          dp-attn: false
+          dp-attn: true
 
     - isl: 8192
       osl: 1024
       search-space:
-      # 1p1d DEP2+TP4 Marlin, 2n: conc 1,4,8,16
-      - conc-list: [1, 4, 8, 16]
+      # 1p1d DEP2+DEP8, 3n: conc 256
+      - conc-list: [256]
         prefill:
           num-worker: 1
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-1p1d-dep2-tp4-marlin-2n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/1p1d-dep2-dep8-8k1k.yaml"
         decode:
           num-worker: 1
-          tp: 4
-          ep: 1
-          dp-attn: false
+          tp: 8
+          ep: 8
+          dp-attn: true
 
-      # 1p2d DEP2+DEP8, 5n: conc 128
+      # 1p1d DEP2+TEP8, 3n: conc 128
       - conc-list: [128]
         prefill:
           num-worker: 1
@@ -12104,24 +12088,39 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-1p2d-dep2-dep8-5n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/1p1d-dep2-tep8-8k1k.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 1p2d DEP2+TEP8, 5n: conc 32,64,128
+      - conc-list: [32, 64, 128]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/1p2d-dep2-tep8-8k1k.yaml"
         decode:
           num-worker: 2
           tp: 8
           ep: 8
-          dp-attn: true
+          dp-attn: false
 
-      # 2p2d DEP2+DEP8, 5n: conc 256,512
-      - conc-list: [256, 512]
+      # 2p1d DEP2+DEP8, 3n: conc 512
+      - conc-list: [512]
         prefill:
           num-worker: 2
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-2p2d-dep2-dep8-5n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/2p1d-dep2-dep8-8k1k.yaml"
         decode:
-          num-worker: 2
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
@@ -12134,12 +12133,42 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-2p2d-dep2-tep8-5n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/2p2d-dep2-tep8-8k1k.yaml"
         decode:
           num-worker: 2
           tp: 8
           ep: 8
           dp-attn: false
+
+      # 2p4d DEP2+TEP4, 5n: conc 4
+      - conc-list: [4]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/2p4d-dep2-tep4-8k1k.yaml"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: false
+
+      # 3p1d DEP2+DEP8, 4n: conc 1024
+      - conc-list: [1024]
+        prefill:
+          num-worker: 3
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/3p1d-dep2-dep8-8k1k.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
 
       # 3p2d DEP2+DEP8, 6n: conc 512
       - conc-list: [512]
@@ -12149,57 +12178,27 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-3p2d-dep2-dep8-6n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/3p2d-dep2-dep8-8k1k.yaml"
         decode:
           num-worker: 2
           tp: 8
           ep: 8
           dp-attn: true
 
-      # 3p2d DEP2+TEP8, 6n: conc 32
-      - conc-list: [32]
+      # 6p1d DEP2+DEP8, 5n: conc 2048
+      - conc-list: [2048]
         prefill:
-          num-worker: 3
+          num-worker: 6
           tp: 2
           ep: 2
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-3p2d-dep2-tep8-6n.yaml"
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/6p1d-dep2-dep8-8k1k.yaml"
         decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: false
-
-      # 4p2d DEP2+DEP8, 6n: conc 4096
-      - conc-list: [4096]
-        prefill:
-          num-worker: 4
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-4p2d-dep2-dep8-6n.yaml"
-        decode:
-          num-worker: 2
+          num-worker: 1
           tp: 8
           ep: 8
           dp-attn: true
-
-      # 5p2d DEP2+TEP8, 7n: conc 4,64
-      - conc-list: [4, 64]
-        prefill:
-          num-worker: 5
-          tp: 2
-          ep: 2
-          dp-attn: true
-          additional-settings:
-          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/disagg-gb300-5p2d-dep2-tep8-7n.yaml"
-        decode:
-          num-worker: 2
-          tp: 8
-          ep: 8
-          dp-attn: false
 
 qwen3.5-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
