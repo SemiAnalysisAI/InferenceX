@@ -4158,4 +4158,4 @@
     - dsv4-fp4-b300-sglang
   description:
     - "Update B300 FP4 SGLang (non-MTP) image to latest nightly: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2 (was nightly-dev-cu13-20260529-a8cfae0b)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1913
