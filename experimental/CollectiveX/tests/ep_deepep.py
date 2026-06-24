@@ -71,6 +71,9 @@ def _per_block_dequant_3d(x_fp8, scales):
 class DeepEPBackend:
     name = "deepep"
     combine_needs_redispatch = False  # DeepEP combine reuses the handle (its own bench does too)
+    # Blackwell (B300) drops GPU clocks during the tiny small-T points, so the harness
+    # re-ramps clocks at each shape before timing it. Harmless (just untimed iters) on H100.
+    wants_warm_burst = True
     # Capabilities — run_ep.py REJECTS anything outside these BEFORE construction (no
     # fallback/mislabel). Expanded as each path is implemented + hardware-validated.
     #   normal mode: bf16 + fp8 (per-token block-128 cast) — validated intranode NVLink.

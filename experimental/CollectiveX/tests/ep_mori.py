@@ -41,6 +41,9 @@ class MoRIBackend:
     # MoRI wedges on a COLD dispatch jumping straight to a large T (validated on
     # MI355X); the harness ramps this backend's ladder geometrically from 1.
     needs_gradual_ramp = True
+    # MoRI WEDGES under a sustained warm-up burst (the harness's Blackwell clock-ramp)
+    # and is already steady at a short warm-up (~44us, reproducible) — so it opts out.
+    wants_warm_burst = False
     # Capabilities — run_ep.py REJECTS anything outside these BEFORE construction (no
     # fallback/mislabel). Expanded as each path is implemented + hardware-validated.
     # MoRI exposes quant_type (fp8) in EpDispatchCombineConfig; added once validated.

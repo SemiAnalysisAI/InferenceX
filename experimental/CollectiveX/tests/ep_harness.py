@@ -241,26 +241,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         wp = backend.make_problem(wt, wsi.to(device), wsw.to(device), wx)
         for _ in range(8):
             wh = backend.dispatch(wp); backend.stage(wp, wh); backend.combine(wp, wh)
-    # Sustained clock-ramp burst at the LARGEST warm shape. Ramping through small shapes
-    # (above) establishes connections but doesn't sustain enough load to boost GPU clocks
-    # on Blackwell (B300): at a short warm-up its FIRST timed points read ~20x cold. A
-    # sustained burst at warm_T pins clocks high so EVERY timed point (incl. small T) is
-    # steady-state. CX_FABRIC_WARM_BURST overrides (0 disables).
-    burst = int(os.environ.get("CX_FABRIC_WARM_BURST", "60"))
-    if burst > 0:
-        bt = warm_shapes[-1]
-        bi, bw = routing.build_global_routing(bt * ep_size, args.experts, args.topk,
-                                              args.routing, args.seed, experts_per_rank)
-        bsi, bsw = routing.rank_slice(bi, bw, rank, bt)
-        bx = routing.rank_activations(bt, args.hidden, args.seed, rank, device, torch.bfloat16)
-        bp = backend.make_problem(bt, bsi.to(device), bsw.to(device), bx)
-        for _ in range(burst):
-            bh = backend.dispatch(bp); backend.stage(bp, bh); backend.combine(bp, bh)
     torch.cuda.synchronize()
     try:
         dist.barrier()
     except Exception:
         pass
+    # Per-point clock-ramp burst (set up below, applied inside the loop): a ONE-TIME burst
+    # warms clocks, but on Blackwell (B300) the tiny small-T points let clocks drop again,
+    # so a mid-sweep T=64 reads ~20x cold. Re-ramping at EACH shape keeps every timed point
+    # steady-state. Gated by backend.wants_warm_burst — MoRI WEDGES on a sustained burst
+    # (and is already steady at warmup=8), so it opts out. CX_FABRIC_WARM_BURST overrides.
+    warm_burst = int(os.environ.get("CX_FABRIC_WARM_BURST", "40"))
+    do_burst = warm_burst > 0 and getattr(backend, "wants_warm_burst", False)
 
     rows: list[dict] = []
     for T in ladder:
@@ -271,6 +263,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         idx_s, w_s = routing.rank_slice(idx_g, w_g, rank, T)
         x = routing.rank_activations(T, args.hidden, args.seed, rank, device, torch.bfloat16)
         problem = backend.make_problem(T, idx_s.to(device), w_s.to(device), x)
+
+        # Re-ramp GPU clocks at THIS shape (untimed) so the point is measured at
+        # steady-state regardless of where it sits in the sweep (Blackwell drops clocks
+        # during the tiny small-T points). Skipped for backends that opt out (MoRI).
+        if do_burst:
+            for _ in range(warm_burst):
+                bh = backend.dispatch(problem); backend.stage(problem, bh); backend.combine(problem, bh)
+            torch.cuda.synchronize()
 
         # ---- correctness gate (untimed): dispatch -> stage -> combine ----
         h = backend.dispatch(problem)
