@@ -4153,3 +4153,11 @@
     - "Run the PR #1891 MiniMax-M3 MXFP8 B300 Dynamo-vLLM recipe set on top of current main."
     - "Uses the vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image and the TEP4/TEP8 8k1k topologies not covered by PR #1890."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
+- config-keys:
+    - dsr1-fp8-mi300x-vllm-disagg
+  description:
+    - "Add DSR1-0528 FP8 MI300X vLLM PD-disaggregation configuration"
+    - "Image: vllm-mori-pd:milestone4-aiterwheel"
+    - "Topology: 2P2D TP8 with MTP3 speculative decoding"
+    - "Runner: mi300x-disagg; framework: vllm-disagg"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1915

@@ -43,7 +43,18 @@ fi
 
 set +x
 
-export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
+# Pin RCCL/NCCL to the data-plane RDMA devices in explicit-match form.
+# Our NCCL 2.27 / RCCL 7.2 stack silently ignores the exclude/non-explicit form,
+# so every HCA name must carry its own leading '=' (e.g. '=rocep28s0,=rocep62s0,...').
+# This matches scripts/pd/lib_shared.sh in the AMDSOW delivery.
+_nccl_ib_hca=""
+IFS=',' read -ra _ib_arr <<< "$IBDEVICES"
+for _dev in "${_ib_arr[@]}"; do
+    [[ -n "$_dev" ]] && _nccl_ib_hca+="=${_dev},"
+done
+_nccl_ib_hca="${_nccl_ib_hca%,}"
+export NCCL_IB_HCA=${NCCL_IB_HCA:-$_nccl_ib_hca}
+export MORI_RDMA_DEVICES=${MORI_RDMA_DEVICES:-$IBDEVICES}
 
 # =============================================================================
 # Engine-specific environment
@@ -110,6 +121,11 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         elif [[ $NODENAME == mia1* ]]; then
             export UCX_IB_TRAFFIC_CLASS=104
             echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
+        elif [[ -n "${MORI_RDMA_TC:-}" ]]; then
+            # AMDSOW MI300X Thor fallback: align UCX RoCEv2 TC with MORI_RDMA_TC
+            # when the hostname does not match a known InfX pattern.
+            export UCX_IB_TRAFFIC_CLASS=$MORI_RDMA_TC
+            echo "[INFO] Falling back to UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from MORI_RDMA_TC"
         else
             echo "[INFO] No nicctl and unable to detect from hostname. Skipping QoS configuration."
         fi

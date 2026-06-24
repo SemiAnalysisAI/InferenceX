@@ -392,6 +392,10 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     DOCKER_ENV_ENGINE=(
         -e VLLM_WS_PATH=${WS_PATH}
         -e MODEL_PATH=$DOCKER_MODEL_PATH
+        -e IBDEVICES=${IBDEVICES}
+        -e MORI_RDMA_DEVICES=${MORI_RDMA_DEVICES:-$IBDEVICES}
+        -e MORI_RDMA_TC=${MORI_RDMA_TC:-104}
+        -e MORI_KV_EXTRA_CONFIG_JSON=${MORI_KV_EXTRA_CONFIG_JSON:-}
         -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
         -e UCX_SOCKADDR_TLS_PRIORITY=tcp
         -e UCX_MEMTYPE_CACHE=y
@@ -441,7 +445,9 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
 
-# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack).
+# Our vllm-mori-pd image is self-contained with bnxt_re ABI-8 libs; do NOT mount host RDMA
+# libraries for vllm-disagg to avoid ABI/version mismatch.
 RDMA_MOUNTS=()
 if [[ "$ENGINE" == "atom-disagg" ]]; then
 

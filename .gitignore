@@ -1,3 +1,5 @@
 **/__pycache__/**
 **/.coverage
 experimental/multiturn/vllm_benchmark/results/
+.venv/
+AMDSOW_CLUSTER_NOTES.md

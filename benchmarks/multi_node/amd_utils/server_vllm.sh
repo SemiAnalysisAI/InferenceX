@@ -52,8 +52,10 @@ MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
 source $WS_PATH/env.sh
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
-# RDMA IP for Nixl KV transfer (prefer 192.168.x.x subnet if available)
-rdma_ip=$(hostname -I | tr ' ' '\n' | grep '^192\.168\.' | head -1)
+# RDMA IP for Nixl KV transfer: prefer Thor data-plane subnet 172.29.x.x, then 192.168.x.x,
+# then fall back to the default-gateway interface IP.
+rdma_ip=$(hostname -I | tr ' ' '\n' | grep '^172\.29\.' | head -1)
+rdma_ip="${rdma_ip:-$(hostname -I | tr ' ' '\n' | grep '^192\.168\.' | head -1)}"
 rdma_ip="${rdma_ip:-$host_ip}"
 host_name=$(hostname)
 
@@ -217,6 +219,33 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
+# MoRIIO connector extra config: optional caller overrides merged with the
+# standard proxy endpoints. Prefer only proven keys; unknown keys are silently
+# ignored by the connector.
+MORI_KV_EXTRA_CONFIG_JSON="${MORI_KV_EXTRA_CONFIG_JSON:-{\"read_mode\":true,\"allow_full_cudagraph\":true}}"
+
+KV_TRANSFER_CONFIG_BASE=$(python3 -c "
+import json, os
+extra = json.loads(os.environ.get('MORI_KV_EXTRA_CONFIG_JSON', '{}'))
+print(json.dumps(extra, separators=(',', ':')))
+")
+
+# Prefill nodes are kv_producer; decode nodes are kv_consumer. The proxy IP,
+# ping port, and HTTP port are always nested inside kv_connector_extra_config.
+build_kv_config() {
+    local role="$1"
+    python3 -c "
+import json
+extra = json.loads('''${KV_TRANSFER_CONFIG_BASE}''')
+extra.update({'proxy_ip': '${NODE0_ADDR}', 'proxy_ping_port': '${PROXY_PING_PORT}', 'http_port': '${SERVER_PORT}'})
+cfg = {'kv_connector': 'MoRIIOConnector', 'kv_role': '${role}', 'kv_connector_extra_config': extra}
+print(json.dumps(cfg, separators=(',', ':')))
+"
+}
+
+KV_TRANSFER_CONFIG_PRODUCER=$(build_kv_config kv_producer)
+KV_TRANSFER_CONFIG_CONSUMER=$(build_kv_config kv_consumer)
+
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
     export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
@@ -256,7 +285,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config "${KV_TRANSFER_CONFIG_PRODUCER}" \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -300,6 +329,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Ready for benchmarking on ${host_name}:${host_ip}"
     echo "Benchmarking on ${host_name}:${host_ip}"
     cd $WS_PATH
+
+    if [[ "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+        export IS_MTP=true
+    else
+        export IS_MTP=false
+    fi
 
     export ROUTER_PORT=$ROUTER_PORT
     BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
@@ -410,7 +445,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "ERROR: eval failed; exiting node-0 with rc=1"
         exit 1
     fi
-
 elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "${host_name}:${host_ip} is Additional Prefill Node (Model: ${MODEL_NAME})"
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
@@ -422,7 +456,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config "${KV_TRANSFER_CONFIG_PRODUCER}" \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -478,7 +512,7 @@ else
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config "${KV_TRANSFER_CONFIG_CONSUMER}" \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
