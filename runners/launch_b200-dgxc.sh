@@ -437,7 +437,11 @@ else
         SALLOC_MEMORY_ARGS=(--mem=0)
     fi
     DEFAULT_SALLOC_TIME_LIMIT=180
-    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "${DURATION:-0}" -ge 5400 ]]; then
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "${DURATION:-0}" -ge 10800 ]]; then
+        # Three-hour profiles need enough lifecycle headroom for model startup,
+        # warmup, request draining, and CPU-heavy result processing.
+        DEFAULT_SALLOC_TIME_LIMIT=480
+    elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "${DURATION:-0}" -ge 5400 ]]; then
         # A 90-minute profile plus model startup, warmup, request draining,
         # and result processing can exceed the normal three-hour lifecycle.
         DEFAULT_SALLOC_TIME_LIMIT=300
