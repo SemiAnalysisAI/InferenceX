@@ -37,11 +37,12 @@ start_gpu_monitor
 MEM_FRAC_STATIC=0.8
 
 set -x
-#export AITER_QUICK_REDUCE_QUANTIZATION=INT4
-export ATOM_M3_SPARSE_USE_ASM_PA=1
+export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export MAX_MODEL_LEN=32768
 export MAX_NUM_BATCHED_TOKENS=32768
 export MAX_NUM_SEQS=256
+# (srok), not yet
+#    --kv_cache_dtype fp8 \
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
     --server-port $PORT \
@@ -52,7 +53,6 @@ python3 -m atom.entrypoints.openai_server \
     --max-model-len $MAX_MODEL_LEN \
     --max-num-batched-tokens $MAX_NUM_BATCHED_TOKENS \
     --max-num-seqs $MAX_NUM_SEQS \
-    --kv_cache_dtype fp8 \
     --trust-remote-code \
     --no-enable_prefix_caching \
     > $SERVER_LOG 2>&1 &
