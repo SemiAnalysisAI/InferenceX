@@ -83,8 +83,11 @@ on:
 concurrency:
   # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
   # not cancel each other; push has no sku input -> shares one 'push' group.
+  # cancel-in-progress FALSE: same-SKU dispatches QUEUE (serialize) rather than
+  # cancel — required so a 3-run reproducibility sweep on one SKU actually runs all
+  # three (with `true` the later dispatches silently cancelled the earlier ones).
   group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: read
