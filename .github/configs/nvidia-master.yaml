@@ -11115,7 +11115,7 @@ qwen3.5-fp8-h100-sglang-mtp:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc
+  image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: gb300
