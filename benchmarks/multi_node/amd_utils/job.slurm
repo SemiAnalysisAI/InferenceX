@@ -404,10 +404,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
-        -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-50000}
-        -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-16384}
-        -e MORI_IO_QP_MAX_CQE=\${MORI_IO_QP_MAX_CQE:-32768}
-        -e MORI_IO_QP_MAX_SGE=\${MORI_IO_QP_MAX_SGE:-2}
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
     DOCKER_ENV_ENGINE=(
