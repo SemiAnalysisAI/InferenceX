@@ -12,6 +12,12 @@ dynamo:
   install: true
   wheel: "1.2.0.dev20260526"
 
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
+srun_options:
+  mem: "0"
+
 slurm:
   time_limit: "8:00:00"
 
@@ -46,6 +52,8 @@ backend:
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
 
   decode_environment:
     VLLM_ENGINE_READY_TIMEOUT_S: "3600"
@@ -56,6 +64,8 @@ backend:
     UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
 
   vllm_config:
     prefill:
