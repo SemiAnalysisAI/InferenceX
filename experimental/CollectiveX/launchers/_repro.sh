@@ -27,7 +27,9 @@ repro() {  # $1=phase $2=T
     python3 - "$out" "$i" "$T" <<'PY'
 import json,sys
 try:
-    d=json.load(open(sys.argv[1])); r=d["rows"][0]
+    d=json.load(open(sys.argv[1])); T=int(sys.argv[3])
+    # MoRI's gradual ramp expands the ladder ([1..T]); pick the row that IS T, not rows[0].
+    r=next(r for r in d["rows"] if r["tokens_per_rank"]==T)
     print(f"  run{sys.argv[2]} T={sys.argv[3]} dispatch_p50={r['dispatch_us_p50']:.1f} "
           f"combine_p50={r['combine_us_p50']:.1f} serial_p50={r['serial_us_p50']:.1f} status={d['status']}")
 except Exception as e:
@@ -47,7 +49,9 @@ for phase, T in (("decode", 64), ("prefill", 512)):
     vals = []
     for f in sorted(glob.glob(f"results/_repro_{runner}_{backend}_{phase}_T{T}_{dt}_{mode}_run*.json")):
         try:
-            vals.append(json.load(open(f))["rows"][0]["dispatch_us_p50"])
+            d = json.load(open(f))
+            r = next(r for r in d["rows"] if r["tokens_per_rank"] == T)  # T row (ramp-safe)
+            vals.append(r["dispatch_us_p50"])
         except Exception:
             pass
     if len(vals) >= 2:

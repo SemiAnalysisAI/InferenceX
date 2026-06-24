@@ -34,6 +34,6 @@ srun --jobid="$JID" \
   --container-writable --container-remap-root --no-container-mount-home \
   --container-workdir=/cx --no-container-entrypoint --export=ALL \
   env COLLECTIVEX_IMAGE="$IMAGE" BACKEND=mori RUNNER=mi355x-8x TOPO=mi355x-xgmi TRANSPORT=xgmi \
-  DT=bf16 MODE=normal RM=tuned bash /cx/launchers/_repro.sh </dev/null 2>&1
+  DT=bf16 MODE=normal RM=tuned WARMUP=8 ITERS=40 bash /cx/launchers/_repro.sh </dev/null 2>&1
 scancel "$JID" 2>/dev/null || true
 echo "=== ORCH DONE ==="
