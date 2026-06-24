@@ -1349,6 +1349,12 @@ resulting merge commit retains both histories and supplies the latest AgentX
 warmup, timing, Weka-loader, metrics, Dynamo-session, and process-lifecycle
 fixes.
 
+Checkpoint artifact identity uses the stable runner label (for example,
+`gb200`) rather than the physical runner name (`gb200-nv_0`, `_1`, or `_2`).
+GitHub may schedule a failed matrix job on a different physical runner during
+`rerun --failed`; a physical-runner suffix would make that job unable to find
+the prior attempt's completed-concurrency checkpoints.
+
 ## Exploratory Frontier Tails
 
 Five boundary probes extend the validated core sweep. The 3P/2D TEP8/TP8
