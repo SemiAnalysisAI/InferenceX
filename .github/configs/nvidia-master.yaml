@@ -2004,7 +2004,7 @@ dsr1-fp8-b300-sglang:
 # DeepSeek-V4-Pro on B300 with sglang (non-MTP).
 # Uses nightly image with megamoe backend for high-concurrency profiles.
 dsv4-fp4-b300-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260529-a8cfae0b
+  image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
