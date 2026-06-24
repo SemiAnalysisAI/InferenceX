@@ -1304,3 +1304,27 @@ worker environments now set it to 1800 seconds. This preserves immediate
 Slurm detection of process exits while allowing the trace's extreme long-tail
 steps to finish. The failed matrix job will be retried through the floating
 branch ref after the remaining first-attempt jobs finish.
+
+## Middle/High-Interactivity Coverage and Dominated-Topology Pruning
+
+The first complete one-decode attempt showed that the selected DEP8/DEP8
+space covers approximately 25--46 p90 output tok/s/user, but leaves the
+middle/high-interactivity side of the intended frontier unsampled. The
+historical 3P/2D TEP8/TP8 curve was the validated shape for that region:
+c16--c64 progressed from roughly 71 to 49 tok/s/user with low TTFT, while c80
+provided the final approximately 47 tok/s/user boundary point. Its c72 point
+was dominated by c64 and c96 was a hard overload collapse.
+
+The master sweep therefore restores 3P/2D TEP8/TP8 in two bounded engine
+starts: c16/c24/c32/c40 and c48/c56/c64/c80. The recipe uses the June 21
+dataset and current runtime contract: 16K TEP prefill batching, PIECEWISE
+prefill graphs, FULL_DECODE_ONLY decode graphs, Model Runner V2, FlashInfer
+DSV4 attention, prefix retention 32768, 120-second etcd leases, and the
+1800-second model-execution timeout.
+
+The official one-decode results also make the tested 3P/1D and 4P/1D DEP
+curves unambiguously non-Pareto. Every 3P/1D point was dominated by a 2P/1D
+point on normalized throughput, p90 TTFT, and p90 interactivity; 4P/1D was
+farther behind and decode-starved. Their master entries and now-unreferenced
+recipes were removed. The retained official space is the 2P/1D DEP8/DEP8
+curve plus the restored 3P/2D middle/high-interactivity curve.

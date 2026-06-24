@@ -1,8 +1,10 @@
-name: "svf-vllm-disagg-gb200-3p1d-dep8-dep8-agentic"
+name: "svf-vllm-disagg-gb200-3p2d-tep8-tp8-agentic"
 
-# High-throughput topology: three DEP8 prefill workers and one DEP8 decode
-# worker. All four workers use attention DP8 / expert EP8, for 32 inference
-# GPUs total.
+# Middle/high-interactivity topology: three cache-affinitized TEP8 prefill
+# workers and two independent TP8 decode workers, for 40 inference GPUs.
+# The dense historical curve covered roughly 47--71 output tok/s/user through
+# c16--c80. This recipe re-establishes that curve on the June 21 AgentX corpus
+# with the current vLLM/Dynamo runtime contract.
 
 model:
   path: "deepseek-v4-pro"
@@ -26,9 +28,9 @@ resources:
   gpu_type: "gb200"
   gpus_per_node: 4
   prefill_nodes: 6
-  decode_nodes: 2
+  decode_nodes: 4
   prefill_workers: 3
-  decode_workers: 1
+  decode_workers: 2
   gpus_per_prefill: 8
   gpus_per_decode: 8
 
@@ -41,8 +43,6 @@ frontend:
   enable_multiple_frontends: false
   env:
     DYN_REQUEST_PLANE: "tcp"
-    # Dynamo's 10-second default can expire during brief etcd stalls while
-    # many long-loading DEP ranks initialize. Slurm still detects hard exits.
     ETCD_LEASE_TTL: "120"
   args:
     router-mode: "kv"
@@ -62,8 +62,6 @@ backend:
     NCCL_NVLS_ENABLE: "1"
     VLLM_SERVER_DEV_MODE: "1"
     VLLM_USE_V2_MODEL_RUNNER: "1"
-    # Long AgentX requests can make one DEP rank hold the EP step beyond
-    # vLLM's 300-second model-execution timeout.
     VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
     VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
     VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
@@ -98,21 +96,19 @@ backend:
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
       # Let vLLM select max-num-seqs for the long-context AgentX trace.
-      # max-num-seqs: 256
-      # DEP8 holds a full model replica per GPU. A 16K prefill step requires
-      # a 9.84 GiB FP4 MoE intermediate and OOMs before serving traffic.
-      max-num-batched-tokens: 8192
+      # max-num-seqs: 16
+      max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
+      # FULL capture conflicts with NCCL symmetric-memory registration on the
+      # TP prefill path; PIECEWISE preserves compilation and safe graph regions.
       compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
@@ -121,21 +117,20 @@ backend:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
       served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 1
+      tensor-parallel-size: 8
       pipeline-parallel-size: 1
-      data-parallel-size: 8
-      data-parallel-rpc-port: 13345
-      enable-expert-parallel: true
-      enable-ep-weight-filter: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_fp4_indexer_cache": true}'
       # Let vLLM select max-num-seqs and max-num-batched-tokens.
       # max-num-seqs: 512
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
+      # Decode is launch-bound. FULL_DECODE_ONLY produced the historical
+      # high-interactivity TP8 curve while avoiding prefill's FULL capture.
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
       stream-interval: 10
+      all2all-backend: "flashinfer_nvlink_one_sided"
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
 
