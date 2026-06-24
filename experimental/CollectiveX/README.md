@@ -16,11 +16,12 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 |---|---|
 | `env_capture.py` | Layer-0 environment + topology fingerprint → JSON (stdlib only) |
 | `run_nccl.py` | run stock `nccl-tests`, parse the text table, emit flat JSON (stdlib only) |
-| `run_deepep.py` | DeepEP dispatch+combine, normal mode, correctness-gated (torch + DeepEP) |
-| `run_mori.py` | MoRI (AMD) dispatch+combine, normal mode, correctness-gated (torch + MoRI) |
+| `tests/run_ep.py` | EP dispatch/combine entrypoint (torchrun): source-tokens-per-rank sweep, dispatch & combine timed **separately** |
+| `tests/ep_harness.py` | shared EP harness: token ladder, separated timing, correctness gate, doc emission (stdlib top) |
+| `tests/ep_deepep.py`, `tests/ep_mori.py` | per-backend adapters (DeepEP / MoRI) implementing the harness protocol |
 | `plot.py` | latency/bus-bw curves, B200-vs-GB200 overlay with a comparison guard (matplotlib) |
 | `launchers/common.sh` | shared helpers: image resolve, enroot squash, staging, nccl-tests build |
-| `launchers/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/mori/all) |
+| `launchers/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/mori/all) over `CX_PHASE` |
 | `launchers/launch_<sku>.sh` | per-SKU adapters: `launch_b200-dgxc.sh` (8× NVLink), `launch_b200-dgxc-slurm.sh` (2-node IB), `launch_gb200-nv.sh` (NVL72 MNNVL), `launch_mi355x-amds.sh` (8× XGMI, AMD MoRI + rccl) |
 | `CONTAINERS.md` | the pinned multi-arch container + audited library versions |
 | `results/` | flat JSON artifacts (+ `plots/`, raw captures) |
@@ -30,13 +31,15 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 
 ### Via GitHub Actions (`.github/workflows/collectivex-experimental.yml`)
 
-- **push** to `experimental/CollectiveX/**` → the **MI355X MoRI** dispatch/combine
-  run (the "CollectiveX Experimental" job; lands on a free `mi355x-amds` runner).
+- **push** to `experimental/CollectiveX/**` → the **MI355X MoRI** EP dispatch/combine
+  sweep, **one job per phase** (decode + prefill) via a matrix (lands on free
+  `mi355x-amds` runners).
 - **workflow_dispatch** → pick `sku` (gb200 / b200-dgxc / b200-multinode /
   mi355x), `benchmark` (nccl / deepep / mori / all — `mori` is AMD-only; `nccl`
-  on MI355X runs rccl-tests), ops,
-  sizes, ngpus. Lands on that SKU's self-hosted runner and runs
-  `launch_${RUNNER_NAME%%_*}.sh`.
+  on MI355X runs rccl-tests), `phase` (decode / prefill / **both** → a job each),
+  `tokens_ladder`, `dispatch_dtype`, ops, sizes, ngpus. Lands on that SKU's
+  self-hosted runner and runs `launch_${RUNNER_NAME%%_*}.sh`. For EP results
+  across all SKUs, dispatch once per `sku` with `phase=both`.
 
 Each job renders a results table to the **GitHub Actions job summary** (via
 `summarize.py --markdown` → `$GITHUB_STEP_SUMMARY`) and uploads the result JSONs
@@ -57,7 +60,9 @@ CX_BENCH=nccl bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh   # 
 Knobs: `CX_BENCH` (nccl|deepep|mori|all), `CX_OPS`, `CX_MIN_BYTES`/`CX_MAX_BYTES`,
 `CX_NGPUS`, `CX_TIME`, `CX_IMAGE`, `CX_SQUASH_DIR`, `CX_STAGE_DIR` (compute-visible
 staging — needed on GB200/watchtower), `CX_DRYRUN=1` (print plan, allocate
-nothing). Results land in `experimental/CollectiveX/results/`.
+nothing). EP (deepep/mori) adds `CX_PHASE` (decode|prefill|both), `CX_TOKENS_LADDER`
+(e.g. `"1 2 4 8 16 32 64 128"`), `CX_HIDDEN`/`CX_TOPK`/`CX_EXPERTS`,
+`CX_DISPATCH_DTYPE`, `CX_NUM_EP_GROUPS`. Results land in `experimental/CollectiveX/results/`.
 
 ### Offline (no GPU) — verify the parser/JSON pipeline
 
@@ -104,9 +109,9 @@ DeepSeek-V4 fallback images.
   validate it on first run and refresh `CONTAINERS.md` (expect CUDA 13 / NCCL 2.28 / torch 2.9).
 - **DeepEP** is not bundled in the multi-arch image → `run_in_container.sh` builds
   it via `rebuild-deepep` (CX_BENCH=deepep). Its Python API is version-sensitive;
-  `run_deepep.py` marks the dispatch/combine block `ADAPT HERE` — validate against
+  `tests/ep_deepep.py` follows the documented normal-mode API — validate against
   the built commit. B200 (x86_64) first; GB200 (aarch64) follows.
-- **MoRI / MI355X** (`run_mori.py` + `launch_mi355x-amds.sh`) is **validated on
+- **MoRI / MI355X** (`tests/ep_mori.py` + `launch_mi355x-amds.sh`) is **validated on
   hardware** (8× MI355X: dispatch+combine numerically correct, ~85 µs round-trip).
   It mirrors `ROCm/mori`'s example (config + `get_registered_combine_input_buffer`
   zero-copy path, `expected = input × #unique-destination-ranks`). Three

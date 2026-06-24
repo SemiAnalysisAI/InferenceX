@@ -11,7 +11,10 @@
 # Selector:        CX_BENCH = nccl | deepep | mori | all    (default nccl)
 #                  (mori = AMD ROCm EP; nccl/deepep = NVIDIA. `all` = nccl+deepep.)
 # NCCL knobs:      CX_OPS, CX_MIN_BYTES, CX_MAX_BYTES, CX_TRANSPORT, CX_NCCL_HOME
-# EP knobs (DeepEP/MoRI): CX_TOKENS_PER_RANK CX_HIDDEN CX_TOPK CX_EXPERTS CX_DISPATCH_DTYPE
+# EP knobs (DeepEP/MoRI), all -> tests/run_ep.py:
+#   CX_PHASE = decode | prefill | both (default decode)   <- picks the token sweep
+#   CX_TOKENS_LADDER (space/comma sep; blank = phase default), CX_TOKENS_PER_RANK (legacy single point)
+#   CX_HIDDEN CX_TOPK CX_EXPERTS CX_DISPATCH_DTYPE CX_ROUTING CX_NUM_EP_GROUPS CX_NUM_COMM_SMS
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
@@ -54,6 +57,38 @@ run_nccl_suite() {
   return "$sfail"
 }
 
+# Resolve the source-tokens-per-rank sweep: explicit CX_TOKENS_LADDER wins; else
+# the legacy single-point CX_TOKENS_PER_RANK becomes a one-point ladder; else
+# blank => tests/run_ep.py picks the phase default (decode small / prefill large).
+cx_ep_ladder() {
+  if [ -n "${CX_TOKENS_LADDER:-}" ]; then printf '%s' "$CX_TOKENS_LADDER"
+  elif [ -n "${CX_TOKENS_PER_RANK:-}" ]; then printf '%s' "$CX_TOKENS_PER_RANK"
+  else printf ''; fi
+}
+
+# run_ep_suite <backend: deepep|mori>
+# One tests/run_ep.py invocation per phase (decode/prefill/both); dispatch and
+# combine are timed separately inside it. One JSON per (backend, phase).
+run_ep_suite() {
+  local backend="$1" phase phases ladder rc=0
+  ladder="$(cx_ep_ladder)"
+  phases="${CX_PHASE:-decode}"
+  [ "$phases" = "both" ] && phases="decode prefill"
+  for phase in $phases; do
+    cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
+    if ! torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
+        --phase "$phase" --tokens-ladder "$ladder" \
+        --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
+        --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-balanced}" \
+        --num-ep-groups "${CX_NUM_EP_GROUPS:-1}" --num-comm-sms "${CX_NUM_COMM_SMS:-24}" \
+        --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
+        --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"; then
+      cx_log "WARN: $backend $phase run failed or invalid"; rc=1
+    fi
+  done
+  return "$rc"
+}
+
 run_deepep_suite() {
   # DeepEP is not bundled in the multi-arch image. Try to import; if absent,
   # attempt rebuild-deepep (srt-slurm setup script). Inability to run is a
@@ -67,13 +102,7 @@ run_deepep_suite() {
       return 1
     fi
   fi
-  torchrun --nproc_per_node="$CX_NGPUS" run_deepep.py \
-    --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
-    --tokens-per-rank "${CX_TOKENS_PER_RANK:-64}" --hidden "${CX_HIDDEN:-7168}" \
-    --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
-    --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" \
-    --env-json "$ENVJSON" --out "results/${CX_RUNNER}_deepep_${CX_TS}.json" \
-    || { cx_log "WARN: deepep run failed"; return 1; }
+  run_ep_suite deepep
 }
 
 run_mori_suite() {
@@ -84,12 +113,7 @@ run_mori_suite() {
     cx_log "WARN: mori not importable — needs the AMD MoRI image (rocm/sgl-dev:...-mori-...); cannot run mori"
     return 1
   fi
-  torchrun --nproc_per_node="$CX_NGPUS" run_mori.py \
-    --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
-    --tokens-per-rank "${CX_TOKENS_PER_RANK:-64}" --hidden "${CX_HIDDEN:-7168}" \
-    --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
-    --env-json "$ENVJSON" --out "results/${CX_RUNNER}_mori_${CX_TS}.json" \
-    || { cx_log "WARN: mori run failed"; return 1; }
+  run_ep_suite mori
 }
 
 rc=0

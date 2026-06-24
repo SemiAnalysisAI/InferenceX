@@ -12,7 +12,7 @@
 # (collective primitives via rccl-tests, the ROCm nccl-tests fork).
 #
 # !!! NOT yet validated on hardware (no MI355X cluster access at authoring time).
-# Treat the first on-runner run as validation — like run_deepep.py was on GB200.
+# Treat the first on-runner run as validation — like the DeepEP path was on GB200.
 #
 # Run from inside the InferenceX checkout on the MI355X login node:
 #     bash experimental/CollectiveX/launchers/launch_mi355x-amds.sh

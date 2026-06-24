@@ -31,7 +31,7 @@ The Milestone-0 spike ran for real on **both** B200 (8× NVLink island, x86_64) 
 - **Multi-arch container** for all NVIDIA SKUs: import by tag `lmsysorg/sglang:v0.5.11-cu130` (amd64 + arm64; index digest `sha256:061fb71f…` recorded for provenance) — one reference both arches; DeepEP via `rebuild-deepep`. Imported by tag, not digest (enroot anonymous auth needs a tag); v0.5.12-cu130 avoided (62-layer overlay-mount failure). See `CONTAINERS.md`.
 - **Per-SKU launch adapters** (`launchers/launch_<sku>.sh`, the InferenceX `launch_${RUNNER_NAME%%_*}.sh` convention) that run **any** benchmark via `CX_BENCH` (nccl|deepep|mori|all) through a shared `launchers/run_in_container.sh`.
 - **`on: push` workflow** (`.github/workflows/collectivex-experimental.yml`): push → MI355X MoRI dispatch/combine (the "CollectiveX Experimental" job); `workflow_dispatch` → chosen `sku`+`benchmark`. No merge to main; activates when the branch is pushed to GitHub.
-- **AMD MI355X / MoRI path validated** (first cross-vendor reach, ahead of Milestone 1): `run_mori.py` (MoRI dispatch+combine, mirrors `ROCm/mori`'s example with the zero-copy registered-combine-buffer path and `expected = input × unique-destination-ranks`), `launchers/launch_mi355x-amds.sh` (partition `compute`, node-local `/var/lib/squash` imported via `srun`, `--container-writable --container-remap-root`), ROCm MoRI image in `cx_default_image`, and `mi355x`/`mori` workflow options. **Validated on 8× MI355X** (dispatch+combine numerically correct, ~85 µs round-trip): the run surfaced three ionic_rdma-fabric constraints now baked into `run_mori.py` — a 2 GiB symmetric heap (these NICs cap RDMA MRs at ~4 GiB; MoRI registers the whole heap), a bounded `max_num_inp_token_per_rank`, and a hard-exit past MoRI's post-finalize shmem teardown assertion (see `CONTAINERS.md`).
+- **AMD MI355X / MoRI path validated** (first cross-vendor reach, ahead of Milestone 1): `tests/ep_mori.py` (MoRI dispatch+combine, mirrors `ROCm/mori`'s example with the zero-copy registered-combine-buffer path and `expected = input × unique-destination-ranks`), `launchers/launch_mi355x-amds.sh` (partition `compute`, node-local `/var/lib/squash` imported via `srun`, `--container-writable --container-remap-root`), ROCm MoRI image in `cx_default_image`, and `mi355x`/`mori` workflow options. **Validated on 8× MI355X** (dispatch+combine numerically correct, ~85 µs round-trip): the run surfaced three ionic_rdma-fabric constraints now baked into `tests/ep_mori.py` — a 2 GiB symmetric heap (these NICs cap RDMA MRs at ~4 GiB; MoRI registers the whole heap), a bounded `max_num_inp_token_per_rank`, and a hard-exit past MoRI's post-finalize shmem teardown assertion (see `CONTAINERS.md`).
 
 This supersedes the Milestone-0 "light single-script launcher" sketch below where they differ — launchers are now thin SKU adapters + a shared dispatcher (still light/experimental).
 
@@ -562,7 +562,7 @@ Scaffolding — deliberately light, matching `experimental/` convention (bare sc
 experimental/CollectiveX/
   README.md
   run_nccl.py        # argparse; run stock nccl-tests, parse its text table (do NOT assume JSON)
-  run_deepep.py      # one dispatch+combine shape, normal mode
+  tests/run_ep.py    # EP dispatch/combine sweep (DeepEP/MoRI); dispatch & combine timed separately
   env_capture.py     # Layer-0 env + topology fingerprint (torch.cuda.* + nvidia-smi topo) → json
   plot.py            # matplotlib, like token_position_decode_slo/*/plot_*.py
   launchers/
@@ -678,7 +678,7 @@ The spike lands as a few small PRs, each producing something runnable — not a 
      each tagged with topology-class and transport (aarch64 build for GB200)
 
 3. DeepEP dispatch+combine — B200 first
-   run_deepep.py, routing generator + reference combine for correctness,
+   tests/ep_deepep.py, routing generator + reference combine for correctness,
    reusing rebuild-deepep at job setup
    → one decode shape, normal mode, on B200; GB200 DeepEP fast-follow
 

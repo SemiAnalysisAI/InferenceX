@@ -49,6 +49,21 @@ on:
         description: Node count (gb200 multi-node MNNVL; 2 = 8 GPU). Blank/1 = single node.
         type: string
         default: ''
+      phase:
+        # EP only. 'both' fans out to one job per phase (decode + prefill).
+        description: EP phase — decode (small T) / prefill (large T); 'both' = a job each
+        type: choice
+        default: both
+        options: [both, decode, prefill]
+      tokens_ladder:
+        description: EP source-tokens-per-rank sweep (space/comma sep); blank = phase default
+        type: string
+        default: ''
+      dispatch_dtype:
+        description: EP dispatch payload precision
+        type: choice
+        default: bf16
+        options: [bf16, fp8]
 
 concurrency:
   # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
@@ -64,16 +79,23 @@ jobs:
   # runs launch_mi355x-amds.sh (CX_BENCH=mori). The AMD workspace is compute-
   # visible, so no CX_STAGE_DIR; the launcher defaults to 8 GPUs.
   experimental:
-    name: CollectiveX Experimental
+    name: CollectiveX Experimental (${{ matrix.phase }})
     if: github.event_name == 'push'
     runs-on: mi355x
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # MI355X MoRI EP dispatch/combine, one job per phase: decode (small T) +
+        # prefill (large T, clamped to the registerable heap).
+        phase: [decode, prefill]
     env:
       CX_BENCH: mori
+      CX_PHASE: ${{ matrix.phase }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
-      - name: Launch MI355X MoRI
+      - name: Launch MI355X MoRI (${{ matrix.phase }})
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
@@ -84,7 +106,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: collectivex_mi355x_mori_${{ github.run_id }}
+          name: collectivex_mi355x_mori_${{ matrix.phase }}_${{ github.run_id }}
           path: experimental/CollectiveX/results/*.json
           if-no-files-found: warn
 
@@ -93,6 +115,12 @@ jobs:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ${{ inputs.sku }}
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # 'both' -> one job per phase (decode + prefill); else a single job. Phase
+        # only affects EP (deepep/mori); nccl ignores it (runs the same twice).
+        phase: ${{ fromJSON(inputs.phase == 'both' && '["decode","prefill"]' || format('["{0}"]', inputs.phase)) }}
     env:
       CX_BENCH: ${{ inputs.benchmark }}
       CX_OPS: ${{ inputs.ops }}
@@ -100,12 +128,15 @@ jobs:
       CX_MAX_BYTES: ${{ inputs.max_bytes }}
       CX_NGPUS: ${{ inputs.ngpus }}
       CX_NODES: ${{ inputs.nodes }}
+      CX_PHASE: ${{ matrix.phase }}
+      CX_TOKENS_LADDER: ${{ inputs.tokens_ladder }}
+      CX_DISPATCH_DTYPE: ${{ inputs.dispatch_dtype }}
       # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
       CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
-      - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }}
+      - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }} (${{ matrix.phase }})
         env:
           RUNNER_NAME: ${{ runner.name }}
         run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
@@ -116,6 +147,6 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ github.run_id }}
+          name: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ matrix.phase }}_${{ github.run_id }}
           path: experimental/CollectiveX/results/*.json
           if-no-files-found: warn

@@ -117,6 +117,32 @@ def _fnum(x, fmt):
     return format(x, fmt) if isinstance(x, (int, float)) else "—"
 
 
+def _moe_sorted(moe):
+    return sorted(moe, key=lambda x: (x.get("backend", ""), x.get("phase", ""), x.get("ep_size", 0)))
+
+
+def _moe_sweep_table(d):
+    """Markdown sweep table for one EP doc — the rows already ARE the ladder, so
+    emit one row per source-tokens-per-rank point. Skips old single-point docs
+    (no rows[])."""
+    rows = d.get("rows")
+    if not rows:
+        return []
+    sh = d.get("shape", {})
+    head = (f"\n**`{d.get('backend')}` · {d.get('phase')} · ep{d.get('ep_size')} · "
+            f"H{sh.get('hidden')} top{sh.get('topk')} E{sh.get('experts')} "
+            f"{sh.get('dispatch_dtype')} {sh.get('routing')}** — latency vs source tokens/rank\n")
+    out = [head,
+           "| tokens/rank | global tokens | dispatch µs | combine µs | round-trip µs | tokens/s | recv tok | correct |",
+           "|--:|--:|--:|--:|--:|--:|--:|:--:|"]
+    for r in rows:
+        out.append(f"| {r.get('tokens_per_rank')} | {r.get('global_tokens')} | "
+                   f"{_fnum(r.get('dispatch_us_p50'), '.2f')} | {_fnum(r.get('combine_us_p50'), '.2f')} | "
+                   f"{_fnum(r.get('roundtrip_us_p50'), '.2f')} | {_fnum(r.get('tokens_per_second'), '.3e')} | "
+                   f"{r.get('recv_tokens', '—')} | {'✅' if r.get('correct') else '❌'} |")
+    return out
+
+
 def render_plain(nccl, moe, n_valid, total) -> str:
     out = []
     hdr = "CollectiveX results"
@@ -133,15 +159,14 @@ def render_plain(nccl, moe, n_valid, total) -> str:
             out.append(f"  {d['op']:<16}{d.get('status',''):<9}{_peak_busbw(rows):>12.1f}"
                        f"{_lat_floor(rows):>10.2f}{(avg if avg is not None else float('nan')):>11.1f}")
     if moe:
-        out.append("\nMoE dispatch+combine (DeepEP / MoRI):")
-        out.append(f"  {'backend':<10}{'mode':<8}{'status':<9}{'rt_p50':>9}{'rt_p99':>9}{'disp_p50':>10}{'tokens/s':>13}  correct")
-        for d in sorted(moe, key=lambda x: x.get("backend", "")):
+        out.append("\nMoE EP dispatch/combine (DeepEP / MoRI) — headline (* = headline tokens/rank):")
+        out.append(f"  {'backend':<9}{'phase':<8}{'ep':>3} {'status':<9}{'T*':>5}{'disp_p50':>10}{'comb_p50':>10}{'rt_p50':>9}  correct")
+        for d in sorted(moe, key=lambda x: (x.get("backend", ""), x.get("phase", ""))):
             m, c = d.get("metrics", {}), d.get("correctness", {})
-            tps = m.get("tokens_per_second")
-            out.append(f"  {d.get('backend',''):<10}{d.get('mode',''):<8}{d.get('status',''):<9}"
-                       f"{(m.get('roundtrip_us_p50') or float('nan')):>9.1f}{(m.get('roundtrip_us_p99') or float('nan')):>9.1f}"
-                       f"{(m.get('dispatch_us_p50') or float('nan')):>10.1f}"
-                       f"{(tps if tps is not None else float('nan')):>13.3e}   {c.get('passed')}")
+            out.append(f"  {d.get('backend',''):<9}{d.get('phase',''):<8}{str(d.get('ep_size','')):>3} {d.get('status',''):<9}"
+                       f"{str(m.get('headline_tokens_per_rank','')):>5}"
+                       f"{(m.get('dispatch_us_p50') or float('nan')):>10.1f}{(m.get('combine_us_p50') or float('nan')):>10.1f}"
+                       f"{(m.get('roundtrip_us_p50') or float('nan')):>9.1f}   {c.get('passed')}")
     return "\n".join(out)
 
 
@@ -167,15 +192,22 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
                    "reduce-scatter / all-to-all; all-gather input/rank = size ÷ #GPUs). Small "
                    "sizes are latency-bound (busbw ≈ 0); peak bandwidth is at the largest size.")
     if moe:
-        out.append("\n### MoE dispatch+combine (DeepEP / MoRI)\n")
-        out.append("| backend | mode | status | rt p50 (µs) | rt p99 (µs) | dispatch p50 (µs) | tokens/s | correct |")
-        out.append("|---|---|---|--:|--:|--:|--:|:--:|")
-        for d in sorted(moe, key=lambda x: x.get("backend", "")):
+        out.append("\n### MoE EP dispatch / combine (DeepEP / MoRI)\n")
+        out.append("Headline = the reference point (tokens/rank shown as `T*`); the per-line "
+                   "sweep tables below carry the full source-tokens-per-rank curve.\n")
+        out.append("| backend | phase | ep | status | T\\* | dispatch p50 (µs) | combine p50 (µs) | round-trip p50 (µs) | tokens/s | correct |")
+        out.append("|---|---|--:|---|--:|--:|--:|--:|--:|:--:|")
+        for d in _moe_sorted(moe):
             m, c = d.get("metrics", {}), d.get("correctness", {})
-            out.append(f"| `{d.get('backend')}` | {d.get('mode')} | {_emoji(d.get('status'))} | "
-                       f"{_fnum(m.get('roundtrip_us_p50'), '.1f')} | {_fnum(m.get('roundtrip_us_p99'), '.1f')} | "
-                       f"{_fnum(m.get('dispatch_us_p50'), '.1f')} | {_fnum(m.get('tokens_per_second'), '.3e')} | "
-                       f"{'✅' if c.get('passed') else '❌'} |")
+            out.append(f"| `{d.get('backend')}` | {d.get('phase','')} | {d.get('ep_size','')} | {_emoji(d.get('status'))} | "
+                       f"{m.get('headline_tokens_per_rank','—')} | {_fnum(m.get('dispatch_us_p50'), '.1f')} | "
+                       f"{_fnum(m.get('combine_us_p50'), '.1f')} | {_fnum(m.get('roundtrip_us_p50'), '.1f')} | "
+                       f"{_fnum(m.get('tokens_per_second'), '.3e')} | {'✅' if c.get('passed') else '❌'} |")
+        for d in _moe_sorted(moe):
+            out += _moe_sweep_table(d)
+        out.append("\n> EP sweep: only source tokens/rank varies along a line; global tokens = "
+                   "tokens/rank × ep. Dispatch and combine are timed **separately** (combine's "
+                   "setup dispatch runs untimed); round-trip = dispatch + combine.")
     if not total:
         out.append("\n> No result files found — the benchmark produced nothing.")
     return "\n".join(out)

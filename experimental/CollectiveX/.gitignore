@@ -10,3 +10,5 @@ results/*.json
 results/plots/
 results/raw_*.txt
 results/raw_*.txt.stderr
+# running local-only reflection log (not a committed artifact)
+notes.md
