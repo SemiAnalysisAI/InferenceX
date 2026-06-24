@@ -181,6 +181,31 @@ fi
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
 echo "DECODE_SERVER_CONFIG (after TP/EP/DP): $DECODE_SERVER_CONFIG"
 
+if [[ "${ENABLE_PREFIX_CACHING:-0}" == "1" ]]; then
+    for _cfg in PREFILL_SERVER_CONFIG DECODE_SERVER_CONFIG; do
+        _val="${!_cfg}"
+        _val="${_val//--no-enable-prefix-caching/}"
+        if ! echo "$_val" | grep -q -- '--enable-prefix-caching'; then
+            _val+=" --enable-prefix-caching"
+        fi
+        printf -v "$_cfg" '%s' "$_val"
+    done
+    echo "[vLLM] ENABLE_PREFIX_CACHING=1 -> prefix cache enabled on prefill + decode"
+fi
+
+if [[ -n "${MAX_MODEL_LEN:-}" && "${MAX_MODEL_LEN}" != "0" ]]; then
+    for _cfg in PREFILL_SERVER_CONFIG DECODE_SERVER_CONFIG; do
+        _val="${!_cfg}"
+        if echo "$_val" | grep -q -- '--max-model-len'; then
+            _val=$(echo "$_val" | sed -E "s/--max-model-len[=[:space:]]+[0-9]+/--max-model-len ${MAX_MODEL_LEN}/g")
+        else
+            _val+=" --max-model-len ${MAX_MODEL_LEN}"
+        fi
+        printf -v "$_cfg" '%s' "$_val"
+    done
+    echo "[vLLM] MAX_MODEL_LEN=${MAX_MODEL_LEN}"
+fi
+
 # =============================================================================
 # Container Synchronization
 # =============================================================================
@@ -217,13 +242,161 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
+# =============================================================================
+# KV connector selection
+# =============================================================================
+_MORIIO_EXTRA="\"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}"
+KVT_PREFILL="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", ${_MORIIO_EXTRA}}"
+KVT_DECODE="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", ${_MORIIO_EXTRA}}"
+
+MC_PREFILL_CONN="{\"kv_connector\":\"MooncakeConnector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"${MC_PROTOCOL:-tcp}\"}}"
+MC_DECODE_CONN="{\"kv_connector\":\"MooncakeConnector\",\"kv_role\":\"kv_consumer\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"${MC_PROTOCOL:-tcp}\"}}"
+LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://${LMCACHE_HOST:-127.0.0.1}}"
+LMC_CONN="{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"${LMCACHE_CONNECT_HOST}\",\"lmcache.mp.port\":${LMCACHE_PORT:-5555}}}"
+
+case "${PREFILL_KV_CONNECTOR:-moriio}" in
+    mooncake-lmcachemp)
+        KVT_PREFILL="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"connectors\":[${MC_PREFILL_CONN},${LMC_CONN}]}}"
+        ;;
+    mooncake)
+        KVT_PREFILL="$MC_PREFILL_CONN"
+        ;;
+    moriio|"")
+        ;;
+    *)
+        echo "ERROR: unsupported PREFILL_KV_CONNECTOR=${PREFILL_KV_CONNECTOR}" >&2
+        exit 1
+        ;;
+esac
+
+case "${DECODE_KV_CONNECTOR:-moriio}" in
+    mooncake)
+        KVT_DECODE="$MC_DECODE_CONN"
+        ;;
+    moriio|"")
+        ;;
+    *)
+        echo "ERROR: unsupported DECODE_KV_CONNECTOR=${DECODE_KV_CONNECTOR}" >&2
+        exit 1
+        ;;
+esac
+
+if [[ "$NODE_RANK" -lt "$xP" ]]; then
+    ROLE_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio}"
+else
+    ROLE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
+fi
+echo "[KV] PREFILL_KV_CONNECTOR=${PREFILL_KV_CONNECTOR:-moriio}; DECODE_KV_CONNECTOR=${DECODE_KV_CONNECTOR:-moriio}; rank connector=${ROLE_KV_CONNECTOR}"
+
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
-    export VLLM_NIXL_SIDE_CHANNEL_HOST=${rdma_ip}
+    local bind_ip="${VLLM_BIND_IP:-${rdma_ip}}"
+    export VLLM_HOST_IP="${bind_ip}"
+    export VLLM_NIXL_SIDE_CHANNEL_HOST="${bind_ip}"
     export VLLM_NIXL_SIDE_CHANNEL_PORT=5600
     for env_pair in ${MODEL_ENVS}; do
         export "$env_pair"
     done
+    echo "[vLLM] VLLM_HOST_IP=${VLLM_HOST_IP}"
+}
+
+start_lmcache_mp_if_needed() {
+    if [[ "$ROLE_KV_CONNECTOR" != "mooncake-lmcachemp" ]]; then
+        return 0
+    fi
+
+    LMCACHE_PATCH_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/lmcache_mp_patch"
+    mkdir -p "$LMCACHE_PATCH_DIR"
+    cat > "$LMCACHE_PATCH_DIR/sitecustomize.py" <<'PY'
+"""Keep LMCacheMP from producing proxy-visible PD transfer params.
+
+MultiConnector permits only one child connector to return kv_transfer_params.
+Mooncake owns the prefill->decode PD protocol; LMCacheMP should only provide
+local L2 lookup/retrieve/store on the prefill engine.
+"""
+import builtins
+import sys
+
+_orig_import = builtins.__import__
+
+
+def _patch_module(mod):
+    cls = getattr(mod, "LMCacheMPConnector", None)
+    if cls is None or getattr(cls, "_inferencex_pd_params_patch", False):
+        return
+    orig = cls.request_finished
+
+    def request_finished(self, request, block_ids):
+        async_save, params = orig(self, request, block_ids)
+        req_params = getattr(request, "kv_transfer_params", None)
+        if req_params and (
+            req_params.get("do_remote_decode") or req_params.get("do_remote_prefill")
+        ):
+            return async_save, None
+        return async_save, params
+
+    cls.request_finished = request_finished
+    cls._inferencex_pd_params_patch = True
+
+
+def _import(name, globals=None, locals=None, fromlist=(), level=0):
+    mod = _orig_import(name, globals, locals, fromlist, level)
+    target = "lmcache.integration.vllm.lmcache_mp_connector"
+    if name == target or target in sys.modules:
+        _patch_module(sys.modules[target])
+    return mod
+
+
+builtins.__import__ = _import
+if "lmcache.integration.vllm.lmcache_mp_connector" in sys.modules:
+    _patch_module(sys.modules["lmcache.integration.vllm.lmcache_mp_connector"])
+
+try:
+    from vllm.distributed.kv_transfer.kv_connector.v1 import multi_connector
+    _orig_observe = multi_connector.MultiConnectorPromMetrics.observe
+
+    def _safe_observe(self, transfer_stats_data, engine_idx):
+        if not isinstance(transfer_stats_data, dict):
+            return _orig_observe(self, transfer_stats_data, engine_idx)
+        filtered = {
+            connector_id: stats_data
+            for connector_id, stats_data in transfer_stats_data.items()
+            if connector_id in getattr(self, "_prom_metrics", {})
+        }
+        if filtered:
+            return _orig_observe(self, filtered, engine_idx)
+
+    multi_connector.MultiConnectorPromMetrics.observe = _safe_observe
+except Exception:
+    pass
+PY
+    export PYTHONPATH="$LMCACHE_PATCH_DIR${PYTHONPATH:+:$PYTHONPATH}"
+
+    python3 -c 'import lmcache.integration.vllm.lmcache_mp_connector; print("LMCacheMPConnector import OK")'
+
+    LMCACHE_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/lmcache_${host_name}.log"
+    echo "[LMCacheMP] starting server on ${LMCACHE_HOST:-127.0.0.1}:${LMCACHE_PORT:-5555} (http ${LMCACHE_HTTP_PORT:-8080})"
+    lmcache server \
+        --host "${LMCACHE_HOST:-127.0.0.1}" --port "${LMCACHE_PORT:-5555}" \
+        --http-host "${LMCACHE_HOST:-127.0.0.1}" --http-port "${LMCACHE_HTTP_PORT:-8080}" \
+        --l1-size-gb "${LMCACHE_L1_SIZE_GB:-2500}" \
+        --l1-init-size-gb "${LMCACHE_L1_INIT_SIZE_GB:-20}" \
+        --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-3600}" \
+        --chunk-size "${LMCACHE_CHUNK_SIZE:-256}" \
+        --max-workers "${LMCACHE_MAX_WORKERS:-8}" \
+        --eviction-policy LRU \
+        > "$LMCACHE_LOG" 2>&1 &
+
+    for _i in $(seq 1 120); do
+        if curl -sf --max-time 3 "http://${LMCACHE_HOST:-127.0.0.1}:${LMCACHE_HTTP_PORT:-8080}/healthcheck" >/dev/null 2>&1; then
+            echo "[LMCacheMP] server healthy"
+            return 0
+        fi
+        sleep 2
+    done
+    echo "ERROR: LMCache MP server failed to become healthy; tailing $LMCACHE_LOG" >&2
+    tail -n 80 "$LMCACHE_LOG" >&2 || true
+    return 1
 }
 
 # =============================================================================
@@ -247,16 +420,21 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "================================================"
 
     setup_vllm_env
+    start_lmcache_mp_if_needed
 
-    # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
-    echo "Using external vllm-router container (started by job.slurm on this node)"
+    if [[ "${ROUTER_TYPE:-vllm-router}" == "mc-proxy" ]]; then
+        echo "Using in-container Mooncake/LMCache PD proxy on ROUTER_PORT=${ROUTER_PORT}"
+    else
+        # Router is started as an external container by job.slurm (VLLM_ROUTER_IMAGE)
+        echo "Using external vllm-router container (started by job.slurm on this node)"
+    fi
 
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '${KVT_PREFILL}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -281,6 +459,18 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
+
+    if [[ "${ROUTER_TYPE:-vllm-router}" == "mc-proxy" ]]; then
+        MC_PROXY_DECODER_IP="${IP_ARRAY[$xP]:-${NODE0_ADDR}}"
+        MC_PROXY_LOG="/run_logs/slurm_job-${SLURM_JOB_ID}/mc_lmcache_pd_proxy.log"
+        echo "[Mooncake] starting in-container PD proxy :${ROUTER_PORT} (P=${NODE0_ADDR}:${SERVER_PORT} D=${MC_PROXY_DECODER_IP}:${SERVER_PORT})"
+        python3 -c 'import httpx,fastapi,uvicorn' 2>/dev/null || pip install -q httpx fastapi uvicorn
+        ( python3 "$WS_PATH/mooncake_lmcache_proxy.py" --host 0.0.0.0 --port "${ROUTER_PORT}" \
+            --prefiller-hosts "${NODE0_ADDR}" --prefiller-ports "${SERVER_PORT}" \
+            --decoder-hosts "${MC_PROXY_DECODER_IP}" --decoder-ports "${SERVER_PORT}" \
+            > "$MC_PROXY_LOG" 2>&1 & ) || echo "[Mooncake] WARN: proxy failed to start (see $MC_PROXY_LOG)"
+        sleep 6
+    fi
 
     # Wait for proxy /health to confirm it is accepting requests
     HEALTH_BARRIER_CMD="python3 $WS_PATH/sync.py barrier \
@@ -416,13 +606,14 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     echo "Using prefill config: $PREFILL_SERVER_CONFIG"
 
     setup_vllm_env
+    start_lmcache_mp_if_needed
 
     SERVED_MODEL="${MODEL_NAME}"
     PREFILL_CMD="vllm serve ${MODEL_PATH} \
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '${KVT_PREFILL}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -478,7 +669,7 @@ else
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config '{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", \"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}}' \
+        --kv-transfer-config '${KVT_DECODE}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
