@@ -22,13 +22,19 @@ REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
 # shellcheck source=common.sh
 source "$HERE/common.sh"
 
+# Cluster identity from runners/launch_h100-dgxc-slurm.sh (the serving launcher):
+# partition hpc-gpu-1, account customer, known-bad node hpc-gpu-1-7 excluded. This
+# is the SAME cluster validated over SSH. CRITICAL: /home is login-local (not
+# compute-visible) — the squash MUST live on /mnt/nfs; the GH runner workspace is
+# already on /mnt/nfs (compute-visible) so the checkout mounts directly (no staging).
 RUNNER_NAME="${RUNNER_NAME:-h100-dgxc-slurm}"
-PARTITION="${CX_PARTITION:-gpu-2}"
-ACCOUNT="${CX_ACCOUNT:-benchmark}"
+PARTITION="${CX_PARTITION:-hpc-gpu-1}"
+ACCOUNT="${CX_ACCOUNT:-customer}"
+EXCLUDE_NODES="${CX_EXCLUDE_NODES:-hpc-gpu-1-7}"
 NGPUS="${CX_NGPUS:-8}"
 TIME_MIN="${CX_TIME:-45}"
 IMAGE="${CX_IMAGE:-$(cx_default_image h100)}"
-SQUASH_DIR="${CX_SQUASH_DIR:-/home/sa-shared/containers}"
+SQUASH_DIR="${CX_SQUASH_DIR:-/mnt/nfs/sa-shared/containers}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
@@ -48,8 +54,8 @@ cx_log "squash=$SQUASH_FILE  mount=$MOUNT_SRC -> $MOUNT_DIR"
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
-salloc --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$NGPUS" \
-       --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+salloc --partition="$PARTITION" --account="$ACCOUNT" --exclude="$EXCLUDE_NODES" \
+       --gres=gpu:"$NGPUS" --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
 JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
 [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
 cx_log "JOB_ID=$JOB_ID"

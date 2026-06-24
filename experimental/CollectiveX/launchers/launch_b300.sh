@@ -25,6 +25,7 @@ source "$HERE/common.sh"
 RUNNER_NAME="${RUNNER_NAME:-b300}"
 PARTITION="${CX_PARTITION:-batch_1}"
 ACCOUNT="${CX_ACCOUNT:-benchmark}"   # B300 scheduler REQUIRES a valid account/partition combo
+EXCLUDE_NODES="${CX_EXCLUDE_NODES:-b300-018}"  # known-bad node (per the serving launcher)
 NGPUS="${CX_NGPUS:-8}"
 TIME_MIN="${CX_TIME:-45}"
 IMAGE="${CX_IMAGE:-$(cx_default_image b300)}"
@@ -49,8 +50,8 @@ cx_log "squash=$SQUASH_FILE  mount=$MOUNT_SRC -> $MOUNT_DIR"
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
-salloc --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$NGPUS" \
-       --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+salloc --partition="$PARTITION" --account="$ACCOUNT" --exclude="$EXCLUDE_NODES" \
+       --gres=gpu:"$NGPUS" --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
 JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
 [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
 cx_log "JOB_ID=$JOB_ID"
