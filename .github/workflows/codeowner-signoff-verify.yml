@@ -338,14 +338,30 @@ jobs:
               `https://github.com/sgl-project/sglang` (cookbook under `docs_new`), or the
               published recipe page (`https://recipes.vllm.ai/` or
               `https://docs.sglang.io/cookbook/...`). If no such link is present, FAIL.
-            - (b) RECIPE COMPLETE: Fetch the linked recipe (use the `fetch` MCP tool or WebFetch;
-              for a recipe PR, read its diff via `gh pr diff` against that repo if accessible)
-              and verify it includes ALL of the reproduction-critical information present in this
-              InferenceX PR's recipe. At minimum cross-check: model, hardware/SKU, inference
-              engine + image tag/version, parallelism (TP/EP/DP/PP), quantization, kv-cache
-              dtype, key server launch flags, required env vars, and benchmark settings
-              (concurrency, sequence lengths / ISL-OSL). FAIL and list every detail that is in
-              the InferenceX PR but missing from the linked recipe.
+            - (b) MAJOR SERVER ARGS MATCH: Fetch the linked recipe (use the `fetch` MCP tool or
+              WebFetch; for a recipe PR, read its diff via `gh pr diff` against that repo if
+              accessible) and compare it to this PR's launch command. The recipe only needs to
+              match the MAJOR, deployment-defining server args — NOT every flag, and explicitly
+              NOT the knobs that are specific to InferenceX benchmark/harness tuning.
+                MAJOR (must match — these define the model, parallelism, precision, and which
+                kernels run, so they determine the perf profile):
+                  - model / model-path, hardware/SKU
+                  - parallelism: TP / EP / DP / PP and DP-attention flags
+                    (`--enable-dp-attention`, `--enable-dp-lm-head`, etc.)
+                  - quantization and kv-cache dtype
+                  - kernel-selection backends: `--attention-backend`, `--moe-runner-backend`,
+                    `--enable-flashinfer-allreduce-fusion` and similar
+                  - other flags that materially change the served model or its throughput
+                INFERENCEX-SPECIFIC (do NOT require a match — list as informational only, never a
+                failure): per-lane sweep tuning and harness plumbing such as
+                `--scheduler-recv-interval`, `--chunked-prefill-size`, `--disable-piecewise-cuda-graph`,
+                `SGLANG_RADIX_FORCE_MISS` and similar env toggles, concurrency / sequence-length
+                sweep ranges, ports, result filenames, and image tag/version.
+              FAIL only if a MAJOR arg in this PR is missing from (or contradicts) the recipe;
+              list exactly those. Treat the InferenceX-specific diffs as expected and mention them
+              only as a brief informational note, not as blockers. If a flag's effect is
+              equivalent to a recipe default (e.g. quantization auto-detected from an FP4 model),
+              say so and do not count it against the recipe.
             - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
               link does not pass this workflow's standard — a link is required.
 
