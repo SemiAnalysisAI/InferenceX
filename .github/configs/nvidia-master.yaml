@@ -1719,7 +1719,7 @@ dsr1-fp4-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
