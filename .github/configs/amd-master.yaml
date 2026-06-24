@@ -2737,7 +2737,7 @@ minimaxm3-fp8-mi325x-vllm-mtp:
 # TP-sharded as in the single-node M3 TP8 recipe. Per-worker serve flags live in
 # benchmarks/multi_node/amd_utils/models_vllm.yaml (MiniMax-M3-MXFP8).
 minimaxm3-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-556bc4e3a089378e9df2482659898192da18db15
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x-disagg

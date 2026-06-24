@@ -80,54 +80,6 @@ if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
     export EXTRA_DOCKER_MOUNTS
     echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
 fi
-
-# ── In-tree vLLM MoRIIO patch: auto-apply for known-affected images ──
-# The vLLM MoRIIOConnector (image vllm/vllm-openai-rocm:minimax-m3) ships a
-# transposed-KV-layout bug: it assumes the FlashAttention layout
-# [2, num_blocks, ...] (K/V axis outer) but this vLLM's backends allocate
-# [num_blocks, 2, ...] (K/V axis inner), so every disagg block transfer reads
-# the wrong region. Invisible to throughput, but corrupts GQA/non-MLA accuracy
-# (MiniMax-M3 gsm8k 0.0008 -> 0.958). Fix ships as a unified diff (see
-# patches/moriio/ and patches/README.md), applied to the vLLM package dir
-# inside the container at startup, ahead of the server launch below.
-#
-# Auto-applied when the image tag contains "minimax-m3" (and not the already-
-# fixed "-hetkv" rebuild), unless the caller sets MORIIO_KV_PATCH=skip. The
-# repo is already bind-mounted at DOCKER_MOUNT_PATH ("/workspace"), so the
-# diff needs no extra mount -- just an in-container `patch` call. A failed
-# apply aborts the container: silently running unpatched would silently
-# corrupt accuracy, not just skip a feature.
-#
-# The single diff bundles three layered fixes (all in patches/moriio/,
-# see patches/README.md):
-#   1. KV-layout: the load-bearing accuracy fix (axis-aware per-layer offsets;
-#      gsm8k 0.0008 -> 0.958). Required for homogeneous TP too.
-#   2. heterogeneous-TP (no-op for homogeneous TP, required for
-#      PREFILL_TP_SIZE != DECODE_TP_SIZE -- see nvidia/amd-master.yaml's TP4+TP8
-#      configs): handshake/notify port addressing maps each decode rank to the
-#      correct prefill rank instead of its own raw tp_rank (stock
-#      MoRIIOConnector has no fan-out concept at all), and guards (fail loud)
-#      the KV-head-split / prefill-TP>decode-TP cases MoRIIO can't serve.
-#   3. dup-ack: with DECODE_TP_SIZE > PREFILL_TP_SIZE, N decode ranks fan in to
-#      1 prefill rank and each sends its own completion ack for the same
-#      transfer_id. Freeing KV blocks on the first ack (the original
-#      MoRIIOConnector behavior) both crashes EngineCore on the late second ack
-#      (AssertionError in Scheduler._update_from_kv_xfer_finished) and risks
-#      silently corrupting KV if the slower decode rank's read is still in
-#      flight when the blocks are reused. Fix mirrors NIXL's
-#      consumer_notification_counts_by_req: producer counts acks per
-#      transfer_id (consumer embeds its own tp_size in the notify message) and
-#      only frees once all expected consumers have acked.
-_MORIIO_DIFF="$DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/moriio/moriio-minimax-m3-disagg.diff"
-_MORIIO_PATCH_CMD=""
-if [[ "${MORIIO_KV_PATCH:-auto}" != "skip" ]] \
-   && [[ -f "$_MORIIO_DIFF" ]] \
-   && [[ "${DOCKER_IMAGE_NAME:-}" == *"minimax-m3"* ]] \
-   && [[ "${DOCKER_IMAGE_NAME:-}" != *"hetkv"* ]]; then
-    _MORIIO_PATCH_CMD="patch -p1 -d /usr/local/lib/python3.12/dist-packages < /workspace/benchmarks/multi_node/amd_utils/patches/moriio/moriio-minimax-m3-disagg.diff || exit 1"
-    echo "[job.slurm] will auto-apply vLLM MoRIIO KV-layout + heterogeneous-TP + dup-ack diff inside container: ${_MORIIO_DIFF}"
-fi
-
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -640,7 +592,6 @@ fi
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         set -o pipefail
         mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
-        ${_MORIIO_PATCH_CMD:-}
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 
