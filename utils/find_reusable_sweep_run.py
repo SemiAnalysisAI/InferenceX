@@ -23,6 +23,10 @@ from typing import Any
 
 API_BASE = "https://api.github.com"
 DEFAULT_ALLOWED_AUTHOR_ASSOCIATIONS = ("OWNER", "MEMBER", "COLLABORATOR")
+REUSABLE_AGGREGATE_ARTIFACTS = {
+    "results_bmk",
+    "eval_results_all",
+}
 
 
 def github_api(
@@ -190,7 +194,7 @@ def find_latest_successful_pr_run(
         if str(run.get("head_sha") or "") not in valid_shas:
             continue
         names = artifact_names(repo, int(run["id"]), token)
-        if "results_bmk" not in names and "eval_results_all" not in names:
+        if not has_reusable_result_artifacts(names):
             continue
         return run
     return None
@@ -264,14 +268,22 @@ def validate_reusable_run(
         )
 
     names = artifact_names(repo, run_id, token)
-    if "results_bmk" not in names and "eval_results_all" not in names:
+    if not has_reusable_result_artifacts(names):
         raise RuntimeError(
-            f"Reusable source run {run_id} has no results_bmk or eval_results_all artifact."
+            f"Reusable source run {run_id} has no benchmark, eval, or "
+            "agentic result artifact."
         )
 
 
+def has_reusable_result_artifacts(names: set[str]) -> bool:
+    """Return whether a run produced ingest-relevant result artifacts."""
+    return bool(names & REUSABLE_AGGREGATE_ARTIFACTS) or any(
+        name.startswith("bmk_agentic_") for name in names
+    )
+
+
 def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
-    """Return artifact names from a workflow run."""
+    """Return unexpired artifact names from a workflow run."""
     artifacts = paginated_github_api(
         repo,
         f"/actions/runs/{run_id}/artifacts",
@@ -281,7 +293,9 @@ def artifact_names(repo: str, run_id: int, token: str) -> set[str]:
     return {
         str(artifact.get("name"))
         for artifact in artifacts
-        if isinstance(artifact, dict) and artifact.get("name")
+        if isinstance(artifact, dict)
+        and artifact.get("name")
+        and not artifact.get("expired", False)
     }
 
 
@@ -298,6 +312,11 @@ def main() -> int:
         "--full-sweep-label",
         default="full-sweep-enabled,non-canary-full-sweep-enabled,full-sweep-fail-fast,full-sweep-fail-fast-no-canary",
         help="Comma-separated PR labels treated as 'full sweep'; reuse requires at least one.",
+    )
+    parser.add_argument(
+        "--reuse-incompatible-label",
+        default="evals-only",
+        help="Comma-separated PR labels that make sweep artifacts ineligible for reuse.",
     )
     parser.add_argument("--pinned-run-command", default="/reuse-sweep-run")
     parser.add_argument(
@@ -412,6 +431,18 @@ def main() -> int:
         for value in args.full_sweep_label.split(",")
         if value.strip()
     }
+    incompatible_labels = {
+        value.strip()
+        for value in args.reuse_incompatible_label.split(",")
+        if value.strip()
+    }
+    incompatible_present = incompatible_labels.intersection(labels)
+    if incompatible_present:
+        names = ", ".join(sorted(incompatible_present))
+        raise RuntimeError(
+            f"PR #{pr_number} has {args.pinned_run_command} authorization but "
+            f"uses reuse-incompatible label(s): {names}."
+        )
     if not accepted_full_sweep_labels.intersection(labels):
         accepted = ", ".join(sorted(accepted_full_sweep_labels))
         raise RuntimeError(
