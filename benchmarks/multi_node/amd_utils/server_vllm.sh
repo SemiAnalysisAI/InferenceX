@@ -152,32 +152,81 @@ print(f'DECODE_MODEL_ENVS=\"{dev}\"')
 
 echo "Loaded model configuration for: $MODEL_NAME"
 
-# Apply tensor-parallel size and EP/DP flags from submit pipeline.
-if [[ -n "${PREFILL_TP_SIZE:-}" ]]; then
+# Apply parallelism flags from the submit pipeline.
+#
+# DP8EP ("EP8") layout: data-parallel across the node's GPUs with expert-parallel
+# over the DP ranks via MoRI all2all and TP=1. This is vLLM's data-parallel path
+# (NOT SGLang's --enable-dp-attention) and mirrors the AMDSOW reference
+# VLLM_DP8EP_FLAGS (exp_common.sh): the tensor-parallel flag is replaced with
+# `--tensor-parallel-size 1 --data-parallel-size <gpus> --enable-expert-parallel
+# --all2all-backend mori`. Triggered per role by PREFILL_DP8EP / DECODE_DP8EP
+# (true|1); the branch is self-contained and takes precedence over TP/EP/DP.
+PREFILL_DP8EP="${PREFILL_DP8EP:-false}"
+DECODE_DP8EP="${DECODE_DP8EP:-false}"
+DP8EP_ALL2ALL_BACKEND="${DP8EP_ALL2ALL_BACKEND:-mori}"
+
+_dp8ep_enabled() { [[ "$1" == "true" || "$1" == "1" ]]; }
+
+# $1 = data-parallel size (GPUs in the role's single-node DP group)
+_dp8ep_flags() {
+    printf -- '--tensor-parallel-size 1 --data-parallel-size %s --enable-expert-parallel --all2all-backend %s' \
+        "$1" "${DP8EP_ALL2ALL_BACKEND}"
+}
+
+# Prefill side
+if _dp8ep_enabled "$PREFILL_DP8EP"; then
     if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
-        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP_SIZE}/g")
+        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/$(_dp8ep_flags "${GPUS_PER_NODE:-8}")/")
     else
-        PREFILL_SERVER_CONFIG+=" --tensor-parallel-size ${PREFILL_TP_SIZE}"
+        PREFILL_SERVER_CONFIG+=" $(_dp8ep_flags "${GPUS_PER_NODE:-8}")"
+    fi
+else
+    if [[ -n "${PREFILL_TP_SIZE:-}" ]]; then
+        if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+            PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${PREFILL_TP_SIZE}/g")
+        else
+            PREFILL_SERVER_CONFIG+=" --tensor-parallel-size ${PREFILL_TP_SIZE}"
+        fi
+    fi
+    if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
+        PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
+    fi
+    if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
+        PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
     fi
 fi
-if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
+
+# Decode side
+if _dp8ep_enabled "$DECODE_DP8EP"; then
     if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
-        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${DECODE_TP_SIZE}/g")
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/$(_dp8ep_flags "${GPUS_PER_NODE:-8}")/")
     else
-        DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
+        DECODE_SERVER_CONFIG+=" $(_dp8ep_flags "${GPUS_PER_NODE:-8}")"
+    fi
+else
+    if [[ -n "${DECODE_TP_SIZE:-}" ]]; then
+        if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--tensor-parallel-size'; then
+            DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--tensor-parallel-size[[:space:]]+[0-9]+/--tensor-parallel-size ${DECODE_TP_SIZE}/g")
+        else
+            DECODE_SERVER_CONFIG+=" --tensor-parallel-size ${DECODE_TP_SIZE}"
+        fi
+    fi
+    if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
+        DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
+    fi
+    if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
+        DECODE_SERVER_CONFIG+=" --enable-dp-attention"
     fi
 fi
-if [[ "${PREFILL_ENABLE_EP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
-    PREFILL_SERVER_CONFIG+=" --enable-expert-parallel"
-fi
-if [[ "${PREFILL_ENABLE_DP:-false}" == "true" ]] && ! echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    PREFILL_SERVER_CONFIG+=" --enable-dp-attention"
-fi
-if [[ "${DECODE_ENABLE_EP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-expert-parallel'; then
-    DECODE_SERVER_CONFIG+=" --enable-expert-parallel"
-fi
-if [[ "${DECODE_ENABLE_DP:-false}" == "true" ]] && ! echo "$DECODE_SERVER_CONFIG" | grep -q -- '--enable-dp-attention'; then
-    DECODE_SERVER_CONFIG+=" --enable-dp-attention"
+
+# MTP speculative decoding. vLLM deepseek_mtp requires the spec config on BOTH
+# producer (prefill) and consumer (decode) so MTP layers match across the PD pair
+# for KV transfer (AMDSOW vllm_PxDy_mtpX_NpMd.sh applies it to both engines). The
+# JSON is single-quoted so it survives the eval in PREFILL_CMD / DECODE_CMD.
+if [[ "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+    _mtp_spec_flag="--speculative-config '{\"method\":\"deepseek_mtp\",\"num_speculative_tokens\":${DECODE_MTP_SIZE}}'"
+    PREFILL_SERVER_CONFIG+=" ${_mtp_spec_flag}"
+    DECODE_SERVER_CONFIG+=" ${_mtp_spec_flag}"
 fi
 
 echo "PREFILL_SERVER_CONFIG (after TP/EP/DP): $PREFILL_SERVER_CONFIG"
@@ -219,10 +268,13 @@ echo "Decode  node IPs: ${DECODE_ARGS}"
 # MoRI-IO proxy ZMQ registration port (must match vllm-router --vllm-discovery-address)
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 
-# MoRIIO connector extra config: optional caller overrides merged with the
-# standard proxy endpoints. Prefer only proven keys; unknown keys are silently
-# ignored by the connector.
-MORI_KV_EXTRA_CONFIG_JSON="${MORI_KV_EXTRA_CONFIG_JSON:-{\"read_mode\":true,\"allow_full_cudagraph\":true}}"
+# MoRIIO connector extra config: caller-supplied knobs (read_mode,
+# allow_full_cudagraph, ...) merged with the standard proxy endpoints below.
+# Defaults enable the proven read_mode + full-cudagraph knobs. Must be EXPORTED
+# so the python builders read it via os.environ; the default is held in its own
+# var to avoid the ${VAR:-{...}} nested-brace parse that appends a stray '}'.
+_MORI_KV_EXTRA_DEFAULT='{"read_mode":true,"allow_full_cudagraph":true}'
+export MORI_KV_EXTRA_CONFIG_JSON="${MORI_KV_EXTRA_CONFIG_JSON:-$_MORI_KV_EXTRA_DEFAULT}"
 
 KV_TRANSFER_CONFIG_BASE=$(python3 -c "
 import json, os
@@ -285,7 +337,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config "${KV_TRANSFER_CONFIG_PRODUCER}" \
+        --kv-transfer-config '${KV_TRANSFER_CONFIG_PRODUCER}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -456,7 +508,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config "${KV_TRANSFER_CONFIG_PRODUCER}" \
+        --kv-transfer-config '${KV_TRANSFER_CONFIG_PRODUCER}' \
         ${PREFILL_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
@@ -512,7 +564,7 @@ else
         --served-model-name ${SERVED_MODEL} \
         --port $SERVER_PORT \
         --trust-remote-code \
-        --kv-transfer-config "${KV_TRANSFER_CONFIG_CONSUMER}" \
+        --kv-transfer-config '${KV_TRANSFER_CONFIG_CONSUMER}' \
         ${DECODE_SERVER_CONFIG}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then

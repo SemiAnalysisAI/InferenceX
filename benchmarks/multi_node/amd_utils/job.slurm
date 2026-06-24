@@ -102,6 +102,8 @@ DECODE_ENABLE_DP="${DECODE_ENABLE_DP:-false}"
 PREFILL_TP_SIZE="${PREFILL_TP_SIZE:-8}"
 DECODE_TP_SIZE="${DECODE_TP_SIZE:-8}"
 DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
+PREFILL_DP8EP="${PREFILL_DP8EP:-false}"
+DECODE_DP8EP="${DECODE_DP8EP:-false}"
 
 # Router selection: "vllm-router" (external container) or "moriio" (in-container proxy)
 ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
@@ -316,7 +318,7 @@ SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
 # vLLM external router container
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260511-e667ebb}"
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
@@ -384,6 +386,8 @@ DOCKER_ENV_COMMON=(
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
+    -e PREFILL_DP8EP=\$PREFILL_DP8EP
+    -e DECODE_DP8EP=\$DECODE_DP8EP
     -e IS_MULTINODE=\$IS_MULTINODE
 )
 
@@ -393,9 +397,10 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e VLLM_WS_PATH=${WS_PATH}
         -e MODEL_PATH=$DOCKER_MODEL_PATH
         -e IBDEVICES=${IBDEVICES}
+        -e NCCL_IB_HCA
         -e MORI_RDMA_DEVICES=${MORI_RDMA_DEVICES:-$IBDEVICES}
         -e MORI_RDMA_TC=${MORI_RDMA_TC:-104}
-        -e MORI_KV_EXTRA_CONFIG_JSON=${MORI_KV_EXTRA_CONFIG_JSON:-}
+        -e MORI_KV_EXTRA_CONFIG_JSON
         -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
         -e UCX_SOCKADDR_TLS_PRIORITY=tcp
         -e UCX_MEMTYPE_CACHE=y

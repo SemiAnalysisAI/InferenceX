@@ -33,8 +33,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_ACCOUNT="$USER"
     export SLURM_PARTITION="compute"
     export SLURM_JOB_NAME="benchmark-disagg.job"
-    # Exclude known-bad MI300X nodes; let Slurm pick from the rest.
-    export SLURM_EXCLUDE_NODES="${AMDSOW_SLURM_EXCLUDE_NODES:-chi-mi300x-049}"
+    # Exclude known-bad MI300X nodes if any; empty means let Slurm pick from all idle nodes.
+    export SLURM_EXCLUDE_NODES="${AMDSOW_SLURM_EXCLUDE_NODES:-}"
     export MODEL_NAME=${MODEL##*/}
     # Host-side model directory; job.slurm mounts ${MODEL_DIR} -> /models in the container.
     # Override with AMDSOW_MODEL_DIR if your site stages weights elsewhere.
@@ -44,6 +44,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # Broadcom Thor data-plane RDMA devices. Override with AMDSOW_IBDEVICES if
     # cluster_prepare_amd.sh reports different names.
     export IBDEVICES="${AMDSOW_IBDEVICES:-rocep28s0,rocep62s0,rocep79s0,rocep96s0,rocep158s0,rocep190s0,rocep206s0,rocep222s0}"
+    export MORI_RDMA_DEVICES="${AMDSOW_MORI_RDMA_DEVICES:-$IBDEVICES}"
     export MORI_RDMA_TC=104
     export GPUS_PER_NODE=8
 

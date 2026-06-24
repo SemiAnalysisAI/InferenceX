@@ -47,6 +47,12 @@ Required environment variables:
   MODEL_NAME       Model name directory
   CONTAINER_IMAGE  Docker image name (e.g., vllm_disagg_pd:latest)
   RUNNER_NAME      Runner identifier (for job name)
+
+Optional environment variables:
+  SUBMIT_DRY_RUN     When 1, print the resolved sbatch command and the per-node
+                     env (propagated via --export=ALL) then exit WITHOUT
+                     submitting. For offline, no-GPU validation.
+  SLURM_REUSE_JOBID  Attach to an existing allocation instead of calling sbatch.
 USAGE
 }
 
@@ -113,7 +119,13 @@ export PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP}
 export DECODE_TP_SIZE=$(( $DECODE_NODES * $DECODE_TP / $DECODE_WORKERS ))
 export DECODE_ENABLE_EP=${DECODE_ENABLE_EP}
 export DECODE_ENABLE_DP=${DECODE_ENABLE_DP}
-export DECODE_MTP_SIZE=${DECODE_MTP_SIZE}
+export DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
+# DP8EP booleans (1k1k EP8 rows + mixed EP8-decode rows). vLLM does data-parallel
+# attention via --data-parallel-size (+ --enable-expert-parallel --all2all-backend),
+# distinct from the SGLang --enable-dp-attention path. Forwarded to job.slurm via
+# --export=ALL so server_vllm.sh can emit the DP8EP flag set when true.
+export PREFILL_DP8EP=${PREFILL_DP8EP:-false}
+export DECODE_DP8EP=${DECODE_DP8EP:-false}
 
 export NUM_NODES=$NUM_NODES
 export GPUS_PER_NODE=$GPUS_PER_NODE
@@ -157,7 +169,7 @@ fi
 # Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
 # Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
+SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi
@@ -215,6 +227,7 @@ fi
 sbatch_cmd=(
     sbatch
     --parsable
+    --export=ALL
     --exclusive
     -N "$NUM_NODES"
     -n "$NUM_NODES"
@@ -228,6 +241,27 @@ sbatch_cmd=(
     --error "${BENCHMARK_LOGS_DIR}/slurm_job-%j.err"
     "$(dirname "$0")/job.slurm"
 )
+
+# Offline dry-run: print the resolved sbatch command + the per-node env that
+# --export=ALL will propagate, emit a placeholder parsable job id, and exit
+# without submitting. Used for no-GPU validation of command construction.
+if [[ "${SUBMIT_DRY_RUN:-0}" == "1" ]]; then
+    {
+        echo "SUBMIT_DRY_RUN=1: not calling sbatch. Resolved command:"
+        printf '  '; printf '%q ' "${sbatch_cmd[@]}"; printf '\n'
+        echo "Per-node env (propagated to job.slurm via --export=ALL):"
+        for v in ENGINE NUM_NODES GPUS_PER_NODE xP yD \
+                 PREFILL_TP_SIZE PREFILL_ENABLE_EP PREFILL_ENABLE_DP PREFILL_DP8EP \
+                 DECODE_TP_SIZE DECODE_ENABLE_EP DECODE_ENABLE_DP DECODE_DP8EP \
+                 DECODE_MTP_SIZE SPEC_DECODING MODEL_NAME MODEL_DIR DOCKER_IMAGE_NAME \
+                 BENCH_INPUT_LEN BENCH_OUTPUT_LEN BENCH_MAX_CONCURRENCY \
+                 BENCH_REQUEST_RATE BENCH_RANDOM_RANGE_RATIO; do
+            printf '  %s=%s\n' "$v" "${!v:-}"
+        done
+    } >&2
+    echo "DRYRUN-0"
+    exit 0
+fi
 
 JOB_ID=$("${sbatch_cmd[@]}")
 if [[ $? -ne 0 ]]; then

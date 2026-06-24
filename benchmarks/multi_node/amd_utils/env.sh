@@ -108,7 +108,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
             if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
                 export UCX_IB_TRAFFIC_CLASS=96
                 echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-            elif [[ $NODENAME == mia1* ]]; then
+            elif [[ $NODENAME == mia1* ]] || [[ $NODENAME == a[0-9][0-9]u[0-9]* ]]; then
                 export UCX_IB_TRAFFIC_CLASS=104
                 echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
             fi
@@ -118,7 +118,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
             export UCX_IB_TRAFFIC_CLASS=96
             echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
+        elif [[ $NODENAME == mia1* ]] || [[ $NODENAME == a[0-9][0-9]u[0-9]* ]]; then
             export UCX_IB_TRAFFIC_CLASS=104
             echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
         elif [[ -n "${MORI_RDMA_TC:-}" ]]; then
@@ -221,7 +221,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
                 export MORI_RDMA_TC=96
                 export MORI_IO_TC=96
                 echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-            elif [[ $NODENAME == mia1* ]]; then
+            elif [[ $NODENAME == mia1* ]] || [[ $NODENAME == a[0-9][0-9]u[0-9]* ]]; then
                 export MORI_RDMA_TC=104
                 export MORI_IO_TC=104
                 echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
@@ -236,7 +236,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
             export MORI_RDMA_TC=96
             export MORI_IO_TC=96
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
+        elif [[ $NODENAME == mia1* ]] || [[ $NODENAME == a[0-9][0-9]u[0-9]* ]]; then
             export MORI_RDMA_TC=104
             export MORI_IO_TC=104
             echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"

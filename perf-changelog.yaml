@@ -4157,7 +4157,8 @@
     - dsr1-fp8-mi300x-vllm-disagg
   description:
     - "Add DSR1-0528 FP8 MI300X vLLM PD-disaggregation configuration"
-    - "Image: vllm-mori-pd:milestone4-aiterwheel"
-    - "Topology: 2P2D TP8 with MTP3 speculative decoding"
+    - "Image: docker.io/chaeminlimmb/vllm-mori-pd:milestone4-aiterwheel"
+    - "Topology: 1P1D/1P2D/1P3D/2P1D/2P2D TP8, DP8EP wide-EP (1k1k c462+), and mixed TP8-prefill|EP8-decode (8k1k c256/512), with MTP 0-3"
     - "Runner: mi300x-disagg; framework: vllm-disagg"
+    - "Fabric: Thor/bnxt RDMA with MoRIIO kv-connector on 172.29.x data-plane subnet"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
