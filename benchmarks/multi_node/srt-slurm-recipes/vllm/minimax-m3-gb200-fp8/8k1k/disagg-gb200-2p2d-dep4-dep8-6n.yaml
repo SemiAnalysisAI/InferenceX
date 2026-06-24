@@ -49,7 +49,6 @@ backend:
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -61,7 +60,6 @@ backend:
     VLLM_FLASHINFER_ALLREDUCE_BACKEND: "mnnvl"
     UCX_MEMTYPE_CACHE: "n"
     UCX_MEMTYPE_REG_WHOLE: "n"
-    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
     UCX_CUDA_IPC_ENABLE_MNNVL: "y"
     NCCL_CUMEM_ENABLE: "1"
     NCCL_MNNVL_ENABLE: "1"
@@ -81,7 +79,6 @@ backend:
       max-model-len: 9472
       language-model-only: true
       kv-cache-dtype: fp8
-      attention-backend: FLASHINFER
       stream-interval: 32
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 16384
@@ -99,7 +96,6 @@ backend:
       max-model-len: 9472
       language-model-only: true
       kv-cache-dtype: fp8
-      attention-backend: FLASHINFER
       stream-interval: 32
       max-num-seqs: 512
       max-num-batched-tokens: 16384
