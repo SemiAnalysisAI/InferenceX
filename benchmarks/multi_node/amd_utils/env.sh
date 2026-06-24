@@ -197,6 +197,8 @@ else
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
 
+    export SGLANG_HEALTH_CHECK_TIMEOUT=600
+
     # GLM-5: uses NSA (not MLA), needs fused-decode-MLA disabled + fast loading
     if [[ "$MODEL_NAME" == "GLM-5-FP8" ]]; then
         export SGLANG_ROCM_FUSED_DECODE_MLA=0
