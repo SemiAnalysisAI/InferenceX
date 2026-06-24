@@ -59,21 +59,42 @@ data = {
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
 
 if is_multinode:
-    # TODO: Eventually will have to have a separate condition in here for multinode disagg and
-    # multinode agg. For now, just assume that multinode implies disagg.
+    # Detect topology from the prefill/decode GPU split. A disaggregated run keeps
+    # prefill and decode in separate pools (decode GPUs > 0); an aggregated ("agg")
+    # run colocates them in one pool and so reports zero decode GPUs. Classify on
+    # that split rather than trusting the DISAGG env flag.
+    topo_env = get_required_env_vars(['PREFILL_GPUS', 'DECODE_GPUS'])
+    prefill_gpus = int(topo_env['PREFILL_GPUS'])
+    decode_gpus = int(topo_env['DECODE_GPUS'])
+    is_agg = decode_gpus == 0
 
-    multinode_env = get_required_env_vars(['PREFILL_GPUS', 'DECODE_GPUS', 'PREFILL_NUM_WORKERS', 'PREFILL_TP',
-                                          'PREFILL_EP', 'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP', 'DECODE_EP', 'DECODE_DP_ATTN'])
-    prefill_gpus = int(multinode_env['PREFILL_GPUS'])
-    decode_gpus = int(multinode_env['DECODE_GPUS'])
-    prefill_num_workers = int(multinode_env['PREFILL_NUM_WORKERS'])
-    prefill_tp = int(multinode_env['PREFILL_TP'])
-    prefill_ep = int(multinode_env['PREFILL_EP'])
-    prefill_dp_attn = multinode_env['PREFILL_DP_ATTN']
-    decode_num_workers = int(multinode_env['DECODE_NUM_WORKERS'])
-    decode_tp = int(multinode_env['DECODE_TP'])
-    decode_ep = int(multinode_env['DECODE_EP'])
-    decode_dp_attn = multinode_env['DECODE_DP_ATTN']
+    if is_agg:
+        # Aggregated multinode has no decode pool, so the DECODE_* detail vars may be
+        # absent; read all detail vars tolerantly and default to zero/empty.
+        detail_env = {
+            'PREFILL_NUM_WORKERS': os.environ.get('PREFILL_NUM_WORKERS', '0'),
+            'PREFILL_TP': os.environ.get('PREFILL_TP', '0'),
+            'PREFILL_EP': os.environ.get('PREFILL_EP', '0'),
+            'PREFILL_DP_ATTN': os.environ.get('PREFILL_DP_ATTN', ''),
+            'DECODE_NUM_WORKERS': os.environ.get('DECODE_NUM_WORKERS', '0'),
+            'DECODE_TP': os.environ.get('DECODE_TP', '0'),
+            'DECODE_EP': os.environ.get('DECODE_EP', '0'),
+            'DECODE_DP_ATTN': os.environ.get('DECODE_DP_ATTN', ''),
+        }
+    else:
+        # Disaggregated multinode requires the full prefill+decode env contract.
+        detail_env = get_required_env_vars(['PREFILL_NUM_WORKERS', 'PREFILL_TP', 'PREFILL_EP',
+                                            'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP',
+                                            'DECODE_EP', 'DECODE_DP_ATTN'])
+
+    prefill_num_workers = int(detail_env['PREFILL_NUM_WORKERS'])
+    prefill_tp = int(detail_env['PREFILL_TP'])
+    prefill_ep = int(detail_env['PREFILL_EP'])
+    prefill_dp_attn = detail_env['PREFILL_DP_ATTN']
+    decode_num_workers = int(detail_env['DECODE_NUM_WORKERS'])
+    decode_tp = int(detail_env['DECODE_TP'])
+    decode_ep = int(detail_env['DECODE_EP'])
+    decode_dp_attn = detail_env['DECODE_DP_ATTN']
 
     total_gpus = prefill_gpus + decode_gpus
     if total_gpus <= 0:
@@ -87,6 +108,8 @@ if is_multinode:
 
     multi_node_data = {
         'is_multinode': True,
+        # decode_gpus == 0 => aggregated, not disaggregated (overrides DISAGG env).
+        'disagg': not is_agg,
         'prefill_tp': prefill_tp,
         'prefill_ep': prefill_ep,
         'prefill_dp_attention': prefill_dp_attn,
