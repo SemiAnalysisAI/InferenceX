@@ -351,6 +351,10 @@ def test_run_sweep_checks_changelog_before_reuse_and_setup() -> None:
         "!contains(github.event.pull_request.labels.*.name, 'evals-only')"
         in jobs["reuse-sweep-gate"]["if"]
     )
+    assert (
+        "!contains(github.event.pull_request.labels.*.name, 'all-evals')"
+        not in jobs["reuse-sweep-gate"]["if"]
+    )
     setup_if = jobs["setup"]["if"]
     assert "needs.check-changelog.outputs.skip-pr-sweep != 'true'" in setup_if
     assert "github.event_name == 'push'" in setup_if
@@ -376,7 +380,7 @@ def test_merge_helper_waits_for_pr_checks_before_merge() -> None:
     assert "CHECK_TIMEOUT_SECONDS" in script
     assert "prepare_perf_changelog_merge.py" in script
     assert "git commit --allow-empty" in script
-    assert "uses all-evals, which is not eligible for artifact reuse" in script
+    assert "uses all-evals, which is not eligible for artifact reuse" not in script
     assert "uses evals-only, which is not eligible for artifact reuse" in script
     assert script.count('CURRENT_HEAD="$(gh pr view') == 2
     assert "must have exactly one sweep label" in script

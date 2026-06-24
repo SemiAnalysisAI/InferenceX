@@ -60,7 +60,7 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4"
     exit 1
@@ -106,6 +106,7 @@ export OSL="$OSL"
 echo "Cloning srt-slurm repository..."
 RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
 SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" ]]; then
@@ -171,6 +172,10 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
     git checkout main
     mkdir -p recipes/vllm/minimax-m3-gb300-fp8
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
+    SRTCTL_SETUP_SCRIPT="minimax-m3-gb300-vllm-fixes.sh"
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+        "configs/$SRTCTL_SETUP_SCRIPT"
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -274,12 +279,18 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 # seq-len recipes still resolve model.path to an NFS-visible location
 # where the precheck is a useful sanity guard, so keep enforcement on
 # for them.
-PREFLIGHT_FLAG=""
+SRTCTL_APPLY_ARGS=(
+    -f "$CONFIG_FILE"
+    --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    PREFLIGHT_FLAG="--no-preflight"
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply $PREFLIGHT_FLAG -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
