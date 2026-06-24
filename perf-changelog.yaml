@@ -4123,3 +4123,12 @@
     - "Use the dedicated ARM64 MiniMax-M3 performance image; benchmark settings unchanged"
     - "Allocate FlashInfer MNNVL workspace for one-shot TP8 all-reduce during CUDA graph capture"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1897
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+  description:
+    - "Update B200 FP4 SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.12.post1."
+    - "Update search space: 1k/1k TP4/EP4 conc 1-256 and TP8/EP8 conc 1; 8k/1k TP4/EP4 conc 1-128, add TP4/EP4 DP-attention conc 64-256, and keep TP8/EP8 conc 1."
+    - "For DP-attention runs, use TP-sized data parallelism with DP attention local-control broadcast, DP LM head, prefill delayer, scheduler recv interval 1, chunked prefill size 32768, and schedule conservativeness 3.33."
+    - "Set SGLANG_RADIX_FORCE_MISS=1, remove --disable-radix-cache, and explicitly pass --disable-piecewise-cuda-graph."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1792
