@@ -1348,3 +1348,12 @@ The AIPerf submodule also merges `ajcasagrande/aiperf:ajc/agentx` at
 resulting merge commit retains both histories and supplies the latest AgentX
 warmup, timing, Weka-loader, metrics, Dynamo-session, and process-lifecycle
 fixes.
+
+## Exploratory Frontier Tails
+
+Five boundary probes extend the validated core sweep. The 3P/2D TEP8/TP8
+topology adds c4/c8 below its historical c16 endpoint to measure the
+ultra-high-interactivity limit. The 2P/1D DEP8/DEP8 topology adds
+c192/c224/c256 beyond the current c160 normalized-throughput leader to locate
+the actual one-decode saturation knee. These are isolated batches so they do
+not force reruns of already selected points when a boundary probe overloads.
