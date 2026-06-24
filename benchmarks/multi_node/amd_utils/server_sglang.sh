@@ -649,7 +649,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # "No available prefill workers (all circuits open or unhealthy)" and aborts
     # with 100% errors. Disable the breaker and relax health-check sensitivity so
     # a busy-but-alive worker is not ejected. Override via ROUTER_RESILIENCE_FLAGS.
-    ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 5 --health-check-timeout-secs 60 --health-check-interval-secs 30}"
+    ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
         --port 30000 \
