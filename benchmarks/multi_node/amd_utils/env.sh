@@ -118,6 +118,12 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     set +x
     echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
 
+    export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+    export MORI_IO_QP_MAX_SEND_WR=16384
+    export MORI_IO_QP_MAX_CQE=32768
+    export MORI_IO_QP_MAX_SGE=2
+    export MORI_IO_TC_DISABLE=0
+
 else
     # =========================================================================
     # SGLang/MoRI-specific environment
