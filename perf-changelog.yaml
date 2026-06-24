@@ -4002,6 +4002,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-atom-mtp
+  description:
+    - "Add minimaxm3-fp8-mi355x-atom-mtp: same with EAGLE3 speculative decoding (3 draft tokens)"
+    - "Both use rocm/atom-dev:MiniMax-M3-20260619; search space mirrors FP4 atom variants (ISL=1024,8192 OSL=1024 TP2/TP4/TP8)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1867
+
+- config-keys:
     - minimaxm3-fp8-gb300-dynamo-vllm
   description:
     - "Switch to vllm/vllm-openai:nightly-aarch64 — contains upstream head_ratio fix (vllm-project/vllm#45879), avoids gemm1_alpha crash in minimax-m3-0618"
@@ -4117,9 +4124,32 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1897
 
 - config-keys:
+    - qwen3.5-fp4-b200-trt-mtp
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 B200 single-node TensorRT-LLM benchmark with MTP speculative decode (1k/1k and 8k/1k) across a TP/TEP/DEP parallelism sweep"
+    - "Image: nvcr.io/nvidia/tensorrt-llm/release:1.3.0rc18"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1894
+
+- config-keys:
+    - dsr1-fp4-b200-sglang
+  description:
+    - "Update B200 FP4 SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.12.post1."
+    - "Update search space: 1k/1k TP4/EP4 conc 1-256 and TP8/EP8 conc 1; 8k/1k TP4/EP4 conc 1-128, add TP4/EP4 DP-attention conc 64-256, and keep TP8/EP8 conc 1."
+    - "For DP-attention runs, use TP-sized data parallelism with DP attention local-control broadcast, DP LM head, prefill delayer, scheduler recv interval 1, chunked prefill size 32768, and schedule conservativeness 3.33."
+    - "Set SGLANG_RADIX_FORCE_MISS=1, remove --disable-radix-cache, and explicitly pass --disable-piecewise-cuda-graph."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1792
+
+- config-keys:
+  - dsv4-fp4-gb200-dynamo-sglang-mtp
+  description:
+    - "Initial submission: DSv4-Pro FP4 disagg on GB200 with SGLang + MTP speculative decoding (8k/1k)."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85"
+    - "8 topologies: low-latency 1p1d-tp8-tp8 + 1p6d-dep8-tp8; mid-curve 1p1d through 6p1d-dep8-dep16."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1676
+  
+- config-keys:
     - minimaxm3-fp8-b300-dynamo-vllm
   description:
     - "Run the PR #1891 MiniMax-M3 MXFP8 B300 Dynamo-vLLM recipe set on top of current main."
     - "Uses the vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image and the TEP4/TEP8 8k1k topologies not covered by PR #1890."
-    - "Retains 7 configs for 1k1k and 8 configs for 8k1k, with evals on the 8k1k subset."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891

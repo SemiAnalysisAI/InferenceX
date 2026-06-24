@@ -5,10 +5,10 @@ When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/
 ## Template
 
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
-
+- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/edit/main/docs/PR_REVIEW_CHECKLIST.md)
 - [ ] Verified that the general code quality meets the InferenceX standard and does not make the code quality any worse.
-- [ ] Verified that this PR has passed PR validation.
-- [ ] Verified that this PR passes evals.
+- [ ] Verified that this PR has passed PR validation. Please link to GitHub Action workflow that shows this.
+- [ ] Verified that this PR passes evals.  Please link to GitHub Action workflow that shows this.
 - [ ] Verified that speculative decoding PRs uses chat templates to align the AL distribution to real world 
 - [ ] If an company claims that they support vLLM/SGLang as first class LLM inference engines on their hardware, I have have verified that the respective vLLM/SGLang submission has been made before additional frameworks (TRT-LLM, ATOM, etc.). The only exceptions are for new hardware, such as MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8, etc., and for new model architectures where there is an actual reason why vLLM/SGLang does not fundamentally support them yet.
 - [ ] Verified that the single-node recipes are similar to the official [vLLM recipes](https://recipes.vllm.ai/) and/or the[SGLang cookbook](https://docs.sglang.io/cookbook/intro):
