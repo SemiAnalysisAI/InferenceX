@@ -4146,3 +4146,10 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85"
     - "8 topologies: low-latency 1p1d-tp8-tp8 + 1p6d-dep8-tp8; mid-curve 1p1d through 6p1d-dep8-dep16."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1676
+  
+- config-keys:
+    - minimaxm3-fp8-b300-dynamo-vllm
+  description:
+    - "Run the PR #1891 MiniMax-M3 MXFP8 B300 Dynamo-vLLM recipe set on top of current main."
+    - "Uses the vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image and the TEP4/TEP8 8k1k topologies not covered by PR #1890."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
