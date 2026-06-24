@@ -47,6 +47,33 @@ def main() -> int:
     os.environ.setdefault("MASTER_ADDR", "localhost")
     os.environ.setdefault("MASTER_PORT", "12355")
 
+    # Reproduction provenance (recorded in the artifact).
+    args.reproduction_command = (f"torchrun --nproc_per_node={world_size} tests/run_ep.py "
+                                 + " ".join(sys.argv[1:]))
+    args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
+    args.image_digest = os.environ.get("COLLECTIVEX_IMAGE_DIGEST", "")
+
+    # Import the backend CLASS (module-top imports torch + the backend lib; no process
+    # group needed) and REJECT unsupported combos BEFORE init — never fall back or
+    # mislabel (review/goal). All ranks reject identically.
+    if args.backend == "mori":
+        from ep_mori import MoRIBackend as Backend
+    else:
+        from ep_deepep import DeepEPBackend as Backend
+    if args.num_ep_groups != 1:
+        if rank == 0:
+            print(f"ERROR: num_ep_groups={args.num_ep_groups} REJECTED — real subgroup process "
+                  f"groups are unimplemented; not faking it.", file=sys.stderr)
+        return 5
+    sp = getattr(Backend, "SUPPORTED_PRECISIONS", {"bf16"})
+    sm = getattr(Backend, "SUPPORTED_MODES", {"normal"})
+    if args.dispatch_dtype not in sp or args.mode not in sm:
+        if rank == 0:
+            print(f"ERROR: {args.backend} REJECTS dispatch-dtype={args.dispatch_dtype} / "
+                  f"mode={args.mode} — not supported on this build (no fallback). "
+                  f"supported precisions={sorted(sp)} modes={sorted(sm)}.", file=sys.stderr)
+        return 5
+
     # MoRI inits its shmem on a process group it registers as "default" and wants
     # the gloo+nccl combo with an explicit device_id (per its reference test);
     # DeepEP uses a plain nccl group.
@@ -56,11 +83,6 @@ def main() -> int:
                                     world_size=world_size, device_id=device)
         else:
             dist.init_process_group("nccl")
-
-    if args.backend == "mori":
-        from ep_mori import MoRIBackend as Backend
-    else:
-        from ep_deepep import DeepEPBackend as Backend
 
     backend = Backend(args, rank, world_size, local_rank, device)
     if rank == 0:

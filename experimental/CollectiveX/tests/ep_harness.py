@@ -82,6 +82,8 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     choices=["normalized", "tuned", "default"])
     ap.add_argument("--sm-fraction", type=float, default=0.18,
                     help="normalized mode: fraction of device SMs/CUs dedicated to comms (~24/132)")
+    ap.add_argument("--num-ep-groups", type=int, default=1,
+                    help="concurrent EP groups; >1 is REJECTED (real subgroup PGs unimplemented)")
     ap.add_argument("--seed", type=int, default=67)
     ap.add_argument("--warmup", type=int, default=20)
     ap.add_argument("--iters", type=int, default=200, help=">=100 so p99 is meaningful")
@@ -264,7 +266,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # may legitimately RECEIVE 0 tokens at small T under balanced routing (not every
         # rank is a destination), so recv==0 is NOT a per-rank failure — only the GLOBAL
         # total recv must be > 0 (gated below), to catch a truly silent no-op.
-        local_ok = 1 if max_rel < 5e-2 else 0
+        # Tolerance is backend/dtype-aware (fp8 round-trip is looser); recorded in the doc.
+        tol = getattr(backend, "tolerance", 5e-2)
+        local_ok = 1 if max_rel < tol else 0
 
         # ---- comm-only timing: dispatch-only + combine-only (staging untimed) ----
         disp_iters = time_us(torch, lambda p=problem: backend.dispatch(p), args.warmup, args.iters)
@@ -300,11 +304,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         max_rel = _reduce_vec(torch, dist, device, [max_rel], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0  # reconstruct on all ranks + non-silent
 
-        routed_bytes_total = recv_total * args.hidden * elem_bytes  # all ranks, one direction
+        routed_bytes_total = recv_total * args.hidden * elem_bytes  # dispatch dir (fp8=1B/bf16=2B)
+        combine_bytes_total = recv_total * args.hidden * 2          # combine ALWAYS moves bf16
         # Algorithmic bandwidth: total routed payload across ranks / collective latency.
-        # Payload-only (excludes indices/weights/scales); serial-RT moves it ~twice.
+        # Payload-only (excludes indices/weights/scales). Round-trip sums the two directions
+        # with their REAL dtypes (fp8 dispatch + bf16 combine => 1.5x, not 2x; bf16 => 2x).
         disp_algbw = (routed_bytes_total / (d50 * 1e3)) if d50 > 0 else 0.0
-        serial_algbw = (2 * routed_bytes_total / (s50 * 1e3)) if s50 > 0 else 0.0
+        serial_algbw = ((routed_bytes_total + combine_bytes_total) / (s50 * 1e3)) if s50 > 0 else 0.0
         # tokens/s is throughput at THIS global-token count — only compare across
         # configs at a MATCHED global_tokens (the global-tokens x-axis), not equal T.
         tps = (gt / (s50 * 1e-6)) if s50 > 0 else None
@@ -316,7 +322,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "serial_us_p50": s50, "serial_us_p99": s99,  # = dispatch + combine (sum, not chained)
             "recv_tokens_max": recv_max, "recv_tokens_min": recv_min,
             "recv_tokens_mean": recv_total / world_size, "recv_tokens_total": recv_total,
-            "routed_bytes_total": routed_bytes_total,
+            "routed_bytes_total": routed_bytes_total, "combine_bytes_total": combine_bytes_total,
             "dispatch_algbw_gbps": disp_algbw, "serial_algbw_gbps": serial_algbw,
             "tokens_per_second": tps,
             # realized routing properties (published so fan-out is never misread):
@@ -361,10 +367,20 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "x_axis": {"primary": "tokens_per_rank",
                    "global_relation": "global_tokens = tokens_per_rank * ep_size"},
         "backend_provenance": backend.backend_provenance,
+        "reproduction": {
+            "command": getattr(args, "reproduction_command", ""),
+            "image": getattr(args, "image", "") or None,
+            "image_digest": getattr(args, "image_digest", "") or None,
+            "seed": args.seed, "warmup": args.warmup, "iters": args.iters,
+            "dispatch_dtype": args.dispatch_dtype, "mode": args.mode,
+            # Whether the fp8 per-token cast is INSIDE the timed dispatch window. None for
+            # bf16; the fp8 path sets it on the backend (cast is staged untimed ⇒ False).
+            "fp8_quant_in_timing": getattr(backend, "fp8_in_timing", None),
+        },
         **meta,
         "correctness": {"passed": all_ok,
                         "max_rel_error": max((r["max_rel_error"] for r in rows), default=None),
-                        "tolerance": 5e-2, "points": len(rows)},
+                        "tolerance": getattr(backend, "tolerance", 5e-2), "points": len(rows)},
         "routing_profile": {  # realized fan-out for the whole sweep (so it can't be misread)
             "routing": args.routing,
             "fanout_mean": sum(r["fanout_mean"] for r in rows) / len(rows),

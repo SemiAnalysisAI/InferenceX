@@ -41,6 +41,11 @@ class MoRIBackend:
     # MoRI wedges on a COLD dispatch jumping straight to a large T (validated on
     # MI355X); the harness ramps this backend's ladder geometrically from 1.
     needs_gradual_ramp = True
+    # Capabilities — run_ep.py REJECTS anything outside these BEFORE construction (no
+    # fallback/mislabel). Expanded as each path is implemented + hardware-validated.
+    # MoRI exposes quant_type (fp8) in EpDispatchCombineConfig; added once validated.
+    SUPPORTED_PRECISIONS = {"bf16"}        # + "fp8" once the fp8 quant_type path is wired
+    SUPPORTED_MODES = {"normal"}           # MoRI has no separate low-latency entrypoint
 
     def __init__(self, args, rank, world_size, local_rank, device):
         self.args = args
@@ -48,8 +53,9 @@ class MoRIBackend:
         self.world_size = world_size
         self.device = device
         self.mode = args.mode
-        if args.mode == "ll":
-            raise NotImplementedError("MoRI low-latency (LL) path is wired in Phase 3; use --mode normal")
+        assert args.dispatch_dtype in self.SUPPORTED_PRECISIONS and args.mode in self.SUPPORTED_MODES, \
+            "run_ep.py must reject unsupported dtype/mode before constructing the backend"
+        self.fp8_in_timing = None  # set when fp8 dispatch is used (whether the cast is timed)
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
         dev_cus = torch.cuda.get_device_properties(device).multi_processor_count
@@ -80,11 +86,6 @@ class MoRIBackend:
                               ("normalized-floored" if self._block_floored else "n/a"))
         self.dispatch_warps = int(os.environ.get("CX_MORI_DISPATCH_WARPS", "16"))
         self.combine_warps = int(os.environ.get("CX_MORI_COMBINE_WARPS", "8"))
-        if args.dispatch_dtype != "bf16":
-            if rank == 0:
-                print(f"WARN: mori fp8 dispatch is wired in Phase 3; using bf16 "
-                      f"('{args.dispatch_dtype}' requested).", file=sys.stderr)
-            args.dispatch_dtype = "bf16"
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
