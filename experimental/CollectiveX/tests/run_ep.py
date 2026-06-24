@@ -64,9 +64,10 @@ def main() -> int:
 
     backend = Backend(args, rank, world_size, local_rank, device)
     if rank == 0:
-        print(f"[run_ep] backend={args.backend} phase={args.phase} world={world_size} "
-              f"ep_size={world_size // max(1, args.num_ep_groups)} hidden={args.hidden} "
-              f"topk={args.topk} experts={args.experts} dtype={args.dispatch_dtype}")
+        print(f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
+              f"world={world_size} ep_size={world_size} hidden={args.hidden} "
+              f"topk={args.topk} experts={args.experts} dtype={args.dispatch_dtype} "
+              f"routing={args.routing} seed={args.seed}")
 
     rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)
     # finalize() handles backend-specific teardown: DeepEP returns rc cleanly;

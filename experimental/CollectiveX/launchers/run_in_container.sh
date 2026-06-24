@@ -14,7 +14,8 @@
 # EP knobs (DeepEP/MoRI), all -> tests/run_ep.py:
 #   CX_PHASE = decode | prefill | both (default decode)   <- picks the token sweep
 #   CX_TOKENS_LADDER (space/comma sep; blank = phase default), CX_TOKENS_PER_RANK (legacy single point)
-#   CX_HIDDEN CX_TOPK CX_EXPERTS CX_DISPATCH_DTYPE CX_ROUTING CX_NUM_EP_GROUPS CX_NUM_COMM_SMS
+#   CX_HIDDEN CX_TOPK CX_EXPERTS CX_DISPATCH_DTYPE CX_ROUTING CX_MODE(normal|ll)
+#   CX_NUM_SMS (DeepEP comm SMs) CX_SEED CX_ITERS
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
@@ -77,10 +78,10 @@ run_ep_suite() {
   for phase in $phases; do
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
     if ! torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
-        --phase "$phase" --tokens-ladder "$ladder" \
+        --phase "$phase" --tokens-ladder "$ladder" --mode "${CX_MODE:-normal}" \
         --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
-        --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-balanced}" \
-        --num-ep-groups "${CX_NUM_EP_GROUPS:-1}" --num-comm-sms "${CX_NUM_COMM_SMS:-24}" \
+        --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-uniform}" \
+        --num-sms "${CX_NUM_SMS:-24}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-200}" \
         --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
         --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"; then
       cx_log "WARN: $backend $phase run failed or invalid"; rc=1

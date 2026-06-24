@@ -133,13 +133,14 @@ def _moe_sweep_table(d):
             f"H{sh.get('hidden')} top{sh.get('topk')} E{sh.get('experts')} "
             f"{sh.get('dispatch_dtype')} {sh.get('routing')}** — latency vs source tokens/rank\n")
     out = [head,
-           "| tokens/rank | global tokens | dispatch µs | combine µs | round-trip µs | tokens/s | recv tok | correct |",
+           "| tokens/rank | fan-out | dispatch µs | combine µs | serial µs (D+C) | tokens/s | recv max | correct |",
            "|--:|--:|--:|--:|--:|--:|--:|:--:|"]
     for r in rows:
-        out.append(f"| {r.get('tokens_per_rank')} | {r.get('global_tokens')} | "
+        out.append(f"| {r.get('tokens_per_rank')} | {_fnum(r.get('fanout_mean'), '.2f')} | "
                    f"{_fnum(r.get('dispatch_us_p50'), '.2f')} | {_fnum(r.get('combine_us_p50'), '.2f')} | "
-                   f"{_fnum(r.get('roundtrip_us_p50'), '.2f')} | {_fnum(r.get('tokens_per_second'), '.3e')} | "
-                   f"{r.get('recv_tokens', '—')} | {'✅' if r.get('correct') else '❌'} |")
+                   f"{_fnum(r.get('serial_us_p50', r.get('roundtrip_us_p50')), '.2f')} | "
+                   f"{_fnum(r.get('tokens_per_second'), '.3e')} | "
+                   f"{r.get('recv_tokens_max', r.get('recv_tokens', '—'))} | {'✅' if r.get('correct') else '❌'} |")
     return out
 
 
@@ -160,13 +161,14 @@ def render_plain(nccl, moe, n_valid, total) -> str:
                        f"{_lat_floor(rows):>10.2f}{(avg if avg is not None else float('nan')):>11.1f}")
     if moe:
         out.append("\nMoE EP dispatch/combine (DeepEP / MoRI) — headline (* = headline tokens/rank):")
-        out.append(f"  {'backend':<9}{'phase':<8}{'ep':>3} {'status':<9}{'T*':>5}{'disp_p50':>10}{'comb_p50':>10}{'rt_p50':>9}  correct")
+        out.append(f"  {'backend':<9}{'phase':<8}{'ep':>3} {'status':<9}{'T*':>5}{'disp_p50':>10}{'comb_p50':>10}{'serial':>9}  correct")
         for d in sorted(moe, key=lambda x: (x.get("backend", ""), x.get("phase", ""))):
             m, c = d.get("metrics", {}), d.get("correctness", {})
+            ser = m.get("serial_us_p50", m.get("roundtrip_us_p50"))
             out.append(f"  {d.get('backend',''):<9}{d.get('phase',''):<8}{str(d.get('ep_size','')):>3} {d.get('status',''):<9}"
                        f"{str(m.get('headline_tokens_per_rank','')):>5}"
                        f"{(m.get('dispatch_us_p50') or float('nan')):>10.1f}{(m.get('combine_us_p50') or float('nan')):>10.1f}"
-                       f"{(m.get('roundtrip_us_p50') or float('nan')):>9.1f}   {c.get('passed')}")
+                       f"{(ser or float('nan')):>9.1f}   {c.get('passed')}")
     return "\n".join(out)
 
 
@@ -195,19 +197,24 @@ def render_markdown(nccl, moe, n_valid, total) -> str:
         out.append("\n### MoE EP dispatch / combine (DeepEP / MoRI)\n")
         out.append("Headline = the reference point (tokens/rank shown as `T*`); the per-line "
                    "sweep tables below carry the full source-tokens-per-rank curve.\n")
-        out.append("| backend | phase | ep | status | T\\* | dispatch p50 (µs) | combine p50 (µs) | round-trip p50 (µs) | tokens/s | correct |")
-        out.append("|---|---|--:|---|--:|--:|--:|--:|--:|:--:|")
+        out.append("| backend | phase | ep | routing (fan-out) | status | T\\* | dispatch p50 (µs) | combine p50 (µs) | serial p50 (µs) | tokens/s | correct |")
+        out.append("|---|---|--:|---|---|--:|--:|--:|--:|--:|:--:|")
         for d in _moe_sorted(moe):
             m, c = d.get("metrics", {}), d.get("correctness", {})
-            out.append(f"| `{d.get('backend')}` | {d.get('phase','')} | {d.get('ep_size','')} | {_emoji(d.get('status'))} | "
+            rp = d.get("routing_profile", {})
+            ser = m.get("serial_us_p50", m.get("roundtrip_us_p50"))
+            fo = f"{(d.get('shape') or {}).get('routing','?')} ({_fnum(rp.get('fanout_mean'), '.1f')})"
+            out.append(f"| `{d.get('backend')}` | {d.get('phase','')} | {d.get('ep_size','')} | {fo} | {_emoji(d.get('status'))} | "
                        f"{m.get('headline_tokens_per_rank','—')} | {_fnum(m.get('dispatch_us_p50'), '.1f')} | "
-                       f"{_fnum(m.get('combine_us_p50'), '.1f')} | {_fnum(m.get('roundtrip_us_p50'), '.1f')} | "
+                       f"{_fnum(m.get('combine_us_p50'), '.1f')} | {_fnum(ser, '.1f')} | "
                        f"{_fnum(m.get('tokens_per_second'), '.3e')} | {'✅' if c.get('passed') else '❌'} |")
         for d in _moe_sorted(moe):
             out += _moe_sweep_table(d)
-        out.append("\n> EP sweep: only source tokens/rank varies along a line; global tokens = "
-                   "tokens/rank × ep. Dispatch and combine are timed **separately** (combine's "
-                   "setup dispatch runs untimed); round-trip = dispatch + combine.")
+        out.append("\n> EP sweep: only source tokens/rank varies along a line. **fan-out** = mean "
+                   "destination ranks/token (representativeness — top-k spread, not a permutation). "
+                   "Dispatch & combine timed **separately** (staging untimed); **serial = dispatch + "
+                   "combine** (a sum, not an independently-measured chained op). **Selected stack at each "
+                   "backend's default resource budget — not resource-normalized.**")
     if not total:
         out.append("\n> No result files found — the benchmark produced nothing.")
     return "\n".join(out)
