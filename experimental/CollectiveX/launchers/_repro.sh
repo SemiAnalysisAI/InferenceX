@@ -22,7 +22,8 @@ repro() {  # $1=phase $2=T
     timeout -k 30 700 torchrun --nproc_per_node="$NG" tests/run_ep.py --backend "$BACKEND" \
       --phase "$phase" --tokens-ladder "$T" --dispatch-dtype "$DT" --mode "$MODE" \
       --resource-mode "$RM" --routing uniform --runner "$RUNNER" --topology-class "$TOPO" \
-      --transport "$TRANSPORT" --iters 200 --out "$out" >/dev/null 2>&1
+      --transport "$TRANSPORT" --warmup "${WARMUP:-32}" --iters "${ITERS:-200}" \
+      --out "$out" >"$out.log" 2>&1 || tail -6 "$out.log"
     python3 - "$out" "$i" "$T" <<'PY'
 import json,sys
 try:
