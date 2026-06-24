@@ -9,9 +9,10 @@ SQ="$SQDIR/${SQKEY}.sqsh"
 STAGE="$HOME/cx_stage"
 JOBNAME="${JOBNAME:-cx_mrepro}"
 
-echo "[orch] salloc partition=compute exclude g09,g11 gpu:8"
-salloc --partition=compute --exclude=mia1-p01-g09,mia1-p01-g11 --gres=gpu:8 \
-       --exclusive --cpus-per-task=128 --time=40 --no-shell --job-name="$JOBNAME" 2>&1 | tail -2
+EXCLUDE="${CX_EXCLUDE_NODES:-mia1-p01-g09,mia1-p01-g11}"
+echo "[orch] salloc partition=compute exclude=$EXCLUDE gpu:8"
+salloc --partition=compute --exclude="$EXCLUDE" --gres=gpu:8 \
+       --exclusive --cpus-per-task=128 --time=30 --no-shell --job-name="$JOBNAME" 2>&1 | tail -2
 JID="$(squeue --name="$JOBNAME" -h -o %A | head -n1)"
 [ -n "$JID" ] || { echo "[orch] FATAL: no JOB_ID"; exit 1; }
 echo "[orch] JOB_ID=$JID"
@@ -33,7 +34,7 @@ srun --jobid="$JID" \
   --container-image="$SQ" --container-mounts="$STAGE:/cx" \
   --container-writable --container-remap-root --no-container-mount-home \
   --container-workdir=/cx --no-container-entrypoint --export=ALL \
-  env COLLECTIVEX_IMAGE="$IMAGE" BACKEND=mori RUNNER=mi355x-8x TOPO=mi355x-xgmi TRANSPORT=xgmi \
-  DT=bf16 MODE=normal RM=tuned WARMUP=8 ITERS=40 bash /cx/launchers/_repro.sh </dev/null 2>&1
+  env COLLECTIVEX_IMAGE="$IMAGE" RUNNER=mi355x-8x TOPO=mi355x-xgmi \
+  bash /cx/launchers/_mori_repro.sh </dev/null 2>&1
 scancel "$JID" 2>/dev/null || true
 echo "=== ORCH DONE ==="
