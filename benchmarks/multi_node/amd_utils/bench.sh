@@ -55,6 +55,38 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
+if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+    export PORT="${ROUTER_PORT}"
+    export MODEL="${MODEL:-${BENCH_MODEL}}"
+    export DURATION="${DURATION:-1800}"
+    export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
+    export AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-/workspace}"
+    export RESULT_FILENAME="${RESULT_FILENAME:-agentic_bench}"
+
+    RESULT_DIR="${RESULT_DIR:-/workspace/LOGS/agentic}"
+    mkdir -p "$RESULT_DIR"
+
+    resolve_trace_source
+    install_agentic_deps
+
+    # Multinode agentic matrix entries carry a single concurrency, but keep
+    # the loop so local one-off runs can pass a small x-separated list.
+    replay_failed=0
+    for max_concurrency in "${chosen_concurrencies[@]}"; do
+        export CONC="$max_concurrency"
+        export USERS="$max_concurrency"
+        build_replay_cmd "$RESULT_DIR"
+        run_agentic_replay_and_write_outputs "$RESULT_DIR" || replay_failed=1
+
+        if [[ "$ENGINE" == "vllm-disagg" ]]; then
+            echo "[BENCH] Cooldown: waiting 10s for idle KV block reaper..."
+            sleep 10
+        fi
+    done
+
+    exit "$replay_failed"
+fi
+
 for max_concurrency in "${chosen_concurrencies[@]}"; do
 
     export_file="${profile_folder}/concurrency_${max_concurrency}_req_rate_${chosen_req_rate}_gpus_$((prefill_gpus+decode_gpus))_ctx_${prefill_gpus}_gen_${decode_gpus}"
