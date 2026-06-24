@@ -86,12 +86,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # MI355X MoRI EP dispatch/combine, one job per phase: decode (small T) +
-        # prefill (large T, clamped to the registerable heap).
-        phase: [decode, prefill]
+        # Push = a fast MoRI SMOKE only (decode). The full sweep is workflow_dispatch.
+        phase: [decode]
     env:
       CX_BENCH: mori
       CX_PHASE: ${{ matrix.phase }}
+      # SMOKE ladder capped at T<=16: MoRI + realistic (fan-out≈5.3) routing currently
+      # WEDGES at T>=32 (under investigation; DeepEP is fine), and an unguarded run hung
+      # ~1 h before the job timeout. Keep the push smoke in the known-good range; run the
+      # full sweep via workflow_dispatch (timeout-guarded). Remove the cap once fixed.
+      CX_TOKENS_LADDER: "1 2 4 8 16"
+      CX_RUN_TIMEOUT: "600"
       # Pin to the MI355X nodes that hold the node-local squash and have a writable
       # /var/lib/squash; other nodes need a slow cold import that can fail on lock/
       # cache permissions. Widen once the squash is staged cluster-wide.

@@ -77,7 +77,11 @@ run_ep_suite() {
   [ "$phases" = "both" ] && phases="decode prefill"
   for phase in $phases; do
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
-    if ! torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
+    # Hard wall-clock guard: a wedged collective (e.g. a backend that hangs at a shape)
+    # must FAIL FAST, never burn the whole job timeout. timeout -k sends SIGKILL after
+    # a grace period. Override with CX_RUN_TIMEOUT (seconds).
+    if ! timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
+        torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
         --phase "$phase" --tokens-ladder "$ladder" --mode "${CX_MODE:-normal}" \
         --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
         --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-uniform}" \
@@ -85,7 +89,7 @@ run_ep_suite() {
         --resource-mode "${CX_RESOURCE_MODE:-normalized}" --sm-fraction "${CX_SM_FRACTION:-0.18}" \
         --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
         --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"; then
-      cx_log "WARN: $backend $phase run failed or invalid"; rc=1
+      cx_log "WARN: $backend $phase run failed/timed out (CX_RUN_TIMEOUT=${CX_RUN_TIMEOUT:-900}s)"; rc=1
     fi
   done
   return "$rc"
