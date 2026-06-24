@@ -4011,14 +4011,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
 
 - config-keys:
-    - minimaxm3-fp8-mi355x-atom
-    - minimaxm3-fp8-mi355x-atom-mtp
-  description:
-    - "Add minimaxm3-fp8-mi355x-atom: MiniMax-M3 MXFP8 single-node benchmark on MI355X using ATOM framework"
-    - "Uses rocm/atom-dev:MiniMax-M3-20260623; TP4, block size 128, ISL=1024,8192 OSL=1024"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1929
-
-- config-keys:
     - minimaxm3-fp8-mi355x-atom-mtp
   description:
     - "Add minimaxm3-fp8-mi355x-atom-mtp: same with EAGLE3 speculative decoding (3 draft tokens)"
