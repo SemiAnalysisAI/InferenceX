@@ -3985,6 +3985,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom
+    - minimaxm3-fp4-mi355x-atom-mtp
+  description:
+    - "Add minimaxm3-fp4-mi355x-atom-mtp: MiniMax-M3 MXFP4 on MI355X with EAGLE3 speculative decoding (3 draft tokens)"
+    - "Bump image to rocm/atom-dev:MiniMax-M3-20260623 for both fp4 atom entries"
+    - "Search space: TP2/TP4, ISL=1024,8192, OSL=1024, conc 1–256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1917
+
+- config-keys:
     - minimaxm3-fp8-b300-vllm-mtp
   description:
     - "Update the MiniMax-M3 B300 single-node image to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
