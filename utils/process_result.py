@@ -42,6 +42,23 @@ image = base_env['IMAGE']
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
 
+# A failed/degenerate benchmark (server never came up, disagg warmup deadlock,
+# MoRI/KV-transport failure, etc.) still writes a result JSON, but with zeroed
+# throughput and latency metrics. Detect that here and fail with the real,
+# actionable reason. Otherwise the tpot reciprocal below (1000.0 / tpot) raises
+# an opaque "ZeroDivisionError: float division by zero" that masks the true
+# server-side cause and makes every such failure look identical.
+_output_tput = float(bmk_result.get('output_throughput', 0) or 0)
+_total_tput = float(bmk_result.get('total_token_throughput', 0) or 0)
+if _output_tput <= 0 or _total_tput <= 0:
+    raise SystemExit(
+        "FAIL: benchmark produced no decode throughput "
+        f"(output_throughput={_output_tput}, total_token_throughput={_total_tput}) "
+        f"in {result_filename}.json — the server almost certainly failed to serve "
+        "(disagg warmup deadlock / MoRI transport failure / server never reached "
+        "ready). Check the multinode_server_logs artifact for the real error."
+    )
+
 data = {
     'hw': hw,
     'conc': int(bmk_result['max_concurrency']),
