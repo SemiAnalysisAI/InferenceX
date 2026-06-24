@@ -102,7 +102,7 @@ Before accepting an updated curve, reviewers should verify:
 ## Primary references
 
 - [Similar Efforts from AMD @haic0 PR Reference 1](https://github.com/SemiAnalysisAI/InferenceX/pull/1633)
-- [Similar Effortts from AMD @haic0 Reference 2](https://github.com/SemiAnalysisAI/InferenceX/pull/1115#issuecomment-4295024377)
+- [Similar Efforts from AMD @haic0 Reference 2](https://github.com/SemiAnalysisAI/InferenceX/pull/1115#issuecomment-4295024377)
 - [SPEED-Bench paper](https://arxiv.org/abs/2604.09557)
 - [SPEED-Bench dataset and dataset card](https://huggingface.co/datasets/nvidia/SPEED-Bench)
 - [vLLM SPEED-Bench integration](https://github.com/vllm-project/vllm/pull/36029)
