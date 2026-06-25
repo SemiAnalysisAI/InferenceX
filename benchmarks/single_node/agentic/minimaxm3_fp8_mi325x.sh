@@ -39,6 +39,9 @@ SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
+export TRITON_CACHE_DIR="$RESULT_DIR/triton_cache"
+rm -rf "$TRITON_CACHE_DIR"
+mkdir -p "$TRITON_CACHE_DIR"
 
 install_mooncake_rocm() {
     local mooncake_tag="v0.3.11.post1"
