@@ -2,36 +2,39 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K2.5 FP4 on MI355X using vLLM.
+# Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on MI355X using vLLM.
+# Mirrors the fixed-seq-len parallelism options (pure TP and DEP) so the
+# agentic sweep can probe both interactivity and throughput regimes:
+#   pure TP (DP_ATTENTION=false, EP_SIZE=1):  attention TP-sharded across
+#       all $TP GPUs in a single engine. Lower TPOT, lower batch.
+#   TP+EP   (DP_ATTENTION=false, EP_SIZE>1):  attention TP-sharded, MoE
+#       experts EP-sharded within the TP group.
+#   DEP     (DP_ATTENTION=true, EP_SIZE>1):   per-DP-rank attention with
+#       experts EP-sharded across DP ranks.
+#       Highest aggregate throughput at large CONC.
+#
+# Serving flags follow the validated MI355X recipe from
+# vllm-project/recipes#433: AITER+AITER_LINEAR, mp executor,
+# triton_unfused MoE (required for the FP4 expert format),
+# async scheduling, FULL_AND_PIECEWISE cudagraph capture.
+# Image is configured in amd-master.yaml.
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
 # OFFLOADING values:
-#   none    - vLLM GPU KV only.
-#   cpu     - vLLM native CPU offload.
+#   none - vLLM GPU KV only.
+#   cpu  - MooncakeStoreConnector with a configured host-memory KV tier.
 #   lmcache - LMCache MP server + vLLM LMCacheMPConnector.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR EP_SIZE DP_ATTENTION
-
-PORT=${PORT:-8888}
-DURATION=${DURATION:-1800}
-EP_SIZE=${EP_SIZE:-1}
+check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
-# ROCR/HIP visibility for vLLM 0.14+
-if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
-    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
-fi
-
-# `hf download` creates the target dir if missing and is itself idempotent.
-# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
-# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -41,45 +44,43 @@ else
     export MODEL_PATH="$MODEL"
 fi
 
-rocm-smi || true
-amd-smi || true
-
-# ---- Resolve traces and install deps ----------------------------------------
-# Cap the replay corpus at 256k (470 traces, max in+out <= 256k) instead of the
-# unfiltered 052726 corpus whose ~1M-token traces get rejected and add no perf
-# signal at high concurrency.
-#export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
-#060226
-#export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
+if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
+    export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
+fi
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# Install amd-quark for MXFP4 (manual install due to ROCm vLLM bug)
-pip install amd-quark
+export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
 
-# Disable AITER RMSNorm for TP < 8 due to accuracy issues
-if [ "${TP}" -lt 8 ]; then
-  export VLLM_ROCM_USE_AITER_RMSNORM=0
+# vLLM router for DEP runs: expands one HTTP backend into one logical worker
+# per DP rank and routes by X-Session-ID (aliased from X-Correlation-ID).
+USE_VLLM_ROUTER=false
+VLLM_BACKEND_PORT="$PORT"
+if [ "$DP_ATTENTION" = "true" ]; then
+    USE_VLLM_ROUTER=true
+    VLLM_BACKEND_PORT=$((PORT + 1))
+    VLLM_ROUTER_VERSION=0.1.14
+    VLLM_ROUTER_POLICY=consistent_hash
+    VLLM_ROUTER_METRICS_PORT=$((PORT + 10000))
+    export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
+    agentic_pip_install --quiet "vllm-router==$VLLM_ROUTER_VERSION"
 fi
 
-# Workaround for MEC FW <177 RCCL memory reclaim issue
-version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
-if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
-    export HSA_NO_SCRATCH_RECLAIM=1
-fi
+# DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
+export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+ROUTER_LOG="$RESULT_DIR/router.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-PREFIX_CACHE_ARGS=()
 
 # ---- Lmcache config ----------------------------------------------------------
 LMCACHE_PID=""
@@ -135,25 +136,57 @@ wait_for_lmcache_ready() {
 case "$OFFLOADING" in
     none) ;;
     cpu)
+        # Embedded mode contributes one segment per GPU rank to a shared
+        # distributed store, so pre-divide the aggregate host-memory budget.
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-rocm==$MOONCAKE_VERSION"
+        python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
+        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
+        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "rdma",
+  "device_name": "mlx5_0",
+  "enable_offload": false
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        export PYTHONHASHSEED=0
+        export MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX=4
+
+        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
+        MOONCAKE_EVICTION_RATIO=0.10
+        MOONCAKE_KV_LEASE_TTL=60s
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
+            --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
+            --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup." >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2
+            exit 1
+        fi
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
-        # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
-        # worker RSS / page cache / slurm cgroup).
-        #TODO: fix
-        TOTAL_CPU_DRAM_GB=3000
-        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
-        # Use vLLM's regular native KV-offload path (OffloadingConnector),
-        # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
-        # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        # would switch it to SimpleCPUOffloadConnector. We intentionally leave
-        # that env var UNSET here so the regular OffloadingConnector path is
-        # used. The shortcut --kv_offloading_backend native + --kv_offloading_size
-        # form constructs the KVTransferConfig at engine startup
-        # (vllm/config/vllm.py:662).
         OFFLOAD_ARGS=(
-            --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
-            --disable-hybrid-kv-cache-manager
+            --kv-transfer-config
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
         ;;
     lmcache)
@@ -227,25 +260,26 @@ case "$OFFLOADING" in
             --disable-hybrid-kv-cache-manager
         )
         ;;
-    *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
+    *)
+        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
+        exit 1
+        ;;
 esac
 
-# ---- LLM server config ----------------------------------------------------------
+PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
+if [ "$DP_ATTENTION" = "true" ]; then
+    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+fi
+
 EP_ARGS=()
 if [ "$EP_SIZE" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
 
-echo "Starting vllm server..."
-export PYTHONNOUSERSITE=1
-
-# Install amd-quark for MXFP4 (manual install due to ROCm vLLM bug)
-pip install amd-quark
-
-# Disable AITER RMSNorm for TP < 8 due to accuracy issues
-if [ "${TP}" -lt 8 ]; then
-  export VLLM_ROCM_USE_AITER_RMSNORM=0
-fi
+# AgentX concurrency counts live session trees, not individual requests.
+# Subagent fan-out can push instantaneous request concurrency above CONC, so
+# leave 2x headroom rather than clipping those bursts at the scheduler.
+MAX_NUM_SEQS=$((2 * CONC))
 
 # Workaround for MEC FW <177 RCCL memory reclaim issue
 version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
@@ -253,6 +287,8 @@ if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
     export HSA_NO_SCRATCH_RECLAIM=1
 fi
 
+echo "Starting vllm server..."
+set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
@@ -260,16 +296,22 @@ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
-    --port "$PORT"
-    --tensor-parallel-size="$TP"
-    "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.90
-    --kv-cache-dtype fp8 \
-    --block-size=1
+    --port "$VLLM_BACKEND_PORT"
     --trust-remote-code
-    --max-num-seqs "$CONC"
-    --mm-encoder-tp-mode data
-    "${PREFIX_CACHE_ARGS[@]}"
+    --async-scheduling
+    --distributed-executor-backend mp
+    --kv-cache-dtype fp8
+    "${PARALLEL_ARGS[@]}"
+    "${EP_ARGS[@]}"
+    --moe-backend triton_unfused
+    --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --tokenizer-mode deepseek_v4
+    --tool-call-parser deepseek_v4
+    --enable-auto-tool-choice
+    --reasoning-parser deepseek_v4
+    --enable-prefix-caching
+    --gpu-memory-utilization 0.8
+    --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
@@ -278,7 +320,24 @@ printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
-wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+if [ "$USE_VLLM_ROUTER" = "true" ]; then
+    echo "Starting native vLLM router on port $PORT for $TP DP ranks..."
+    vllm-router \
+        --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
+        --policy "$VLLM_ROUTER_POLICY" \
+        --intra-node-data-parallel-size "$TP" \
+        --host 0.0.0.0 \
+        --port "$PORT" \
+        --prometheus-host 127.0.0.1 \
+        --prometheus-port "$VLLM_ROUTER_METRICS_PORT" \
+        --request-timeout-secs 14400 \
+        --disable-retries > "$ROUTER_LOG" 2>&1 &
+    ROUTER_PID=$!
+    echo "Router PID: $ROUTER_PID"
+    wait_for_server_ready --port "$PORT" --server-log "$ROUTER_LOG" --server-pid "$ROUTER_PID"
+fi
 
 # ---- Run benchmark ----------------------------------------------------------
 build_replay_cmd "$RESULT_DIR"
