@@ -144,6 +144,60 @@ def scaling(series):
     return out
 
 
+def scaling_efficiency(series):
+    """From EP4+EP8 (same sku/phase): weak = fixed tokens/rank (ideal: flat latency); strong =
+    fixed GLOBAL tokens (ideal: latency falls ~1/EP). Efficiency = ideal/observed (1.0 = ideal)."""
+    out = {"weak": [], "strong": []}
+    by = defaultdict(dict)
+    for s in series:
+        if s["routing"] == "uniform" and s["mode"] == "normal" and s["contract"] == "layout-and-dispatch-v1":
+            by[(s["sku"], s["phase"], s["dtype"])][s["ep"]] = s
+    for k, eps in by.items():
+        if len(eps) < 2:
+            continue
+        lo, hi = min(eps), max(eps)
+        # weak: same tokens/rank T on both EP -> latency should stay flat
+        for T in sorted(set(eps[lo]["rows"]) & set(eps[hi]["rows"])):
+            a, b = _p(eps[lo]["rows"][T], "dispatch", "p50"), _p(eps[hi]["rows"][T], "dispatch", "p50")
+            if a and b:
+                out["weak"].append({"sku": k[0], "phase": k[1], "tokens_per_rank": T,
+                                    f"ep{lo}": round(a, 1), f"ep{hi}": round(b, 1),
+                                    "weak_efficiency": round(a / b, 3)})  # >1 = EP8 faster (super-ideal)
+        # strong: same GLOBAL tokens -> EP_hi has fewer tokens/rank; ideal latency ~ a*(lo/hi)
+        for Tlo in eps[lo]["rows"]:
+            gt = Tlo * lo
+            Thi = gt // hi
+            if Thi in eps[hi]["rows"]:
+                a, b = _p(eps[lo]["rows"][Tlo], "dispatch", "p50"), _p(eps[hi]["rows"][Thi], "dispatch", "p50")
+                if a and b:
+                    ideal = a * (lo / hi)
+                    out["strong"].append({"sku": k[0], "phase": k[1], "global_tokens": gt,
+                                          f"ep{lo}_p50": round(a, 1), f"ep{hi}_p50": round(b, 1),
+                                          "strong_efficiency": round(ideal / b, 3)})
+    return out
+
+
+def regressions(series, baseline_series, thresh=0.10):
+    """Flag latency regressions vs a baseline, comparing ONLY matching (sku,ep,phase,mode,dtype,
+    contract,routing) cells at shared T. Regression = current p50/p99 > baseline*(1+thresh)."""
+    bkey = {_key(b, "sku", "ep", "phase", "mode", "dtype", "contract", "routing"): b for b in baseline_series}
+    out = []
+    for s in series:
+        b = bkey.get(_key(s, "sku", "ep", "phase", "mode", "dtype", "contract", "routing"))
+        if not b:
+            continue
+        for T in sorted(set(s["rows"]) & set(b["rows"])):
+            for op in ("dispatch", "combine", "roundtrip"):
+                for stat in ("p50", "p99"):
+                    cur, base = _p(s["rows"][T], op, stat), _p(b["rows"][T], op, stat)
+                    if cur and base and cur > base * (1 + thresh):
+                        out.append({"sku": s["sku"], "ep": s["ep"], "phase": s["phase"],
+                                    "routing": s["routing"], "T": T, "op": op, "stat": stat,
+                                    "baseline": round(base, 1), "current": round(cur, 1),
+                                    "regression_pct": round(100 * (cur - base) / base, 1)})
+    return out
+
+
 def recommendations(series):
     """Per (sku, phase): lowest-p99-dispatch config at the headline T=64 (decode) / T=256 (prefill)."""
     out = []
@@ -169,12 +223,17 @@ def recommendations(series):
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX operating-envelope analysis")
     ap.add_argument("--results-dir", default="results")
+    ap.add_argument("--baseline", help="dir of baseline results for regression detection")
     ap.add_argument("--out")
     a = ap.parse_args()
     s = load(a.results_dir)
     rep = {"n_series": len(s), "skew_penalty": skew_penalty(s), "ll_crossover": ll_crossover(s),
            "topology_penalty": topology_penalty(s), "scaling": scaling(s),
-           "recommendations": recommendations(s)}
+           "scaling_efficiency": scaling_efficiency(s), "recommendations": recommendations(s)}
+    if a.baseline:
+        regs = regressions(s, load(a.baseline))
+        rep["regressions"] = regs
+        print(f"regressions vs baseline: {len(regs)} cell(s) > +10%")
     print(f"loaded {len(s)} series")
     sk = rep["skew_penalty"]
     if sk:
