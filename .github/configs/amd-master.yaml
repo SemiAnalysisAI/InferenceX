@@ -603,7 +603,7 @@ glm5-fp8-mi355x-sglang-mtp:
       - { tp: 8, conc-start: 4, conc-end: 8, spec-decoding: mtp }
 
 glm5-fp8-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260523
+  image: lmsysorg/sglang:v0.5.13.post1-rocm720-mi35x
   model: zai-org/GLM-5-FP8
   model-prefix: glm5
   runner: mi355x-disagg
@@ -627,12 +627,12 @@ glm5-fp8-mi355x-sglang-disagg:
           additional-settings:
           - "PREFILL_NODES=1"
         decode:
-          num-worker: 8
+          num-worker: 4
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=8"
+          - "DECODE_NODES=4"
           - "DECODE_MTP_SIZE=0"
       # 1P+4D TP8/EP1 dp-attn off (high concurrency)
       - spec-decoding: "none"
@@ -667,12 +667,12 @@ glm5-fp8-mi355x-sglang-disagg:
           additional-settings:
           - "PREFILL_NODES=1"
         decode:
-          num-worker: 1
+          num-worker: 4
           tp: 8
           ep: 1
           dp-attn: false
           additional-settings:
-          - "DECODE_NODES=1"
+          - "DECODE_NODES=4"
           - "DECODE_MTP_SIZE=0"
 
 glm5-fp8-mi355x-atom:
