@@ -35,6 +35,6 @@ srun --jobid="$JID" \
   --container-writable --container-remap-root --no-container-mount-home \
   --container-workdir=/cx --no-container-entrypoint --export=ALL \
   env COLLECTIVEX_IMAGE="$IMAGE" RUNNER=mi355x-8x TOPO=mi355x-xgmi \
-  bash /cx/launchers/_mori_repro.sh </dev/null 2>&1
+  bash "/cx/launchers/${CX_DRIVER:-_v3_mori.sh}" </dev/null 2>&1
 scancel "$JID" 2>/dev/null || true
 echo "=== ORCH DONE ==="
