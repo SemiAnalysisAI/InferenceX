@@ -71,7 +71,8 @@ fi
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
-export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
+# VLLM_PREFIX_CACHE_RETENTION_INTERVAL only applies to sliding-window/Mamba
+# models; this vLLM build raises ValueError if it is set for DSv4.
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
