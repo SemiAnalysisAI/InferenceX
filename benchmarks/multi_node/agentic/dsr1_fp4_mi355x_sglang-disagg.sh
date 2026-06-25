@@ -8,7 +8,8 @@
 # HiCache-offload configuration is ported from local_test_dsr1_agentic_offload.sh
 # and is fully env-overridable so a YAML config can tune it.
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../benchmark_lib.sh"
 
 check_env_vars \
     CONC_LIST \
