@@ -172,10 +172,8 @@ EOF
 esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-MAX_MODEL_LEN_ARGS=()
 if [[ "$DP_ATTENTION" == "true" ]]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
-    MAX_MODEL_LEN_ARGS=(--max-model-len 700000)
 fi
 
 EP_ARGS=()
@@ -219,7 +217,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --enable-prefix-caching \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --max-num-batched-tokens 8192 \
-    "${MAX_MODEL_LEN_ARGS[@]}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
