@@ -4191,4 +4191,4 @@
     - "Image vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223; benchmark script overlays vllm-project/vllm PR #46380 (MiniMax-M3 modelopt NVFP4 support, commit 6c08558) before serve"
     - "Weights pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4 (added minimaxm3-fp4 MODEL_PATH branch to launch_b200-dgxc.sh); --block-size 128 (MSA), --language-model-only"
     - "Sweeps tp 4/8 with and without EP and dp-attn at 1k1k and 8k1k, conc 1-1024"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1932
