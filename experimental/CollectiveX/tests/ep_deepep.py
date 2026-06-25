@@ -81,6 +81,11 @@ class DeepEPBackend:
     #   allow_nvlink_for_low_latency_mode (IBGDA not required intranode) on 8xH100.
     SUPPORTED_PRECISIONS = {"bf16", "fp8"}
     SUPPORTED_MODES = {"normal", "ll"}
+    # Both contracts (review #3): layout-and-dispatch-v1 times get_dispatch_layout INSIDE
+    # dispatch; cached-layout-comm-only-v1 hoists the layout out (untimed) so dispatch is
+    # pure comm — matching DeepEP's own benchmark. (cached-layout applies to normal mode;
+    # LL has no separable layout — its low_latency_dispatch computes it internally.)
+    SUPPORTED_CONTRACTS = {"layout-and-dispatch-v1", "cached-layout-comm-only-v1"}
 
     def __init__(self, args, rank, world_size, local_rank, device):
         self.args = args
@@ -89,6 +94,9 @@ class DeepEPBackend:
         self.device = device
         self.mode = args.mode
         self.ll = (args.mode == "ll")
+        self.contract = args.measurement_contract
+        # hoist layout out of the timed dispatch only for the cached contract in normal mode.
+        self.cache_layout = (self.contract == "cached-layout-comm-only-v1") and not self.ll
         self.group = dist.group.WORLD
         assert args.dispatch_dtype in self.SUPPORTED_PRECISIONS and args.mode in self.SUPPORTED_MODES, \
             "run_ep.py must reject unsupported dtype/mode before constructing the backend"
@@ -175,19 +183,28 @@ class DeepEPBackend:
     def make_problem(self, T, idx, weights, x):
         # idx[T,topk] int64, weights[T,topk] f32, x[T,hidden] bf16 — the shared trace slice.
         p = types.SimpleNamespace(T=T, x=x, topk_idx=idx.to(torch.int64),
-                                  topk_weights=weights.to(torch.float32))
+                                  topk_weights=weights.to(torch.float32), layout=None)
         if self.fp8 and not self.ll:
             # normal mode: per-token block-128 cast, UNTIMED (preprocessing, mirrors the
             # real producer that hands the dispatcher already-quantized activations).
             # LL mode does NOT pre-cast — its kernel casts internally (timed).
             p.x_fp8, p.x_scales = _per_token_cast_to_fp8(x)
+        if self.cache_layout:
+            # cached-layout-comm-only-v1: compute the dispatch layout ONCE here (untimed)
+            # so the timed dispatch is pure comm. (layout-and-dispatch-v1 leaves it None
+            # and dispatch computes it inside the timed window.)
+            ntr, _, ntpe, itir, _ = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
+            p.layout = (ntr, ntpe, itir)
         return p
 
     def dispatch(self, p):
         if self.ll:
             return self._dispatch_ll(p)
-        (num_tokens_per_rank, _, num_tokens_per_expert,
-         is_token_in_rank, _) = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
+        if p.layout is not None:                       # cached-layout-comm-only-v1
+            num_tokens_per_rank, num_tokens_per_expert, is_token_in_rank = p.layout
+        else:                                          # layout-and-dispatch-v1 (timed layout)
+            (num_tokens_per_rank, _, num_tokens_per_expert,
+             is_token_in_rank, _) = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
         x_in = (p.x_fp8, p.x_scales) if self.fp8 else p.x  # tuple => DeepEP fp8 dispatch
         recv_x, _recv_idx, recv_topk_weights, _, handle, _ = self.buffer.dispatch(
             x_in, topk_idx=p.topk_idx, topk_weights=p.topk_weights,

@@ -52,6 +52,12 @@ def main() -> int:
                                  + " ".join(sys.argv[1:]))
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
     args.image_digest = os.environ.get("COLLECTIVEX_IMAGE_DIGEST", "")
+    # GHA run linkage (review #3 #1): every artifact records the workflow run it came
+    # from so a chart point can link back to its run. Populated by the workflow env.
+    _run = {k: os.environ.get(v) for k, v in {
+        "run_id": "GITHUB_RUN_ID", "run_attempt": "GITHUB_RUN_ATTEMPT",
+        "source_sha": "COLLECTIVEX_SOURCE_SHA", "repo": "GITHUB_REPOSITORY"}.items()}
+    args.git_run = _run if any(_run.values()) else None
 
     # Import the backend CLASS (module-top imports torch + the backend lib; no process
     # group needed) and REJECT unsupported combos BEFORE init — never fall back or
@@ -72,6 +78,19 @@ def main() -> int:
             print(f"ERROR: {args.backend} REJECTS dispatch-dtype={args.dispatch_dtype} / "
                   f"mode={args.mode} — not supported on this build (no fallback). "
                   f"supported precisions={sorted(sp)} modes={sorted(sm)}.", file=sys.stderr)
+        return 5
+    # Measurement-contract capability (review #3): each adapter conforms to a declared
+    # contract; reject anything else rather than letting it pick its own timing boundary.
+    sc = getattr(Backend, "SUPPORTED_CONTRACTS", {"layout-and-dispatch-v1"})
+    if args.measurement_contract not in sc:
+        if rank == 0:
+            print(f"ERROR: {args.backend} REJECTS measurement-contract="
+                  f"{args.measurement_contract} — supported={sorted(sc)}.", file=sys.stderr)
+        return 5
+    if args.measurement_contract == "cached-layout-comm-only-v1" and args.mode == "ll":
+        if rank == 0:
+            print("ERROR: cached-layout-comm-only-v1 is meaningless for LL (low_latency_dispatch "
+                  "computes its layout internally; nothing to hoist).", file=sys.stderr)
         return 5
 
     # MoRI inits its shmem on a process group it registers as "default" and wants

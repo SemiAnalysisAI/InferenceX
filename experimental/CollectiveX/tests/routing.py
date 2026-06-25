@@ -84,25 +84,38 @@ def rank_activations(tokens: int, hidden: int, seed: int, rank: int, device, dty
     return torch.randn(tokens, hidden, generator=g, dtype=torch.float32).to(device=device, dtype=dtype)
 
 
-def routing_stats(idx, experts: int, experts_per_rank: int) -> dict:
+def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dict:
     """Realized routing properties for the GLOBAL trace — published per point so the
-    fan-out / load can never be silently misread. idx is the global [gt, topk] tensor.
+    fan-out / load can never be silently misread. idx is the global [gt, topk] tensor;
+    weights the matching [gt, topk] gate weights (hashed too for workload identity).
     """
     ep = max(1, experts // max(1, experts_per_rank))
     ranks = (idx // experts_per_rank)                       # [gt, topk] destination rank per assignment
     # unique destination ranks per token (fan-out)
     onehot = torch.zeros(idx.shape[0], ep, dtype=torch.bool)
-    onehot.scatter_(1, ranks.clamp_(max=ep - 1), True)
+    onehot.scatter_(1, ranks.clamp(max=ep - 1), True)
     fanout = onehot.sum(dim=1)                              # [gt]
     hist = torch.bincount(fanout, minlength=ep + 1)[1:ep + 1].tolist()  # counts for fan-out 1..ep
     load = torch.bincount(idx.reshape(-1), minlength=experts).float()
-    h = hashlib.sha256(idx.to(torch.int32).cpu().numpy().tobytes()).hexdigest()[:16]
+    # token-copies SENT to each destination rank (the "send histogram", review #3).
+    rank_load = torch.bincount(ranks.reshape(-1).clamp(max=ep - 1), minlength=ep).tolist()
+    # SHA-256 workload identity over BOTH topk_idx and gate weights (review #3): a chart
+    # point's routing is provably identical across SKUs only if both hashes match.
+    idx_bytes = idx.to(torch.int32).cpu().numpy().tobytes()
+    idx_hash = hashlib.sha256(idx_bytes).hexdigest()[:16]
+    if weights is not None:
+        w_bytes = weights.to(torch.float32).cpu().numpy().tobytes()
+        w_hash = hashlib.sha256(w_bytes).hexdigest()[:16]
+        routing_hash = hashlib.sha256(idx_bytes + w_bytes).hexdigest()[:16]  # combined identity
+    else:
+        w_hash, routing_hash = None, idx_hash
     return {
         "fanout_mean": float(fanout.float().mean()),
         "fanout_min": int(fanout.min()), "fanout_max": int(fanout.max()),
         "fanout_hist": hist,                               # index k-1 = #tokens with fan-out k
+        "rank_load_hist": rank_load,                       # token-copies sent to each dest rank
         "routed_copies": int(fanout.sum()),                # total (token, dest-rank) pairs
         "expert_load_min": int(load.min()), "expert_load_max": int(load.max()),
         "expert_load_mean": float(load.mean()),
-        "routing_hash": h,
+        "routing_hash": routing_hash, "idx_hash": idx_hash, "weights_hash": w_hash,
     }

@@ -49,6 +49,10 @@ class MoRIBackend:
     # MoRI exposes quant_type (fp8) in EpDispatchCombineConfig; added once validated.
     SUPPORTED_PRECISIONS = {"bf16"}        # + "fp8" once the fp8 quant_type path is wired
     SUPPORTED_MODES = {"normal"}           # MoRI has no separate low-latency entrypoint
+    # MoRI computes its routing layout INSIDE the dispatch kernel (block_num/warps launch);
+    # it cannot be hoisted, so MoRI honors only the layout-and-dispatch contract. Cross-
+    # vendor comparisons must therefore use layout-and-dispatch-v1 (the common contract).
+    SUPPORTED_CONTRACTS = {"layout-and-dispatch-v1"}
 
     def __init__(self, args, rank, world_size, local_rank, device):
         self.args = args

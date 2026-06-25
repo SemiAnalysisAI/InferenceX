@@ -10,10 +10,11 @@ Fair-comparison contract (hardened after review — see notes.md / plan.md):
     gate weights are generated once from a fixed seed over the *global* batch and are
     identical on every SKU; each rank materializes its slice. So every platform runs
     the *same* problem (no per-rank/per-platform RNG in the adapters).
-  * **Communication-only timing**: dispatch and combine are each timed as pure comm
-    with all staging (expert-output placement) done UNTIMED; round-trip is the SUM of
-    the two comm-only medians (no mixed timed region), so backend-specific staging
-    never enters a timed window. `measurement_contract = "comm-only-v1"`.
+  * **Explicit measurement contract** (review #3): adapters conform to a NAMED timing
+    boundary, they do not each choose their own. layout-and-dispatch-v1 times the
+    routing-layout step inside dispatch (the only contract MoRI can honor); cached-
+    layout-comm-only-v1 hoists it out (DeepEP). Combine excludes staging in both.
+    Serial = SUM of the two isolated medians (NOT a measured chained op).
   * **Correct collective percentile**: each iteration's latency is reduced MAX across
     ranks first (a collective finishes with its slowest rank), THEN percentiled —
     `median_i(max_r)`, not `max_r(median_i)`.
@@ -42,7 +43,7 @@ import hashlib
 import json
 import os
 
-SCHEMA_VERSION = 2  # bumped: comm-only contract, deterministic trace, corrected percentile
+SCHEMA_VERSION = 3  # v3: explicit contracts, pooled trials p50/p90/p99, routing-identity proof, separated logical bytes
 
 # Phase-default sweeps — token-size regimes, NOT distinct kernels (both run normal
 # mode; "decode"/"prefill" name the small/large-token regime). Powers of two for a
@@ -70,6 +71,17 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     choices=["uniform", "balanced", "balanced-rank-local", "zipf"])
     ap.add_argument("--mode", default="normal", choices=["normal", "ll"],
                     help="kernel path: normal or low-latency (LL); LL is backend-dependent")
+    # Measurement contract — the EXPLICIT timing boundary every adapter must conform to
+    # (review #3: adapters must not each decide their own boundary). Backends declare
+    # SUPPORTED_CONTRACTS; run_ep.py rejects an unsupported one.
+    #   layout-and-dispatch-v1   — dispatch timing INCLUDES routing-layout generation
+    #                              (the only contract MoRI can honor; its layout is
+    #                              computed inside the kernel and cannot be hoisted).
+    #   cached-layout-comm-only-v1 — layout computed ONCE untimed; dispatch times pure
+    #                              comm (DeepEP-only; matches DeepEP's own benchmark).
+    # Combine excludes staging in BOTH (staging is untimed for every backend).
+    ap.add_argument("--measurement-contract", default="layout-and-dispatch-v1",
+                    choices=["layout-and-dispatch-v1", "cached-layout-comm-only-v1"])
     ap.add_argument("--num-sms", type=int, default=24,
                     help="DeepEP comm-SM budget in 'default' resource-mode (MoRI uses block_num/warps)")
     # Resource regime (review: budgets were neither normalized nor tuned):
@@ -90,7 +102,13 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     # (cold), at warmup>=30 it settles to ~85us (faster than H100, reproducible within
     # ~2.5%). H100/MI355X reach steady state much sooner; the extra iters are harmless.
     ap.add_argument("--warmup", type=int, default=32)
-    ap.add_argument("--iters", type=int, default=200, help=">=100 so p99 is meaningful")
+    ap.add_argument("--iters", type=int, default=200,
+                    help="timed iterations PER TRIAL; pooled across trials for percentiles")
+    # review #3: p99 from ~50 samples is just the max. Pool iters x trials, randomize the
+    # token-order each trial so warmup/clock drift doesn't correlate with T, report p50/
+    # p90/p99 (p99 is the headline). 3 trials x 200 iters = 600 pooled samples per point.
+    ap.add_argument("--trials", type=int, default=3,
+                    help="independent timed trials, token-order randomized per trial; samples pooled")
     ap.add_argument("--allow-unknown-provenance", action="store_true",
                     help="permit a run with unpinned backend commit/version (default: fail)")
     # provenance / output
@@ -254,112 +272,126 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     warm_burst = int(os.environ.get("CX_FABRIC_WARM_BURST", "40"))
     do_burst = warm_burst > 0 and getattr(backend, "wants_warm_burst", False)
 
-    rows: list[dict] = []
+    import random as _random
+    elem_dispatch = elem_bytes          # fp8=1 / bf16=2 (dispatch payload element size)
+    tol = getattr(backend, "tolerance", 5e-2)
+
+    # ---- Pass 1: build the per-T problem ONCE (deterministic trace + cached layout per
+    # contract), run the correctness gate ONCE. Timing is Pass 2 (pooled over trials). ----
+    problems, gate = {}, {}
+    routing_hashes = set()
     for T in ladder:
         gt = T * ep_size
         idx_g, w_g = routing.build_global_routing(gt, args.experts, args.topk, args.routing,
                                                   args.seed, experts_per_rank)
-        rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank)
+        rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
+        routing_hashes.add(rstats["routing_hash"])
         idx_s, w_s = routing.rank_slice(idx_g, w_g, rank, T)
         x = routing.rank_activations(T, args.hidden, args.seed, rank, device, torch.bfloat16)
         problem = backend.make_problem(T, idx_s.to(device), w_s.to(device), x)
-
-        # Re-ramp GPU clocks at THIS shape (untimed) so the point is measured at
-        # steady-state regardless of where it sits in the sweep (Blackwell drops clocks
-        # during the tiny small-T points). Skipped for backends that opt out (MoRI).
-        if do_burst:
-            for _ in range(warm_burst):
-                bh = backend.dispatch(problem); backend.stage(problem, bh); backend.combine(problem, bh)
-            torch.cuda.synchronize()
-
-        # ---- correctness gate (untimed): dispatch -> stage -> combine ----
-        h = backend.dispatch(problem)
-        backend.stage(problem, h)
+        h = backend.dispatch(problem); backend.stage(problem, h)
         combined = backend.combine(problem, h)
         torch.cuda.synchronize()
         recv_local = backend.recv_tokens(h)
         exp, n_cmp = backend.expected(problem, h)
         max_abs = (combined[:n_cmp].float() - exp[:n_cmp].float()).abs().max().item()
-        denom = exp[:n_cmp].float().abs().max().item() + 1e-6
-        max_rel = max_abs / denom
-        # Correctness = this rank's OWN tokens reconstruct (combine round-trip). A rank
-        # may legitimately RECEIVE 0 tokens at small T under balanced routing (not every
-        # rank is a destination), so recv==0 is NOT a per-rank failure — only the GLOBAL
-        # total recv must be > 0 (gated below), to catch a truly silent no-op.
-        # Tolerance is backend/dtype-aware (fp8 round-trip is looser); recorded in the doc.
-        tol = getattr(backend, "tolerance", 5e-2)
-        local_ok = 1 if max_rel < tol else 0
+        max_rel = max_abs / (exp[:n_cmp].float().abs().max().item() + 1e-6)
+        problems[T] = problem
+        gate[T] = {"rstats": rstats, "recv_local": recv_local,
+                   "max_rel": max_rel, "local_ok": 1 if max_rel < tol else 0}
 
-        # ---- comm-only timing: dispatch-only + combine-only (staging untimed) ----
-        disp_iters = time_us(torch, lambda p=problem: backend.dispatch(p), args.warmup, args.iters)
+    # ---- Pass 2: N timed trials. Token order is randomized PER TRIAL (seeded ⇒ identical
+    # on every rank, so collectives stay lock-step) so warmup/clock drift can't correlate
+    # with T. Per-iteration cross-rank MAX samples are POOLED across trials, then
+    # percentiled (review #3: p99 from one 50-iter run is just the max). MoRI keeps
+    # ascending order — it wedges on a cold jump to a large T. ----
+    disp_pool = {T: [] for T in ladder}
+    comb_pool = {T: [] for T in ladder}
+    order = list(ladder)
+    rng = _random.Random(args.seed)
+    shuffle_ok = not getattr(backend, "needs_gradual_ramp", False)
+    for trial in range(max(1, args.trials)):
+        if shuffle_ok:
+            rng.shuffle(order)
+        for T in order:
+            problem = problems[T]
+            if do_burst:   # re-ramp clocks at THIS shape before timing (Blackwell)
+                for _ in range(warm_burst):
+                    bh = backend.dispatch(problem); backend.stage(problem, bh); backend.combine(problem, bh)
+                torch.cuda.synchronize()
+            disp_iters = time_us(torch, lambda p=problem: backend.dispatch(p), args.warmup, args.iters)
 
-        def prep(p=problem):
-            hh = backend.dispatch(p)
-            backend.stage(p, hh)
-            return hh
+            def prep(p=problem):
+                hh = backend.dispatch(p); backend.stage(p, hh); return hh
+            if backend.combine_needs_redispatch:
+                comb_iters = time_us(torch, lambda hh, p=problem: backend.combine(p, hh),
+                                     args.warmup, args.iters, pre=prep)
+            else:
+                hh = prep()
+                comb_iters = time_us(torch, lambda p=problem, hx=hh: backend.combine(p, hx),
+                                     args.warmup, args.iters)
+            # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
+            disp_pool[T] += _reduce_vec(torch, dist, device, disp_iters, MAX)
+            comb_pool[T] += _reduce_vec(torch, dist, device, comb_iters, MAX)
 
-        if backend.combine_needs_redispatch:
-            comb_iters = time_us(torch, lambda hh, p=problem: backend.combine(p, hh),
-                                 args.warmup, args.iters, pre=prep)
-        else:
-            hh = prep()
-            comb_iters = time_us(torch, lambda p=problem, hx=hh: backend.combine(p, hx),
-                                 args.warmup, args.iters)
-
-        # ---- per-iteration cross-rank MAX, THEN percentile  (= median_i(max_r)) ----
-        d_iter = _reduce_vec(torch, dist, device, disp_iters, MAX)
-        c_iter = _reduce_vec(torch, dist, device, comb_iters, MAX)
-        d50, d99 = percentile(d_iter, 50), percentile(d_iter, 99)
-        c50, c99 = percentile(c_iter, 50), percentile(c_iter, 99)
-        # SERIAL dispatch+combine = the SUM of the two separately-measured comm-only
-        # medians. NOT an independently-measured chained op: it cannot reveal shared
-        # sync cost, launch amortization, or dispatch/combine overlap. Named honestly.
-        s50, s99 = d50 + c50, d99 + c99
-
-        # ---- realized comm volume (from the known trace) + recv distribution ----
-        recv_total = _reduce_int(torch, dist, device, recv_local, SUM)
-        recv_max = _reduce_int(torch, dist, device, recv_local, MAX)
-        recv_min = _reduce_int(torch, dist, device, recv_local, MIN)
-        global_ok = _reduce_int(torch, dist, device, local_ok, MIN)
-        max_rel = _reduce_vec(torch, dist, device, [max_rel], MAX)[0]
-        point_ok = bool(global_ok) and recv_total > 0  # reconstruct on all ranks + non-silent
-
-        routed_bytes_total = recv_total * args.hidden * elem_bytes  # dispatch dir (fp8=1B/bf16=2B)
-        combine_bytes_total = recv_total * args.hidden * 2          # combine ALWAYS moves bf16
-        # Algorithmic bandwidth: total routed payload across ranks / collective latency.
-        # Payload-only (excludes indices/weights/scales). Round-trip sums the two directions
-        # with their REAL dtypes (fp8 dispatch + bf16 combine => 1.5x, not 2x; bf16 => 2x).
-        disp_algbw = (routed_bytes_total / (d50 * 1e3)) if d50 > 0 else 0.0
-        serial_algbw = ((routed_bytes_total + combine_bytes_total) / (s50 * 1e3)) if s50 > 0 else 0.0
-        # tokens/s is throughput at THIS global-token count — only compare across
-        # configs at a MATCHED global_tokens (the global-tokens x-axis), not equal T.
-        tps = (gt / (s50 * 1e-6)) if s50 > 0 else None
-
+    # ---- Pass 3: percentiles from pooled samples + realized bytes + row ----
+    rows = []
+    for T in ladder:
+        gt = T * ep_size
+        g = gate[T]; rstats = g["rstats"]
+        d, c = disp_pool[T], comb_pool[T]
+        d50, d90, d99 = percentile(d, 50), percentile(d, 90), percentile(d, 99)
+        c50, c90, c99 = percentile(c, 50), percentile(c, 90), percentile(c, 99)
+        # "Sum of isolated medians" — NOT an independently-measured chained dispatch->combine
+        # op (cannot reveal shared sync, launch amortization, or overlap). Named so in the UI.
+        s50, s90, s99 = d50 + c50, d90 + c90, d99 + c99
+        recv_total = _reduce_int(torch, dist, device, g["recv_local"], SUM)
+        recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
+        recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
+        global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
+        max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
+        point_ok = bool(global_ok) and recv_total > 0
+        # Logical routed payload (NOT wire/bus bandwidth): realized token-copies received
+        # across all ranks x hidden x element size. Dispatch and combine counted SEPARATELY
+        # at their REAL dtypes; excludes scales/indices/metadata/padding/protocol. The
+        # plot reports a "logical routed payload rate", never an algBW/busBW claim.
+        dispatch_logical_bytes = recv_total * args.hidden * elem_dispatch
+        combine_logical_bytes = recv_total * args.hidden * 2   # combine input is bf16
         rows.append({
             "tokens_per_rank": T, "global_tokens": gt,
-            "dispatch_us_p50": d50, "dispatch_us_p99": d99,
-            "combine_us_p50": c50, "combine_us_p99": c99,
-            "serial_us_p50": s50, "serial_us_p99": s99,  # = dispatch + combine (sum, not chained)
+            "dispatch_us_p50": d50, "dispatch_us_p90": d90, "dispatch_us_p99": d99,
+            "combine_us_p50": c50, "combine_us_p90": c90, "combine_us_p99": c99,
+            "serial_us_p50": s50, "serial_us_p90": s90, "serial_us_p99": s99,  # sum of isolated medians
+            "samples_pooled": len(d), "trials": max(1, args.trials),
             "recv_tokens_max": recv_max, "recv_tokens_min": recv_min,
             "recv_tokens_mean": recv_total / world_size, "recv_tokens_total": recv_total,
-            "routed_bytes_total": routed_bytes_total, "combine_bytes_total": combine_bytes_total,
-            "dispatch_algbw_gbps": disp_algbw, "serial_algbw_gbps": serial_algbw,
-            "tokens_per_second": tps,
-            # realized routing properties (published so fan-out is never misread):
+            "dispatch_logical_bytes": dispatch_logical_bytes,
+            "combine_logical_bytes": combine_logical_bytes,
+            "byte_contract": "logical-routed-payload-v1",
+            "tokens_per_second": (gt / (s50 * 1e-6)) if s50 > 0 else None,
             "fanout_mean": rstats["fanout_mean"], "fanout_max": rstats["fanout_max"],
             "routed_copies": rstats["routed_copies"], "expert_load_max": rstats["expert_load_max"],
             "routing_hash": rstats["routing_hash"],
             "correct": point_ok, "max_rel_error": max_rel,
         })
         if rank == 0:
-            print(f"  T={T:<5} disp={d50:8.2f}us combine={c50:8.2f}us serial={s50:8.2f}us "
-                  f"fanout={rstats['fanout_mean']:.2f} recv[min/mean/max]="
+            print(f"  T={T:<5} disp p50/p99={d50:7.1f}/{d99:7.1f}us combine p50/p99={c50:7.1f}/{c99:7.1f}us "
+                  f"n={len(d)} fanout={rstats['fanout_mean']:.2f} recv[min/mean/max]="
                   f"{recv_min}/{recv_total // world_size}/{recv_max} correct={point_ok}")
+
+    # Cross-rank workload-identity proof: every rank must have built the SAME global routing
+    # (one hash per T here); confirm all ranks agree by hashing the per-T hash set and
+    # MIN/MAX-reducing it — a mismatch means NVIDIA and AMD did NOT run identical routing.
+    trace_sig = int(hashlib.sha256("|".join(sorted(routing_hashes)).encode()).hexdigest()[:15], 16)
+    sig_min = _reduce_int(torch, dist, device, trace_sig, MIN)
+    sig_max = _reduce_int(torch, dist, device, trace_sig, MAX)
+    routing_consistent = (sig_min == sig_max == trace_sig)
 
     if rank != 0:
         return 0
 
-    all_ok = bool(rows) and all(r["correct"] for r in rows)
+    # status=valid requires correctness AND a proven-identical routing trace across ranks.
+    all_ok = bool(rows) and all(r["correct"] for r in rows) and routing_consistent
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank, "dispatch_dtype": args.dispatch_dtype,
@@ -371,7 +403,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "resource_mode": args.resource_mode,
         "nodes": int(os.environ.get("SLURM_NNODES", "1")),
         "topology_class": args.topology_class, "comparison_class": args.comparison_class,
-        "measurement_contract": "comm-only-v1", "shape": shape,
+        # honest contract name (was the misleading "comm-only-v1": dispatch INCLUDES layout
+        # under layout-and-dispatch-v1). Adapters declare which they conform to.
+        "measurement_contract": args.measurement_contract, "shape": shape,
     }
     headline = next((r for r in rows if r["tokens_per_rank"] == 64), rows[len(rows) // 2])
     env = None
@@ -391,28 +425,38 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "command": getattr(args, "reproduction_command", ""),
             "image": getattr(args, "image", "") or None,
             "image_digest": getattr(args, "image_digest", "") or None,
+            "git_run": getattr(args, "git_run", None),   # GHA run id/attempt/sha (review #1)
             "seed": args.seed, "warmup": args.warmup, "iters": args.iters,
+            "trials": max(1, args.trials), "samples_per_point": (max(1, args.trials) * args.iters),
+            "measurement_contract": args.measurement_contract,
             "dispatch_dtype": args.dispatch_dtype, "mode": args.mode,
-            # Whether the fp8 per-token cast is INSIDE the timed dispatch window. None for
-            # bf16; the fp8 path sets it on the backend (cast is staged untimed ⇒ False).
             "fp8_quant_in_timing": getattr(backend, "fp8_in_timing", None),
         },
         **meta,
         "correctness": {"passed": all_ok,
                         "max_rel_error": max((r["max_rel_error"] for r in rows), default=None),
-                        "tolerance": getattr(backend, "tolerance", 5e-2), "points": len(rows)},
-        "routing_profile": {  # realized fan-out for the whole sweep (so it can't be misread)
+                        "tolerance": getattr(backend, "tolerance", 5e-2), "points": len(rows),
+                        # honest scope: round-trip reconstruction + non-silent recv, NOT a full
+                        # per-token routing/ordering/weight/padding proof (review #3).
+                        "scope": "roundtrip-reconstruction-smoke-v1"},
+        "routing_identity": {   # cryptographic workload-identity proof (review #3)
+            "consistent_across_ranks": routing_consistent,
+            "trace_signature": f"{trace_sig:015x}",
+            "distinct_per_T_hashes": sorted(routing_hashes),
+        },
+        "routing_profile": {
             "routing": args.routing,
             "fanout_mean": sum(r["fanout_mean"] for r in rows) / len(rows),
             "fanout_max": max(r["fanout_max"] for r in rows),
             "headline_hash": headline["routing_hash"],
         },
-        "metrics": {
+        "metrics": {   # p99 is the headline percentile (review #3); p50/p90 also kept
             "headline_tokens_per_rank": headline["tokens_per_rank"],
-            "dispatch_us_p50": headline["dispatch_us_p50"],
-            "combine_us_p50": headline["combine_us_p50"],
-            "serial_us_p50": headline["serial_us_p50"],
-            "serial_us_p99": headline["serial_us_p99"],
+            "headline_percentile": "p99",
+            "dispatch_us_p50": headline["dispatch_us_p50"], "dispatch_us_p99": headline["dispatch_us_p99"],
+            "combine_us_p50": headline["combine_us_p50"], "combine_us_p99": headline["combine_us_p99"],
+            "serial_us_p50": headline["serial_us_p50"], "serial_us_p99": headline["serial_us_p99"],
+            "serial_label": "sum of isolated medians (not a measured chained op)",
             "tokens_per_second": headline["tokens_per_second"],
         },
         "rows": rows, "environment": env,
@@ -421,8 +465,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     with open(args.out, "w") as fh:
         json.dump(doc, fh, indent=2)
         fh.write("\n")
-    print(f"{backend.name} ep-dispatch-combine [{args.phase}/{args.mode}]: status={doc['status']} "
-          f"{len(rows)} points, headline T={headline['tokens_per_rank']} "
-          f"disp={headline['dispatch_us_p50']:.1f}us combine={headline['combine_us_p50']:.1f}us "
+    print(f"{backend.name} ep-dispatch-combine [{args.phase}/{args.mode}/{args.measurement_contract}]: "
+          f"status={doc['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
+          f"headline T={headline['tokens_per_rank']} disp_p99={headline['dispatch_us_p99']:.1f}us "
           f"-> {args.out}")
     return 0 if all_ok else 1
