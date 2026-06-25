@@ -108,7 +108,14 @@ fi
 
 MAX_NUM_SEQS_MULTIPLIER="${VLLM_MAX_NUM_SEQS_MULTIPLIER:-2}"
 MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$((MAX_NUM_SEQS_MULTIPLIER * CONC))}"
-GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.95}"
+GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-}"
+if [[ -z "$GPU_MEMORY_UTILIZATION" ]]; then
+    if [[ "$OFFLOADING" == "cpu" ]]; then
+        GPU_MEMORY_UTILIZATION=0.92
+    else
+        GPU_MEMORY_UTILIZATION=0.95
+    fi
+fi
 PREFIX_CACHING_ARGS=(--enable-prefix-caching)
 if [[ "${VLLM_PREFIX_CACHING:-true}" == "false" ]]; then
     PREFIX_CACHING_ARGS=(--no-enable-prefix-caching)
@@ -125,10 +132,21 @@ if [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]]; then
     MAX_BATCHED_TOKENS_ARGS=(--max-num-batched-tokens "$VLLM_MAX_NUM_BATCHED_TOKENS")
 fi
 MAX_MODEL_LEN_ARGS=()
-if [[ -n "${VLLM_MAX_MODEL_LEN:-}" ]]; then
-    MAX_MODEL_LEN_ARGS=(--max-model-len "$VLLM_MAX_MODEL_LEN")
+MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-}"
+if [[ "$DP_ATTENTION" == "true" && -z "$MAX_MODEL_LEN" ]]; then
+    MAX_MODEL_LEN=393216
 fi
-echo "H100 AgentX tuning: max_num_seqs=$MAX_NUM_SEQS gpu_memory_utilization=$GPU_MEMORY_UTILIZATION chunked_prefill=${VLLM_CHUNKED_PREFILL:-auto} prefix_caching=${VLLM_PREFIX_CACHING:-true} max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS:-auto} max_model_len=${VLLM_MAX_MODEL_LEN:-model-default} cache_warmup_s=$AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
+if [[ -n "$MAX_MODEL_LEN" ]]; then
+    MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
+fi
+VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-}"
+if [[ -z "$VLLM_ROUTER_POLICY" ]]; then
+    case "${EXP_NAME:-}" in
+        *round-robin*) VLLM_ROUTER_POLICY=round_robin ;;
+        *) VLLM_ROUTER_POLICY=consistent_hash ;;
+    esac
+fi
+echo "H100 AgentX tuning: max_num_seqs=$MAX_NUM_SEQS gpu_memory_utilization=$GPU_MEMORY_UTILIZATION chunked_prefill=${VLLM_CHUNKED_PREFILL:-auto} prefix_caching=${VLLM_PREFIX_CACHING:-true} max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS:-auto} max_model_len=${MAX_MODEL_LEN:-model-default} router_policy=$VLLM_ROUTER_POLICY cache_warmup_s=$AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
 free -g
 swapon --show || true
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
@@ -160,7 +178,7 @@ wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --s
 if [[ "$DP_ATTENTION" == "true" ]]; then
     vllm-router \
         --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
-        --policy "${VLLM_ROUTER_POLICY:-consistent_hash}" \
+        --policy "$VLLM_ROUTER_POLICY" \
         --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \
