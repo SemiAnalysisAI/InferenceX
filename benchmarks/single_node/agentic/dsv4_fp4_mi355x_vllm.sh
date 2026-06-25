@@ -303,7 +303,6 @@ VLLM_CMD=(
     "${EP_ARGS[@]}"
     --moe-backend triton_unfused
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
-    --attention_config.use_fp4_indexer_cache=True
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
@@ -313,6 +312,9 @@ VLLM_CMD=(
     --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
 )
+
+# (srok), not yet
+    #--attention_config.use_fp4_indexer_cache=True
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
 printf '\n' | tee -a "$RESULT_DIR/vllm_command.txt"
 "${VLLM_CMD[@]}" > "$SERVER_LOG" 2>&1 &
