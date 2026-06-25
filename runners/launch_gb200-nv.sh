@@ -521,6 +521,24 @@ else
     echo "Warning: Logs directory not found at $LOGS_DIR"
 fi
 
+if [[ "$IS_AGENTIC" == "1" && "$INFMAX_WORKSPACE" != "$GITHUB_WORKSPACE" ]]; then
+    shopt -s nullglob
+    AGENTIC_RESULT_FILES=("$INFMAX_WORKSPACE/${RESULT_FILENAME}"_conc*.json)
+    AGENTIC_CHECKPOINT_FILES=("$INFMAX_WORKSPACE/agentic_checkpoints/${RESULT_FILENAME}"_conc*)
+    shopt -u nullglob
+
+    for result_file in "${AGENTIC_RESULT_FILES[@]}"; do
+        cp "$result_file" "$GITHUB_WORKSPACE/"
+        echo "Copied agentic result to GHA workspace: $(basename "$result_file")"
+    done
+
+    if [ "${#AGENTIC_CHECKPOINT_FILES[@]}" -gt 0 ]; then
+        mkdir -p "$GITHUB_WORKSPACE/agentic_checkpoints"
+        cp "${AGENTIC_CHECKPOINT_FILES[@]}" "$GITHUB_WORKSPACE/agentic_checkpoints/"
+        echo "Copied ${#AGENTIC_CHECKPOINT_FILES[@]} agentic checkpoint files to GHA workspace"
+    fi
+fi
+
 if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
     if [ ! -d "$LOGS_DIR" ]; then
         exit 1
