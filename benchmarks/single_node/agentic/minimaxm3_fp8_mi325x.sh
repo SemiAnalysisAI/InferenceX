@@ -39,7 +39,7 @@ SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
-export TRITON_CACHE_DIR="$RESULT_DIR/triton_cache"
+export TRITON_CACHE_DIR="${TRITON_CACHE_DIR:-/tmp/triton-cache-${SLURM_JOB_ID:-$$}}"
 rm -rf "$TRITON_CACHE_DIR"
 mkdir -p "$TRITON_CACHE_DIR"
 
