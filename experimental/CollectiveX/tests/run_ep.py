@@ -47,6 +47,15 @@ def main() -> int:
     os.environ.setdefault("MASTER_ADDR", "localhost")
     os.environ.setdefault("MASTER_PORT", "12355")
 
+    # EPLB bumps the expert count to PHYSICAL (logical + redundant) BEFORE backend construction
+    # so the backend sizes its buffers for the replicated set; ep_harness builds the LOGICAL
+    # routing trace and remaps it to the balanced physical placement (a pure routing transform,
+    # tests/eplb.py — no adapter change). Deterministic, so every rank agrees on the count.
+    if getattr(args, "eplb", False):
+        import eplb
+        args.num_logical_experts = args.experts
+        args.experts = eplb.physical_count(args.experts, args.num_redundant_experts, world_size)
+
     # Reproduction provenance (recorded in the artifact).
     args.reproduction_command = (f"torchrun --nproc_per_node={world_size} tests/run_ep.py "
                                  + " ".join(sys.argv[1:]))

@@ -86,10 +86,15 @@ def load_series(results_dir: str) -> list[dict]:
         cl = " [cl]" if contract == "cached-layout-comm-only-v1" else ""   # cached-layout flag
         backend = d.get("backend")
         ep = d.get("ep_size")
-        # FULL per-line label: SKU·EP·backend·dtype[·LL][·resource][·cached-layout]. EP is
-        # explicit because a SKU can now span EP degrees (GB300 EP4 on one NVL72 tray, EP8
-        # across two) — without it the EP4/EP8 lines collide in the combined all-EP overlay.
-        label = f'{sku.upper()} EP{ep} · {backend} · {dtype}{ll}{rs}{cl}'
+        # Routing axis: base distribution + EPLB. "zipf+eplb" is the balanced-by-replication
+        # variant of zipf; uniform is the baseline (omitted from the label to keep it short).
+        eplb_doc = d.get("eplb") or {}
+        routing_disp = f'{sh.get("routing", "?")}+eplb' if eplb_doc.get("enabled") else sh.get("routing", "?")
+        rt = "" if routing_disp == "uniform" else f' ·{routing_disp}'
+        # FULL per-line label: SKU·EP·backend·dtype[·LL][·resource][·cached-layout][·routing].
+        # EP is explicit because a SKU can span EP degrees (GB300 EP4 on one NVL72 tray, EP8
+        # across two); routing is explicit so balanced/zipf/zipf+eplb don't collide with uniform.
+        label = f'{sku.upper()} EP{ep} · {backend} · {dtype}{ll}{rs}{cl}{rt}'
         repro = d.get("reproduction", {})
         gr = repro.get("git_run") or {}
         rid = d.get("routing_identity", {})
@@ -100,9 +105,12 @@ def load_series(results_dir: str) -> list[dict]:
             # comparison class: best-stack (tuned/default) vs resource-constrained
             # (normalized) — kept distinct so they're never read as one fair contest.
             "suite": "resource-constrained" if rmode == "normalized" else "backend-default",
-            # ep in the key so EP4 and EP8 of one SKU get distinct colors in the all-EP
-            # overlay (sku stays ckey.split("|")[0] for the family lookup — ep is last).
-            "ckey": f"{sku}|{backend}|{dtype}|{mode}|{rmode}|{contract}|ep{ep}",  # config identity (color)
+            "routing": routing_disp,
+            # eplb per-rank load imbalance removed (the headline of zipf vs zipf+eplb).
+            "eplb_before": eplb_doc.get("imbalance_before"), "eplb_after": eplb_doc.get("imbalance_after"),
+            # ep + routing in the key so EP4/EP8 and uniform/balanced/zipf/zipf+eplb of one SKU
+            # get distinct colors/lines (sku stays ckey.split("|")[0] for the family lookup).
+            "ckey": f"{sku}|{backend}|{dtype}|{mode}|{rmode}|{contract}|ep{ep}|{routing_disp}",  # config identity (color)
             "label": label,
             "dash": "" if dtype == "bf16" else "6 4",   # bf16 solid, fp8 dashed (2nd cue)
             "color": COLORS.get(sku, "#555"),           # provisional; reassigned below
@@ -201,9 +209,13 @@ const YK  = {lat:"Latency (µs)", tps:"Tokens / s", bw:"Logical routed payload r
 const XK  = {t:"Source tokens / rank", gt:"Global source tokens"};
 const PCT = {p50:"p50", p90:"p90", p99:"p99"};
 const SUITE = {all:"All", "backend-default":"Backend-default", "resource-constrained":"Resource-constrained"};
+// Routing distributions present in the data (+ "all"): uniform (baseline) / balanced /
+// zipf (skewed) / zipf+eplb (skew rebalanced by EPLB replication). Default to uniform so the
+// initial view matches the headline sweep; switch to compare zipf vs zipf+eplb.
+const ROUTING = (()=>{ const o={all:"All"}; [...new Set(DATA.map(s=>s.routing))].sort().forEach(r=>{o[r]=r;}); return o; })();
 // p99 is the headline percentile (review #3); suite=all overlays best-stack + constrained
 // (distinguishable by label/style) — switch to one suite for a clean within-class read.
-const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50", suite:"all"};
+const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50", suite:"all", routing:"uniform"};
 
 function xval(r,xk){ return xk==="t"? r.t : r.gt; }
 function metric(r,op,yk,pct){
@@ -238,9 +250,10 @@ const mapLin=(v,a,b,p,q)=>p+(v-a)/(b-a)*(q-p);
 // Build one SVG chart. opts: {op,phase,x,y,ylog,title,legend,w,h}
 function chart(o){
   const W=o.w||900, H=o.h||520, m={l:64,r:16,t:34,b:46};
-  const pct=o.pct||"p99", suite=o.suite||"all";
+  const pct=o.pct||"p99", suite=o.suite||"all", routing=o.routing||"all";
   const sl = DATA.filter(s=>s.phase===o.phase && (o.ep==null || s.ep===o.ep)
-                            && (suite==="all" || s.suite===suite));
+                            && (suite==="all" || s.suite===suite)
+                            && (routing==="all" || s.routing===routing));
   const pts = sl.map(s=>({s, P:s.rows.map(r=>({x:xval(r,o.x), y:metric(r,o.op,o.y,pct), r}))
                                      .filter(p=>p.x>0 && (o.ylog? p.y>0 : p.y>=0))}));
   let xs=[], ys=[]; pts.forEach(g=>g.P.forEach(p=>{xs.push(p.x);ys.push(p.y);}));
@@ -288,9 +301,10 @@ function chart(o){
   });
   s+='</svg>'; return s;
 }
-function legend(phase, ep, suite){
+function legend(phase, ep, suite, routing){
   return '<div class="legend">'+DATA.filter(s=>s.phase===phase && (ep==null||s.ep===ep)
-                                              && (!suite||suite==="all"||s.suite===suite)).map(s=>{
+                                              && (!suite||suite==="all"||s.suite===suite)
+                                              && (!routing||routing==="all"||s.routing===routing)).map(s=>{
     const sw = s.dash ? 'background:repeating-linear-gradient(90deg,'+s.color+' 0 5px,transparent 5px 9px)'
                       : 'background:'+s.color;   // dashed swatch = fp8 (matches the line)
     return '<span class="it"><span class="sw" style="'+sw+'"></span>'+s.label+'</span>';
@@ -306,6 +320,7 @@ function renderControls(){
     '<div class="grp"><span class="lab">Phase</span>'+seg('phase',{decode:"Decode",prefill:"Prefill"},ST.phase)+'</div>'+
     '<div class="grp"><span class="lab">Percentile</span>'+seg('pct',PCT,ST.pct)+'</div>'+
     '<div class="grp"><span class="lab">Suite</span>'+seg('suite',SUITE,ST.suite)+'</div>'+
+    '<div class="grp"><span class="lab">Routing</span>'+seg('routing',ROUTING,ST.routing)+'</div>'+
     '<div class="grp"><span class="lab">X-axis</span>'+seg('x',XK,ST.x)+'</div>'+
     '<div class="grp"><span class="lab">X scale</span>'+seg('xlog',{true:"Log",false:"Linear"},String(ST.xlog))+'</div>'+
     '<div class="grp"><span class="lab">Y-axis</span>'+seg('y',YK,ST.y)+'</div>'+
@@ -316,9 +331,9 @@ function renderControls(){
 }
 function renderMain(){
   document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,xlog:ST.xlog,ylog:ST.ylog,
-    pct:ST.pct, suite:ST.suite,
-    title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
-  document.getElementById('mlegend').innerHTML = legend(ST.phase, null, ST.suite);
+    pct:ST.pct, suite:ST.suite, routing:ST.routing,
+    title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
+  document.getElementById('mlegend').innerHTML = legend(ST.phase, null, ST.suite, ST.routing);
 }
 function renderGrid(){
   // SEPARATE panels per (phase, EP degree); within a panel, the SUITE selector keeps
@@ -327,12 +342,13 @@ function renderGrid(){
   const eps=[...new Set(DATA.map(s=>s.ep))].sort((a,b)=>a-b);
   let h='';
   phases.forEach(ph=>{ eps.forEach(ep=>{
-    if(!DATA.some(s=>s.phase===ph && s.ep===ep && (ST.suite==="all"||s.suite===ST.suite))) return;
+    if(!DATA.some(s=>s.phase===ph && s.ep===ep && (ST.suite==="all"||s.suite===ST.suite)
+                     && (ST.routing==="all"||s.routing===ST.routing))) return;
     const scale=(ST.xlog?'log':'lin')+'–'+(ST.ylog?'log':'lin');
-    h+='<h2>'+ph[0].toUpperCase()+ph.slice(1)+' · EP'+ep+' · '+ST.pct+' — latency vs source tokens/rank (µs, '+scale+')</h2>'+
-       legend(ph,ep,ST.suite)+'<div class="grid">';
+    h+='<h2>'+ph[0].toUpperCase()+ph.slice(1)+' · EP'+ep+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+' — latency vs source tokens/rank (µs, '+scale+')</h2>'+
+       legend(ph,ep,ST.suite,ST.routing)+'<div class="grid">';
     ['dispatch','combine','serial'].forEach(op=>{ h+='<div class="card"><div class="gtit">'+OPS[op]+'</div>'+
-      chart({op,phase:ph,ep,x:'t',y:'lat',xlog:ST.xlog,ylog:ST.ylog,pct:ST.pct,suite:ST.suite,title:'',w:340,h:260})+'</div>'; });
+      chart({op,phase:ph,ep,x:'t',y:'lat',xlog:ST.xlog,ylog:ST.ylog,pct:ST.pct,suite:ST.suite,routing:ST.routing,title:'',w:340,h:260})+'</div>'; });
     h+='</div>'; }); });
   document.getElementById('grid').innerHTML=h;
 }
@@ -345,8 +361,11 @@ function renderGrid(){
   const suites=[...new Set(DATA.map(s=>s.suite))].join(' + ');
   const samp=[...new Set(DATA.map(s=>s.samples).filter(Boolean))].join('/');
   const allconsistent=DATA.every(s=>s.routing_consistent!==false);
+  const routings=[...new Set(DATA.map(s=>s.routing))].sort().join(' / ');
+  const ez=DATA.find(s=>s.eplb_after!=null);
+  const eplbNote=ez? ' EPLB (routing=zipf+eplb) replicates hot experts to rebalance per-rank load — imbalance '+ez.eplb_before.toFixed(1)+'x→'+ez.eplb_after.toFixed(1)+'x (vs raw zipf).' : '';
   document.getElementById('prov').textContent=
-    'Deterministic shared routing trace (seed-fixed, '+(sh.routing||'?')+', mean fan-out ≈'+fo+
+    'Deterministic shared routing trace (seed-fixed; routings: '+routings+' — Routing selector; mean fan-out ≈'+fo+
     ' dest-ranks/token; cross-rank identity '+(allconsistent?'PROVEN (SHA-256 of topk_idx+weights agrees on every rank)':'NOT proven on some series')+
     '). Fixed: hidden='+(sh.hidden||'?')+', top-k='+(sh.topk||'?')+', experts='+(sh.experts||'?')+
     '. dtype/mode/resource/contract vary PER LINE — read the label (dtypes shown: '+dtypes+'). '+
@@ -355,7 +374,7 @@ function renderGrid(){
     '. SERIAL = SUM of isolated dispatch+combine medians, NOT a measured chained op. The bandwidth axis is a LOGICAL routed-payload rate '+
     '(recv copies x hidden x dtype / latency; per-op bytes; excludes scales/idx/meta/padding) — NOT algBW/busBW/wire utilization. '+
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
-    'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof). '+
+    'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
     'Backends: '+provs.join(', ')+'. Hover a point for p50/p90/p99, contract, suite, and its workflow run.';
   renderControls(); renderMain(); renderGrid();
 })();

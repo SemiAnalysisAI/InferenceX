@@ -69,6 +69,13 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     # comm) edge case; zipf = skewed. Default to the REALISTIC one.
     ap.add_argument("--routing", default="uniform",
                     choices=["uniform", "balanced", "balanced-rank-local", "zipf"])
+    # EPLB (Expert-Parallel Load Balancer): replicate hot experts onto redundant physical
+    # slots + balanced-place so per-rank load equalizes. A pure routing-trace transform
+    # (tests/eplb.py); experts becomes num_logical+redundant. The remedy for `zipf` skew.
+    ap.add_argument("--eplb", action="store_true",
+                    help="apply EPLB expert replication/placement to the routing trace")
+    ap.add_argument("--num-redundant-experts", type=int, default=32,
+                    help="EPLB: redundant physical expert slots (rounded up to a multiple of ep_size)")
     ap.add_argument("--mode", default="normal", choices=["normal", "ll"],
                     help="kernel path: normal or low-latency (LL); LL is backend-dependent")
     # Measurement contract — the EXPLICIT timing boundary every adapter must conform to
@@ -205,8 +212,15 @@ def _provenance_unknown(prov: dict) -> list[str]:
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     import routing  # torch-based; imported lazily so the module byte-compiles without torch
+    import eplb     # stdlib planner + torch remap (the EPLB transform)
 
     ep_size = world_size  # num_ep_groups removed (was metadata-only; no real subgroups)
+    # EPLB (if on): run_ep.py already bumped args.experts to the PHYSICAL count and stashed the
+    # logical count, so experts_per_rank below is physical. The trace is built over LOGICAL
+    # experts then remapped to physical (build_trace), so the whole sweep runs over the
+    # balanced physical placement with no adapter change.
+    eplb_on = getattr(args, "eplb", False)
+    num_logical = getattr(args, "num_logical_experts", args.experts)
     if args.experts % ep_size != 0:
         if rank == 0:
             print(f"ERROR: experts ({args.experts}) must divide ep_size ({ep_size})")
@@ -245,6 +259,27 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     MAX, MIN, SUM = dist.ReduceOp.MAX, dist.ReduceOp.MIN, dist.ReduceOp.SUM
 
+    # EPLB plan (once): estimate logical load from the global logical trace at the largest
+    # ladder T (most samples), then replicate+place. Held fixed across all T (as real EPLB
+    # plans from an observed load estimate). build_trace builds the LOGICAL trace and remaps
+    # to physical when the plan is present; otherwise it's the identity (logical == physical).
+    eplb_plan = None
+    if eplb_on:
+        ref_idx, _ = routing.build_global_routing(max(ladder) * ep_size, num_logical, args.topk,
+                                                  args.routing, args.seed, num_logical // ep_size)
+        load = torch.bincount(ref_idx.reshape(-1), minlength=num_logical).float().tolist()
+        eplb_plan = eplb.build_plan(load, args.experts, ep_size)
+        if rank == 0:
+            print(f"NOTE: EPLB {num_logical}->{args.experts} experts ({ep_size}x{experts_per_rank}); "
+                  f"per-rank load imbalance {eplb_plan['imbalance_before']:.2f}x -> "
+                  f"{eplb_plan['imbalance_after']:.2f}x; {eplb_plan['replicated_experts']} experts "
+                  f"replicated (hottest {eplb_plan['max_replicas']}x)")
+
+    def build_trace(gt):
+        idx_l, w = routing.build_global_routing(gt, num_logical, args.topk, args.routing,
+                                                args.seed, num_logical // ep_size)
+        return (eplb.remap_idx(idx_l, eplb_plan) if eplb_plan is not None else idx_l), w
+
     # Fabric/clock warm-up BEFORE any timed point (review: H200 had an anomalous cold
     # first point and a 40% decode-vs-prefill mismatch at the shared T=128). Gradually
     # ramp through the small ladder shapes untimed — warms clocks/fabric for everyone
@@ -252,8 +287,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     warm_T = min(ladder[-1], 128)
     warm_shapes = [t for t in ladder if t <= warm_T] or [ladder[0]]
     for wt in warm_shapes:
-        wi, ww = routing.build_global_routing(wt * ep_size, args.experts, args.topk,
-                                              args.routing, args.seed, experts_per_rank)
+        wi, ww = build_trace(wt * ep_size)
         wsi, wsw = routing.rank_slice(wi, ww, rank, wt)
         wx = routing.rank_activations(wt, args.hidden, args.seed, rank, device, torch.bfloat16)
         wp = backend.make_problem(wt, wsi.to(device), wsw.to(device), wx)
@@ -282,8 +316,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     routing_hashes = set()
     for T in ladder:
         gt = T * ep_size
-        idx_g, w_g = routing.build_global_routing(gt, args.experts, args.topk, args.routing,
-                                                  args.seed, experts_per_rank)
+        idx_g, w_g = build_trace(gt)
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
         routing_hashes.add(rstats["routing_hash"])
         idx_s, w_s = routing.rank_slice(idx_g, w_g, rank, T)
@@ -395,7 +428,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank, "dispatch_dtype": args.dispatch_dtype,
-        "routing": args.routing,
+        "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
     }
     meta = {
         "op": "ep-dispatch-combine", "backend": backend.name, "mode": args.mode,
@@ -444,6 +477,16 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "trace_signature": f"{trace_sig:015x}",
             "distinct_per_T_hashes": sorted(routing_hashes),
         },
+        # EPLB plan + the per-rank load imbalance it removes (the headline of the zipf+EPLB
+        # comparison). enabled=False when the run did not apply EPLB.
+        "eplb": ({"enabled": True, "num_logical_experts": num_logical,
+                  "num_physical_experts": args.experts,
+                  "num_redundant": args.experts - num_logical,
+                  "imbalance_before": eplb_plan["imbalance_before"],
+                  "imbalance_after": eplb_plan["imbalance_after"],
+                  "replicated_experts": eplb_plan["replicated_experts"],
+                  "max_replicas": eplb_plan["max_replicas"]}
+                 if eplb_plan else {"enabled": False}),
         "routing_profile": {
             "routing": args.routing,
             "fanout_mean": sum(r["fanout_mean"] for r in rows) / len(rows),
