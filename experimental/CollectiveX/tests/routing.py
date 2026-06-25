@@ -95,6 +95,32 @@ def rank_activations(tokens: int, hidden: int, seed: int, rank: int, device, dty
     return torch.randn(tokens, hidden, generator=g, dtype=torch.float32).to(device=device, dtype=dtype)
 
 
+def routing_locality(idx, experts_per_rank: int, ep_size: int, tokens_per_rank: int,
+                     gpus_per_node: int, scale_up_domain: int = None) -> dict:
+    """Locality of the routed (token, dest-rank) copies (goal Part 2 topology section).
+    A token's SOURCE rank is global_id // tokens_per_rank; its DEST ranks are idx // epr.
+    Reports the fraction of copies that stay on the local rank / same node / same scale-up
+    domain vs cross-node / cross-domain — the property a placement (packed/striped) changes."""
+    import torch as _t
+    gt = idx.shape[0]
+    dest = (idx // experts_per_rank).clamp(max=ep_size - 1)             # [gt, topk]
+    src = (_t.arange(gt) // max(1, tokens_per_rank)).unsqueeze(1)       # [gt,1] source rank
+    src = src.expand_as(dest)
+    sud = scale_up_domain or (gpus_per_node * ep_size)                  # default: all one domain
+    local = (dest == src)
+    same_node = (dest // gpus_per_node) == (src // gpus_per_node)
+    same_dom = (dest // sud) == (src // sud)
+    n = dest.numel()
+    return {
+        "local_rank_fraction": float(local.float().mean()),
+        "same_node_fraction": float(same_node.float().mean()),
+        "same_scaleup_domain_fraction": float(same_dom.float().mean()),
+        "cross_node_fraction": float((~same_node).float().mean()),
+        "cross_domain_fraction": float((~same_dom).float().mean()),
+        "gpus_per_node": gpus_per_node, "scale_up_domain": sud, "copies": int(n),
+    }
+
+
 def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dict:
     """Realized routing properties for the GLOBAL trace — published per point so the
     fan-out / load can never be silently misread. idx is the global [gt, topk] tensor;

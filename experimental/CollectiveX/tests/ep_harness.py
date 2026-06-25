@@ -129,6 +129,13 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topology-class", required=True)
     ap.add_argument("--transport", default="")
     ap.add_argument("--comparison-class", default="standardized")
+    # Structured placement metadata (goal P2 topology): GPUs/node + scale-up domain + placement
+    # kind let routing locality (local/same-node/cross-domain copy fractions) be computed and let
+    # packed/striped/adversarial be distinguished. gpus-per-node=0 -> single node (= ep_size).
+    ap.add_argument("--gpus-per-node", type=int, default=0)
+    ap.add_argument("--scale-up-domain", type=int, default=0, help="0 = gpus_per_node*ep (one domain)")
+    ap.add_argument("--placement", default="packed",
+                    choices=["packed", "striped", "runtime-native", "adversarial"])
     ap.add_argument("--env-json")
     ap.add_argument("--timestamp")
     ap.add_argument("--out", required=True)
@@ -424,6 +431,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gt = T * ep_size
         idx_g, w_g = build_trace(gt)
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
+        gpn = args.gpus_per_node or ep_size
+        rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, T, gpn,
+                                                      args.scale_up_domain or None)
         routing_hashes.add(rstats["routing_hash"])
         idx_s, w_s = routing.rank_slice(idx_g, w_g, rank, T)
         x = routing.rank_activations(T, args.hidden, args.seed, rank, device, torch.bfloat16)
@@ -547,7 +557,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "raw_samples": {"dispatch": _histogram(d), "combine": _histogram(c), "roundtrip": _histogram(rt)},
             "fanout_mean": rstats["fanout_mean"], "fanout_max": rstats["fanout_max"],
             "routed_copies": rstats["routed_copies"], "expert_load_max": rstats["expert_load_max"],
-            "routing_hash": rstats["routing_hash"],
+            "routing_hash": rstats["routing_hash"], "locality": rstats.get("locality"),
             "correct": point_ok, "max_rel_error": max_rel,
         })
         if rank == 0:
@@ -615,6 +625,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # honest contract name (was the misleading "comm-only-v1": dispatch INCLUDES layout
         # under layout-and-dispatch-v1). Adapters declare which they conform to.
         "measurement_contract": args.measurement_contract, "shape": shape,
+        # structured placement metadata (goal P2 topology) — replaces the bare topology string.
+        "placement": {
+            "kind": args.placement, "nodes": int(os.environ.get("SLURM_NNODES", "1")),
+            "gpus_per_node": args.gpus_per_node or ep_size,
+            "scale_up_domain": args.scale_up_domain or ((args.gpus_per_node or ep_size) * 1),
+            "ranks": ep_size, "transport": args.transport,
+        },
     }
     headline = next((r for r in rows if r["tokens_per_rank"] == 64), rows[len(rows) // 2])
     env = None
