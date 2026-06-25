@@ -126,6 +126,23 @@ install_mooncake_rocm() {
     exec 9>&-
 }
 
+VLLM_BACKEND_PORT="$PORT"
+ROUTER_PROMETHEUS_PORT=$((PORT + 10000))
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    read -r PORT VLLM_BACKEND_PORT ROUTER_PROMETHEUS_PORT < <(python3 - <<'PY'
+import socket
+
+sockets = [socket.socket() for _ in range(3)]
+for sock in sockets:
+    sock.bind(("", 0))
+print(*(sock.getsockname()[1] for sock in sockets))
+for sock in sockets:
+    sock.close()
+PY
+)
+    export PORT
+fi
+
 OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
@@ -186,9 +203,7 @@ if [[ "$IMAGE" == vllm/vllm-openai-rocm:nightly-* ]]; then
     KV_CACHE_ARGS=(--kv-cache-dtype fp8)
 fi
 
-VLLM_BACKEND_PORT="$PORT"
 if [[ "$DP_ATTENTION" == "true" ]]; then
-    VLLM_BACKEND_PORT=$((PORT + 1))
     export AIPERF_HTTP_X_SESSION_ID_FROM_CORRELATION_ID=1
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
@@ -235,7 +250,7 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
         --host 0.0.0.0 \
         --port "$PORT" \
         --prometheus-host 127.0.0.1 \
-        --prometheus-port "$((PORT + 10000))" \
+        --prometheus-port "$ROUTER_PROMETHEUS_PORT" \
         --request-timeout-secs 14400 \
         --disable-retries > "$ROUTER_LOG" 2>&1 &
     ROUTER_PID=$!
