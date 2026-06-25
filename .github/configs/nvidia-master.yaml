@@ -4584,7 +4584,7 @@ minimaxm3-fp8-h100-vllm-agentic:
     # has a 269k-token service-time-weighted active request, placing the H100
     # 1.64M-token HBM cliff near conc 6. Sample every integer through the
     # cliff; Mooncake extends prefix retention, not active-request HBM.
-    - duration: 1800
+    - duration: 3600
       available-cpu-dram-mib: 2_063_837
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
