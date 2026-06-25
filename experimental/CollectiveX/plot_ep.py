@@ -53,23 +53,31 @@ def load_series(results_dir: str) -> list[dict]:
         sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
         rows = []
         for r in d["rows"]:
-            # carry p50/p90/p99 per op (v3); fall back to p50-only for v2 docs.
-            def pcts(k):
-                p50 = r.get(f"{k}_us_p50") or r.get("roundtrip_us_p50" if k == "serial" else "")
-                return {"p50": p50, "p90": r.get(f"{k}_us_p90") or p50,
-                        "p99": r.get(f"{k}_us_p99") or p50}
-            dop, cop, sop = pcts("dispatch"), pcts("combine"), pcts("serial")
-            if not (dop["p50"] and cop["p50"] and sop["p50"]):
+            # v4 carries nested {p50,p90,p95,p99} dicts for dispatch/combine/roundtrip/isolated_sum.
+            # Fall back to v3 flat *_us_p* (serial -> isolated_sum) so legacy docs still load.
+            def pcts(k, flat):
+                if isinstance(r.get(k), dict) and r[k].get("p50") is not None:
+                    o = dict(r[k]); o.setdefault("p95", o.get("p90"))
+                    return o
+                p50 = r.get(f"{flat}_us_p50")
+                return {"p50": p50, "p90": r.get(f"{flat}_us_p90") or p50,
+                        "p95": r.get(f"{flat}_us_p95") or r.get(f"{flat}_us_p90") or p50,
+                        "p99": r.get(f"{flat}_us_p99") or p50}
+            dop, cop = pcts("dispatch", "dispatch"), pcts("combine", "combine")
+            iso = pcts("isolated_sum", "serial")                       # renamed from "serial"
+            rtp = pcts("roundtrip", "roundtrip")                       # MEASURED round trip (v4)
+            if not (dop["p50"] and cop["p50"]):
                 continue
+            if rtp["p50"] is None:                                     # legacy: no measured RT
+                rtp = iso
             rows.append({
                 "t": r["tokens_per_rank"], "gt": r.get("global_tokens"),
-                "dispatch": dop, "combine": cop, "serial": sop,
+                "dispatch": dop, "combine": cop, "roundtrip": rtp, "isolated_sum": iso,
                 "fanout": r.get("fanout_mean"),
-                # SEPARATE logical bytes per direction (review #3 #6): dispatch at its dtype,
-                # combine always bf16. v2 fallback: routed_bytes_total (dispatch dir only).
                 "dbytes": r.get("dispatch_logical_bytes") or r.get("routed_bytes_total") or 0,
                 "cbytes": r.get("combine_logical_bytes") or 0,
                 "recv": r.get("recv_tokens_max") or r.get("recv_tokens") or 0,
+                "straggler": (r.get("per_rank_dispatch_us") or {}).get("slowest_rank"),
                 "correct": bool(r.get("correct")),
             })
         if not rows:
@@ -98,8 +106,14 @@ def load_series(results_dir: str) -> list[dict]:
         repro = d.get("reproduction", {})
         gr = repro.get("git_run") or {}
         rid = d.get("routing_identity", {})
+        wl = d.get("workload") or {}
+        # publication status (v4) gates the default view; legacy v3 docs -> "legacy".
+        pub = d.get("publication_status") or "legacy"
+        # workload signature: prefer the v4 workload block, fall back to routing_identity (v3).
+        wsig = wl.get("trace_signature") or rid.get("trace_signature")
         series.append({
             "sku": sku, "backend": backend, "ep": ep,
+            "pub": pub, "wsig": wsig, "wid": wl.get("workload_id"),
             "phase": d.get("phase", "decode"), "mode": mode,
             "dtype": dtype, "resource": rmode or "tuned", "contract": contract,
             # comparison class: best-stack (tuned/default) vs resource-constrained
@@ -124,25 +138,11 @@ def load_series(results_dir: str) -> list[dict]:
             "prov": d.get("backend_provenance", {}),
             "shape": sh, "rows": rows,
         })
-    # Fill each prefill curve with the decode-range points of the SAME config so a prefill
-    # panel spans the full token axis. DeepEP's prefill ladder is [128,256,512], but MoRI's
-    # gradual ramp expands its prefill to [1..512]; without this the DeepEP lines look
-    # "incomplete" (clustered at the right) next to MoRI. decode+prefill are the same kernel
-    # at different token regimes — this is one continuous latency-vs-T curve. Idempotent.
-    # Key on EP degree too: a SKU can now appear at multiple EP degrees (e.g. GB300 EP4 on
-    # one NVL72 tray AND EP8 across two), same config => same ckey; without ep in the key the
-    # EP8 prefill would stitch the EP4 decode points (different global batch). Keep them apart.
-    by_cfg_phase = {(s["ckey"], s["ep"], s["phase"]): s for s in series}
-    for s in series:
-        if s["phase"] != "prefill" or not s["rows"]:
-            continue
-        dec = by_cfg_phase.get((s["ckey"], s["ep"], "decode"))
-        if not dec:
-            continue
-        minp = min(r["t"] for r in s["rows"])
-        extra = [r for r in dec["rows"] if r["t"] < minp]
-        if extra:
-            s["rows"] = sorted(extra + s["rows"], key=lambda r: r["t"])
+    # NOTE (goal Part 1, "plot/artifact integrity"): raw series are IMMUTABLE after loading.
+    # An earlier version injected each config's decode-range points into its prefill series so
+    # prefill panels spanned the full token axis — that COPIED observations between series and
+    # is removed. Each phase now plots only its own measured points; the x-axis simply spans
+    # whatever a series measured. (A shaded decode/prefill regime is the cosmetic alternative.)
 
     # Assign a DISTINCT color per config key, grouped by SKU family (stable across the
     # decode/prefill panels so a line keeps its color everywhere).
@@ -182,6 +182,7 @@ h1{font-size:20px;margin:0 0 4px} h2{font-size:15px;color:var(--mut);font-weight
 .seg button.on{background:var(--accent);color:#fff}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
 .legend{display:flex;flex-wrap:wrap;gap:16px;margin:6px 2px 0;color:var(--mut);font-size:12.5px}
+.guard{background:#3a2a14;border:1px solid #6b4f1f;color:#f0c674;border-radius:6px;padding:6px 10px;margin:6px 2px;font-size:12px}
 .legend .it{display:flex;align-items:center;gap:7px}
 .legend .sw{width:22px;height:3px;border-radius:2px;display:inline-block}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -202,7 +203,9 @@ TAIL = "</div></body></html>"
 
 JS = r"""
 const SKUS = [...new Set(DATA.map(s=>s.sku))];
-const OPS = {dispatch:"Dispatch", combine:"Combine", serial:"Serial (Σ isolated medians)"};
+// roundtrip = INDEPENDENTLY MEASURED chained latency (v4). isolated_sum = Σ of isolated
+// dispatch+combine percentiles — NOT a measured op (no throughput/SLO use). serial(v3)->isolated_sum.
+const OPS = {dispatch:"Dispatch", combine:"Combine", roundtrip:"Round trip (measured)", isolated_sum:"Isolated sum (Σp, not measured)"};
 // NOT algorithmic/bus bandwidth: logical routed payload (recv copies x hidden x dtype)
 // over latency; dispatch & combine count their OWN bytes. Excludes scales/idx/meta/padding.
 const YK  = {lat:"Latency (µs)", tps:"Tokens / s", bw:"Logical routed payload rate (GB/s)"};
@@ -213,9 +216,14 @@ const SUITE = {all:"All", "backend-default":"Backend-default", "resource-constra
 // zipf (skewed) / zipf+eplb (skew rebalanced by EPLB replication). Default to uniform so the
 // initial view matches the headline sweep; switch to compare zipf vs zipf+eplb.
 const ROUTING = (()=>{ const o={all:"All"}; [...new Set(DATA.map(s=>s.routing))].sort().forEach(r=>{o[r]=r;}); return o; })();
-// p99 is the headline percentile (review #3); suite=all overlays best-stack + constrained
-// (distinguishable by label/style) — switch to one suite for a clean within-class read.
-const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50", suite:"all", routing:"uniform"};
+// Publication-status filter (goal P1): default hides diagnostic/invalid/failed so the first
+// view is publication-valid; "publishable" = official + comparable-experimental + legacy v3.
+const PUB = {publishable:"Publishable", official:"Official only", all:"All (incl. diagnostic)"};
+function pubOk(s){ return ST.pub==="all" || (ST.pub==="official" ? s.pub==="official"
+                   : !["diagnostic","invalid","failed"].includes(s.pub)); }
+// Default to ONE suite (not all) + publishable results (goal P1).
+const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50",
+             suite:"backend-default", routing:"uniform", pub:"publishable"};
 
 function xval(r,xk){ return xk==="t"? r.t : r.gt; }
 function metric(r,op,yk,pct){
@@ -253,7 +261,7 @@ function chart(o){
   const pct=o.pct||"p99", suite=o.suite||"all", routing=o.routing||"all";
   const sl = DATA.filter(s=>s.phase===o.phase && (o.ep==null || s.ep===o.ep)
                             && (suite==="all" || s.suite===suite)
-                            && (routing==="all" || s.routing===routing));
+                            && (routing==="all" || s.routing===routing) && pubOk(s));
   const pts = sl.map(s=>({s, P:s.rows.map(r=>({x:xval(r,o.x), y:metric(r,o.op,o.y,pct), r}))
                                      .filter(p=>p.x>0 && (o.ylog? p.y>0 : p.y>=0))}));
   let xs=[], ys=[]; pts.forEach(g=>g.P.forEach(p=>{xs.push(p.x);ys.push(p.y);}));
@@ -285,26 +293,44 @@ function chart(o){
     const d=g.P.map((p,i)=>(i?'L':'M')+xv(p.x).toFixed(1)+' '+yv(p.y).toFixed(1)).join(' ');
     const dash=g.s.dash?' stroke-dasharray="'+g.s.dash+'"':'';
     s+='<path d="'+d+'" fill="none" stroke="'+g.s.color+'" stroke-width="2"'+dash+'/>';
-    g.P.forEach(p=>{ const D=p.r.dispatch, C=p.r.combine;
+    g.P.forEach(p=>{ const D=p.r.dispatch, C=p.r.combine, R=p.r.roundtrip;
+      // artifact links (goal P1): the workflow run + source SHA + image digest + workload id
+      // that produced this point. (Result JSON / manifest / raw-samples live alongside by name.)
       const run=g.s.run_id? ('\nrun '+g.s.run_id+(g.s.source_sha?' @'+g.s.source_sha:'')) : '';
+      const art='\nworkload='+(g.s.wid||g.s.wsig||'?')+(g.s.image_digest?'  ·  image '+g.s.image_digest:'')
+                +(g.s.repo?'  ·  '+g.s.repo:'');
       s+='<circle class="pt" cx="'+xv(p.x).toFixed(1)+'" cy="'+yv(p.y).toFixed(1)+'" r="3.2" fill="'+g.s.color+'">'+
-      // tooltip: label, the plotted Y value (current toggle), dispatch+combine at p50/p90/p99,
-      // routing context, and the workflow run that produced the point (review #3 #1).
-      '<title>'+g.s.label+'  ['+pct+']'+
+      '<title>'+g.s.label+'  ['+pct+']  ('+g.s.pub+')'+
       '\nT/rank='+p.r.t+'  ·  global='+p.r.gt+
       '\n'+YK[o.y]+' = '+fmt(p.y)+(o.y==='lat'?' µs':o.y==='bw'?' GB/s':'')+
-      '\ndispatch µs p50/p90/p99 = '+D.p50.toFixed(1)+'/'+D.p90.toFixed(1)+'/'+D.p99.toFixed(1)+
-      '\ncombine  µs p50/p90/p99 = '+C.p50.toFixed(1)+'/'+C.p90.toFixed(1)+'/'+C.p99.toFixed(1)+
-      '\nfan-out='+(p.r.fanout!=null?p.r.fanout.toFixed(2):'?')+'  ·  recv(max)='+p.r.recv+(p.r.correct?'':'  ✗')+
-      '\ncontract='+g.s.contract+'  ·  suite='+g.s.suite+run+
+      '\ndispatch  µs p50/p90/p99 = '+D.p50.toFixed(1)+'/'+D.p90.toFixed(1)+'/'+D.p99.toFixed(1)+
+      '\ncombine   µs p50/p90/p99 = '+C.p50.toFixed(1)+'/'+C.p90.toFixed(1)+'/'+C.p99.toFixed(1)+
+      '\nroundtrip µs p50/p90/p99 = '+R.p50.toFixed(1)+'/'+R.p90.toFixed(1)+'/'+R.p99.toFixed(1)+' (measured)'+
+      '\nfan-out='+(p.r.fanout!=null?p.r.fanout.toFixed(2):'?')+'  ·  recv(max)='+p.r.recv
+      +(p.r.straggler!=null?'  ·  straggler=r'+p.r.straggler:'')+(p.r.correct?'':'  ✗')+
+      '\ncontract='+g.s.contract+'  ·  suite='+g.s.suite+run+art+
       '</title></circle>'; });
   });
   s+='</svg>'; return s;
 }
+// Comparison guard (goal P1): flag when overlaid lines are NOT a direct comparison —
+// differing topology at one EP, or differing realized workload signature within one routing.
+function guardNote(vis){
+  if(!vis.length) return '';
+  const w=[];
+  const topos=[...new Set(vis.map(s=>s.topo).filter(Boolean))];
+  if(topos.length>1) w.push('mixed topology ('+topos.join(', ')+')');
+  const byRt={}; vis.forEach(s=>{ (byRt[s.routing]=byRt[s.routing]||new Set()).add(s.wsig||'?'); });
+  const split=Object.entries(byRt).filter(([k,v])=>v.size>1).map(([k])=>k);
+  if(split.length) w.push('different workload trace within routing ['+split.join(',')+'] — NOT identical workloads');
+  const eps=[...new Set(vis.map(s=>s.ep))];
+  if(eps.length>1) w.push('mixed EP degree '+eps.join('/')+' — compare only on the global-tokens x-axis');
+  return w.length? '<div class="guard">⚠ not a direct comparison: '+w.join('; ')+'</div>' : '';
+}
 function legend(phase, ep, suite, routing){
   return '<div class="legend">'+DATA.filter(s=>s.phase===phase && (ep==null||s.ep===ep)
                                               && (!suite||suite==="all"||s.suite===suite)
-                                              && (!routing||routing==="all"||s.routing===routing)).map(s=>{
+                                              && (!routing||routing==="all"||s.routing===routing) && pubOk(s)).map(s=>{
     const sw = s.dash ? 'background:repeating-linear-gradient(90deg,'+s.color+' 0 5px,transparent 5px 9px)'
                       : 'background:'+s.color;   // dashed swatch = fp8 (matches the line)
     return '<span class="it"><span class="sw" style="'+sw+'"></span>'+s.label+'</span>';
@@ -321,6 +347,7 @@ function renderControls(){
     '<div class="grp"><span class="lab">Percentile</span>'+seg('pct',PCT,ST.pct)+'</div>'+
     '<div class="grp"><span class="lab">Suite</span>'+seg('suite',SUITE,ST.suite)+'</div>'+
     '<div class="grp"><span class="lab">Routing</span>'+seg('routing',ROUTING,ST.routing)+'</div>'+
+    '<div class="grp"><span class="lab">Publication</span>'+seg('pub',PUB,ST.pub)+'</div>'+
     '<div class="grp"><span class="lab">X-axis</span>'+seg('x',XK,ST.x)+'</div>'+
     '<div class="grp"><span class="lab">X scale</span>'+seg('xlog',{true:"Log",false:"Linear"},String(ST.xlog))+'</div>'+
     '<div class="grp"><span class="lab">Y-axis</span>'+seg('y',YK,ST.y)+'</div>'+
@@ -333,7 +360,9 @@ function renderMain(){
   document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,xlog:ST.xlog,ylog:ST.ylog,
     pct:ST.pct, suite:ST.suite, routing:ST.routing,
     title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
-  document.getElementById('mlegend').innerHTML = legend(ST.phase, null, ST.suite, ST.routing);
+  const vis=DATA.filter(s=>s.phase===ST.phase && (ST.suite==="all"||s.suite===ST.suite)
+                           && (ST.routing==="all"||s.routing===ST.routing) && pubOk(s));
+  document.getElementById('mlegend').innerHTML = guardNote(vis)+legend(ST.phase, null, ST.suite, ST.routing);
 }
 function renderGrid(){
   // SEPARATE panels per (phase, EP degree); within a panel, the SUITE selector keeps
@@ -342,11 +371,12 @@ function renderGrid(){
   const eps=[...new Set(DATA.map(s=>s.ep))].sort((a,b)=>a-b);
   let h='';
   phases.forEach(ph=>{ eps.forEach(ep=>{
-    if(!DATA.some(s=>s.phase===ph && s.ep===ep && (ST.suite==="all"||s.suite===ST.suite)
-                     && (ST.routing==="all"||s.routing===ST.routing))) return;
+    const panelVis=DATA.filter(s=>s.phase===ph && s.ep===ep && (ST.suite==="all"||s.suite===ST.suite)
+                     && (ST.routing==="all"||s.routing===ST.routing) && pubOk(s));
+    if(!panelVis.length) return;
     const scale=(ST.xlog?'log':'lin')+'–'+(ST.ylog?'log':'lin');
     h+='<h2>'+ph[0].toUpperCase()+ph.slice(1)+' · EP'+ep+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+' — latency vs source tokens/rank (µs, '+scale+')</h2>'+
-       legend(ph,ep,ST.suite,ST.routing)+'<div class="grid">';
+       guardNote(panelVis)+legend(ph,ep,ST.suite,ST.routing)+'<div class="grid">';
     ['dispatch','combine','serial'].forEach(op=>{ h+='<div class="card"><div class="gtit">'+OPS[op]+'</div>'+
       chart({op,phase:ph,ep,x:'t',y:'lat',xlog:ST.xlog,ylog:ST.ylog,pct:ST.pct,suite:ST.suite,routing:ST.routing,title:'',w:340,h:260})+'</div>'; });
     h+='</div>'; }); });
@@ -371,7 +401,7 @@ function renderGrid(){
     '. dtype/mode/resource/contract vary PER LINE — read the label (dtypes shown: '+dtypes+'). '+
     'Contract(s): '+contracts+' (layout-and-dispatch times routing-layout INSIDE dispatch; cached-layout [cl] hoists it out). '+
     'Latency = percentile (selector; p99 default) over POOLED per-iteration cross-rank-MAX samples'+(samp?(' (~'+samp+'/point)'):'')+
-    '. SERIAL = SUM of isolated dispatch+combine medians, NOT a measured chained op. The bandwidth axis is a LOGICAL routed-payload rate '+
+    '. ROUND TRIP is INDEPENDENTLY MEASURED (dispatch→sync→no-op expert→combine, raw per-iter samples); ISOLATED_SUM is Σ of isolated dispatch+combine percentiles, NOT a measured op (no throughput/SLO use). Publication filter defaults to publishable (diagnostic/invalid hidden); status is machine-derived from validity. The bandwidth axis is a LOGICAL routed-payload rate '+
     '(recv copies x hidden x dtype / latency; per-op bytes; excludes scales/idx/meta/padding) — NOT algBW/busBW/wire utilization. '+
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+

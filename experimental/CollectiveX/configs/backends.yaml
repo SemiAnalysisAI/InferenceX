@@ -1,0 +1,49 @@
+# CollectiveX backend registry (goal Part 2) — the single source of truth for backend
+# capability, replacing the data split between the adapters and tests/capability.py. Keep in
+# sync with ep_deepep.py / ep_mori.py SUPPORTED_* sets (capability.py mirrors this at runtime).
+schema_version: 1
+backends:
+  deepep:
+    vendor: nvidia
+    modes: [normal, ll]                 # ll is DECODE-ONLY (fixed num_max dispatch)
+    dtypes: [bf16, fp8]
+    contracts: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+    transports: [nvlink, mnnvl, rdma]
+    ep_max_intranode: 8                  # <=8 ranks = intranode NVL kernel (incl. MNNVL trays)
+    ep_min: 2
+    phase_constraints:
+      ll: {phases: [decode], max_tokens_per_rank: 128}   # LL is a fixed-num_max decode path
+    required_image: "lmsysorg/sglang:v0.5.11-cu130"
+    cap_token_per_rank: 4096             # 4 GiB NVL buffer holds ~4096 tok/rank at hidden=7168
+  mori:
+    vendor: amd
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    transports: [xgmi, rdma]
+    ep_max_intranode: 8
+    ep_min: 2
+    phase_constraints:
+      normal: {max_tokens_per_rank: 512}   # 2 GiB registerable heap cap at hidden=7168
+    required_image: "rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2"
+    cap_token_per_rank: 512
+    fragility: "wedges (D-state) on sustained iters>=200 at T>=32; needs gradual ramp, low iters"
+  aiter:
+    vendor: amd
+    modes: [normal]
+    dtypes: [bf16, fp8]
+    contracts: [layout-and-dispatch-v1]
+    transports: [xgmi, rdma]
+    ep_max_intranode: 8
+    ep_min: 2
+    status: "scaffolded — adapter ep_aiter.py not yet implemented (capability declared, not validated)"
+    required_image: "rocm/sgl-dev (AITER CK MoE EP)"
+
+# 'all' resolves to a DEFINED per-vendor backend set (NOT the same across vendors).
+vendor_backends:
+  nvidia: [nccl, deepep]
+  amd: [rccl, mori]
+# Collective primitives (not EP dispatch/combine — phase/dtype/mode/contract N/A).
+collective_backends:
+  nccl: [nvidia]
+  rccl: [amd]

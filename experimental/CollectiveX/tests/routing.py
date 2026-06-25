@@ -64,12 +64,23 @@ def build_global_routing(global_tokens: int, experts: int, topk: int,
         i = torch.arange(gt, dtype=torch.int64).unsqueeze(1)
         j = torch.arange(topk, dtype=torch.int64).unsqueeze(0)
         idx = (i * topk + j) % experts
-    elif routing == "zipf":
-        p = 1.0 / torch.arange(1, experts + 1, dtype=torch.float32)
+    elif routing == "zipf" or routing.startswith("zipf-"):
+        # popularity ∝ 1/rank^s — s sets the skew. zipf == zipf-moderate (s=1).
+        s = {"zipf": 1.0, "zipf-mild": 0.5, "zipf-moderate": 1.0, "zipf-heavy": 2.0}.get(routing)
+        if s is None:
+            raise ValueError(f"unknown zipf level '{routing}'")
+        p = 1.0 / torch.arange(1, experts + 1, dtype=torch.float32).pow(s)
         p = (p / p.sum()).expand(gt, experts)
         idx = torch.multinomial(p, topk, replacement=False, generator=g).to(torch.int64)
+    elif routing == "hotspot-single":
+        # adversarial: expert 0 is in EVERY token's top-k (single hot expert/rank), the other
+        # topk-1 drawn uniformly from the rest — maximal single-rank load.
+        rest = torch.stack([torch.randperm(experts - 1, generator=g)[:topk - 1] + 1
+                            for _ in range(gt)]).to(torch.int64)
+        idx = torch.cat([torch.zeros(gt, 1, dtype=torch.int64), rest], dim=1)
     else:
-        raise ValueError(f"unknown routing '{routing}' (uniform|balanced|balanced-rank-local|zipf)")
+        raise ValueError(f"unknown routing '{routing}' "
+                         f"(uniform|balanced|balanced-rank-local|zipf[-mild|-moderate|-heavy]|hotspot-single)")
     weights = torch.softmax(torch.randn(gt, topk, generator=g), dim=1).to(torch.float32)
     return idx, weights
 

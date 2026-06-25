@@ -1,0 +1,122 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://semianalysis/collectivex/schemas/ep-result-v4.schema.json",
+  "title": "CollectiveX EP dispatch/combine result (v4)",
+  "description": "One (backend, phase, dtype, mode, contract, routing) sweep. v4 adds multi-dimensional validity + machine-derived publication_status, measured roundtrip, dual byte contracts, per-rank diagnostics, raw-sample histograms, and workload identity. v3 docs load via compatibility (publication_status absent => treated as legacy/experimental).",
+  "type": "object",
+  "required": ["schema_version", "family", "runner", "backend", "mode", "phase",
+               "ep_size", "measurement_contract", "shape", "rows",
+               "validity", "publication_status", "workload", "reproduction",
+               "backend_provenance", "comparison_key"],
+  "properties": {
+    "schema_version": {"type": "integer", "minimum": 3},
+    "family": {"const": "moe"},
+    "runner": {"type": "string"},
+    "backend": {"type": "string", "enum": ["deepep", "mori", "aiter"]},
+    "mode": {"type": "string", "enum": ["normal", "ll"]},
+    "phase": {"type": "string", "enum": ["decode", "prefill"]},
+    "ep_size": {"type": "integer", "minimum": 1},
+    "world_size": {"type": "integer", "minimum": 1},
+    "nodes": {"type": "integer", "minimum": 1},
+    "topology_class": {"type": "string"},
+    "transport": {"type": "string"},
+    "resource_mode": {"type": "string", "enum": ["normalized", "tuned", "default"]},
+    "measurement_contract": {"type": "string",
+      "enum": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"]},
+    "publication_status": {"type": "string",
+      "enum": ["official", "comparable-experimental", "diagnostic", "invalid", "failed"]},
+    "validity": {
+      "type": "object",
+      "required": ["execution_status", "semantic_correctness", "workload_identity",
+                   "measurement_conformance", "resource_conformance", "provenance_complete"],
+      "properties": {
+        "execution_status": {"type": "string", "enum": ["complete", "failed"]},
+        "semantic_correctness": {"type": "string", "enum": ["pass", "fail"]},
+        "workload_identity": {"type": "string"},
+        "workload_source": {"type": "string", "enum": ["canonical-serialized", "seeded-runtime"]},
+        "measurement_conformance": {"type": "string", "enum": ["conformant", "nonconformant"]},
+        "resource_conformance": {"type": "string"},
+        "provenance_complete": {"type": "boolean"}
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["source", "trace_signature", "cross_rank_consistent"],
+      "properties": {
+        "source": {"type": "string", "enum": ["canonical-serialized", "seeded-runtime"]},
+        "workload_id": {"type": ["string", "null"]},
+        "manifest_checksums": {"type": ["object", "null"]},
+        "trace_signature": {"type": "string"},
+        "distinct_per_T_hashes": {"type": "array", "items": {"type": "string"}},
+        "cross_rank_consistent": {"type": "boolean"}
+      }
+    },
+    "shape": {
+      "type": "object",
+      "required": ["hidden", "topk", "experts", "experts_per_rank", "dispatch_dtype", "routing"],
+      "properties": {
+        "hidden": {"type": "integer"}, "topk": {"type": "integer"},
+        "experts": {"type": "integer"}, "experts_per_rank": {"type": "integer"},
+        "dispatch_dtype": {"type": "string", "enum": ["bf16", "fp8"]},
+        "routing": {"type": "string"},
+        "eplb": {"type": "boolean"}, "num_logical_experts": {"type": "integer"}
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "required": ["command", "seed", "warmup", "iters", "trials", "measurement_contract"],
+      "properties": {
+        "command": {"type": "string"},
+        "image": {"type": ["string", "null"]},
+        "image_digest": {"type": ["string", "null"]},
+        "image_arch": {"type": ["string", "null"]},
+        "squash_sha256": {"type": ["string", "null"]},
+        "git_run": {"type": ["object", "null"]},
+        "fp8_quant_in_timing": {"type": ["boolean", "null"]}
+      }
+    },
+    "backend_provenance": {"type": "object"},
+    "rows": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["tokens_per_rank", "global_tokens", "dispatch", "combine", "roundtrip",
+                     "isolated_sum", "samples_pooled", "byte_contracts", "correct"],
+        "properties": {
+          "tokens_per_rank": {"type": "integer", "minimum": 1},
+          "global_tokens": {"type": "integer", "minimum": 1},
+          "dispatch": {"$ref": "#/definitions/percentiles"},
+          "combine": {"$ref": "#/definitions/percentiles"},
+          "roundtrip": {"$ref": "#/definitions/percentiles"},
+          "isolated_sum": {"type": "object"},
+          "samples_pooled": {"type": "integer", "minimum": 1},
+          "percentile_interpolation": {"type": "string"},
+          "per_rank_dispatch_us": {"type": "object"},
+          "raw_samples": {"type": "object"},
+          "byte_contracts": {
+            "type": "object",
+            "required": ["token_rank_payload_copies", "token_expert_payload_copies",
+                         "dispatch_bytes", "combine_bytes"],
+            "properties": {
+              "token_rank_payload_copies": {"type": "integer"},
+              "token_expert_payload_copies": {"type": "integer"},
+              "dispatch_bytes": {"type": "integer"}, "combine_bytes": {"type": "integer"}
+            }
+          },
+          "roundtrip_tokens_per_second": {"type": ["number", "null"]},
+          "correct": {"type": "boolean"}
+        }
+      }
+    }
+  },
+  "definitions": {
+    "percentiles": {
+      "type": "object",
+      "required": ["p50", "p90", "p95", "p99"],
+      "properties": {
+        "p50": {"type": "number"}, "p90": {"type": "number"},
+        "p95": {"type": "number"}, "p99": {"type": "number"}
+      }
+    }
+  }
+}

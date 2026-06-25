@@ -1,0 +1,92 @@
+# CollectiveX named benchmark suites (goal Part 2). A suite binds workloads x platforms x
+# backends x modes x contracts x resource regimes x repetitions x required publication level.
+# generate_matrix.py resolves a suite against platforms.yaml/backends.yaml capabilities BEFORE
+# any GPU is allocated, omitting unsupported combinations with recorded reasons.
+schema_version: 1
+suites:
+  ep-smoke-v1:
+    description: "fast canary: one small point per platform/backend/mode/contract"
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, gb300, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    token_points: [8, 64]
+    trials: 1
+    required_publication: comparable-experimental
+
+  ep-nightly-v1:
+    description: "headline matrix: both contracts, bf16+fp8, normal+LL, decode+prefill"
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, gb300, mi355x]
+    backends: [deepep, mori]
+    modes: [normal, ll]
+    dtypes: [bf16, fp8]
+    contracts: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: official
+
+  ep-models-v1:
+    description: "model-shape envelope: real MoE dimensions, controlled routing"
+    workloads: [deepseek-v4, kimi-k2.x, qwen3.5, glm-5, minimax-m3]
+    platforms: [h100, h200, gb300, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [fp8, bf16]
+    contracts: [runtime-visible-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-scaling-v1:
+    description: "strong (fixed global tokens) + weak (fixed tokens/rank) scaling across EP degrees"
+    workloads: [ds-like-ref]
+    platforms: [gb300]            # the only SKU with >1 validated EP degree (EP4 + EP8)
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    scaling: [strong, weak]
+    ep_degrees: [4, 8]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-topology-v1:
+    description: "placement sensitivity: packed vs striped vs adversarial on multi-domain SKUs"
+    workloads: [ds-like-ref]
+    platforms: [gb300]            # NVL72 tray boundary is the scale-up domain edge
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform, zipf]
+    placements: [packed, striped, adversarial]
+    resource_modes: [tuned]
+    ep_degrees: [8]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-routing-v1:
+    description: "routing-skew sensitivity + EPLB remedy"
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, gb300]
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform, balanced, zipf, zipf-mild, zipf-moderate, zipf-heavy, hotspot-single]
+    eplb: [false, true]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: comparable-experimental

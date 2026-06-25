@@ -1,0 +1,84 @@
+# CollectiveX platform registry (goal Part 2). One entry per SKU: hardware capability is
+# separated from VALIDATED software capability (what we've actually run green on real HW).
+# scale_up_domain = #GPUs reachable over the intra-domain fabric before crossing a tier
+# (NVLink island / NVL72 MNNVL tray-group / XGMI). gpus_per_node bounds single-node EP.
+schema_version: 1
+platforms:
+  h100:
+    vendor: nvidia
+    arch: sm90
+    gpu: "H100 80GB HBM3"
+    gpus_per_node: 8
+    scale_up_domain: 8            # single 8-GPU NVLink island
+    transport_tiers: [nvlink, ib]
+    runner: h100-8x
+    launcher: launch_h100-dgxc-slurm.sh
+    ssh: "sa-shared@100.118.57.65"   # partition hpc-gpu-1, /mnt/nfs, exclude hpc-gpu-1-7
+    validated:
+      ep_degrees: [8]
+      backends: [deepep]
+      max_intranode_gpus: 8
+      internode: false            # not yet exercised for EP
+  h200:
+    vendor: nvidia
+    arch: sm90
+    gpu: "H200 143GB HBM3e"
+    gpus_per_node: 8
+    scale_up_domain: 8
+    transport_tiers: [nvlink, ib]
+    runner: h200-8x
+    launcher: launch_h200.sh
+    ssh: "sa-shared@100.78.55.80"    # partition main, /home NFS
+    validated:
+      ep_degrees: [8]
+      backends: [deepep]
+      max_intranode_gpus: 8
+      internode: false
+  b300:
+    vendor: nvidia
+    arch: sm100
+    gpu: "B300 SXM6 268GB"
+    gpus_per_node: 8
+    scale_up_domain: 8
+    transport_tiers: [nvlink, ib]
+    runner: b300-nv
+    launcher: launch_b300.sh
+    ssh: "sa-shared@100.101.13.83"   # partition batch_1, acct benchmark, /data, exclude b300-018
+    notes: "Blackwell drops clocks on tiny T -> per-point warm burst (warmup>=30). LL aborts."
+    validated:
+      ep_degrees: [8]
+      backends: [deepep]
+      max_intranode_gpus: 8
+      internode: false
+  gb300:
+    vendor: nvidia
+    arch: sm100
+    gpu: "GB300 Grace-Blackwell (aarch64)"
+    gpus_per_node: 4              # NVL72 compute tray = 4 GPU/node
+    scale_up_domain: 72          # NVL72 MNNVL: one NVLink P2P domain spans the rack
+    transport_tiers: [mnnvl, ib]
+    runner: gb300-8x
+    launcher: _gb300_ep8.sh
+    ssh: "2-hop: sa-shared@100.92.114.46 -> im-gb300-login-02"  # batch_1, acct benchmark, /data
+    notes: "EP8 = 2 trays but INTRANODE NVLink path (MNNVL is one domain for <=8 ranks). deep_ep 1.1.0."
+    validated:
+      ep_degrees: [4, 8]
+      backends: [deepep]
+      max_intranode_gpus: 8        # <=8 ranks use the intranode NVL kernel even across 2 trays
+      internode: false             # internode-normal asserts out until >8 ranks (EP16+)
+  mi355x:
+    vendor: amd
+    arch: gfx950
+    gpu: "MI355X CDNA4 256 CU"
+    gpus_per_node: 8
+    scale_up_domain: 8           # single 8-GPU XGMI island
+    transport_tiers: [xgmi, rdma]
+    runner: mi355x-8x
+    launcher: launch_mi355x-amds.sh
+    ssh: "2-hop bastion -> mia1-vm-amd-prj3-slurm-001"  # partition compute, cpus-per-task=128
+    notes: "MoRI wedges (D-state) on sustained iters>=200 at T>=32; cap iters. 512-tok buffer cap. No LL/fp8."
+    validated:
+      ep_degrees: [8]
+      backends: [mori]
+      max_intranode_gpus: 8
+      internode: false

@@ -68,7 +68,8 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     # one-expert-per-rank (fan-out = ep_size); balanced-rank-local = fan-out 1 (min
     # comm) edge case; zipf = skewed. Default to the REALISTIC one.
     ap.add_argument("--routing", default="uniform",
-                    choices=["uniform", "balanced", "balanced-rank-local", "zipf"])
+                    choices=["uniform", "balanced", "balanced-rank-local", "zipf",
+                             "zipf-mild", "zipf-moderate", "zipf-heavy", "hotspot-single"])
     # EPLB (Expert-Parallel Load Balancer): replicate hot experts onto redundant physical
     # slots + balanced-place so per-rank load equalizes. A pure routing-trace transform
     # (tests/eplb.py); experts becomes num_logical+redundant. The remedy for `zipf` skew.
@@ -175,7 +176,11 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None) -> list[float]:
             a = pre(); torch.cuda.synchronize(); fn(a)
         else:
             fn()
-    torch.cuda.synchronize()
+        # sync EACH warmup iteration, not just once after the loop: the measured-roundtrip fn
+        # interleaves dispatch+combine on a backend's persistent comm buffer, so back-to-back
+        # un-synced warmup iterations let iter N+1's dispatch race iter N's combine (CUDA abort
+        # on a rank -> NCCL-watchdog SIGABRT). Cheap (warmup is small); timed samples already sync.
+        torch.cuda.synchronize()
     return [sample() for _ in range(iters)]
 
 
@@ -205,8 +210,54 @@ def _reduce_int(torch, dist, device, v: int, op) -> int:
     return int(t.item())
 
 
+def _allgather_floats(torch, dist, device, v: float) -> list[float]:
+    """Gather one scalar from every rank -> list indexed by rank (for per-rank diagnostics:
+    which rank is the straggler, the rank spread). all_reduce can't do this — it collapses."""
+    world = dist.get_world_size()
+    out = [torch.zeros(1, device=device, dtype=torch.float64) for _ in range(world)]
+    dist.all_gather(out, torch.tensor([float(v)], device=device, dtype=torch.float64))
+    return [float(x.item()) for x in out]
+
+
+def _histogram(xs: list[float], nbins: int = 40) -> dict:
+    """Compact distribution of pooled cross-rank-max samples (for p99-spike debugging without
+    storing every sample). Equal-width bins between min and max."""
+    if not xs:
+        return {"n": 0}
+    lo, hi = min(xs), max(xs)
+    if hi <= lo:
+        return {"n": len(xs), "min": lo, "max": hi, "bins": nbins, "counts": [len(xs)]}
+    counts = [0] * nbins
+    span = hi - lo
+    for x in xs:
+        b = min(nbins - 1, int((x - lo) / span * nbins))
+        counts[b] += 1
+    return {"n": len(xs), "min": round(lo, 3), "max": round(hi, 3), "bins": nbins, "counts": counts}
+
+
 def _provenance_unknown(prov: dict) -> list[str]:
     return [k for k, v in prov.items() if isinstance(v, str) and v.strip().lower() == "unknown"]
+
+
+def _derive_publication_status(v: dict) -> str:
+    """Machine-derive the publication state from the validity dimensions (goal P1). No caller
+    may hand-label a result 'official' — it must earn every gate here."""
+    if v["execution_status"] != "complete":
+        return "failed"
+    if v["semantic_correctness"] != "pass" or v["measurement_conformance"] != "conformant" \
+       or v["workload_identity"] == "inconsistent":
+        return "invalid"
+    sound = (v["semantic_correctness"] == "pass"
+             and v["workload_identity"].startswith("consistent")
+             and v["measurement_conformance"] == "conformant")
+    # resource-nonconforming but otherwise sound -> diagnostic (not a fair cross-platform point)
+    if v["resource_conformance"].endswith("nonconforming"):
+        return "diagnostic"
+    if sound and v["provenance_complete"] and v["workload_source"] == "canonical-serialized":
+        return "official"
+    if sound:
+        return "comparable-experimental"   # measurement sound, missing a publication requirement
+    return "diagnostic"
 
 
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
@@ -338,8 +389,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # with T. Per-iteration cross-rank MAX samples are POOLED across trials, then
     # percentiled (review #3: p99 from one 50-iter run is just the max). MoRI keeps
     # ascending order — it wedges on a cold jump to a large T. ----
-    disp_pool = {T: [] for T in ladder}
-    comb_pool = {T: [] for T in ladder}
+    disp_pool = {T: [] for T in ladder}     # pooled per-iteration cross-rank MAX (dispatch)
+    comb_pool = {T: [] for T in ladder}     # ... combine
+    rt_pool = {T: [] for T in ladder}       # ... INDEPENDENTLY-MEASURED round trip (goal P1)
+    disp_local = {T: [] for T in ladder}    # THIS rank's own dispatch samples (per-rank diag)
     order = list(ladder)
     rng = _random.Random(args.seed)
     shuffle_ok = not getattr(backend, "needs_gradual_ramp", False)
@@ -363,54 +416,90 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 hh = prep()
                 comb_iters = time_us(torch, lambda p=problem, hx=hh: backend.combine(p, hx),
                                      args.warmup, args.iters)
+            # MEASURED round trip (goal P1: not a sum of percentiles): one timed region over
+            # dispatch -> stage (no-op "expert" transform) -> combine -> output ready. Captures
+            # shared sync / launch amortization / overlap that the isolated_sum cannot.
+            def rt_once(p=problem):
+                hh = backend.dispatch(p); backend.stage(p, hh); return backend.combine(p, hh)
+            rt_iters = time_us(torch, lambda p=problem: rt_once(p), args.warmup, args.iters)
             # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
             disp_pool[T] += _reduce_vec(torch, dist, device, disp_iters, MAX)
             comb_pool[T] += _reduce_vec(torch, dist, device, comb_iters, MAX)
+            rt_pool[T] += _reduce_vec(torch, dist, device, rt_iters, MAX)
+            disp_local[T] += disp_iters
 
-    # ---- Pass 3: percentiles from pooled samples + realized bytes + row ----
+    # ---- Pass 3: percentiles (p50/p90/p95/p99, nearest-rank) from pooled samples + bytes + row ----
+    def pcts(xs):
+        return {"p50": percentile(xs, 50), "p90": percentile(xs, 90),
+                "p95": percentile(xs, 95), "p99": percentile(xs, 99)}
     rows = []
     for T in ladder:
         gt = T * ep_size
         g = gate[T]; rstats = g["rstats"]
-        d, c = disp_pool[T], comb_pool[T]
-        d50, d90, d99 = percentile(d, 50), percentile(d, 90), percentile(d, 99)
-        c50, c90, c99 = percentile(c, 50), percentile(c, 90), percentile(c, 99)
-        # "Sum of isolated medians" — NOT an independently-measured chained dispatch->combine
-        # op (cannot reveal shared sync, launch amortization, or overlap). Named so in the UI.
-        s50, s90, s99 = d50 + c50, d90 + c90, d99 + c99
+        d, c, rt = disp_pool[T], comb_pool[T], rt_pool[T]
+        dp, cp, rtp = pcts(d), pcts(c), pcts(rt)
+        # isolated_sum = SUM of the isolated dispatch+combine percentiles. NOT a measured op
+        # (can't reveal shared sync / launch amortization / overlap) — do NOT use for throughput
+        # or SLO capacity. The MEASURED round trip (rtp) is the real chained latency.
+        isum = {k: dp[k] + cp[k] for k in dp}
         recv_total = _reduce_int(torch, dist, device, g["recv_local"], SUM)
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
         global_ok = _reduce_int(torch, dist, device, g["local_ok"], MIN)
         max_rel = _reduce_vec(torch, dist, device, [g["max_rel"]], MAX)[0]
         point_ok = bool(global_ok) and recv_total > 0
-        # Logical routed payload (NOT wire/bus bandwidth): realized token-copies received
-        # across all ranks x hidden x element size. Dispatch and combine counted SEPARATELY
-        # at their REAL dtypes; excludes scales/indices/metadata/padding/protocol. The
-        # plot reports a "logical routed payload rate", never an algBW/busBW claim.
-        dispatch_logical_bytes = recv_total * args.hidden * elem_dispatch
-        combine_logical_bytes = recv_total * args.hidden * 2   # combine input is bf16
+        # Per-rank diagnostics: gather each rank's own dispatch median -> spread + straggler.
+        per_rank_med = _allgather_floats(torch, dist, device, percentile(disp_local[T], 50))
+        slowest_rank = max(range(len(per_rank_med)), key=lambda i: per_rank_med[i])
+        rmean = sum(per_rank_med) / len(per_rank_med)
+        # Canonical LOGICAL payload byte contracts (from the routing trace, NOT backend recv
+        # tensors): token-rank = one copy per unique (token,dest-rank); token-expert = one copy
+        # per routed (token,expert). routed_copies = token-rank copies; gt*topk = token-expert.
+        token_rank_copies = rstats["routed_copies"]
+        token_expert_copies = gt * args.topk
+        H = args.hidden
         rows.append({
             "tokens_per_rank": T, "global_tokens": gt,
-            "dispatch_us_p50": d50, "dispatch_us_p90": d90, "dispatch_us_p99": d99,
-            "combine_us_p50": c50, "combine_us_p90": c90, "combine_us_p99": c99,
-            "serial_us_p50": s50, "serial_us_p90": s90, "serial_us_p99": s99,  # sum of isolated medians
+            "dispatch": dp, "combine": cp, "roundtrip": rtp, "isolated_sum": isum,
+            # flat aliases kept for back-compat with v3 readers
+            "dispatch_us_p50": dp["p50"], "dispatch_us_p90": dp["p90"], "dispatch_us_p99": dp["p99"],
+            "combine_us_p50": cp["p50"], "combine_us_p90": cp["p90"], "combine_us_p99": cp["p99"],
+            "roundtrip_us_p50": rtp["p50"], "roundtrip_us_p90": rtp["p90"],
+            "roundtrip_us_p95": rtp["p95"], "roundtrip_us_p99": rtp["p99"],
+            "isolated_sum_us_p50": isum["p50"], "isolated_sum_us_p99": isum["p99"],
             "samples_pooled": len(d), "trials": max(1, args.trials),
+            "percentile_interpolation": "nearest-rank",
             "recv_tokens_max": recv_max, "recv_tokens_min": recv_min,
             "recv_tokens_mean": recv_total / world_size, "recv_tokens_total": recv_total,
-            "dispatch_logical_bytes": dispatch_logical_bytes,
-            "combine_logical_bytes": combine_logical_bytes,
+            "per_rank_dispatch_us": {"min": min(per_rank_med), "mean": rmean,
+                                     "max": max(per_rank_med), "spread": max(per_rank_med) - min(per_rank_med),
+                                     "slowest_rank": slowest_rank},
+            # dispatch carries its dtype's element size; combine input is bf16 (2B).
+            "dispatch_logical_bytes": token_rank_copies * H * elem_dispatch,
+            "combine_logical_bytes": token_rank_copies * H * 2,
+            "byte_contracts": {
+                "token_rank_payload_copies": token_rank_copies,
+                "token_expert_payload_copies": token_expert_copies,
+                "dispatch_bytes": token_rank_copies * H * elem_dispatch,
+                "combine_bytes": token_rank_copies * H * 2,
+                "fp8_scale_bytes": (token_rank_copies * (H // 128) * 4) if elem_dispatch == 1 else 0,
+                "routing_index_bytes": token_expert_copies * 4,   # int32 topk_idx
+                "gate_weight_bytes": token_expert_copies * 4,     # f32 topk_weights
+            },
             "byte_contract": "logical-routed-payload-v1",
-            "tokens_per_second": (gt / (s50 * 1e-6)) if s50 > 0 else None,
+            # throughput from the MEASURED round trip ONLY (not isolated_sum).
+            "roundtrip_tokens_per_second": (gt / (rtp["p50"] * 1e-6)) if rtp["p50"] > 0 else None,
+            "raw_samples": {"dispatch": _histogram(d), "combine": _histogram(c), "roundtrip": _histogram(rt)},
             "fanout_mean": rstats["fanout_mean"], "fanout_max": rstats["fanout_max"],
             "routed_copies": rstats["routed_copies"], "expert_load_max": rstats["expert_load_max"],
             "routing_hash": rstats["routing_hash"],
             "correct": point_ok, "max_rel_error": max_rel,
         })
         if rank == 0:
-            print(f"  T={T:<5} disp p50/p99={d50:7.1f}/{d99:7.1f}us combine p50/p99={c50:7.1f}/{c99:7.1f}us "
-                  f"n={len(d)} fanout={rstats['fanout_mean']:.2f} recv[min/mean/max]="
-                  f"{recv_min}/{recv_total // world_size}/{recv_max} correct={point_ok}")
+            print(f"  T={T:<5} disp p50/p99={dp['p50']:7.1f}/{dp['p99']:7.1f} comb {cp['p50']:6.1f}/{cp['p99']:6.1f} "
+                  f"RT p50/p99={rtp['p50']:7.1f}/{rtp['p99']:7.1f}us n={len(d)} fanout={rstats['fanout_mean']:.2f} "
+                  f"recv[min/mean/max]={recv_min}/{recv_total // world_size}/{recv_max} "
+                  f"straggler=r{slowest_rank} correct={point_ok}")
 
     # Cross-rank workload-identity proof: every rank must have built the SAME global routing
     # (one hash per T here); confirm all ranks agree by hashing the per-T hash set and
@@ -425,6 +514,33 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     # status=valid requires correctness AND a proven-identical routing trace across ranks.
     all_ok = bool(rows) and all(r["correct"] for r in rows) and routing_consistent
+
+    # ---- Multi-dimensional validity (goal P1) -> MACHINE-DERIVED publication_status. Adapters
+    # never self-label "official"; status is a pure function of these gates. ----
+    prov = backend.backend_provenance
+    prov_unknown = _provenance_unknown(prov)
+    repro = getattr(args, "reproduction_full", {})
+    git_run = getattr(args, "git_run", None)
+    provenance_complete = (not prov_unknown
+                           and bool(getattr(args, "image_digest", ""))
+                           and bool(git_run) and all((git_run or {}).get(k) for k in ("run_id", "source_sha")))
+    floored = bool(prov.get("block_num_floored"))
+    resource_conformance = ("minimum-functional-nonconforming" if floored
+                            else ("resource-conforming" if args.resource_mode == "normalized"
+                                  else "backend-default" if args.resource_mode in ("tuned", "default")
+                                  else "unspecified"))
+    canonical_workload = bool(getattr(args, "workload_id", None))
+    validity = {
+        "execution_status": "complete" if rows else "failed",
+        "semantic_correctness": "pass" if (rows and all(r["correct"] for r in rows)) else "fail",
+        "workload_identity": "consistent-across-ranks" if routing_consistent else "inconsistent",
+        "workload_source": "canonical-serialized" if canonical_workload else "seeded-runtime",
+        "measurement_conformance": "conformant",   # run_ep gate rejects nonconformant pre-run
+        "resource_conformance": resource_conformance,
+        "provenance_complete": provenance_complete,
+    }
+    publication_status = _derive_publication_status(validity)
+
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank, "dispatch_dtype": args.dispatch_dtype,
@@ -449,7 +565,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "schema_version": SCHEMA_VERSION, "family": "moe", "generated_by": "tests/run_ep.py",
         "generated_at": args.timestamp or _dt.datetime.now().astimezone().isoformat(),
         "runner": args.runner, "transport": args.transport,
+        # Multi-dimensional validity + machine-derived publication status (goal P1). `status`
+        # is a back-compat alias (legacy v3 readers) — publication_status is authoritative.
+        "validity": validity,
+        "publication_status": publication_status,
         "status": "valid" if all_ok else "invalid",
+        "workload": {
+            "source": validity["workload_source"],
+            "workload_id": getattr(args, "workload_id", None),
+            "manifest_checksums": getattr(args, "workload_checksums", None),
+            "trace_signature": f"{trace_sig:015x}",
+            "distinct_per_T_hashes": sorted(routing_hashes),
+            # within-run (cross-rank) identity is PROVEN here; cross-hardware identity holds
+            # only if another run records the SAME trace_signature / workload_id.
+            "cross_rank_consistent": routing_consistent,
+        },
         "comparison_key": comparison_key(meta),
         "x_axis": {"primary": "tokens_per_rank",
                    "global_relation": "global_tokens = tokens_per_rank * ep_size"},
@@ -493,14 +623,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "fanout_max": max(r["fanout_max"] for r in rows),
             "headline_hash": headline["routing_hash"],
         },
-        "metrics": {   # p99 is the headline percentile (review #3); p50/p90 also kept
+        "metrics": {   # p99 is the headline percentile (review #3); p50/p90/p95 also kept per row
             "headline_tokens_per_rank": headline["tokens_per_rank"],
             "headline_percentile": "p99",
             "dispatch_us_p50": headline["dispatch_us_p50"], "dispatch_us_p99": headline["dispatch_us_p99"],
             "combine_us_p50": headline["combine_us_p50"], "combine_us_p99": headline["combine_us_p99"],
-            "serial_us_p50": headline["serial_us_p50"], "serial_us_p99": headline["serial_us_p99"],
-            "serial_label": "sum of isolated medians (not a measured chained op)",
-            "tokens_per_second": headline["tokens_per_second"],
+            "roundtrip_us_p50": headline["roundtrip_us_p50"], "roundtrip_us_p99": headline["roundtrip_us_p99"],
+            "isolated_sum_us_p50": headline["isolated_sum_us_p50"], "isolated_sum_us_p99": headline["isolated_sum_us_p99"],
+            "isolated_sum_label": "sum of isolated dispatch+combine percentiles — NOT a measured chained op",
+            "roundtrip_tokens_per_second": headline["roundtrip_tokens_per_second"],
         },
         "rows": rows, "environment": env,
     }

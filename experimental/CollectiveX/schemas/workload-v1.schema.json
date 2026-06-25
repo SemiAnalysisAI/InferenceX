@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://semianalysis/collectivex/schemas/workload-v1.schema.json",
+  "title": "CollectiveX canonical MoE routing workload manifest",
+  "description": "Manifest for a serialized routing trace (tests/workload.py). The <workload_id>.npz holds topk_idx/topk_weights; this manifest carries the identity, dimensions, routing profile, and SHA-256 checksums that gate cross-hardware comparison.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "workload_id", "generator_version", "gate_weight_format",
+               "dims", "routing_profile", "seed", "checksums"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "workload_id": {"type": "string", "pattern": "^[0-9a-f]{16}$",
+      "description": "Immutable id = sha256(generator|routing|hidden|topk|experts|gt|seed)[:16]."},
+    "generator_version": {"type": "string",
+      "description": "Routing generator identity; bump when numerics change so stale files can't masquerade."},
+    "gate_weight_format": {"type": "string"},
+    "dims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["hidden", "topk", "experts", "global_tokens", "experts_per_rank"],
+      "properties": {
+        "hidden": {"type": "integer", "minimum": 1},
+        "topk": {"type": "integer", "minimum": 1},
+        "experts": {"type": "integer", "minimum": 1},
+        "global_tokens": {"type": "integer", "minimum": 1},
+        "experts_per_rank": {"type": "integer", "minimum": 1}
+      }
+    },
+    "routing_profile": {"type": "string",
+      "enum": ["uniform", "balanced", "balanced-rank-local", "zipf",
+               "zipf-mild", "zipf-moderate", "zipf-heavy", "hotspot-single"]},
+    "seed": {"type": "integer"},
+    "checksums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["topk_idx", "topk_weights", "trace"],
+      "properties": {
+        "topk_idx": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "topk_weights": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "trace": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "routing_stats": {"type": "object",
+      "description": "Realized fan-out / load / locality stats (advisory; not identity-defining)."}
+  }
+}
