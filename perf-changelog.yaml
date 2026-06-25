@@ -4183,3 +4183,12 @@
     - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
     - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1927
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node aggregated vLLM benchmark (no spec decode), runner b200-dgxc"
+    - "Image vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223; benchmark script overlays vllm-project/vllm PR #46380 (MiniMax-M3 modelopt NVFP4 support, commit 6c08558) before serve"
+    - "Weights pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4 (added minimaxm3-fp4 MODEL_PATH branch to launch_b200-dgxc.sh); --block-size 128 (MSA), --language-model-only"
+    - "Sweeps tp 4/8 with and without EP and dp-attn at 1k1k and 8k1k, conc 1-1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

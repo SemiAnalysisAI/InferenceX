@@ -12333,6 +12333,41 @@ minimaxm3-fp8-b200-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
+# MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node vLLM — FP4 variant
+# of minimaxm3-fp8-b200-vllm, running on the b200-dgxc cluster. The benchmark
+# script overlays vllm-project/vllm PR #46380 (MiniMax-M3 modelopt NVFP4
+# support, commit 6c08558) before serve. --block-size 128 is mandatory (MSA
+# sparse/index cache); weights are pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4
+# (launch_b200-dgxc.sh resolves MODEL_PATH for minimaxm3-fp4).
+minimaxm3-fp4-b200-vllm:
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: b200-dgxc
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
+      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-b200-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
 # Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, drafter pinned
