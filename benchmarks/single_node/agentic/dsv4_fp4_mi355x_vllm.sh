@@ -308,7 +308,8 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
     --enable-prefix-caching
-    --gpu-memory-utilization 0.8
+    --gpu-memory-utilization 0.85
+    --max-model-len 180000
     --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
 )
