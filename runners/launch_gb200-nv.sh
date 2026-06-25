@@ -435,6 +435,7 @@ if [[ -n "${CPU_OFFLOAD_GIB:-}" ]]; then
     python3 - "$CONFIG_PATH" "$CPU_OFFLOAD_GIB" <<'PY'
 import json
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -466,33 +467,30 @@ for worker_type in ("prefill", "decode"):
 
 with open(config_path, "w") as config_file:
     yaml.safe_dump(config, config_file, sort_keys=False)
+
+runtime_script = Path("src/srtctl/runtime_scripts/dynamo_wheels.py")
+runtime_source = runtime_script.read_text()
+needle = '    importlib.import_module("dynamo.llm")\n\n\ndef main()'
+replacement = '''    importlib.import_module("dynamo.llm")
+    protocols = importlib.import_module("dynamo.vllm.kv_connector_protocols")
+    protocol_path = Path(protocols.__file__)
+    protocol_source = protocol_path.read_text()
+    if '"MultiConnector": NixlConnectorProtocol' not in protocol_source:
+        registry_tail = '    "MooncakeConnector": MooncakeConnectorProtocol,\\n}'
+        patched_tail = (
+            '    "MooncakeConnector": MooncakeConnectorProtocol,\\n'
+            '    "MultiConnector": NixlConnectorProtocol,\\n}'
+        )
+        if registry_tail not in protocol_source:
+            raise RuntimeError("Dynamo KV protocol registry layout changed")
+        protocol_path.write_text(protocol_source.replace(registry_tail, patched_tail))
+
+
+def main()'''
+if needle not in runtime_source:
+    raise RuntimeError("Dynamo wheel installer layout changed")
+runtime_script.write_text(runtime_source.replace(needle, replacement))
 PY
-    cat >> configs/patches/vllm-container-deps.sh <<'SH'
-
-python3 - <<'PY'
-from pathlib import Path
-
-paths = list(
-    Path("/usr/local/lib").glob(
-        "python*/dist-packages/dynamo/vllm/kv_connector_protocols.py"
-    )
-)
-if len(paths) != 1:
-    raise RuntimeError(f"Expected one Dynamo KV protocol module, found {paths}")
-
-path = paths[0]
-source = path.read_text()
-if '"MultiConnector": NixlConnectorProtocol' not in source:
-    needle = '    "MooncakeConnector": MooncakeConnectorProtocol,\n}'
-    replacement = (
-        '    "MooncakeConnector": MooncakeConnectorProtocol,\n'
-        '    "MultiConnector": NixlConnectorProtocol,\n}'
-    )
-    if needle not in source:
-        raise RuntimeError("Dynamo KV protocol registry layout changed")
-    path.write_text(source.replace(needle, replacement))
-PY
-SH
     echo "Enabled ${CPU_OFFLOAD_GIB} GiB logical-worker CPU KV tier in $CONFIG_PATH"
 fi
 
