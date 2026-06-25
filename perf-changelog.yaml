@@ -4196,3 +4196,10 @@
   description:
     - "Initial submission: MiniMax-M3 MXFP4 disagg (prefill/decode) on MI355X with vLLM over the MoRI-IO KV connector (8k/1k)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1914
+
+- config-keys:
+    - minimaxm3-fp8-b300-dynamo-vllm
+  description:
+    - "Move the MiniMax-M3 MXFP8 B300 Dynamo-vLLM sweep (1k/1k and 8k/1k) to the vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223 image; the perf image already carries the vLLM fixes, so the minimax-m3-vllm-fixes.sh monkeypatch is skipped on it in launch_b300-nv.sh"
+    - "Reshape the 1k/1k disaggregated prefill/decode layouts to 1P DEP4 + 1D DEP8, 1P DEP2 + 2D TEP4, 1P DEP2 + 6D TEP8, 1P DEP2 + 8D TEP8, and 1P DEP2 + 8D TEP4"
+  pr-link: XXX

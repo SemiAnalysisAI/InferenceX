@@ -91,12 +91,23 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISIO
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    # minimax-m3-vllm-fixes.sh monkeypatches the vLLM that ships in the
+    # minimax-m3-0618 image (the NIXL base_worker heterogeneous-TP KV-length fix
+    # and the MSA sparse-attention .contiguous() fix). The vllm-minimax-m3-perf
+    # image already carries these fixes and its vLLM source no longer matches the
+    # patch anchors, so running the patch there aborts with "missing or ambiguous
+    # patch anchor" and the server never starts. Only patch the 0618 image; the
+    # perf image needs no patch.
+    if [[ "${IMAGE:-}" != *vllm-minimax-m3-perf* ]]; then
+        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    fi
     # NVIDIA/srt-slurm#38
     git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
-    cp \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT"
+    if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+        cp \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+            "configs/$SRTCTL_SETUP_SCRIPT"
+    fi
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
