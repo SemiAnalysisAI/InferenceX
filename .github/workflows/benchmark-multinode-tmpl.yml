@@ -184,6 +184,13 @@ jobs:
             done
           fi
 
+      - name: Workspace cleanup (pre-checkout)
+        run: |
+          sudo rm -rf "$GITHUB_WORKSPACE/benchmark_logs" || true
+          sudo rm -f "$GITHUB_WORKSPACE"/samples*.jsonl || true
+          sudo rm -f "$GITHUB_WORKSPACE"/meta_env.json || true
+          sudo chown -R "$USER":"$USER" "$GITHUB_WORKSPACE" || true
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
