@@ -467,6 +467,32 @@ for worker_type in ("prefill", "decode"):
 with open(config_path, "w") as config_file:
     yaml.safe_dump(config, config_file, sort_keys=False)
 PY
+    cat >> configs/patches/vllm-container-deps.sh <<'SH'
+
+python3 - <<'PY'
+from pathlib import Path
+
+paths = list(
+    Path("/usr/local/lib").glob(
+        "python*/dist-packages/dynamo/vllm/kv_connector_protocols.py"
+    )
+)
+if len(paths) != 1:
+    raise RuntimeError(f"Expected one Dynamo KV protocol module, found {paths}")
+
+path = paths[0]
+source = path.read_text()
+if '"MultiConnector": NixlConnectorProtocol' not in source:
+    needle = '    "MooncakeConnector": MooncakeConnectorProtocol,\n}'
+    replacement = (
+        '    "MooncakeConnector": MooncakeConnectorProtocol,\n'
+        '    "MultiConnector": NixlConnectorProtocol,\n}'
+    )
+    if needle not in source:
+        raise RuntimeError("Dynamo KV protocol registry layout changed")
+    path.write_text(source.replace(needle, replacement))
+PY
+SH
     echo "Enabled ${CPU_OFFLOAD_GIB} GiB logical-worker CPU KV tier in $CONFIG_PATH"
 fi
 
