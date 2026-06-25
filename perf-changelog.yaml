@@ -4183,6 +4183,13 @@
     - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
     - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1927
+  
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Update the DeepSeek-V4-Pro B200 disaggregated Dynamo-vLLM benchmark to the vllm/vllm-openai:v0.23.0 image"
+    - "Lower max-num-batched-tokens to 16384 and gpu-memory-utilization to 0.9 on the high-throughput and max-throughput recipes to avoid OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1899
 
 - config-keys:
     - minimaxm3-fp4-b200-vllm-mtp
