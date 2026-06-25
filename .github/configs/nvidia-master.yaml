@@ -12296,13 +12296,13 @@ minimaxm3-fp8-b300-vllm:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
 
 # MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM — FP4 variant
-# of minimaxm3-fp8-b300-vllm. The benchmark script overlays vllm-project/vllm
-# PR #46380 (MiniMax-M3 modelopt NVFP4 support, commit 6c08558) onto the perf
-# image before serve. --block-size 128 is mandatory (MSA sparse/index cache);
+# of minimaxm3-fp8-b300-vllm. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm
+# PR #46380) is baked into the perf container image, so no runtime patch is
+# needed. --block-size 128 is mandatory (MSA sparse/index cache);
 # weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
 # the STAGED_MODELS allow-list in launch_b300-nv.sh).
 minimaxm3-fp4-b300-vllm:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
