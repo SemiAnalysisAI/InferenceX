@@ -8,7 +8,8 @@
 # HiCache-offload configuration mirrors the DSR1 recipe but uses DSV4-Pro
 # specific flags (dsv4 attention backend, page-size 256, SWA settings).
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../benchmark_lib.sh"
 
 check_env_vars \
     CONC_LIST \
