@@ -143,19 +143,45 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-MAX_NUM_SEQS=$((2 * CONC))
+MAX_NUM_SEQS_MULTIPLIER="${MAX_NUM_SEQS_MULTIPLIER:-2}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((MAX_NUM_SEQS_MULTIPLIER * CONC))}"
+MAX_NUM_BATCHED_TOKENS_ARGS=()
+if [[ -n "${MAX_NUM_BATCHED_TOKENS:-}" ]]; then
+    MAX_NUM_BATCHED_TOKENS_ARGS=(--max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS")
+fi
+
+PREFIX_CACHE_ARGS=()
+if [[ "${PREFIX_CACHING:-true}" == "true" ]]; then
+    PREFIX_CACHE_ARGS=(--enable-prefix-caching)
+fi
+
+CHUNKED_PREFILL_ARGS=()
+case "${CHUNKED_PREFILL:-auto}" in
+    auto) ;;
+    true) CHUNKED_PREFILL_ARGS=(--enable-chunked-prefill) ;;
+    false) CHUNKED_PREFILL_ARGS=(--no-enable-chunked-prefill) ;;
+    *)
+        echo "Error: CHUNKED_PREFILL must be auto, true, or false" >&2
+        exit 1
+        ;;
+esac
+
+GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"
+VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.92 \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --block-size 128 \
     --language-model-only \
-    --enable-prefix-caching \
+    "${PREFIX_CACHE_ARGS[@]}" \
+    "${CHUNKED_PREFILL_ARGS[@]}" \
     --max-num-seqs "$MAX_NUM_SEQS" \
+    "${MAX_NUM_BATCHED_TOKENS_ARGS[@]}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
@@ -168,7 +194,7 @@ wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --s
 if [[ "$DP_ATTENTION" == "true" ]]; then
     vllm-router \
         --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
-        --policy consistent_hash \
+        --policy "$VLLM_ROUTER_POLICY" \
         --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \

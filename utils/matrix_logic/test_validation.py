@@ -315,6 +315,30 @@ class TestSingleNodeMatrixEntry:
 class TestAgenticMatrixEntries:
     """Tests for agentic coding validation models."""
 
+    def test_single_node_variant_and_additional_settings_are_valid(self):
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "variant": "mseq1-gmu95",
+            "additional-settings": [
+                "MAX_NUM_SEQS_MULTIPLIER=1",
+                "GPU_MEMORY_UTILIZATION=0.95",
+            ],
+            "conc-list": [4],
+        })
+        assert entry.variant == "mseq1-gmu95"
+        assert entry.additional_settings == [
+            "MAX_NUM_SEQS_MULTIPLIER=1",
+            "GPU_MEMORY_UTILIZATION=0.95",
+        ]
+
+    def test_single_node_variant_rejects_shell_metacharacters(self):
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "variant": "bad;variant",
+                "conc-list": [4],
+            })
+
     def test_lmcache_mp_offloading_is_valid_for_single_node_agentic_entry(self):
         """LMCache MP is a valid agentic offloading backend."""
         entry = SingleNodeAgenticMatrixEntry(**{
@@ -333,6 +357,7 @@ class TestAgenticMatrixEntries:
             "duration": 1800,
             "exp-name": "dsv4_tp8_conc1_offloadlmcache-mp",
             "scenario-type": "agentic-coding",
+            "additional-settings": [],
         })
         assert entry.offloading == "lmcache-mp"
 

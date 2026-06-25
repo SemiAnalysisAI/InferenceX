@@ -1663,6 +1663,49 @@ class TestGenerateTestConfigSweep:
         assert result[0]["scenario-type"] == "agentic-coding"
         assert result[0]["total-cpu-dram-gb"] == 1814
 
+    def test_agentic_variant_exports_unique_name_and_settings(self, sample_runner_config):
+        config = {
+            "minimaxm3-agentic": {
+                "image": "vllm",
+                "model": "MiniMaxAI/MiniMax-M3-MXFP8",
+                "model-prefix": "minimaxm3",
+                "precision": "fp8",
+                "framework": "vllm",
+                "runner": "h200-dgxc",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "search-space": [{
+                            "tp": 8,
+                            "variant": "mseq1-gmu95",
+                            "additional-settings": [
+                                "MAX_NUM_SEQS_MULTIPLIER=1",
+                                "GPU_MEMORY_UTILIZATION=0.95",
+                            ],
+                            "conc-list": [4],
+                        }],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["minimaxm3-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        assert result[0]["exp-name"] == (
+            "minimaxm3_tp8_conc4_offloadnone_mseq1-gmu95"
+        )
+        assert result[0]["additional-settings"] == [
+            "MAX_NUM_SEQS_MULTIPLIER=1",
+            "GPU_MEMORY_UTILIZATION=0.95",
+        ]
+
     def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
         config = {
             "dsv4-b300-agentic": {

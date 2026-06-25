@@ -48,6 +48,7 @@ class Fields(Enum):
     BATCH_SIZE = 'batch-size'
     MAX_NUM_TOKENS = 'max-num-tokens'
     ADDITIONAL_SETTINGS = 'additional-settings'
+    VARIANT = 'variant'
 
     # Agentic coding fields
     OFFLOADING = 'offloading'
@@ -167,6 +168,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+    additional_settings: List[str] = Field(alias=Fields.ADDITIONAL_SETTINGS.value)
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
@@ -352,6 +354,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
+    variant: Optional[str] = Field(default=None, pattern=r"^[a-z0-9-]+$")
+    additional_settings: List[str] = Field(
+        default=[], alias=Fields.ADDITIONAL_SETTINGS.value
+    )
 
     @model_validator(mode='after')
     def validate_conc_fields(self):

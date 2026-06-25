@@ -87,6 +87,11 @@ on:
         required: false
         type: string
         default: '1800'
+      additional-settings:
+        description: "Environment assignments for single-node AgentX tuning"
+        required: false
+        type: string
+        default: '[]'
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -184,6 +189,10 @@ jobs:
         run: |
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
           echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+
+          if [ '${{ inputs.additional-settings }}' != '[]' ]; then
+            export ${{ join(fromJson(inputs.additional-settings), ' ') }}
+          fi
 
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
 

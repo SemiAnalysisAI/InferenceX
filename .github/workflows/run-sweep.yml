@@ -440,6 +440,7 @@ jobs:
             offloading: ${{ matrix.config.offloading }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
+            additional-settings: ${{ toJson(matrix.config.additional-settings) }}
             isl: '0'
             osl: '0'
             max-model-len: '0'
