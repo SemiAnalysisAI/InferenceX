@@ -178,6 +178,9 @@ MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
 if (( TP == 4 )) && [[ -z "$MAX_MODEL_LEN" ]]; then
     MAX_MODEL_LEN=786432
 fi
+if [[ "$DP_ATTENTION" == "true" && -z "$MAX_MODEL_LEN" ]]; then
+    MAX_MODEL_LEN=753664
+fi
 MAX_MODEL_LEN_ARGS=()
 if [[ -n "$MAX_MODEL_LEN" ]]; then
     MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
