@@ -1,7 +1,7 @@
 name: "minimax-m3-vllm-disagg-gb200-1p2d-dep4-tep4-fp8-8k1k"
 
-# 1P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 2D TEP4 decode (TP4 EP, 4 GPU/worker = 1 node each).
-# GB300 has 4 GPUs/node. Adapted from NV B300 PR #1863.
+# 1P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 2D TEP4 decode (TP4 EP, 4 GPU/worker = 1 node each).
+# GB200 has 4 GPUs/node.
 # Nodes: 1 prefill + 2 decode (+ head/infra).
 
 model:

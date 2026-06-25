@@ -1,8 +1,8 @@
-name: "minimax-m3-vllm-disagg-gb200-1p4d-dep4-tep4-marlin-fp8-1k1k"
+name: "minimax-m3-vllm-disagg-gb200-1p4d-dep4-tp4-marlin-fp8-1k1k"
 
-# 1P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 4D TEP4 decode (TP4, 4 GPU/worker = 1 node each).
+# 1P DEP4 prefill (TP1 DP4 EP, 4 GPU/worker) + 4D TP4 decode (TP4, 4 GPU/worker = 1 node each).
 # Decode uses Marlin MoE backend with expert-parallel disabled (1p4d only).
-# GB300 has 4 GPUs/node. Adapted from NV B300 PR #1863.
+# GB200 has 4 GPUs/node.
 # Nodes: 1 prefill + 4 decode (+ head/infra).
 
 model:
