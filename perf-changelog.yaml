@@ -4163,6 +4163,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-atom-disagg
+  description:
+    - "Add minimaxm3-fp8-mi355x-atom-disagg CI recipe: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP8"
+    - "Settings aligned with slurm reference: MEM_FRAC_STATIC=0.8, MAX_NUM_SEQS=128, BLOCK_SIZE=128, MAX_MODEL_LEN=32768, KV_CACHE_DTYPE=auto"
+    - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
+    - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1865
+  
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm-disagg
   description:
     - "Initial submission: MiniMax-M3 MXFP8 MI355X vLLM disaggregated (prefill/decode) smoke test on the day-zero ROCm image (vllm/vllm-openai-rocm:minimax-m3) — 1 prefill (TP8) + 1 decode (TP8) across conc 1,2,4,8,16, validating the MoRI-IO KV-transfer disagg pipeline end-to-end for M3"
