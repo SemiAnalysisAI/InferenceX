@@ -79,6 +79,14 @@ on:
         type: choice
         default: normalized
         options: [normalized, tuned, default]
+      contract:
+        # layout-and-dispatch-v1 = dispatch timing includes routing-layout gen (the only
+        # contract MoRI honors; use for cross-vendor). cached-layout-comm-only-v1 = layout
+        # hoisted out, pure-comm dispatch (DeepEP normal only).
+        description: Measurement contract (timing boundary)
+        type: choice
+        default: layout-and-dispatch-v1
+        options: [layout-and-dispatch-v1, cached-layout-comm-only-v1]
 
 concurrency:
   # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
@@ -145,9 +153,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 'both' -> one job per phase (decode + prefill); else a single job. Phase
-        # only affects EP (deepep/mori); nccl ignores it (runs the same twice).
-        phase: ${{ fromJSON(inputs.phase == 'both' && '["decode","prefill"]' || format('["{0}"]', inputs.phase)) }}
+        # nccl/rccl are collective primitives — phase is meaningless, so run ONE job (not
+        # the same work twice). EP backends: 'both' -> decode + prefill; else a single job.
+        phase: ${{ fromJSON((inputs.benchmark == 'nccl' || inputs.benchmark == 'rccl') && '["na"]' || (inputs.phase == 'both' && '["decode","prefill"]' || format('["{0}"]', inputs.phase))) }}
     env:
       CX_BENCH: ${{ inputs.benchmark }}
       CX_OPS: ${{ inputs.ops }}
@@ -160,6 +168,9 @@ jobs:
       CX_DISPATCH_DTYPE: ${{ inputs.dispatch_dtype }}
       CX_MODE: ${{ inputs.mode }}
       CX_RESOURCE_MODE: ${{ inputs.resource_mode }}
+      CX_MEASUREMENT_CONTRACT: ${{ inputs.contract }}
+      # review #3 #1: link every artifact to this workflow run (run_ep records git_run).
+      COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
       # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
       CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
       # MI355X: pin to the warm-squash, writable nodes (see the push job).
@@ -167,6 +178,16 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
+      # Reject an unsupported backend/SKU/mode/dtype/contract BEFORE consuming the runner
+      # (review #3): fail fast on the login node, not after a salloc. 'all' fans out per
+      # vendor in-container, so skip the single-combo check for it.
+      - name: Validate capability
+        if: inputs.benchmark != 'all'
+        run: |
+          python3 experimental/CollectiveX/tests/capability.py \
+            --sku "${{ inputs.sku }}" --backend "${{ inputs.benchmark }}" \
+            --mode "${{ inputs.mode }}" --dtype "${{ inputs.dispatch_dtype }}" \
+            --contract "${{ inputs.contract }}"
       - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }} (${{ matrix.phase }})
         env:
           RUNNER_NAME: ${{ runner.name }}

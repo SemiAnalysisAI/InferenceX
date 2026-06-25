@@ -54,9 +54,10 @@ def main() -> int:
     args.image_digest = os.environ.get("COLLECTIVEX_IMAGE_DIGEST", "")
     # GHA run linkage (review #3 #1): every artifact records the workflow run it came
     # from so a chart point can link back to its run. Populated by the workflow env.
-    _run = {k: os.environ.get(v) for k, v in {
-        "run_id": "GITHUB_RUN_ID", "run_attempt": "GITHUB_RUN_ATTEMPT",
-        "source_sha": "COLLECTIVEX_SOURCE_SHA", "repo": "GITHUB_REPOSITORY"}.items()}
+    _run = {"run_id": os.environ.get("GITHUB_RUN_ID"),
+            "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+            "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
+            "repo": os.environ.get("GITHUB_REPOSITORY")}
     args.git_run = _run if any(_run.values()) else None
 
     # Import the backend CLASS (module-top imports torch + the backend lib; no process
