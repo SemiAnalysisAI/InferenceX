@@ -1,0 +1,32 @@
+minimaxm3-fp8-h200-vllm-agentic-frontier-refinement:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      search-space:
+      - tp: 8
+        offloading: none
+        conc-list: [11]
+        variant: tp8-default
+      - tp: 8
+        offloading: none
+        conc-list: [12]
+        variant: tp8-mns1x
+      - tp: 8
+        offloading: none
+        conc-list: [12]
+        variant: tp8-mns4x
+      - tp: 8
+        offloading: none
+        conc-list: [12]
+        variant: tp8-mbt4096
+      - tp: 8
+        offloading: none
+        conc-list: [12]
+        variant: tp8-mbt16384
