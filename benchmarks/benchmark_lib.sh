@@ -1111,6 +1111,9 @@ build_replay_cmd() {
     REPLAY_CMD+=" --model $MODEL"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
+    if [ -n "${AIPERF_BENCHMARK_GRACE_PERIOD:-}" ]; then
+        REPLAY_CMD+=" --benchmark-grace-period $AIPERF_BENCHMARK_GRACE_PERIOD"
+    fi
     REPLAY_CMD+=" --random-seed 42"
     # Fail runs once more than 10% of requests error. This keeps known
     # transient low-rate failures from killing long sweeps while still
