@@ -193,10 +193,6 @@ EOF
     lmcache)
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
-        # cupy-rocm installed by lmcache occupies GPU memory at import time,
-        # leaving only ~107/288 GiB free per device. Use a conservative
-        # utilization that fits within that budget.
-        GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.35}"
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
@@ -313,7 +309,7 @@ VLLM_CMD=(
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
     --enable-prefix-caching
-    --gpu-memory-utilization "${GPU_MEM_UTIL:-0.8}"
+    --gpu-memory-utilization 0.8
     --max-model-len 170000
     --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
