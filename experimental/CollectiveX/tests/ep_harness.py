@@ -77,6 +77,11 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="apply EPLB expert replication/placement to the routing trace")
     ap.add_argument("--num-redundant-experts", type=int, default=32,
                     help="EPLB: redundant physical expert slots (rounded up to a multiple of ep_size)")
+    # Canonical serialized workload (goal P1): consume pre-generated trace bytes instead of the
+    # seeded runtime generator, so a result is provably the SAME workload as another machine's
+    # (checksum match). Points at a dir of <workload_id>.npz/.manifest.json (make_workloads.py).
+    ap.add_argument("--workload-dir", default="",
+                    help="dir of canonical workload traces; empty = seeded runtime generation (dev)")
     ap.add_argument("--mode", default="normal", choices=["normal", "ll"],
                     help="kernel path: normal or low-latency (LL); LL is backend-dependent")
     # Measurement contract — the EXPLICIT timing boundary every adapter must conform to
@@ -239,6 +244,40 @@ def _provenance_unknown(prov: dict) -> list[str]:
     return [k for k, v in prov.items() if isinstance(v, str) and v.strip().lower() == "unknown"]
 
 
+def _resource_profile(prov: dict, args) -> dict:
+    """Map backend-specific provenance onto the backend-INDEPENDENT resource vocabulary (goal P3):
+    requested vs achieved comm-unit fraction, configured units/warps, and a conformance class.
+    DeepEP units = SMs (num_sms); MoRI units = CU blocks (block_num)."""
+    dev = prov.get("device_sms") or prov.get("device_cus")
+    cfg = prov.get("num_sms") if prov.get("num_sms") is not None else prov.get("block_num")
+    requested = args.sm_fraction if args.resource_mode == "normalized" else None
+    achieved = (cfg / dev) if (cfg and dev) else None
+    floored = bool(prov.get("block_num_floored"))
+    if floored:
+        cls = "minimum-functional"            # backend needed MORE than requested to run
+    elif args.resource_mode == "normalized":
+        cls = "resource-conforming"
+    elif args.resource_mode == "tuned":
+        cls = "best-known" if "default" not in str(prov.get("tuned_source", "")) else "backend-default"
+    else:
+        cls = "backend-default"
+    # within tolerance? (normalized only — did we hit the requested fraction?)
+    tol = 0.10
+    target_achieved = (requested is not None and achieved is not None
+                       and abs(achieved - requested) <= tol) if requested else None
+    return {
+        "comm_units_kind": "sm" if prov.get("num_sms") is not None else "cu_block",
+        "requested_fraction": requested, "configured_units": cfg, "device_units": dev,
+        "achieved_fraction": round(achieved, 4) if achieved else None,
+        "warps_dispatch": prov.get("dispatch_warps"), "warps_combine": prov.get("combine_warps"),
+        "qps_per_rank": prov.get("num_qps_per_rank"),
+        "persistent_bytes": prov.get("num_nvl_bytes") or prov.get("num_rdma_bytes") or prov.get("heap_size"),
+        "tuned_source": prov.get("tuned_source"),
+        "conformance_class": cls, "tolerance": tol, "target_achieved_within_tol": target_achieved,
+        "nonconforming": floored,
+    }
+
+
 def _derive_publication_status(v: dict) -> str:
     """Machine-derive the publication state from the validity dimensions (goal P1). No caller
     may hand-label a result 'official' — it must earn every gate here."""
@@ -326,9 +365,25 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                   f"{eplb_plan['imbalance_after']:.2f}x; {eplb_plan['replicated_experts']} experts "
                   f"replicated (hottest {eplb_plan['max_replicas']}x)")
 
+    canonical = bool(getattr(args, "workload_dir", ""))
+    loaded_workload_ids, loaded_checksums = [], {}
+    if canonical:
+        import workload as _wl
+
     def build_trace(gt):
-        idx_l, w = routing.build_global_routing(gt, num_logical, args.topk, args.routing,
-                                                args.seed, num_logical // ep_size)
+        # canonical: load pre-serialized trace bytes (verified by checksum) so this run is
+        # provably the SAME workload as any other consuming the same files. else: seeded gen.
+        if canonical:
+            wid = _wl.compute_workload_id(args.routing, args.hidden, args.topk, num_logical, gt, args.seed)
+            idx_np, w_np, man = _wl.load_workload(os.path.join(args.workload_dir, f"{wid}.npz"), verify=True)
+            idx_l = torch.from_numpy(idx_np).to(torch.int64)
+            w = torch.from_numpy(w_np).to(torch.float32)
+            if wid not in loaded_workload_ids:
+                loaded_workload_ids.append(wid)
+                loaded_checksums[wid] = man.get("checksums")
+        else:
+            idx_l, w = routing.build_global_routing(gt, num_logical, args.topk, args.routing,
+                                                    args.seed, num_logical // ep_size)
         return (eplb.remap_idx(idx_l, eplb_plan) if eplb_plan is not None else idx_l), w
 
     # Fabric/clock warm-up BEFORE any timed point (review: H200 had an anomalous cold
@@ -529,6 +584,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                             else ("resource-conforming" if args.resource_mode == "normalized"
                                   else "backend-default" if args.resource_mode in ("tuned", "default")
                                   else "unspecified"))
+    # record the canonical workload identity consumed (one trace per T -> set of ids/checksums).
+    if canonical and loaded_workload_ids:
+        args.workload_id = (loaded_workload_ids[0] if len(loaded_workload_ids) == 1
+                            else f"set:{len(loaded_workload_ids)}:{loaded_workload_ids[0]}")
+        args.workload_checksums = loaded_checksums
     canonical_workload = bool(getattr(args, "workload_id", None))
     validity = {
         "execution_status": "complete" if rows else "failed",
@@ -584,6 +644,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "x_axis": {"primary": "tokens_per_rank",
                    "global_relation": "global_tokens = tokens_per_rank * ep_size"},
         "backend_provenance": backend.backend_provenance,
+        # backend-independent resource vocabulary + conformance class (goal P3).
+        "resource_profile": _resource_profile(backend.backend_provenance, args),
         "reproduction": {
             "command": getattr(args, "reproduction_command", ""),
             "image": getattr(args, "image", "") or None,
