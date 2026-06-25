@@ -112,6 +112,23 @@ def load_series(results_dir: str) -> list[dict]:
             "prov": d.get("backend_provenance", {}),
             "shape": sh, "rows": rows,
         })
+    # Fill each prefill curve with the decode-range points of the SAME config so a prefill
+    # panel spans the full token axis. DeepEP's prefill ladder is [128,256,512], but MoRI's
+    # gradual ramp expands its prefill to [1..512]; without this the DeepEP lines look
+    # "incomplete" (clustered at the right) next to MoRI. decode+prefill are the same kernel
+    # at different token regimes — this is one continuous latency-vs-T curve. Idempotent.
+    by_cfg_phase = {(s["ckey"], s["phase"]): s for s in series}
+    for s in series:
+        if s["phase"] != "prefill" or not s["rows"]:
+            continue
+        dec = by_cfg_phase.get((s["ckey"], "decode"))
+        if not dec:
+            continue
+        minp = min(r["t"] for r in s["rows"])
+        extra = [r for r in dec["rows"] if r["t"] < minp]
+        if extra:
+            s["rows"] = sorted(extra + s["rows"], key=lambda r: r["t"])
+
     # Assign a DISTINCT color per config key, grouped by SKU family (stable across the
     # decode/prefill panels so a line keeps its color everywhere).
     by_sku: dict[str, list[str]] = {}
