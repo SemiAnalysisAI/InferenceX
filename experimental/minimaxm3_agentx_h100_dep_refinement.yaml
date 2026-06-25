@@ -1,0 +1,32 @@
+minimaxm3-fp8-h100-vllm-agentic-dep-refinement:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h100-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      search-space:
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        offloading: none
+        conc-list: [4, 8]
+        variant: dep8-ep8-sticky
+        additional-settings: &dep-settings
+        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=300
+        - VLLM_MAX_MODEL_LEN=393216
+        - VLLM_ROUTER_POLICY=consistent_hash
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        offloading: none
+        conc-list: [4]
+        variant: dep8-ep8-round-robin
+        additional-settings:
+        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=300
+        - VLLM_MAX_MODEL_LEN=393216
+        - VLLM_ROUTER_POLICY=round_robin
