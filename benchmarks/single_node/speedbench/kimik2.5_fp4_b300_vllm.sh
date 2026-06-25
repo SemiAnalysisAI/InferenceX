@@ -1,22 +1,34 @@
 #!/usr/bin/env bash
 
-# DSV4-Pro B300 vLLM SPEED-Bench AL matrix collector.
+# Kimi-K2.5 B300 vLLM SPEED-Bench AL matrix collector for EAGLE3 speculative
+# decoding.
 #
 # Produces the golden acceptance-length (AL) reference matrix consumed by the
-# synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
-# level (num_speculative_tokens), measure the AL on a single SPEED-Bench
+# synthetic-acceptance framework: for each thinking mode (on/off) and each
+# EAGLE3 speculative-token count, measure the REAL AL on a single SPEED-Bench
 # category (default: coding) and emit a YAML matrix identical in shape to
 # benchmarks/speedbench-reference-al.yaml.
 #
-# This is the "AL distribution collection" script wired into the
-# speedbench-al.yml GitHub Action (workflow_dispatch / push-button).
+# Kimi-K2.5 uses the lightseekorg/kimi-k2.5-eagle3-mla draft head (MLA
+# variant, recommended by official docs). The draft model is downloaded
+# alongside the target checkpoint before the sweep begins.
 #
-# Usage (inside the vLLM container, on a B300 node):
-#   export MODEL=/data/models/dsv4-pro
-#   bash benchmarks/single_node/speedbench/dsv4_fp4_b300_vllm.sh
+# Differences vs the GLM-5 MTP template (glm5_fp4_b300_vllm.sh):
+#   - speculative-config     eagle3 with external draft model (not mtp)
+#   - reasoning-parser       kimi_k2        (was glm45)
+#   - tool-call-parser       kimi_k2        (was glm47)
+#   - thinking toggle        {"thinking": true/false}   (was enable_thinking)
+#   - temperature            1.0 (thinking) / 0.6 (instant)  (was fixed 1.0)
+#   - NO --chat-template-content-format, --tokenizer-mode, --block-size,
+#     or --attention_config.use_fp4_indexer_cache
+#   - --language-model-only  (text-only benchmark, no vision)
+#
+# Usage (inside the Kimi vLLM container, on a B300 node):
+#   export MODEL=moonshotai/Kimi-K2.5-NVFP4
+#   bash benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh
 #
 # Tunables (env):
-#   MTP_LIST          space-separated MTP levels   (default "1 2 3 4 5 6 7 8")
+#   MTP_LIST          space-separated EAGLE3 spec-token counts (default "1 2 3 4 5 6 7 8")
 #   THINKING_MODES    space-separated: off|on       (default "off on")
 #   CATEGORY          SPEED-Bench category          (default coding)
 #   SPEEDBENCH_OUTPUT_LEN  per-request output len   (default 4096)
@@ -25,41 +37,68 @@
 set -uo pipefail
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-MODEL="${MODEL:?MODEL env var required (e.g. /data/models/dsv4-pro)}"
-# Serve from the local weights dir resolved by the launcher (MODEL_PATH points
-# at the pre-staged copy, e.g. /scratch/models/DeepSeek-V4-Pro). Falls back to
-# MODEL for a standalone local run where MODEL is itself a path. A leading "/"
-# makes the download guard below a no-op.
+MODEL="${MODEL:?MODEL env var required (e.g. moonshotai/Kimi-K2.5-NVFP4)}"
 SERVE_MODEL="${MODEL_PATH:-$MODEL}"
 TP="${TP:-8}"
 DP_ATTENTION="${DP_ATTENTION:-false}"
 EP_SIZE="${EP_SIZE:-1}"
 PORT="${PORT:-8888}"
+GPU_MEM_UTIL="${GPU_MEM_UTIL:-0.80}"
+
+DRAFT_MODEL="lightseekorg/kimi-k2.5-eagle3-mla"
 
 MTP_LIST="${MTP_LIST:-1 2 3 4 5 6 7 8}"
 THINKING_MODES="${THINKING_MODES:-off on}"
 CATEGORY="${CATEGORY:-coding}"
-# Top-level key in the emitted YAML matrix. Derived from the model by the
-# workflow (e.g. deepseek-v4-pro); falls back to the model basename, lowercased.
 MODEL_KEY="${MODEL_KEY:-$(basename "$SERVE_MODEL" | tr '[:upper:]' '[:lower:]')}"
 SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
-CONCURRENCY="${CONCURRENCY:-1}"
-TEMPERATURE="${TEMPERATURE:-1.0}"
-# thinking-on chat_template_kwargs. MUST match the production/golden config:
-# the reference matrix (benchmarks/speedbench-reference-al.yaml) was measured
-# with reasoning_effort=high.
-DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true, "reasoning_effort": "high"}'
+# AL is concurrency-independent (per-token accept/reject; no spec-disable-by-batch
+# is set below), so batch the SPEED-Bench pass to keep wall-time under the CI
+# limit. conc=1 made Kimi-K2.5 exceed the 8h budget. 64 captures most of the
+# batch-decode speedup before it saturates / KV pressure grows; override via env.
+CONCURRENCY="${CONCURRENCY:-64}"
+TOP_P="${TOP_P:-0.95}"
+# Kimi thinking toggles via the thinking chat_template key (default ON).
+DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true}'
+DEFAULT_CHAT_TEMPLATE_KWARGS_OFF='{"thinking": false}'
 CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"
+CHAT_TEMPLATE_KWARGS_OFF="${CHAT_TEMPLATE_KWARGS_OFF:-$DEFAULT_CHAT_TEMPLATE_KWARGS_OFF}"
 
 SPEEDBENCH_DIR="${SPEEDBENCH_DIR:-/workspace/speed_bench_data}"
 RESULTS_DIR="${RESULTS_DIR:-/workspace/speedbench_results}"
 OUT_YAML="${OUT_YAML:-$RESULTS_DIR/speedbench-reference-al.yaml}"
 
+# Blackwell NVFP4 checkpoints need FlashInfer FP4 MoE kernels; auto-enable
+# when the served model name contains NVFP4 (e.g. nvidia/Kimi-K2.5-NVFP4).
+if [[ "$SERVE_MODEL" == *NVFP4* || "$SERVE_MODEL" == *nvfp4* ]]; then
+    export VLLM_USE_FLASHINFER_MOE_FP4="${VLLM_USE_FLASHINFER_MOE_FP4:-1}"
+fi
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
 mkdir -p "$RESULTS_DIR"
 nvidia-smi
-if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
+
+# ---- Download target if it is not pre-staged ----
+# A pre-staged target lands in the read-only staged mount (/scratch/models);
+# only download when MODEL_PATH is an empty writable dir (non-staged run).
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    if [[ "$SERVE_MODEL" != /* ]]; then hf download "$SERVE_MODEL"; fi
+fi
+
+# ---- Download EAGLE3 draft model to a WRITABLE dir ----
+# The draft must NOT go next to a pre-staged target: dirname(MODEL_PATH) is the
+# read-only staged mount (/scratch/models), so writing the draft there fails
+# with PermissionError. Use a writable workspace dir regardless of staging.
+DRAFT_DIR="${DRAFT_MODEL_DIR:-/workspace/draft_models}"
+mkdir -p "$DRAFT_DIR"
+DRAFT_MODEL_PATH="$DRAFT_DIR/${DRAFT_MODEL##*/}"
+if [[ ! -d "$DRAFT_MODEL_PATH" || -z "$(ls -A "$DRAFT_MODEL_PATH" 2>/dev/null)" ]]; then
+    hf download "$DRAFT_MODEL" --local-dir "$DRAFT_MODEL_PATH"
+fi
 
 # ---- Download SPEED-Bench dataset ----
 echo "=== Downloading SPEED-Bench dataset ==="
@@ -78,8 +117,8 @@ fi
 # posts to /v1/completions, so thinking mode cannot be enabled via --extra-body
 # or --default-chat-template-kwargs. This wires a proper --chat-template-kwargs
 # option through get_samples into CustomDataset.sample's apply_chat_template.
-# TODO: delete this whole block once #44244 is released in the benchmark image;
-# the patch is idempotent (marker check) so it is safe to leave until then.
+# Model agnostic (forwards whatever dict it is given). TODO: delete once #44244
+# is released in the benchmark image; idempotent (marker check), safe to leave.
 apply_chat_template_kwargs_shim() {
     echo "=== Patching vLLM benchmark to add --chat-template-kwargs (temporary shim) ==="
     python3 - <<'PYEOF'
@@ -146,8 +185,11 @@ patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
 PYEOF
 }
 
-# Apply the shim once if any thinking-on cell is requested.
-if [[ " $THINKING_MODES " == *" on "* ]]; then
+# Apply the shim once if any cell will pass chat_template_kwargs.
+NEED_SHIM=0
+if [[ " $THINKING_MODES " == *" on "*  && -n "$CHAT_TEMPLATE_KWARGS_ON"  ]]; then NEED_SHIM=1; fi
+if [[ " $THINKING_MODES " == *" off "* && -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then NEED_SHIM=1; fi
+if [[ "$NEED_SHIM" == "1" ]]; then
     if ! apply_chat_template_kwargs_shim; then
         echo "CRITICAL: --chat-template-kwargs shim failed — aborting"
         exit 1
@@ -162,10 +204,6 @@ EP_ARGS=()
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     EP_ARGS=(--enable-expert-parallel)
 fi
-MOE_ARGS=()
-if [ "${DP_ATTENTION}" = "true" ]; then
-    MOE_ARGS=(--moe-backend deep_gemm_mega_moe)
-fi
 
 fetch_metric() {
     local port="$1" name="$2"
@@ -174,10 +212,6 @@ fetch_metric() {
 }
 
 SERVER_PID=""
-# List all descendant PIDs of $1 recursively, matched by PARENT pid. This can
-# never include this script (the script is an ancestor of the server, not a
-# descendant), so it avoids the self-kill a name-based `pkill -f vllm` caused
-# (the script filename contains "vllm").
 _descendants() {
     local pid="$1" child
     for child in $(pgrep -P "$pid" 2>/dev/null || true); do
@@ -187,10 +221,6 @@ _descendants() {
 }
 cleanup_server() {
     if [[ -n "$SERVER_PID" ]]; then
-        # Snapshot the server's worker/EngineCore subprocesses BEFORE killing the
-        # parent: once the parent dies the children reparent to init and the tree
-        # link is lost. Killing the captured PIDs guarantees no orphaned worker
-        # survives to hold GPU memory and OOM the next server start.
         local descendants
         descendants=$(_descendants "$SERVER_PID")
         kill "$SERVER_PID" 2>/dev/null || true
@@ -199,7 +229,6 @@ cleanup_server() {
         for pid in $descendants; do
             kill -9 "$pid" 2>/dev/null || true
         done
-        # Wait for GPU memory to actually free before the next server starts.
         local waited=0
         while [[ $waited -lt 120 ]]; do
             local used
@@ -214,19 +243,27 @@ trap 'cleanup_server' EXIT
 
 start_gpu_monitor
 
-# Per-cell AL is collected into associative arrays keyed by "mode_mtp".
 declare -A AL_RESULT
 
 run_cell() {
     local mode="$1" mtp="$2"
     local think_args=()
+    local temperature
     if [[ "$mode" == "on" ]]; then
-        think_args=(--chat-template-kwargs "$CHAT_TEMPLATE_KWARGS_ON")
+        temperature=1.0
+        if [[ -n "$CHAT_TEMPLATE_KWARGS_ON" ]]; then
+            think_args=(--chat-template-kwargs "$CHAT_TEMPLATE_KWARGS_ON")
+        fi
+    else
+        temperature=0.6
+        if [[ -n "$CHAT_TEMPLATE_KWARGS_OFF" ]]; then
+            think_args=(--chat-template-kwargs "$CHAT_TEMPLATE_KWARGS_OFF")
+        fi
     fi
 
     echo ""
     echo "=========================================="
-    echo "  Cell: thinking=$mode  MTP=$mtp  category=$CATEGORY"
+    echo "  Cell: thinking=$mode  EAGLE3=$mtp  category=$CATEGORY"
     echo "=========================================="
 
     local serve_args=(
@@ -235,19 +272,15 @@ run_cell() {
         --pipeline-parallel-size 1
         --kv-cache-dtype fp8
         --trust-remote-code
-        --block-size 256
+        --language-model-only
         --no-enable-prefix-caching
         "${EP_ARGS[@]}"
-        "${MOE_ARGS[@]}"
-        --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
-        --attention_config.use_fp4_indexer_cache True
-        --tokenizer-mode deepseek_v4
-        --tool-call-parser deepseek_v4
+        --reasoning-parser kimi_k2
+        --tool-call-parser kimi_k2
         --enable-auto-tool-choice
-        --reasoning-parser deepseek_v4
-        --max-cudagraph-capture-size 2048
+        --gpu-memory-utilization "$GPU_MEM_UTIL"
         --max-model-len 16384
-        --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $mtp}"
+        --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL_PATH\", \"num_speculative_tokens\": $mtp}"
     )
 
     local server_log="$RESULTS_DIR/server_${mode}_mtp${mtp}.log"
@@ -255,7 +288,7 @@ run_cell() {
     SERVER_PID=$!
 
     if ! wait_for_server_ready --port "$PORT" --server-log "$server_log" --server-pid "$SERVER_PID"; then
-        echo "  -> server failed to start (thinking=$mode mtp=$mtp), recording N/A"
+        echo "  -> server failed to start (thinking=$mode eagle3=$mtp), recording N/A"
         AL_RESULT["${mode}_${mtp}"]="N/A"
         cleanup_server
         return
@@ -279,8 +312,8 @@ run_cell() {
         --result-dir "$RESULTS_DIR" \
         --result-filename "speedbench_${mode}_mtp${mtp}" \
         --trust-remote-code \
-        --tokenizer-mode deepseek_v4 \
-        --temperature "$TEMPERATURE" \
+        --temperature "$temperature" \
+        --top-p "$TOP_P" \
         "${think_args[@]}"
 
     acc_after=$(fetch_metric "$PORT" "vllm:spec_decode_num_accepted_tokens_total")
@@ -294,7 +327,7 @@ run_cell() {
     else
         al="N/A"
     fi
-    echo "  -> thinking=$mode MTP=$mtp AL=$al (accepted=$delta_acc drafts=$delta_drf)"
+    echo "  -> thinking=$mode EAGLE3=$mtp AL=$al (accepted=$delta_acc drafts=$delta_drf)"
     AL_RESULT["${mode}_${mtp}"]="$al"
 
     cleanup_server
@@ -318,12 +351,13 @@ emit_mode_block() {
 
 {
     echo "# Acceptance Length (AL) reference values measured with SPEED-Bench."
-    echo "# dataset: $CATEGORY | temperature: $TEMPERATURE | output_len: $SPEEDBENCH_OUTPUT_LEN"
-    echo "# thinking_on chat_template_kwargs: $CHAT_TEMPLATE_KWARGS_ON"
-    echo "# Measured on $MODEL_KEY (B300, vLLM MTP), per num_speculative_tokens."
-    echo "# Auto-generated by benchmarks/single_node/speedbench/dsv4_fp4_b300_vllm.sh (speedbench-al.yml)."
+    echo "# dataset: $CATEGORY | top_p: $TOP_P | output_len: $SPEEDBENCH_OUTPUT_LEN"
+    echo "# thinking_on: temperature=1.0, chat_template_kwargs: $CHAT_TEMPLATE_KWARGS_ON"
+    echo "# thinking_off: temperature=0.6, chat_template_kwargs: $CHAT_TEMPLATE_KWARGS_OFF"
+    echo "# Measured on $MODEL_KEY (B300, vLLM EAGLE3), per num_speculative_tokens."
+    echo "# Auto-generated by benchmarks/single_node/speedbench/kimik2.5_fp4_b300_vllm.sh (speedbench-al.yml)."
     echo "#"
-    echo "# key = num_speculative_tokens (MTP level); value = golden AL"
+    echo "# key = num_speculative_tokens (EAGLE3 level); value = golden AL"
     echo "${MODEL_KEY}:"
     if [[ " $THINKING_MODES " == *" on "* ]]; then
         echo "  thinking_on:"

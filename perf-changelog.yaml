@@ -4161,3 +4161,15 @@
     - "Run the PR #1891 MiniMax-M3 MXFP8 B300 Dynamo-vLLM recipe set on top of current main."
     - "Uses the vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image and the TEP4/TEP8 8k1k topologies not covered by PR #1890."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-disagg
+  description:
+    - "Initial submission: MiniMax-M3 MXFP8 MI355X vLLM disaggregated (prefill/decode) smoke test on the day-zero ROCm image (vllm/vllm-openai-rocm:minimax-m3) — 1 prefill (TP8) + 1 decode (TP8) across conc 1,2,4,8,16, validating the MoRI-IO KV-transfer disagg pipeline end-to-end for M3"
+    - "Layered on the MoRI-IO patch-removal infra (#1585): uses benchmarks/multi_node/amd_utils with the runtime MoRI patches removed"
+    - "Per-worker serve flags (models_vllm.yaml MiniMax-M3-MXFP8): --block-size 128 (MSA), --language-model-only, --kv-cache-dtype fp8, --attention-backend TRITON_ATTN, minimax_m3 parsers; no EP (TP8, MoE experts TP-sharded)"
+    - "M3 disagg script points MODEL_PATH at the cluster's shared HF cache (/it-share/hf-hub-cache) where the ~414 GB MiniMax-M3-MXFP8 checkpoint is pre-staged, instead of the launcher default /it-share/data; scoped to M3 only (other disagg models keep /it-share/data)"
+    - "Sweeps conc 1,2,4,8,16,32,64,128,256,512,1024 at both 1k1k and 8k1k (1P TP8 + 1D TP8). The 8k1k point makes the multi-node eval policy (8k1k + conc >= 16) mark one lm-eval on the highest-max-conc layout (eval-conc=median), validating the disagg pipeline's correctness; run with non-canary-full-sweep-enabled so the eval entry actually runs"
+    - "Adds two asymmetric prefill/decode layouts at both 1k1k and 8k1k alongside the TP8+TP8 sweep: 1P TP4 + 1D TP8 (smaller prefill, full-node decode) at conc 1,2,4,8,16,32,64,128,256; and balanced 1P TP4 + 1D TP4 at conc 64,128,256,512,1024. Per-worker TP comes from the master-config prefill/decode tp (server_vllm.sh rewrites the models_vllm.yaml --tensor-parallel-size placeholder); no EP, dp-attn off, PREFILL_NODES=1/DECODE_NODES=1 (TP4 uses half an 8-GPU node)"
+    - "Adds a 2P TP4 + 1D TP8 layout at both 1k1k and 8k1k for high conc 256,512,768,1024: two TP4 prefill workers (num-worker 2, PREFILL_NODES=2, each TP4 on half an 8-GPU node) feeding one TP8 decode (DECODE_NODES=1); 3 nodes total"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1762
