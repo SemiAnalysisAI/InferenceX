@@ -106,12 +106,19 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-MAX_NUM_SEQS_MULTIPLIER="${VLLM_MAX_NUM_SEQS_MULTIPLIER:-2}"
+MAX_NUM_SEQS_MULTIPLIER="${VLLM_MAX_NUM_SEQS_MULTIPLIER:-}"
+if [[ -z "$MAX_NUM_SEQS_MULTIPLIER" ]]; then
+    if [[ "$OFFLOADING" == "cpu" ]]; then
+        MAX_NUM_SEQS_MULTIPLIER=1
+    else
+        MAX_NUM_SEQS_MULTIPLIER=2
+    fi
+fi
 MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$((MAX_NUM_SEQS_MULTIPLIER * CONC))}"
 GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-}"
 if [[ -z "$GPU_MEMORY_UTILIZATION" ]]; then
     if [[ "$OFFLOADING" == "cpu" ]]; then
-        GPU_MEMORY_UTILIZATION=0.92
+        GPU_MEMORY_UTILIZATION=0.94
     else
         GPU_MEMORY_UTILIZATION=0.95
     fi
