@@ -1,0 +1,18 @@
+minimaxm3-fp8-h200-vllm-agentic-dep-throughput:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      search-space:
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        offloading: none
+        conc-list: [8, 12, 16]
+        variant: dep8-ep8-sticky
