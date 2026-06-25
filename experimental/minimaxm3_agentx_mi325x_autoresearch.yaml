@@ -9,6 +9,10 @@ minimaxm3-fp8-mi325x-vllm-agentic-autoresearch:
   scenarios:
     agentic-coding:
     - duration: 900
+      available-cpu-dram-mib: 2_321_924
+      cpu-offload-utilization: 0.50
+      gpus-per-node: 8
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 4, 8, 16, 24] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [16, 32, 48, 64] }
+      - { tp: 4, offloading: none, conc-list: [1, 2, 3, 5] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [20, 24, 28, 32, 36] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, conc-list: [32, 40, 48, 56] }
