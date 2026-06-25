@@ -164,7 +164,7 @@ PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 MAX_MODEL_LEN_ARGS=()
 if [[ "$DP_ATTENTION" == "true" ]]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
-    MAX_MODEL_LEN_ARGS=(--max-model-len 524288)
+    MAX_MODEL_LEN_ARGS=(--max-model-len 700000)
 fi
 
 EP_ARGS=()
