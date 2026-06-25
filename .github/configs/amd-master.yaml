@@ -2600,12 +2600,10 @@ minimaxm3-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 128, conc-end: 256 }
       - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 128, conc-end: 256 }
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp4-mi355x-atom-mtp:
@@ -2621,12 +2619,10 @@ minimaxm3-fp4-mi355x-atom-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 128, conc-end: 256, spec-decoding: mtp  }
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 128, conc-end: 256, spec-decoding: mtp  }
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
 
 minimaxm3-fp8-mi355x-atom-mtp:
