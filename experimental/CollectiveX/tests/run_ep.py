@@ -61,12 +61,20 @@ def main() -> int:
                                  + " ".join(sys.argv[1:]))
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
     args.image_digest = os.environ.get("COLLECTIVEX_IMAGE_DIGEST", "")
-    # GHA run linkage (review #3 #1): every artifact records the workflow run it came
-    # from so a chart point can link back to its run. Populated by the workflow env.
+    # Container provenance (goal P1): arch (amd64/arm64) + local squash hash for Enroot/Pyxis.
+    import platform as _plat
+    _arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(_plat.machine(), _plat.machine())
+    args.image_arch = _arch
+    args.squash_sha256 = os.environ.get("COLLECTIVEX_SQUASH_SHA256")
+    # Complete GitHub provenance (goal P1): repo, run id, attempt, ref/branch, source SHA, job,
+    # artifact. A result is only publication-'official' when these are present (validity gate).
     _run = {"run_id": os.environ.get("GITHUB_RUN_ID"),
             "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+            "ref": os.environ.get("GITHUB_REF_NAME") or os.environ.get("GITHUB_REF"),
             "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
-            "repo": os.environ.get("GITHUB_REPOSITORY")}
+            "repo": os.environ.get("GITHUB_REPOSITORY"),
+            "job": os.environ.get("GITHUB_JOB"),
+            "artifact": os.environ.get("COLLECTIVEX_ARTIFACT_NAME")}
     args.git_run = _run if any(_run.values()) else None
 
     # Import the backend CLASS (module-top imports torch + the backend lib; no process

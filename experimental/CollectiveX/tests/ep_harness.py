@@ -650,7 +650,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "command": getattr(args, "reproduction_command", ""),
             "image": getattr(args, "image", "") or None,
             "image_digest": getattr(args, "image_digest", "") or None,
-            "git_run": getattr(args, "git_run", None),   # GHA run id/attempt/sha (review #1)
+            "image_arch": getattr(args, "image_arch", None),
+            "squash_sha256": getattr(args, "squash_sha256", None),
+            "git_run": getattr(args, "git_run", None),   # repo/run/attempt/ref/sha/job/artifact
+            # redaction (goal P1): command + provenance carry NO hostnames/IPs/UUIDs/private paths;
+            # per-node env (hostnames, GPU UUIDs, NIC GUIDs) lives in the separate gitignored
+            # env_json (CI uploads it as a workflow artifact), never inlined into this record.
+            "redaction": "no hostnames/IPs/UUIDs/private-paths in command or provenance",
             "seed": args.seed, "warmup": args.warmup, "iters": args.iters,
             "trials": max(1, args.trials), "samples_per_point": (max(1, args.trials) * args.iters),
             "measurement_contract": args.measurement_contract,
