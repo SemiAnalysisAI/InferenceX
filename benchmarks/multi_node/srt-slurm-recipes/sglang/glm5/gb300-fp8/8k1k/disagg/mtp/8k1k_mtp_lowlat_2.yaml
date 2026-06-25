@@ -51,7 +51,7 @@ backend:
     DYN_REQUEST_PLANE: nats
       # DeepEP per-rank dispatch buffer; must be >= ceil(cuda_graph_max_bs / dp_size).
       # Default 128 overflows with large DP + batch (e.g. 4096/24 ~= 171 > 128). Limit 1024.
-    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '512'
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: '1024'
 
   sglang_config:
     prefill:
