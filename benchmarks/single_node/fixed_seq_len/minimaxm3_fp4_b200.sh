@@ -2,9 +2,8 @@
 
 # MiniMax-M3 NVFP4 B200 single-node vLLM recipe.
 # Same shape as minimaxm3_fp8_b200.sh but uses the nvidia/MiniMax-M3-NVFP4
-# checkpoint. Applies vllm-project/vllm PR #46380 (MiniMax-M3 modelopt NVFP4
-# support) from commit 6c08558 by overwriting the 3 changed files in the
-# installed vLLM package before the server starts.
+# checkpoint. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm PR #46380) is
+# baked into the perf container image, so no runtime patch is needed.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -19,19 +18,6 @@ check_env_vars \
     MAX_MODEL_LEN \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
-
-# Apply vllm-project/vllm PR #46380 (Add MiniMax-M3 modelopt NVFP4 support, commit 6c08558).
-# This patch is required for nvidia/MiniMax-M3-NVFP4: without it vLLM does not
-# recognise the NVFP4 quant config and falls back to an unsupported path.
-VLLM_DIR=$(python3 -c "import vllm, os; print(os.path.dirname(vllm.__file__))")
-for f in \
-  model_executor/layers/fused_moe/experts/trtllm_nvfp4_moe.py \
-  model_executor/layers/quantization/modelopt.py \
-  model_executor/layers/quantization/utils/flashinfer_utils.py
-do
-  curl -fsSL "https://raw.githubusercontent.com/vllm-project/vllm/6c08558/vllm/${f}" -o "${VLLM_DIR}/${f}"
-done
-python3 -c "from vllm.model_executor.layers.fused_moe.experts.trtllm_nvfp4_moe import TrtLlmNvFp4ExpertsModular; print('[nvfp4-patch] OK')"
 
 # launch_b200-dgxc.sh rewrites MODEL to the pre-downloaded path; only download
 # when handed a bare HF id (b200-cw / b200-nb runners).
