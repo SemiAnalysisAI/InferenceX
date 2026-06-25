@@ -24,8 +24,6 @@ else
 fi
 rocm-smi || true
 amd-smi || true
-free -h || true
-swapon --show || true
 
 export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_062126
 resolve_trace_source
@@ -158,10 +156,8 @@ EOF
 esac
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
-MAX_MODEL_LEN_ARGS=()
 if [[ "$DP_ATTENTION" == "true" ]]; then
     PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
-    MAX_MODEL_LEN_ARGS=(--max-model-len 524288)
 fi
 
 EP_ARGS=()
@@ -177,12 +173,6 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
 fi
 
 MAX_NUM_SEQS=$((2 * CONC))
-if [[ "$DP_ATTENTION" == "true" ]]; then
-    MAX_NUM_SEQS=$((2 * ((CONC + TP - 1) / TP)))
-    if ((MAX_NUM_SEQS < 8)); then
-        MAX_NUM_SEQS=8
-    fi
-fi
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 \
     --port "$VLLM_BACKEND_PORT" \
@@ -195,8 +185,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --kv-cache-dtype fp8 \
     --enable-prefix-caching \
     --max-num-seqs "$MAX_NUM_SEQS" \
-    --max-num-batched-tokens 8192 \
-    "${MAX_MODEL_LEN_ARGS[@]}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
