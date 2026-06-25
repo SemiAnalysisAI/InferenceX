@@ -12295,6 +12295,42 @@ minimaxm3-fp8-b300-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
 
+# MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM — FP4 variant
+# of minimaxm3-fp8-b300-vllm. The benchmark script overlays vllm-project/vllm
+# PR #46380 (MiniMax-M3 modelopt NVFP4 support, commit 6c08558) onto the perf
+# image before serve. --block-size 128 is mandatory (MSA sparse/index cache);
+# weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
+# the STAGED_MODELS allow-list in launch_b300-nv.sh).
+minimaxm3-fp4-b300-vllm:
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223
+  model: nvidia/MiniMax-M3-NVFP4
+  model-prefix: minimaxm3
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512 }
+      - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 64 }
+      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
 # (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
