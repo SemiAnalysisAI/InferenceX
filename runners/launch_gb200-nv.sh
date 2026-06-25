@@ -60,8 +60,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -74,15 +77,22 @@ export SLURM_ACCOUNT="benchmark"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-# === Cluster diagnostic probe (minimax only) ===
+uses_watchtower_shared_fs() {
+    case "$MODEL_PREFIX" in
+        minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# === Cluster diagnostic probe for watchtower-hosted sweeps ===
 # The gb200-nv_* runners may be hosted on different physical clusters
 # (e.g., the legacy NVIDIA Lustre cluster vs Oracle Cloud "watchtower").
 # Print enough info to identify the layout, then pick a writable
 # squash dir on a path that's also visible to compute nodes. Falls
 # back to the legacy sa-shared path so other configs are untouched.
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
-    echo "=== cluster diagnostic (minimax sweep) ==="
+if uses_watchtower_shared_fs; then
+    echo "=== cluster diagnostic (watchtower sweep) ==="
     echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
     echo "HOME=$HOME"
     echo "HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
@@ -128,8 +138,27 @@ fi
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-enroot import -o $SQUASH_FILE docker://$IMAGE
-enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
+# Concurrent matrix jobs import to the same shared-FS squash path.
+# Serialize imports and atomically replace invalid images so readers never
+# observe a partially written squash file.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    (
+        exec 9>"$lock"
+        flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+        if unsquashfs -l "$squash" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import: $squash"
+        else
+            rm -f "$squash" "$squash".tmp.*
+            enroot import -o "${squash}.tmp.$$" "docker://$image"
+            mv -f "${squash}.tmp.$$" "$squash"
+        fi
+    ) || exit 1
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
@@ -198,11 +227,12 @@ fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
+SRTCTL_SETUP_SCRIPT=""
 # On the watchtower (Oracle) gb200 cluster, /home/slurm-shared is not
 # cross-mounted to compute nodes. Put the srt-slurm workspace and staged
 # InferenceX checkout on a writable shared-FS path that compute can see.
 # Per-run-unique paths avoid races between parallel sweep jobs.
-if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
+if uses_watchtower_shared_fs; then
     SHARED_BASE=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared/gha-runs \
@@ -274,6 +304,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
         echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
         exit 1
     fi
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout sa-submission-q2-2026 || exit 1
+    mkdir -p recipes/vllm/minimax-m3-gb200-fp8 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb200-fp8" recipes/vllm/minimax-m3-gb200-fp8 || exit 1
+    SRTCTL_SETUP_SCRIPT="minimax-m3-gb200-vllm-fixes.sh"
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+        "configs/$SRTCTL_SETUP_SCRIPT" || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -303,7 +343,7 @@ source $HOME/.local/bin/env
 # under a head-node-only path, .venv/bin/python3 becomes a broken
 # symlink on compute. Pin the venv to /usr/bin/python3 — a system
 # path that exists at the same location on both head and compute.
-if [[ ($MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5") && -x /usr/bin/python3 ]]; then
+if uses_watchtower_shared_fs && [[ -x /usr/bin/python3 ]]; then
     uv venv --seed --python /usr/bin/python3
 else
     uv venv --seed
@@ -320,10 +360,10 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
-# Minimax on watchtower: SRT_REPO_DIR was moved to a shared-FS path
+# Watchtower-hosted sweeps: SRT_REPO_DIR was moved to a shared-FS path
 # above so srtctl's outputs/ directory (which lives under
 # SRTCTL_ROOT) is visible to compute nodes.
-if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
+if uses_watchtower_shared_fs; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 echo "Creating srtslurm.yaml configuration..."
@@ -365,7 +405,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # can't see. Stage the relevant subset to shared FS and repoint
 # INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
 # on shared FS) and .git (not needed in container) for speed.
-if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "kimik2.5" ]]; then
+if uses_watchtower_shared_fs; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
     mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \
@@ -390,11 +430,16 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+SRTCTL_APPLY_ARGS=(
+    -f "$CONFIG_PATH"
+    --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
-else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_APPLY_ARGS+=(--setup-script install-torchao.sh)
+elif [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
