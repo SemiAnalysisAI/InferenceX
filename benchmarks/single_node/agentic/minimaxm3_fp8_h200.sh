@@ -149,7 +149,7 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-MAX_NUM_SEQS_MULTIPLIER="${MAX_NUM_SEQS_MULTIPLIER:-2}"
+MAX_NUM_SEQS_MULTIPLIER="${MAX_NUM_SEQS_MULTIPLIER:-1}"
 case "${EXP_NAME:-}" in
     *mns1x*) MAX_NUM_SEQS="${MAX_NUM_SEQS:-$CONC}" ;;
     *mns4x*) MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((4 * CONC))}" ;;
