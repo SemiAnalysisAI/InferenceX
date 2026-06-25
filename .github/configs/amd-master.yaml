@@ -2587,6 +2587,32 @@ minimaxm3-fp8-mi355x-vllm-mtp:
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
+# MiniMax-M3 MXFP4 MI355X single-node vLLM recipe.
+# amd/MiniMax-M3-MXFP4 via the AITER MoE backend (block size 128 for MSA, no fp8
+# KV cache -- the checkpoint has no calibrated KV scales). Upstream recipe:
+# https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3 (mxfp4 variant).
+# TP8 covers the low-latency / low-concurrency regime; TP4 carries the full sweep.
+minimaxm3-fp4-mi355x-vllm:
+  image: rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 8, conc-start: 1, conc-end: 32 }
+      - { tp: 4, conc-start: 1, conc-end: 256 }
+
 # MiniMax-M3 MXFP4 MI355X atom recipe:
 # https://github.com/ROCm/ATOM/blob/5d42d49f9e4292e5b61475917e92e7ec1b1dacb7/recipes/MiniMax-M3.md
 # block size 128 is mandatory for MSA. TP4 on a single gfx950 node, per the recipe.
