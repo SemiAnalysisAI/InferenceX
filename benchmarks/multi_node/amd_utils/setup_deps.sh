@@ -995,7 +995,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 else
     patch_gluon_pa_mqa_logits_instr_shape
     patch_disagg_prefill_bootstrap_desync
-    patch_decode_tp_queue_agree
+    # patch_decode_tp_queue_agree
     patch_memory_pool_host_assert
     install_transformers_glm5
 fi

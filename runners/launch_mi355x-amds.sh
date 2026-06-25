@@ -134,7 +134,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # search for "FRAMEWORK_DIFF_IF_STATEMENT #3" for this if-statement
     # Find the latest log directory that contains the data
 
-    if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
+    if [[ "${EVAL_ONLY:-false}" != "true" && "${IS_AGENTIC:-0}" != "1" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
 job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
@@ -186,6 +186,47 @@ PY
             shopt -u nullglob
         else
             echo "WARNING: RUN_EVAL=true but no eval results found under $BENCHMARK_LOGS_DIR/logs"
+        fi
+    fi
+
+    # Stage agentic raw artifacts + server logs for the CI upload steps.
+    # server_sglang.sh copies /run_logs/slurm_job-<id> to
+    # $BENCHMARK_LOGS_DIR/logs/slurm_job-<id> on shared storage, and
+    # trace_replay.sh writes the aiperf artifacts under agentic/ (flat for a
+    # single concurrency, like agentic_srt.sh; nested conc<N>/ for local
+    # multi-conc sweeps). benchmark-multinode-tmpl.yml expects them under
+    # $GITHUB_WORKSPACE/LOGS/agentic/ (the agentic_* bundle) plus a
+    # multinode_server_logs.tar.gz, so mirror that layout before the logs
+    # dir is removed below. The agg result JSON is already written straight
+    # to the mounted workspace by process_agentic_result.py.
+    if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
+        JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
+        if [ -d "$JOB_LOGS_DIR" ]; then
+            # trace_replay.sh writes a single concurrency flat into agentic/
+            # (mirroring agentic_srt.sh); local multi-conc sweeps nest under
+            # agentic/conc<N>/. Prefer the flat layout, else pick the newest
+            # conc<N> dir.
+            AGENTIC_SRC="$JOB_LOGS_DIR/agentic"
+            if [ ! -e "$AGENTIC_SRC/benchmark.log" ] && [ ! -d "$AGENTIC_SRC/aiperf_artifacts" ]; then
+                AGENTIC_CONC_DIR=$(find "$AGENTIC_SRC" -mindepth 1 -maxdepth 1 -type d -name 'conc*' 2>/dev/null | sort | tail -1)
+                [ -n "$AGENTIC_CONC_DIR" ] && AGENTIC_SRC="$AGENTIC_CONC_DIR"
+            fi
+            if [ -d "$AGENTIC_SRC" ]; then
+                echo "Staging agentic raw artifacts from $AGENTIC_SRC"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+                cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
+                ls -la "$GITHUB_WORKSPACE/LOGS/agentic"
+            else
+                echo "WARNING: no agentic artifacts found under $JOB_LOGS_DIR/agentic"
+            fi
+            # Server/router/prefill/decode logs for the multinode_server_logs_* artifact.
+            if tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$JOB_LOGS_DIR" . 2>/dev/null; then
+                echo "Created multinode_server_logs.tar.gz"
+            else
+                echo "WARNING: failed to create multinode_server_logs.tar.gz"
+            fi
+        else
+            echo "WARNING: agentic staging skipped; $JOB_LOGS_DIR not found"
         fi
     fi
 
