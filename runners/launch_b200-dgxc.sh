@@ -459,7 +459,7 @@ else
     # threads blocked in Lustre I/O for hours. Select the local copy only after
     # Slurm assigns a node, and retain the shared-Lustre path as a fallback for
     # nodes whose local staging is incomplete.
-    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "sglang" ]]; then
         LOCAL_MODEL_PATH=/raid/models/DeepSeek-V4-Pro-NVFP4
         if srun --jobid="$JOB_ID" bash -c \
             'test -f "$1/config.json" && test -f "$1/model.safetensors.index.json" && test "$(find "$1" -maxdepth 1 -name "model-*.safetensors" | wc -l)" -eq 64' \
