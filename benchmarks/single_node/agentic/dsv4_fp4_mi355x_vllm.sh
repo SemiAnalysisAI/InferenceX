@@ -256,7 +256,6 @@ EOF
         OFFLOAD_ARGS=(
             --kv-transfer-config
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
-            --disable-hybrid-kv-cache-manager
         )
         ;;
     *)
@@ -304,13 +303,13 @@ VLLM_CMD=(
     "${EP_ARGS[@]}"
     --moe-backend triton_unfused
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
+    --attention_config.use_fp4_indexer_cache=True
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
     --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
     --enable-prefix-caching
-    --gpu-memory-utilization 0.8
-    --max-model-len 100000
+    --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
     "${OFFLOAD_ARGS[@]}"
 )
