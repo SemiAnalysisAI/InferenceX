@@ -179,7 +179,7 @@ const PCT = {p50:"p50", p90:"p90", p99:"p99"};
 const SUITE = {all:"All", "backend-default":"Backend-default", "resource-constrained":"Resource-constrained"};
 // p99 is the headline percentile (review #3); suite=all overlays best-stack + constrained
 // (distinguishable by label/style) — switch to one suite for a clean within-class read.
-const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", ylog:true, pct:"p99", suite:"all"};
+const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", ylog:true, pct:"p50", suite:"all"};
 
 function xval(r,xk){ return xk==="t"? r.t : r.gt; }
 function metric(r,op,yk,pct){
