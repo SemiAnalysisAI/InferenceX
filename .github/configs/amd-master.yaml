@@ -1605,6 +1605,8 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
 # prefill->decode KV transfer; LMCacheMP is enabled only on the prefill engine
 # for local host-DRAM L2 prefix reuse. Decode intentionally uses Mooncake only
 # to avoid decode-side LMCache lookup/retrieve racing the remote-prefill load.
+# The 0.55 vLLM GPU memory target leaves HBM headroom for LMCacheMP KV-cache
+# registration; 0.75+ can fill HBM before the server can attach its tensors.
 kimik2.5-fp4-mi355x-vllm-disagg-agentic:
   image: yukiozzz/kimi-lmc-mc-rocm:dmabuf
   model: amd/Kimi-K2.5-MXFP4
@@ -1634,15 +1636,16 @@ kimik2.5-fp4-mi355x-vllm-disagg-agentic:
           - "ENABLE_PREFIX_CACHING=1"
           - "MAX_MODEL_LEN=262144"
           - "WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k"
-          - "LMCACHE_L1_SIZE_GB=2500"
+          - "LMCACHE_L1_SIZE_GB=1200"
           - "LMCACHE_L1_INIT_SIZE_GB=20"
-          - "LMCACHE_L1_READ_TTL_SECONDS=3600"
+          - "LMCACHE_L1_READ_TTL_SECONDS=7200"
           - "LMCACHE_CHUNK_SIZE=256"
           - "LMCACHE_MAX_WORKERS=8"
+          - "LMCACHE_MP_MQ_TIMEOUT=1200"
         decode:
           num-worker: 1
           tp: 8
-          ep: 8
+          ep: 1
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
