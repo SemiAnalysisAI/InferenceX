@@ -179,7 +179,7 @@ const PCT = {p50:"p50", p90:"p90", p99:"p99"};
 const SUITE = {all:"All", "backend-default":"Backend-default", "resource-constrained":"Resource-constrained"};
 // p99 is the headline percentile (review #3); suite=all overlays best-stack + constrained
 // (distinguishable by label/style) — switch to one suite for a clean within-class read.
-const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", ylog:true, pct:"p50", suite:"all"};
+const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50", suite:"all"};
 
 function xval(r,xk){ return xk==="t"? r.t : r.gt; }
 function metric(r,op,yk,pct){
@@ -226,7 +226,8 @@ function chart(o){
   if(o.ylog){ ymn=Math.min(...ys.filter(v=>v>0)); } else { ymn=Math.min(0,ymn); }
   if(ymx===ymn) ymx=ymn+1;
   const X0=m.l,X1=W-m.r,Y0=H-m.b,Y1=m.t;
-  const xv=v=>mapLog(v,xmn,xmx,X0,X1);                      // x always log (geometric sweep)
+  const xlog = o.xlog!==false;                              // x defaults to log (geometric sweep)
+  const xv=v=>xlog?mapLog(v,xmn,xmx,X0,X1):mapLin(v,xmn,xmx,X0,X1);
   const yv=v=>o.ylog?mapLog(Math.max(v,ymn),ymn,ymx,Y0,Y1):mapLin(v,ymn,ymx,Y0,Y1);
   let s='<svg viewBox="0 0 '+W+' '+H+'" role="img">';
   s+='<text x="'+X0+'" y="20" class="ttl">'+o.title+'</text>';
@@ -240,7 +241,7 @@ function chart(o){
     '<text class="tk" x="'+x+'" y="'+(Y0+16)+'" text-anchor="middle">'+fmt(v)+'</text>';});
   // axes
   s+='<line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X1+'" y2="'+Y0+'"/><line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X0+'" y2="'+Y1+'"/>';
-  s+='<text class="axl" x="'+((X0+X1)/2)+'" y="'+(H-6)+'" text-anchor="middle">'+XK[o.x]+'  (log)</text>';
+  s+='<text class="axl" x="'+((X0+X1)/2)+'" y="'+(H-6)+'" text-anchor="middle">'+XK[o.x]+(xlog?'  (log)':'')+'</text>';
   s+='<text class="axl" transform="translate(15,'+((Y0+Y1)/2)+') rotate(-90)" text-anchor="middle">'+YK[o.y]+(o.ylog?'  (log)':'')+'</text>';
   // lines + points
   pts.forEach(g=>{ if(!g.P.length) return;
@@ -282,13 +283,15 @@ function renderControls(){
     '<div class="grp"><span class="lab">Percentile</span>'+seg('pct',PCT,ST.pct)+'</div>'+
     '<div class="grp"><span class="lab">Suite</span>'+seg('suite',SUITE,ST.suite)+'</div>'+
     '<div class="grp"><span class="lab">X-axis</span>'+seg('x',XK,ST.x)+'</div>'+
+    '<div class="grp"><span class="lab">X scale</span>'+seg('xlog',{true:"Log",false:"Linear"},String(ST.xlog))+'</div>'+
     '<div class="grp"><span class="lab">Y-axis</span>'+seg('y',YK,ST.y)+'</div>'+
     '<div class="grp"><span class="lab">Y scale</span>'+seg('ylog',{true:"Log",false:"Linear"},String(ST.ylog))+'</div>';
   document.querySelectorAll('#controls button').forEach(b=>b.onclick=()=>{
-    const g=b.dataset.grp, v=b.dataset.val; ST[g]= g==='ylog'? v==='true' : v; renderControls(); renderMain(); });
+    const g=b.dataset.grp, v=b.dataset.val; ST[g]= (g==='ylog'||g==='xlog')? v==='true' : v;
+    renderControls(); renderMain(); renderGrid(); });  // grid also reflects pct/suite/scale toggles
 }
 function renderMain(){
-  document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,ylog:ST.ylog,
+  document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,xlog:ST.xlog,ylog:ST.ylog,
     pct:ST.pct, suite:ST.suite,
     title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
   document.getElementById('mlegend').innerHTML = legend(ST.phase, null, ST.suite);
@@ -301,10 +304,11 @@ function renderGrid(){
   let h='';
   phases.forEach(ph=>{ eps.forEach(ep=>{
     if(!DATA.some(s=>s.phase===ph && s.ep===ep && (ST.suite==="all"||s.suite===ST.suite))) return;
-    h+='<h2>'+ph[0].toUpperCase()+ph.slice(1)+' · EP'+ep+' · '+ST.pct+' — latency vs source tokens/rank (µs, log–log)</h2>'+
+    const scale=(ST.xlog?'log':'lin')+'–'+(ST.ylog?'log':'lin');
+    h+='<h2>'+ph[0].toUpperCase()+ph.slice(1)+' · EP'+ep+' · '+ST.pct+' — latency vs source tokens/rank (µs, '+scale+')</h2>'+
        legend(ph,ep,ST.suite)+'<div class="grid">';
     ['dispatch','combine','serial'].forEach(op=>{ h+='<div class="card"><div class="gtit">'+OPS[op]+'</div>'+
-      chart({op,phase:ph,ep,x:'t',y:'lat',ylog:true,pct:ST.pct,suite:ST.suite,title:'',w:340,h:260})+'</div>'; });
+      chart({op,phase:ph,ep,x:'t',y:'lat',xlog:ST.xlog,ylog:ST.ylog,pct:ST.pct,suite:ST.suite,title:'',w:340,h:260})+'</div>'; });
     h+='</div>'; }); });
   document.getElementById('grid').innerHTML=h;
 }
