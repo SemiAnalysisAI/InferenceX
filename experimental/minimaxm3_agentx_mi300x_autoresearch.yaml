@@ -8,6 +8,6 @@ minimaxm3-fp8-mi300x-vllm-agentic-autoresearch:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - duration: 3600
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
