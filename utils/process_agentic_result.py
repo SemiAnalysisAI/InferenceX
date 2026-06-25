@@ -659,6 +659,13 @@ def main() -> int:
         return 1
 
     records = load_records(jsonl_path)
+    if not records:
+        print(
+            f"ERROR: {jsonl_path} contains no successful agentic records",
+            file=sys.stderr,
+        )
+        return 1
+
     aggregate = load_aggregate(aggregate_path) if aggregate_path.exists() else {}
     server_metrics = load_server_metrics(server_metrics_path)
 

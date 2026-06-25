@@ -58,6 +58,13 @@ REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
     export PORT="${ROUTER_PORT}"
     export MODEL="${MODEL:-${BENCH_MODEL}}"
+    if [[ "$ENGINE" == "vllm-disagg" ]]; then
+        # vLLM disagg serves --served-model-name=$MODEL_NAME. The workflow's
+        # MODEL env is the HF repo id (e.g. amd/Kimi-K2.5-MXFP4), which vLLM's
+        # OpenAI endpoint rejects unless it matches the served model name. Keep
+        # MODEL as result metadata and use AIPERF_MODEL only for the request body.
+        export AIPERF_MODEL="${AIPERF_MODEL:-${BENCH_MODEL}}"
+    fi
     export DURATION="${DURATION:-1800}"
     export INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
     export AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-/workspace}"

@@ -252,7 +252,7 @@ KVT_DECODE="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\"
 MC_PREFILL_CONN="{\"kv_connector\":\"MooncakeConnector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"${MC_PROTOCOL:-tcp}\"}}"
 MC_DECODE_CONN="{\"kv_connector\":\"MooncakeConnector\",\"kv_role\":\"kv_consumer\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"${MC_PROTOCOL:-tcp}\"}}"
 LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://${LMCACHE_HOST:-127.0.0.1}}"
-LMC_CONN="{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"${LMCACHE_CONNECT_HOST}\",\"lmcache.mp.port\":${LMCACHE_PORT:-5555}}}"
+LMC_CONN="{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"${LMCACHE_CONNECT_HOST}\",\"lmcache.mp.port\":${LMCACHE_PORT:-5555},\"lmcache.mp.mq_timeout\":${LMCACHE_MP_MQ_TIMEOUT:-1200}}}"
 
 case "${PREFILL_KV_CONNECTOR:-moriio}" in
     mooncake-lmcachemp)

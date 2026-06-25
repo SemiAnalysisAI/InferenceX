@@ -158,6 +158,7 @@ export LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
 export LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-3600}"
 export LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
 export LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-8}"
+export LMCACHE_MP_MQ_TIMEOUT="${LMCACHE_MP_MQ_TIMEOUT:-1200}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"

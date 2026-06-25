@@ -1183,7 +1183,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    REPLAY_CMD+=" --model ${AIPERF_MODEL:-$MODEL}"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"

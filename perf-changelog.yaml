@@ -4159,4 +4159,5 @@
   description:
     - "Add Kimi-K2.5 MI355X multinode agentic recipe using Mooncake(tcp) for PD KV transfer and LMCacheMP only on prefill for L2 prefix reuse."
     - "Decode uses MooncakeConnector only to avoid decode-side LMCache lookup/retrieve racing the remote-prefill KV load."
+    - "Use fp8 KV cache, 0.55 vLLM GPU memory utilization, and 1.2TB LMCache host-DRAM cache to leave HBM headroom for LMCacheMP KV registration."
   pr-link: XXX
