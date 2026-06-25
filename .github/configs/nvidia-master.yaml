@@ -4862,7 +4862,7 @@ minimaxm3-fp8-h200-vllm-agentic:
     # active tokens. Against the June-21 service-time-weighted 269k-token
     # request, the expected HBM cliff is near conc 10; sample densely from
     # 5-14 and retain post-cliff points through 20.
-    - duration: 1800
+    - duration: 3600
       available-cpu-dram-mib: 1_471_356
       cpu-offload-utilization: 0.80
       gpus-per-node: 8
