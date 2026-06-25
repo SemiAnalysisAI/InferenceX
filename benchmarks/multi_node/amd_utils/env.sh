@@ -46,6 +46,68 @@ set +x
 export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 
 # =============================================================================
+# MoRI-specific environment
+# =============================================================================
+# Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
+
+export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+export MORI_IO_QP_MAX_SEND_WR=16384
+export MORI_IO_QP_MAX_CQE=32768
+export MORI_IO_QP_MAX_SGE=2
+export MORI_IO_TC_DISABLE=0
+
+# QoS/DSCP configuration
+# Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
+if [[ -n "$MORI_RDMA_TC" ]]; then
+    echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
+elif command -v nicctl &> /dev/null; then
+    ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
+    ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
+$1 == "DSCP" && $2 == ":" && $NF == p {
+    print $3; exit
+}')
+
+    if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
+        TC=$(( 4 * ND_DSCP ))
+        export MORI_RDMA_SL=$ND_PRIO
+        export MORI_IO_SL=$ND_PRIO
+        export MORI_RDMA_TC=$TC
+        export MORI_IO_TC=$TC
+        echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
+    else
+        echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
+        # Fall back to hostname-based detection
+        NODENAME=$(hostname -s)
+        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+            export MORI_RDMA_TC=96
+            export MORI_IO_TC=96
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        elif [[ $NODENAME == mia1* ]]; then
+            export MORI_RDMA_TC=104
+            export MORI_IO_TC=104
+            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+        else
+            echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
+        fi
+    fi
+else
+    # nicctl not available, try hostname-based detection
+    NODENAME=$(hostname -s)
+    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
+        export MORI_RDMA_TC=96
+        export MORI_IO_TC=96
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    elif [[ $NODENAME == mia1* ]]; then
+        export MORI_RDMA_TC=104
+        export MORI_IO_TC=104
+        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
+    else
+        echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
+        echo "       This is normal for clusters without QoS or outside Docker containers."
+    fi
+fi
+
+# =============================================================================
 # Engine-specific environment
 # =============================================================================
 
@@ -120,7 +182,7 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
 
 else
     # =========================================================================
-    # SGLang/MoRI-specific environment
+    # SGLang-specific environment
     # =========================================================================
 
     export SGLANG_USE_AITER=1
@@ -131,13 +193,6 @@ else
     export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
-    export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
-
-    export MORI_IO_QP_MAX_SEND_WR=16384
-    export MORI_IO_QP_MAX_CQE=32768
-    export MORI_IO_QP_MAX_SGE=4
-
-    export MORI_IO_TC_DISABLE=0
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
@@ -178,57 +233,6 @@ else
     # 0 (default) keeps noisy per-request access logs out of stdout while still logging to file.
     # 1 mirrors router logs to stdout via tee (useful for live debugging).
     export SGLANG_ROUTER_STDOUT_LOGS="${SGLANG_ROUTER_STDOUT_LOGS:-0}"
-
-    # QoS/DSCP configuration
-    # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
-    if [[ -n "$MORI_RDMA_TC" ]]; then
-        echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
-    elif command -v nicctl &> /dev/null; then
-        ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
-        ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
-$1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
-}')
-
-        if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
-            TC=$(( 4 * ND_DSCP ))
-            export MORI_RDMA_SL=$ND_PRIO
-            export MORI_IO_SL=$ND_PRIO
-            export MORI_RDMA_TC=$TC
-            export MORI_IO_TC=$TC
-            echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
-        else
-            echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
-            # Fall back to hostname-based detection
-            NODENAME=$(hostname -s)
-            if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-                export MORI_RDMA_TC=96
-                export MORI_IO_TC=96
-                echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-            elif [[ $NODENAME == mia1* ]]; then
-                export MORI_RDMA_TC=104
-                export MORI_IO_TC=104
-                echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-            else
-                echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
-            fi
-        fi
-    else
-        # nicctl not available, try hostname-based detection
-        NODENAME=$(hostname -s)
-        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-            export MORI_RDMA_TC=96
-            export MORI_IO_TC=96
-            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
-            export MORI_RDMA_TC=104
-            export MORI_IO_TC=104
-            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        else
-            echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
-            echo "       This is normal for clusters without QoS or outside Docker containers."
-        fi
-    fi
 
     # FIXME: WA for latest upstream 0305 image
     export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
