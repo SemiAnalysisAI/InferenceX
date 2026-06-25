@@ -1,0 +1,63 @@
+minimaxm3-fp8-h100-vllm-agentic-coarse:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h100-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      search-space:
+      - tp: 8
+        offloading: none
+        conc-list: [4, 8]
+        variant: tp8-none
+        additional-settings: &baseline-settings
+        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=300
+      - tp: 8
+        offloading: cpu
+        total-cpu-dram-gb: 866
+        conc-list: [4, 8]
+        variant: tp8-offload40
+        additional-settings: *baseline-settings
+      - tp: 8
+        offloading: cpu
+        total-cpu-dram-gb: 1299
+        conc-list: [4, 8]
+        variant: tp8-offload60
+        additional-settings: *baseline-settings
+      - tp: 8
+        offloading: cpu
+        total-cpu-dram-gb: 1731
+        conc-list: [4, 8]
+        variant: tp8-offload80
+        additional-settings: *baseline-settings
+      - tp: 8
+        ep: 8
+        offloading: none
+        conc-list: [4, 8]
+        variant: tep8-none
+        additional-settings: *baseline-settings
+      - tp: 8
+        ep: 8
+        offloading: cpu
+        total-cpu-dram-gb: 866
+        conc-list: [4, 8]
+        variant: tep8-offload40
+        additional-settings: *baseline-settings
+      - tp: 8
+        ep: 8
+        offloading: cpu
+        total-cpu-dram-gb: 1299
+        conc-list: [4, 8]
+        variant: tep8-offload60
+        additional-settings: *baseline-settings
+      - tp: 8
+        ep: 8
+        offloading: cpu
+        total-cpu-dram-gb: 1731
+        conc-list: [4, 8]
+        variant: tep8-offload80
+        additional-settings: *baseline-settings
