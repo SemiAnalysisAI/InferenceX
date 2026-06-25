@@ -1,0 +1,14 @@
+minimaxm3-fp8-mi325x-vllm-agentic-autoresearch:
+  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi325x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      search-space:
+      - { tp: 8, offloading: none, conc-list: [1, 4, 8, 16, 24] }
+      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [16, 32, 48, 64] }
