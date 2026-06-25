@@ -1717,6 +1717,7 @@ class TestGenerateTestConfigSweep:
                             "duration": 1800,
                             "search-space": [
                                 {
+                                    "variant": "dep8-nooffload",
                                     "conc-list": [16, 32, 64, 128, 256],
                                     "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
                                     "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
@@ -1739,9 +1740,9 @@ class TestGenerateTestConfigSweep:
 
         assert len(result) == 2
         assert result[0]["conc"] == [16, 32, 64, 128]
-        assert result[0]["exp-name"] == "dsv4_p2x8_d1x8_conc16x32x64x128"
+        assert result[0]["exp-name"] == "dsv4_p2x8_d1x8_conc16x32x64x128_dep8-nooffload"
         assert result[1]["conc"] == [256]
-        assert result[1]["exp-name"] == "dsv4_p2x8_d1x8_conc256"
+        assert result[1]["exp-name"] == "dsv4_p2x8_d1x8_conc256_dep8-nooffload"
 
 
 # =============================================================================

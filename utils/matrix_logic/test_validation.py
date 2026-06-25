@@ -346,6 +346,22 @@ class TestAgenticMatrixEntries:
         })
         assert entry.offloading == "lmcache-mp"
 
+    def test_agentic_variant_accepts_artifact_safe_name(self):
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 4,
+            "variant": "tp4-nooffload",
+            "conc-list": [1],
+        })
+        assert entry.variant == "tp4-nooffload"
+
+    def test_agentic_variant_rejects_unsafe_name(self):
+        with pytest.raises(Exception):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 4,
+                "variant": "TP4/nooffload",
+                "conc-list": [1],
+            })
+
     def test_lmcache_offloading_is_valid_for_agentic_search_space(self):
         """Agentic search-space entries can request in-process LMCache."""
         entry = AgenticCodingSearchSpaceEntry(**{

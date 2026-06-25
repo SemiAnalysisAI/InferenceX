@@ -61,8 +61,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -82,7 +85,7 @@ NGINX_IMAGE="nginx:1.27.4"
 # squash dir on a path that's also visible to compute nodes. Falls
 # back to the legacy sa-shared path so other configs are untouched.
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     echo "=== cluster diagnostic (minimax sweep) ==="
     echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
     echo "HOME=$HOME"
@@ -203,7 +206,7 @@ SRT_REPO_DIR="srt-slurm"
 # cross-mounted to compute nodes. Put the srt-slurm workspace and staged
 # InferenceX checkout on a writable shared-FS path that compute can see.
 # Per-run-unique paths avoid races between parallel sweep jobs.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     SHARED_BASE=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared/gha-runs \
@@ -252,6 +255,11 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     mkdir -p recipes/vllm/deepseek-v4/agentic
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
         recipes/vllm/deepseek-v4/agentic
+    if [[ $MODEL_PREFIX == "minimaxm3" ]]; then
+        mkdir -p recipes/vllm/minimax-m3/agentic
+        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3/agentic" \
+            recipes/vllm/minimax-m3/agentic
+    fi
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -306,7 +314,7 @@ source $HOME/.local/bin/env
 # under a head-node-only path, .venv/bin/python3 becomes a broken
 # symlink on compute. Pin the venv to /usr/bin/python3 — a system
 # path that exists at the same location on both head and compute.
-if [[ $MODEL_PREFIX == "minimaxm2.5" && -x /usr/bin/python3 ]]; then
+if [[ ( $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ) && -x /usr/bin/python3 ]]; then
     uv venv --seed --python /usr/bin/python3
 else
     uv venv --seed
@@ -326,7 +334,7 @@ SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 # Minimax on watchtower: SRT_REPO_DIR was moved to a shared-FS path
 # above so srtctl's outputs/ directory (which lives under
 # SRTCTL_ROOT) is visible to compute nodes.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 
@@ -395,7 +403,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # can't see. Stage the relevant subset to shared FS and repoint
 # INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
 # on shared FS) and .git (not needed in container) for speed.
-if [[ $MODEL_PREFIX == "minimaxm2.5" ]]; then
+if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "minimaxm3" ]]; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
     mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \

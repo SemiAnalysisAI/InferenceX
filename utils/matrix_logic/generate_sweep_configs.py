@@ -427,6 +427,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                variant = bmk.get(Fields.VARIANT.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -479,6 +480,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
                                     f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
                                     f"_conc{'x'.join(str(c) for c in conc_batch)}"
+                                    f"{f'_{variant}' if variant else ''}"
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
@@ -502,7 +504,10 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.OFFLOADING.value: offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_offload{offloading}"
+                                    f"{f'_{variant}' if variant else ''}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             validate_agentic_matrix_entry(entry)
@@ -852,6 +857,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                variant = bmk.get(Fields.VARIANT.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -898,6 +904,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
                                     f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
                                     f"_conc{'x'.join(str(c) for c in conc_batch)}"
+                                    f"{f'_{variant}' if variant else ''}"
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
@@ -920,7 +927,10 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.OFFLOADING.value: offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_offload{offloading}"
+                                    f"{f'_{variant}' if variant else ''}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             matrix_values.append(validate_agentic_matrix_entry(entry))
