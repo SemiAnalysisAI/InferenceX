@@ -183,6 +183,10 @@ h1{font-size:20px;margin:0 0 4px} h2{font-size:15px;color:var(--mut);font-weight
 .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
 .legend{display:flex;flex-wrap:wrap;gap:16px;margin:6px 2px 0;color:var(--mut);font-size:12.5px}
 .guard{background:#3a2a14;border:1px solid #6b4f1f;color:#f0c674;border-radius:6px;padding:6px 10px;margin:6px 2px;font-size:12px}
+table.cov{border-collapse:collapse;font-size:12px;width:100%;margin:4px 0 18px}
+table.cov th,table.cov td{border:1px solid var(--line);padding:3px 8px;text-align:left}
+table.cov th{color:var(--mut)}
+.badge{color:#0f1115;border-radius:4px;padding:1px 6px;font-size:11px;font-weight:600}
 .legend .it{display:flex;align-items:center;gap:7px}
 .legend .sw{width:22px;height:3px;border-radius:2px;display:inline-block}
 .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
@@ -382,6 +386,25 @@ function renderGrid(){
     h+='</div>'; }); });
   document.getElementById('grid').innerHTML=h;
 }
+// Coverage table (goal P2): publication status per measured config (validated=official,
+// experimental=comparable/legacy, failed=invalid/failed). Supported/unsupported come from
+// generate_matrix.py (capability), which records omissions with reasons.
+function renderCoverage(){
+  const cls={official:'#2ca02c','comparable-experimental':'#d6a72b',legacy:'#7f7f7f',
+             diagnostic:'#9467bd',invalid:'#d62728',failed:'#a30000'};
+  const by={}; DATA.forEach(s=>{ (by[s.sku]=by[s.sku]||[]).push(s); });
+  let h='<table class="cov"><tr><th>SKU</th><th>EP</th><th>config</th><th>phase</th><th>routing</th><th>status</th><th>correct pts</th></tr>';
+  Object.keys(by).sort().forEach(sku=>{
+    by[sku].sort((a,b)=>(a.ep-b.ep)||a.label.localeCompare(b.label)).forEach(s=>{
+      const ok=s.rows.filter(r=>r.correct).length;
+      const cfg=(s.dtype||'?')+'/'+s.mode+'/'+(s.contract||'?').replace('-v1','');
+      h+='<tr><td>'+sku+'</td><td>'+s.ep+'</td><td>'+cfg+'</td><td>'+s.phase+'</td><td>'+s.routing+'</td>'
+        +'<td><span class="badge" style="background:'+(cls[s.pub]||'#555')+'">'+s.pub+'</span></td>'
+        +'<td>'+ok+'/'+s.rows.length+'</td></tr>';
+    });
+  });
+  document.getElementById('coverage').innerHTML=h+'</table>';
+}
 (function(){
   const sh=(DATA[0]||{shape:{}}).shape||{};
   const provs=[...new Set(DATA.map(s=>s.backend+' '+(s.prov.deepep_version||s.prov.mori_commit||'?')))];
@@ -406,7 +429,7 @@ function renderGrid(){
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
     'Backends: '+provs.join(', ')+'. Hover a point for p50/p90/p99, contract, suite, and its workflow run.';
-  renderControls(); renderMain(); renderGrid();
+  renderControls(); renderMain(); renderGrid(); renderCoverage();
 })();
 """
 
@@ -425,6 +448,7 @@ def main() -> int:
     html = HEAD + '<div class="controls" id="controls"></div>' \
         + '<div class="card"><div id="chart"></div></div><div id="mlegend"></div>' \
         + '<div id="grid"></div>' \
+        + '<h2>Coverage</h2><div id="coverage"></div>' \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
         + f'{len(series)} EP sweeps. Latency (p50/p90/p99 selector) is the primary metric; the ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
