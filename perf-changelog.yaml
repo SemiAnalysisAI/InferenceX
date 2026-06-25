@@ -4191,3 +4191,10 @@
     - "models_atom.yaml: add MiniMax-M3-MXFP4 and MiniMax-M3-MXFP8 entries with EAGLE3 MTP flags; add DeepSeek-V4-Pro with TBO/cpu-affinity TP+DPA env and MTP flags; add tp_dp_flags, ep_dp_flags, tp_dp_env, ep_dp_env, kv_cache_flags, mtp_flags, hf_overrides fields"
     - "Image bump for minimaxm3-fp8-mi355x-atom-disagg: rocm/atom-dev:MiniMax-M3-20260622 -> rocm/atom-dev:MiniMax-M3-20260623"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1930
+  
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Update the DeepSeek-V4-Pro B200 disaggregated Dynamo-vLLM benchmark to the vllm/vllm-openai:v0.23.0 image"
+    - "Lower max-num-batched-tokens to 16384 and gpu-memory-utilization to 0.9 on the high-throughput and max-throughput recipes to avoid OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1899
