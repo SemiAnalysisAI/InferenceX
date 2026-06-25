@@ -2632,7 +2632,7 @@ minimaxm3-fp8-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
 minimaxm3-fp8-mi355x-atom-disagg:
-  image: rocm/atom-dev:MiniMax-M3-20260622
+  image: rocm/atom-dev:MiniMax-M3-20260623
   model: amd/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x-disagg
