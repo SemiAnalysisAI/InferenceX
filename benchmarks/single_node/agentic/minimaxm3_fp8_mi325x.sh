@@ -131,14 +131,27 @@ VLLM_BACKEND_PORT="$PORT"
 ROUTER_PROMETHEUS_PORT=$((PORT + 10000))
 if [[ "$DP_ATTENTION" == "true" ]]; then
     read -r PORT VLLM_BACKEND_PORT ROUTER_PROMETHEUS_PORT < <(python3 - <<'PY'
+import os
 import socket
 
-sockets = [socket.socket() for _ in range(3)]
-for sock in sockets:
-    sock.bind(("", 0))
-print(*(sock.getsockname()[1] for sock in sockets))
-for sock in sockets:
-    sock.close()
+seed = int(os.environ.get("SLURM_JOB_ID", os.getpid()))
+for slot_offset in range(2000):
+    base_port = 20000 + ((seed + slot_offset) % 2000) * 4
+    ports = (base_port, base_port + 1, base_port + 2)
+    sockets = [socket.socket() for _ in ports]
+    try:
+        for sock, port in zip(sockets, ports, strict=True):
+            sock.bind(("", port))
+    except OSError:
+        for sock in sockets:
+            sock.close()
+        continue
+    print(*ports)
+    for sock in sockets:
+        sock.close()
+    break
+else:
+    raise RuntimeError("Unable to allocate MI325X AgentX router ports")
 PY
 )
     export PORT
