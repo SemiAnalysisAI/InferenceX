@@ -14,9 +14,11 @@ TMO="${CX_RUN_TIMEOUT:-220}"
 one() {  # $1=phase $2=ladder $3=run
   local phase="$1" ladder="$2" i="$3"
   local out="results/_morirepro_${phase}_run${i}.json"
+  # iters 100 (was 40): MoRI decode is ~44us, so a 40-sample p50 jitters ~10% run-to-run;
+  # a 100-sample median is tighter. Still below the sustained-iter count that wedges MoRI.
   timeout -k 20 "$TMO" torchrun --nproc_per_node="$NG" tests/run_ep.py --backend mori \
     --mode normal --dispatch-dtype bf16 --phase "$phase" --routing uniform \
-    --resource-mode tuned --tokens-ladder "$ladder" --warmup 8 --iters 40 \
+    --resource-mode tuned --tokens-ladder "$ladder" --warmup 8 --iters "${MORI_ITERS:-100}" \
     --runner "$RUNNER" --topology-class "$TOPO" --transport xgmi \
     --out "$out" >"$out.log" 2>&1
   local rc=$?
