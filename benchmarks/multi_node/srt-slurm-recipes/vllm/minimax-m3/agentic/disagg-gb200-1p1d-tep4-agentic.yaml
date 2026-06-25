@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-agentic"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-tep4-agentic"
 
 model:
   path: "minimax-m3-mxfp8"
@@ -76,6 +76,8 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
       max-num-seqs: 64
       max-num-batched-tokens: 8192
       gpu-memory-utilization: 0.92
@@ -91,6 +93,8 @@ backend:
       kv-cache-dtype: "fp8"
       tensor-parallel-size: 4
       pipeline-parallel-size: 1
+      enable-expert-parallel: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
       max-num-seqs: 64
       max-num-batched-tokens: 8192
       gpu-memory-utilization: 0.92

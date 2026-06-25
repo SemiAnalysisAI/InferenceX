@@ -1,4 +1,4 @@
-name: "minimax-m3-vllm-disagg-gb200-1p1d-tp4-agentic"
+name: "minimax-m3-vllm-disagg-gb200-1p1d-dep4-agentic"
 
 model:
   path: "minimax-m3-mxfp8"
@@ -74,8 +74,12 @@ backend:
       kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
       served-model-name: "MiniMaxAI/MiniMax-M3-MXFP8"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 4
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
       max-num-seqs: 64
       max-num-batched-tokens: 8192
       gpu-memory-utilization: 0.92
@@ -89,8 +93,12 @@ backend:
       kv-transfer-config: '{"kv_connector":"NixlConnector","kv_role":"kv_both"}'
       served-model-name: "MiniMaxAI/MiniMax-M3-MXFP8"
       kv-cache-dtype: "fp8"
-      tensor-parallel-size: 4
+      tensor-parallel-size: 1
       pipeline-parallel-size: 1
+      data-parallel-size: 4
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      all2all-backend: "flashinfer_nvlink_one_sided"
       max-num-seqs: 64
       max-num-batched-tokens: 8192
       gpu-memory-utilization: 0.92
