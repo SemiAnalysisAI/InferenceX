@@ -4192,6 +4192,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1899
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+    - "Initial submission: MiniMax-M3 MXFP4 disagg (prefill/decode) on MI355X with vLLM over the MoRI-IO KV connector (8k/1k)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1914
+
+- config-keys:
     - minimaxm3-fp4-b200-vllm
   description:
     - "Add MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node aggregated vLLM benchmark (no spec decode), runner b200-dgxc"
