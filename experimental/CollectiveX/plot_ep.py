@@ -85,20 +85,24 @@ def load_series(results_dir: str) -> list[dict]:
         contract = d.get("measurement_contract", "?")
         cl = " [cl]" if contract == "cached-layout-comm-only-v1" else ""   # cached-layout flag
         backend = d.get("backend")
-        # FULL per-line label: SKU·backend·dtype[·LL][·resource][·cached-layout]. Unique per
-        # config so the legend identifies every line (was SKU·backend·EP only -> collisions).
-        label = f'{sku.upper()} · {backend} · {dtype}{ll}{rs}{cl}'
+        ep = d.get("ep_size")
+        # FULL per-line label: SKU·EP·backend·dtype[·LL][·resource][·cached-layout]. EP is
+        # explicit because a SKU can now span EP degrees (GB300 EP4 on one NVL72 tray, EP8
+        # across two) — without it the EP4/EP8 lines collide in the combined all-EP overlay.
+        label = f'{sku.upper()} EP{ep} · {backend} · {dtype}{ll}{rs}{cl}'
         repro = d.get("reproduction", {})
         gr = repro.get("git_run") or {}
         rid = d.get("routing_identity", {})
         series.append({
-            "sku": sku, "backend": backend, "ep": d.get("ep_size"),
+            "sku": sku, "backend": backend, "ep": ep,
             "phase": d.get("phase", "decode"), "mode": mode,
             "dtype": dtype, "resource": rmode or "tuned", "contract": contract,
             # comparison class: best-stack (tuned/default) vs resource-constrained
             # (normalized) — kept distinct so they're never read as one fair contest.
             "suite": "resource-constrained" if rmode == "normalized" else "backend-default",
-            "ckey": f"{sku}|{backend}|{dtype}|{mode}|{rmode}|{contract}",  # config identity (color)
+            # ep in the key so EP4 and EP8 of one SKU get distinct colors in the all-EP
+            # overlay (sku stays ckey.split("|")[0] for the family lookup — ep is last).
+            "ckey": f"{sku}|{backend}|{dtype}|{mode}|{rmode}|{contract}|ep{ep}",  # config identity (color)
             "label": label,
             "dash": "" if dtype == "bf16" else "6 4",   # bf16 solid, fp8 dashed (2nd cue)
             "color": COLORS.get(sku, "#555"),           # provisional; reassigned below
@@ -117,11 +121,14 @@ def load_series(results_dir: str) -> list[dict]:
     # gradual ramp expands its prefill to [1..512]; without this the DeepEP lines look
     # "incomplete" (clustered at the right) next to MoRI. decode+prefill are the same kernel
     # at different token regimes — this is one continuous latency-vs-T curve. Idempotent.
-    by_cfg_phase = {(s["ckey"], s["phase"]): s for s in series}
+    # Key on EP degree too: a SKU can now appear at multiple EP degrees (e.g. GB300 EP4 on
+    # one NVL72 tray AND EP8 across two), same config => same ckey; without ep in the key the
+    # EP8 prefill would stitch the EP4 decode points (different global batch). Keep them apart.
+    by_cfg_phase = {(s["ckey"], s["ep"], s["phase"]): s for s in series}
     for s in series:
         if s["phase"] != "prefill" or not s["rows"]:
             continue
-        dec = by_cfg_phase.get((s["ckey"], "decode"))
+        dec = by_cfg_phase.get((s["ckey"], s["ep"], "decode"))
         if not dec:
             continue
         minp = min(r["t"] for r in s["rows"])

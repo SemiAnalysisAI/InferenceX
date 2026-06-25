@@ -12,10 +12,12 @@ run(){  # phase ladder
   local phase="$1" ladder="$2"
   local out="results/${RUNNER}_mori_${phase}_bf16_normal_layout-and-dispatch-v1.json"
   echo "### mori $phase ladder=[$ladder]"
-  timeout -k 30 700 torchrun --nproc_per_node="$NG" tests/run_ep.py --backend mori \
+  # MoRI is slow (combine re-dispatches each iter) + ramps the whole ladder; trials=3 x
+  # iters=50 over [1..128] blew past 700s. 2 trials x 40 iters = 80 pooled samples, fits.
+  timeout -k 30 "${CX_RUN_TIMEOUT:-1100}" torchrun --nproc_per_node="$NG" tests/run_ep.py --backend mori \
     --phase "$phase" --dispatch-dtype bf16 --mode normal \
     --measurement-contract layout-and-dispatch-v1 --routing uniform --resource-mode tuned \
-    --tokens-ladder "$ladder" --warmup 8 --iters "${ITERS:-50}" --trials "${TRIALS:-3}" \
+    --tokens-ladder "$ladder" --warmup 8 --iters "${ITERS:-40}" --trials "${TRIALS:-2}" \
     --runner "$RUNNER" --topology-class "$TOPO" --transport xgmi --out "$out" 2>&1 | tail -8
   echo "### rc=${PIPESTATUS[0]} -> $out"
 }
