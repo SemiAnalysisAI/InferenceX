@@ -31,6 +31,7 @@ fi
 
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context

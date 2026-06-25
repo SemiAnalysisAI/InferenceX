@@ -4202,6 +4202,6 @@
   description:
     - "Add a MiniMax-M3 MXFP4 single-node vLLM benchmark on MI355X using amd/MiniMax-M3-MXFP4."
     - "Pin vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e, which includes upstream Quark MXFP4 support from vllm-project/vllm#45794."
-    - "Serve through the text-only language-model path with block size 128, TRITON_ATTN, MiniMax-M3 tool/reasoning parsers, and automatic tool choice; let vLLM select the MoE backend and retain the default KV-cache dtype."
+    - "Serve through the text-only language-model path with block size 128, TRITON_ATTN, MiniMax-M3 tool/reasoning parsers, automatic tool choice, and VLLM_USE_BREAKABLE_CUDAGRAPH=0; let vLLM select the MoE backend and retain the default KV-cache dtype."
     - "Mirror the MiniMax-M3 MXFP8 MI355X TP/EP/DP-attention search space at 1k1k and 8k1k for a direct precision comparison."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1935
