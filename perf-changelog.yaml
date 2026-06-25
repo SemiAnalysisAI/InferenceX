@@ -4204,4 +4204,3 @@
     - "Image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc."
     - "8k/1k STP recipes: 1P1D TP4 (conc 1-256), 5P1D DEP4+1D DEP16 (conc 2048, NIXL), 6P1D and 7P1D DEP4+1D DEP16 (conc 5120, Mooncake)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1921
- 
