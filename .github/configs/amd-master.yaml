@@ -2587,6 +2587,56 @@ minimaxm3-fp8-mi355x-vllm-mtp:
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
+# MiniMax-M3 MXFP4 MI355X vLLM disaggregated (prefill/decode) config.
+minimaxm3-fp4-mi355x-vllm-disagg:
+  image: rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1P TP4 + 1D TP4 (2 nodes total), conc sweep 1..512 (single job, looped)
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256, 512 ]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+      # 2P TP4 + 1D TP4 (3 nodes total), conc 128/256/512 (single job, looped)
+      - spec-decoding: "none"
+        conc-list: [ 128, 256, 512 ]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
 # MiniMax-M3 MXFP4 MI355X atom recipe:
 # https://github.com/ROCm/ATOM/blob/5d42d49f9e4292e5b61475917e92e7ec1b1dacb7/recipes/MiniMax-M3.md
 # block size 128 is mandatory for MSA. TP4 on a single gfx950 node, per the recipe.
