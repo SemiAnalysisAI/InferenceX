@@ -43,6 +43,17 @@ export TRITON_CACHE_DIR="$RESULT_DIR/triton_cache"
 rm -rf "$TRITON_CACHE_DIR"
 mkdir -p "$TRITON_CACHE_DIR"
 
+cleanup() {
+    local pid
+    for pid in "${ROUTER_PID:-}" "${SERVER_PID:-}" "${MOONCAKE_MASTER_PID:-}"; do
+        if [[ -n "$pid" ]]; then
+            kill "$pid" 2>/dev/null || true
+            wait "$pid" 2>/dev/null || true
+        fi
+    done
+}
+trap cleanup EXIT
+
 install_mooncake_rocm() {
     local mooncake_tag="v0.3.11.post1"
     local mooncake_src="/tmp/Mooncake-$mooncake_tag"
