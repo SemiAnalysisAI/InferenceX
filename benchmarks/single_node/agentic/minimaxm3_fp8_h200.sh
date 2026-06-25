@@ -88,6 +88,12 @@ OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;
     cpu)
+        TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
+        HOST_MEMORY_GIB=$(awk '/MemTotal:/ {print int($2 / 1024 / 1024)}' /proc/meminfo)
+        if (( TOTAL_CPU_DRAM_GIB * 100 > HOST_MEMORY_GIB * 85 )); then
+            echo "Error: CPU DRAM budget ${TOTAL_CPU_DRAM_GIB} GiB exceeds the 85% host safety limit" >&2
+            exit 1
+        fi
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
@@ -168,6 +174,17 @@ esac
 
 GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.92}"
 VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
+if (( TP == 4 )) && [[ -z "$MAX_MODEL_LEN" ]]; then
+    MAX_MODEL_LEN=786432
+fi
+MAX_MODEL_LEN_ARGS=()
+if [[ -n "$MAX_MODEL_LEN" ]]; then
+    MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
+fi
+echo "H200 AgentX tuning: max_num_seqs=$MAX_NUM_SEQS gpu_memory_utilization=$GPU_MEMORY_UTILIZATION chunked_prefill=${CHUNKED_PREFILL:-auto} prefix_caching=${PREFIX_CACHING:-true} max_num_batched_tokens=${MAX_NUM_BATCHED_TOKENS:-auto} max_model_len=${MAX_MODEL_LEN:-model-default} router_policy=$VLLM_ROUTER_POLICY"
+free -g
+swapon --show || true
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 \
     --port "$VLLM_BACKEND_PORT" \
@@ -182,6 +199,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     "${CHUNKED_PREFILL_ARGS[@]}" \
     --max-num-seqs "$MAX_NUM_SEQS" \
     "${MAX_NUM_BATCHED_TOKENS_ARGS[@]}" \
+    "${MAX_MODEL_LEN_ARGS[@]}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice \
