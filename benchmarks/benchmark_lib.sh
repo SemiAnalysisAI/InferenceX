@@ -915,6 +915,24 @@ run_eval() {
 # Agentic trace replay helpers (aiperf driver)
 # --------------------------------
 
+apply_agentic_additional_settings() {
+    local settings_json="${ADDITIONAL_SETTINGS:-[]}" setting key
+
+    while IFS= read -r setting; do
+        [[ -z "$setting" ]] && continue
+        if [[ "$setting" != *=* ]]; then
+            echo "ERROR: agentic additional setting must use KEY=VALUE: $setting" >&2
+            return 1
+        fi
+        key="${setting%%=*}"
+        if [[ ! "$key" =~ ^[A-Z_][A-Z0-9_]*$ ]]; then
+            echo "ERROR: invalid agentic additional setting key: $key" >&2
+            return 1
+        fi
+        export "$setting"
+    done < <(python3 -c 'import json, sys; [print(value) for value in json.loads(sys.argv[1])]' "$settings_json")
+}
+
 INFMAX_CONTAINER_WORKSPACE="${INFMAX_CONTAINER_WORKSPACE:-/workspace}"
 AGENTIC_DIR="${AGENTIC_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/agentic-benchmark}"
 AIPERF_DIR="${AIPERF_DIR:-${INFMAX_CONTAINER_WORKSPACE}/utils/aiperf}"

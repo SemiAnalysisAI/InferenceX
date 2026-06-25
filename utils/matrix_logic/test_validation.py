@@ -356,6 +356,17 @@ class TestAgenticMatrixEntries:
         })
         assert entry.offloading == "lmcache"
 
+    def test_agentic_search_space_additional_settings_and_variant(self):
+        entry = AgenticCodingSearchSpaceEntry(**{
+            "tp": 8,
+            "conc-list": [4],
+            "additional-settings": ["VLLM_MAX_NUM_SEQS=8"],
+            "variant": "maxseqs8",
+        })
+
+        assert entry.additional_settings == ["VLLM_MAX_NUM_SEQS=8"]
+        assert entry.variant == "maxseqs8"
+
     def test_hicache_offloading_is_valid_for_agentic_search_space(self):
         """Agentic search-space entries can request SGLang HiCache."""
         entry = AgenticCodingSearchSpaceEntry(**{

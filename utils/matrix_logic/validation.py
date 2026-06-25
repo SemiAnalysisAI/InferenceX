@@ -48,6 +48,7 @@ class Fields(Enum):
     BATCH_SIZE = 'batch-size'
     MAX_NUM_TOKENS = 'max-num-tokens'
     ADDITIONAL_SETTINGS = 'additional-settings'
+    VARIANT = 'variant'
 
     # Agentic coding fields
     OFFLOADING = 'offloading'
@@ -165,6 +166,9 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     )
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    additional_settings: List[str] = Field(
+        default=[], alias=Fields.ADDITIONAL_SETTINGS.value
+    )
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
 
@@ -349,6 +353,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.OFFLOADING.value
     )
     total_cpu_dram_gb: int = Field(default=0, alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
+    additional_settings: List[str] = Field(
+        default=[], alias=Fields.ADDITIONAL_SETTINGS.value
+    )
+    variant: Optional[str] = Field(default=None, pattern=r'^[a-z0-9][a-z0-9-]*$')
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)

@@ -186,6 +186,7 @@ jobs:
             conc: ${{ matrix.config.conc }}
             offloading: ${{ matrix.config.offloading }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
+            additional-settings: ${{ toJson(matrix.config.additional-settings) }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             isl: '0'
             osl: '0'

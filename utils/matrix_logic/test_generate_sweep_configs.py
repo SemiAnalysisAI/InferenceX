@@ -1663,6 +1663,41 @@ class TestGenerateTestConfigSweep:
         assert result[0]["scenario-type"] == "agentic-coding"
         assert result[0]["total-cpu-dram-gb"] == 1814
 
+    def test_agentic_additional_settings_and_variant_reach_matrix(self, sample_runner_config):
+        config = {
+            "minimax-agentic": {
+                "image": "vllm/vllm-openai:minimax-m3",
+                "model": "MiniMaxAI/MiniMax-M3-MXFP8",
+                "model-prefix": "minimaxm3",
+                "precision": "fp8",
+                "framework": "vllm",
+                "runner": "h100",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "search-space": [{
+                            "tp": 8,
+                            "conc-list": [4],
+                            "additional-settings": ["VLLM_MAX_NUM_SEQS=8"],
+                            "variant": "maxseqs8",
+                        }],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["minimax-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        assert result[0]["additional-settings"] == ["VLLM_MAX_NUM_SEQS=8"]
+        assert result[0]["exp-name"].endswith("_maxseqs8")
+
     def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
         config = {
             "dsv4-b300-agentic": {

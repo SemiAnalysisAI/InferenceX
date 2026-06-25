@@ -427,6 +427,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                additional_settings = bmk.get(Fields.ADDITIONAL_SETTINGS.value, [])
+                variant = bmk.get(Fields.VARIANT.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -502,7 +504,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.OFFLOADING.value: offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.ADDITIONAL_SETTINGS.value: additional_settings,
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_offload{offloading}"
+                                    f"{f'_{variant}' if variant else ''}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             validate_agentic_matrix_entry(entry)
@@ -852,6 +858,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                 offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                additional_settings = bmk.get(Fields.ADDITIONAL_SETTINGS.value, [])
+                variant = bmk.get(Fields.VARIANT.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -920,7 +928,11 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.OFFLOADING.value: offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.ADDITIONAL_SETTINGS.value: additional_settings,
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_offload{offloading}"
+                                    f"{f'_{variant}' if variant else ''}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
                             matrix_values.append(validate_agentic_matrix_entry(entry))

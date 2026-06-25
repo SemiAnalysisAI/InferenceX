@@ -82,6 +82,11 @@ on:
         required: false
         type: string
         default: '0'
+      additional-settings:
+        description: "JSON list of KEY=VALUE environment settings for agentic recipes"
+        required: false
+        type: string
+        default: '[]'
       duration:
         description: "Benchmark duration in seconds"
         required: false
@@ -113,6 +118,7 @@ env:
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   OFFLOADING: ${{ inputs.offloading }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
+  ADDITIONAL_SETTINGS: ${{ inputs.additional-settings }}
   DURATION: ${{ inputs.duration }}
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'

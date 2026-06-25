@@ -5,6 +5,7 @@ set -x
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+apply_agentic_additional_settings
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -26,6 +27,7 @@ install_agentic_deps
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export PYTHONNOUSERSITE=1
+export AIPERF_AGENTIC_CACHE_WARMUP_DURATION="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-600}"
 
 SERVER_LOG="$RESULT_DIR/server.log"
 ROUTER_LOG="$RESULT_DIR/router.log"
@@ -33,13 +35,18 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-MODEL_CPU_OFFLOAD_GB=26
+MODEL_CPU_OFFLOAD_GB="${VLLM_MODEL_CPU_OFFLOAD_GB:-26}"
 MODEL_CHECKPOINT_PAGE_CACHE_GIB=414
 MOONCAKE_LOCAL_BUFFER_GIB=4
 case "$OFFLOADING" in
     none) ;;
     cpu)
         TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
+        HOST_MEMORY_GIB=$(awk '/MemTotal:/ {print int($2 / 1024 / 1024)}' /proc/meminfo)
+        if (( TOTAL_CPU_DRAM_GIB * 100 > HOST_MEMORY_GIB * 85 )); then
+            echo "Error: CPU DRAM budget ${TOTAL_CPU_DRAM_GIB} GiB exceeds the 85% host safety limit" >&2
+            exit 1
+        fi
         PER_RANK_GIB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MODEL_CPU_OFFLOAD_GB - MOONCAKE_LOCAL_BUFFER_GIB))
         if (( PER_RANK_GIB <= 0 )); then
             echo "Error: CPU DRAM budget is too small for checkpoint cache, model, and KV offload" >&2
@@ -99,19 +106,41 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     agentic_pip_install --quiet 'vllm-router==0.1.14'
 fi
 
-MAX_NUM_SEQS=$((2 * CONC))
+MAX_NUM_SEQS_MULTIPLIER="${VLLM_MAX_NUM_SEQS_MULTIPLIER:-2}"
+MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$((MAX_NUM_SEQS_MULTIPLIER * CONC))}"
+GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-0.95}"
+PREFIX_CACHING_ARGS=(--enable-prefix-caching)
+if [[ "${VLLM_PREFIX_CACHING:-true}" == "false" ]]; then
+    PREFIX_CACHING_ARGS=(--no-enable-prefix-caching)
+fi
+CHUNKED_PREFILL_ARGS=()
+case "${VLLM_CHUNKED_PREFILL:-auto}" in
+    true) CHUNKED_PREFILL_ARGS=(--enable-chunked-prefill) ;;
+    false) CHUNKED_PREFILL_ARGS=(--no-enable-chunked-prefill) ;;
+    auto) ;;
+    *) echo "Error: VLLM_CHUNKED_PREFILL must be true, false, or auto" >&2; exit 1 ;;
+esac
+MAX_BATCHED_TOKENS_ARGS=()
+if [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]]; then
+    MAX_BATCHED_TOKENS_ARGS=(--max-num-batched-tokens "$VLLM_MAX_NUM_BATCHED_TOKENS")
+fi
+echo "H100 AgentX tuning: max_num_seqs=$MAX_NUM_SEQS gpu_memory_utilization=$GPU_MEMORY_UTILIZATION chunked_prefill=${VLLM_CHUNKED_PREFILL:-auto} prefix_caching=${VLLM_PREFIX_CACHING:-true} max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS:-auto} cache_warmup_s=$AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
+free -g
+swapon --show || true
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     --host 0.0.0.0 \
     --port "$VLLM_BACKEND_PORT" \
     "${PARALLEL_ARGS[@]}" \
     "${EP_ARGS[@]}" \
-    --gpu-memory-utilization 0.95 \
+    --gpu-memory-utilization "$GPU_MEMORY_UTILIZATION" \
     --cpu-offload-gb "$MODEL_CPU_OFFLOAD_GB" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
     --block-size 128 \
     --language-model-only \
-    --enable-prefix-caching \
+    "${PREFIX_CACHING_ARGS[@]}" \
+    "${CHUNKED_PREFILL_ARGS[@]}" \
+    "${MAX_BATCHED_TOKENS_ARGS[@]}" \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
@@ -126,7 +155,7 @@ wait_for_server_ready --port "$VLLM_BACKEND_PORT" --server-log "$SERVER_LOG" --s
 if [[ "$DP_ATTENTION" == "true" ]]; then
     vllm-router \
         --worker-urls "http://localhost:$VLLM_BACKEND_PORT" \
-        --policy consistent_hash \
+        --policy "${VLLM_ROUTER_POLICY:-consistent_hash}" \
         --intra-node-data-parallel-size "$TP" \
         --host 0.0.0.0 \
         --port "$PORT" \
