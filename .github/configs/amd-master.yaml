@@ -2768,7 +2768,7 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       #- { tp: 8, dp-attn: false, offloading: none, conc-list: [4, 8, 16, 32, 48, 64, 128, 196, 256]  }
       #- { tp: 8, dp-attn: false, offloading: hicache, conc-list: [4, 8, 16, 32, 48, 64, 128, 196, 256]  }
       #- { tp: 8, dp-attn: false, offloading: none, conc-list: [64]  }
-      - { tp: 8, dp-attn: false, offloading: hicache, conc-list: [64]  }
+      - { tp: 8, dp-attn: false, offloading: hicache, total-cpu-dram-gb: 2418, conc-list: [64]  }
 
 
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
@@ -2807,7 +2807,7 @@ dsv4-fp4-mi355x-sglang-agentic-hicache:
       search-space:
         #DPA, conc>=64
       - { tp: 8, dp-attn: false, offloading: none, conc-list: [4, 8, 16, 32, 40]  }
-      - { tp: 8, dp-attn: false, offloading: hicache, conc-list: [4, 8, 16, 32, 40]  }
+      - { tp: 8, dp-attn: false, offloading: hicache, total-cpu-dram-gb: 2418, conc-list: [4, 8, 16, 32, 40]  }
 
 dsr1-fp4-mi355x-sglang-disagg-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260609
@@ -3199,6 +3199,7 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
       - spec-decoding: "none"
         conc-list: [ 32,64 ]
         offloading: hicache
+        total-cpu-dram-gb: 2418
         prefill:
           num-worker: 1
           tp: 8
@@ -3228,4 +3229,4 @@ minimaxm3-fp8-mi355x-vllm-agentic:
     - duration: 1800
       search-space:
       - { tp: 8, ep: 1, offloading: none, conc-list: [8] }
-      - { tp: 8, ep: 1, offloading: lmcache,  conc-list: [8] }
+      - { tp: 8, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [8] }
