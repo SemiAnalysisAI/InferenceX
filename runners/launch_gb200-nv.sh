@@ -427,6 +427,49 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 
+if [[ -n "${CPU_OFFLOAD_GIB:-}" ]]; then
+    if [[ ! "$CPU_OFFLOAD_GIB" =~ ^(64|128|192)$ ]]; then
+        echo "Error: CPU_OFFLOAD_GIB must be 64, 128, or 192; got $CPU_OFFLOAD_GIB" >&2
+        exit 1
+    fi
+    python3 - "$CONFIG_PATH" "$CPU_OFFLOAD_GIB" <<'PY'
+import json
+import sys
+
+import yaml
+
+config_path, offload_gib = sys.argv[1], int(sys.argv[2])
+with open(config_path) as config_file:
+    config = yaml.safe_load(config_file)
+
+transfer_config = {
+    "kv_connector": "MultiConnector",
+    "kv_role": "kv_both",
+    "kv_connector_extra_config": {
+        "connectors": [
+            {"kv_connector": "NixlConnector", "kv_role": "kv_both"},
+            {
+                "kv_connector": "SimpleCPUOffloadConnector",
+                "kv_role": "kv_both",
+                "kv_connector_extra_config": {
+                    "cpu_bytes_to_use": offload_gib * 1024**3,
+                    "lazy_offload": True,
+                },
+            },
+        ]
+    },
+}
+for worker_type in ("prefill", "decode"):
+    config["backend"]["vllm_config"][worker_type]["kv-transfer-config"] = (
+        json.dumps(transfer_config, separators=(",", ":"))
+    )
+
+with open(config_path, "w") as config_file:
+    yaml.safe_dump(config, config_file, sort_keys=False)
+PY
+    echo "Enabled ${CPU_OFFLOAD_GIB} GiB logical-worker CPU KV tier in $CONFIG_PATH"
+fi
+
 # Override the job name with the runner name, prefixed "ifx-": another
 # runner fleet on watchtower (user slurm-shared, uid 1010, with Slurm
 # operator rights) names ITS jobs after the same runner names (gb200-nv_N)
