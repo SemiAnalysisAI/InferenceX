@@ -12297,14 +12297,14 @@ minimaxm3-fp8-b300-vllm:
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of MiniMax-M3 NVFP4
 # (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM, pairing the target with the
-# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). The benchmark
-# script overlays vllm-project/vllm PR #46380 (MiniMax-M3 modelopt NVFP4
-# support, commit 6c08558) before serve and routes prompts through the chat
-# template. Target weights are pre-staged read-only at
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). MiniMax-M3
+# modelopt NVFP4 support (vllm-project/vllm PR #46380) is baked into the perf
+# container image, so no runtime patch is needed; prompts are routed through the
+# chat template. Target weights are pre-staged read-only at
 # /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
 # launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
