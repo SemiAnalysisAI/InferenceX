@@ -9,7 +9,7 @@ minimaxm3-fp8-gb200-dynamo-vllm-agentic-tp4:
   disagg: true
   scenarios:
     agentic-coding:
-    - duration: 900
+    - duration: 3600
       search-space:
       - variant: tp4-final
         conc-list: [1, 2, 4, 6, 8, 10, 12]
