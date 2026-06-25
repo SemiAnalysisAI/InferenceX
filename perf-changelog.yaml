@@ -4190,3 +4190,9 @@
     - "Update the DeepSeek-V4-Pro B200 disaggregated Dynamo-vLLM benchmark to the vllm/vllm-openai:v0.23.0 image"
     - "Lower max-num-batched-tokens to 16384 and gpu-memory-utilization to 0.9 on the high-throughput and max-throughput recipes to avoid OOM"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1899
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Initial submission: MiniMax-M3 MXFP4 single-node on MI355X with vLLM (AITER MoE, TRITON_ATTN MSA, block-size 128, no fp8 KV cache). Pure TP: TP8 low-concurrency (conc 1-32) + TP4 full sweep (conc 1-256), at 1k/1k and 8k/1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1936
