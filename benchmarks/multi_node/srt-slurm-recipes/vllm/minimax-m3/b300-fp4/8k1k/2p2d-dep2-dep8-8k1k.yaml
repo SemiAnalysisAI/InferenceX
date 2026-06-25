@@ -37,6 +37,7 @@ backend:
 
   vllm_config:
     prefill:
+      no-enable-flashinfer-autotune: true
       tensor-parallel-size: 1
       data-parallel-size: 2
       data-parallel-rpc-port: 13345
@@ -55,6 +56,7 @@ backend:
       max-num-batched-tokens: 16384
 
     decode:
+      no-enable-flashinfer-autotune: true
       tensor-parallel-size: 1
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
