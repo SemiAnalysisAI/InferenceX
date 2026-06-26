@@ -42,6 +42,12 @@ git_clone_retry() {
 #    Used for in-container NIC/RDMA validation and routing checks.
 # ---------------------------------------------------------------------------
 install_recipe_deps() {
+    if [[ -d /ainic-repo ]]; then
+        echo "[SETUP] Installing AINIC libionic userspace from /ainic-repo..."
+        dpkg -i /ainic-repo/ionic-common*.deb /ainic-repo/libionic1*.deb 2>/dev/null || \
+            apt-get install -y --allow-downgrades /ainic-repo/libionic1*.deb 2>/dev/null || true
+    fi
+
     if command -v ibv_devinfo >/dev/null 2>&1 && command -v ip >/dev/null 2>&1; then
         echo "[SETUP] Container RDMA/net tools already present"
         return 0
@@ -53,7 +59,8 @@ install_recipe_deps() {
         && rm -rf /var/lib/apt/lists/*
 
     if ! command -v ibv_devinfo >/dev/null 2>&1 || ! command -v ip >/dev/null 2>&1; then
-        echo "[SETUP] ERROR: Failed to install ibv_devinfo/iproute2"; exit 1
+        echo "[SETUP] WARN: Failed to install ibv_devinfo/iproute2; continuing because these are diagnostics only"
+        return 0
     fi
     _SETUP_INSTALLED+=("ibverbs-utils+iproute2")
 }
@@ -372,7 +379,53 @@ except Exception as e:
 }
 
 # ---------------------------------------------------------------------------
-# 10. Patch MoRIIO start_load_kv busy-spin (same pattern as save_kv_layer)
+# 10. Patch MoRIIO notify parser for vllm-router service-discovery request IDs
+#     vllm-router's MoRIIO PD path sends OpenAI request IDs such as
+#     chatcmpl-___prefill_addr_host:...___decode_addr_host:... to the notify
+#     socket. Upstream MoRIIO only accepts msgpack allocation messages or
+#     tx-prefixed completion messages, so the notify listener thread exits with
+#     HandshakeError on the first routed request. Treat router request IDs as
+#     completion notifications.
+# ---------------------------------------------------------------------------
+patch_moriio_router_request_id_notify() {
+    python3 -c '
+import os, sys
+
+try:
+    import vllm.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine as me
+    f = me.__file__
+    src = open(f).read()
+
+    if "[PATCHED] vllm-router request id notify" in src:
+        print("[SETUP] vllm-router request-id notify patch already applied")
+        sys.exit(0)
+
+    old = """            if msg_str.startswith(MoRIIOConstants.TRANSFER_PREFIX):
+                self._handle_completion_message(msg_str)
+                handled = True"""
+
+    new = """            if msg_str.startswith(MoRIIOConstants.TRANSFER_PREFIX):
+                self._handle_completion_message(msg_str)
+                handled = True
+            elif "___prefill_addr_" in msg_str and "___decode_addr_" in msg_str:
+                # [PATCHED] vllm-router request id notify
+                self._handle_completion_message(msg_str)
+                handled = True"""
+
+    if old not in src:
+        print("[SETUP] WARN: MoRIIO notify parser pattern not found")
+        sys.exit(0)
+
+    open(f, "w").write(src.replace(old, new, 1))
+    print("[SETUP] Patched MoRIIO notify parser for vllm-router request IDs")
+except Exception as e:
+    print(f"[SETUP] WARN patch vllm-router request-id notify: {e}", file=sys.stderr)
+'
+    _SETUP_INSTALLED+=("MoRIIO-router-request-id-notify-patch")
+}
+
+# ---------------------------------------------------------------------------
+# 11. Patch MoRIIO start_load_kv busy-spin (same pattern as save_kv_layer)
 #     The READ-mode spin loop in start_load_kv has the same unbounded-spin
 #     issue as save_kv_layer. Add timeout + sleep + null guard.
 # ---------------------------------------------------------------------------
@@ -980,6 +1033,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     install_amd_quark
     patch_moriio_save_kv_timeout
     patch_moriio_transfer_timeout
+    patch_moriio_router_request_id_notify
     patch_moriio_load_kv_timeout
     patch_scheduler_read_mode_fix
     patch_prefill_idle_kv_reaper

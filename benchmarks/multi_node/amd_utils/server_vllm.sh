@@ -52,6 +52,9 @@ MODEL_PATH="${MODEL_PATH:-${MODEL_DIR}/${MODEL_NAME}}"
 source $WS_PATH/env.sh
 
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
+IFS=',' read -ra NODE_IP_ARRAY <<< "$IPADDRS"
+node_ip="${NODE_IP_ARRAY[$NODE_RANK]:-${NODE0_ADDR}}"
+host_ip="${host_ip:-$node_ip}"
 # RDMA IP for Nixl KV transfer (prefer 192.168.x.x subnet if available)
 rdma_ip=$(hostname -I | tr ' ' '\n' | grep '^192\.168\.' | head -1)
 rdma_ip="${rdma_ip:-$host_ip}"
@@ -236,7 +239,7 @@ python3 $WS_PATH/sync.py barrier \
 # =============================================================================
 # Cluster Topology Configuration
 # =============================================================================
-IFS=',' read -ra IP_ARRAY <<< "$IPADDRS"
+IP_ARRAY=("${NODE_IP_ARRAY[@]}")
 
 PREFILL_ARGS=""
 DECODE_ARGS=""
@@ -259,8 +262,10 @@ PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 # KV connector selection
 # =============================================================================
 _MORIIO_EXTRA="\"kv_connector_extra_config\": {\"proxy_ip\": \"${NODE0_ADDR}\", \"proxy_ping_port\": \"${PROXY_PING_PORT}\", \"http_port\": \"${SERVER_PORT}\"}"
-KVT_PREFILL="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", ${_MORIIO_EXTRA}}"
-KVT_DECODE="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", ${_MORIIO_EXTRA}}"
+MORIIO_PREFILL_CONN="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_producer\", ${_MORIIO_EXTRA}}"
+MORIIO_DECODE_CONN="{\"kv_connector\": \"MoRIIOConnector\", \"kv_role\": \"kv_consumer\", ${_MORIIO_EXTRA}}"
+KVT_PREFILL="$MORIIO_PREFILL_CONN"
+KVT_DECODE="$MORIIO_DECODE_CONN"
 
 MC_PREFILL_CONN="{\"kv_connector\":\"MooncakeConnector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"${MC_PROTOCOL:-tcp}\"}}"
 MC_DECODE_CONN="{\"kv_connector\":\"MooncakeConnector\",\"kv_role\":\"kv_consumer\",\"kv_connector_extra_config\":{\"mooncake_protocol\":\"${MC_PROTOCOL:-tcp}\"}}"
@@ -270,6 +275,9 @@ LMC_CONN="{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":
 case "${PREFILL_KV_CONNECTOR:-moriio}" in
     mooncake-lmcachemp)
         KVT_PREFILL="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"connectors\":[${MC_PREFILL_CONN},${LMC_CONN}]}}"
+        ;;
+    moriio-lmcachemp)
+        KVT_PREFILL="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_producer\",\"kv_connector_extra_config\":{\"connectors\":[${MORIIO_PREFILL_CONN},${LMC_CONN}]}}"
         ;;
     mooncake)
         KVT_PREFILL="$MC_PREFILL_CONN"
@@ -283,6 +291,9 @@ case "${PREFILL_KV_CONNECTOR:-moriio}" in
 esac
 
 case "${DECODE_KV_CONNECTOR:-moriio}" in
+    moriio-lmcachemp)
+        KVT_DECODE="{\"kv_connector\":\"MultiConnector\",\"kv_role\":\"kv_consumer\",\"kv_connector_extra_config\":{\"connectors\":[${MORIIO_DECODE_CONN},${LMC_CONN}]}}"
+        ;;
     mooncake)
         KVT_DECODE="$MC_DECODE_CONN"
         ;;
@@ -314,7 +325,7 @@ setup_vllm_env() {
 }
 
 start_lmcache_mp_if_needed() {
-    if [[ "$ROLE_KV_CONNECTOR" != "mooncake-lmcachemp" ]]; then
+    if [[ "$ROLE_KV_CONNECTOR" != *"-lmcachemp" ]]; then
         return 0
     fi
 
@@ -324,8 +335,8 @@ start_lmcache_mp_if_needed() {
 """Keep LMCacheMP from producing proxy-visible PD transfer params.
 
 MultiConnector permits only one child connector to return kv_transfer_params.
-Mooncake owns the prefill->decode PD protocol; LMCacheMP should only provide
-local L2 lookup/retrieve/store on the prefill engine.
+The PD transfer connector owns the prefill->decode protocol; LMCacheMP should
+only provide local L2 lookup/retrieve/store for prefix reuse.
 """
 import builtins
 import sys
@@ -590,6 +601,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
             fi
 
             popd
+        fi
+    fi
+
+    # Stage workspace-level artifacts such as aggregated benchmark JSON and
+    # AIPerf exports before the container exits.
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+        WORKSPACE_ARTIFACT_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/workspace_artifacts"
+        mkdir -p "$WORKSPACE_ARTIFACT_DIR"
+        find /workspace -maxdepth 1 -type f \( -name '*.json' -o -name '*.jsonl' -o -name '*.csv' -o -name '*.png' \) \
+            -exec cp -f {} "$WORKSPACE_ARTIFACT_DIR/" \; 2>/dev/null || true
+        if [[ -d /workspace/LOGS/agentic ]]; then
+            mkdir -p "$WORKSPACE_ARTIFACT_DIR/LOGS"
+            cp -r /workspace/LOGS/agentic "$WORKSPACE_ARTIFACT_DIR/LOGS/" 2>/dev/null || true
         fi
     fi
 

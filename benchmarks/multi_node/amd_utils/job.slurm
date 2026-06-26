@@ -491,6 +491,12 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
         -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
+        -e IBDEVICES=\${IBDEVICES:-}
+        -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
+        -e MORI_IO_TC=\${MORI_IO_TC:-}
+        -e MORI_RDMA_SL=\${MORI_RDMA_SL:-}
+        -e MORI_IO_SL=\${MORI_IO_SL:-}
+        -e NCCL_IB_DISABLE=\${NCCL_IB_DISABLE:-}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
