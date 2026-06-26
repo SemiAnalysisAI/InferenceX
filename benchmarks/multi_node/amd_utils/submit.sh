@@ -128,6 +128,7 @@ export BENCH_NUM_PROMPTS_MULTIPLIER=${BENCH_NUM_PROMPTS_MULTIPLIER:-10}
 export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
 export BENCH_REQUEST_RATE=${REQUEST_RATE}
 export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
+export MAX_NUM_SEQS=${MAX_NUM_SEQS:-$(echo "$CONCURRENCIES" | tr 'x' '\n' | sort -n | tail -1)}
 
 # DRY_RUN=1 makes server_sglang.sh echo the composed prefill/decode/router launch
 # commands instead of executing them (useful for previewing a recipe against a real
@@ -155,6 +156,7 @@ export ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 export ROUTER_PORT="${ROUTER_PORT:-30000}"
 export ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-}"
 export MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-}"
 export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
 export VLLM_BIND_IP="${VLLM_BIND_IP:-}"
 export PREFILL_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio}"

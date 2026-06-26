@@ -307,6 +307,85 @@ jobs:
           name: bmk_${{ env.RESULT_FILENAME }}
           path: agg_${{ env.RESULT_FILENAME }}_*.json
 
+      - name: Package debug logs
+        if: always()
+        run: |
+          set +e
+          DEBUG_DIR="multinode_debug_logs"
+          rm -rf "$DEBUG_DIR" multinode_server_logs.tar.gz
+          mkdir -p "$DEBUG_DIR"
+
+          {
+            echo "result_filename=${RESULT_FILENAME:-unset}"
+            echo "exp_name=${EXP_NAME:-unset}"
+            echo "runner=${{ runner.name }}"
+            echo "runner_type=${{ inputs.runner }}"
+            echo "framework=${FRAMEWORK:-unset}"
+            echo "scenario_type=${SCENARIO_TYPE:-unset}"
+            echo "conc_list=${CONC_LIST:-unset}"
+            echo "conc=${CONC:-unset}"
+            echo "duration=${DURATION:-unset}"
+            echo "model=${MODEL:-unset}"
+            echo "model_prefix=${MODEL_PREFIX:-unset}"
+            echo "precision=${PRECISION:-unset}"
+            echo "github_run_id=${GITHUB_RUN_ID:-unset}"
+            echo "github_sha=${GITHUB_SHA:-unset}"
+            date -u +"utc_time=%Y-%m-%dT%H:%M:%SZ"
+          } > "$DEBUG_DIR/context.txt"
+
+          if [ -d benchmark_logs ]; then
+            sudo tar -czf "$DEBUG_DIR/benchmark_logs.tar.gz" benchmark_logs 2>/dev/null || true
+          fi
+
+          if [ -d LOGS ]; then
+            sudo tar -czf "$DEBUG_DIR/LOGS.tar.gz" LOGS 2>/dev/null || true
+          fi
+
+          mkdir -p "$DEBUG_DIR/top_level"
+          find . -maxdepth 1 -type f \( \
+              -name '*.json' -o \
+              -name '*.jsonl' -o \
+              -name '*.log' -o \
+              -name '*.out' -o \
+              -name '*.err' -o \
+              -name 'meta_env.json' -o \
+              -name 'samples*.jsonl' \
+            \) -exec cp -f {} "$DEBUG_DIR/top_level/" \; 2>/dev/null || true
+
+          {
+            echo "=== container/slurm/process snapshot ==="
+            command -v squeue >/dev/null 2>&1 && squeue -u "$USER" || true
+            command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}} {{.Status}} {{.Image}}' || true
+            echo
+            echo "=== benchmark_logs files ==="
+            find benchmark_logs -maxdepth 4 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
+            echo
+            echo "=== LOGS files ==="
+            find LOGS -maxdepth 5 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
+          } > "$DEBUG_DIR/file_manifest.txt"
+
+          ERROR_PAT='ERROR|Error|Traceback|Exception|AssertionError|RuntimeError|ValueError|Internal Server Error|No available memory|No HIP GPUs|Engine core initialization failed|Run failed|server internal error|PD_BENCH.*rc=[1-9]|GSM8K_.*rc=[1-9]'
+          {
+            echo "Error summary generated from benchmark_logs, LOGS, and top-level logs."
+            echo "Pattern: $ERROR_PAT"
+            echo
+            for f in $(find benchmark_logs LOGS "$DEBUG_DIR/top_level" -type f 2>/dev/null | sort); do
+              case "$f" in
+                *.log|*.out|*.err|*.txt|*.json|*.jsonl|*.csv)
+                  if sudo grep -E -q "$ERROR_PAT" "$f" 2>/dev/null; then
+                    echo "===== $f ====="
+                    sudo grep -E -n "$ERROR_PAT" "$f" 2>/dev/null | tail -200
+                    echo
+                  fi
+                  ;;
+              esac
+            done
+          } > "$DEBUG_DIR/error_summary.txt"
+
+          sudo chown -R "$USER":"$USER" "$DEBUG_DIR" 2>/dev/null || true
+          tar -czf multinode_server_logs.tar.gz "$DEBUG_DIR" 2>/dev/null || true
+          ls -lh multinode_server_logs.tar.gz || true
+
       - name: Upload server logs
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
