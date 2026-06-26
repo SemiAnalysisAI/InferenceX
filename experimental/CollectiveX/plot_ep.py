@@ -381,7 +381,7 @@ function renderGrid(){
     const scale=(ST.xlog?'log':'lin')+'–'+(ST.ylog?'log':'lin');
     h+='<h2>'+ph[0].toUpperCase()+ph.slice(1)+' · EP'+ep+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+' — latency vs source tokens/rank (µs, '+scale+')</h2>'+
        guardNote(panelVis)+legend(ph,ep,ST.suite,ST.routing)+'<div class="grid">';
-    ['dispatch','combine','serial'].forEach(op=>{ h+='<div class="card"><div class="gtit">'+OPS[op]+'</div>'+
+    ['dispatch','combine','roundtrip'].forEach(op=>{ h+='<div class="card"><div class="gtit">'+OPS[op]+'</div>'+
       chart({op,phase:ph,ep,x:'t',y:'lat',xlog:ST.xlog,ylog:ST.ylog,pct:ST.pct,suite:ST.suite,routing:ST.routing,title:'',w:340,h:260})+'</div>'; });
     h+='</div>'; }); });
   document.getElementById('grid').innerHTML=h;
