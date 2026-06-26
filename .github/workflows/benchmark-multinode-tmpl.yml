@@ -376,13 +376,16 @@ jobs:
           if [ -d benchmark_logs ]; then
             sudo tar -czf "$DEBUG_DIR/benchmark_logs.tar.gz" benchmark_logs 2>/dev/null || true
           fi
+          if [ -d benchmark_artifacts ]; then
+            sudo tar -czf "$DEBUG_DIR/benchmark_artifacts.tar.gz" benchmark_artifacts 2>/dev/null || true
+          fi
 
           mkdir -p "$DEBUG_DIR/top_level"
 
           # Some launchers copy server logs out of benchmark_logs before
           # failing the result-file check. Keep these top-level launch logs in
           # the debug artifact as a fallback so HTTP 500s are not opaque.
-          find benchmark_logs -maxdepth 8 -type f \( \
+          find benchmark_logs benchmark_artifacts -maxdepth 8 -type f \( \
               -name 'slurm_job-*.out' -o \
               -name 'slurm_job-*.err' -o \
               -name 'server_*.log' -o \
@@ -414,6 +417,9 @@ jobs:
             echo "=== benchmark_logs files ==="
             find benchmark_logs -maxdepth 8 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
             echo
+            echo "=== benchmark_artifacts files ==="
+            find benchmark_artifacts -maxdepth 8 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
+            echo
             echo "=== LOGS files ==="
             find LOGS -maxdepth 5 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
             echo
@@ -426,7 +432,7 @@ jobs:
             echo "Error summary generated from benchmark_logs, LOGS, and top-level logs."
             echo "Pattern: $ERROR_PAT"
             echo
-            for f in $(find benchmark_logs LOGS "$DEBUG_DIR/top_level" -type f 2>/dev/null | sort); do
+            for f in $(find benchmark_logs benchmark_artifacts LOGS "$DEBUG_DIR/top_level" -type f 2>/dev/null | sort); do
               case "$f" in
                 *.log|*.out|*.err|*.txt|*.json|*.jsonl|*.csv)
                   if sudo grep -E -q "$ERROR_PAT" "$f" 2>/dev/null; then
