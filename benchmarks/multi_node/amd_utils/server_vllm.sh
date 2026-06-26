@@ -291,11 +291,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
     else
-        python3 $WS_PATH/sync.py barrier \
+        if ! python3 $WS_PATH/sync.py barrier \
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout 1800; then
+            echo "ERROR: prefill/decode server ports did not become ready within timeout" >&2
+            exit 1
+        fi
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -311,7 +314,32 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
-        eval "$HEALTH_BARRIER_CMD"
+        if ! eval "$HEALTH_BARRIER_CMD"; then
+            echo "ERROR: router health endpoint did not become ready within timeout" >&2
+            exit 1
+        fi
+        echo "MoRI-IO proxy health endpoint is up"
+
+        ROUTER_READY_PAYLOAD="{\"model\":\"${SERVED_MODEL}\",\"prompt\":\"ping\",\"max_tokens\":1,\"temperature\":0}"
+        ROUTER_READY=false
+        for _attempt in $(seq 1 30); do
+            rm -f /tmp/vllm_router_ready.json
+            if curl -sf --max-time 60 \
+                -H 'Content-Type: application/json' \
+                -d "$ROUTER_READY_PAYLOAD" \
+                "http://0.0.0.0:${ROUTER_PORT}/v1/completions" >/tmp/vllm_router_ready.json; then
+                ROUTER_READY=true
+                break
+            fi
+            echo "Router completion readiness attempt ${_attempt} failed; retrying in 10s..."
+            cat /tmp/vllm_router_ready.json 2>/dev/null || true
+            sleep 10
+        done
+        if [[ "$ROUTER_READY" != "true" ]]; then
+            echo "ERROR: router is healthy but did not route a test completion to prefill/decode workers" >&2
+            cat /tmp/vllm_router_ready.json 2>/dev/null || true
+            exit 1
+        fi
         echo "MoRI-IO proxy is ready for benchmarking"
     fi
 
