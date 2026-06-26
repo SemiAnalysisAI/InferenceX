@@ -4002,6 +4002,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1843
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-atom
+    - minimaxm3-fp8-mi355x-atom-mtp
+  description:
+    - "Add minimaxm3-fp8-mi355x-atom: MiniMax-M3 MXFP8 single-node benchmark on MI355X using ATOM framework"
+    - "Uses rocm/atom-dev:MiniMax-M3-20260623; TP4, block size 128, ISL=1024,8192 OSL=1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1916
+
+- config-keys:
     - minimaxm3-fp8-mi355x-atom-mtp
   description:
     - "Add minimaxm3-fp8-mi355x-atom-mtp: same with EAGLE3 speculative decoding (3 draft tokens)"
@@ -4205,3 +4213,37 @@
     - "Weights pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added MiniMax-M3-NVFP4 to launch_b300-nv.sh STAGED_MODELS); --block-size 128 (MSA), --language-model-only"
     - "Sweeps tp 2/4/8 with and without EP and dp-attn at 1k1k and 8k1k, conc 1-1024"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1928
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-mtp
+  description:
+    - "Add MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node aggregated vLLM benchmark with EAGLE3 speculative decoding (spec-decoding: mtp, 3 draft tokens via Inferact/MiniMax-M3-EAGLE3)"
+    - "Image vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41 (bakes in MiniMax-M3 modelopt NVFP4 support, vllm-project/vllm PR #46380; no runtime patch needed); prompts routed through the chat template"
+    - "Target weights pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added MiniMax-M3-NVFP4 to launch_b300-nv.sh STAGED_MODELS); EAGLE3 draft downloaded to the writable /data/models; --block-size 128 (MSA), --language-model-only"
+    - "Sweeps tp 4/8 with and without EP and dp-attn at 1k1k and 8k1k, conc 1-512"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1929
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Add a MiniMax-M3 MXFP4 single-node vLLM benchmark on MI355X using amd/MiniMax-M3-MXFP4."
+    - "Pin vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e, which includes upstream Quark MXFP4 support from vllm-project/vllm#45794."
+    - "Serve through the text-only language-model path with block size 128, TRITON_ATTN, MiniMax-M3 tool/reasoning parsers, automatic tool choice, and VLLM_USE_BREAKABLE_CUDAGRAPH=0; let vLLM select the MoE backend and retain the default KV-cache dtype."
+    - "Mirror the MiniMax-M3 MXFP8 MI355X TP/EP/DP-attention search space at 1k1k and 8k1k for a direct precision comparison."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1935
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 GB300 disaggregated multinode SGLang benchmarks via Dynamo."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc."
+    - "8k/1k STP recipes: 1P1D TP4 (conc 1-256), 5P1D DEP4+1D DEP16 (conc 2048, NIXL), 6P1D and 7P1D DEP4+1D DEP16 (conc 5120, Mooncake)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1921
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-mtp
+  description:
+    - "Add a MiniMax-M3 MXFP4 MI355X vLLM benchmark with EAGLE3 speculative decoding using amd/MiniMax-M3-MXFP4 and Inferact/MiniMax-M3-EAGLE3 with three speculative tokens."
+    - "Reuse the pinned vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e image, text-only target path, TRITON_ATTN, automatic tool choice, MiniMax-M3 parsers, VLLM_USE_BREAKABLE_CUDAGRAPH=0, default KV-cache dtype, and automatic MoE backend selection."
+    - "Pass --use-chat-template for MTP acceptance and mirror the existing MiniMax-M3 MXFP8 MI355X MTP TP/EP/DP-attention search space at 1k1k and 8k1k."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1939
