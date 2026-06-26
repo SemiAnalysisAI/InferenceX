@@ -100,17 +100,22 @@ def cohort_id(members: list) -> str:
 
 
 def evaluate_cohort(members: list, pin_sha: bool) -> dict:
-    """Split members into accepted/rejected for an OFFICIAL cohort + record why. A cohort can be a
-    valid comparable-experimental overlay even when not official; official adds the hard gates."""
+    """Split members into the OFFICIAL subset (accepted) + the rest (rejected, with reasons).
+    A non-canonical (wid=null / seeded-runtime) member is REJECTED from the official cohort but
+    does NOT block it — that is the point of recording rejections. official_eligible then depends
+    on the ACCEPTED subset being mutually consistent (one source SHA under --pin-sha, one workload_id,
+    one EPLB mapping), NOT on there being zero rejected members. A seeded run of the same config
+    shares the deterministic trace_signature, so it lands in the same cohort and is simply excluded."""
     rejected, accepted = [], []
-    shas = {m["source_sha"] for m in members if m["source_sha"]}
-    wids = {m["workload_id"] for m in members if m["workload_id"]}
-    maps = {m["eplb_mapping_hash"] for m in members if m["eplb_enabled"]}
-    any_eplb = any(m["eplb_enabled"] for m in members)
     for m in members:
-        reasons = []
-        if m["publication_status"] in ("invalid", "failed"):
-            reasons.append(f"member status={m['publication_status']}")
+        reasons = []                                  # PER-MEMBER gates only
+        # publication_status is machine-derived from ALL validity dims (correctness, workload
+        # identity, measurement + RESOURCE conformance, provenance, anomalies). Only an 'official'
+        # member belongs in an official cohort — this is the authoritative gate; the granular
+        # checks below just enrich the rejection reason (e.g. a resource-nonconforming MoRI run is
+        # 'diagnostic' and excluded here even though it is correct + canonical + provenance-complete).
+        if m["publication_status"] != "official":
+            reasons.append(f"publication_status={m['publication_status']} (official cohort needs 'official')")
         if not m["correct"]:
             reasons.append("a point failed correctness")
         if not m["anomaly_free"]:
@@ -123,24 +128,30 @@ def evaluate_cohort(members: list, pin_sha: bool) -> dict:
             reasons.append("provenance incomplete (image digest / git run missing)")
         if m["min_samples"] < MIN_SAMPLES_OFFICIAL:
             reasons.append(f"a point has <{MIN_SAMPLES_OFFICIAL} pooled samples")
-        # cross-member gates (only meaningful with >1 member)
-        if pin_sha and len(shas) > 1:
-            reasons.append(f"cohort spans {len(shas)} source SHAs (--pin-sha requires one)")
-        if len(wids) > 1:
-            reasons.append(f"cohort spans {len(wids)} workload_ids — not the same canonical workload")
-        if m["eplb_enabled"] and len(maps) > 1:
-            reasons.append(f"cohort spans {len(maps)} EPLB mapping_hashes — different replica placement")
         (rejected if reasons else accepted).append({**m, "rejection_reasons": reasons})
-    official_eligible = (len(accepted) >= 1 and not rejected
-                         and (not pin_sha or len(shas) <= 1)
-                         and len(wids) <= 1 and (not any_eplb or len(maps) <= 1))
+    # cross-member consistency over the ACCEPTED (would-be-official) subset.
+    a_shas = {m["source_sha"] for m in accepted if m["source_sha"]}
+    a_wids = {m["workload_id"] for m in accepted if m["workload_id"]}
+    a_maps = {m["eplb_mapping_hash"] for m in accepted if m["eplb_enabled"]}
+    a_eplb = any(m["eplb_enabled"] for m in accepted)
+    incoherent = []
+    if pin_sha and len(a_shas) > 1:
+        incoherent.append(f"accepted members span {len(a_shas)} source SHAs (--pin-sha requires one)")
+    if len(a_wids) > 1:
+        incoherent.append(f"accepted members span {len(a_wids)} workload_ids")
+    if a_eplb and len(a_maps) > 1:
+        incoherent.append(f"accepted members span {len(a_maps)} EPLB mapping_hashes")
+    official_eligible = len(accepted) >= 1 and not incoherent
     return {
         "cohort_id": cohort_id(members), "n_members": len(members),
         "skus": sorted({m["sku"] for m in members}),
+        "official_skus": sorted({m["sku"] for m in accepted}),
         "backends": sorted({m["backend"] for m in members if m["backend"]}),
-        "source_shas": sorted(shas), "workload_ids": sorted(wids),
-        "eplb_mapping_hashes": sorted(maps), "any_eplb": any_eplb,
-        "official_eligible": official_eligible,
+        "source_shas": sorted({m["source_sha"] for m in members if m["source_sha"]}),
+        "workload_ids": sorted({m["workload_id"] for m in members if m["workload_id"]}),
+        "official_source_shas": sorted(a_shas), "official_workload_ids": sorted(a_wids),
+        "eplb_mapping_hashes": sorted(a_maps), "any_eplb": a_eplb,
+        "official_eligible": official_eligible, "incoherent": incoherent,
         "accepted": accepted, "rejected": rejected,
     }
 

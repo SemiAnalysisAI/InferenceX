@@ -145,8 +145,12 @@ def main() -> int:
             files.append(p)
     files = sorted(f for f in files if not os.path.basename(f).startswith("env_"))
 
-    # cross-run workload identity: trace_signature must agree within a comparison_key.
-    by_ck = {}
+    # cross-run workload identity: within a comparison_key, the realized routing must be the SAME
+    # workload. We check PER-TOKEN routing_hash agreement (not the whole trace_signature) so two
+    # runs of the same config at DIFFERENT ladders (e.g. a capped cross-vendor sweep 1..16 vs a full
+    # 1..128 headline) are NOT falsely flagged — only a genuine conflict (same T, different routing
+    # bytes) is a different workload.
+    by_ck = {}   # ck -> {T: {routing_hash: [files]}}
     bad = 0
     for f in files:
         try:
@@ -157,9 +161,11 @@ def main() -> int:
             continue
         errs, warns, status = validate_doc(doc, schema, f)
         ck = doc.get("comparison_key")
-        sig = (doc.get("workload") or {}).get("trace_signature")
-        if ck and sig:
-            by_ck.setdefault(ck, {}).setdefault(sig, []).append(os.path.basename(f))
+        if ck:
+            for r in doc.get("rows", []):
+                T, rh = r.get("tokens_per_rank"), r.get("routing_hash")
+                if T is not None and rh:
+                    by_ck.setdefault(ck, {}).setdefault(T, {}).setdefault(rh, []).append(os.path.basename(f))
         tag = "OK" if not errs else "FAIL"
         if errs:
             bad += 1
@@ -170,13 +176,15 @@ def main() -> int:
             print(f"        ERROR: {e}")
         for w in warns:
             print(f"        note: {w}")
-    # report cross-run identity disagreements (different hardware, same config, different trace)
-    for ck, sigs in by_ck.items():
-        if len(sigs) > 1:
+    # report cross-run identity CONFLICTS: same comparison_key + same T but DIFFERENT routing bytes
+    # (a genuine "not the same workload" — different hardware ran different routing for one point).
+    for ck, perT in by_ck.items():
+        conflicts = {T: hs for T, hs in perT.items() if len(hs) > 1}
+        if conflicts:
             bad += 1
-            print(f"[FAIL] comparison_key {ck[:12]}: {len(sigs)} DIFFERENT trace signatures — not the same workload:")
-            for sig, fs in sigs.items():
-                print(f"        {sig}: {', '.join(fs)}")
+            print(f"[FAIL] comparison_key {ck[:12]}: per-T routing-hash CONFLICT — not the same workload:")
+            for T, hs in sorted(conflicts.items()):
+                print(f"        T={T}: " + "; ".join(f"{h[:10]}=[{', '.join(fs)}]" for h, fs in hs.items()))
     print(f"\n{'FAILED' if bad else 'PASS'}: {len(files)} files, {bad} problem(s)")
     return 1 if bad else 0
 
