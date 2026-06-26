@@ -4586,7 +4586,7 @@ minimaxm3-fp8-h100-vllm-agentic:
     # cliff; Mooncake extends prefix retention, not active-request HBM.
     - duration: 3600
       available-cpu-dram-mib: 2_063_837
-      cpu-offload-utilization: 0.80
+      cpu-offload-utilization: 0.60
       gpus-per-node: 8
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }

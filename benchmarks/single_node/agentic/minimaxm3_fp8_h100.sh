@@ -41,6 +41,11 @@ MOONCAKE_LOCAL_BUFFER_GIB=4
 case "$OFFLOADING" in
     none) ;;
     cpu)
+        CPU_DRAM_CAP_GB="${VLLM_CPU_OFFLOAD_TOTAL_DRAM_CAP_GB:-1298}"
+        if (( TOTAL_CPU_DRAM_GB > CPU_DRAM_CAP_GB )); then
+            echo "Capping H100 CPU KV budget from ${TOTAL_CPU_DRAM_GB} GB to ${CPU_DRAM_CAP_GB} GB"
+            TOTAL_CPU_DRAM_GB="$CPU_DRAM_CAP_GB"
+        fi
         TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
         HOST_MEMORY_GIB=$(awk '/MemTotal:/ {print int($2 / 1024 / 1024)}' /proc/meminfo)
         if (( TOTAL_CPU_DRAM_GIB * 100 > HOST_MEMORY_GIB * 85 )); then
