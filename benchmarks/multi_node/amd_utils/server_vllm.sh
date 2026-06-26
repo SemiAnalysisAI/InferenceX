@@ -423,6 +423,19 @@ PY
     return 1
 }
 
+dump_runtime_logs() {
+    local label="${1:-runtime failure}"
+    echo "ERROR: ${label}" >&2
+    echo "==== /run_logs/slurm_job-${SLURM_JOB_ID} files ====" >&2
+    find "/run_logs/slurm_job-${SLURM_JOB_ID}" -maxdepth 2 -type f -printf '%p %s bytes\n' 2>/dev/null | sort >&2 || true
+    echo "==== recent server logs ====" >&2
+    for _log in /run_logs/slurm_job-"${SLURM_JOB_ID}"/*.log; do
+        [[ -f "$_log" ]] || continue
+        echo "----- $_log -----" >&2
+        tail -n 200 "$_log" >&2 || true
+    done
+}
+
 # =============================================================================
 # Node Role Assignment and Server Launch
 # =============================================================================
@@ -475,11 +488,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: skipping barrier (wait-for-all-ports)"
     else
-        python3 $WS_PATH/sync.py barrier \
+        if ! python3 $WS_PATH/sync.py barrier \
             --node-ips ${IPADDRS} \
             --node-ports $SERVER_PORT \
             --wait-for-all-ports \
-            --timeout 1800
+            --timeout 1800; then
+            dump_runtime_logs "prefill/decode server readiness barrier failed"
+            [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
+            exit 1
+        fi
     fi
 
     echo "Congratulations!!! All prefill and decode servers are up . . ."
@@ -507,7 +524,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $HEALTH_BARRIER_CMD"
     else
-        eval "$HEALTH_BARRIER_CMD"
+        if ! eval "$HEALTH_BARRIER_CMD"; then
+            dump_runtime_logs "proxy health barrier failed"
+            [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
+            exit 1
+        fi
         echo "MoRI-IO proxy is ready for benchmarking"
     fi
 
@@ -673,7 +694,11 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        if ! eval "$BARRIER_CMD"; then
+            dump_runtime_logs "proxy port barrier failed on additional prefill node"
+            [[ -n "${prefill_pid:-}" ]] && kill $prefill_pid 2>/dev/null || true
+            exit 1
+        fi
     fi
 
     echo "Waiting until proxy server closes..."
@@ -729,7 +754,11 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        if ! eval "$BARRIER_CMD"; then
+            dump_runtime_logs "proxy port barrier failed on decode node"
+            [[ -n "${decode_pid:-}" ]] && kill $decode_pid 2>/dev/null || true
+            exit 1
+        fi
     fi
 
     echo "Waiting until proxy server closes..."

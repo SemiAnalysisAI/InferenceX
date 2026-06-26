@@ -337,11 +337,25 @@ jobs:
             sudo tar -czf "$DEBUG_DIR/benchmark_logs.tar.gz" benchmark_logs 2>/dev/null || true
           fi
 
+          mkdir -p "$DEBUG_DIR/top_level"
+
+          # Some launchers copy server logs out of benchmark_logs before
+          # failing the result-file check. Keep these top-level launch logs in
+          # the debug artifact as a fallback so HTTP 500s are not opaque.
+          find benchmark_logs -maxdepth 8 -type f \( \
+              -name 'slurm_job-*.out' -o \
+              -name 'slurm_job-*.err' -o \
+              -name 'server_*.log' -o \
+              -name 'prefill_*.log' -o \
+              -name 'decode_*.log' -o \
+              -name 'lmcache_*.log' -o \
+              -name 'mc_lmcache_pd_proxy.log' \
+            \) -exec cp -f {} "$DEBUG_DIR/top_level/" \; 2>/dev/null || true
+
           if [ -d LOGS ]; then
             sudo tar -czf "$DEBUG_DIR/LOGS.tar.gz" LOGS 2>/dev/null || true
           fi
 
-          mkdir -p "$DEBUG_DIR/top_level"
           find . -maxdepth 1 -type f \( \
               -name '*.json' -o \
               -name '*.jsonl' -o \
@@ -358,13 +372,16 @@ jobs:
             command -v docker >/dev/null 2>&1 && docker ps -a --format '{{.Names}} {{.Status}} {{.Image}}' || true
             echo
             echo "=== benchmark_logs files ==="
-            find benchmark_logs -maxdepth 4 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
+            find benchmark_logs -maxdepth 8 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
             echo
             echo "=== LOGS files ==="
             find LOGS -maxdepth 5 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
+            echo
+            echo "=== top_level debug files ==="
+            find "$DEBUG_DIR/top_level" -maxdepth 1 -type f -printf '%p %s bytes\n' 2>/dev/null | sort || true
           } > "$DEBUG_DIR/file_manifest.txt"
 
-          ERROR_PAT='ERROR|Error|Traceback|Exception|AssertionError|RuntimeError|ValueError|Internal Server Error|No available memory|No HIP GPUs|Engine core initialization failed|Run failed|server internal error|PD_BENCH.*rc=[1-9]|GSM8K_.*rc=[1-9]'
+          ERROR_PAT='ERROR|Error|Traceback|Exception|AssertionError|RuntimeError|ValueError|Internal Server Error|No available memory|No HIP GPUs|Engine core initialization failed|Run failed|server internal error|Segmentation fault|Timeout after|not responding|PD_BENCH.*rc=[1-9]|GSM8K_.*rc=[1-9]'
           {
             echo "Error summary generated from benchmark_logs, LOGS, and top-level logs."
             echo "Pattern: $ERROR_PAT"
