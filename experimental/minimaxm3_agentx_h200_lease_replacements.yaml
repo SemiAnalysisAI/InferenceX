@@ -1,0 +1,16 @@
+minimaxm3-fp8-h200-vllm-agentic-lease-replacements:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 3600
+      available-cpu-dram-mib: 1_471_356
+      cpu-offload-utilization: 0.80
+      gpus-per-node: 8
+      search-space:
+      - { tp: 8, ep: 8, offloading: cpu, conc-list: [12, 16, 20] }
