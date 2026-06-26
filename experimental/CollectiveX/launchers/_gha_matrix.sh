@@ -67,5 +67,8 @@ fire both bf16 normal layout-and-dispatch-v1 balanced false
 fire both bf16 normal layout-and-dispatch-v1 zipf     false
 fire both bf16 normal layout-and-dispatch-v1 zipf     true
 
-drytag=""; [ "$DRY" = 1 ] && drytag=", DRY-RUN (nothing fired)"
-echo "=== ${DRY:+would dispatch }${N} runs for sku=$SKU (ref=$REF${NODES:+, nodes=$NODES}${drytag}) ==="
+# NB: do NOT use ${DRY:+...} here — DRY=0 is a NON-EMPTY string, so :+ would expand
+# on real dispatches too. Branch on the value explicitly.
+verb="dispatched"; tail=""
+if [ "$DRY" = 1 ]; then verb="would dispatch"; tail=" — DRY-RUN, nothing fired"; fi
+echo "=== $verb $N runs for sku=$SKU (ref=$REF${NODES:+, nodes=$NODES})$tail ==="
