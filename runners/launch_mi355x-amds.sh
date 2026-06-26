@@ -306,6 +306,7 @@ else
     fi
 
     srun --jobid=$JOB_ID \
+        --shm=3000000 \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \
