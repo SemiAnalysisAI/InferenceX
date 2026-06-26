@@ -4,6 +4,7 @@ set -euo pipefail
 export HF_HUB_CACHE_MOUNT="/local-nvme/hf-hub-cache/"
 
 PARTITION="compute"
+EXCLUDED_NODES="chi-mi325x-pod1-018.ord.vultr.cpe.ice.amd.com,chi-mi325x-pod1-019.ord.vultr.cpe.ice.amd.com"
 SQUASH_FILE="/nfsdata/sa/gharunner/gharunners/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 LOCK_FILE="${SQUASH_FILE}.lock"
 
@@ -13,7 +14,7 @@ SPEC_SUFFIX=$([[ "${SPEC_DECODING:-}" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
 
-JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude="$EXCLUDED_NODES" --gres=gpu:$TP --cpus-per-task=256 --time=480 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job" >&2
