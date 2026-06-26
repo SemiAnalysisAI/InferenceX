@@ -591,7 +591,9 @@ fi
     --entrypoint \"\" \
     \"$DOCKER_IMAGE_NAME\" bash -lc '
         set -o pipefail
-        mkdir -p /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        mkdir -p /benchmark_logs/logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        rm -rf /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
+        ln -s /benchmark_logs/logs/slurm_job-'\"\$SLURM_JOB_ID\"' /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'
         '"$RUN_FILE_FULL"' 2>&1 | tee /run_logs/slurm_job-'\"\$SLURM_JOB_ID\"'/server_\$(hostname).log
     '
 
