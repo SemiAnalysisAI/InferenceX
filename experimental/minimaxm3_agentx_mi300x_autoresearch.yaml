@@ -11,6 +11,3 @@ minimaxm3-fp8-mi300x-vllm-agentic-autoresearch:
     - duration: 3600
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] }
-      - { tp: 8, offloading: cpu, total-cpu-dram-gb: 1024, conc-list: [12, 16] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: none, conc-list: [12, 20] }
-      - { tp: 8, ep: 8, dp-attn: true, offloading: cpu, total-cpu-dram-gb: 1024, conc-list: [12, 20] }
