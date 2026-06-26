@@ -279,10 +279,15 @@ NODE_OFFSET=$((PREFILL_NODES_PER_WORKER * xP))
 # Build prefill arguments dynamically based on xP
 PREFILL_HEADNODE_URLS=()
 PREFILL_ARGS=""
+# Per-worker Prometheus /metrics endpoints (port 8000) for aiperf's
+# --server-metrics scrape. The router on :30000 does not serve Prometheus, so
+# aiperf must scrape each prefill/decode worker directly (see ENABLE_METRICS).
+SERVER_METRICS_URLS=()
 for i in $(seq 0 $((xP - 1))); do
     prefill_idx=$((i * PREFILL_NODES_PER_WORKER))
     PREFILL_HEADNODE_URLS[$i]="${IP_ARRAY[$prefill_idx]}:${HEADNODE_PORT}"
     PREFILL_ARGS="$PREFILL_ARGS --prefill http://${IP_ARRAY[$prefill_idx]}:8000"
+    SERVER_METRICS_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000/metrics")
 done
 
 # Build decode arguments dynamically based on yD
@@ -292,10 +297,12 @@ for i in $(seq 0 $((yD - 1))); do
     decode_idx=$((i * DECODE_NODES_PER_WORKER + NODE_OFFSET))
     DECODE_HEADNODE_URLS[$i]="${IP_ARRAY[$decode_idx]}:${HEADNODE_PORT}"
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$decode_idx]}:8000"
+    SERVER_METRICS_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000/metrics")
 done
 
 echo "Prefill worker headnode list: ${PREFILL_HEADNODE_URLS[@]}"
 echo "Decode  worker headnode list: ${DECODE_HEADNODE_URLS[@]}"
+echo "Server metrics endpoints:     ${SERVER_METRICS_URLS[@]}"
 
 # =============================================================================
 # Configuration Builder Functions
@@ -710,6 +717,16 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # IS_AGENTIC=1/true  → agentic trace replay (trace_replay.sh)
     # IS_AGENTIC unset/0 → fixed-seq-len throughput benchmark (bench.sh)
     if [[ "${IS_AGENTIC:-0}" == "1" || "${IS_AGENTIC:-}" == "true" ]]; then
+        # Point aiperf's server-metrics scrape at the per-worker Prometheus
+        # /metrics endpoints. The router (:30000) that aiperf auto-detects from
+        # --url does not expose Prometheus, so without this the scrape finds no
+        # reachable endpoint and all server-side cache/KV fields come out null.
+        # Only set it when the workers were actually started with --enable-metrics.
+        if [[ "${ENABLE_METRICS:-0}" == "1" && "${#SERVER_METRICS_URLS[@]}" -gt 0 ]]; then
+            AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${SERVER_METRICS_URLS[*]}")
+            export AIPERF_SERVER_METRICS_URLS
+            echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
+        fi
         # trace_replay.sh signature: model_path model_name concurrency_list log_path
         BENCH_CMD="bash $SGLANG_WS_PATH/trace_replay.sh \
             $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
