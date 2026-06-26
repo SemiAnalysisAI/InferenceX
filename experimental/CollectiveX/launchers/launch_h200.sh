@@ -3,7 +3,7 @@
 #
 # Thin adapter: H200-specific allocation/container, then hands off to
 # launchers/run_in_container.sh (CX_BENCH = nccl | deepep | all). Mirrors
-# launch_b200-dgxc.sh; H200 differs in: partition `hpc-gpu-1` (20x 8-GPU nodes),
+# launch_b200-dgxc.sh; H200 differs in: partition `main` (14x 8-GPU H200 nodes),
 # NO account (open scheduler), home is shared NFS (compute-visible, so no
 # CX_STAGE_DIR), and the sglang image is imported on first use (not pre-staged).
 #
@@ -22,7 +22,7 @@ REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
 source "$HERE/common.sh"
 
 RUNNER_NAME="${RUNNER_NAME:-h200}"
-PARTITION="${CX_PARTITION:-hpc-gpu-1}"
+PARTITION="${CX_PARTITION:-main}"            # H200 cluster's only partition (sinfo: main*)
 ACCOUNT="${CX_ACCOUNT:-}"            # H200 scheduler is open; no account needed
 NGPUS="${CX_NGPUS:-8}"
 TIME_MIN="${CX_TIME:-45}"            # generous: first-use enroot import of the image
