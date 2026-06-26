@@ -161,7 +161,12 @@ jobs:
   # Manual dispatch -> chosen SKU + benchmark. Lands on the inputs.sku runner.
   dispatch:
     if: github.event_name == 'workflow_dispatch'
-    runs-on: ${{ inputs.sku }}
+    # The bare `h200` label spans TWO clusters: 14 h200-dgxc runners (login-0; the EP
+    # path is validated there) and 2 h200-cw (CoreWeave) runners that have no
+    # launch_h200-cw.sh and die exit 127. Pin h200 to the h200-dgxc pool so every
+    # dispatch lands where the launcher + FS + partition are known-good. Other SKUs are
+    # single-pool, so pass the sku through unchanged.
+    runs-on: ${{ inputs.sku == 'h200' && 'h200-dgxc' || inputs.sku }}
     timeout-minutes: 120
     strategy:
       fail-fast: false
