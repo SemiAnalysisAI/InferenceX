@@ -246,7 +246,10 @@ const PUB = {publishable:"Publishable", official:"Official only", all:"All (incl
 function pubOk(s){
   if(ST.pub==="all") return true;
   if(ST.pub==="official") return s.pub==="official" && !!s.wid;   // official => canonical wid required
-  return !["diagnostic","invalid","failed"].includes(s.pub);
+  // publishable = official + comparable, but ONLY with a NON-NULL workload id (goal P0: every
+  // plotted official/comparable result carries non-null workload identity). A seeded-runtime
+  // (wid=null) line is shown only in the "All (incl. diagnostic)" view, never as publishable.
+  return !["diagnostic","invalid","failed"].includes(s.pub) && !!s.wid;
 }
 // HEADLINE DISTRIBUTION CONTRACT (goal P2 "define one headline distribution"): uniform is the
 // single cross-hardware headline — controlled, deterministic, and present on every SKU, so it is
@@ -547,6 +550,22 @@ function renderCoverage(){
   document.getElementById('coverage').innerHTML=h+'</table>'
     +'<p class="note">workload=wid is the canonical workload id; <b>wid=null</b> marks a seeded-runtime (non-canonical) line that is capped at comparable-experimental and is hidden from the Official view. Status is machine-derived from validity (goal P1).</p>';
 }
+// Failed / quarantined cases (goal immediate P2 "preserve failed cases in aggregation"): no-row
+// failed-case records (classified wedge/timeout/crash) + diagnostic/invalid/failed docs, surfaced
+// so a failure is never silently dropped. Diagnostic = quarantined (e.g. LL-FP8 roundtrip anomaly,
+// MoRI resource-nonconforming) — kept, labelled, excluded from official/comparable.
+function renderFailed(){
+  const el=document.getElementById('failed'); if(!el) return;
+  if(!window.FAILED || !FAILED.length){ el.innerHTML='<p class="note">No failed or quarantined cases — every run completed and is publishable.</p>'; return; }
+  const cls={failed:'#a30000',invalid:'#d62728',diagnostic:'#9467bd'};
+  let h='<table class="cov"><tr><th>SKU</th><th>backend</th><th>phase</th><th>config</th><th>status</th><th>reason / failure mode</th><th>rc</th></tr>';
+  FAILED.slice().sort((a,b)=>(a.sku||'').localeCompare(b.sku||'')).forEach(r=>{
+    h+='<tr><td>'+r.sku+'</td><td>'+(r.backend||'?')+'</td><td>'+(r.phase||'?')+'</td><td>'+r.cfg+'</td>'
+      +'<td><span class="badge" style="background:'+(cls[r.status]||'#555')+'">'+r.status+'</span></td>'
+      +'<td>'+(r.reason||'?')+'</td><td>'+(r.rc==null?'—':r.rc)+'</td></tr>';
+  });
+  el.innerHTML=h+'</table><p class="note">Preserved, not dropped: failed-case records (run_in_container emits a tests/failure_taxonomy classification on a wedge/timeout/crash) + quarantined diagnostic/invalid docs (e.g. an LL-FP8 roundtrip anomaly, or a resource-nonconforming MoRI run). These are excluded from the official/comparable views above.</p>';
+}
 // Distribution-sensitivity summary (review: don't add a 7th chart dimension — collapse it to one
 // ratio per sku/backend/phase). p99(worst stressor distribution) / p99(uniform) at matched
 // tokens/rank, computed by tests/sensitivity.py and injected as SENS.
@@ -590,7 +609,7 @@ function renderSensitivity(){
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
     'Backends: '+provs.join(', ')+'. Hover a point for p50/p90/p99, contract, suite, and its workflow run.';
-  renderControls(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); renderCoverage(); renderSensitivity();
+  renderControls(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); renderCoverage(); renderSensitivity(); renderFailed();
 })();
 """
 
@@ -607,6 +626,32 @@ def main() -> int:
     if not series:
         print(f"no family=moe results with rows under {args.results_dir} (legacy={args.legacy})")
         return 1
+    # Preserve FAILED / quarantined cases (goal immediate P2): failed-case records (no rows, a
+    # classified wedge/timeout/crash) + any diagnostic/invalid/failed doc — surfaced as a table so
+    # a failure is never silently dropped from the aggregation.
+    failed = []
+    for path in sorted(glob.glob(os.path.join(args.results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "moe":
+            continue
+        rt, pub = d.get("record_type"), d.get("publication_status")
+        if rt == "failed-case" or pub in ("failed", "invalid", "diagnostic"):
+            fa = d.get("failure") or {}
+            sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+            sh = d.get("shape", {}) or {}
+            cfg = f"{sh.get('dispatch_dtype','?')}/{d.get('mode','?')}/{(d.get('measurement_contract') or '?').replace('-v1','')}"
+            reason = fa.get("failure_mode")
+            if not reason and pub == "diagnostic":
+                rc = d.get("resource_profile") or {}
+                anom = d.get("anomaly_summary") or {}
+                reason = ("resource-nonconforming" if str((d.get("validity") or {}).get("resource_conformance","")).endswith("nonconforming")
+                          else f"anomaly:{','.join(anom.get('types',[]))}" if anom.get("count") else "diagnostic")
+            failed.append({"sku": sku, "backend": d.get("backend"), "phase": d.get("phase"),
+                           "cfg": cfg, "status": pub or "failed", "reason": reason or "?",
+                           "rc": fa.get("return_code")})
     # Distribution-sensitivity ratios (stdlib; same results dir), embedded as SENS for a small
     # summary table — collapses the routing axis to one ratio per sku/backend/phase (review).
     sens_rows = []
@@ -624,12 +669,14 @@ def main() -> int:
         + '<h2>Scaling (strong + weak — distinct contracts)</h2><div id="scaling"></div>' \
         + '<h2>Heatmaps</h2><div id="heatmaps"></div>' \
         + '<h2>Distribution sensitivity <span style="font-weight:400;color:var(--mut)">— NOT the headline (headline = uniform)</span></h2><div id="sensitivity"></div>' \
+        + '<h2>Failed / quarantined cases</h2><div id="failed"></div>' \
         + '<h2>Coverage</h2><div id="coverage"></div>' \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
         + f'{len(series)} EP sweeps. Latency (p50/p90/p99 selector) is the primary metric; the ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
         + 'bandwidth. dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
-        + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) + ";\n" + JS + "\n</script>\n" + TAIL
+        + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) \
+        + ";\nconst FAILED = " + json.dumps(failed) + ";\n" + JS + "\n</script>\n" + TAIL
     with open(args.out, "w") as fh:
         fh.write(html)
     phases = sorted({s["phase"] for s in series})

@@ -159,6 +159,12 @@ def main() -> int:
             continue
         if doc.get("family") != "moe":
             continue
+        # preserved failed-case record (goal immediate P2): a classified failure (run_in_container
+        # emitted it on a wedge/timeout/crash). Report it as a preserved case, NOT a validation error.
+        if doc.get("record_type") == "failed-case":
+            fm = (doc.get("failure") or {}).get("failure_mode", "?")
+            print(f"[FAILED-CASE] {os.path.basename(f):68s} mode={fm}  (preserved, not a validation error)")
+            continue
         errs, warns, status = validate_doc(doc, schema, f)
         ck = doc.get("comparison_key")
         if ck:

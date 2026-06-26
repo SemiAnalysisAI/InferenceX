@@ -56,9 +56,54 @@ def load(results_dir):
             "pub": d.get("publication_status") or "legacy",
             "anomaly_free": v.get("anomaly_free", True),
             "hidden": sh.get("hidden"), "topk": sh.get("topk"), "experts": sh.get("experts"),
+            # resource-Pareto axis (immediate P2): achieved comm-fraction + class; fixed-kernel
+            # (DeepEP LL) is EXCLUDED from Pareto (it is not a normalized resource-constrained run).
+            "resource_class": (d.get("resource_profile") or {}).get("resource_class"),
+            "achieved_fraction": (d.get("resource_profile") or {}).get("achieved_fraction"),
+            "pareto_eligible": (d.get("resource_profile") or {}).get("pareto_eligible"),
+            "fixed_kernel": (d.get("resource_profile") or {}).get("fixed_kernel", False),
             "rows": {r["tokens_per_rank"]: r for r in d["rows"]},
         })
     return series
+
+
+def resource_pareto(series):
+    """latency vs achieved comm-resource fraction (immediate P2 'resource Pareto sweeps'). Per
+    (sku,phase,dtype,T): the (achieved_fraction -> dispatch p50/p99) curve across resource points
+    (normalized sm-fraction ladder + tuned/default anchors), EXCLUDING fixed-kernel (LL) runs which
+    are not normalized resource-constrained. Reports the points + marginal efficiency Δlatency/Δfrac
+    so the resource/latency trade-off (more comm SMs -> lower latency, with diminishing returns) is
+    explicit. Needs >=2 distinct fractions at a matched cell; reports per-cell curves where present."""
+    by = defaultdict(dict)   # (sku,phase,dtype,T) -> {achieved_fraction: (p50,p99,class,mode)}
+    for s in series:
+        if s["mode"] != "normal" or s["routing"] != "uniform" or s["contract"] != "layout-and-dispatch-v1":
+            continue
+        if s.get("fixed_kernel"):
+            continue                                   # exclude fixed-kernel from the Pareto
+        af = s.get("achieved_fraction")
+        if af is None:
+            continue
+        for T, r in s["rows"].items():
+            p50, p99 = _p(r, "dispatch", "p50"), _p(r, "dispatch", "p99")
+            if p50:
+                by[(s["sku"], s["phase"], s["dtype"], T)][round(af, 4)] = (round(p50, 1),
+                                                                           round(p99 or 0, 1), s["resource_class"])
+    out = []
+    for (sku, phase, dtype, T), pts in by.items():
+        if len(pts) < 2:
+            continue                                   # need >=2 fractions for a Pareto curve
+        fr = sorted(pts)
+        curve = [{"achieved_fraction": f, "dispatch_p50": pts[f][0], "dispatch_p99": pts[f][1],
+                  "resource_class": pts[f][2]} for f in fr]
+        # marginal efficiency between adjacent points: Δlatency per +0.1 comm-fraction (negative = faster).
+        marg = []
+        for a, b in zip(fr, fr[1:]):
+            dlat, dfr = pts[b][0] - pts[a][0], b - a
+            if dfr > 0:
+                marg.append({"from_frac": a, "to_frac": b, "us_per_0.1frac": round(dlat / dfr * 0.1, 2)})
+        out.append({"sku": sku, "phase": phase, "dtype": dtype, "T": T,
+                    "n_points": len(fr), "curve": curve, "marginal": marg})
+    return out
 
 
 def model_envelope(series, here):
@@ -358,6 +403,7 @@ def main() -> int:
            "scaling": scaling(s), "scaling_efficiency": scaling_efficiency(s),
            "model_envelope": model_envelope(s, here),
            "distribution_summary": distribution_summary(s, a.results_dir),
+           "resource_pareto": resource_pareto(s),
            "recommendations": recommendations(s)}
     if a.baseline:
         regs = regressions(s, load(a.baseline))
@@ -373,6 +419,9 @@ def main() -> int:
     if tp:
         print(f"topology penalty (EP4->EP8): {len(tp)} cells; e.g. "
               + ", ".join(f"{x['sku']} T{x['T']} {x['penalty_pct']:+}%" for x in tp[:3]))
+    rpar = rep["resource_pareto"]
+    print(f"resource-Pareto cells (>=2 fractions, fixed-kernel excluded): {len(rpar)}"
+          + (f"; e.g. {rpar[0]['sku']} T{rpar[0]['T']} {rpar[0]['n_points']} pts" if rpar else " (need an sm_fraction ladder)"))
     print(f"LL crossover cells: {len(rep['ll_crossover'])}; recommendations: {len(rep['recommendations'])}")
     for r in rep["recommendations"]:
         print(f"  rec {r['sku']}/{r['phase']} @T{r['at_T']}: {r['lowest_p99_dispatch_us']}us via {r['config']}")

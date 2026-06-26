@@ -124,6 +124,13 @@ on:
         type: choice
         default: packed
         options: [packed, striped, runtime-native, adversarial]
+      sm_fraction:
+        # normalized comm-resource fraction (DeepEP sm_fraction*SMs / MoRI ~*CUs). Sweep this with
+        # resource_mode=normalized to build the resource-Pareto (latency vs comm fraction). Blank =
+        # harness default 0.18.
+        description: Normalized comm-resource fraction (resource_mode=normalized)
+        type: string
+        default: ''
 
 concurrency:
   # Group per (SKU + FULL config): GitHub keeps only one running + one pending per group and
@@ -131,7 +138,10 @@ concurrency:
   # self-cancel down to ~2. Including dtype/mode/contract/routing/eplb/phase gives each config
   # its OWN group -> all configs survive; they queue only on the runner's own capacity, not on
   # GitHub concurrency. cancel-in-progress FALSE so a re-dispatch of the SAME config queues.
-  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}
+  # The group includes the resource/value/placement axes (sm_fraction, resource_mode,
+  # activation_profile, placement) too — otherwise a Pareto sm-fraction sweep or an activation/
+  # placement sweep (same dtype/mode/contract/routing/phase) would self-cancel down to ~2 runs.
+  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.placement }}
   cancel-in-progress: false
 
 permissions:
@@ -217,6 +227,7 @@ jobs:
       CX_CANONICAL: ${{ inputs.canonical && '1' || '' }}
       CX_ACTIVATION_PROFILE: ${{ inputs.activation_profile }}
       CX_PLACEMENT: ${{ inputs.placement }}
+      CX_SM_FRACTION: ${{ inputs.sm_fraction }}
       # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
       # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}

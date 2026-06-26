@@ -353,14 +353,22 @@ def _resource_profile(prov: dict, args) -> dict:
     requested = args.sm_fraction if args.resource_mode == "normalized" else None
     achieved = (cfg / dev) if (cfg and dev) else None
     floored = bool(prov.get("block_num_floored"))
-    if floored:
-        cls = "minimum-functional"            # backend needed MORE than requested to run
+    # FIXED-KERNEL split (goal P3 / immediate P0): a kernel whose comm occupancy is fixed by the
+    # library and NOT a normalized/tuned SM/CU budget (DeepEP LL: num_sms=None, low_latency_mode,
+    # tuned_source=ll-fixed-kernel) is NOT a resource-constrained run. It gets resource_class=
+    # fixed-kernel + conformance not-applicable, and is excluded from resource-Pareto comparisons.
+    fixed_kernel = bool(prov.get("low_latency_mode")) or ("fixed-kernel" in str(prov.get("tuned_source", "")))
+    if fixed_kernel:
+        resource_class, cls = "fixed-kernel", "not-applicable"
+    elif floored:
+        resource_class, cls = "resource-constrained", "minimum-functional"  # needed MORE than requested
     elif args.resource_mode == "normalized":
-        cls = "resource-conforming"
+        resource_class, cls = "resource-constrained", "resource-conforming"
     elif args.resource_mode == "tuned":
+        resource_class = "backend-tuned"
         cls = "best-known" if "default" not in str(prov.get("tuned_source", "")) else "backend-default"
     else:
-        cls = "backend-default"
+        resource_class, cls = "backend-default", "backend-default"
     # within tolerance? (normalized only — did we hit the requested fraction?)
     tol = 0.10
     target_achieved = (requested is not None and achieved is not None
@@ -373,8 +381,12 @@ def _resource_profile(prov: dict, args) -> dict:
         "qps_per_rank": prov.get("num_qps_per_rank"),
         "persistent_bytes": prov.get("num_nvl_bytes") or prov.get("num_rdma_bytes") or prov.get("heap_size"),
         "tuned_source": prov.get("tuned_source"),
+        # resource_class: fixed-kernel | resource-constrained | backend-tuned | backend-default.
+        # fixed-kernel + backend-* are NOT normalized resource-constrained runs (excluded from Pareto).
+        "resource_class": resource_class,
         "conformance_class": cls, "tolerance": tol, "target_achieved_within_tol": target_achieved,
-        "nonconforming": floored,
+        "nonconforming": floored, "fixed_kernel": fixed_kernel,
+        "pareto_eligible": (resource_class == "resource-constrained" and not floored),
     }
 
 
@@ -768,7 +780,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                            and bool(getattr(args, "image_digest", ""))
                            and bool(git_run) and all((git_run or {}).get(k) for k in ("run_id", "source_sha")))
     floored = bool(prov.get("block_num_floored"))
-    resource_conformance = ("minimum-functional-nonconforming" if floored
+    # fixed-kernel (DeepEP LL) is NOT a normalized resource-constrained run -> conformance N/A
+    # (immediate P0 "split LL fixed-kernel from normalized-resource"). Not a conformance failure.
+    fixed_kernel = bool(prov.get("low_latency_mode")) or ("fixed-kernel" in str(prov.get("tuned_source", "")))
+    resource_conformance = ("not-applicable" if fixed_kernel
+                            else "minimum-functional-nonconforming" if floored
                             else ("resource-conforming" if args.resource_mode == "normalized"
                                   else "backend-default" if args.resource_mode in ("tuned", "default")
                                   else "unspecified"))

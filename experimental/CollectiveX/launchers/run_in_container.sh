@@ -92,8 +92,32 @@ cx_stage_canonical() {
 # run_ep_suite <backend: deepep|mori>
 # One tests/run_ep.py invocation per phase (decode/prefill/both); dispatch and
 # combine are timed separately inside it. One JSON per (backend, phase).
+# Preserve a FAILED case as a classified record (goal immediate P2 "preserve failed cases in
+# aggregation") so a wedge/timeout/crash becomes a bounded artifact in results/ (uploaded + surfaced
+# by the plot/validator) instead of vanishing. Uses tests/failure_taxonomy.py for the mode.
+emit_failed_case() {  # backend phase rc
+  python3 - "$1" "$2" "$3" "$CX_RUNNER" "$CX_TOPO" \
+    "results/failed_${CX_RUNNER}_${1}_${2}_${CX_TS}.json" <<'PY' || true
+import sys, json, os
+sys.path.insert(0, "tests")
+import failure_taxonomy as ft
+backend, phase, rc, runner, topo, out = sys.argv[1:7]
+rec = {"family": "moe", "record_type": "failed-case", "schema_version": 3,
+       "generated_by": "run_in_container.sh", "runner": runner, "backend": backend,
+       "phase": phase, "topology_class": topo, "status": "failed",
+       "publication_status": "failed", "rows": [],
+       "failure": ft.record(rc=int(rc), case={"backend": backend, "phase": phase,
+                            "dispatch_dtype": os.environ.get("CX_DISPATCH_DTYPE", "bf16"),
+                            "mode": os.environ.get("CX_MODE", "normal"),
+                            "contract": os.environ.get("CX_MEASUREMENT_CONTRACT", "layout-and-dispatch-v1"),
+                            "routing": os.environ.get("CX_ROUTING", "uniform")})}
+json.dump(rec, open(out, "w"), indent=2)
+print(f"preserved failed-case record ({rec['failure']['failure_mode']}) -> {out}")
+PY
+}
+
 run_ep_suite() {
-  local backend="$1" phase phases ladder rc=0
+  local backend="$1" phase phases ladder rc=0 rc_run
   ladder="$(cx_ep_ladder)"
   phases="${CX_PHASE:-decode}"
   [ "$phases" = "both" ] && phases="decode prefill"
@@ -103,7 +127,7 @@ run_ep_suite() {
     # Hard wall-clock guard: a wedged collective (e.g. a backend that hangs at a shape)
     # must FAIL FAST, never burn the whole job timeout. timeout -k sends SIGKILL after
     # a grace period. Override with CX_RUN_TIMEOUT (seconds).
-    if ! timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
+    timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
         torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
         --phase "$phase" --tokens-ladder "$ladder" --mode "${CX_MODE:-normal}" \
         --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
@@ -118,8 +142,12 @@ run_ep_suite() {
         --combine-dtype "${CX_COMBINE_DTYPE:-bf16}" --combine-quant-mode "${CX_COMBINE_QUANT_MODE:-none}" \
         ${CX_WAIVE_ANOMALY:+--waive-anomaly} \
         --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
-        --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"; then
-      cx_log "WARN: $backend $phase run failed/timed out (CX_RUN_TIMEOUT=${CX_RUN_TIMEOUT:-900}s)"; rc=1
+        --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
+    rc_run=$?
+    if [ "$rc_run" != 0 ]; then
+      cx_log "WARN: $backend $phase run failed/timed out rc=$rc_run (CX_RUN_TIMEOUT=${CX_RUN_TIMEOUT:-900}s)"
+      emit_failed_case "$backend" "$phase" "$rc_run"   # preserve the classified failed case
+      rc=1
     fi
   done
   return "$rc"
