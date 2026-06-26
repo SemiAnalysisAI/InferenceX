@@ -6,11 +6,20 @@ backends:
   deepep:
     vendor: nvidia
     modes: [normal, ll]                 # ll is DECODE-ONLY (fixed num_max dispatch)
-    dtypes: [bf16, fp8]
+    dtypes: [bf16, fp8]                  # DISPATCH-side precision
     contracts: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
     transports: [nvlink, mnnvl, rdma]
     ep_max_intranode: 8                  # <=8 ranks = intranode NVL kernel (incl. MNNVL trays)
     ep_min: 2
+    # combine path + distribution semantics (goal P2 "distribution + quant-combine constraints").
+    # bf16/none combine only (quantized combine reserved until a kernel is wired); honors any
+    # routing trace + EPLB; all activation profiles runnable (value-neutral under bf16).
+    combine_dtypes: [bf16]
+    quant_modes: [none]
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate, zipf-heavy,
+               hotspot-single, hotspot-moving, alternating-groups]
+    eplb: true
+    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
     phase_constraints:
       ll: {phases: [decode], max_tokens_per_rank: 128}   # LL is a fixed-num_max decode path
     required_image: "lmsysorg/sglang:v0.5.11-cu130"
@@ -23,6 +32,12 @@ backends:
     transports: [xgmi, rdma]
     ep_max_intranode: 8
     ep_min: 2
+    combine_dtypes: [bf16]               # + fp8 when ROCm/MoRI PR311 quant_type combine lands
+    quant_modes: [none]                  # + the PR311 mode id once validated
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate, zipf-heavy,
+               hotspot-single, hotspot-moving, alternating-groups]
+    eplb: true
+    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
     phase_constraints:
       normal: {max_tokens_per_rank: 512}   # 2 GiB registerable heap cap at hidden=7168
     required_image: "rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2"

@@ -27,18 +27,27 @@ SKU_VENDOR = {
 # Backend capability table — MIRRORS the adapter SUPPORTED_* sets (the runtime source of
 # truth). Keep in sync with ep_deepep.py / ep_mori.py. LL is decode-only; cached-layout is
 # normal-only; MoRI is bf16/normal/layout-and-dispatch only.
+# All synthetic routing distributions (trace transforms — backend-agnostic) + the temporal modes.
+ALL_ROUTINGS = ["uniform", "balanced", "balanced-rank-local", "zipf", "zipf-mild",
+                "zipf-moderate", "zipf-heavy", "hotspot-single", "hotspot-moving", "alternating-groups"]
+# Activation value profiles. Under bf16 combine all are RUNNABLE but latency-neutral; the
+# non-normal ones become latency-relevant only under a quantized combine (PR311 — see quant_modes).
+ALL_ACTIVATION_PROFILES = ["normal", "zeros", "small-amplitude", "wide-dynamic-range", "fp8-saturation"]
 CAP = {
     "deepep": {
         "vendors": ["nvidia"],
         "modes": ["normal", "ll"],
         "dtypes": ["bf16", "fp8"],            # DISPATCH-side precision
-        "contracts": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1"],
+        "contracts": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"],
         "transports": ["nvlink", "rdma"],
         # Combine path is a SEPARATE axis from dispatch dtype (review): today combine is bf16
         # with no quant on every backend regardless of dispatch_dtype. fp8/quantized combine is
         # reserved until a kernel is wired — capability rejects it so it can't be silently faked.
         "combine_dtypes": ["bf16"],
         "quant_modes": ["none"],
+        # routing/EPLB/activation semantics (goal P2 "distribution + quant-combine constraints in
+        # capabilities"): DeepEP honors any trace (routing is a pure trace transform) + EPLB.
+        "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
     "mori": {
         "vendors": ["amd"],
@@ -48,6 +57,8 @@ CAP = {
         "transports": ["xgmi", "rdma"],
         "combine_dtypes": ["bf16"],           # + "fp8" when the MoRI quant_type combine path (PR311) lands
         "quant_modes": ["none"],              # + the PR311 mode id once validated
+        # MoRI also honors any trace + EPLB (a routing-trace transform), bf16 value-neutral.
+        "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
 }
 # nccl/rccl are collective primitives, not EP dispatch/combine — phase is meaningless.
@@ -58,9 +69,11 @@ VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep"], "amd": ["rccl", "mori"]}
 
 
 def resolve(sku, backend, mode="normal", dtype="bf16",
-            contract="layout-and-dispatch-v1", combine_dtype="bf16", combine_quant_mode="none"):
+            contract="layout-and-dispatch-v1", combine_dtype="bf16", combine_quant_mode="none",
+            routing="uniform", eplb=False, activation_profile="normal"):
     """Return (ok: bool, reason: str). dtype = DISPATCH precision; combine_dtype/
-    combine_quant_mode are the SEPARATE combine-path axes (default bf16/none = today's behavior)."""
+    combine_quant_mode are the SEPARATE combine-path axes (default bf16/none = today's behavior).
+    routing/eplb/activation_profile gate the distribution semantics a backend admits (goal P2)."""
     sku = (sku or "").split("_")[0]
     vendor = SKU_VENDOR.get(sku)
     if vendor is None:
@@ -87,6 +100,18 @@ def resolve(sku, backend, mode="normal", dtype="bf16",
     if combine_quant_mode not in cap.get("quant_modes", ["none"]):
         return False, (f"{backend} quant_modes={cap.get('quant_modes', ['none'])} "
                        f"(got '{combine_quant_mode}') — quant combine not wired yet")
+    if routing not in cap.get("routings", ALL_ROUTINGS):
+        return False, f"{backend} routings={cap.get('routings', ALL_ROUTINGS)} (got '{routing}')"
+    if eplb and not cap.get("eplb", False):
+        return False, f"{backend} does not support EPLB"
+    if activation_profile not in cap.get("activation_profiles", ["normal"]):
+        return False, (f"{backend} activation_profiles={cap.get('activation_profiles', ['normal'])} "
+                       f"(got '{activation_profile}')")
+    # an activation profile that needs special scaling is only MEANINGFUL under a quantized combine
+    # (bf16 is value-independent) — runnable but flagged so it isn't read as a latency result.
+    if activation_profile != "normal" and combine_quant_mode == "none":
+        return True, (f"ok (note: activation_profile={activation_profile} is latency-neutral under "
+                      f"bf16/none combine — value sensitivity needs a quantized combine)")
     return True, "ok"
 
 
@@ -97,6 +122,9 @@ def main() -> int:
     ap.add_argument("--contract", default="layout-and-dispatch-v1")
     ap.add_argument("--combine-dtype", default="bf16")
     ap.add_argument("--combine-quant-mode", default="none")
+    ap.add_argument("--routing", default="uniform")
+    ap.add_argument("--eplb", action="store_true")
+    ap.add_argument("--activation-profile", default="normal")
     ap.add_argument("--list", action="store_true")
     a = ap.parse_args()
     if a.list:
@@ -104,10 +132,12 @@ def main() -> int:
                           "collective": COLLECTIVE, "vendor_backends": VENDOR_BACKENDS}, indent=2))
         return 0
     ok, reason = resolve(a.sku, a.backend, a.mode, a.dtype, a.contract,
-                         a.combine_dtype, a.combine_quant_mode)
+                         a.combine_dtype, a.combine_quant_mode,
+                         a.routing, a.eplb, a.activation_profile)
     print(f"{'VALID' if ok else 'INVALID'}: sku={a.sku} backend={a.backend} mode={a.mode} "
           f"dtype={a.dtype} contract={a.contract} combine_dtype={a.combine_dtype} "
-          f"combine_quant_mode={a.combine_quant_mode} — {reason}")
+          f"combine_quant_mode={a.combine_quant_mode} routing={a.routing} eplb={a.eplb} "
+          f"activation_profile={a.activation_profile} — {reason}")
     return 0 if ok else 3
 
 

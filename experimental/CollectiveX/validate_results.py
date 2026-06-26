@@ -40,6 +40,9 @@ def derive_publication_status(v: dict) -> str:
              and v.get("measurement_conformance") == "conformant")
     if str(v.get("resource_conformance", "")).endswith("nonconforming"):
         return "diagnostic"
+    # contract-level anomaly (goal P1-e/f): demotes to diagnostic unless waived (anomaly_free).
+    if not v.get("anomaly_free", True):
+        return "diagnostic"
     if sound and v.get("provenance_complete") and v.get("workload_source") == "canonical-serialized":
         return "official"
     if sound:
@@ -94,12 +97,29 @@ def validate_doc(doc, schema, path):
         for op in ("dispatch", "combine", "roundtrip"):
             if op not in r or "p99" not in r.get(op, {}):
                 errs.append(f"T={r.get('tokens_per_rank')}: missing {op} percentiles"); break
+    # anomaly self-consistency (goal P1-e): validity.anomaly_free must equal (no anomalies or waived).
+    anoms = doc.get("anomalies") or []
+    waived = (doc.get("anomaly_summary") or {}).get("waived", False)
+    expect_anomaly_free = (len(anoms) == 0) or bool(waived)
+    if v.get("anomaly_free", True) != expect_anomaly_free:
+        errs.append(f"validity.anomaly_free={v.get('anomaly_free')} but {len(anoms)} anomalies "
+                    f"(waived={waived}) imply {expect_anomaly_free}")
+    if anoms and not waived and recorded not in ("diagnostic", "invalid", "failed"):
+        errs.append(f"{len(anoms)} unwaived timing anomaly(ies) but status={recorded} (must be diagnostic)")
     # official-grade gates
     if recorded == "official":
         if not v.get("provenance_complete"):
             errs.append("official but provenance_complete=false")
         if v.get("workload_source") != "canonical-serialized":
             errs.append("official but workload not canonical-serialized")
+        # goal P1: official requires NON-NULL workload identity (id + signature).
+        wl = doc.get("workload") or {}
+        if not wl.get("workload_id"):
+            errs.append("official but workload_id is null (non-null workload identity required)")
+        if not wl.get("trace_signature"):
+            errs.append("official but trace_signature is null")
+        if anoms and not waived:
+            errs.append("official but has unwaived timing anomalies")
         if rows and min((r.get("samples_pooled", 0) for r in rows)) < MIN_SAMPLES_OFFICIAL:
             errs.append(f"official but a point has <{MIN_SAMPLES_OFFICIAL} pooled samples")
         if not all(r.get("correct") for r in rows):

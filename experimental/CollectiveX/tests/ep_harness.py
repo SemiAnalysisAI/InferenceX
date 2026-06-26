@@ -53,6 +53,22 @@ PREFILL_LADDER = [128, 256, 512, 1024, 2048, 4096]
 
 _DTYPE_BYTES = {"bf16": 2, "fp16": 2, "fp8": 1}
 
+# Phase profiles (goal P2 "decode/prefill representation"): decode/prefill are token-size REGIMES
+# that also carry distinct serving semantics — NOT merely ladder aliases. Emitted into the doc so a
+# T=128 point launched under "prefill" is never silently read as decode (the shared-T overlap is
+# the same kernel at the same T; the phase records what serving situation it stands in). Each point
+# is ONE MoE layer, ONE step, a SINGLE dispatch+combine collective pair — not a whole model or
+# several concurrent layers.
+PHASE_PROFILE = {
+    "decode": {"regime": "decode", "tokens_per_iter": "1 (or few) per active sequence",
+               "microbatch": "one decode step across the active sequences",
+               "routing_variability": "varies step-to-step (temporal routing modes model this)",
+               "represents": "one MoE layer · one decode step · one dispatch+combine collective"},
+    "prefill": {"regime": "prefill", "chunk": "chunked-prefill — many tokens/sequence per MoE layer",
+                "request_mixture": "tokens of one chunk entering a single MoE layer at once",
+                "represents": "one MoE layer · one prefill chunk · one dispatch+combine collective"},
+}
+
 
 def add_common_args(ap: argparse.ArgumentParser) -> None:
     """CLI args shared by every backend (the entrypoint adds --backend)."""
@@ -73,15 +89,32 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="combine-input precision (today bf16 everywhere; fp8 = future quant combine)")
     ap.add_argument("--combine-quant-mode", default="none",
                     help="combine quantization mode; 'none' today. capability.py rejects unwired modes")
-    ap.add_argument("--activation-profile", default="normal", choices=["normal"],
-                    help="value distribution of expert inputs; seeded N(0,1) today. lognormal/"
-                         "model-trace reserved for the value-sensitivity rig (not yet wired)")
+    # Activation VALUE distribution of expert inputs (goal P2). normal = seeded N(0,1) (the only
+    # latency-relevant one under bf16 combine — bf16 is value-independent); the others stress a
+    # FUTURE quantized combine's scale computation (amax/outliers/saturation). routing.py owns
+    # the generators; capability.py gates which a backend/mode admits.
+    ap.add_argument("--activation-profile", default="normal",
+                    choices=["normal", "zeros", "small-amplitude", "wide-dynamic-range", "fp8-saturation"],
+                    help="value distribution of expert inputs (routing.ACTIVATION_PROFILES)")
     # uniform = realistic top-k (fan-out ≈5.3 over EP8); balanced = load-equalized,
     # one-expert-per-rank (fan-out = ep_size); balanced-rank-local = fan-out 1 (min
-    # comm) edge case; zipf = skewed. Default to the REALISTIC one.
+    # comm) edge case; zipf = skewed; hotspot-* = adversarial single hot expert (static
+    # or moving across steps); alternating-groups = expert halves that toggle by step.
     ap.add_argument("--routing", default="uniform",
                     choices=["uniform", "balanced", "balanced-rank-local", "zipf",
-                             "zipf-mild", "zipf-moderate", "zipf-heavy", "hotspot-single"])
+                             "zipf-mild", "zipf-moderate", "zipf-heavy", "hotspot-single",
+                             "hotspot-moving", "alternating-groups"])
+    # Temporal snapshot index for the moving/alternating distributions (goal P2 "temporal routing
+    # changes"). One run = one step; a temporal suite launches steps 0..N and analyze_ep compares
+    # them. Folds into workload_id only when non-zero (preserves existing canonical ids).
+    ap.add_argument("--routing-step", type=int, default=0,
+                    help="temporal step for hotspot-moving / alternating-groups (0 = first/static)")
+    # Uneven source-token allocation (goal P2 "support uneven source-token allocation"): per-rank
+    # token counts vary (global may not divide EP); empty-source-rank case included. Default 'none'
+    # = every rank gets exactly the ladder T (perfectly even; source-token CV 0) — no behavior
+    # change for existing runs. 'linear' ramps counts ~0.5T..1.5T; 'empty-rank' zeroes rank 0.
+    ap.add_argument("--uneven-tokens", default="none", choices=["none", "linear", "empty-rank"],
+                    help="per-rank source-token allocation skew (records source_token_stats)")
     # EPLB (Expert-Parallel Load Balancer): replicate hot experts onto redundant physical
     # slots + balanced-place so per-rank load equalizes. A pure routing-trace transform
     # (tests/eplb.py); experts becomes num_logical+redundant. The remedy for `zipf` skew.
@@ -105,8 +138,14 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     #   cached-layout-comm-only-v1 — layout computed ONCE untimed; dispatch times pure
     #                              comm (DeepEP-only; matches DeepEP's own benchmark).
     # Combine excludes staging in BOTH (staging is untimed for every backend).
+    #   runtime-visible-v1       — the serving-realistic boundary: dispatch starts from what the
+    #                              runtime has right after routing and INCLUDES required quant /
+    #                              scale creation / layout / packing / comm / sync; combine starts
+    #                              from expert outputs and ends when token outputs are consumable.
+    #                              (DeepEP-only today; the FP8 cast moves INSIDE the timed window.)
     ap.add_argument("--measurement-contract", default="layout-and-dispatch-v1",
-                    choices=["layout-and-dispatch-v1", "cached-layout-comm-only-v1"])
+                    choices=["layout-and-dispatch-v1", "cached-layout-comm-only-v1",
+                             "runtime-visible-v1"])
     ap.add_argument("--num-sms", type=int, default=24,
                     help="DeepEP comm-SM budget in 'default' resource-mode (MoRI uses block_num/warps)")
     # Resource regime (review: budgets were neither normalized nor tuned):
@@ -136,6 +175,14 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
                     help="independent timed trials, token-order randomized per trial; samples pooled")
     ap.add_argument("--allow-unknown-provenance", action="store_true",
                     help="permit a run with unpinned backend commit/version (default: fail)")
+    # Anomaly waiver (goal P1: roundtrip/isolated_sum threshold -> diagnostic unless explicitly
+    # waived). Without this, a measured roundtrip implausibly larger/smaller than its components
+    # (e.g. the open LL-FP8 anomaly) demotes the result to 'diagnostic'. Pass to keep it
+    # comparable-experimental/official AFTER the cause is understood + documented.
+    ap.add_argument("--waive-anomaly", action="store_true",
+                    help="do not let a flagged timing anomaly demote publication_status to diagnostic")
+    ap.add_argument("--roundtrip-anomaly-threshold", type=float, default=3.0,
+                    help="roundtrip p99 > threshold x isolated_sum p99 is flagged as an anomaly")
     # provenance / output
     ap.add_argument("--runner", required=True)
     ap.add_argument("--topology-class", required=True)
@@ -164,6 +211,40 @@ def token_ladder(spec: str, phase: str, cap: int | None) -> tuple[list[int], lis
     if cap is not None:
         return [t for t in want if t <= cap], [t for t in want if t > cap]
     return want, []
+
+
+def source_token_counts(nominal_T: int, ep_size: int, mode: str) -> list[int]:
+    """Per-rank source-token counts for the uneven-allocation study (goal P2). 'none' = even
+    (every rank nominal_T; global = nominal_T*ep). 'linear' = a deterministic ramp ~0.5T..1.5T
+    (mean ≈ T, so global tokens stay ~the same but ranks are imbalanced). 'empty-rank' = rank 0
+    gets 0 and the rest share evenly (the empty-source-rank case). Deterministic => identical on
+    every rank. Counts are clamped to >=0; total need not divide ep_size."""
+    if mode == "none" or ep_size <= 1:
+        return [nominal_T] * ep_size
+    if mode == "empty-rank":
+        if ep_size < 2:
+            return [nominal_T]
+        # rank 0 empty; spread ep_size*T across the remaining ranks (keeps ~global constant).
+        total = nominal_T * ep_size
+        per = max(1, total // (ep_size - 1))
+        return [0] + [per] * (ep_size - 1)
+    # linear ramp from ~0.5T to ~1.5T across ranks (mean ≈ T). At least 1 token/rank.
+    if ep_size == 1:
+        return [nominal_T]
+    lo, hi = 0.5 * nominal_T, 1.5 * nominal_T
+    return [max(1, int(round(lo + (hi - lo) * r / (ep_size - 1)))) for r in range(ep_size)]
+
+
+def _stats_vec(xs: list[int]) -> dict:
+    """min/mean/max/CV (+ empty count) of a per-rank count vector — self-describing source-token
+    or load summary without dumping the full vector."""
+    n = len(xs) or 1
+    mean = sum(xs) / n
+    var = sum((x - mean) ** 2 for x in xs) / n
+    cv = (var ** 0.5 / mean) if mean > 0 else 0.0
+    return {"min": min(xs) if xs else 0, "mean": round(mean, 3),
+            "max": max(xs) if xs else 0, "cv": round(cv, 4),
+            "empty_ranks": sum(1 for x in xs if x == 0), "total": sum(xs), "ranks": n}
 
 
 def percentile(xs: list[float], q: float) -> float:
@@ -311,6 +392,10 @@ def _derive_publication_status(v: dict) -> str:
     # resource-nonconforming but otherwise sound -> diagnostic (not a fair cross-platform point)
     if v["resource_conformance"].endswith("nonconforming"):
         return "diagnostic"
+    # contract-level anomaly (goal P1-e/f): a flagged roundtrip/isolated_sum mismatch demotes to
+    # diagnostic unless explicitly waived (validity.anomaly_free reflects the waiver).
+    if not v.get("anomaly_free", True):
+        return "diagnostic"
     if sound and v["provenance_complete"] and v["workload_source"] == "canonical-serialized":
         return "official"
     if sound:
@@ -375,7 +460,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     eplb_plan = None
     if eplb_on:
         ref_idx, _ = routing.build_global_routing(max(ladder) * ep_size, num_logical, args.topk,
-                                                  args.routing, args.seed, num_logical // ep_size)
+                                                  args.routing, args.seed, num_logical // ep_size,
+                                                  step=routing_step)
         load = torch.bincount(ref_idx.reshape(-1), minlength=num_logical).float().tolist()
         eplb_plan = eplb.build_plan(load, args.experts, ep_size)
         if rank == 0:
@@ -385,6 +471,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                   f"replicated (hottest {eplb_plan['max_replicas']}x)")
 
     canonical = bool(getattr(args, "workload_dir", ""))
+    uneven = getattr(args, "uneven_tokens", "none")
+    if canonical and uneven != "none":
+        if rank == 0:
+            print(f"ERROR: --uneven-tokens={uneven} is incompatible with --workload-dir "
+                  f"(canonical workloads are serialized at a fixed global-token count per id); "
+                  f"use seeded-runtime for the uneven-allocation study.")
+        return 2
+    routing_step = int(getattr(args, "routing_step", 0))
     loaded_workload_ids, loaded_checksums = [], {}
     if canonical:
         import workload as _wl
@@ -393,7 +487,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # canonical: load pre-serialized trace bytes (verified by checksum) so this run is
         # provably the SAME workload as any other consuming the same files. else: seeded gen.
         if canonical:
-            wid = _wl.compute_workload_id(args.routing, args.hidden, args.topk, num_logical, gt, args.seed)
+            wid = _wl.compute_workload_id(args.routing, args.hidden, args.topk, num_logical, gt,
+                                          args.seed, step=routing_step)
             idx_np, w_np, man = _wl.load_workload(os.path.join(args.workload_dir, f"{wid}.npz"), verify=True)
             idx_l = torch.from_numpy(idx_np).to(torch.int64)
             w = torch.from_numpy(w_np).to(torch.float32)
@@ -402,7 +497,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 loaded_checksums[wid] = man.get("checksums")
         else:
             idx_l, w = routing.build_global_routing(gt, num_logical, args.topk, args.routing,
-                                                    args.seed, num_logical // ep_size)
+                                                    args.seed, num_logical // ep_size, step=routing_step)
         return (eplb.remap_idx(idx_l, eplb_plan) if eplb_plan is not None else idx_l), w
 
     # Fabric/clock warm-up BEFORE any timed point (review: H200 had an anomalous cold
@@ -414,7 +509,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     for wt in warm_shapes:
         wi, ww = build_trace(wt * ep_size)
         wsi, wsw = routing.rank_slice(wi, ww, rank, wt)
-        wx = routing.rank_activations(wt, args.hidden, args.seed, rank, device, torch.bfloat16)
+        wx = routing.rank_activations(wt, args.hidden, args.seed, rank, device, torch.bfloat16,
+                                      profile=args.activation_profile)
         wp = backend.make_problem(wt, wsi.to(device), wsw.to(device), wx)
         for _ in range(8):
             wh = backend.dispatch(wp); backend.stage(wp, wh); backend.combine(wp, wh)
@@ -437,26 +533,43 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     # ---- Pass 1: build the per-T problem ONCE (deterministic trace + cached layout per
     # contract), run the correctness gate ONCE. Timing is Pass 2 (pooled over trials). ----
-    problems, gate = {}, {}
+    problems, gate, gts = {}, {}, {}
     routing_hashes = set()
     for T in ladder:
-        gt = T * ep_size
+        # Per-rank source-token counts (goal P2 uneven allocation). mode 'none' => [T]*ep,
+        # gt = T*ep, offsets = 0,T,2T,... — byte-identical to the even path. Otherwise counts
+        # vary (global may not divide ep) and rank 0 may be empty.
+        counts = source_token_counts(T, ep_size, uneven)
+        offsets = [sum(counts[:r]) for r in range(ep_size)]
+        gt = sum(counts)
+        gts[T] = gt
         idx_g, w_g = build_trace(gt)
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
         gpn = args.gpus_per_node or ep_size
-        rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, T, gpn,
-                                                      args.scale_up_domain or None)
+        # placement-aware locality (goal P2): packed/striped/adversarial change which physical
+        # node/domain a rank sits on, so the local/same-node/cross-domain copy fractions differ.
+        rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
+                                                      gpn, args.scale_up_domain or None,
+                                                      placement=args.placement)
+        rstats["source_token_stats"] = _stats_vec(counts)
         routing_hashes.add(rstats["routing_hash"])
-        idx_s, w_s = routing.rank_slice(idx_g, w_g, rank, T)
-        x = routing.rank_activations(T, args.hidden, args.seed, rank, device, torch.bfloat16)
-        problem = backend.make_problem(T, idx_s.to(device), w_s.to(device), x)
+        my_off, my_cnt = offsets[rank], counts[rank]
+        idx_s = idx_g[my_off:my_off + my_cnt].contiguous()
+        w_s = w_g[my_off:my_off + my_cnt].contiguous()
+        x = routing.rank_activations(my_cnt, args.hidden, args.seed, rank, device, torch.bfloat16,
+                                     profile=args.activation_profile)
+        problem = backend.make_problem(my_cnt, idx_s.to(device), w_s.to(device), x)
         h = backend.dispatch(problem); backend.stage(problem, h)
         combined = backend.combine(problem, h)
         torch.cuda.synchronize()
         recv_local = backend.recv_tokens(h)
         exp, n_cmp = backend.expected(problem, h)
-        max_abs = (combined[:n_cmp].float() - exp[:n_cmp].float()).abs().max().item()
-        max_rel = max_abs / (exp[:n_cmp].float().abs().max().item() + 1e-6)
+        # empty source rank (my_cnt==0): nothing to reconstruct locally — gate passes vacuously.
+        if n_cmp > 0:
+            max_abs = (combined[:n_cmp].float() - exp[:n_cmp].float()).abs().max().item()
+            max_rel = max_abs / (exp[:n_cmp].float().abs().max().item() + 1e-6)
+        else:
+            max_rel = 0.0
         problems[T] = problem
         gate[T] = {"rstats": rstats, "recv_local": recv_local,
                    "max_rel": max_rel, "local_ok": 1 if max_rel < tol else 0}
@@ -510,8 +623,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         return {"p50": percentile(xs, 50), "p90": percentile(xs, 90),
                 "p95": percentile(xs, 95), "p99": percentile(xs, 99)}
     rows = []
+    all_anomalies = []                                       # contract-level anomalies (goal P1)
+    thr_rt = float(getattr(args, "roundtrip_anomaly_threshold", 3.0))
     for T in ladder:
-        gt = T * ep_size
+        gt = gts[T]
         g = gate[T]; rstats = g["rstats"]
         d, c, rt = disp_pool[T], comb_pool[T], rt_pool[T]
         dp, cp, rtp = pcts(d), pcts(c), pcts(rt)
@@ -535,6 +650,43 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         token_rank_copies = rstats["routed_copies"]
         token_expert_copies = gt * args.topk
         H = args.hidden
+        # Bandwidth semantics (goal P1 "distinguish all bandwidth concepts"): the ONLY rates we can
+        # defensibly publish are logical-payload (canonical routed bytes / latency) and backend-
+        # buffer (recv-tensor bytes / latency). algorithm/bus/wire bandwidth are NULL — EP
+        # dispatch/combine have no standard busBW model and we have no transport counters, so we
+        # must NOT imply physical NVLink/XGMI/RDMA utilization.
+        def _rate(nbytes, us):
+            return round(nbytes / (us * 1e3), 3) if (us and us > 0) else None
+        disp_bytes_l = token_rank_copies * H * elem_dispatch
+        comb_bytes_l = token_rank_copies * H * 2
+        buf_disp = recv_max * H * elem_dispatch
+        buf_comb = recv_max * H * 2
+        bandwidth = {
+            "logical_payload_rate_gbps": {
+                "dispatch": _rate(disp_bytes_l, dp["p50"]), "combine": _rate(comb_bytes_l, cp["p50"]),
+                "roundtrip": _rate(disp_bytes_l + comb_bytes_l, rtp["p50"])},
+            "backend_buffer_rate_gbps": {
+                "dispatch": _rate(buf_disp, dp["p50"]), "combine": _rate(buf_comb, cp["p50"])},
+            "algorithm_bandwidth_gbps": None, "bus_bandwidth_gbps": None, "wire_utilization": None,
+            "basis": ("logical = canonical routed-payload copies x hidden x dtype / latency; "
+                      "buffer = backend recv tensor / latency; alg/bus/wire = null (no defined "
+                      "EP busBW formula, no transport counters) — NOT physical link utilization"),
+        }
+        # Contract-level anomaly checks (goal P1) — attached to the ROW and rolled into validity.
+        #   roundtrip_gt_isolated_sum: measured RT p99 >> Σ(isolated dispatch+combine) p99 — a
+        #     chained op shouldn't be far larger than its parts (the open LL-FP8 case).
+        #   roundtrip_lt_component_floor: measured RT p50 < max(dispatch,combine) p50 — a chained
+        #     op can't finish faster than its slowest required component (sync semantics violated).
+        row_anoms = []
+        if isum["p99"] > 0 and rtp["p99"] > thr_rt * isum["p99"]:
+            row_anoms.append({"type": "roundtrip_gt_isolated_sum", "T": T,
+                              "roundtrip_p99": round(rtp["p99"], 2), "isolated_sum_p99": round(isum["p99"], 2),
+                              "ratio": round(rtp["p99"] / isum["p99"], 2), "threshold": thr_rt})
+        floor = max(dp["p50"], cp["p50"])
+        if rtp["p50"] > 0 and floor > 0 and rtp["p50"] < 0.95 * floor:
+            row_anoms.append({"type": "roundtrip_lt_component_floor", "T": T,
+                              "roundtrip_p50": round(rtp["p50"], 2), "component_floor_p50": round(floor, 2)})
+        all_anomalies.extend(row_anoms)
         rows.append({
             "tokens_per_rank": T, "global_tokens": gt,
             "dispatch": dp, "combine": cp, "roundtrip": rtp, "isolated_sum": isum,
@@ -567,9 +719,23 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # throughput from the MEASURED round trip ONLY (not isolated_sum).
             "roundtrip_tokens_per_second": (gt / (rtp["p50"] * 1e-6)) if rtp["p50"] > 0 else None,
             "raw_samples": {"dispatch": _histogram(d), "combine": _histogram(c), "roundtrip": _histogram(rt)},
+            # distinguished bandwidth concepts (goal P1) — logical + buffer real, alg/bus/wire null.
+            "bandwidth": bandwidth,
+            # full load + fanout statistics in EVERY row (goal P2 "report full load and fanout"):
             "fanout_mean": rstats["fanout_mean"], "fanout_max": rstats["fanout_max"],
-            "routed_copies": rstats["routed_copies"], "expert_load_max": rstats["expert_load_max"],
+            "fanout_min": rstats["fanout_min"], "fanout_hist": rstats["fanout_hist"],
+            "routed_copies": rstats["routed_copies"],
+            "expert_load_min": rstats["expert_load_min"], "expert_load_max": rstats["expert_load_max"],
+            "expert_load_mean": rstats["expert_load_mean"], "expert_load_cv": rstats["expert_load_cv"],
+            "rank_load_cv": rstats["rank_load_cv"], "hotspot_ratio": rstats["hotspot_ratio"],
+            "dest_rank_load_max": rstats["dest_rank_load_max"],
+            "dest_rank_load_mean": rstats["dest_rank_load_mean"],
+            "empty_expert_count": rstats["empty_expert_count"],
+            "empty_rank_count": rstats["empty_rank_count"],
+            "rank_load_hist": rstats["rank_load_hist"],
+            "source_token_stats": rstats.get("source_token_stats"),
             "routing_hash": rstats["routing_hash"], "locality": rstats.get("locality"),
+            "anomalies": row_anoms,
             "correct": point_ok, "max_rel_error": max_rel,
         })
         if rank == 0:
@@ -618,6 +784,16 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     activation_identity = hashlib.sha256(
         f"{args.activation_profile}|seed={args.seed}|hidden={args.hidden}|gen=collectivex-activation-v1"
         .encode()).hexdigest()[:16]
+    # EPLB mapping identity hash (goal P2) — over the replica placement, not just the counts.
+    eplb_mapping_hash = None
+    if eplb_plan is not None:
+        eplb_mapping_hash = hashlib.sha256(json.dumps(
+            {"phys2log": eplb_plan["phys2log"], "rank_of_phys": eplb_plan["rank_of_phys"],
+             "replicas": eplb_plan["replicas"]}, sort_keys=True).encode()).hexdigest()[:16]
+    # Anomaly roll-up (goal P1-e/f): any flagged row anomaly demotes publication_status to
+    # diagnostic, unless --waive-anomaly (set AFTER the cause is understood + documented).
+    waived = bool(getattr(args, "waive_anomaly", False))
+    anomaly_free = (len(all_anomalies) == 0) or waived
     validity = {
         "execution_status": "complete" if rows else "failed",
         "semantic_correctness": "pass" if (rows and all(r["correct"] for r in rows)) else "fail",
@@ -626,6 +802,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "measurement_conformance": "conformant",   # run_ep gate rejects nonconformant pre-run
         "resource_conformance": resource_conformance,
         "provenance_complete": provenance_complete,
+        # anomaly-free unless a contract-level timing anomaly fired (then diagnostic, see above).
+        "anomaly_free": anomaly_free,
     }
     publication_status = _derive_publication_status(validity)
 
@@ -714,6 +892,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "dispatch_dtype": args.dispatch_dtype, "mode": args.mode,
             "combine_dtype": args.combine_dtype, "combine_quant_mode": args.combine_quant_mode,
             "activation_profile": args.activation_profile,
+            "routing_step": routing_step, "uneven_tokens": uneven,
+            "waive_anomaly": waived,
+            "roundtrip_anomaly_threshold": thr_rt,
             # whether (de)quantization is inside the timed window. fp8_quant_in_timing kept as a
             # back-compat alias (dispatch-side fp8); combine_* are the quant-combine generalization
             # (None today — no quant combine is wired). A backend sets these when it quantizes.
@@ -735,13 +916,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         # EPLB plan + the per-rank load imbalance it removes (the headline of the zipf+EPLB
         # comparison). enabled=False when the run did not apply EPLB.
+        # EPLB mapping IDENTITY (goal P2): logical/physical counts + a hash of the replica
+        # placement (phys2log/rank_of_phys/replicas). Two EPLB runs are only an official comparison
+        # if their mapping_hash matches (cohort.py enforces); zipf vs zipf+eplb is a RECOVERY
+        # experiment, not the same raw workload.
         "eplb": ({"enabled": True, "num_logical_experts": num_logical,
                   "num_physical_experts": args.experts,
                   "num_redundant": args.experts - num_logical,
                   "imbalance_before": eplb_plan["imbalance_before"],
                   "imbalance_after": eplb_plan["imbalance_after"],
                   "replicated_experts": eplb_plan["replicated_experts"],
-                  "max_replicas": eplb_plan["max_replicas"]}
+                  "max_replicas": eplb_plan["max_replicas"],
+                  "mapping_hash": eplb_mapping_hash}
                  if eplb_plan else {"enabled": False}),
         "routing_profile": {
             "routing": args.routing,
@@ -759,6 +945,21 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "isolated_sum_label": "sum of isolated dispatch+combine percentiles — NOT a measured chained op",
             "roundtrip_tokens_per_second": headline["roundtrip_tokens_per_second"],
         },
+        # phase semantics (goal P2): decode/prefill are regimes with distinct serving meaning, not
+        # just ladder aliases — a point is one MoE layer / one step / one collective.
+        "phase_profile": PHASE_PROFILE.get(args.phase, {"regime": args.phase}),
+        # source-token allocation across ranks (goal P2 uneven allocation). 'none' = even.
+        "source_allocation": {
+            "mode": uneven, "routing_step": routing_step,
+            "note": ("even — every rank gets the ladder T (global = T*ep_size)" if uneven == "none"
+                     else "uneven — per-rank source-token counts vary; see rows[].source_token_stats "
+                          "(global may not divide ep_size; empty-source-rank possible)"),
+        },
+        # contract-level timing anomalies (goal P1) — aggregate of the per-row flags; demotes
+        # publication_status to diagnostic unless --waive-anomaly (validity.anomaly_free).
+        "anomalies": all_anomalies,
+        "anomaly_summary": {"count": len(all_anomalies), "waived": waived,
+                            "types": sorted({a["type"] for a in all_anomalies})},
         "rows": rows, "environment": env,
     }
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

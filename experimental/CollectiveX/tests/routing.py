@@ -25,6 +25,16 @@ default having fan-out 1):
                 explicit edge case, honestly named.
   * zipf      — expert popularity ∝ 1/rank (skewed load), uniform-ish fan-out.
 
+Temporal classes (goal Part 2 "temporal routing changes" — the hot set MOVES across decode
+steps; selected by `step`, which every rank passes identically so the trace stays consistent):
+
+  * hotspot-single   — STATIC hotspot: expert 0 hot on every step (the adversarial baseline).
+  * hotspot-moving   — the hot expert is `step % experts` (a hotspot that migrates step-to-step).
+  * alternating-groups — tokens route within one of two disjoint expert halves, the active half
+                toggling with `step % 2` (models expert groups that alternate across steps).
+  * trace-replay     — RESERVED: captured per-step routing from real serving (needs a captured
+                trace loader; not yet wired — `build_global_routing` raises for it).
+
 Always publish the realized fan-out so the workload is never misread again
 (`routing_stats`).
 """
@@ -44,9 +54,11 @@ def _cpu_gen(seed: int) -> "torch.Generator":
 
 
 def build_global_routing(global_tokens: int, experts: int, topk: int,
-                         routing: str, seed: int, experts_per_rank: int):
+                         routing: str, seed: int, experts_per_rank: int, step: int = 0):
     """(idx[gt, topk] int64, weights[gt, topk] float32) on CPU — deterministic,
-    independent of world/EP/platform, experts distinct within a token."""
+    independent of world/EP/platform, experts distinct within a token. `step` selects
+    the temporal snapshot for the moving/alternating distributions (0 = first step =
+    the static behavior; identical on every rank so the trace stays cross-rank consistent)."""
     if topk > experts:
         raise ValueError(f"topk ({topk}) > experts ({experts})")
     gt = int(global_tokens)
@@ -72,17 +84,46 @@ def build_global_routing(global_tokens: int, experts: int, topk: int,
         p = 1.0 / torch.arange(1, experts + 1, dtype=torch.float32).pow(s)
         p = (p / p.sum()).expand(gt, experts)
         idx = torch.multinomial(p, topk, replacement=False, generator=g).to(torch.int64)
-    elif routing == "hotspot-single":
-        # adversarial: expert 0 is in EVERY token's top-k (single hot expert/rank), the other
-        # topk-1 drawn uniformly from the rest — maximal single-rank load.
-        rest = torch.stack([torch.randperm(experts - 1, generator=g)[:topk - 1] + 1
+    elif routing == "hotspot-single" or routing == "hotspot-moving":
+        # adversarial: ONE hot expert is in EVERY token's top-k (max single-rank load), the
+        # other topk-1 drawn uniformly from the rest. hotspot-single pins it at expert 0
+        # (STATIC); hotspot-moving migrates it to `step % experts` (the hot rank moves across
+        # decode steps). Identical math otherwise — `hot` is the only difference.
+        hot = 0 if routing == "hotspot-single" else (int(step) % experts)
+        others = [e for e in range(experts) if e != hot]
+        others_t = torch.tensor(others, dtype=torch.int64)
+        rest = torch.stack([others_t[torch.randperm(experts - 1, generator=g)[:topk - 1]]
                             for _ in range(gt)]).to(torch.int64)
-        idx = torch.cat([torch.zeros(gt, 1, dtype=torch.int64), rest], dim=1)
+        idx = torch.cat([torch.full((gt, 1), hot, dtype=torch.int64), rest], dim=1)
+    elif routing == "alternating-groups":
+        # tokens route ENTIRELY within one disjoint expert half; the active half toggles with
+        # `step % 2` (group A = [0, E/2), group B = [E/2, E)). Models expert groups that
+        # alternate across steps — half the ranks idle each step (a temporal load shift).
+        half = experts // 2
+        if topk > half:
+            raise ValueError(f"alternating-groups needs topk ({topk}) <= experts/2 ({half})")
+        base = 0 if (int(step) % 2 == 0) else half
+        keys = torch.rand(gt, half, generator=g)
+        idx = (keys.argsort(dim=1)[:, :topk].contiguous().to(torch.int64) + base)
+    elif routing == "trace-replay":
+        raise ValueError("trace-replay routing is reserved — needs a captured per-step trace "
+                         "loader (not yet wired); use make_workloads.py + --workload-dir to "
+                         "replay a serialized trace, or pick a synthetic temporal mode")
     else:
-        raise ValueError(f"unknown routing '{routing}' "
-                         f"(uniform|balanced|balanced-rank-local|zipf[-mild|-moderate|-heavy]|hotspot-single)")
+        raise ValueError(
+            f"unknown routing '{routing}' (uniform|balanced|balanced-rank-local|"
+            f"zipf[-mild|-moderate|-heavy]|hotspot-single|hotspot-moving|alternating-groups)")
     weights = torch.softmax(torch.randn(gt, topk, generator=g), dim=1).to(torch.float32)
     return idx, weights
+
+
+# Activation VALUE distributions (goal Part 2 "activation-value sensitivity"). Under bf16 combine
+# these are latency-neutral (bf16 is value-independent — the ratio is ~1.0, the expected null
+# result); they become latency-relevant only under a quantized combine (PR311), where amax /
+# outliers / saturation drive scale computation. Kept here so the rig is ready + the value
+# identity (activation_identity) is honest about which distribution was used.
+ACTIVATION_PROFILES = ("normal", "zeros", "small-amplitude", "wide-dynamic-range", "fp8-saturation")
+_FP8_E4M3_MAX = 448.0   # e4m3 max magnitude — fp8-saturation pushes values to/over this
 
 
 def rank_slice(idx, weights, rank: int, tokens_per_rank: int):
@@ -90,28 +131,82 @@ def rank_slice(idx, weights, rank: int, tokens_per_rank: int):
     return idx[lo:lo + tokens_per_rank].contiguous(), weights[lo:lo + tokens_per_rank].contiguous()
 
 
-def rank_activations(tokens: int, hidden: int, seed: int, rank: int, device, dtype=torch.bfloat16):
+def rank_activations(tokens: int, hidden: int, seed: int, rank: int, device,
+                     dtype=torch.bfloat16, profile: str = "normal"):
+    """Per-rank expert-input activations. Deterministic from (seed, rank) so a given global
+    token has identical activation on every platform. `profile` selects the VALUE distribution
+    (goal Part 2): normal N(0,1); zeros; small-amplitude (×0.01); wide-dynamic-range (heavy-tailed
+    with rare large outliers); fp8-saturation (values scaled to straddle the e4m3 max so an fp8
+    cast saturates). All seeded identically per rank — only the value shape changes."""
     g = _cpu_gen(int(seed) * _RANK_SUBSEED + int(rank) + 1)
-    return torch.randn(tokens, hidden, generator=g, dtype=torch.float32).to(device=device, dtype=dtype)
+    if profile == "zeros":
+        x = torch.zeros(tokens, hidden, dtype=torch.float32)
+    elif profile == "small-amplitude":
+        x = torch.randn(tokens, hidden, generator=g, dtype=torch.float32) * 0.01
+    elif profile == "wide-dynamic-range":
+        # heavy-tailed: N(0,1) base with a sparse (~1%) set of large (×~250) outliers, so amax
+        # per block swings widely token-to-token (the case that stresses per-block fp8 scaling).
+        x = torch.randn(tokens, hidden, generator=g, dtype=torch.float32)
+        spikes = (torch.rand(tokens, hidden, generator=g) < 0.01).float()
+        x = x + spikes * torch.randn(tokens, hidden, generator=g, dtype=torch.float32) * 250.0
+    elif profile == "fp8-saturation":
+        # uniform in [-1,1] scaled to ~1.5× the e4m3 max so a naive fp8 cast clips/saturates.
+        u = torch.rand(tokens, hidden, generator=g, dtype=torch.float32) * 2.0 - 1.0
+        x = u * (_FP8_E4M3_MAX * 1.5)
+    elif profile == "normal":
+        x = torch.randn(tokens, hidden, generator=g, dtype=torch.float32)
+    else:
+        raise ValueError(f"unknown activation profile '{profile}' (one of {ACTIVATION_PROFILES})")
+    return x.to(device=device, dtype=dtype)
+
+
+def placement_perm(ep_size: int, gpus_per_node: int, placement: str) -> list:
+    """phys[logical_rank] -> physical slot, per placement kind (goal Part 2 placement matrix).
+    The physical slot's node = slot // gpus_per_node, domain = slot // scale_up_domain. Single
+    node (ep <= gpus_per_node) makes every placement identical (everything is same-node).
+
+      packed         identity — fill one node/domain before crossing (latency-oriented default).
+      runtime-native identity for now — reproduces the serving placement (link via recipe meta).
+      striped        round-robin logical ranks across nodes (exposes inter-node transport).
+      adversarial    a deterministic scatter that maximizes cross-node/-domain copies.
+    """
+    n = ep_size
+    if gpus_per_node <= 0 or gpus_per_node >= n or placement in ("packed", "runtime-native"):
+        return list(range(n))
+    nodes = (n + gpus_per_node - 1) // gpus_per_node
+    if placement == "striped":
+        # logical r -> node (r % nodes), intra-node slot (r // nodes): spreads neighbors apart.
+        return [min(n - 1, (r % nodes) * gpus_per_node + (r // nodes)) for r in range(n)]
+    if placement == "adversarial":
+        # reverse within the rank space, then stripe — pushes a rank's neighbors to far nodes.
+        return [min(n - 1, ((n - 1 - r) % nodes) * gpus_per_node + ((n - 1 - r) // nodes))
+                for r in range(n)]
+    return list(range(n))
 
 
 def routing_locality(idx, experts_per_rank: int, ep_size: int, tokens_per_rank: int,
-                     gpus_per_node: int, scale_up_domain: int = None) -> dict:
+                     gpus_per_node: int, scale_up_domain: int = None,
+                     placement: str = "packed") -> dict:
     """Locality of the routed (token, dest-rank) copies (goal Part 2 topology section).
-    A token's SOURCE rank is global_id // tokens_per_rank; its DEST ranks are idx // epr.
-    Reports the fraction of copies that stay on the local rank / same node / same scale-up
-    domain vs cross-node / cross-domain — the property a placement (packed/striped) changes."""
+    A token's SOURCE rank is global_id // tokens_per_rank; its DEST ranks are idx // epr. The
+    PLACEMENT maps each logical rank to a physical slot, so node/domain membership — and thus the
+    same-node / same-domain / cross-* fractions — depend on packed vs striped vs adversarial."""
     import torch as _t
     gt = idx.shape[0]
-    dest = (idx // experts_per_rank).clamp(max=ep_size - 1)             # [gt, topk]
-    src = (_t.arange(gt) // max(1, tokens_per_rank)).unsqueeze(1)       # [gt,1] source rank
+    dest = (idx // experts_per_rank).clamp(max=ep_size - 1)             # [gt, topk] dest logical rank
+    src = (_t.arange(gt) // max(1, tokens_per_rank)).clamp(max=ep_size - 1).unsqueeze(1)
     src = src.expand_as(dest)
     sud = scale_up_domain or (gpus_per_node * ep_size)                  # default: all one domain
+    # physical slot of each logical rank, per placement -> node / domain it lives in.
+    perm = placement_perm(ep_size, gpus_per_node, placement)
+    phys = _t.tensor(perm, dtype=_t.int64)
+    pd, ps = phys[dest], phys[src]
     local = (dest == src)
-    same_node = (dest // gpus_per_node) == (src // gpus_per_node)
-    same_dom = (dest // sud) == (src // sud)
+    same_node = (pd // gpus_per_node) == (ps // gpus_per_node)
+    same_dom = (pd // sud) == (ps // sud)
     n = dest.numel()
     return {
+        "placement": placement,
         "local_rank_fraction": float(local.float().mean()),
         "same_node_fraction": float(same_node.float().mean()),
         "same_scaleup_domain_fraction": float(same_dom.float().mean()),
@@ -147,6 +242,14 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
     expert_load_cv = _cv(load)
     rank_load_cv = _cv(rank_load_t)
     hotspot_ratio = float(load.max() / load.mean()) if float(load.mean()) > 0 else 0.0
+    # Empty-expert / empty-rank counts (goal P2 "report full load and fanout statistics"):
+    # how many experts/dest-ranks received ZERO token-copies (the dark side of skew — idle
+    # units while the hot rank stalls). dest-rank load max/mean make the rank histogram
+    # self-describing without re-reading rank_load_hist.
+    empty_expert_count = int((load == 0).sum())
+    empty_rank_count = int((rank_load_t == 0).sum())
+    dest_rank_load_max = int(rank_load_t.max())
+    dest_rank_load_mean = float(rank_load_t.mean())
     # SHA-256 workload identity over BOTH topk_idx and gate weights (review #3): a chart
     # point's routing is provably identical across SKUs only if both hashes match.
     idx_bytes = idx.to(torch.int32).cpu().numpy().tobytes()
@@ -166,5 +269,47 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
         "expert_load_min": int(load.min()), "expert_load_max": int(load.max()),
         "expert_load_mean": float(load.mean()), "expert_load_cv": expert_load_cv,
         "rank_load_cv": rank_load_cv, "hotspot_ratio": hotspot_ratio,
+        "dest_rank_load_max": dest_rank_load_max, "dest_rank_load_mean": dest_rank_load_mean,
+        "empty_expert_count": empty_expert_count, "empty_rank_count": empty_rank_count,
         "routing_hash": routing_hash, "idx_hash": idx_hash, "weights_hash": w_hash,
     }
+
+
+# --------------------------------------------------------------------------- self-test
+if __name__ == "__main__":  # needs torch; verifies temporal modes + value profiles + new stats
+    import sys
+    E, TOPK, EPR, GT = 256, 8, 32, 4096
+    # (1) static vs moving hotspot: the hot expert is 0 for static, step%E for moving.
+    si, _ = build_global_routing(GT, E, TOPK, "hotspot-single", 67, EPR, step=5)
+    assert (si[:, 0] == 0).all(), "hotspot-single must pin expert 0 on every step"
+    mi, _ = build_global_routing(GT, E, TOPK, "hotspot-moving", 67, EPR, step=5)
+    assert (mi[:, 0] == 5).all(), "hotspot-moving step=5 must pin expert 5"
+    mi0, _ = build_global_routing(GT, E, TOPK, "hotspot-moving", 67, EPR, step=0)
+    assert (mi0[:, 0] == 0).all(), "hotspot-moving step=0 == static origin"
+    # all topk distinct (hot + topk-1 from the rest, no collision)
+    assert all(len(set(r.tolist())) == TOPK for r in mi[:16]), "moving-hotspot topk must stay distinct"
+    # (2) alternating-groups: even step -> lower half, odd step -> upper half.
+    a0, _ = build_global_routing(GT, E, TOPK, "alternating-groups", 67, EPR, step=0)
+    a1, _ = build_global_routing(GT, E, TOPK, "alternating-groups", 67, EPR, step=1)
+    assert int(a0.max()) < E // 2 and int(a1.min()) >= E // 2, "alternating-groups must toggle halves"
+    # (3) new stats: uniform low CV / no empties; hotspot high CV + many empty experts.
+    su = routing_stats(build_global_routing(GT, E, TOPK, "uniform", 67, EPR)[0], E, EPR)
+    sh = routing_stats(si, E, EPR)
+    assert su["hotspot_ratio"] < 1.5 and sh["hotspot_ratio"] > 5, "hotspot_ratio must separate uniform/hotspot"
+    assert sh["empty_expert_count"] >= 0 and "empty_rank_count" in sh and "dest_rank_load_max" in sh
+    print(f"routing temporal+stats OK (uniform hotspot_ratio={su['hotspot_ratio']:.2f} "
+          f"hotspot empty_experts={sh['empty_expert_count']} dest_rank_max={sh['dest_rank_load_max']})")
+    # (4) value profiles: distinct value shapes, all finite, fp8-saturation exceeds e4m3 max.
+    dev = torch.device("cpu")
+    z = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32, profile="zeros")
+    assert float(z.abs().max()) == 0.0, "zeros profile must be all-zero"
+    sat = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32, profile="fp8-saturation")
+    assert float(sat.abs().max()) > _FP8_E4M3_MAX, "fp8-saturation must exceed e4m3 max"
+    sm = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32, profile="small-amplitude")
+    assert float(sm.abs().max()) < 1.0, "small-amplitude must be tiny"
+    for prof in ACTIVATION_PROFILES:
+        v = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32, profile=prof)
+        assert torch.isfinite(v).all(), f"{prof} produced non-finite values"
+    print(f"activation profiles OK ({', '.join(ACTIVATION_PROFILES)})")
+    print("routing self-test: PASS")
+    sys.exit(0)

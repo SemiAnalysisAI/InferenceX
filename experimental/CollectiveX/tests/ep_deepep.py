@@ -81,11 +81,16 @@ class DeepEPBackend:
     #   allow_nvlink_for_low_latency_mode (IBGDA not required intranode) on 8xH100.
     SUPPORTED_PRECISIONS = {"bf16", "fp8"}
     SUPPORTED_MODES = {"normal", "ll"}
-    # Both contracts (review #3): layout-and-dispatch-v1 times get_dispatch_layout INSIDE
-    # dispatch; cached-layout-comm-only-v1 hoists the layout out (untimed) so dispatch is
-    # pure comm — matching DeepEP's own benchmark. (cached-layout applies to normal mode;
-    # LL has no separable layout — its low_latency_dispatch computes it internally.)
-    SUPPORTED_CONTRACTS = {"layout-and-dispatch-v1", "cached-layout-comm-only-v1"}
+    # Three contracts (review #3 + goal P1 runtime-visible):
+    #   layout-and-dispatch-v1     — times get_dispatch_layout INSIDE dispatch; fp8 cast/dequant
+    #                                OUTSIDE (preprocessing mirrors a producer handing quantized x).
+    #   cached-layout-comm-only-v1 — layout hoisted out (untimed); dispatch = pure comm (DeepEP's
+    #                                own benchmark boundary). normal mode only.
+    #   runtime-visible-v1         — the serving-realistic boundary: dispatch INCLUDES the fp8
+    #                                quant (cast) + layout + comm + the recv-dequant that makes
+    #                                expert input consumable; combine starts from bf16 expert
+    #                                outputs. (normal mode; LL already times all of this in-kernel.)
+    SUPPORTED_CONTRACTS = {"layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"}
 
     def __init__(self, args, rank, world_size, local_rank, device):
         self.args = args
@@ -97,6 +102,10 @@ class DeepEPBackend:
         self.contract = args.measurement_contract
         # hoist layout out of the timed dispatch only for the cached contract in normal mode.
         self.cache_layout = (self.contract == "cached-layout-comm-only-v1") and not self.ll
+        # runtime-visible-v1: the fp8 cast + recv-dequant move INSIDE the timed dispatch (normal
+        # mode). LL already times cast+layout+comm in its single kernel, so it's runtime-visible
+        # by construction — the flag only changes normal mode's boundary.
+        self.runtime_visible = (self.contract == "runtime-visible-v1") and not self.ll
         self.group = dist.group.WORLD
         assert args.dispatch_dtype in self.SUPPORTED_PRECISIONS and args.mode in self.SUPPORTED_MODES, \
             "run_ep.py must reject unsupported dtype/mode before constructing the backend"
@@ -113,9 +122,9 @@ class DeepEPBackend:
             self._init_normal(args, rank, dev_sms, ver)
 
     def _init_normal(self, args, rank, dev_sms, ver):
-        # fp8 cast is done in make_problem / dequant in stage — both UNTIMED. So fp8
-        # quantization is NOT inside the dispatch timing for DeepEP normal mode.
-        self.fp8_in_timing = False if self.fp8 else None
+        # fp8 cast: UNTIMED (make_problem) under layout-and-dispatch / cached-layout; TIMED (inside
+        # dispatch) under runtime-visible-v1. So fp8_in_timing tracks the contract honestly.
+        self.fp8_in_timing = (self.runtime_visible if self.fp8 else None)
         self.combine_needs_redispatch = False  # normal combine reuses the handle
         # Intranode normal mode: NVLink buffer only. ONE buffer size for ALL points
         # (review: a phase-dependent 2/4 GiB made the shared T=128 point differ between
@@ -184,10 +193,10 @@ class DeepEPBackend:
         # idx[T,topk] int64, weights[T,topk] f32, x[T,hidden] bf16 — the shared trace slice.
         p = types.SimpleNamespace(T=T, x=x, topk_idx=idx.to(torch.int64),
                                   topk_weights=weights.to(torch.float32), layout=None)
-        if self.fp8 and not self.ll:
-            # normal mode: per-token block-128 cast, UNTIMED (preprocessing, mirrors the
-            # real producer that hands the dispatcher already-quantized activations).
-            # LL mode does NOT pre-cast — its kernel casts internally (timed).
+        if self.fp8 and not self.ll and not self.runtime_visible:
+            # layout-and-dispatch / cached-layout: per-token block-128 cast, UNTIMED (preprocessing,
+            # mirrors the real producer that hands the dispatcher already-quantized activations).
+            # runtime-visible does NOT pre-cast (the cast is timed inside dispatch); LL casts in-kernel.
             p.x_fp8, p.x_scales = _per_token_cast_to_fp8(x)
         if self.cache_layout:
             # cached-layout-comm-only-v1: compute the dispatch layout ONCE here (untimed)
@@ -202,17 +211,35 @@ class DeepEPBackend:
             return self._dispatch_ll(p)
         if p.layout is not None:                       # cached-layout-comm-only-v1
             num_tokens_per_rank, num_tokens_per_expert, is_token_in_rank = p.layout
-        else:                                          # layout-and-dispatch-v1 (timed layout)
+        else:                                          # layout-and-dispatch / runtime-visible (timed layout)
             (num_tokens_per_rank, _, num_tokens_per_expert,
              is_token_in_rank, _) = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
-        x_in = (p.x_fp8, p.x_scales) if self.fp8 else p.x  # tuple => DeepEP fp8 dispatch
+        ref_fp8 = ref_scales = None
+        if self.fp8:
+            if self.runtime_visible:
+                # runtime-visible: the per-token block-128 cast is INSIDE the timed dispatch.
+                x_fp8, x_scales = _per_token_cast_to_fp8(p.x)
+                ref_fp8, ref_scales = x_fp8, x_scales      # for the correctness reference
+            else:
+                x_fp8, x_scales = p.x_fp8, p.x_scales      # pre-cast (untimed)
+            x_in = (x_fp8, x_scales)
+        else:
+            x_in = p.x
         recv_x, _recv_idx, recv_topk_weights, _, handle, _ = self.buffer.dispatch(
             x_in, topk_idx=p.topk_idx, topk_weights=p.topk_weights,
             num_tokens_per_rank=num_tokens_per_rank, is_token_in_rank=is_token_in_rank,
             num_tokens_per_expert=num_tokens_per_expert)
-        return types.SimpleNamespace(
+        out = types.SimpleNamespace(
             recv_x=recv_x, recv_topk_weights=recv_topk_weights, handle=handle,
-            is_token_in_rank=is_token_in_rank)
+            is_token_in_rank=is_token_in_rank, ref_fp8=ref_fp8, ref_scales=ref_scales)
+        if self.fp8 and self.runtime_visible:
+            # dispatch ENDS when expert input is consumable: dequant fp8 recv -> bf16 INSIDE the
+            # timed window (the contract's "expert input genuinely consumable" boundary). stage()
+            # then no-ops for this contract.
+            recv_fp8, recv_scales = recv_x
+            out.combine_input = _per_block_dequant(recv_fp8, recv_scales)
+            out.rv_staged = True
+        return out
 
     def _dispatch_ll(self, p):
         # x is bf16; the kernel casts to fp8 internally when use_fp8=True (so for fp8 the
@@ -227,6 +254,8 @@ class DeepEPBackend:
         # comm-only contract: "expert outputs" already exist as recv_x. Dequantize fp8 recv
         # to bf16 HERE (untimed) — the expert-compute boundary — so combine moves bf16 in
         # both precisions. Bf16 recv is staged as-is. (LL recv is 3D; normal recv is 2D.)
+        if getattr(h, "rv_staged", False):
+            return None   # runtime-visible already produced bf16 combine_input inside dispatch (timed)
         if self.ll:
             if self.fp8:
                 recv_fp8, recv_scales = h.recv_x
@@ -262,7 +291,12 @@ class DeepEPBackend:
         ranks_per_token = h.is_token_in_rank.sum(dim=1, keepdim=True).clamp(min=1).float()
         ref = p.x.float()
         if self.fp8:
-            ref = _per_block_dequant(p.x_fp8, p.x_scales).float()
+            # runtime-visible cast lives on the handle (no pre-cast on p); else use the pre-cast.
+            x_fp8 = getattr(h, "ref_fp8", None)
+            x_scales = getattr(h, "ref_scales", None)
+            if x_fp8 is None:
+                x_fp8, x_scales = p.x_fp8, p.x_scales
+            ref = _per_block_dequant(x_fp8, x_scales).float()
         return ref * ranks_per_token, p.T
 
     def recv_tokens(self, h):

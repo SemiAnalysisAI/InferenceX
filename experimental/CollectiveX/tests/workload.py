@@ -37,10 +37,15 @@ def _sha256(b: bytes) -> str:
 
 
 def compute_workload_id(routing: str, hidden: int, topk: int, experts: int,
-                        global_tokens: int, seed: int, generator: str = GENERATOR_VERSION) -> str:
-    """Deterministic id over the identity-defining params. Same params+generator => same id."""
+                        global_tokens: int, seed: int, generator: str = GENERATOR_VERSION,
+                        step: int = 0) -> str:
+    """Deterministic id over the identity-defining params. Same params+generator => same id.
+    `step` is the temporal snapshot for moving/alternating routing; folded in ONLY when non-zero
+    so every existing (step=0) canonical workload keeps its id."""
     key = (f"{generator}|routing={routing}|hidden={hidden}|topk={topk}|experts={experts}"
            f"|gt={global_tokens}|seed={seed}")
+    if step:
+        key += f"|step={step}"
     return _sha256(key.encode())[:16]
 
 

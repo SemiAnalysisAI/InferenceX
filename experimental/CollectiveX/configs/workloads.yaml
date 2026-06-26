@@ -66,11 +66,24 @@ model_derived:
     combine_dtype: bf16
     verify: true
 
-# decode vs prefill are workload METADATA, not just token-ladder aliases (goal Part 2):
+# decode vs prefill are workload METADATA, not just token-ladder aliases (goal Part 2). Each point
+# is ONE MoE layer · ONE step · a SINGLE dispatch+combine collective pair (NOT a whole model or
+# several concurrent layers). The harness emits this as `phase_profile` so a T=128 point launched
+# under "prefill" is never silently read as a decode point.
 phase_profiles:
   decode:
     token_ladder: [1, 2, 4, 8, 16, 32, 64, 128]
     description: "one (or few) tokens per active sequence per step; routing varies step-to-step"
+    active_sequences: "one batch of active sequences"
+    tokens_per_iter: "1 (or few) per active sequence"
+    microbatch_distribution: "one decode step across the active sequences"
+    routing_variability: "varies step-to-step (use the temporal routing modes to model this)"
+    represents: "one MoE layer · one decode step · one dispatch+combine collective"
   prefill:
     token_ladder: [128, 256, 512, 1024, 2048, 4096]
     description: "chunked-prefill: many tokens per sequence enter each MoE layer at once"
+    chunk_size: "the tokens/rank point IS the prefill chunk size entering the MoE layer"
+    tokens_entering_moe: "chunk_size * ep_size tokens enter one MoE layer at once"
+    request_mixture: "a single chunked-prefill chunk (no request-mix modelled yet)"
+    chunked_prefill_behavior: "one chunk per measured point"
+    represents: "one MoE layer · one prefill chunk · one dispatch+combine collective"

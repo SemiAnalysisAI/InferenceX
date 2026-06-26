@@ -30,8 +30,10 @@ def _load(name):
         return yaml.safe_load(fh)
 
 
-def resolve_case(plat, beng, mode, dtype, contract, routing, ep, phase, platforms, backends):
-    """Return (ok, reason). Mirrors adapter SUPPORTED_* + platform/backend registry limits."""
+def resolve_case(plat, beng, mode, dtype, contract, routing, ep, phase, platforms, backends,
+                 combine_quant_mode="none", placement="packed", activation_profile="normal", eplb=False):
+    """Return (ok, reason). Mirrors adapter SUPPORTED_* + platform/backend registry limits, including
+    the combine-quant / routing / EPLB / activation distribution constraints (goal P2-m)."""
     p = platforms["platforms"].get(plat)
     b = backends["backends"].get(beng)
     if p is None:
@@ -55,6 +57,17 @@ def resolve_case(plat, beng, mode, dtype, contract, routing, ep, phase, platform
         return False, f"{beng} mode={mode} is {pc['phases']}-only (got {phase})"
     if contract == "cached-layout-comm-only-v1" and mode == "ll":
         return False, "cached-layout meaningless for LL"
+    # combine-quant / distribution constraints (goal P2-m). Default none/packed/normal reproduce
+    # today; the quant-combine suite's fp8/mxfp8 modes are REJECTED here (no kernel wired) so it
+    # resolves to zero valid cases until PR311 lands.
+    if combine_quant_mode not in b.get("quant_modes", ["none"]):
+        return False, f"{beng} quant_modes={b.get('quant_modes', ['none'])} (got {combine_quant_mode}) — not wired"
+    if routing not in b.get("routings", [routing]):
+        return False, f"{beng} does not support routing {routing}"
+    if eplb and not b.get("eplb", False):
+        return False, f"{beng} does not support EPLB"
+    if activation_profile not in b.get("activation_profiles", ["normal"]):
+        return False, f"{beng} does not support activation_profile {activation_profile}"
     return True, "ok"
 
 
@@ -78,6 +91,10 @@ def generate(suite_name):
     phases = s.get("phases", ["decode"])
     routings = s.get("routings", ["uniform"])
     resource_modes = s.get("resource_modes", ["tuned"])
+    # optional distribution axes (default to today's single value when the suite omits them).
+    cqms = s.get("combine_quant_modes", ["none"])
+    placements = s.get("placements", ["packed"])
+    activations = s.get("activation_profiles", ["normal"])
     cases, omitted = [], []
     for plat in s["platforms"]:
         bset = []
@@ -85,14 +102,17 @@ def generate(suite_name):
             bset += expand_backends(bspec, plat, platforms, backends)
         for beng in sorted(set(bset)):
             eps = s.get("ep_degrees") or platforms["platforms"][plat]["validated"]["ep_degrees"]
-            for wl, mode, dtype, contract, routing, ep, phase, rmode in itertools.product(
+            for wl, mode, dtype, contract, routing, ep, phase, rmode, cqm, placement, act in \
+                    itertools.product(
                     s["workloads"], s["modes"], s.get("dtypes", ["bf16"]), s["contracts"],
-                    routings, eps, phases, resource_modes):
+                    routings, eps, phases, resource_modes, cqms, placements, activations):
                 ok, reason = resolve_case(plat, beng, mode, dtype, contract, routing, ep, phase,
-                                          platforms, backends)
+                                          platforms, backends, combine_quant_mode=cqm,
+                                          placement=placement, activation_profile=act)
                 rec = {"workload": wl, "platform": plat, "backend": beng, "mode": mode,
                        "dtype": dtype, "contract": contract, "routing": routing, "ep": ep,
-                       "phase": phase, "resource_mode": rmode}
+                       "phase": phase, "resource_mode": rmode, "combine_quant_mode": cqm,
+                       "placement": placement, "activation_profile": act}
                 (cases if ok else omitted).append({**rec, **({} if ok else {"reason": reason})})
     # SHARDS: one allocation per (platform, backend, mode, resource, image) runs many points.
     shards = {}
@@ -107,7 +127,13 @@ def generate(suite_name):
     for c in cases:
         ck = (c["platform"], c["backend"], c["mode"], c["contract"])
         canary.setdefault(ck, c)
+    # cohort-level source-SHA pinning (goal P2-n): record whether this suite REQUIRES all SKUs to
+    # use one benchmark source SHA (official runs) — cohort.py --pin-sha enforces it at validation.
+    # official suites pin by default; diagnostic/bring-up may mix.
+    pin = s.get("pin_source_sha", s.get("required_publication") == "official")
     return {"suite": suite_name, "required_publication": s.get("required_publication"),
+            "pin_source_sha": pin,
+            "headline_distribution": (_load("suites.yaml").get("headline_distribution") or {}).get("routing"),
             "n_cases": len(cases), "n_omitted": len(omitted),
             "cases": cases, "omitted": omitted, "shards": shard_list,
             "canaries": list(canary.values())}

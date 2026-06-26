@@ -25,47 +25,60 @@
 #   _gha_matrix.sh --sku h200 --ll --dry            # print dispatches, fire nothing
 set -euo pipefail
 WF="collectivex-experimental.yml"
-SKU=""; NODES=""; LL=0; REF="collectivex"; DRY=0; SLEEP="${CX_DISPATCH_SLEEP:-8}"
+SKU=""; NODES=""; LL=0; REF="collectivex"; DRY=0; CANON=0; OFFICIAL=0
+BENCH="deepep"; SLEEP="${CX_DISPATCH_SLEEP:-8}"
 while [ $# -gt 0 ]; do
   case "$1" in
-    --sku)   SKU="$2";   shift 2 ;;
-    --nodes) NODES="$2"; shift 2 ;;
-    --ll)    LL=1;       shift   ;;
-    --ref)   REF="$2";   shift 2 ;;
-    --dry)   DRY=1;      shift   ;;
+    --sku)     SKU="$2";   shift 2 ;;
+    --nodes)   NODES="$2"; shift 2 ;;
+    --ll)      LL=1;       shift   ;;
+    --ref)     REF="$2";   shift 2 ;;
+    --dry)     DRY=1;      shift   ;;
+    --canonical) CANON=1;  shift   ;;   # thread canonical=true to every dispatch (official-grade)
+    --official)  OFFICIAL=1; CANON=1; shift ;;  # fire ONLY the headline canonical config (the cohort)
+    --bench)   BENCH="$2"; shift 2 ;;   # deepep (NVIDIA) | mori (AMD MI355X)
     *) echo "unknown arg: $1" >&2; exit 2 ;;
   esac
 done
 [ -n "$SKU" ] || { echo "need --sku <gb200|b200-dgxc|mi355x|h100-dgxc|h200|b300|gb300>" >&2; exit 2; }
+# MI355X is AMD -> mori; everything else here is NVIDIA -> deepep (unless --bench overrides).
+[ "$SKU" = mi355x ] && BENCH="${BENCH/deepep/mori}"
 
 N=0
 fire() {  # phase dtype mode contract routing eplb(true|false)
-  local args=( -f sku="$SKU" -f benchmark=deepep -f phase="$1" -f dispatch_dtype="$2"
+  local args=( -f sku="$SKU" -f benchmark="$BENCH" -f phase="$1" -f dispatch_dtype="$2"
                -f mode="$3" -f contract="$4" -f routing="$5" )
   [ "$6" = true ]  && args+=( -f eplb=true )      # else omit -> workflow default false
+  [ "$CANON" = 1 ] && args+=( -f canonical=true ) # official-grade canonical workload identity
   [ -n "$NODES" ]  && args+=( -f nodes="$NODES" )
   N=$((N+1))
-  printf '[%d] sku=%s phase=%-7s dtype=%-4s mode=%-6s contract=%-26s routing=%-9s eplb=%s nodes=%s\n' \
-    "$N" "$SKU" "$1" "$2" "$3" "$4" "$5" "$6" "${NODES:-default}"
+  printf '[%d] sku=%s bench=%s phase=%-7s dtype=%-4s mode=%-6s contract=%-26s routing=%-9s eplb=%s canon=%s nodes=%s\n' \
+    "$N" "$SKU" "$BENCH" "$1" "$2" "$3" "$4" "$5" "$6" "$CANON" "${NODES:-default}"
   [ "$DRY" = 1 ] && return 0
   gh workflow run "$WF" --ref "$REF" "${args[@]}"
   sleep "$SLEEP"   # stagger: ease the API and let each run claim a runner before the next
 }
 
-# Headline (A-D)
-fire both   bf16 normal layout-and-dispatch-v1      uniform false
-fire both   fp8  normal layout-and-dispatch-v1      uniform false
-fire both   bf16 normal cached-layout-comm-only-v1  uniform false
-fire both   fp8  normal cached-layout-comm-only-v1  uniform false
-# Low-latency (E-F), decode-only, Hopper only
-if [ "$LL" = 1 ]; then
-  fire decode bf16 ll layout-and-dispatch-v1 uniform false
-  fire decode fp8  ll layout-and-dispatch-v1 uniform false
+# --official: fire ONLY the cross-SKU/cross-vendor headline cohort config (canonical bf16 normal
+# layout-and-dispatch uniform). This is the publication-'official' point (goal P1 DoD).
+if [ "$OFFICIAL" = 1 ]; then
+  fire both bf16 normal layout-and-dispatch-v1 uniform false
+else
+  # Headline (A-D)
+  fire both   bf16 normal layout-and-dispatch-v1      uniform false
+  fire both   fp8  normal layout-and-dispatch-v1      uniform false
+  fire both   bf16 normal cached-layout-comm-only-v1  uniform false
+  fire both   fp8  normal cached-layout-comm-only-v1  uniform false
+  # Low-latency (E-F), decode-only, Hopper only
+  if [ "$LL" = 1 ]; then
+    fire decode bf16 ll layout-and-dispatch-v1 uniform false
+    fire decode fp8  ll layout-and-dispatch-v1 uniform false
+  fi
+  # Routing (G-I)
+  fire both bf16 normal layout-and-dispatch-v1 balanced false
+  fire both bf16 normal layout-and-dispatch-v1 zipf     false
+  fire both bf16 normal layout-and-dispatch-v1 zipf     true
 fi
-# Routing (G-I)
-fire both bf16 normal layout-and-dispatch-v1 balanced false
-fire both bf16 normal layout-and-dispatch-v1 zipf     false
-fire both bf16 normal layout-and-dispatch-v1 zipf     true
 
 # NB: do NOT use ${DRY:+...} here — DRY=0 is a NON-EMPTY string, so :+ would expand
 # on real dispatches too. Branch on the value explicitly.

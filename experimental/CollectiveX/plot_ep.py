@@ -240,12 +240,23 @@ const _dpf = DATA.filter(s=>s.phase==="prefill"&&s.backend==="deepep").flatMap(s
 const PREFILL_MIN = _dpf.length? Math.min(..._dpf) : 128;
 // Publication-status filter (goal P1): default hides diagnostic/invalid/failed so the first
 // view is publication-valid; "publishable" = official + comparable-experimental + legacy v3.
+// The OFFICIAL view additionally drops wid=null lines (a non-canonical workload can never be
+// official — goal P1) so an official chart can never show a wid=null or non-official cohort.
 const PUB = {publishable:"Publishable", official:"Official only", all:"All (incl. diagnostic)"};
-function pubOk(s){ return ST.pub==="all" || (ST.pub==="official" ? s.pub==="official"
-                   : !["diagnostic","invalid","failed"].includes(s.pub)); }
-// Default to ONE suite (not all) + publishable results (goal P1).
+function pubOk(s){
+  if(ST.pub==="all") return true;
+  if(ST.pub==="official") return s.pub==="official" && !!s.wid;   // official => canonical wid required
+  return !["diagnostic","invalid","failed"].includes(s.pub);
+}
+// HEADLINE DISTRIBUTION CONTRACT (goal P2 "define one headline distribution"): uniform is the
+// single cross-hardware headline — controlled, deterministic, and present on every SKU, so it is
+// the apples-to-apples reference. balanced / zipf / zipf+eplb / hotspot* are SENSITIVITY views
+// (see the Distribution-sensitivity section), NOT peer headline dimensions. (Long-term headline
+// will come from InferenceX trace replay; zipf+eplb is the interim load-realism reference.)
+const HEADLINE_DISTRIBUTION = "uniform";
+// Default to ONE suite (not all) + publishable + the headline distribution (goal P1/P2).
 const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50",
-             suite:"backend-default", routing:"uniform", pub:"publishable"};
+             suite:"backend-default", routing:HEADLINE_DISTRIBUTION, pub:"publishable"};
 
 function xval(r,xk){ return xk==="t"? r.t : r.gt; }
 function metric(r,op,yk,pct){
@@ -356,6 +367,12 @@ function guardNote(vis){
   if(acts.length>1) w.push('mixed activation profile ('+acts.join(', ')+') — value distribution differs');
   const wids=[...new Set(vis.map(s=>s.wid).filter(Boolean))];
   if(wids.length>1) w.push('mixed workload_id ('+wids.join(' / ')+') — not the same canonical workload');
+  // source SHA: a cross-SKU OFFICIAL cohort must come from ONE benchmark source SHA (goal P1).
+  const shas=[...new Set(vis.map(s=>s.source_sha).filter(Boolean))];
+  if(shas.length>1) w.push('mixed source SHA ('+shas.join(' / ')+') — official cohorts need one benchmark SHA');
+  // wid=null cohorts can never be official (goal P1) — flag if any non-canonical line is shown.
+  const nullwid=vis.filter(s=>!s.wid).length;
+  if(nullwid && ST.pub==='official') w.push(nullwid+' line(s) have wid=null — excluded from the official view');
   const eps=[...new Set(vis.map(s=>s.ep))];
   if(eps.length>1) w.push('mixed EP degree '+eps.join('/')+' — compare only on the global-tokens x-axis');
   return w.length? '<div class="guard">⚠ not a direct comparison: '+w.join('; ')+'</div>' : '';
@@ -379,7 +396,7 @@ function renderControls(){
     '<div class="grp"><span class="lab">Phase</span>'+seg('phase',{decode:"Decode",prefill:"Prefill"},ST.phase)+'</div>'+
     '<div class="grp"><span class="lab">Percentile</span>'+seg('pct',PCT,ST.pct)+'</div>'+
     '<div class="grp"><span class="lab">Suite</span>'+seg('suite',SUITE,ST.suite)+'</div>'+
-    '<div class="grp"><span class="lab">Routing</span>'+seg('routing',ROUTING,ST.routing)+'</div>'+
+    '<div class="grp"><span class="lab">Routing (headline='+HEADLINE_DISTRIBUTION+')</span>'+seg('routing',ROUTING,ST.routing)+'</div>'+
     '<div class="grp"><span class="lab">Publication</span>'+seg('pub',PUB,ST.pub)+'</div>'+
     '<div class="grp"><span class="lab">X-axis</span>'+seg('x',XK,ST.x)+'</div>'+
     '<div class="grp"><span class="lab">X scale</span>'+seg('xlog',{true:"Log",false:"Linear"},String(ST.xlog))+'</div>'+
@@ -387,7 +404,8 @@ function renderControls(){
     '<div class="grp"><span class="lab">Y scale</span>'+seg('ylog',{true:"Log",false:"Linear"},String(ST.ylog))+'</div>';
   document.querySelectorAll('#controls button').forEach(b=>b.onclick=()=>{
     const g=b.dataset.grp, v=b.dataset.val; ST[g]= (g==='ylog'||g==='xlog')? v==='true' : v;
-    renderControls(); renderMain(); renderGrid(); });  // grid also reflects pct/suite/scale toggles
+    // grid/heatmaps also reflect pct/suite/phase/scale toggles; scaling is headline-only (static).
+    renderControls(); renderMain(); renderGrid(); renderHeatmaps(); });
 }
 function renderMain(){
   document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,xlog:ST.xlog,ylog:ST.ylog,
@@ -415,6 +433,93 @@ function renderGrid(){
     h+='</div>'; }); });
   document.getElementById('grid').innerHTML=h;
 }
+// Strong + weak SCALING views (goal P2 "separate views for strong and weak scaling" — do NOT rely
+// on the x-axis toggle to reinterpret one experiment). weak = fixed tokens/RANK, latency vs EP
+// (ideal: flat). strong = fixed GLOBAL tokens, latency vs EP (ideal: falls ~1/EP). Each labels its
+// scaling contract. Renders only for SKUs measured at >=2 EP degrees (the headline distribution).
+function scalingChart(kind){
+  // map: sku -> {ep -> {key(T or GT) -> p50 dispatch}}
+  const sl=DATA.filter(s=>s.routing===HEADLINE_DISTRIBUTION && s.mode==="normal"
+                          && s.contract==="layout-and-dispatch-v1" && pubOk(s));
+  const bySku={}; sl.forEach(s=>{ (bySku[s.sku]=bySku[s.sku]||{})[s.ep]=s; });
+  const skuColor={}; DATA.forEach(s=>{ skuColor[s.sku]=skuColor[s.sku]||s.color; });
+  const skus=Object.keys(bySku).filter(k=>Object.keys(bySku[k]).length>=2).sort();
+  if(!skus.length) return '<p class="note">No SKU measured at ≥2 EP degrees yet (needs e.g. GB300 EP4 + EP8). Strong/weak scaling renders here once a multi-EP cohort exists.</p>';
+  // build series: one line per sku; x=EP, y=latency at a fixed anchor (weak: tokens/rank=64; strong: global=512).
+  const anchorT=64, anchorGT=512;
+  const W=900,H=360,m={l:64,r:16,t:34,b:46},X0=m.l,X1=W-m.r,Y0=H-m.b,Y1=m.t;
+  const lines=[]; let xs=[],ys=[];
+  skus.forEach(sku=>{ const pts=[];
+    Object.keys(bySku[sku]).map(Number).sort((a,b)=>a-b).forEach(ep=>{ const s=bySku[sku][ep];
+      let r=null;
+      if(kind==="weak"){ r=s.rows.find(rr=>rr.t===anchorT); }
+      else { r=s.rows.find(rr=>rr.gt===anchorGT) || s.rows.find(rr=>rr.t===Math.round(anchorGT/ep)); }
+      if(r){ const y=r.dispatch.p50; if(y>0){ pts.push({ep,y}); xs.push(ep); ys.push(y);} }
+    });
+    if(pts.length) lines.push({sku,pts,color:(skuColor[sku]||"#888")});
+  });
+  if(!xs.length) return '<p class="note">No matched anchor points for '+kind+' scaling.</p>';
+  const xmn=Math.min(...xs),xmx=Math.max(...xs),ymn=Math.min(...ys),ymx=Math.max(...ys);
+  const xv=v=>mapLin(v,xmn,xmx||xmn+1,X0,X1), yv=v=>mapLin(v,Math.min(0,ymn),ymx||1,Y0,Y1);
+  let s='<svg viewBox="0 0 '+W+' '+H+'">';
+  s+='<text x="'+X0+'" y="20" class="ttl">'+(kind==="weak"?"Weak scaling — fixed tokens/rank="+anchorT+" (ideal: flat)":"Strong scaling — fixed global tokens="+anchorGT+" (ideal: ↓ ~1/EP)")+'</text>';
+  [...new Set(xs)].sort((a,b)=>a-b).forEach(v=>{const x=xv(v);s+='<line class="gl" x1="'+x+'" y1="'+Y0+'" x2="'+x+'" y2="'+Y1+'"/><text class="tk" x="'+x+'" y="'+(Y0+16)+'" text-anchor="middle">EP'+v+'</text>';});
+  linTicks(Math.min(0,ymn),ymx).forEach(v=>{const y=yv(v);s+='<line class="gl" x1="'+X0+'" y1="'+y+'" x2="'+X1+'" y2="'+y+'"/><text class="tk" x="'+(X0-7)+'" y="'+(y+3.5)+'" text-anchor="end">'+fmt(v)+'</text>';});
+  s+='<line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X1+'" y2="'+Y0+'"/><line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X0+'" y2="'+Y1+'"/>';
+  s+='<text class="axl" x="'+((X0+X1)/2)+'" y="'+(H-6)+'" text-anchor="middle">EP degree</text>';
+  s+='<text class="axl" transform="translate(15,'+((Y0+Y1)/2)+') rotate(-90)" text-anchor="middle">dispatch p50 (µs)</text>';
+  lines.forEach(g=>{ const d=g.pts.map((p,i)=>(i?'L':'M')+xv(p.ep).toFixed(1)+' '+yv(p.y).toFixed(1)).join(' ');
+    s+='<path d="'+d+'" fill="none" stroke="'+g.color+'" stroke-width="2"/>';
+    g.pts.forEach(p=>{ s+='<circle class="pt" cx="'+xv(p.ep).toFixed(1)+'" cy="'+yv(p.y).toFixed(1)+'" r="3.5" fill="'+g.color+'"><title>'+g.sku.toUpperCase()+' EP'+p.ep+' '+kind+'-scaling: '+fmt(p.y)+' µs</title></circle>'; }); });
+  s+='</svg>'; return s;
+}
+function renderScaling(){
+  const el=document.getElementById('scaling'); if(!el) return;
+  el.innerHTML='<div class="card">'+scalingChart("weak")+'</div><div class="card" style="margin-top:12px">'+scalingChart("strong")+'</div>'
+    +'<p class="note">Strong vs weak are DISTINCT experiments with distinct scaling contracts (labelled in each title) — not one chart reinterpreted by an x-axis toggle. Headline distribution = '+HEADLINE_DISTRIBUTION+', layout-and-dispatch-v1, normal mode.</p>';
+}
+// HEATMAPS (goal P2): EP×tokens/rank and routing-skew×token-load (latency), placement×node and
+// resource×load where data exists. A cell is colored by dispatch p50 (log scale); empty cells are
+// blank (no measured point). One grid per (metric pairing) for the current phase + publishable set.
+function heatmap(rowKeyFn, rowLabel, rowVals, colVals, title){
+  const sl=DATA.filter(s=>s.phase===ST.phase && (ST.suite==="all"||s.suite===ST.suite) && pubOk(s));
+  // cell value = min dispatch p50 across series matching (rowVal) at colVal (tokens/rank)
+  const cell={};
+  sl.forEach(s=>{ const rk=rowKeyFn(s); if(rk==null) return;
+    s.rows.forEach(r=>{ const k=rk+'|'+r.t; const y=r.dispatch&&r.dispatch.p50; if(y>0) cell[k]=Math.min(cell[k]||1e9,y); }); });
+  const present=Object.keys(cell); if(!present.length) return '';
+  const cols=colVals.filter(c=>present.some(k=>k.endsWith('|'+c)));
+  const rows=rowVals.filter(rv=>present.some(k=>k.startsWith(rv+'|')));
+  if(!rows.length||!cols.length) return '';
+  const allv=Object.values(cell), lo=Math.min(...allv), hi=Math.max(...allv);
+  const cw=46,ch=26,L=120,T=30,W=L+cols.length*cw+16,H=T+rows.length*ch+24;
+  const col=v=>{ const t=(Math.log(v)-Math.log(lo))/((Math.log(hi)-Math.log(lo))||1); // green->red
+    const r=Math.round(40+t*200),g=Math.round(190-t*150); return 'rgb('+r+','+g+',70)'; };
+  let s='<svg viewBox="0 0 '+W+' '+H+'"><text x="4" y="16" class="ttl">'+title+'</text>';
+  cols.forEach((c,j)=>{ s+='<text class="tk" x="'+(L+j*cw+cw/2)+'" y="'+(T-4)+'" text-anchor="middle">'+c+'</text>'; });
+  rows.forEach((rv,i)=>{ s+='<text class="tk" x="'+(L-6)+'" y="'+(T+i*ch+ch/2+3)+'" text-anchor="end">'+rv+'</text>';
+    cols.forEach((c,j)=>{ const v=cell[rv+'|'+c]; const x=L+j*cw,y=T+i*ch;
+      if(v) s+='<rect x="'+x+'" y="'+y+'" width="'+(cw-2)+'" height="'+(ch-2)+'" fill="'+col(v)+'"><title>'+rowLabel+'='+rv+' T='+c+': '+fmt(v)+' µs</title></rect><text class="tk" x="'+(x+cw/2-1)+'" y="'+(y+ch/2+3)+'" text-anchor="middle" style="fill:#0b0d10;font-size:9px">'+fmt(v)+'</text>';
+      else s+='<rect x="'+x+'" y="'+y+'" width="'+(cw-2)+'" height="'+(ch-2)+'" fill="#1b1f27" stroke="#2a2f3a"/>'; }); });
+  s+='</svg>'; return s;
+}
+function renderHeatmaps(){
+  const el=document.getElementById('heatmaps'); if(!el) return;
+  const Ts=[...new Set(DATA.filter(s=>s.phase===ST.phase).flatMap(s=>s.rows.map(r=>r.t)))].sort((a,b)=>a-b);
+  const eps=[...new Set(DATA.map(s=>s.ep))].sort((a,b)=>a-b);
+  const routs=[...new Set(DATA.map(s=>s.routing))].sort();
+  const ress=[...new Set(DATA.map(s=>s.resource))].sort();
+  const places=[...new Set(DATA.map(s=>s.placement||'packed'))].sort();
+  const grids=[
+    heatmap(s=>'EP'+s.ep, 'EP', eps.map(e=>'EP'+e), Ts, 'EP × tokens/rank — dispatch p50 (µs), '+ST.phase),
+    heatmap(s=>s.routing, 'routing', routs, Ts, 'Routing skew × token load — dispatch p50 (µs), '+ST.phase),
+    heatmap(s=>s.resource, 'resource', ress, Ts, 'Resource regime × token load — dispatch p50 (µs), '+ST.phase),
+  ];
+  if(places.length>1) grids.push(heatmap(s=>s.placement||'packed','placement',places,Ts,'Placement × token load — dispatch p50 (µs), '+ST.phase));
+  const shown=grids.filter(Boolean);
+  el.innerHTML=(shown.length? shown.map(g=>'<div class="card" style="margin-bottom:10px">'+g+'</div>').join('') : '<p class="note">No heatmap cells for this phase/suite.</p>')
+    +'<p class="note">Cell = min dispatch p50 (µs) over matching publishable series; green→red = fast→slow (log). Blank = no measured point. Placement×node and a populated routing×load grid fill in as multi-node / skew runs land.</p>';
+}
 // Coverage table (goal P2): publication status per measured config (validated=official,
 // experimental=comparable/legacy, failed=invalid/failed). Supported/unsupported come from
 // generate_matrix.py (capability), which records omissions with reasons.
@@ -422,7 +527,7 @@ function renderCoverage(){
   const cls={official:'#2ca02c','comparable-experimental':'#d6a72b',legacy:'#7f7f7f',
              diagnostic:'#9467bd',invalid:'#d62728',failed:'#a30000'};
   const by={}; DATA.forEach(s=>{ (by[s.sku]=by[s.sku]||[]).push(s); });
-  let h='<table class="cov"><tr><th>SKU</th><th>EP</th><th>config</th><th>phase</th><th>routing</th><th>status</th><th>correct pts</th></tr>';
+  let h='<table class="cov"><tr><th>SKU</th><th>EP</th><th>config</th><th>phase</th><th>routing</th><th>workload</th><th>status</th><th>correct pts</th></tr>';
   Object.keys(by).sort().forEach(sku=>{
     by[sku].sort((a,b)=>(a.ep-b.ep)||a.label.localeCompare(b.label)).forEach(s=>{
       const ok=s.rows.filter(r=>r.correct).length;
@@ -430,12 +535,17 @@ function renderCoverage(){
       // (so today's bf16/none/normal rows stay uncluttered; a PR311 quant-combine run shows /cq:…).
       const cfg=(s.dtype||'?')+'/'+s.mode+'/'+(s.contract||'?').replace('-v1','')
         +((s.cqm&&s.cqm!=='none')?'/cq:'+s.cqm:'')+((s.act&&s.act!=='normal')?'/'+s.act:'');
+      // workload identity column (goal P1): canonical wid, else flag wid=null as an official blocker.
+      const wcell = s.wid? ('<span title="canonical workload">'+s.wid.slice(0,10)+'</span>')
+                         : '<span style="color:#d6a72b" title="non-canonical (seeded-runtime) — cannot be official">wid=null ⚠</span>';
       h+='<tr><td>'+sku+'</td><td>'+s.ep+'</td><td>'+cfg+'</td><td>'+s.phase+'</td><td>'+s.routing+'</td>'
+        +'<td>'+wcell+'</td>'
         +'<td><span class="badge" style="background:'+(cls[s.pub]||'#555')+'">'+s.pub+'</span></td>'
         +'<td>'+ok+'/'+s.rows.length+'</td></tr>';
     });
   });
-  document.getElementById('coverage').innerHTML=h+'</table>';
+  document.getElementById('coverage').innerHTML=h+'</table>'
+    +'<p class="note">workload=wid is the canonical workload id; <b>wid=null</b> marks a seeded-runtime (non-canonical) line that is capped at comparable-experimental and is hidden from the Official view. Status is machine-derived from validity (goal P1).</p>';
 }
 // Distribution-sensitivity summary (review: don't add a 7th chart dimension — collapse it to one
 // ratio per sku/backend/phase). p99(worst stressor distribution) / p99(uniform) at matched
@@ -480,7 +590,7 @@ function renderSensitivity(){
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
     'Backends: '+provs.join(', ')+'. Hover a point for p50/p90/p99, contract, suite, and its workflow run.';
-  renderControls(); renderMain(); renderGrid(); renderCoverage(); renderSensitivity();
+  renderControls(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); renderCoverage(); renderSensitivity();
 })();
 """
 
@@ -511,7 +621,9 @@ def main() -> int:
     html = HEAD + '<div class="controls" id="controls"></div>' \
         + '<div class="card"><div id="chart"></div></div><div id="mlegend"></div>' \
         + '<div id="grid"></div>' \
-        + '<h2>Distribution sensitivity</h2><div id="sensitivity"></div>' \
+        + '<h2>Scaling (strong + weak — distinct contracts)</h2><div id="scaling"></div>' \
+        + '<h2>Heatmaps</h2><div id="heatmaps"></div>' \
+        + '<h2>Distribution sensitivity <span style="font-weight:400;color:var(--mut)">— NOT the headline (headline = uniform)</span></h2><div id="sensitivity"></div>' \
         + '<h2>Coverage</h2><div id="coverage"></div>' \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
         + f'{len(series)} EP sweeps. Latency (p50/p90/p99 selector) is the primary metric; the ' \

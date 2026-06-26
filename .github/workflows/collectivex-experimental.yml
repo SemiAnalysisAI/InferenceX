@@ -83,23 +83,47 @@ on:
         # layout-and-dispatch-v1 = dispatch timing includes routing-layout gen (the only
         # contract MoRI honors; use for cross-vendor). cached-layout-comm-only-v1 = layout
         # hoisted out, pure-comm dispatch (DeepEP normal only).
+        # runtime-visible-v1 = serving-realistic boundary (DeepEP times fp8 cast + layout + comm +
+        # recv-dequant inside dispatch). cached-layout = pure-comm (DeepEP normal only).
         description: Measurement contract (timing boundary)
         type: choice
         default: layout-and-dispatch-v1
-        options: [layout-and-dispatch-v1, cached-layout-comm-only-v1]
+        options: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
       routing:
         # Routing distribution of the shared trace. uniform=realistic; balanced=load-equalized;
-        # zipf*=skewed; hotspot-single=one hot expert. The skew + EPLB sweep lives here.
+        # zipf*=skewed; hotspot-*=one hot expert (static/moving); alternating-groups=toggling halves.
         description: EP routing distribution
         type: choice
         default: uniform
-        options: [uniform, balanced, zipf, zipf-mild, zipf-moderate, zipf-heavy, hotspot-single]
+        options: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate,
+                  zipf-heavy, hotspot-single, hotspot-moving, alternating-groups]
       eplb:
         # EPLB = replicate hot experts + balanced-place (the remedy for skewed routing). A pure
         # routing-trace transform; experts -> num_logical+redundant. Meaningful with zipf*.
         description: Apply EPLB expert replication/placement
         type: boolean
         default: false
+      canonical:
+        # Consume a CANONICAL serialized workload (generated deterministically in-container) instead
+        # of seeded-runtime. A canonical-serialized run with full GHA provenance is publication
+        # 'official' — this is the switch that promotes a cohort past comparable-experimental.
+        description: Use canonical serialized workload (official-grade workload identity)
+        type: boolean
+        default: false
+      activation_profile:
+        # Activation VALUE distribution of expert inputs. normal = headline; the others stress a
+        # future quantized combine (latency-neutral under bf16 — the expected null result).
+        description: Activation value profile
+        type: choice
+        default: normal
+        options: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+      placement:
+        # Rank->node/domain placement (locality). Single-node SKUs make these identical; meaningful
+        # on multi-domain SKUs (GB300 NVL72). packed=fill a domain first; striped=spread; adversarial.
+        description: Rank placement
+        type: choice
+        default: packed
+        options: [packed, striped, runtime-native, adversarial]
 
 concurrency:
   # Group per (SKU + FULL config): GitHub keeps only one running + one pending per group and
@@ -189,6 +213,10 @@ jobs:
       CX_MEASUREMENT_CONTRACT: ${{ inputs.contract }}
       CX_ROUTING: ${{ inputs.routing }}
       CX_EPLB: ${{ inputs.eplb && '1' || '' }}
+      # canonical serialized workload (official-grade identity) + value/placement axes (goal P1/P2).
+      CX_CANONICAL: ${{ inputs.canonical && '1' || '' }}
+      CX_ACTIVATION_PROFILE: ${{ inputs.activation_profile }}
+      CX_PLACEMENT: ${{ inputs.placement }}
       # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
       # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}

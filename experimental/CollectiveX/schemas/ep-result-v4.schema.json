@@ -37,7 +37,8 @@
         "workload_source": {"type": "string", "enum": ["canonical-serialized", "seeded-runtime"]},
         "measurement_conformance": {"type": "string", "enum": ["conformant", "nonconformant"]},
         "resource_conformance": {"type": "string"},
-        "provenance_complete": {"type": "boolean"}
+        "provenance_complete": {"type": "boolean"},
+        "anomaly_free": {"type": "boolean"}
       }
     },
     "workload": {
@@ -86,10 +87,49 @@
         "image_arch": {"type": ["string", "null"]},
         "squash_sha256": {"type": ["string", "null"]},
         "git_run": {"type": ["object", "null"]},
-        "fp8_quant_in_timing": {"type": ["boolean", "null"]}
+        "fp8_quant_in_timing": {"type": ["boolean", "null"]},
+        "combine_quant_in_timing": {"type": ["boolean", "null"]},
+        "combine_dequant_in_timing": {"type": ["boolean", "null"]},
+        "combine_dtype": {"type": "string"}, "combine_quant_mode": {"type": "string"},
+        "activation_profile": {"type": "string"},
+        "routing_step": {"type": "integer"}, "uneven_tokens": {"type": "string"},
+        "waive_anomaly": {"type": "boolean"}, "roundtrip_anomaly_threshold": {"type": "number"}
       }
     },
     "backend_provenance": {"type": "object"},
+    "phase_profile": {"type": "object"},
+    "source_allocation": {
+      "type": "object",
+      "properties": {
+        "mode": {"type": "string", "enum": ["none", "linear", "empty-rank"]},
+        "routing_step": {"type": "integer"}
+      }
+    },
+    "placement": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string", "enum": ["packed", "striped", "runtime-native", "adversarial"]},
+        "nodes": {"type": "integer"}, "gpus_per_node": {"type": "integer"},
+        "scale_up_domain": {"type": "integer"}, "ranks": {"type": "integer"}
+      }
+    },
+    "eplb": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "num_logical_experts": {"type": "integer"}, "num_physical_experts": {"type": "integer"},
+        "imbalance_before": {"type": "number"}, "imbalance_after": {"type": "number"},
+        "mapping_hash": {"type": ["string", "null"]}
+      }
+    },
+    "anomalies": {"type": "array", "items": {"type": "object"}},
+    "anomaly_summary": {
+      "type": "object",
+      "properties": {
+        "count": {"type": "integer"}, "waived": {"type": "boolean"},
+        "types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
     "rows": {
       "type": "array", "minItems": 1,
       "items": {
@@ -118,6 +158,24 @@
             }
           },
           "roundtrip_tokens_per_second": {"type": ["number", "null"]},
+          "bandwidth": {
+            "type": "object",
+            "properties": {
+              "logical_payload_rate_gbps": {"type": "object"},
+              "backend_buffer_rate_gbps": {"type": "object"},
+              "algorithm_bandwidth_gbps": {"type": ["number", "null"]},
+              "bus_bandwidth_gbps": {"type": ["number", "null"]},
+              "wire_utilization": {"type": ["number", "null"]}
+            }
+          },
+          "fanout_hist": {"type": "array"},
+          "rank_load_hist": {"type": "array"},
+          "expert_load_cv": {"type": "number"}, "rank_load_cv": {"type": "number"},
+          "hotspot_ratio": {"type": "number"},
+          "dest_rank_load_max": {"type": "integer"}, "dest_rank_load_mean": {"type": "number"},
+          "empty_expert_count": {"type": "integer"}, "empty_rank_count": {"type": "integer"},
+          "source_token_stats": {"type": ["object", "null"]},
+          "anomalies": {"type": "array", "items": {"type": "object"}},
           "correct": {"type": "boolean"}
         }
       }
