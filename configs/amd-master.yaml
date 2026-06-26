@@ -2645,7 +2645,7 @@ minimaxm3-fp4-mi355x-vllm-mtp:
 # https://github.com/ROCm/ATOM/blob/5d42d49f9e4292e5b61475917e92e7ec1b1dacb7/recipes/MiniMax-M3.md
 # block size 128 is mandatory for MSA. TP4 on a single gfx950 node, per the recipe.
 minimaxm3-fp4-mi355x-atom:
-  image: rocm/atom-dev:M3
+  image: rocm/atom-dev:MiniMax-M3-20260623
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2666,8 +2666,46 @@ minimaxm3-fp4-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
       - { tp: 8, conc-start: 1, conc-end: 2 }
 
+minimaxm3-fp4-mi355x-atom-mtp:
+  image: rocm/atom-dev:MiniMax-M3-20260623
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: mi355x
+  precision: fp4
+  framework: atom
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
+
+minimaxm3-fp8-mi355x-atom:
+  image: rocm/atom-dev:MiniMax-M3-20260623
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi355x
+  precision: fp8
+  framework: atom
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256 }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256 }
+
 minimaxm3-fp8-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260622
+  image: rocm/atom-dev:MiniMax-M3-20260623
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2686,7 +2724,7 @@ minimaxm3-fp8-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
 minimaxm3-fp8-mi355x-atom-disagg:
-  image: rocm/atom-dev:MiniMax-M3-20260622
+  image: rocm/atom-dev:MiniMax-M3-20260623
   model: amd/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x-disagg
