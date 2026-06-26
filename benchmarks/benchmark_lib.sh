@@ -94,6 +94,71 @@ stop_gpu_monitor() {
     GPU_MONITOR_PID=""
 }
 
+# Return success only while a PID exists and is not a zombie waiting to be
+# reaped. `kill -0` alone treats zombies as live processes.
+_background_process_is_running() {
+    local pid="$1"
+    local state
+    kill -0 "$pid" 2>/dev/null || return 1
+    state=$(ps -o stat= -p "$pid" 2>/dev/null) || return 1
+    [[ -n "$state" && "${state:0:1}" != "Z" ]]
+}
+
+_background_process_descendants() {
+    local parent_pid="$1"
+    local child_pid
+    while read -r child_pid; do
+        [[ -n "$child_pid" ]] || continue
+        echo "$child_pid"
+        _background_process_descendants "$child_pid"
+    done < <(pgrep -P "$parent_pid" 2>/dev/null || true)
+}
+
+# Stop a background service and every process that descended from it. Capture
+# descendants before terminating the root because orphaned workers are
+# reparented and can otherwise keep a Slurm step alive after the benchmark
+# script exits.
+stop_background_process_tree() {
+    local root_pid="${1:-}"
+    local label="${2:-background process}"
+    local grace_seconds="${3:-30}"
+
+    if [[ ! "$root_pid" =~ ^[1-9][0-9]*$ ]] || ! _background_process_is_running "$root_pid"; then
+        return 0
+    fi
+
+    local descendants
+    local child_pid
+    descendants=$(_background_process_descendants "$root_pid")
+
+    echo "Stopping $label (PID=$root_pid)..."
+    kill -TERM "$root_pid" 2>/dev/null || true
+
+    local deadline=$((SECONDS + grace_seconds))
+    while _background_process_is_running "$root_pid" && [[ $SECONDS -lt $deadline ]]; do
+        sleep 1
+    done
+
+    local forced_stop=false
+    while read -r child_pid; do
+        [[ -n "$child_pid" ]] || continue
+        if _background_process_is_running "$child_pid"; then
+            if [[ "$forced_stop" == "false" ]]; then
+                echo "Force-stopping remaining $label processes."
+                forced_stop=true
+            fi
+            echo "  PID=$child_pid"
+            kill -KILL "$child_pid" 2>/dev/null || true
+        fi
+    done <<EOF
+$root_pid
+$descendants
+EOF
+
+    wait "$root_pid" 2>/dev/null || true
+    echo "Stopped $label."
+}
+
 # Check if required environment variables are set
 # Usage: check_env_vars VAR1 VAR2 VAR3 ...
 # Exits with code 1 if any variable is not set
