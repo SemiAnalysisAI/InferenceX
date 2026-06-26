@@ -20,7 +20,13 @@ source "$HERE/common.sh"
 PARTITION="${CX_PARTITION:-batch_1}"; ACCOUNT="${CX_ACCOUNT:-benchmark}"
 NODES="${CX_NODES:-2}"; GPN="${CX_GPUS_PER_NODE:-4}"
 NGPUS="${CX_NGPUS:-$((NODES*GPN))}"; TIME_MIN="${CX_TIME:-90}"
-IMAGE="${CX_IMAGE:-/data/sa-shared/containers/lmsysorg_sglang_v0.5.11-cu130.sqsh}"
+# CX_IMAGE is a docker TAG, not a squash path: cx_ensure_squash mangles the tag to
+# <repo>_<tag>.sqsh and finds the pre-staged squash by THAT name (the same convention
+# H200/B300 use). Passing a .sqsh PATH here made it try `enroot import docker://<path>`
+# -> "Invalid image reference", then pyxis "No such file or directory" on the mangled
+# target. The pre-staged file is /data/sa-shared/containers/lmsysorg_sglang_v0.5.11-cu130.sqsh,
+# which is exactly the mangled name of this tag, so it resolves with no re-import.
+IMAGE="${CX_IMAGE:-$(cx_default_image gb300)}"
 SQUASH_DIR="${CX_SQUASH_DIR:-/data/sa-shared/containers}"
 export CX_STAGE_DIR="${CX_STAGE_DIR:-/data/sa-shared/cx_stage}"
 export ENROOT_CACHE_PATH="${ENROOT_CACHE_PATH:-/data/sa-shared/.enroot_cache}"
