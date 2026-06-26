@@ -16,3 +16,5 @@ _ssh_v4_archive/
 # running local-only reflection log (not a committed artifact)
 notes.md
 goal.md
+# superseded seeded-runtime GHA results (canonical counterpart exists); kept out of the plot glob
+_seeded_archive/
