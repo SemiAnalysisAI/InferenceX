@@ -56,7 +56,7 @@ case "$OFFLOADING" in
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=4
+        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS="${INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS:-1}"
         python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -72,7 +72,8 @@ case "$OFFLOADING" in
   "enable_offload": false
 }
 EOF
-        export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576 MC_WORKERS_PER_CTX=4
+        export MOONCAKE_CONFIG_PATH PYTHONHASHSEED=0 MC_SLICE_SIZE=1048576
+        export MC_WORKERS_PER_CTX="${MC_WORKERS_PER_CTX:-1}"
         export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
             --eviction_high_watermark_ratio=0.80 \
@@ -117,6 +118,12 @@ if [[ -z "$MAX_NUM_SEQS_MULTIPLIER" ]]; then
     fi
 fi
 MAX_NUM_SEQS="${VLLM_MAX_NUM_SEQS:-$((MAX_NUM_SEQS_MULTIPLIER * CONC))}"
+if [[ "$OFFLOADING" == "cpu" && -z "${VLLM_MAX_NUM_SEQS:-}" ]]; then
+    CPU_MAX_NUM_SEQS_CAP="${VLLM_CPU_MAX_NUM_SEQS_CAP:-5}"
+    if (( MAX_NUM_SEQS > CPU_MAX_NUM_SEQS_CAP )); then
+        MAX_NUM_SEQS="$CPU_MAX_NUM_SEQS_CAP"
+    fi
+fi
 GPU_MEMORY_UTILIZATION="${VLLM_GPU_MEMORY_UTILIZATION:-}"
 if [[ -z "$GPU_MEMORY_UTILIZATION" ]]; then
     if [[ "$OFFLOADING" == "cpu" ]]; then
