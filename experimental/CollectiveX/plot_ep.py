@@ -41,7 +41,7 @@ SKU_FAMILY = {
 PALETTE = ["#17becf", "#bcbd22", "#7f7f7f", "#393b79", "#637939"]      # fallback for unknown SKUs
 
 
-def load_series(results_dir: str) -> list[dict]:
+def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
     series = []
     for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
         try:
@@ -49,6 +49,11 @@ def load_series(results_dir: str) -> list[dict]:
         except (json.JSONDecodeError, OSError):
             continue
         if d.get("family") != "moe" or not d.get("rows"):
+            continue
+        # legacy = a v3 doc with no machine-derived publication_status. exclude -> v4-only main
+        # plot; only -> the legacy.html archive.
+        is_legacy = "publication_status" not in d
+        if (legacy == "exclude" and is_legacy) or (legacy == "only" and not is_legacy):
             continue
         sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
         rows = []
@@ -445,11 +450,13 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP HTML plotter")
     ap.add_argument("--results-dir", default="results")
     ap.add_argument("--out", default="results/plots/collectivex_ep.html")
+    ap.add_argument("--legacy", choices=["all", "exclude", "only"], default="all",
+                    help="exclude -> v4-only main plot; only -> the legacy v3 archive")
     args = ap.parse_args()
 
-    series = load_series(args.results_dir)
+    series = load_series(args.results_dir, args.legacy)
     if not series:
-        print(f"no family=moe results with rows under {args.results_dir}")
+        print(f"no family=moe results with rows under {args.results_dir} (legacy={args.legacy})")
         return 1
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     html = HEAD + '<div class="controls" id="controls"></div>' \
