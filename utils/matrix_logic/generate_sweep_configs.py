@@ -22,7 +22,11 @@ seq_len_stoi = {
 }
 
 MIN_EVAL_CONC = 16
-MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
+# One concurrency per multi-node agentic allocation so each conc becomes its
+# own job and produces its own per-conc artifacts (matching the gb200/dynamo
+# path). Raise this to batch multiple concurrencies into a single server
+# allocation again (trades per-conc artifacts for fewer allocations).
+MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 CPU_MEMORY_OFFLOAD_MODES = {"cpu", "lmcache", "lmcache-mp", "hicache"}
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
