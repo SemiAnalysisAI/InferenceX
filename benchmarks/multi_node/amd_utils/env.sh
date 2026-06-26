@@ -205,7 +205,10 @@ else
     # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
     # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-}"
 
-    export MC_TE_METRIC=1
+    # Mooncake transfer-engine throughput metrics logging (transfer_engine.cpp:523).
+    # Default off to keep the 5s "[Metrics] Transfer Engine Throughput" lines out of
+    # prefill/decode stdout. Set MC_TE_METRIC=1 (or true) to re-enable for debugging.
+    export MC_TE_METRIC="${MC_TE_METRIC:-0}"
 
     # QoS/DSCP configuration
     # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
