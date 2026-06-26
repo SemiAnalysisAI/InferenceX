@@ -86,7 +86,13 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-MODEL_CPU_OFFLOAD_GB="${VLLM_MODEL_CPU_OFFLOAD_GB:-0}"
+if [[ -n "${VLLM_MODEL_CPU_OFFLOAD_GB:-}" ]]; then
+    MODEL_CPU_OFFLOAD_GB="$VLLM_MODEL_CPU_OFFLOAD_GB"
+elif [[ "$DP_ATTENTION" == "true" ]]; then
+    MODEL_CPU_OFFLOAD_GB=24
+else
+    MODEL_CPU_OFFLOAD_GB=0
+fi
 case "$OFFLOADING" in
     none) ;;
     cpu)
@@ -154,6 +160,9 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
 fi
 
 MAX_NUM_SEQS_MULTIPLIER="${MAX_NUM_SEQS_MULTIPLIER:-1}"
+if [[ "$DP_ATTENTION" == "true" && -z "${MAX_NUM_SEQS:-}" ]]; then
+    MAX_NUM_SEQS=1
+fi
 case "${EXP_NAME:-}" in
     *mns1x*) MAX_NUM_SEQS="${MAX_NUM_SEQS:-$CONC}" ;;
     *mns4x*) MAX_NUM_SEQS="${MAX_NUM_SEQS:-$((4 * CONC))}" ;;
