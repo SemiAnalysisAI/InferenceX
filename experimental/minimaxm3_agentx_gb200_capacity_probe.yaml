@@ -1,0 +1,27 @@
+minimaxm3-fp8-gb200-dynamo-vllm-agentic-capacity-probe:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: gb200
+  precision: fp8
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 3600
+      search-space:
+      - variant: tp4-4p6d-capacity-probe
+        conc-list: [12, 16, 20]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3/agentic/disagg-gb200-4p6d-tp4-agentic.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
