@@ -1108,8 +1108,14 @@ resolve_trace_source() {
         semianalysis_cc_traces_weka_with_subagents_256k)
             dataset="semianalysisai/cc-traces-weka-with-subagents-052726-256k"
             ;;
+        semianalysis_cc_traces_weka_with_subagents_060826)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-060826"
+            ;;
+        semianalysis_cc_traces_weka_with_subagents_060826_256k)
+            dataset="semianalysisai/cc-traces-weka-with-subagents-060826-256k"
+            ;;
         *)
-            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k" >&2
+            echo "Error: unknown WEKA_LOADER_OVERRIDE='$loader'. Allowed: semianalysis_cc_traces_weka_with_subagents, semianalysis_cc_traces_weka_with_subagents_256k, semianalysis_cc_traces_weka_with_subagents_060826, semianalysis_cc_traces_weka_with_subagents_060826_256k" >&2
             exit 1
             ;;
     esac
@@ -1184,6 +1190,9 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
     REPLAY_CMD+=" --model ${AIPERF_MODEL:-$MODEL}"
+    if [ -n "${AIPERF_MODEL:-}" ] && [ "${AIPERF_MODEL}" != "$MODEL" ]; then
+        REPLAY_CMD+=" --tokenizer $MODEL"
+    fi
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"

@@ -206,6 +206,19 @@ if [[ -n "${MAX_MODEL_LEN:-}" && "${MAX_MODEL_LEN}" != "0" ]]; then
     echo "[vLLM] MAX_MODEL_LEN=${MAX_MODEL_LEN}"
 fi
 
+if [[ -n "${MAX_NUM_SEQS:-}" && "${MAX_NUM_SEQS}" != "0" ]]; then
+    for _cfg in PREFILL_SERVER_CONFIG DECODE_SERVER_CONFIG; do
+        _val="${!_cfg}"
+        if echo "$_val" | grep -q -- '--max-num-seqs'; then
+            _val=$(echo "$_val" | sed -E "s/--max-num-seqs[=[:space:]]+[0-9]+/--max-num-seqs ${MAX_NUM_SEQS}/g")
+        else
+            _val+=" --max-num-seqs ${MAX_NUM_SEQS}"
+        fi
+        printf -v "$_cfg" '%s' "$_val"
+    done
+    echo "[vLLM] MAX_NUM_SEQS=${MAX_NUM_SEQS}"
+fi
+
 # =============================================================================
 # Container Synchronization
 # =============================================================================
