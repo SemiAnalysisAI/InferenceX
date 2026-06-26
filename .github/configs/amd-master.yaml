@@ -3230,5 +3230,5 @@ minimaxm3-fp8-mi355x-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [8] }
-      - { tp: 8, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [8] }
+      - { tp: 8, ep: 1, offloading: none, conc-list: [48] }
+      - { tp: 8, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [48] }
