@@ -222,6 +222,24 @@ if [[ -n "${MAX_NUM_SEQS:-}" && "${MAX_NUM_SEQS}" != "0" ]]; then
     echo "[vLLM] MAX_NUM_SEQS=${MAX_NUM_SEQS}"
 fi
 
+if [[ -n "${PREFILL_GPU_MEMORY_UTILIZATION:-}" ]]; then
+    if echo "$PREFILL_SERVER_CONFIG" | grep -q -- '--gpu-memory-utilization'; then
+        PREFILL_SERVER_CONFIG=$(echo "$PREFILL_SERVER_CONFIG" | sed -E "s/--gpu-memory-utilization[=[:space:]]+[0-9.]+/--gpu-memory-utilization ${PREFILL_GPU_MEMORY_UTILIZATION}/g")
+    else
+        PREFILL_SERVER_CONFIG+=" --gpu-memory-utilization ${PREFILL_GPU_MEMORY_UTILIZATION}"
+    fi
+    echo "[vLLM] PREFILL_GPU_MEMORY_UTILIZATION=${PREFILL_GPU_MEMORY_UTILIZATION}"
+fi
+
+if [[ -n "${DECODE_GPU_MEMORY_UTILIZATION:-}" ]]; then
+    if echo "$DECODE_SERVER_CONFIG" | grep -q -- '--gpu-memory-utilization'; then
+        DECODE_SERVER_CONFIG=$(echo "$DECODE_SERVER_CONFIG" | sed -E "s/--gpu-memory-utilization[=[:space:]]+[0-9.]+/--gpu-memory-utilization ${DECODE_GPU_MEMORY_UTILIZATION}/g")
+    else
+        DECODE_SERVER_CONFIG+=" --gpu-memory-utilization ${DECODE_GPU_MEMORY_UTILIZATION}"
+    fi
+    echo "[vLLM] DECODE_GPU_MEMORY_UTILIZATION=${DECODE_GPU_MEMORY_UTILIZATION}"
+fi
+
 # =============================================================================
 # Container Synchronization
 # =============================================================================
@@ -426,6 +444,13 @@ PY
 dump_runtime_logs() {
     local label="${1:-runtime failure}"
     echo "ERROR: ${label}" >&2
+    if [[ "$DRY_RUN" -eq 0 ]]; then
+        local logs_output="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
+        mkdir -p "$logs_output" 2>/dev/null || true
+        cp -r "/run_logs/slurm_job-${SLURM_JOB_ID}" "$logs_output/" 2>/dev/null || \
+            sudo cp -r "/run_logs/slurm_job-${SLURM_JOB_ID}" "$logs_output/" 2>/dev/null || true
+        echo "==== staged runtime logs to ${logs_output}/slurm_job-${SLURM_JOB_ID} ====" >&2
+    fi
     echo "==== /run_logs/slurm_job-${SLURM_JOB_ID} files ====" >&2
     find "/run_logs/slurm_job-${SLURM_JOB_ID}" -maxdepth 2 -type f -printf '%p %s bytes\n' 2>/dev/null | sort >&2 || true
     echo "==== recent server logs ====" >&2

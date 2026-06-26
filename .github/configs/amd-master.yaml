@@ -1650,6 +1650,7 @@ kimik2.5-fp4-mi355x-vllm-disagg-agentic:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+          - "DECODE_GPU_MEMORY_UTILIZATION=0.85"
 
 # Experimental agentic 1P1D bring-up for MoRIIO RDMA + LMCacheMP through
 # vllm-router. LMCacheMP is intentionally attached only on prefill; decode
