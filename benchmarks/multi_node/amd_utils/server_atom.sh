@@ -201,6 +201,11 @@ Opt     args : ${HF_OVERRIDES_ARG}
 =====================
 INFO
 
+set -x
+echo "::group::Environment Variables"
+env
+echo "::endgroup::"
+
 # =============================================================================
 # Node Role Assignment
 #
