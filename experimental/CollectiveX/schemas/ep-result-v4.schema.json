@@ -22,7 +22,8 @@
     "transport": {"type": "string"},
     "resource_mode": {"type": "string", "enum": ["normalized", "tuned", "default"]},
     "measurement_contract": {"type": "string",
-      "enum": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"]},
+      "enum": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1",
+               "mori-quant-combine-v1"]},
     "publication_status": {"type": "string",
       "enum": ["official", "comparable-experimental", "diagnostic", "invalid", "failed"]},
     "validity": {
@@ -48,7 +49,9 @@
         "manifest_checksums": {"type": ["object", "null"]},
         "trace_signature": {"type": "string"},
         "distinct_per_T_hashes": {"type": "array", "items": {"type": "string"}},
-        "cross_rank_consistent": {"type": "boolean"}
+        "cross_rank_consistent": {"type": "boolean"},
+        "activation_profile": {"type": "string"},
+        "activation_identity": {"type": ["string", "null"]}
       }
     },
     "shape": {
@@ -59,7 +62,18 @@
         "experts": {"type": "integer"}, "experts_per_rank": {"type": "integer"},
         "dispatch_dtype": {"type": "string", "enum": ["bf16", "fp8"]},
         "routing": {"type": "string"},
-        "eplb": {"type": "boolean"}, "num_logical_experts": {"type": "integer"}
+        "eplb": {"type": "boolean"}, "num_logical_experts": {"type": "integer"},
+        "activation_profile": {"type": "string"},
+        "quant": {
+          "type": "object",
+          "properties": {
+            "combine_input_dtype": {"type": "string"},
+            "combine_accum_dtype": {"type": "string"},
+            "combine_output_dtype": {"type": "string"},
+            "combine_quant_mode": {"type": "string"},
+            "scale_layout": {"type": ["string", "null"]}
+          }
+        }
       }
     },
     "reproduction": {

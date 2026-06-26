@@ -45,9 +45,16 @@ class MoRIBackend:
     # and is already steady at a short warm-up (~44us, reproducible) — so it opts out.
     wants_warm_burst = False
     # Capabilities — run_ep.py REJECTS anything outside these BEFORE construction (no
-    # fallback/mislabel). Expanded as each path is implemented + hardware-validated.
-    # MoRI exposes quant_type (fp8) in EpDispatchCombineConfig; added once validated.
-    SUPPORTED_PRECISIONS = {"bf16"}        # + "fp8" once the fp8 quant_type path is wired
+    # fallback/mislabel). DISPATCH precision and the SEPARATE combine path are distinct axes
+    # (review: dispatch_dtype=fp8 must NOT imply quantized combine). Today MoRI combines bf16
+    # with quant_type="none". PR311 WIRING POINT: when the ROCm/MoRI fp8 quant_type combine
+    # path is validated, add "fp8" to SUPPORTED_COMBINE_DTYPES + the mode id to
+    # SUPPORTED_COMBINE_QUANT_MODES here, flip quant_type below, and set the combine_* attrs
+    # ep_harness reads. Keep in sync with capability.py CAP["mori"].
+    SUPPORTED_DISPATCH_DTYPES = {"bf16"}        # + "fp8" once a dispatch-side fp8 cast is wired
+    SUPPORTED_COMBINE_DTYPES = {"bf16"}         # + "fp8" once the PR311 quant combine lands
+    SUPPORTED_COMBINE_QUANT_MODES = {"none"}    # + the PR311 mode id once validated
+    SUPPORTED_PRECISIONS = SUPPORTED_DISPATCH_DTYPES  # back-compat alias (run_ep.py / older refs)
     SUPPORTED_MODES = {"normal"}           # MoRI has no separate low-latency entrypoint
     # MoRI computes its routing layout INSIDE the dispatch kernel (block_num/warps launch);
     # it cannot be hoisted, so MoRI honors only the layout-and-dispatch contract. Cross-
@@ -60,9 +67,17 @@ class MoRIBackend:
         self.world_size = world_size
         self.device = device
         self.mode = args.mode
-        assert args.dispatch_dtype in self.SUPPORTED_PRECISIONS and args.mode in self.SUPPORTED_MODES, \
-            "run_ep.py must reject unsupported dtype/mode before constructing the backend"
+        assert (args.dispatch_dtype in self.SUPPORTED_DISPATCH_DTYPES
+                and args.mode in self.SUPPORTED_MODES
+                and getattr(args, "combine_dtype", "bf16") in self.SUPPORTED_COMBINE_DTYPES
+                and getattr(args, "combine_quant_mode", "none") in self.SUPPORTED_COMBINE_QUANT_MODES), \
+            "run_ep.py must reject unsupported dispatch/mode/combine before constructing the backend"
         self.fp8_in_timing = None  # set when fp8 dispatch is used (whether the cast is timed)
+        # Combine-path quant timing (None today — no quant combine wired). PR311 sets these +
+        # the combine_* dtype attrs ep_harness reads via getattr; until then ep_harness records
+        # combine bf16 / none from the args defaults.
+        self.combine_quant_in_timing = None
+        self.combine_dequant_in_timing = None
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
         dev_cus = torch.cuda.get_device_properties(device).multi_processor_count

@@ -97,6 +97,19 @@ def main() -> int:
                   f"mode={args.mode} — not supported on this build (no fallback). "
                   f"supported precisions={sorted(sp)} modes={sorted(sm)}.", file=sys.stderr)
         return 5
+    # Combine-path capability (review: dispatch_dtype=fp8 must NOT silently imply quantized
+    # combine). Defaults (bf16 / none) reproduce today's behavior; a quant-combine backend
+    # widens its SUPPORTED_COMBINE_* sets. getattr keeps backends that don't declare them at bf16/none.
+    scd = getattr(Backend, "SUPPORTED_COMBINE_DTYPES", {"bf16"})
+    sqm = getattr(Backend, "SUPPORTED_COMBINE_QUANT_MODES", {"none"})
+    cdt = getattr(args, "combine_dtype", "bf16")
+    cqm = getattr(args, "combine_quant_mode", "none")
+    if cdt not in scd or cqm not in sqm:
+        if rank == 0:
+            print(f"ERROR: {args.backend} REJECTS combine-dtype={cdt} / combine-quant-mode={cqm} "
+                  f"— quant combine not wired (no fallback). supported combine_dtypes={sorted(scd)} "
+                  f"quant_modes={sorted(sqm)}.", file=sys.stderr)
+        return 5
     # Measurement-contract capability (review #3): each adapter conforms to a declared
     # contract; reject anything else rather than letting it pick its own timing boundary.
     sc = getattr(Backend, "SUPPORTED_CONTRACTS", {"layout-and-dispatch-v1"})

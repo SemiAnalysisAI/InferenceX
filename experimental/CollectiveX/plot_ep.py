@@ -21,6 +21,7 @@ import argparse
 import glob
 import json
 import os
+import sys
 
 # SKU -> color (matches the matplotlib convention used for the NCCL plots).
 COLORS = {"b200": "#1f77b4", "gb200": "#2ca02c", "mi355x": "#d62728",
@@ -119,6 +120,12 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
         series.append({
             "sku": sku, "backend": backend, "ep": ep,
             "pub": pub, "wsig": wsig, "wid": wl.get("workload_id"),
+            # combine-quant mode + activation (value) profile are part of workload identity
+            # (review: quant combine can be value-sensitive). Default none/normal for pre-scaffold
+            # results; used by the comparison guard + tooltip so a quantized-combine or
+            # different-value run is never read as the same point as a bf16/normal one.
+            "cqm": (sh.get("quant") or {}).get("combine_quant_mode", "none"),
+            "act": sh.get("activation_profile", "normal"),
             "phase": d.get("phase", "decode"), "mode": mode,
             "dtype": dtype, "resource": rmode or "tuned", "contract": contract,
             # comparison class: best-stack (tuned/default) vs resource-constrained
@@ -324,7 +331,8 @@ function chart(o){
       '\nroundtrip µs p50/p90/p99 = '+R.p50.toFixed(1)+'/'+R.p90.toFixed(1)+'/'+R.p99.toFixed(1)+' (measured)'+
       '\nfan-out='+(p.r.fanout!=null?p.r.fanout.toFixed(2):'?')+'  ·  recv(max)='+p.r.recv
       +(p.r.straggler!=null?'  ·  straggler=r'+p.r.straggler:'')+(p.r.correct?'':'  ✗')+
-      '\ncontract='+g.s.contract+'  ·  suite='+g.s.suite+run+art+
+      '\ncontract='+g.s.contract+'  ·  suite='+g.s.suite+
+      '\ndispatch='+g.s.dtype+'  ·  combine='+(g.s.cqm||'none')+'  ·  activation='+(g.s.act||'normal')+run+art+
       '</title></circle>'; });
   });
   s+='</svg>'; return s;
@@ -339,6 +347,15 @@ function guardNote(vis){
   const byRt={}; vis.forEach(s=>{ (byRt[s.routing]=byRt[s.routing]||new Set()).add(s.wsig||'?'); });
   const split=Object.entries(byRt).filter(([k,v])=>v.size>1).map(([k])=>k);
   if(split.length) w.push('different workload trace within routing ['+split.join(',')+'] — NOT identical workloads');
+  // combine-quant / activation-value / workload-id are part of the workload contract: a quantized
+  // combine, a different value distribution, or a different canonical workload is NOT the same
+  // benchmark as the headline, even at matched routing/dims (review).
+  const cqms=[...new Set(vis.map(s=>s.cqm||'none'))];
+  if(cqms.length>1) w.push('mixed combine-quant ('+cqms.join(', ')+') — quantized combine is a different contract from dispatch');
+  const acts=[...new Set(vis.map(s=>s.act||'normal'))];
+  if(acts.length>1) w.push('mixed activation profile ('+acts.join(', ')+') — value distribution differs');
+  const wids=[...new Set(vis.map(s=>s.wid).filter(Boolean))];
+  if(wids.length>1) w.push('mixed workload_id ('+wids.join(' / ')+') — not the same canonical workload');
   const eps=[...new Set(vis.map(s=>s.ep))];
   if(eps.length>1) w.push('mixed EP degree '+eps.join('/')+' — compare only on the global-tokens x-axis');
   return w.length? '<div class="guard">⚠ not a direct comparison: '+w.join('; ')+'</div>' : '';
@@ -409,13 +426,35 @@ function renderCoverage(){
   Object.keys(by).sort().forEach(sku=>{
     by[sku].sort((a,b)=>(a.ep-b.ep)||a.label.localeCompare(b.label)).forEach(s=>{
       const ok=s.rows.filter(r=>r.correct).length;
-      const cfg=(s.dtype||'?')+'/'+s.mode+'/'+(s.contract||'?').replace('-v1','');
+      // dispatch dtype / mode / contract, + combine-quant + activation profile ONLY when non-default
+      // (so today's bf16/none/normal rows stay uncluttered; a PR311 quant-combine run shows /cq:…).
+      const cfg=(s.dtype||'?')+'/'+s.mode+'/'+(s.contract||'?').replace('-v1','')
+        +((s.cqm&&s.cqm!=='none')?'/cq:'+s.cqm:'')+((s.act&&s.act!=='normal')?'/'+s.act:'');
       h+='<tr><td>'+sku+'</td><td>'+s.ep+'</td><td>'+cfg+'</td><td>'+s.phase+'</td><td>'+s.routing+'</td>'
         +'<td><span class="badge" style="background:'+(cls[s.pub]||'#555')+'">'+s.pub+'</span></td>'
         +'<td>'+ok+'/'+s.rows.length+'</td></tr>';
     });
   });
   document.getElementById('coverage').innerHTML=h+'</table>';
+}
+// Distribution-sensitivity summary (review: don't add a 7th chart dimension — collapse it to one
+// ratio per sku/backend/phase). p99(worst stressor distribution) / p99(uniform) at matched
+// tokens/rank, computed by tests/sensitivity.py and injected as SENS.
+function renderSensitivity(){
+  const el=document.getElementById('sensitivity'); if(!el) return;
+  if(!window.SENS || !SENS.length){ el.innerHTML='<p class="note">No multi-distribution groups in this view (need uniform + a stressor at matched tokens/rank).</p>'; return; }
+  let h='<table class="cov"><tr><th>SKU</th><th>backend</th><th>phase</th><th>config</th><th>headline p99 µs</th><th>worst dist @T</th><th>sensitivity</th><th>EPLB zipf→+eplb</th></tr>';
+  SENS.slice().sort((a,b)=>(a.sku.localeCompare(b.sku))||a.backend.localeCompare(b.backend)||a.phase.localeCompare(b.phase)).forEach(r=>{
+    const cfg=r.dispatch_dtype+'·'+r.mode+'·'+(r.contract||'').replace('-v1','');
+    const rng=r.headline_p99_range_us, sr=r.distribution_sensitivity_ratio;
+    const sc = sr>=1.5?'#d62728':(sr>=1.2?'#d6a72b':'#2ca02c');
+    const ev=r.eplb_recovery? (r.eplb_recovery.zipf.toFixed(2)+'→'+r.eplb_recovery['zipf+eplb'].toFixed(2)+'×') : '—';
+    h+='<tr><td>'+r.sku+'</td><td>'+r.backend+'</td><td>'+r.phase+'</td><td>'+cfg+'</td>'
+      +'<td>'+rng[0]+'–'+rng[1]+'</td><td>'+r.worst_distribution+' @'+r.worst_at_T+'</td>'
+      +'<td><span class="badge" style="background:'+sc+'">'+sr.toFixed(2)+'×</span></td><td>'+ev+'</td></tr>';
+  });
+  el.innerHTML=h+'</table>'
+    +'<p class="note">distribution_sensitivity_ratio = p99(worst stressor distribution) ÷ p99(uniform) at matched tokens/rank — how much routing skew/spread degrades this backend (>1 = fragile, ~1 = robust). Stressors exclude the min-comm best case + EPLB-remedied runs. A single number, NOT a chart dimension (tests/sensitivity.py).</p>';
 }
 (function(){
   const sh=(DATA[0]||{shape:{}}).shape||{};
@@ -441,7 +480,7 @@ function renderCoverage(){
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
     'Backends: '+provs.join(', ')+'. Hover a point for p50/p90/p99, contract, suite, and its workflow run.';
-  renderControls(); renderMain(); renderGrid(); renderCoverage();
+  renderControls(); renderMain(); renderGrid(); renderCoverage(); renderSensitivity();
 })();
 """
 
@@ -458,16 +497,27 @@ def main() -> int:
     if not series:
         print(f"no family=moe results with rows under {args.results_dir} (legacy={args.legacy})")
         return 1
+    # Distribution-sensitivity ratios (stdlib; same results dir), embedded as SENS for a small
+    # summary table — collapses the routing axis to one ratio per sku/backend/phase (review).
+    sens_rows = []
+    try:
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tests"))
+        import sensitivity as _sens
+        sens_rows = [g for g in _sens.analyze(args.results_dir)["groups"]
+                     if g["distribution_sensitivity_ratio"] is not None]
+    except Exception as exc:  # never let the summary break the main plot
+        print(f"  (sensitivity summary skipped: {exc!r})", file=sys.stderr)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     html = HEAD + '<div class="controls" id="controls"></div>' \
         + '<div class="card"><div id="chart"></div></div><div id="mlegend"></div>' \
         + '<div id="grid"></div>' \
+        + '<h2>Distribution sensitivity</h2><div id="sensitivity"></div>' \
         + '<h2>Coverage</h2><div id="coverage"></div>' \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
         + f'{len(series)} EP sweeps. Latency (p50/p90/p99 selector) is the primary metric; the ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
         + 'bandwidth. dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
-        + "<script>\nconst DATA = " + json.dumps(series) + ";\n" + JS + "\n</script>\n" + TAIL
+        + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) + ";\n" + JS + "\n</script>\n" + TAIL
     with open(args.out, "w") as fh:
         fh.write(html)
     phases = sorted({s["phase"] for s in series})

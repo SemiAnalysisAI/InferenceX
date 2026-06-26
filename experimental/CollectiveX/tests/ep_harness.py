@@ -64,6 +64,18 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
     ap.add_argument("--dispatch-dtype", default="bf16", choices=["bf16", "fp8"])
+    # Combine-path precision/quant is a SEPARATE axis from dispatch (review: don't let
+    # dispatch_dtype=fp8 imply the whole EP path is quantized). Today every backend combines
+    # bf16 with no quant (combine_quant_mode=none); a future quantized combine (e.g. ROCm/MoRI
+    # PR311) sets these WITHOUT changing --dispatch-dtype. Defaults reproduce today exactly;
+    # capability.py gates unsupported values.
+    ap.add_argument("--combine-dtype", default="bf16", choices=["bf16", "fp8"],
+                    help="combine-input precision (today bf16 everywhere; fp8 = future quant combine)")
+    ap.add_argument("--combine-quant-mode", default="none",
+                    help="combine quantization mode; 'none' today. capability.py rejects unwired modes")
+    ap.add_argument("--activation-profile", default="normal", choices=["normal"],
+                    help="value distribution of expert inputs; seeded N(0,1) today. lognormal/"
+                         "model-trace reserved for the value-sensitivity rig (not yet wired)")
     # uniform = realistic top-k (fan-out ≈5.3 over EP8); balanced = load-equalized,
     # one-expert-per-rank (fan-out = ep_size); balanced-rank-local = fan-out 1 (min
     # comm) edge case; zipf = skewed. Default to the REALISTIC one.
@@ -600,6 +612,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                             else f"set:{len(loaded_workload_ids)}:{loaded_workload_ids[0]}")
         args.workload_checksums = loaded_checksums
     canonical_workload = bool(getattr(args, "workload_id", None))
+    # Activation-value identity (scaffold): today activations are seeded N(0,1) and NOT serialized,
+    # so identity is the deterministic descriptor (profile|seed|hidden|generator). When a value rig
+    # (lognormal / model-trace) lands, this becomes the byte-hash of the serialized activations.
+    activation_identity = hashlib.sha256(
+        f"{args.activation_profile}|seed={args.seed}|hidden={args.hidden}|gen=collectivex-activation-v1"
+        .encode()).hexdigest()[:16]
     validity = {
         "execution_status": "complete" if rows else "failed",
         "semantic_correctness": "pass" if (rows and all(r["correct"] for r in rows)) else "fail",
@@ -615,6 +633,19 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank, "dispatch_dtype": args.dispatch_dtype,
         "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
+        # value distribution of expert inputs — part of the workload identity (review: quant
+        # combine can be value-sensitive). "normal" today; folds into comparison_key.
+        "activation_profile": args.activation_profile,
+        # Combine contract, SEPARATE from dispatch. Today bf16/none for every backend regardless
+        # of dispatch_dtype; a quant-combine backend (PR311) reports its actuals via attrs. In
+        # shape so it folds into comparison_key — a quant-combine run is never compared to a bf16 one.
+        "quant": {
+            "combine_input_dtype": getattr(backend, "combine_input_dtype", args.combine_dtype),
+            "combine_accum_dtype": getattr(backend, "combine_accum_dtype", "fp32"),
+            "combine_output_dtype": getattr(backend, "combine_output_dtype", "bf16"),
+            "combine_quant_mode": getattr(backend, "combine_quant_mode", args.combine_quant_mode),
+            "scale_layout": getattr(backend, "scale_layout", None),
+        },
     }
     meta = {
         "op": "ep-dispatch-combine", "backend": backend.name, "mode": args.mode,
@@ -656,6 +687,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             # within-run (cross-rank) identity is PROVEN here; cross-hardware identity holds
             # only if another run records the SAME trace_signature / workload_id.
             "cross_rank_consistent": routing_consistent,
+            # value-distribution identity of the expert inputs (scaffold; see activation_identity above).
+            "activation_profile": args.activation_profile,
+            "activation_identity": activation_identity,
         },
         "comparison_key": comparison_key(meta),
         "x_axis": {"primary": "tokens_per_rank",
@@ -678,7 +712,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "trials": max(1, args.trials), "samples_per_point": (max(1, args.trials) * args.iters),
             "measurement_contract": args.measurement_contract,
             "dispatch_dtype": args.dispatch_dtype, "mode": args.mode,
+            "combine_dtype": args.combine_dtype, "combine_quant_mode": args.combine_quant_mode,
+            "activation_profile": args.activation_profile,
+            # whether (de)quantization is inside the timed window. fp8_quant_in_timing kept as a
+            # back-compat alias (dispatch-side fp8); combine_* are the quant-combine generalization
+            # (None today — no quant combine is wired). A backend sets these when it quantizes.
             "fp8_quant_in_timing": getattr(backend, "fp8_in_timing", None),
+            "combine_quant_in_timing": getattr(backend, "combine_quant_in_timing", None),
+            "combine_dequant_in_timing": getattr(backend, "combine_dequant_in_timing", None),
         },
         **meta,
         "correctness": {"passed": all_ok,

@@ -41,6 +41,10 @@
       }
     },
     "routing_stats": {"type": "object",
-      "description": "Realized fan-out / load / locality stats (advisory; not identity-defining)."}
+      "description": "Realized fan-out / load / locality stats (advisory; not identity-defining)."},
+    "activation_profile": {"type": "string",
+      "description": "Value distribution of expert inputs (e.g. 'normal'); reserved for the value-sensitivity rig."},
+    "activation_identity": {"type": ["string", "null"],
+      "description": "Deterministic descriptor hash of the activation distribution (profile|seed|dims). Becomes a byte-hash once activations are serialized (model-trace)."}
   }
 }

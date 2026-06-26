@@ -28,6 +28,8 @@ WORKLOAD_SCHEMA_VERSION = 1
 # current. The workload_id folds this in: same id <=> same generator + params.
 GENERATOR_VERSION = "collectivex-routing-v1"
 GATE_WEIGHT_FORMAT = "softmax-of-randn-f32"   # how topk_weights are produced (see routing.py)
+ACTIVATION_GENERATOR = "collectivex-activation-v1"  # bump if the activation value-generator changes
+ACTIVATION_PROFILE_DEFAULT = "normal"               # seeded N(0,1) per token; the only wired profile
 
 
 def _sha256(b: bytes) -> str:
@@ -42,8 +44,19 @@ def compute_workload_id(routing: str, hidden: int, topk: int, experts: int,
     return _sha256(key.encode())[:16]
 
 
+def compute_activation_identity(activation_profile, seed, hidden,
+                                generator=ACTIVATION_GENERATOR) -> str:
+    """Deterministic identity of the activation VALUE distribution (scaffold). Today activations
+    are seeded N(0,1) and NOT serialized, so identity = a descriptor hash. The formula MUST match
+    the inline one in ep_harness so a manifest and a result doc agree. Becomes the byte-hash of
+    the serialized activations once a model-trace value rig lands."""
+    key = f"{activation_profile}|seed={seed}|hidden={hidden}|gen={generator}"
+    return _sha256(key.encode())[:16]
+
+
 def build_manifest(routing, hidden, topk, experts, global_tokens, seed, experts_per_rank,
-                   idx_np, weights_np, routing_stats=None):
+                   idx_np, weights_np, routing_stats=None,
+                   activation_profile=ACTIVATION_PROFILE_DEFAULT):
     """Assemble the manifest dict from the (numpy) trace arrays. Pure numpy/stdlib."""
     idx_bytes = idx_np.astype("int32").tobytes()
     w_bytes = weights_np.astype("float32").tobytes()
@@ -59,14 +72,19 @@ def build_manifest(routing, hidden, topk, experts, global_tokens, seed, experts_
         "seed": seed,
         "checksums": {  # SHA-256 over the raw little-endian array bytes (int32 / float32)
             "topk_idx": _sha256(idx_bytes),
-            "topk_weights": _sha256(w_bytes),
+            "topk_weights": _sha256(w_bytes),   # gate-weight (value) distribution identity
             "trace": _sha256(idx_bytes + w_bytes),   # full-workload identity
         },
         "routing_stats": routing_stats or {},
+        # Activation value distribution (scaffold): name + deterministic descriptor identity.
+        # NOT under checksums — activations are not byte-serialized today (see compute_activation_identity).
+        "activation_profile": activation_profile,
+        "activation_identity": compute_activation_identity(activation_profile, seed, hidden),
     }
 
 
-def build_workload(hidden, topk, experts, routing, global_tokens, seed, experts_per_rank):
+def build_workload(hidden, topk, experts, routing, global_tokens, seed, experts_per_rank,
+                   activation_profile=ACTIVATION_PROFILE_DEFAULT):
     """Generate a canonical trace. Needs torch (routing.py). Returns (idx_np, weights_np, manifest)."""
     import numpy as np
     import routing as _routing
@@ -76,7 +94,8 @@ def build_workload(hidden, topk, experts, routing, global_tokens, seed, experts_
     idx_np = idx_t.detach().cpu().numpy().astype(np.int32)
     w_np = w_t.detach().cpu().numpy().astype(np.float32)
     manifest = build_manifest(routing, hidden, topk, experts, global_tokens, seed,
-                              experts_per_rank, idx_np, w_np, rstats)
+                              experts_per_rank, idx_np, w_np, rstats,
+                              activation_profile=activation_profile)
     return idx_np, w_np, manifest
 
 

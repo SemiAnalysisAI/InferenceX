@@ -76,6 +76,26 @@ suites:
     trials: 3
     required_publication: comparable-experimental
 
+  ep-distribution-sensitivity-v1:
+    description: "distribution robustness: ratio p99_worst / p99_headline(uniform) at ANCHOR tokens
+      only. NOT a chart dimension — collapses to one sensitivity number per (sku,backend,phase) via
+      tests/sensitivity.py. BF16/normal today; the value (activation) axis is added when the rig lands."
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, b300, gb300, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    # headline = uniform; balanced-rank-local = min-comm best case; zipf-heavy/hotspot-single = worst.
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-heavy, hotspot-single]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    # ANCHOR points only (not the full ladder) — the suite answers "how fragile", not "the curve".
+    token_points_decode: [1, 8, 32, 128]
+    token_points_prefill: [128, 512, 2048]
+    trials: 3
+    required_publication: comparable-experimental
+
   ep-routing-v1:
     description: "routing-skew sensitivity + EPLB remedy"
     workloads: [ds-like-ref]

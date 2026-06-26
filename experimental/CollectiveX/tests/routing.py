@@ -135,7 +135,18 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
     hist = torch.bincount(fanout, minlength=ep + 1)[1:ep + 1].tolist()  # counts for fan-out 1..ep
     load = torch.bincount(idx.reshape(-1), minlength=experts).float()
     # token-copies SENT to each destination rank (the "send histogram", review #3).
-    rank_load = torch.bincount(ranks.reshape(-1).clamp(max=ep - 1), minlength=ep).tolist()
+    rank_load_t = torch.bincount(ranks.reshape(-1).clamp(max=ep - 1), minlength=ep).float()
+    rank_load = [int(x) for x in rank_load_t.tolist()]
+    # One-number imbalance summaries so a row is self-describing for the distribution-sensitivity
+    # suite (no need to read the full histograms): CV = std/mean of the load; hotspot_ratio =
+    # worst expert load over the mean. uniform -> CV≈0, hotspot_ratio≈1; zipf / hotspot-single ->
+    # high CV and hotspot_ratio (≫1). Population std (unbiased=False) over the full realized trace.
+    def _cv(t):
+        m = float(t.mean())
+        return float(t.std(unbiased=False) / m) if m > 0 else 0.0
+    expert_load_cv = _cv(load)
+    rank_load_cv = _cv(rank_load_t)
+    hotspot_ratio = float(load.max() / load.mean()) if float(load.mean()) > 0 else 0.0
     # SHA-256 workload identity over BOTH topk_idx and gate weights (review #3): a chart
     # point's routing is provably identical across SKUs only if both hashes match.
     idx_bytes = idx.to(torch.int32).cpu().numpy().tobytes()
@@ -153,6 +164,7 @@ def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dic
         "rank_load_hist": rank_load,                       # token-copies sent to each dest rank
         "routed_copies": int(fanout.sum()),                # total (token, dest-rank) pairs
         "expert_load_min": int(load.min()), "expert_load_max": int(load.max()),
-        "expert_load_mean": float(load.mean()),
+        "expert_load_mean": float(load.mean()), "expert_load_cv": expert_load_cv,
+        "rank_load_cv": rank_load_cv, "hotspot_ratio": hotspot_ratio,
         "routing_hash": routing_hash, "idx_hash": idx_hash, "weights_hash": w_hash,
     }
