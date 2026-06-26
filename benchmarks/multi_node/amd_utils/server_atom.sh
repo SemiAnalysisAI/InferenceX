@@ -200,7 +200,6 @@ INFO
 #   rank 1 .. (NODE_OFFSET-1)       -> remaining prefill nodes
 #   rank NODE_OFFSET ..             -> decode nodes
 # =============================================================================
-
 if [ "$NODE_RANK" -eq 0 ]; then
     # ──────────────────────────────────────────────────────────────────────────
     # Node 0: prefill server (producer) + atomesh router
