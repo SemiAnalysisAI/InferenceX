@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+set -eo pipefail
 
 export HF_HUB_CACHE_MOUNT="/raid/hf-hub-cache/"
 export PORT=8888
@@ -16,12 +17,14 @@ set -x
 # Exclude known-bad nodes; let Slurm pick from anything else:
 #   chi-mi300x-049: persistent /nvme_home disk-full
 #   chi-mi300x-121: provisioning incomplete; missing /raid and Enroot storage
-JOB_ID=$(salloc --partition=$PARTITION --exclude=chi-mi300x-049,chi-mi300x-121 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
+JOB_ID=$(set +o pipefail; salloc --partition=$PARTITION --exclude=chi-mi300x-049,chi-mi300x-121 --gres=gpu:$TP --cpus-per-task=256 --time=180 --no-shell --job-name="$RUNNER_NAME" 2>&1 | tee /dev/stderr | grep -oP 'Granted job allocation \K[0-9]+')
 
 if [ -z "$JOB_ID" ]; then
     echo "ERROR: salloc failed to allocate a job"
     exit 1
 fi
+
+trap 'rc=$?; scancel "$JOB_ID" 2>/dev/null || true; exit "$rc"' EXIT
 
 # Use flock to serialize concurrent imports to the same squash file
 srun --jobid=$JOB_ID --job-name="$RUNNER_NAME" bash -c "
