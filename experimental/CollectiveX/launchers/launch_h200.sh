@@ -27,11 +27,15 @@ ACCOUNT="${CX_ACCOUNT:-}"            # H200 scheduler is open; no account needed
 NGPUS="${CX_NGPUS:-8}"
 TIME_MIN="${CX_TIME:-45}"            # generous: first-use enroot import of the image
 IMAGE="${CX_IMAGE:-$(cx_default_image h200)}"
-# CRITICAL: on this cluster /home is LOGIN-LOCAL (/dev/sdc) — invisible to compute
-# nodes. The compute-visible share is /mnt/nfs (10.0.0.130:/nfs). Both the squash
-# AND the staged repo MUST live there or pyxis fails "No such file or directory".
-SQUASH_DIR="${CX_SQUASH_DIR:-/mnt/nfs/sa-shared/containers}"
-export CX_STAGE_DIR="${CX_STAGE_DIR:-/mnt/nfs/sa-shared/cx_stage}"
+# This cluster's /home is shared NFS and IS compute-visible (confirmed on login-0:
+# the GHA runners live under /home/sa-shared/gharunners and the sglang image is
+# pre-staged at /home/sa-shared/containers). The h100-dgxc sibling is the opposite
+# (/home login-local, /mnt/nfs is the share) — /mnt/nfs does NOT exist here, so the
+# old /mnt/nfs default failed the GHA runner at "mkdir /mnt/nfs: Permission denied".
+# The checkout already lives on the compute-visible NFS, so mount it directly: no
+# staging (CX_STAGE_DIR empty). Override CX_STAGE_DIR only from a login-local checkout.
+SQUASH_DIR="${CX_SQUASH_DIR:-/home/sa-shared/containers}"
+export CX_STAGE_DIR="${CX_STAGE_DIR:-}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 

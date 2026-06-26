@@ -67,4 +67,5 @@ fire both bf16 normal layout-and-dispatch-v1 balanced false
 fire both bf16 normal layout-and-dispatch-v1 zipf     false
 fire both bf16 normal layout-and-dispatch-v1 zipf     true
 
-echo "=== dispatched $N runs for sku=$SKU (ref=$REF${NODES:+, nodes=$NODES}${DRY:+, DRY-RUN}) ==="
+drytag=""; [ "$DRY" = 1 ] && drytag=", DRY-RUN (nothing fired)"
+echo "=== ${DRY:+would dispatch }${N} runs for sku=$SKU (ref=$REF${NODES:+, nodes=$NODES}${drytag}) ==="
