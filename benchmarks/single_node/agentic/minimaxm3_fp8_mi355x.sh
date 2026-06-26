@@ -51,7 +51,7 @@ fi
 # Switch to the 256k-capped variant (470 traces, max in+out <= 256k).
 #export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
 #060226
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
+# export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
 
 resolve_trace_source
 install_agentic_deps
@@ -145,6 +145,11 @@ case "$OFFLOADING" in
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
+        # Apply PR #3779: per-engine-group KV format detection for MiniMax-M3.
+        # Fixes IndexError in get_num_heads() when heterogeneous KV tensor ranks
+        # (rank-5 K+V main cache + rank-3 MLA index cache) are present.
+        git fetch origin pull/3779/head:pr-3779
+        git merge --no-edit pr-3779
         pip install -r requirements/build.txt
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
@@ -154,7 +159,8 @@ case "$OFFLOADING" in
         # Let the external MP server own the full CPU KV pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
         # LMCache backend.
-        TOTAL_CPU_DRAM_GB=2000
+        TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
+        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -162,7 +168,7 @@ case "$OFFLOADING" in
         # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
         # ZMQ-style host string.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_GB))}"
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_PARTITION_GB))}"
         LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
         # LMCache read locks are leases on chunks that lookup has promised
         # vLLM can retrieve. The default 300s TTL is too short for this
@@ -172,8 +178,8 @@ case "$OFFLOADING" in
         # size unchanged and only extend the lookup-to-retrieve lease.
         LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
         # (srok) check 256 vs 32
-        #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
+        #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
+        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
         export LMCACHE_BLOCKING_TIMEOUT_SECS=120
@@ -234,7 +240,8 @@ VLLM_CMD=(
     --host 0.0.0.0
     --port "$PORT"
     "${PARALLEL_ARGS[@]}"
-    --gpu-memory-utilization 0.95
+    --block-size 128
+    --gpu-memory-utilization 0.85
     --kv-cache-dtype fp8
     --trust-remote-code
     --language-model-only
