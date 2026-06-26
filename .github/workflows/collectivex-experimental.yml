@@ -22,7 +22,7 @@ on:
         description: Self-hosted runner pool (must have a CollectiveX launcher)
         type: choice
         default: gb200
-        options: [gb200, b200-dgxc, b200-multinode, mi355x, h100-dgxc, b300]
+        options: [gb200, b200-dgxc, b200-multinode, mi355x, h100-dgxc, h200, b300, gb300]
       benchmark:
         # mori runs only on mi355x; nccl/deepep/all on the NVIDIA SKUs.
         description: Which benchmark to run
@@ -87,6 +87,19 @@ on:
         type: choice
         default: layout-and-dispatch-v1
         options: [layout-and-dispatch-v1, cached-layout-comm-only-v1]
+      routing:
+        # Routing distribution of the shared trace. uniform=realistic; balanced=load-equalized;
+        # zipf*=skewed; hotspot-single=one hot expert. The skew + EPLB sweep lives here.
+        description: EP routing distribution
+        type: choice
+        default: uniform
+        options: [uniform, balanced, zipf, zipf-mild, zipf-moderate, zipf-heavy, hotspot-single]
+      eplb:
+        # EPLB = replicate hot experts + balanced-place (the remedy for skewed routing). A pure
+        # routing-trace transform; experts -> num_logical+redundant. Meaningful with zipf*.
+        description: Apply EPLB expert replication/placement
+        type: boolean
+        default: false
 
 concurrency:
   # Include the dispatch SKU so two workflow_dispatch runs on different SKUs do
@@ -169,8 +182,12 @@ jobs:
       CX_MODE: ${{ inputs.mode }}
       CX_RESOURCE_MODE: ${{ inputs.resource_mode }}
       CX_MEASUREMENT_CONTRACT: ${{ inputs.contract }}
-      # review #3 #1: link every artifact to this workflow run (run_ep records git_run).
+      CX_ROUTING: ${{ inputs.routing }}
+      CX_EPLB: ${{ inputs.eplb && '1' || '' }}
+      # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
+      # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      COLLECTIVEX_ARTIFACT_NAME: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ matrix.phase }}_${{ github.run_id }}
       # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
       CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
       # MI355X: pin to the warm-squash, writable nodes (see the push job).
