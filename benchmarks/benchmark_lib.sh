@@ -1177,6 +1177,9 @@ _speedbench_spec_counter_metric() {
         sglang:verify)
             echo "sglang:spec_verify_calls_total"
             ;;
+        sglang:completion)
+            echo "sglang:generation_tokens_total"
+            ;;
         *)
             return 1
             ;;
@@ -1439,6 +1442,9 @@ run_speedbench_al_eval() {
     if [[ "$client" != "openai" && "$client" != "native" ]] && command -v vllm >/dev/null 2>&1; then
         use_vllm_client=1
     fi
+    if [[ "$metrics_framework" == "sglang" ]]; then
+        use_vllm_client=0
+    fi
 
     local think_args=()
     if [[ "$mode" == "on" ]]; then
@@ -1452,13 +1458,15 @@ run_speedbench_al_eval() {
         fi
     fi
 
-    local accepted_before="" proposed_before="" verify_before=""
+    local accepted_before="" proposed_before="" verify_before="" completion_before=""
     accepted_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "accepted" 2>/dev/null || true)
     proposed_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "proposed" 2>/dev/null || true)
     verify_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "verify" 2>/dev/null || true)
+    completion_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "completion" 2>/dev/null || true)
     accepted_before="${accepted_before:-0}"
     proposed_before="${proposed_before:-0}"
     verify_before="${verify_before:-0}"
+    completion_before="${completion_before:-0}"
 
     local trt_server_log_offset="0"
     if [[ "$metrics_framework" == "trtllm" ]]; then
@@ -1529,11 +1537,12 @@ run_speedbench_al_eval() {
         return 0
     fi
 
-    local accepted_after="" proposed_after="" verify_after=""
-    local al="" delta_acc="" delta_proposed="" delta_verify="" metric_source=""
+    local accepted_after="" proposed_after="" verify_after="" completion_after=""
+    local al="" delta_acc="" delta_proposed="" delta_verify="" delta_completion="" metric_source=""
     accepted_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "accepted" 2>/dev/null || true)
     proposed_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "proposed" 2>/dev/null || true)
     verify_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "verify" 2>/dev/null || true)
+    completion_after=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "completion" 2>/dev/null || true)
 
     if [[ -n "$accepted_after" ]]; then
         delta_acc=$(_speedbench_round_metric "$(_speedbench_metric_delta "$accepted_before" "$accepted_after")")
@@ -1543,6 +1552,9 @@ run_speedbench_al_eval() {
     fi
     if [[ -n "$verify_after" ]]; then
         delta_verify=$(_speedbench_round_metric "$(_speedbench_metric_delta "$verify_before" "$verify_after")")
+    fi
+    if [[ -n "$completion_after" ]]; then
+        delta_completion=$(_speedbench_round_metric "$(_speedbench_metric_delta "$completion_before" "$completion_after")")
     fi
 
     if [[ "$metrics_framework" == "vllm" && -n "$delta_acc" && -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
@@ -1586,17 +1598,32 @@ run_speedbench_al_eval() {
             fi
         fi
     elif [[ "$metrics_framework" == "sglang" ]]; then
-        al=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "acceptance_length" 2>/dev/null | awk '{ printf "%.4f", $1 }' || true)
-        if [[ -n "$al" ]]; then
-            metric_source="${metric_source_base}-gauge-endpoints${metrics_endpoint_count}"
-        fi
-        if [[ -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
-            local draft_depth=""
+        local draft_depth=""
+        if [[ -n "$delta_completion" && "$delta_completion" -gt 0 && -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
+            al=$(awk -v completion="$delta_completion" -v verify="$delta_verify" 'BEGIN { printf "%.4f", completion / verify }')
+            delta_acc=$(_speedbench_round_metric "$(awk -v completion="$delta_completion" -v verify="$delta_verify" 'BEGIN { value = completion - verify; if (value < 0) value = 0; printf "%.10f\n", value }')")
             draft_depth=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "draft_tokens_per_step" 2>/dev/null || true)
             if [[ -n "$draft_depth" ]]; then
                 delta_proposed=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v depth="$draft_depth" 'BEGIN { value = verify * (depth - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")
+            elif [[ -n "$mtp" ]]; then
+                delta_proposed=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v mtp="$mtp" 'BEGIN { value = verify * mtp; if (value < 0) value = 0; printf "%.10f\n", value }')")
             fi
+            metric_source="${metric_source_base}-generation-counter+verify-counter-endpoints${metrics_endpoint_count}"
+        fi
+        if [[ -z "$al" ]]; then
+            al=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "acceptance_length" 2>/dev/null | awk '{ printf "%.4f", $1 }' || true)
             if [[ -n "$al" ]]; then
+                metric_source="${metric_source_base}-gauge-endpoints${metrics_endpoint_count}"
+            fi
+        fi
+        if [[ -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
+            if [[ -z "$draft_depth" ]]; then
+                draft_depth=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "draft_tokens_per_step" 2>/dev/null || true)
+            fi
+            if [[ -n "$draft_depth" ]]; then
+                delta_proposed="${delta_proposed:-$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v depth="$draft_depth" 'BEGIN { value = verify * (depth - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")}"
+            fi
+            if [[ -n "$al" && "$metric_source" != *"generation-counter+verify-counter"* ]]; then
                 delta_acc=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v al="$al" 'BEGIN { value = verify * (al - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")
                 metric_source="${metric_source:-${metric_source_base}-gauge-endpoints${metrics_endpoint_count}}+derived-token-counters"
             fi
