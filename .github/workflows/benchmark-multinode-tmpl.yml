@@ -231,9 +231,49 @@ jobs:
         env:
           RUNNER_NAME: ${{ runner.name }}
           RUNNER_TYPE: ${{ inputs.runner }}
+          PREFILL_ADDITIONAL_SETTINGS_JSON: ${{ inputs.prefill-additional-settings }}
+          DECODE_ADDITIONAL_SETTINGS_JSON: ${{ inputs.decode-additional-settings }}
         run: |
           set -x
-          export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
+          python3 - <<'PY' > /tmp/inferencex_additional_settings.sh
+          import json
+          import os
+          import re
+          import shlex
+          import sys
+
+          env_name_re = re.compile(r"[A-Za-z_][A-Za-z0-9_]*$")
+          github_env = os.environ["GITHUB_ENV"]
+
+          with open(github_env, "a", encoding="utf-8") as github_env_file:
+              for json_env_name in ("PREFILL_ADDITIONAL_SETTINGS_JSON", "DECODE_ADDITIONAL_SETTINGS_JSON"):
+                  raw_settings = os.environ.get(json_env_name) or "[]"
+                  try:
+                      settings = json.loads(raw_settings)
+                  except json.JSONDecodeError as exc:
+                      print(f"Invalid {json_env_name}: {exc}", file=sys.stderr)
+                      sys.exit(1)
+
+                  if settings is None:
+                      settings = []
+                  if not isinstance(settings, list):
+                      print(f"{json_env_name} must be a JSON array", file=sys.stderr)
+                      sys.exit(1)
+
+                  for item in settings:
+                      if not isinstance(item, str) or "=" not in item:
+                          print(f"{json_env_name} entry must be KEY=VALUE: {item!r}", file=sys.stderr)
+                          sys.exit(1)
+
+                      name, value = item.split("=", 1)
+                      if not env_name_re.fullmatch(name):
+                          print(f"Invalid environment variable name in {json_env_name}: {name!r}", file=sys.stderr)
+                          sys.exit(1)
+
+                      print(f"{name}={value}", file=github_env_file)
+                      print(f"export {name}={shlex.quote(value)}")
+          PY
+          source /tmp/inferencex_additional_settings.sh
           export IS_MULTINODE=true
           bash ./runners/launch_${RUNNER_NAME%%_*}.sh
           if [ "${{ inputs.eval-only }}" = "true" ]; then
