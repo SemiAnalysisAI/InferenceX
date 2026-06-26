@@ -119,6 +119,7 @@ env:
   OFFLOADING: ${{ inputs.offloading }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
@@ -217,6 +218,12 @@ jobs:
             if [ -z "$FOUND_RESULT_FILE" ]; then
               echo "Run failed: Benchmark result $RESULT_FILENAME.json not found." >&2
               exit 1
+            fi
+
+            if [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
+              python3 utils/validate_agentic_result.py \
+                results/aiperf_artifacts \
+                --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
             fi
           fi
 
