@@ -177,9 +177,29 @@ jobs:
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
             echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
-            scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
+            # scancel can legitimately run a while: it triggers the node epilog,
+            # which may be a slow/complex script. Give it 5min before giving up
+            # (30s was too short — it could kill an epilog that was still working).
+            timeout 300 scancel --name="${{ runner.name }}" 2>/dev/null || true
+            # Bound the drain: on the NVIDIA clusters squeue/scancel intermittently
+            # HANG (unresponsive slurmctld / munge / network — NOT a stuck job),
+            # wedging this step for 15-20min+ (observed up to 8h) and failing dsr1
+            # multinode legs on gb300-nv, gb200, b200 (CoreWeave unaffected). Proven
+            # live 2026-06-22: gb300-nv_2 answered squeue in 37ms, then the same
+            # runner's cleanup squeue hung >6min only 14min later; gb300-nv_0 hung
+            # concurrently. So: timeout-wrap every slurm call (a hung squeue returns
+            # empty -> the while-condition is false -> loop exits and we proceed),
+            # and cap the whole drain at 5min with a force-KILL instead of looping
+            # forever. A real not-yet-cleared job still gets the full 5min to drain.
+            _drain_deadline=$((SECONDS + 300))
+            while [ -n "$(timeout 30 squeue --name='${{ runner.name }}' --noheader --format='%i' 2>/dev/null)" ]; do
+              if [ "$SECONDS" -ge "$_drain_deadline" ]; then
+                echo "[Slurm] drain exceeded 5min; force-cancelling (KILL) and proceeding"
+                timeout 60 scancel --signal=KILL --name="${{ runner.name }}" 2>/dev/null || true
+                sleep 5
+                break
+              fi
+              timeout 30 squeue --name="${{ runner.name }}" 2>/dev/null || true
               sleep 5
             done
           fi
