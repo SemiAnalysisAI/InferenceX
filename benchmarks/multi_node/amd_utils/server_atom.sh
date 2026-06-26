@@ -81,19 +81,25 @@ host_name=$(hostname)
 # Model-Specific Configuration from YAML
 # =============================================================================
 # Load model-specific config from YAML (single parse for all fields)
-eval "$(python3 -c "
+_yaml_tmp=$(mktemp)
+python3 << PYEOF > "$_yaml_tmp"
 import yaml
 with open('${ATOM_WS_PATH}/models_atom.yaml') as f:
     m = yaml.safe_load(f).get('${MODEL_NAME}', {})
-print(f'MODEL_ENVS=\"{m.get(\"env\", \"\")}\"')
-print(f'MODEL_TP_DP_FLAGS=\"{m.get(\"tp_dp_flags\", \"\")}\"')
-print(f'MODEL_EP_DP_FLAGS=\"{m.get(\"ep_dp_flags\", \"\")}\"')
-print(f'MODEL_TP_DP_ENV=\"{m.get(\"tp_dp_env\", \"\")}\"')
-print(f'MODEL_EP_DP_ENV=\"{m.get(\"ep_dp_env\", \"\")}\"')
-print(f'MODEL_MTP_FLAGS=\"{m.get(\"mtp_flags\", \"\")}\"')
-print(f'MODEL_KV_ARG=\"{m.get(\"kv_cache_flags\", \"\")}\"')
-print(f'_HF_OVERRIDES=\"{m.get(\"hf_overrides\", \"\")}\"')
-")"
+def sh(v): return v.replace("'", "'\\''")
+print(f"MODEL_ENVS='{sh(m.get('env', ''))}'")
+print(f"MODEL_TP_DP_FLAGS='{sh(m.get('tp_dp_flags', ''))}'")
+print(f"MODEL_EP_DP_FLAGS='{sh(m.get('ep_dp_flags', ''))}'")
+print(f"MODEL_TP_DP_ENV='{sh(m.get('tp_dp_env', ''))}'")
+print(f"MODEL_EP_DP_ENV='{sh(m.get('ep_dp_env', ''))}'")
+print(f"MODEL_MTP_FLAGS='{sh(m.get('mtp_flags', ''))}'")
+print(f"MODEL_KV_ARG='{sh(m.get('kv_cache_flags', ''))}'")
+print(f"_HF_OVERRIDES='{sh(m.get('hf_overrides', ''))}'")
+PYEOF
+# shellcheck source=/dev/null
+source "$_yaml_tmp"
+rm -f "$_yaml_tmp"
+unset _yaml_tmp
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -131,7 +137,7 @@ DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 # Parallel args
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$PREFILL_ENABLE_DP" = "true" ]; then
-    if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #EP+DPA
+    if [ "$PREFILL_ENABLE_EP" = "true" ]; then #EP+DPA
         PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${MODEL_EP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
     else #TP+DPA
@@ -142,7 +148,7 @@ fi
 
 DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
-    if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #EP+DPA
+    if [ "$DECODE_ENABLE_EP" = "true" ]; then #EP+DPA
         DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${MODEL_EP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
     else #TP+DPA
@@ -166,7 +172,7 @@ unset _env_pair
 
 # MTP args
 SPEC_ARGS=()
-if [ "$SPEC_DECODING" = "mtp" ]; then
+if [[ "$SPEC_DECODING" != "none" && "$SPEC_DECODING" != "" && -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
     SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
 fi
 
