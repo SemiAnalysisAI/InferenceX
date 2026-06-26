@@ -362,6 +362,7 @@ else
         MiniMax-M2.7
         MiniMax-M2.7-NVFP4
         MiniMax-M3
+        MiniMax-M3-NVFP4
         Qwen3.5-397B-A17B
         Qwen3.5-397B-A17B-FP8
         Qwen3.5-397B-A17B-NVFP4
