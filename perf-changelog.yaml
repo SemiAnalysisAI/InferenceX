@@ -3985,6 +3985,15 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1825
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom
+    - minimaxm3-fp4-mi355x-atom-mtp
+  description:
+    - "Add minimaxm3-fp4-mi355x-atom-mtp: MiniMax-M3 MXFP4 on MI355X with EAGLE3 speculative decoding (3 draft tokens)"
+    - "Bump image to rocm/atom-dev:MiniMax-M3-20260623 for both fp4 atom entries"
+    - "Search space: TP2/TP4, ISL=1024,8192, OSL=1024, conc 1–256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1917
+
+- config-keys:
     - minimaxm3-fp8-b300-vllm-mtp
   description:
     - "Update the MiniMax-M3 B300 single-node image to vllm/vllm-openai:minimax-m3-0618-x86_64-cu130."
@@ -4079,6 +4088,14 @@
     - "1k/1k: 1p1d-dep4-dep8 (conc 4096,12288), 1p4d-dep4-tp8 (conc 4-128), 1p1d-dep4-dep16 (conc 4096,6144)"
     - "8k/1k: 1p4d-dep4-tep4 (conc 128), 1p4d-dep4-tp8 (conc 4-256), 3p1d-dep4-dep16 (conc 1024), 6p1d-dep4-dep16 (conc 3072), 8p1d-dep4-dep16 (conc 6144)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1862
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom-disagg
+  description:
+    - "Add minimaxm3-fp4-mi355x-atom-disagg CI script: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP4"
+    - "No MTP, KV_CACHE_DTYPE=auto (MXFP4 native, no fp8 override), MAX_MODEL_LEN=32768, MAX_NUM_BATCHED_TOKENS=32768"
+    - "server_atom.sh: conditional --kv_cache_dtype, MAX_MODEL_LEN/MAX_NUM_BATCHED_TOKENS/CUDAGRAPH_OPT support, syntax fixes"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1856
 
 - config-keys:
     - dsv4-fp4-mi355x-sglang
