@@ -209,6 +209,11 @@ PY
                 echo "Staging agentic raw artifacts from $AGENTIC_SRC"
                 mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
                 cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
+                # aiperf/server_sglang create some dirs read-only (mode 0555),
+                # and cp preserves those modes; without owner-write the next
+                # checkout's `git clean` can't rmdir LOGS/agentic and the job
+                # fails with EACCES. Force owner-writable so it stays cleanable.
+                chmod -R u+w "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
             else
                 echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
@@ -300,6 +305,7 @@ else
     fi
 
     srun --jobid=$JOB_ID \
+        --container-mounts=/dev/shm:/dev/shm \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         $SLRUM_HOME_MOUNT \

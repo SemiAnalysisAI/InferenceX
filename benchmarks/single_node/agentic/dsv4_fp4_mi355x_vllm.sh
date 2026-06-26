@@ -143,7 +143,7 @@ case "$OFFLOADING" in
 
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
-            --force-reinstall "mooncake-transfer-engine-rocm==$MOONCAKE_VERSION"
+            --force-reinstall "mooncake-transfer-engine-non-cuda==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
         python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
