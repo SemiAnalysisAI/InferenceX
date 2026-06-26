@@ -4191,3 +4191,33 @@
     - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
     - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1927
+  
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Update the DeepSeek-V4-Pro B200 disaggregated Dynamo-vLLM benchmark to the vllm/vllm-openai:v0.23.0 image"
+    - "Lower max-num-batched-tokens to 16384 and gpu-memory-utilization to 0.9 on the high-throughput and max-throughput recipes to avoid OOM"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1899
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+    - "Initial submission: MiniMax-M3 MXFP4 disagg (prefill/decode) on MI355X with vLLM over the MoRI-IO KV connector (8k/1k)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1914
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Add a MiniMax-M3 MXFP4 single-node vLLM benchmark on MI355X using amd/MiniMax-M3-MXFP4."
+    - "Pin vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e, which includes upstream Quark MXFP4 support from vllm-project/vllm#45794."
+    - "Serve through the text-only language-model path with block size 128, TRITON_ATTN, MiniMax-M3 tool/reasoning parsers, automatic tool choice, and VLLM_USE_BREAKABLE_CUDAGRAPH=0; let vLLM select the MoE backend and retain the default KV-cache dtype."
+    - "Mirror the MiniMax-M3 MXFP8 MI355X TP/EP/DP-attention search space at 1k1k and 8k1k for a direct precision comparison."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1935
+
+- config-keys:
+    - qwen3.5-fp4-gb300-dynamo-sglang
+  description:
+    - "Add Qwen3.5-397B-A17B-NVFP4 GB300 disaggregated multinode SGLang benchmarks via Dynamo."
+    - "Image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc."
+    - "8k/1k STP recipes: 1P1D TP4 (conc 1-256), 5P1D DEP4+1D DEP16 (conc 2048, NIXL), 6P1D and 7P1D DEP4+1D DEP16 (conc 5120, Mooncake)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1921
