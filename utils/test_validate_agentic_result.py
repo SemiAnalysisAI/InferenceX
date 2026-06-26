@@ -67,7 +67,20 @@ def test_supports_per_run_artifact_layout(tmp_path: Path):
 
 
 def test_fails_when_aggregate_is_missing(tmp_path: Path):
-    errors = validate_result(tmp_path / "aiperf_artifacts", 0.10)
+    artifact_dir = tmp_path / "aiperf_artifacts"
+    artifact_dir.mkdir()
+    (artifact_dir / "profile_export.jsonl").write_text('{"partial": true}\n')
+
+    errors = validate_result(artifact_dir, 0.10)
 
     assert len(errors) == 1
     assert errors[0].endswith("profile_export_aiperf.json not found")
+
+
+def test_workflow_runs_agentic_validity_gate():
+    workflow = (
+        Path(__file__).parents[1] / ".github/workflows/benchmark-tmpl.yml"
+    ).read_text()
+
+    assert "python3 utils/validate_agentic_result.py" in workflow
+    assert '--failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"' in workflow
