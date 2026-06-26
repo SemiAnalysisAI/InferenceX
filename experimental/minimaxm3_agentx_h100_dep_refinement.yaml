@@ -17,8 +17,9 @@ minimaxm3-fp8-h100-vllm-agentic-dep-refinement:
         conc-list: [4, 8]
         variant: dep8-ep8-sticky
         additional-settings: &dep-settings
-        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=300
-        - VLLM_MAX_MODEL_LEN=393216
+        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
+        - VLLM_MODEL_CPU_OFFLOAD_GB=80
+        - VLLM_MAX_NUM_SEQS=1
         - VLLM_ROUTER_POLICY=consistent_hash
       - tp: 8
         ep: 8
@@ -27,6 +28,7 @@ minimaxm3-fp8-h100-vllm-agentic-dep-refinement:
         conc-list: [4]
         variant: dep8-ep8-round-robin
         additional-settings:
-        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=300
-        - VLLM_MAX_MODEL_LEN=393216
+        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
+        - VLLM_MODEL_CPU_OFFLOAD_GB=80
+        - VLLM_MAX_NUM_SEQS=1
         - VLLM_ROUTER_POLICY=round_robin

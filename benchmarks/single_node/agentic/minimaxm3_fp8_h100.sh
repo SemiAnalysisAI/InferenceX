@@ -152,14 +152,6 @@ MAX_BATCHED_TOKENS_ARGS=()
 if [[ -n "${VLLM_MAX_NUM_BATCHED_TOKENS:-}" ]]; then
     MAX_BATCHED_TOKENS_ARGS=(--max-num-batched-tokens "$VLLM_MAX_NUM_BATCHED_TOKENS")
 fi
-MAX_MODEL_LEN_ARGS=()
-MAX_MODEL_LEN="${VLLM_MAX_MODEL_LEN:-}"
-if [[ "$DP_ATTENTION" == "true" && -z "$MAX_MODEL_LEN" ]]; then
-    MAX_MODEL_LEN=393216
-fi
-if [[ -n "$MAX_MODEL_LEN" ]]; then
-    MAX_MODEL_LEN_ARGS=(--max-model-len "$MAX_MODEL_LEN")
-fi
 VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-}"
 if [[ -z "$VLLM_ROUTER_POLICY" ]]; then
     case "${EXP_NAME:-}" in
@@ -167,7 +159,7 @@ if [[ -z "$VLLM_ROUTER_POLICY" ]]; then
         *) VLLM_ROUTER_POLICY=consistent_hash ;;
     esac
 fi
-echo "H100 AgentX tuning: max_num_seqs=$MAX_NUM_SEQS gpu_memory_utilization=$GPU_MEMORY_UTILIZATION chunked_prefill=${VLLM_CHUNKED_PREFILL:-auto} prefix_caching=${VLLM_PREFIX_CACHING:-true} max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS:-auto} max_model_len=${MAX_MODEL_LEN:-model-default} router_policy=$VLLM_ROUTER_POLICY cache_warmup_s=$AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
+echo "H100 AgentX tuning: max_num_seqs=$MAX_NUM_SEQS gpu_memory_utilization=$GPU_MEMORY_UTILIZATION chunked_prefill=${VLLM_CHUNKED_PREFILL:-auto} prefix_caching=${VLLM_PREFIX_CACHING:-true} max_num_batched_tokens=${VLLM_MAX_NUM_BATCHED_TOKENS:-auto} model_cpu_offload_gb=$MODEL_CPU_OFFLOAD_GB router_policy=$VLLM_ROUTER_POLICY cache_warmup_s=$AIPERF_AGENTIC_CACHE_WARMUP_DURATION"
 free -g
 swapon --show || true
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
@@ -184,7 +176,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" \
     "${PREFIX_CACHING_ARGS[@]}" \
     "${CHUNKED_PREFILL_ARGS[@]}" \
     "${MAX_BATCHED_TOKENS_ARGS[@]}" \
-    "${MAX_MODEL_LEN_ARGS[@]}" \
     --max-num-seqs "$MAX_NUM_SEQS" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
