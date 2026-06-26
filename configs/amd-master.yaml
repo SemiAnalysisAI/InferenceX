@@ -2772,7 +2772,7 @@ minimaxm3-fp8-mi355x-atom-disagg:
           - "DECODE_NODES=1"
 
 minimaxm3-fp4-mi355x-atom-disagg:
-  image: rocm/atom-dev:MiniMax-M3-20260622
+  image: rocm/atom-dev:MiniMax-M3-20260623
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x-disagg
