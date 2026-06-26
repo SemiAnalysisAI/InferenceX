@@ -4195,7 +4195,6 @@
     - minimaxm3-fp4-b300-dynamo-vllm
   description:
     - "Add MiniMax-M3 NVFP4 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP (no MTP)"
-    - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223"
+    - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
     - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
-    - "Overlay vllm-project/vllm#46380 at commit 6c08558112acd2fd8b4bfc270104d556eb77f9bf and retain the MiniMax-M3 MSA contiguous top-k fix"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1931

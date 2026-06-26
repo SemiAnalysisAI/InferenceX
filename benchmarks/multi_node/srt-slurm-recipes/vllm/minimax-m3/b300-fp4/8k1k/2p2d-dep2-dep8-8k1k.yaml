@@ -2,7 +2,7 @@ name: "minimax-m3-vllm-disagg-b300-2p2d-fp4-dep2-dep8-8k1k"
 
 model:
   path: "nvidia/MiniMax-M3-NVFP4"
-  container: "vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223"
+  container: "vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41"
   precision: "fp4"
 
 resources:

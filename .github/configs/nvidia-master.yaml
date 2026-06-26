@@ -11956,9 +11956,10 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: false
 
 # MiniMax-M3 NVFP4 disagg sweep on the same B300 topology matrix as the MXFP8
-# baseline above. vLLM PR #46380 is overlaid by the runner setup script.
+# baseline above. The image includes vLLM PR #46380, so no runtime patch is
+# needed.
 minimaxm3-fp4-b300-dynamo-vllm:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223
+  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300

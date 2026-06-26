@@ -94,16 +94,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECIS
     git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    if [[ $PRECISION == "fp4" ]]; then
-        SRTCTL_SETUP_SCRIPT="minimax-m3-nvfp4-vllm-fixes.sh"
-    else
+    if [[ $PRECISION == "fp8" ]]; then
         SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
     fi
     # NVIDIA/srt-slurm#38
     git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
-    cp \
-        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-        "configs/$SRTCTL_SETUP_SCRIPT"
+    if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+        cp \
+            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+            "configs/$SRTCTL_SETUP_SCRIPT"
+    fi
 else
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
