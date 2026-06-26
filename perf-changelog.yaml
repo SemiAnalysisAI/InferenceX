@@ -4305,6 +4305,17 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1939
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-atom-disagg
+  description:
+    - "Add minimaxm3-fp4-mi355x-atom-disagg CI recipe: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP4"
+    - "Image: rocm/atom-dev:MiniMax-M3-20260623; model: amd/MiniMax-M3-MXFP4; framework: atom-disagg"
+    - "Search space: ISL=8192 and ISL=1024, OSL=1024, 1P1D TP4, conc 1-512"
+    - "Refactor server_atom.sh to eliminate all hardcoded MODEL_NAME checks; all model-specific config (env, parallel flags, MTP flags, KV cache flags, HF overrides) now driven from models_atom.yaml"
+    - "Add MiniMax-M3-MXFP4 and MiniMax-M3-MXFP8 entries to models_atom.yaml with EAGLE3 MTP flags (--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3)"
+    - "Fix model HuggingFace path for minimaxm3-fp8-mi355x-atom-disagg: amd/MiniMax-M3-MXFP8 -> MiniMaxAI/MiniMax-M3-MXFP8"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1940
+
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
     - "Update the MiniMax-M3 MXFP8 MI355X vLLM EAGLE3 benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
