@@ -464,6 +464,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         ladder = ramp
 
     MAX, MIN, SUM = dist.ReduceOp.MAX, dist.ReduceOp.MIN, dist.ReduceOp.SUM
+    # temporal snapshot index — defined BEFORE the EPLB block (which builds a reference trace with
+    # step=routing_step); the EPLB path runs only when eplb_on, so a late definition raised an
+    # UnboundLocalError on zipf+eplb canonical runs (caught as a preserved failed-case).
+    routing_step = int(getattr(args, "routing_step", 0))
 
     # EPLB plan (once): estimate logical load from the global logical trace at the largest
     # ladder T (most samples), then replicate+place. Held fixed across all T (as real EPLB
@@ -490,7 +494,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                   f"(canonical workloads are serialized at a fixed global-token count per id); "
                   f"use seeded-runtime for the uneven-allocation study.")
         return 2
-    routing_step = int(getattr(args, "routing_step", 0))
     loaded_workload_ids, loaded_checksums = [], {}
     if canonical:
         import workload as _wl
