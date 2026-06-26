@@ -46,16 +46,18 @@ export LOGLEVEL=WARNING
 # mooncake RDMA KV transfer library path
 export LD_LIBRARY_PATH=/opt/venv/lib/python3.10/site-packages/mooncake:/opt/rocm/lib:${LD_LIBRARY_PATH:-}
 
-# ATOM MoE gather/scatter interleave optimization
-export ATOM_MOE_GU_ITLV=1
 
 # ATOM_HOST_IP is set per-node in server_atom.sh (= host_ip, used as handshake IP)
 
 # aiter logging (WARNING to reduce noise; use DEBUG for troubleshooting)
 export AITER_LOG_LEVEL=WARNING
 
-# Disable bf16->fp8 MoE bound (matches reference script)
-export AITER_BF16_FP8_MOE_BOUND=0
+if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+    # ATOM MoE gather/scatter interleave optimization
+    export ATOM_MOE_GU_ITLV=1
+    # Disable bf16->fp8 MoE bound (only for DeepSeek-V4-Pro)
+    export AITER_BF16_FP8_MOE_BOUND=0
+fi
 
 # Clear stale ATOM cache on startup (server_atom.sh handles this via rm -rf)
 # No env var needed; documented here for reference.

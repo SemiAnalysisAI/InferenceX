@@ -196,8 +196,9 @@ Use `all-evals` and/or `evals-only` with one primary sweep label. `all-evals`
 covers every fixed-sequence config; each multi-node topology runs all
 `conc-list` values on one engine. `evals-only` suppresses throughput; together
 they run all evals only. The primary label still controls canary/fail-fast.
-Modifier runs are not reusable; default full sweeps, including default evals,
-are.
+`all-evals` full sweeps are reusable. Runs with `evals-only`, including runs
+with both modifiers, are not. Default full sweeps, including default evals,
+are also reusable.
 
 ## Reusing an Approved PR Full Sweep
 

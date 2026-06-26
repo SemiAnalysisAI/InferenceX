@@ -819,7 +819,10 @@ def test_main_disables_reuse_without_pinned_comment(monkeypatch, tmp_path) -> No
     assert outputs["reuse-reason"] == "PR #1321 has no /reuse-sweep-run authorization"
 
 
-def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None:
+def test_main_accepts_all_evals_with_non_canary_full_sweep_label(
+    monkeypatch,
+    tmp_path,
+) -> None:
     comments = [
         {
             "created_at": "2026-05-13T00:00:00Z",
@@ -845,7 +848,10 @@ def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None
         if path == "/pulls/1321":
             return {
                 "merged_at": "2026-05-13T00:01:00Z",
-                "labels": [{"name": "non-canary-full-sweep-enabled"}],
+                "labels": [
+                    {"name": "non-canary-full-sweep-enabled"},
+                    {"name": "all-evals"},
+                ],
                 "head": {"sha": "abc123"},
             }
         if path == "/actions/runs/25763404168":
@@ -889,11 +895,9 @@ def test_main_accepts_non_canary_full_sweep_label(monkeypatch, tmp_path) -> None
     assert outputs["reuse-enabled"] == "true"
 
 
-@pytest.mark.parametrize("modifier", ["all-evals", "evals-only"])
-def test_main_rejects_eval_modifier_for_reuse(
+def test_main_rejects_evals_only_for_reuse(
     monkeypatch,
     tmp_path,
-    modifier,
 ) -> None:
     comments = [
         {
@@ -911,7 +915,7 @@ def test_main_rejects_eval_modifier_for_reuse(
                 "merged_at": "2026-05-13T00:01:00Z",
                 "labels": [
                     {"name": "full-sweep-enabled"},
-                    {"name": modifier},
+                    {"name": "evals-only"},
                 ],
                 "head": {"sha": "abc123"},
             }
@@ -944,7 +948,7 @@ def test_main_rejects_eval_modifier_for_reuse(
         ],
     )
 
-    with pytest.raises(RuntimeError, match=rf"reuse-incompatible.*{modifier}"):
+    with pytest.raises(RuntimeError, match=r"reuse-incompatible.*evals-only"):
         reuse.main()
 
 

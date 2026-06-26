@@ -44,3 +44,13 @@ DeepSeek-V4-Pro:
   base_flags: ""
   mtp_flags: ""
   dp_flags: ""
+
+MiniMax-M3-MXFP4:
+  base_flags: ""
+  mtp_flags: ""
+  dp_flags: ""
+
+MiniMax-M3-MXFP8:
+  base_flags: ""
+  mtp_flags: ""
+  dp_flags: ""

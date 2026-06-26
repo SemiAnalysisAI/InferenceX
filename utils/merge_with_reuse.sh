@@ -110,8 +110,6 @@ case "$SELECTED_SWEEP_LABEL" in
         die "PR #${PR} must use a full-sweep label for artifact reuse"
         ;;
 esac
-[ "$(jq '[.labels[].name | select(. == "all-evals")] | length' <<<"$PR_INFO")" -eq 0 ] \
-    || die "PR #${PR} uses all-evals, which is not eligible for artifact reuse"
 [ "$(jq '[.labels[].name | select(. == "evals-only")] | length' <<<"$PR_INFO")" -eq 0 ] \
     || die "PR #${PR} uses evals-only, which is not eligible for artifact reuse"
 

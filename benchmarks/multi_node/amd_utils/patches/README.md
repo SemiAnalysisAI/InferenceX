@@ -1,16 +1,23 @@
-# In-tree sglang patches for the MoRI PD-disagg path
+# In-tree patches for the MoRI / MoRIIO PD-disagg path
 
-This directory carries small Python overlays that get bind-mounted over
-the upstream sglang source inside the docker container at runtime.
-They are needed because some sglang releases ship known bugs in the
-MoRI disaggregation backend that block our benchmark + accuracy
-configs.
+This directory carries small overlays that fix up the engine source inside
+the docker container at runtime. They are needed because some published
+images ship known bugs in the (MoRI / MoRIIO) disaggregation backend that
+block our benchmark + accuracy configs — so we can keep reusing the
+**stock image** instead of rebuilding a patched one.
 
-The mount is wired through the `EXTRA_DOCKER_MOUNTS` env var that
-`job.slurm` consumes (an opt-in `${EXTRA_DOCKER_MOUNTS:-}` after the
-existing `-v` block). The local-test driver scripts under
-`scripts/sglang_disagg/` pre-set this env var to the path of the
-relevant overlay; CI runners that need the patch can do the same.
+- `mori_conn.py` — single-file overlay (bind-mounted) for the **sglang**
+  MoRI backend.
+
+> Note: the vLLM MoRIIO `minimax-m3` overlay (`moriio/`) was retired once the
+> upstream fixes (vLLM #46039 / #46290 / #46332) shipped in the ROCm nightly
+> image; `minimaxm3-fp8-mi355x-vllm-disagg` now runs the stock nightly directly.
+
+The `mori_conn.py` overlay is wired through the `EXTRA_DOCKER_MOUNTS` env
+var that `job.slurm` consumes (an opt-in `${EXTRA_DOCKER_MOUNTS:-}` after
+the existing `-v` block). The local-test driver scripts under
+`scripts/sglang_disagg/` pre-set this env var to the path of the relevant
+overlay; CI runners that need the patch can do the same.
 
 ## `mori_conn.py`
 
