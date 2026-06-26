@@ -121,12 +121,13 @@ if [ "$PREFILL_ENABLE_DP" = "true" ]; then
             PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo )
             export GPU_MAX_HW_QUEUES=5
             export ATOM_CPU_AFFINITY=1
-        else #TP+DPA
+        else #TP+DPA 
             PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
         fi
     fi
 fi 
 
+# (srok), split DPA & TBO cases
 DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
@@ -136,7 +137,7 @@ if [ "$DECODE_ENABLE_DP" = "true" ]; then
             DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo )
             export GPU_MAX_HW_QUEUES=5
             export ATOM_CPU_AFFINITY=1
-        else #TP+DPA
+        else #TP+DPA 
             DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
         fi
     fi

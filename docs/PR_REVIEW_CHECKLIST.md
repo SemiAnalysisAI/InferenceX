@@ -5,7 +5,7 @@ When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/
 ## Template
 
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
-
+- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/edit/main/docs/PR_REVIEW_CHECKLIST.md)
 - [ ] Verified that the general code quality meets the InferenceX standard and does not make the code quality any worse.
 - [ ] Verified that this PR has passed PR validation. Please link to GitHub Action workflow that shows this.
 - [ ] Verified that this PR passes evals.  Please link to GitHub Action workflow that shows this.
