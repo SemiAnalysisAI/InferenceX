@@ -30,7 +30,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
     fi
 fi 
 
-SPEC_ARGS=(--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens 3 )
+SPEC_ARGS=()
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
