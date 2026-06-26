@@ -230,6 +230,9 @@ if [[ "$DP_ATTENTION" == "true" ]]; then
     fi
 fi
 GPU_MEMORY_UTILIZATION=0.95
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    GPU_MEMORY_UTILIZATION=0.94
+fi
 if (( TP == 4 )); then
     GPU_MEMORY_UTILIZATION=0.98
 fi
