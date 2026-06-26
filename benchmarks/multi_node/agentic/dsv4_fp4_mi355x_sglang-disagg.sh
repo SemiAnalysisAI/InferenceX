@@ -92,12 +92,12 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
     export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
     export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-mooncake}"
   else
-    export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
+    export HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first}"
     export HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-    export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+    export HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
     export HICACHE_STORAGE_BACKEND="${HICACHE_STORAGE_BACKEND:-}"
   fi
-  export HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-wait_complete}"
+  export HICACHE_PREFETCH_POLICY="${HICACHE_PREFETCH_POLICY:-best_effort}"
   # Shared nodes: use non-default Mooncake ports to avoid collisions.
   export MC_MASTER_PORT="${MC_MASTER_PORT:-58137}"
   export MC_METADATA_PORT="${MC_METADATA_PORT:-8080}"

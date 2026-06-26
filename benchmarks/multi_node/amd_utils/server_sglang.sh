@@ -435,9 +435,9 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
         HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
         HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
     else
-        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-layer_first}"
-        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-kernel}"
-        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
     fi
 
     # Mooncake master/connection settings (used only when storage=mooncake).
@@ -468,7 +468,7 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
     HICACHE_RATIO="${HICACHE_RATIO:-}"
     if [[ -z "$HICACHE_RATIO" ]]; then
         if [[ "$PREFILL_TP_SIZE" -ge 8 ]]; then
-            HICACHE_RATIO=2
+            HICACHE_RATIO=8
         else
             HICACHE_RATIO=16
         fi

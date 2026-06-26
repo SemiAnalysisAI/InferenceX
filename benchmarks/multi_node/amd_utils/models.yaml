@@ -387,7 +387,13 @@ DeepSeek-V4-Pro:
       max_total_tokens: 1048576
     no_dp:
       max_running_requests: 128
-      chunked_prefill_size: 65280  # dsv4 compressor kernel uint16 token cap (255*256)
+      # Small prefill chunks interleave long-context agentic prefills across
+      # requests instead of letting one ~100K-token prefill monopolize the
+      # engine (the conc>=16 queue-saturation / decode-stall failure mode).
+      # Mirrors the single-node DSv4 agentic recipe (dsv4_fp4_mi355x.sh=8192).
+      # Was 65280 (255*256, the dsv4 compressor kernel uint16 token cap); 8192
+      # (32*256) stays a page-size multiple well under that cap.
+      chunked_prefill_size: 8192
       context_length: 1048576
       max_total_tokens: 1048576
   decode:
