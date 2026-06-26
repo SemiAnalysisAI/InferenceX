@@ -209,11 +209,18 @@ PY
                 echo "Staging agentic raw artifacts from $AGENTIC_SRC"
                 mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
                 cp -r "$AGENTIC_SRC"/. "$GITHUB_WORKSPACE/LOGS/agentic/"
-                # aiperf/server_sglang create some dirs read-only (mode 0555),
-                # and cp preserves those modes; without owner-write the next
-                # checkout's `git clean` can't rmdir LOGS/agentic and the job
-                # fails with EACCES. Force owner-writable so it stays cleanable.
-                chmod -R u+w "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                # The source artifacts are created inside the container as root
+                # (--container-remap-root), so depending on how the runner
+                # invokes this script the copies can end up root-owned and/or
+                # read-only (aiperf/server_sglang make some dirs mode 0555). If
+                # the staged tree isn't owned+writable by the runner user, the
+                # next checkout's `git clean` fails with
+                #   EACCES: permission denied, rmdir '.../LOGS/agentic'.
+                # chown to the invoking user (the same one that runs git clean)
+                # via sudo (already passwordless here for rm -rf), then force it
+                # writable so it always stays cleanable.
+                sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                chmod -R u+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
             else
                 echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
