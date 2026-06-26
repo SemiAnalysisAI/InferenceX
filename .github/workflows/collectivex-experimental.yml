@@ -131,6 +131,31 @@ on:
         description: Normalized comm-resource fraction (resource_mode=normalized)
         type: string
         default: ''
+      hidden:
+        # MoE hidden dim — set (with topk/experts) for model-derived workloads (ep-models-v1).
+        # Blank = ds-like-ref default 7168.
+        description: MoE hidden dim (model-derived workloads); blank = 7168
+        type: string
+        default: ''
+      topk:
+        description: MoE top-k (model-derived workloads); blank = 8
+        type: string
+        default: ''
+      experts:
+        description: MoE total experts (model-derived workloads); blank = 256
+        type: string
+        default: ''
+      routing_step:
+        # temporal snapshot index for hotspot-moving / alternating-groups (ep-temporal-v1).
+        description: Temporal routing step (hotspot-moving / alternating-groups)
+        type: string
+        default: ''
+      uneven_tokens:
+        # per-rank source-token allocation skew (ep-uneven-tokens-v1).
+        description: Uneven source-token allocation
+        type: choice
+        default: none
+        options: [none, linear, empty-rank]
 
 concurrency:
   # Group per (SKU + FULL config): GitHub keeps only one running + one pending per group and
@@ -141,7 +166,7 @@ concurrency:
   # The group includes the resource/value/placement axes (sm_fraction, resource_mode,
   # activation_profile, placement) too — otherwise a Pareto sm-fraction sweep or an activation/
   # placement sweep (same dtype/mode/contract/routing/phase) would self-cancel down to ~2 runs.
-  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.placement }}
+  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.placement }}-${{ inputs.hidden }}-${{ inputs.topk }}-${{ inputs.experts }}-${{ inputs.routing_step }}-${{ inputs.uneven_tokens }}
   cancel-in-progress: false
 
 permissions:
@@ -228,6 +253,12 @@ jobs:
       CX_ACTIVATION_PROFILE: ${{ inputs.activation_profile }}
       CX_PLACEMENT: ${{ inputs.placement }}
       CX_SM_FRACTION: ${{ inputs.sm_fraction }}
+      # model-derived workload dims (blank = ds-like-ref defaults) + temporal/uneven axes.
+      CX_HIDDEN: ${{ inputs.hidden }}
+      CX_TOPK: ${{ inputs.topk }}
+      CX_EXPERTS: ${{ inputs.experts }}
+      CX_ROUTING_STEP: ${{ inputs.routing_step }}
+      CX_UNEVEN_TOKENS: ${{ inputs.uneven_tokens }}
       # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
       # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}

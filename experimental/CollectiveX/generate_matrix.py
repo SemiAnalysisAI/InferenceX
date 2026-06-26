@@ -95,6 +95,9 @@ def generate(suite_name):
     cqms = s.get("combine_quant_modes", ["none"])
     placements = s.get("placements", ["packed"])
     activations = s.get("activation_profiles", ["normal"])
+    eplbs = s.get("eplb", [False])                 # ep-routing-v1 sweeps [false, true]
+    steps = s.get("routing_steps", [0])            # ep-temporal-v1 sweeps the snapshot index
+    unevens = s.get("uneven_tokens", ["none"])     # ep-uneven-tokens-v1 sweeps the allocation
     cases, omitted = [], []
     for plat in s["platforms"]:
         bset = []
@@ -102,17 +105,19 @@ def generate(suite_name):
             bset += expand_backends(bspec, plat, platforms, backends)
         for beng in sorted(set(bset)):
             eps = s.get("ep_degrees") or platforms["platforms"][plat]["validated"]["ep_degrees"]
-            for wl, mode, dtype, contract, routing, ep, phase, rmode, cqm, placement, act in \
-                    itertools.product(
+            for (wl, mode, dtype, contract, routing, ep, phase, rmode, cqm, placement, act,
+                 eplb, step, uneven) in itertools.product(
                     s["workloads"], s["modes"], s.get("dtypes", ["bf16"]), s["contracts"],
-                    routings, eps, phases, resource_modes, cqms, placements, activations):
+                    routings, eps, phases, resource_modes, cqms, placements, activations,
+                    eplbs, steps, unevens):
                 ok, reason = resolve_case(plat, beng, mode, dtype, contract, routing, ep, phase,
                                           platforms, backends, combine_quant_mode=cqm,
-                                          placement=placement, activation_profile=act)
+                                          placement=placement, activation_profile=act, eplb=eplb)
                 rec = {"workload": wl, "platform": plat, "backend": beng, "mode": mode,
                        "dtype": dtype, "contract": contract, "routing": routing, "ep": ep,
                        "phase": phase, "resource_mode": rmode, "combine_quant_mode": cqm,
-                       "placement": placement, "activation_profile": act}
+                       "placement": placement, "activation_profile": act,
+                       "eplb": eplb, "routing_step": step, "uneven_tokens": uneven}
                 (cases if ok else omitted).append({**rec, **({} if ok else {"reason": reason})})
     # SHARDS: one allocation per (platform, backend, mode, resource, image) runs many points.
     shards = {}
