@@ -220,6 +220,12 @@ const SUITE = {all:"All", "backend-default":"Backend-default", "resource-constra
 // zipf (skewed) / zipf+eplb (skew rebalanced by EPLB replication). Default to uniform so the
 // initial view matches the headline sweep; switch to compare zipf vs zipf+eplb.
 const ROUTING = (()=>{ const o={all:"All"}; [...new Set(DATA.map(s=>s.routing))].sort().forEach(r=>{o[r]=r;}); return o; })();
+// Prefill panels show only the real large-T prefill range. MoRI ramps its prefill sweep from 1
+// (cold-jump wedge) and records decode-scale points; the intended prefill floor is the DeepEP
+// prefill ladder min. So every SKU's prefill panel starts there — the sub-floor MoRI points are
+// ramp-warmup (same kernel as decode) and live in the decode panel, not fabricated/duplicated here.
+const _dpf = DATA.filter(s=>s.phase==="prefill"&&s.backend==="deepep").flatMap(s=>s.rows.map(r=>r.t));
+const PREFILL_MIN = _dpf.length? Math.min(..._dpf) : 128;
 // Publication-status filter (goal P1): default hides diagnostic/invalid/failed so the first
 // view is publication-valid; "publishable" = official + comparable-experimental + legacy v3.
 const PUB = {publishable:"Publishable", official:"Official only", all:"All (incl. diagnostic)"};
@@ -267,7 +273,8 @@ function chart(o){
                             && (suite==="all" || s.suite===suite)
                             && (routing==="all" || s.routing===routing) && pubOk(s));
   const pts = sl.map(s=>({s, P:s.rows.map(r=>({x:xval(r,o.x), y:metric(r,o.op,o.y,pct), r}))
-                                     .filter(p=>p.x>0 && (o.ylog? p.y>0 : p.y>=0))}));
+                                     .filter(p=>p.x>0 && (o.ylog? p.y>0 : p.y>=0)
+                                                && (o.phase!=="prefill" || p.r.t>=PREFILL_MIN))}));
   let xs=[], ys=[]; pts.forEach(g=>g.P.forEach(p=>{xs.push(p.x);ys.push(p.y);}));
   if(!xs.length) return '<svg viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="axl" text-anchor="middle">no data</text></svg>';
   const xmn=Math.min(...xs), xmx=Math.max(...xs);
