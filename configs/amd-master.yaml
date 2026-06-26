@@ -2657,14 +2657,11 @@ minimaxm3-fp4-mi355x-atom:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 128, conc-end: 256 }
       - { tp: 4, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 2, conc-start: 128, conc-end: 256 }
       - { tp: 4, conc-start: 1, conc-end: 256 }
-      - { tp: 8, conc-start: 1, conc-end: 2 }
 
 minimaxm3-fp4-mi355x-atom-mtp:
   image: rocm/atom-dev:MiniMax-M3-20260623
@@ -2724,7 +2721,7 @@ minimaxm3-fp8-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
 minimaxm3-fp8-mi355x-atom-disagg:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260622
   model: amd/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x-disagg
