@@ -3,8 +3,8 @@
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
-# b300-018 repeatedly times out UCX/NIXL transfers; allow an empty override to disable this.
-MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018}"
+# b300-018 and b300-004 repeatedly time out UCX/NIXL transfers; allow an empty override to disable this.
+MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018,b300-004}"
 
 set -x
 
