@@ -75,6 +75,19 @@ cx_stage_repo() {
   if [ -z "$stage_dir" ] || [ "$stage_dir" = "$repo_root" ]; then
     echo "$repo_root"; return 0
   fi
+  # Concurrency isolation. Under GHA the per-config concurrency fan-out runs many
+  # same-SKU dispatches at once, all staging into the SAME shared base dir; a
+  # shared dir + `rsync --delete` lets one job unlink/replace a file a peer is
+  # mid-read of -> "error reading input file: Stale file handle" on the next
+  # `srun ... run_in_container.sh`. Give each EXECUTING job its own subdir keyed on
+  # the runner name (a self-hosted runner runs one job at a time, so concurrent
+  # jobs never share a dir); sequential reuse on one runner is safe (the jobs do
+  # not overlap, and --delete refreshes the tree). Outside GHA (no RUNNER_NAME /
+  # GITHUB_RUN_ID) keep the single shared dir — SSH use is single-tenant.
+  local tag="${RUNNER_NAME:-${GITHUB_RUN_ID:-}}"
+  if [ -n "$tag" ]; then
+    stage_dir="$stage_dir/job_$(printf '%s' "$tag" | tr -c 'A-Za-z0-9._-' '_')"
+  fi
   mkdir -p "$stage_dir/experimental" || cx_die "cannot create stage dir $stage_dir"
   cx_log "staging experimental/CollectiveX -> $stage_dir (compute-visible)"
   rsync -a --delete \
