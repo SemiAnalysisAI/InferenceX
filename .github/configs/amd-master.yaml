@@ -2562,7 +2562,7 @@ minimaxm3-fp8-mi355x-vllm:
 # acceptance dilutes in big batches, and the draft weights + draft KV shave
 # headroom — tp2-ep2 is dropped since its KV headroom was already thin.
 minimaxm3-fp8-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
