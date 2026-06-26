@@ -1,0 +1,26 @@
+minimaxm3-fp8-h200-vllm-agentic-dep-native-context:
+  image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: h200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 900
+      available-cpu-dram-mib: 1_471_356
+      cpu-offload-utilization: 0.80
+      gpus-per-node: 8
+      search-space:
+      - tp: 8
+        ep: 8
+        dp-attn: true
+        offloading: none
+        conc-list: [4, 8]
+        variant: dep8-ep8-native-context
+        additional-settings:
+        - AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
+        - VLLM_MODEL_CPU_OFFLOAD_GB=24
+        - MAX_NUM_SEQS=1
+        - VLLM_ROUTER_POLICY=consistent_hash
