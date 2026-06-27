@@ -55,6 +55,13 @@ on:
         type: choice
         default: both
         options: [both, decode, prefill]
+      iters:
+        # Timed iterations PER TRIAL (blank = harness default 200). LOWER it (e.g. 20-30) for the
+        # MoRI/MI355X large-T probe: MoRI wedges (unkillable D-state) under SUSTAINED iters>=200 at
+        # T>=32, but completed T=64-128 at moderate iters in earlier runs.
+        description: Timed iters per trial (blank = 200; lower for the MoRI large-T probe)
+        type: string
+        default: ''
       tokens_ladder:
         description: EP source-tokens-per-rank sweep (space/comma sep); blank = phase default
         type: string
@@ -259,6 +266,7 @@ jobs:
       CX_EXPERTS: ${{ inputs.experts }}
       CX_ROUTING_STEP: ${{ inputs.routing_step }}
       CX_UNEVEN_TOKENS: ${{ inputs.uneven_tokens }}
+      CX_ITERS: ${{ inputs.iters }}
       # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
       # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
