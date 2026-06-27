@@ -48,6 +48,7 @@ platforms:
     validated:
       ep_degrees: [8]
       backends: [deepep]
+      modes: [normal]              # Blackwell LL aborts on this fabric -> normal-only
       max_intranode_gpus: 8
       internode: false
   gb300:

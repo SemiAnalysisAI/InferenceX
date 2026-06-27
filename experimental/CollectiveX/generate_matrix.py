@@ -44,6 +44,9 @@ def resolve_case(plat, beng, mode, dtype, contract, routing, ep, phase, platform
         return False, f"{beng} is {b['vendor']}, {plat} is {p['vendor']}"
     if mode not in b["modes"]:
         return False, f"{beng} has no mode {mode}"
+    pm = (p.get("validated") or {}).get("modes")
+    if pm and mode not in pm:
+        return False, f"{plat} validated modes={pm} (got {mode})"   # e.g. B300 LL aborts -> normal-only
     if dtype not in b["dtypes"]:
         return False, f"{beng} has no dtype {dtype}"
     if contract not in b["contracts"]:

@@ -12,10 +12,11 @@
 #   _gha_suite.sh --all --dry                      # plan for every suite
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; CXDIR="$(cd "$HERE/.." && pwd)"
-WF="collectivex-experimental.yml"; REF="${CX_REF:-collectivex}"; DRY=0; SUITE=""; ALL=0
+WF="collectivex-experimental.yml"; REF="${CX_REF:-collectivex}"; DRY=0; SUITE=""; ALL=0; ONLYSKU=""
 SLEEP="${CX_DISPATCH_SLEEP:-6}"
 while [ $# -gt 0 ]; do case "$1" in
   --suite) SUITE="$2"; shift 2;; --all) ALL=1; shift;; --dry) DRY=1; shift;;
+  --only-sku) ONLYSKU="$2"; shift 2;;   # dispatch only this SKU's cases (e.g. backfill one chip)
   --ref) REF="$2"; shift 2;; *) echo "unknown arg: $1" >&2; exit 2;; esac; done
 
 suites_list() { python3 -c "import yaml;print(' '.join(yaml.safe_load(open('$CXDIR/configs/suites.yaml'))['suites']))"; }
@@ -24,7 +25,7 @@ suites_list() { python3 -c "import yaml;print(' '.join(yaml.safe_load(open('$CXD
 
 # Resolve one suite -> pipe-separated dispatch tuples (one per UNIQUE workflow_dispatch input set).
 emit_tuples() {  # suite
-  python3 - "$1" "$CXDIR" <<'PY'
+  CX_ONLYSKU="$ONLYSKU" python3 - "$1" "$CXDIR" <<'PY'
 import sys, os, json, subprocess
 suite, cxdir = sys.argv[1], sys.argv[2]
 import yaml
@@ -58,6 +59,9 @@ for c in m["cases"]:
     if beng not in ("deepep", "mori"):   # collectives aren't EP suites
         continue
     sku = SKU.get(plat, plat)
+    only = os.environ.get("CX_ONLYSKU", "")
+    if only and sku != only:
+        continue                     # --only-sku: backfill just one chip
     h, t, e = dims(c["workload"])
     hidden = "" if (h in (None, 7168)) else str(h)
     topk = "" if (t in (None, 8)) else str(t)

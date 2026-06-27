@@ -38,7 +38,7 @@ suites:
   ep-nightly-v1:
     description: "headline matrix: both contracts, bf16+fp8, normal+LL, decode+prefill"
     workloads: [ds-like-ref]
-    platforms: [h100, h200, gb300, mi355x]
+    platforms: [h100, h200, b300, gb300, mi355x]
     backends: [deepep, mori]
     modes: [normal, ll]
     dtypes: [bf16, fp8]
@@ -52,7 +52,7 @@ suites:
   ep-models-v1:
     description: "model-shape envelope: real MoE dimensions, controlled routing"
     workloads: [deepseek-v4, kimi-k2.x, qwen3.5, glm-5, minimax-m3]
-    platforms: [h100, h200, gb300, mi355x]
+    platforms: [h100, h200, b300, gb300, mi355x]
     backends: [deepep, mori]
     modes: [normal]
     dtypes: [fp8, bf16]
@@ -116,7 +116,7 @@ suites:
   ep-routing-v1:
     description: "routing-skew sensitivity + EPLB remedy"
     workloads: [ds-like-ref]
-    platforms: [h100, h200, gb300]
+    platforms: [h100, h200, b300, gb300]
     backends: [deepep]
     modes: [normal]
     dtypes: [bf16]
