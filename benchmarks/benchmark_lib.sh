@@ -1069,15 +1069,20 @@ run_swebench_eval() {
 # ------------------------------
 
 run_eval() {
-    local framework="${EVAL_FRAMEWORK:-lm-eval}"
+    # EVAL_FRAMEWORK (env) wins over the --framework arg so an eval-only run
+    # (e.g. the /run-evals command) can override the recipe scripts' hardcoded
+    # `--framework lm-eval`. With the env unset, the CLI arg (else lm-eval) is
+    # used exactly as before.
+    local cli_framework=""
     local forwarded=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --framework) framework="$2"; shift 2 ;;
+            --framework) cli_framework="$2"; shift 2 ;;
             *)           forwarded+=("$1"); shift ;;
         esac
     done
+    local framework="${EVAL_FRAMEWORK:-${cli_framework:-lm-eval}}"
 
     # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
     if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
