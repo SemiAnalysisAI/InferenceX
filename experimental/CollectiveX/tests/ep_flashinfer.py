@@ -125,27 +125,29 @@ def _shape_repr(args):
 
 
 def _build_mapping(world_size, rank):
-    """Construct the FlashInfer Mapping for PURE EP: tp_size=1, moe_ep_size=world_size,
-    moe_tp_size=1. The Mapping kwarg set varies across releases, so try the plausible
-    constructors defensively and record which one worked (logged at rank 0). Raises a LOUD
-    error (listing every attempt) if none construct."""
+    """Construct the FlashInfer Mapping for PURE EP. FlashInfer's Mapping REQUIRES
+    world_size == tp_size*pp_size*cp_size, and realizes MoE-EP as a VIEW over the TP dimension
+    (moe_ep_size ranks taken from the tp ranks). So pure EP across all ranks =
+    tp_size=world_size, moe_ep_size=world_size, moe_tp_size=1 (pp=cp=1). The kwarg set varies
+    across releases, so try the plausible constructors defensively; record which worked (logged
+    at rank 0). Raises a LOUD error (listing every attempt) if none construct."""
     Mapping = getattr(fi_comm, "Mapping", None) or getattr(flashinfer, "Mapping", None)
     if Mapping is None:
         raise _loud("Mapping lookup",
                     "flashinfer.comm.Mapping / flashinfer.Mapping not found",
                     AttributeError("Mapping"))
-    # Ordered most-specific (pure-EP, explicit moe_*) -> least. Each is a full kwargs dict.
+    # tp_size=world_size so the world_size==tp*pp*cp invariant holds; moe_ep_size=world_size = full EP.
     variants = [
         ((), dict(world_size=world_size, rank=rank, gpus_per_node=world_size,
-                  tp_size=1, moe_ep_size=world_size, moe_tp_size=1)),
+                  tp_size=world_size, moe_ep_size=world_size, moe_tp_size=1)),
         ((), dict(world_size=world_size, rank=rank,
-                  tp_size=1, moe_ep_size=world_size, moe_tp_size=1)),
-        ((), dict(world_size=world_size, rank=rank, moe_ep_size=world_size, moe_tp_size=1)),
-        ((), dict(world_size=world_size, rank=rank, tp_size=1, ep_size=world_size)),
-        ((), dict(world_size=world_size, rank=rank, moe_ep_size=world_size)),
-        # positional last-resort: (world_size, rank, gpus_per_node, tp_size, ...) shapes seen
-        ((world_size, rank), dict(tp_size=1, moe_ep_size=world_size, moe_tp_size=1)),
-        ((world_size, rank), {}),
+                  tp_size=world_size, moe_ep_size=world_size, moe_tp_size=1)),
+        ((), dict(world_size=world_size, rank=rank, tp_size=world_size, moe_ep_size=world_size)),
+        ((), dict(world_size=world_size, rank=rank, moe_ep_size=world_size, moe_tp_size=1,
+                  tp_size=world_size)),
+        ((), dict(world_size=world_size, rank=rank, tp_size=world_size)),   # EP defaults from tp
+        # positional last-resort: (world_size, rank) with tp=world_size
+        ((world_size, rank), dict(tp_size=world_size, moe_ep_size=world_size, moe_tp_size=1)),
     ]
     mapping, idx = _call_variants("Mapping(...)", Mapping, variants)
     return mapping, idx
