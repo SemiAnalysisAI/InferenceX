@@ -265,6 +265,18 @@ run_collective_bench() {
   return "$rc"
 }
 
+run_rl_mesh() {
+  # RL trainer<->generator mesh transfer (multi-process: torchrun splits world into two meshes).
+  cx_log "rl-mesh bench ngpus=$CX_NGPUS"
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
+      torchrun --nproc_per_node="$CX_NGPUS" tests/rl_mesh_bench.py \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-nvlink}" \
+      --env-json "$ENVJSON" --out "results/${CX_RUNNER}_rl_mesh_${CX_TS}.json"
+  local rc=$?
+  [ "$rc" = 0 ] || cx_log "WARN: rl-mesh failed/timed out rc=$rc"
+  return "$rc"
+}
+
 rc=0
 case "$CX_BENCH" in
   nccl)        run_nccl_suite || rc=1 ;;
@@ -274,8 +286,9 @@ case "$CX_BENCH" in
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
+  rl-mesh)     run_rl_mesh || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|offload|copy-engine|kv-cache|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|offload|copy-engine|kv-cache|rl-mesh|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.
