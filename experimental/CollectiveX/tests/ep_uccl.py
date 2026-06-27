@@ -328,9 +328,14 @@ class UCCLBackend:
         return int(rx.shape[0])
 
     def finalize(self, rc):
+        # UCCL's symmetric-memory / proxy teardown SIGSEGVs after the sweep completes — but the
+        # result JSON is already written by run_sweep, so (like ep_mori) hard-exit past the crashy
+        # dist/uccl cleanup with the real rc. A clean teardown isn't worth a false 'failed' on a
+        # valid result (the H100 smoke produced status=valid, correct=True before the SIGSEGV).
         try:
             dist.barrier()
-            dist.destroy_process_group()
         except Exception:
             pass
-        return rc
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(0 if rc == 0 else 1)
