@@ -245,9 +245,9 @@ class FlashInferBackend:
             "num_experts": self.num_experts,
             "mapping_variant": map_variant,
             "routing_factor": _ROUTING_FACTOR,
-            # MNNVL symmetric workspace — bootstraps within the NCCL group; the launcher owns
-            # the CAP_SYS_PTRACE (x86_64) / FABRIC (aarch64) plumbing (docs/gated.md).
-            "workspace": "mnnvl-symmetric",
+            # MNNVL symmetric workspace — comm bootstrapped via torch.distributed (TorchDistBackend),
+            # NOT MPI, so it works under torchrun without mpi4py / an MPI launch.
+            "workspace": "mnnvl-symmetric", "mnnvl_comm": getattr(self, "_mnnvl_comm", "n/a"),
         }
 
     def _init_moe_alltoall(self, ver):
@@ -256,11 +256,33 @@ class FlashInferBackend:
         if MoeAlltoAll is None:
             raise _loud("MoeAlltoAll lookup", "flashinfer.comm.MoeAlltoAll not found",
                         AttributeError("MoeAlltoAll"))
+        # The MNNVL symmetric workspace bootstraps its cross-rank comm via MPI by default
+        # (MnnvlMemory.get_comm -> MpiComm().Split) — which fails under torchrun (no mpi4py / no MPI
+        # launch). FlashInfer ships a TorchDistBackend; wrap it in an MnnvlConfig so the workspace
+        # uses the torch.distributed NCCL group torchrun already set up. This is the no-MPI path.
+        mnnvl_config = None
+        try:
+            from flashinfer.comm.mnnvl import MnnvlConfig, TorchDistBackend, MnnvlMemory
+            mnnvl_config = MnnvlConfig(comm_backend=TorchDistBackend(group=None))
+            # get_comm() returns the cached class-level comm if set, else MPI-Splits. Register the
+            # torch-dist comm explicitly so the workspace bootstrap NEVER touches MPI/mpi4py.
+            if MnnvlMemory.comm is None:
+                MnnvlMemory.set_comm_from_config(self.mapping, mnnvl_config)
+            if self.rank == 0:
+                print("[ep_flashinfer] MNNVL via TorchDistBackend (no MPI)", flush=True)
+        except Exception as exc:  # older flashinfer without TorchDistBackend -> fall back (will MPI-fail loudly)
+            if self.rank == 0:
+                print(f"[ep_flashinfer] WARN: no TorchDistBackend ({exc!r}); MoeAlltoAll will need MPI",
+                      flush=True)
+        self._mnnvl_comm = "torch-dist" if mnnvl_config else "mpi-default"  # provenance built later
         # kwarg names have drifted across releases; hidden_size is REQUIRED (else MoeAlltoAll asserts
-        # "hidden_size must be provided if workspace_size_per_rank is not provided"). Try the
-        # documented set + positional fallback.
+        # "hidden_size must be provided if workspace_size_per_rank is not provided"); mnnvl_config
+        # supplies the torch-dist comm. Try with mnnvl_config first, then without (older releases).
         hs = int(self.args.hidden)
+        mc = dict(mnnvl_config=mnnvl_config) if mnnvl_config is not None else {}
         variants = [
+            ((self.mapping,), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
+                                   num_experts=self.num_experts, hidden_size=hs, **mc)),
             ((self.mapping,), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
                                    num_experts=self.num_experts, hidden_size=hs)),
             ((self.mapping,), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
