@@ -1,12 +1,23 @@
 #!/usr/bin/env python3
-"""CollectiveX EP backend adapter — UCCL EP (NVIDIA), normal mode.
+"""CollectiveX EP backend adapter — UCCL EP (NVIDIA), normal mode. SCAFFOLD — NOT yet
+producing results (see docs/gated.md "UCCL EP").
 
-UCCL's `uccl.ep.Buffer` is a drop-in clone of DeepEP's `deep_ep.Buffer`: the same
-intranode/internode/low_latency _dispatch/_combine entrypoints, get_dispatch_layout,
-and get_low_latency_rdma_size_hint. So this adapter is a near-verbatim clone of
-ep_deepep.py with `from deep_ep import Buffer` -> `from uccl.ep import Buffer`; the
-harness contract (make_problem/dispatch/stage/combine/expected/buffer_cap/recv_tokens/
-finalize + backend_provenance + SUPPORTED_*) is identical.
+IMPORTANT (empirically established on H100 via GHA): the LOW-LEVEL `uccl.ep.Buffer` is
+NOT a drop-in DeepEP clone. Its constructor is
+  Buffer(rank, num_ranks, num_nvl_bytes=0, num_rdma_bytes=0, low_latency_mode=False, …)
+— it takes rank/num_ranks ints, NOT a torch ProcessGroup, so the `Buffer(self.group, …)`
+calls below raise `TypeError: incompatible function arguments`. The DeepEP-identical
+`Buffer(group, …)` API is UCCL's separate ~1900-line `deep_ep_wrapper` package (packaged
+as `deep_ep`, colliding with the container's real DeepEP), whose __init__ runs a proxy +
+IPC-handle-exchange + runtime.sync + connect_atomic_buffer bootstrap. To finish UCCL:
+vendor `deep_ep_wrapper` under a non-colliding name (it uses relative imports + only needs
+`uccl.ep`) and import its Buffer here; then this file is a true ep_deepep.py clone. Until
+then `benchmark=uccl` fails loudly (preserved failed-case), never faked. The build hook
+cx_build_uccl + capability/schema wiring are in place as scaffolding.
+
+The harness contract (make_problem/dispatch/stage/combine/expected/buffer_cap/recv_tokens/
+finalize + backend_provenance + SUPPORTED_*) mirrors ep_deepep.py and is correct once the
+wrapper Buffer is wired.
 
 Install (see launchers/run_in_container.sh cx_build_uccl): `pip install uccl` ships a
 prebuilt cp312 wheel; the UCCL EP kernels need a cu12 CUDA runtime on LD_LIBRARY_PATH

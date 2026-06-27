@@ -20,10 +20,22 @@ task #115), with NCCL 2.28.9 recorded in provenance. So the NCCL-EP comparison v
 the V2-vs-V1-vs-LL comparison already in the dataset. A hand-rolled NCCL-device-API adapter would
 duplicate DeepEP V2 with no new signal.
 
-### UCCL EP — DONE (added this session)
-`uccl.ep.Buffer` is a DeepEP-API clone; `pip install uccl` (prebuilt cp312 wheel) + a cu12 CUDA
-runtime on `LD_LIBRARY_PATH` (the wheel is cu12 on a cu13 image). Adapter `tests/ep_uccl.py`, build
-hook `cx_build_uccl`, capability + schema wired; runs via `benchmark=uccl`.
+### UCCL EP — SCAFFOLDED, full run DEFERRED (heavier bootstrap than the probe implied)
+`pip install uccl` (prebuilt cp312 wheel) + a cu12 CUDA runtime on `LD_LIBRARY_PATH` (the wheel is
+cu12 on a cu13 image) **builds and imports** — the C++ runtime `uccl.ep` loads (pkg-0.1.1), confirmed
+on H100 via GHA. BUT the DeepEP-compatible surface is **not** the low-level `uccl.ep.Buffer`: that
+constructor is `Buffer(rank, num_ranks, num_nvl_bytes, num_rdma_bytes, low_latency_mode, …)` — it does
+NOT take a torch ProcessGroup, and a no-bootstrap construction raises `TypeError: incompatible
+function arguments`. The DeepEP-identical `Buffer(group, …)` lives in UCCL's separate ~1900-line
+`deep_ep_wrapper` package (packaged AS `deep_ep`, so it collides with the container's real DeepEP).
+That wrapper's `__init__` runs a non-trivial bootstrap — `get_local_ipc_handle` / `get_local_device_id`
+exchanged via `dist.all_gather_object`, `runtime.sync(...)`, CPU `UcclProxy` setup
+(`get_cpu_proxies_meta`), and `connect_atomic_buffer` — entangled with UCCL's bench harness `init_dist`.
+The wrapper is cleanly vendorable (relative imports + only depends on `uccl.ep`), so the path forward
+is: vendor `deep_ep_wrapper` under a non-colliding name + replicate the proxy/IPC bootstrap, then
+`ep_uccl.py` becomes a true DeepEP clone against it. Deferred (needs GPU iteration to validate the
+proxy bootstrap; NOT a hard blocker). Adapter `tests/ep_uccl.py` + `cx_build_uccl` + capability/schema
+remain wired as scaffolding; `benchmark=uccl` currently fails loudly (preserved failed-case), not faked.
 
 ### NIXL EP — BLOCKED (container toolchain)
 The pip `nixl 1.0.1` is the **host RDMA transfer** library (`nixl_agent.register_memory/transfer`),
