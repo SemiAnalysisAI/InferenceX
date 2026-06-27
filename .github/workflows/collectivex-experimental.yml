@@ -114,6 +114,12 @@ on:
         description: Use canonical serialized workload (official-grade workload identity)
         type: boolean
         default: false
+      deepep_v2:
+        # Build DeepEP V2 (NCCL Gin backend) from source in-container, overriding the image's V1
+        # (1.2.1). Hopper(SM90)+Blackwell(SM100) only. Needs compute-node network + NCCL>=2.30.4.
+        description: Use DeepEP V2 kernels (build from source; NVIDIA SM90+ only)
+        type: boolean
+        default: false
       activation_profile:
         # Activation VALUE distribution of expert inputs. normal = headline; the others stress a
         # future quantized combine (latency-neutral under bf16 — the expected null result).
@@ -253,6 +259,7 @@ jobs:
       CX_EPLB: ${{ inputs.eplb && '1' || '' }}
       # canonical serialized workload (official-grade identity) + value/placement axes (goal P1/P2).
       CX_CANONICAL: ${{ inputs.canonical && '1' || '' }}
+      CX_DEEPEP_V2: ${{ inputs.deepep_v2 && '1' || '' }}
       CX_ACTIVATION_PROFILE: ${{ inputs.activation_profile }}
       CX_PLACEMENT: ${{ inputs.placement }}
       CX_SM_FRACTION: ${{ inputs.sm_fraction }}

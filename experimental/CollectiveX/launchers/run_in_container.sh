@@ -164,7 +164,31 @@ run_ep_suite() {
   return "$rc"
 }
 
+# Build DeepEP V2 (NCCL Gin backend) from source, overriding the image's bundled V1 (1.2.1).
+# V2 needs NCCL>=2.30.4 (symmetric memory) STRICTLY matching the NCCL torch loads, and builds JIT
+# (no precompile). arch 9.0 for Hopper (H100/H200), 10.0 for Blackwell (B300/GB300). Best-effort:
+# on failure the deepep run still fails loudly (preserved failed-case), never a silent V1 fallback.
+cx_build_deepep_v2() {
+  local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*) arch="10.0";; esac
+  cx_log "DeepEP V2: building from source (TORCH_CUDA_ARCH_LIST=$arch) — overrides bundled V1"
+  pip install -q "nvidia-nccl-cu13>=2.30.4" >&2 2>&1 || cx_log "WARN: nvidia-nccl-cu13 install warning"
+  rm -rf /tmp/DeepEP_v2
+  git clone --depth 1 https://github.com/deepseek-ai/DeepEP /tmp/DeepEP_v2 >&2 2>&1 \
+    || { cx_log "ERROR: DeepEP V2 git clone failed (compute-node network?)"; return 1; }
+  export DEEPEP_COMMIT="v2-$(git -C /tmp/DeepEP_v2 rev-parse --short HEAD 2>/dev/null || echo main)"
+  ( cd /tmp/DeepEP_v2 && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+      pip install -q --no-build-isolation --force-reinstall . ) >&2 2>&1 \
+    || { cx_log "ERROR: DeepEP V2 build/install failed (arch=$arch; NCCL/toolchain?)"; return 1; }
+  python3 -c "import deep_ep; print('built deep_ep', getattr(deep_ep,'__version__','?'))" >&2 \
+    || { cx_log "ERROR: DeepEP V2 import failed after build (NCCL version mismatch?)"; return 1; }
+  cx_log "DeepEP V2 ready ($DEEPEP_COMMIT)"
+}
+
 run_deepep_suite() {
+  # CX_DEEPEP_V2=1 -> build the V2 (NCCL Gin) kernels from source first (Hopper+Blackwell only).
+  if [ "${CX_DEEPEP_V2:-0}" = "1" ]; then
+    cx_build_deepep_v2 || { cx_log "WARN: DeepEP V2 setup failed — cannot run V2"; return 1; }
+  fi
   # DeepEP is not bundled in the multi-arch image. Try to import; if absent,
   # attempt rebuild-deepep (srt-slurm setup script). Inability to run is a
   # failure, not a silent skip — the caller asked for deepep.
