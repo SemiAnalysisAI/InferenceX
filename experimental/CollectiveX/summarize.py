@@ -53,14 +53,25 @@ def _peak_busbw(rows):
 
 
 def _coll_peak(d) -> float:
-    """Peak bandwidth (GB/s) across a collective doc — rows carry bandwidth_gb_s; kv-cache
-    nests rows under groups. Defensive: returns 0.0 if none found."""
+    """Peak bandwidth (GB/s) across a collective doc. Field name varies by family:
+    offload/copy-engine use top-level peak_bandwidth_gbps + rows[].bandwidth_gbps;
+    kv-cache nests rows[].bandwidth_gb_s under groups[]. Defensive: 0.0 if none found."""
+    top = d.get("peak_bandwidth_gbps")
+    if top:
+        return top
     best = 0.0
-    for r in d.get("rows", []) or []:
-        best = max(best, r.get("bandwidth_gb_s") or 0.0)
+
+    def _scan(rows):
+        nonlocal best
+        for r in rows or []:
+            for k in ("bandwidth_gbps", "bandwidth_gb_s", "busbw_gbps"):
+                v = r.get(k)
+                if v:
+                    best = max(best, v)
+
+    _scan(d.get("rows"))
     for g in d.get("groups", []) or []:
-        for r in g.get("rows", []) or []:
-            best = max(best, r.get("bandwidth_gb_s") or 0.0)
+        _scan(g.get("rows"))
     return best
 
 
