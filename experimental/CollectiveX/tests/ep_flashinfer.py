@@ -78,7 +78,7 @@ def _flashinfer_version() -> str:
 # identical copies, combine does NOT weight). If GHA shows FlashInfer's combine applies
 # the gate weights instead, flip this to "weight-sum" and the reference becomes
 # x * sum(topk_weights). This is the ONE knob the parent edits after the first GHA run. ---
-_ROUTING_FACTOR = os.environ.get("CX_FLASHINFER_ROUTING_FACTOR", "topk")  # "topk" | "weight-sum"
+_ROUTING_FACTOR = os.environ.get("CX_FLASHINFER_ROUTING_FACTOR", "ranks")  # "ranks" | "topk" | "weight-sum"
 
 
 def _loud(where: str, attempted, exc: Exception) -> RuntimeError:
@@ -498,16 +498,25 @@ class FlashInferBackend:
                     TypeError("non-tensor combine result"))
 
     def expected(self, p, h):
-        # Round trip with identity expert: combine reduces the top_k copies of each SOURCE
-        # token's x. See the module docstring for the full reasoning.
-        #   _ROUTING_FACTOR == "topk"       -> combined ≈ x * top_k  (LEAD: combine does NOT weight)
-        #   _ROUTING_FACTOR == "weight-sum" -> combined ≈ x * sum(topk_weights)  (combine weights)
-        # The harness gate compares combined[:T] to this over the full [T, hidden] slice.
+        # Round trip, identity expert. FlashInfer combine takes NO gate weights and reduces the
+        # recv [ep_size, max_tokens, hidden] over the ep_size (per-RANK) axis — so each source token
+        # is reconstructed as x * (number of DISTINCT ranks its top_k experts land on), exactly like
+        # DeepEP normal mode (combine does not re-weight). Factor is computed from the routing trace:
+        #   "ranks" (default) -> x * distinct_ranks_per_token   (per-rank-sum combine)
+        #   "topk"            -> x * top_k                       (if combine sums every expert copy)
+        #   "weight-sum"      -> x * sum(topk_weights)           (if combine applies the gate)
         ref = p.x.float()
         if _ROUTING_FACTOR == "weight-sum":
             factor = p.topk_weights.sum(dim=1, keepdim=True)        # [T, 1]
-        else:  # "topk"
+        elif _ROUTING_FACTOR == "topk":
             factor = float(self.top_k)
+        else:  # "ranks": distinct ranks among each token's top_k experts (vectorized)
+            epr = max(1, self.num_experts // self.world_size)
+            ranks = (p.topk_idx.long() // epr).clamp_(0, self.world_size - 1)   # [T, topk]
+            present = torch.zeros(ranks.shape[0], self.world_size,
+                                  device=ranks.device, dtype=torch.float32)
+            present.scatter_(1, ranks, 1.0)
+            factor = present.sum(dim=1, keepdim=True)               # [T, 1] distinct ranks/token
         return ref * factor, p.T
 
     def recv_tokens(self, h):
