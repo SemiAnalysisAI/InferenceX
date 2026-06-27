@@ -65,10 +65,10 @@ on:
         type: string
         default: ''
       dispatch_dtype:
-        description: EP dispatch payload precision
+        description: EP dispatch payload precision (fp8 scale-layout recipes; same kernel, different cast)
         type: choice
         default: bf16
-        options: [bf16, fp8]
+        options: [bf16, fp8, fp8-pertoken, fp8-directcast]
       mode:
         # normal = high-throughput kernels (decode+prefill); ll = DeepEP low-latency
         # (decode-shaped, fp8 cast in-kernel). LL is rejected on backends without it

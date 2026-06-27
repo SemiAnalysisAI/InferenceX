@@ -46,12 +46,42 @@ _FP8_BLOCK = 128
 
 
 def _per_token_cast_to_fp8(x):
+    # PER-BLOCK-128 scale layout (DeepEP default): one scale per 128-elem block per token.
     # x: [T, H] (H % 128 == 0) -> (x_fp8 [T,H] e4m3fn, scales [T, H//128] f32)
     T, H = x.shape
     xv = x.float().view(T, H // _FP8_BLOCK, _FP8_BLOCK)
     amax = xv.abs().amax(dim=2).clamp(min=1e-4)               # [T, H//128]
     x_fp8 = (xv * (_FP8_MAX / amax.unsqueeze(2))).to(torch.float8_e4m3fn).view(T, H)
     return x_fp8, (amax / _FP8_MAX).contiguous()
+
+
+def _per_token_cast_to_fp8_pertoken(x):
+    # PER-TOKEN scale layout: ONE amax per token (over all H), broadcast across the H//128 blocks.
+    # Coarser than block-128 (slightly higher quant error) but the same scale transport cost.
+    T, H = x.shape
+    amax = x.float().abs().amax(dim=1, keepdim=True).clamp(min=1e-4)       # [T, 1]
+    x_fp8 = (x.float() * (_FP8_MAX / amax)).to(torch.float8_e4m3fn)
+    scales = (amax / _FP8_MAX).expand(T, H // _FP8_BLOCK).contiguous()     # broadcast per-token
+    return x_fp8, scales
+
+
+def _directcast_to_fp8(x):
+    # DIRECT-CAST: clamp to the e4m3 range and cast with NO learned scale (unit scale). Carries no
+    # scale metadata (zero scale-transport overhead) but truncates activations above e4m3 max — the
+    # recipe MoRI PR311 replaced for accuracy. scales=ones so _per_block_dequant is the plain cast-back.
+    T, H = x.shape
+    x_fp8 = x.float().clamp(-_FP8_MAX, _FP8_MAX).to(torch.float8_e4m3fn)
+    scales = torch.ones((T, H // _FP8_BLOCK), dtype=torch.float32, device=x.device)
+    return x_fp8, scales
+
+
+# dispatch_dtype value -> (scale_layout label, cast fn). All feed DeepEP's same (fp8, scales) kernel
+# input; they differ only in the quant recipe, so they are distinct OPERATING POINTS, not dtypes.
+_FP8_RECIPES = {
+    "fp8": ("per-block-128", _per_token_cast_to_fp8),
+    "fp8-pertoken": ("per-token", _per_token_cast_to_fp8_pertoken),
+    "fp8-directcast": ("direct-cast", _directcast_to_fp8),
+}
 
 
 def _per_block_dequant(x_fp8, scales):
@@ -79,7 +109,7 @@ class DeepEPBackend:
     #   normal mode: bf16 + fp8 (per-token block-128 cast) — validated intranode NVLink.
     #   ll mode: low_latency_dispatch/combine — verified RUNNING intranode over NVLink via
     #   allow_nvlink_for_low_latency_mode (IBGDA not required intranode) on 8xH100.
-    SUPPORTED_PRECISIONS = {"bf16", "fp8"}
+    SUPPORTED_PRECISIONS = {"bf16", "fp8", "fp8-pertoken", "fp8-directcast"}
     SUPPORTED_MODES = {"normal", "ll"}
     # Three contracts (review #3 + goal P1 runtime-visible):
     #   layout-and-dispatch-v1     — times get_dispatch_layout INSIDE dispatch; fp8 cast/dequant
@@ -112,8 +142,15 @@ class DeepEPBackend:
         # fp8 e4m3 per-token-block round-trip caps reconstruction error near the largest
         # element at ~1/16 (3 mantissa bits); bf16 round-trip is ~5e-3. Tolerance is
         # recorded in the artifact so the looser fp8 gate is explicit, not hidden.
-        self.fp8 = (args.dispatch_dtype == "fp8")
-        self.tolerance = 1.25e-1 if self.fp8 else 5e-2
+        self.fp8 = args.dispatch_dtype.startswith("fp8")
+        # fp8 scale-layout recipe (per-block-128 default / per-token / direct-cast) — all use the
+        # same DeepEP fp8 kernel; only the cast differs. Recorded so they're distinct operating points.
+        self.fp8_recipe, self._fp8_cast = _FP8_RECIPES.get(
+            args.dispatch_dtype, ("per-block-128", _per_token_cast_to_fp8))
+        self.scale_layout = self.fp8_recipe if self.fp8 else None
+        # direct-cast truncates above e4m3 (no scale) -> a touch looser gate than scaled recipes.
+        self.tolerance = ((1.5e-1 if self.fp8_recipe == "direct-cast" else 1.25e-1)
+                          if self.fp8 else 5e-2)
         dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
         ver = _deepep_version()
         if self.ll:
@@ -155,6 +192,8 @@ class DeepEPBackend:
             "mode": "normal", "resource_mode": rm, "num_sms": num_sms, "device_sms": dev_sms,
             "sm_fraction": (num_sms / dev_sms), "tuned_source": tuned_src or "n/a",
             "num_nvl_bytes": num_nvl_bytes,
+            "fp8_recipe": self.fp8_recipe if self.fp8 else "n/a",
+            "scale_layout": self.scale_layout,
         }
 
     def _init_ll(self, args, dev_sms, ver):
@@ -197,7 +236,7 @@ class DeepEPBackend:
             # layout-and-dispatch / cached-layout: per-token block-128 cast, UNTIMED (preprocessing,
             # mirrors the real producer that hands the dispatcher already-quantized activations).
             # runtime-visible does NOT pre-cast (the cast is timed inside dispatch); LL casts in-kernel.
-            p.x_fp8, p.x_scales = _per_token_cast_to_fp8(x)
+            p.x_fp8, p.x_scales = self._fp8_cast(x)
         if self.cache_layout:
             # cached-layout-comm-only-v1: compute the dispatch layout ONCE here (untimed)
             # so the timed dispatch is pure comm. (layout-and-dispatch-v1 leaves it None
@@ -218,7 +257,7 @@ class DeepEPBackend:
         if self.fp8:
             if self.runtime_visible:
                 # runtime-visible: the per-token block-128 cast is INSIDE the timed dispatch.
-                x_fp8, x_scales = _per_token_cast_to_fp8(p.x)
+                x_fp8, x_scales = self._fp8_cast(p.x)
                 ref_fp8, ref_scales = x_fp8, x_scales      # for the correctness reference
             else:
                 x_fp8, x_scales = p.x_fp8, p.x_scales      # pre-cast (untimed)

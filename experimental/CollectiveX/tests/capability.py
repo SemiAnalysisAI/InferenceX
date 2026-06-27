@@ -37,7 +37,9 @@ CAP = {
     "deepep": {
         "vendors": ["nvidia"],
         "modes": ["normal", "ll"],
-        "dtypes": ["bf16", "fp8"],            # DISPATCH-side precision
+        # DISPATCH-side precision + fp8 scale-layout recipe variants (same kernel, different cast):
+        # fp8=per-block-128, fp8-pertoken=per-token scale, fp8-directcast=unscaled (no scale transport).
+        "dtypes": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast"],
         "contracts": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"],
         "transports": ["nvlink", "rdma"],
         # Combine path is a SEPARATE axis from dispatch dtype (review): today combine is bf16
