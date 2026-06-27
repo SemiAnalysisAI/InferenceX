@@ -26,15 +26,23 @@ def cfg_key(d):
     q = sh.get("quant") or {}
     e = d.get("eplb") or {}
     rp = d.get("reproduction") or {}
+    prof = d.get("resource_profile") or {}
     sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
-    # include the WORKLOAD DIMS (hidden/topk/experts) — model-derived workloads (kimi/minimax/glm/
-    # qwen) differ only here; omitting them would collapse distinct models into one config.
+    # include the WORKLOAD DIMS (hidden/topk/experts) — model-derived workloads differ only here —
+    # AND the RESOURCE axis (resource_mode + normalized comm-fraction): normalized@0.10 vs @0.35 vs
+    # tuned are distinct operating points (the resource-Pareto ladder + the tuned official cohort);
+    # omitting them would collapse the ladder and merge tuned with normalized.
+    # trace_signature distinguishes the T-LADDER: re-runs of the same config+ladder share it
+    # (dedup to newest), but a capped cross-vendor cohort run (T<=16) keeps its own identity vs the
+    # full-ladder per-GPU run (T<=128) — so both survive (per-GPU completeness AND the matched cohort).
+    wl = d.get("workload") or {}
     return (sku, d.get("backend"), sh.get("hidden"), sh.get("topk"), sh.get("experts"),
             sh.get("dispatch_dtype"), d.get("mode"), d.get("measurement_contract"),
             f"{sh.get('routing')}{'+eplb' if e.get('enabled') else ''}",
             d.get("ep_size"), d.get("phase"), sh.get("activation_profile", "normal"),
             q.get("combine_quant_mode", "none"),
-            rp.get("uneven_tokens", "none"), rp.get("routing_step", 0))
+            rp.get("uneven_tokens", "none"), rp.get("routing_step", 0),
+            d.get("resource_mode"), prof.get("requested_fraction"), wl.get("trace_signature"))
 
 
 def rank(d):
