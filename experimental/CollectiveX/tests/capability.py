@@ -49,6 +49,18 @@ CAP = {
         # capabilities"): DeepEP honors any trace (routing is a pure trace transform) + EPLB.
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
+    "uccl": {
+        # UCCL EP (uccl.ep.Buffer) is a DeepEP-API clone on NVIDIA — mirror DeepEP's capability.
+        # bf16+fp8 dispatch, normal+ll modes, the same 3 contracts, bf16/none combine.
+        "vendors": ["nvidia"],
+        "modes": ["normal", "ll"],
+        "dtypes": ["bf16", "fp8"],
+        "contracts": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"],
+        "transports": ["nvlink", "rdma"],
+        "combine_dtypes": ["bf16"],
+        "quant_modes": ["none"],
+        "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
+    },
     "mori": {
         "vendors": ["amd"],
         "modes": ["normal"],
@@ -65,7 +77,7 @@ CAP = {
 COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
-VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep"], "amd": ["rccl", "mori"]}
+VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl"], "amd": ["rccl", "mori"]}
 
 
 def resolve(sku, backend, mode="normal", dtype="bf16",

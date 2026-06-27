@@ -28,7 +28,7 @@ import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
-    ap.add_argument("--backend", required=True, choices=["deepep", "mori"])
+    ap.add_argument("--backend", required=True, choices=["deepep", "mori", "uccl"])
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -82,6 +82,8 @@ def main() -> int:
     # mislabel (review/goal). All ranks reject identically.
     if args.backend == "mori":
         from ep_mori import MoRIBackend as Backend
+    elif args.backend == "uccl":
+        from ep_uccl import UCCLBackend as Backend
     else:
         from ep_deepep import DeepEPBackend as Backend
     if args.num_ep_groups != 1:

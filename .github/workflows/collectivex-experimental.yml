@@ -24,11 +24,12 @@ on:
         default: gb200
         options: [gb200, b200-dgxc, b200-multinode, mi355x, h100-dgxc, h200, b300, gb300]
       benchmark:
-        # mori runs only on mi355x; nccl/deepep/all on the NVIDIA SKUs.
+        # mori runs only on mi355x; nccl/deepep/uccl/all + the collective benches on NVIDIA SKUs.
+        # offload/copy-engine/kv-cache are single-process memcpy-family collectives (family!=moe).
         description: Which benchmark to run
         type: choice
         default: nccl
-        options: [nccl, deepep, mori, all]
+        options: [nccl, deepep, mori, uccl, offload, copy-engine, kv-cache, all]
       ops:
         description: NCCL ops (space-separated); blank = default set
         type: string

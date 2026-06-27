@@ -188,6 +188,23 @@ cx_build_deepep_v2() {
   cx_log "DeepEP V2 ready ($DEEPEP_COMMIT)"
 }
 
+# UCCL EP (uccl.ep.Buffer is a DeepEP-API clone). The prebuilt wheel is cu12; on a cu13
+# image its kernels need a cu12 CUDA runtime on LD_LIBRARY_PATH (probe-confirmed). PEP-668
+# images need PIP_BREAK_SYSTEM_PACKAGES. Best-effort; failure to import fails loudly.
+cx_build_uccl() {
+  cx_log "UCCL EP: pip install uccl + cu12 runtime shim"
+  export PIP_BREAK_SYSTEM_PACKAGES=1
+  pip install -q uccl >&2 2>&1 || { cx_log "ERROR: pip install uccl failed"; return 1; }
+  pip install -q nvidia-cuda-runtime-cu12 >&2 2>&1 || cx_log "WARN: nvidia-cuda-runtime-cu12 warning"
+  local cu12lib
+  cu12lib="$(python3 -c "import nvidia.cuda_runtime as m, os; print(os.path.join(os.path.dirname(m.__file__),'lib'))" 2>/dev/null)"
+  [ -n "$cu12lib" ] && export LD_LIBRARY_PATH="$cu12lib:${LD_LIBRARY_PATH:-}"
+  export UCCL_COMMIT="pkg-$(python3 -c 'import importlib.metadata as m; print(m.version("uccl"))' 2>/dev/null || echo uccl)"
+  python3 -c "from uccl.ep import Buffer; print('uccl.ep ready')" >&2 \
+    || { cx_log "ERROR: uccl.ep import failed (cu12 runtime on LD_LIBRARY_PATH?)"; return 1; }
+  cx_log "UCCL EP ready ($UCCL_COMMIT)"
+}
+
 run_deepep_suite() {
   # CX_DEEPEP_V2=1 -> build the V2 (NCCL Gin) kernels from source first (Hopper+Blackwell only).
   if [ "${CX_DEEPEP_V2:-0}" = "1" ]; then
@@ -219,13 +236,44 @@ run_mori_suite() {
   run_ep_suite mori
 }
 
+run_uccl_suite() {
+  # UCCL EP (NVIDIA) — DeepEP-API clone; build the wheel + cu12 shim, then reuse the generic
+  # EP sweep (run_ep.py --backend uccl). Inability to install/import is a failure, not a skip.
+  cx_build_uccl || { cx_log "WARN: UCCL EP setup failed — cannot run uccl"; return 1; }
+  run_ep_suite uccl
+}
+
+run_collective_bench() {
+  # Single-process host/GPU memcpy-family collectives (NOT torchrun): CPU-GPU offload,
+  # copy-engine/SDMA, KV-cache transfer. Each emits one family-tagged JSON like run_nccl.py.
+  local kind="$1" script out rc=0
+  case "$kind" in
+    offload)     script="tests/offload_bench.py";    out="results/${CX_RUNNER}_offload_${CX_TS}.json" ;;
+    copy-engine) script="tests/copy_engine_bench.py"; out="results/${CX_RUNNER}_copy_engine_${CX_TS}.json" ;;
+    kv-cache)    script="tests/kv_cache_transfer.py"; out="results/${CX_RUNNER}_kvcache_${CX_TS}.json" ;;
+    *) cx_die "unknown collective kind '$kind'" ;;
+  esac
+  cx_log "collective bench=$kind -> $out"
+  local extra=""; [ "$kind" = "kv-cache" ] && extra="--direction all"
+  # shellcheck disable=SC2086
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" python3 "$script" $extra \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-nvlink}" \
+      --env-json "$ENVJSON" --out "$out" || rc=$?
+  [ "$rc" = 0 ] || cx_log "WARN: collective $kind failed/timed out rc=$rc"
+  return "$rc"
+}
+
 rc=0
 case "$CX_BENCH" in
-  nccl)   run_nccl_suite || rc=1 ;;
-  deepep) run_deepep_suite || rc=1 ;;
-  mori)   run_mori_suite || rc=1 ;;
-  all)    run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)      cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|all)" ;;
+  nccl)        run_nccl_suite || rc=1 ;;
+  deepep)      run_deepep_suite || rc=1 ;;
+  mori)        run_mori_suite || rc=1 ;;
+  uccl)        run_uccl_suite || rc=1 ;;
+  offload)     run_collective_bench offload || rc=1 ;;
+  copy-engine) run_collective_bench copy-engine || rc=1 ;;
+  kv-cache)    run_collective_bench kv-cache || rc=1 ;;
+  all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|offload|copy-engine|kv-cache|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.
