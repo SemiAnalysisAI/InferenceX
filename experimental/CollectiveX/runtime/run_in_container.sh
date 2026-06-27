@@ -209,7 +209,12 @@ cx_build_uccl() {
   # ...) takes a torch ProcessGroup (matching DeepEP + ep_uccl.py's calls) and runs the full
   # proxy/IPC-handle/runtime.sync bootstrap that the low-level uccl.ep.Buffer(rank,num_ranks) lacks.
   rm -rf /tmp/uccl_src /tmp/uccl_deepep_pkg
-  if git clone --depth 1 https://github.com/uccl-project/uccl /tmp/uccl_src >&2 2>&1 \
+  # Pin the wrapper to the SAME tag as the installed wheel (pkg-0.1.1 -> v0.1.1): the wrapper's
+  # dispatch calls into uccl.ep (get_rdma_buffer etc.), so a main-branch wrapper vs a 0.1.1 wheel
+  # mismatches signatures. Match them.
+  _uccl_tag="v$(python3 -c 'import importlib.metadata as m; print(m.version("uccl"))' 2>/dev/null || echo 0.1.1)"
+  if { git clone --depth 1 --branch "$_uccl_tag" https://github.com/uccl-project/uccl /tmp/uccl_src >&2 2>&1 \
+       || git clone --depth 1 https://github.com/uccl-project/uccl /tmp/uccl_src >&2 2>&1; } \
      && [ -d /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep ]; then
     mkdir -p /tmp/uccl_deepep_pkg/uccl_deepep
     cp /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep/*.py /tmp/uccl_deepep_pkg/uccl_deepep/ 2>/dev/null
