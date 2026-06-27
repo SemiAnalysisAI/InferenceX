@@ -414,9 +414,14 @@ class FlashInferBackend:
         # No expert compute (identity expert). bf16 recv is the "expert output" as-is; FlashInfer's
         # combine reads back from the SAME workspace the dispatch populated, so combine() is told
         # the payload is already in the workspace (payload_in_workspace=True) when supported. We
-        # stash the recv payload as combine_input so combine() can pass it explicitly if the API
-        # wants the tensor handed back. (fp8 would dequant here, like ep_deepep.py — see TODO.)
-        h.combine_input = h.recv_payload
+        # stash the recv payload as combine_input. CLONE it to a fresh (non-workspace) buffer: the
+        # dispatch recv aliases the symmetric workspace, and combine(payload_in_workspace=True)
+        # demands the payload sit at the exact workspace combine-region pointer (mismatch ->
+        # RuntimeError). A clone is an unambiguous external tensor for payload_in_workspace=False,
+        # which has the kernel copy our identity-expert output into the workspace itself.
+        # (fp8 would dequant here, like ep_deepep.py — see TODO.)
+        h.combine_input = h.recv_payload.contiguous().clone() if torch.is_tensor(h.recv_payload) \
+            else h.recv_payload
         return None
 
     def combine(self, p, h):
@@ -426,12 +431,15 @@ class FlashInferBackend:
         # -> the per-source-token reduced result on this rank ([T, hidden] bf16). Because the
         # dispatch populated the symmetric workspace, the data is already there: try
         # payload_in_workspace=True first (no payload re-copy), then the explicit-payload forms.
+        # payload_in_workspace=False FIRST: combine_input is a cloned external tensor (see stage),
+        # so the kernel copies it into the workspace itself — avoids the exact-pointer requirement
+        # that payload_in_workspace=True enforces (which raised a RuntimeError, not a TypeError, so
+        # _call_variants would not fall through to it).
         variants = [
-            ((h.combine_input, p.T), dict(payload_in_workspace=True)),
             ((h.combine_input, p.T), dict(payload_in_workspace=False)),
             ((h.combine_input, p.T), {}),
+            ((h.combine_input,), dict(runtime_max_tokens_per_rank=p.T, payload_in_workspace=False)),
             ((h.combine_input,), dict(runtime_max_tokens_per_rank=p.T)),
-            ((h.combine_input,), dict(runtime_max_tokens_per_rank=p.T, payload_in_workspace=True)),
         ]
         combined, idx = _call_variants("MoeAlltoAll.combine(...)", self.a2a.combine, variants)
         h.combine_variant = idx
