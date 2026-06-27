@@ -1,37 +1,37 @@
-name: "minimax-m3-vllm-disagg-gb300-1p2d-dep2-dep4-fp8-1k1k"
+name: "minimax-m3-vllm-disagg-gb300-2p3d-dep2-dep4-fp8-1k1k"
 
-# 1P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 2D DEP4 (TP1 DP4 EP)
-# decode = 3 nodes (1P + 2D). Adapted from NV B300 PR #1863.
+# 2P DEP2 prefill (TP1 DP2 EP, 2 GPU/worker) + 3D DEP4 decode (TP1 DP4 EP, 4 GPU/worker = 1 node each).
+# GB300 has 4 GPUs/node. Adapted from NV B300 PR #1863.
+# Nodes: 1 prefill + 3 decode (+ head/infra).
 
 model:
   path: "minimax-m3-mxfp8"
   container: "vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
   precision: "fp8"
 
+
 dynamo:
   install: true
-  wheel: "1.2.0.dev20260526"
-
-sbatch_directives:
-  mem: "0"
-  cpus-per-task: "72"
-srun_options:
-  mem: "0"
-
-slurm:
-  time_limit: "8:00:00"
+  version: 1.3.0.dev20260614
 
 health_check:
   max_attempts: 720
   interval_seconds: 10
 
+sbatch_directives:
+  mem: "0"
+  cpus-per-task: "72"
+
+srun_options:
+  mem: "0"
+
 resources:
   gpu_type: "gb300"
   gpus_per_node: 4
   prefill_nodes: 1
-  decode_nodes: 2
-  prefill_workers: 1
-  decode_workers: 2
+  decode_nodes: 3
+  prefill_workers: 2
+  decode_workers: 3
   gpus_per_prefill: 2
   gpus_per_decode: 4
 
@@ -64,6 +64,7 @@ backend:
   vllm_config:
     prefill:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
       data-parallel-size: 2
       data-parallel-rpc-port: 13345
@@ -75,12 +76,13 @@ backend:
       max-model-len: 2304
       language-model-only: true
       kv-cache-dtype: fp8
-      stream-interval: 32
+      stream-interval: 100
       max-cudagraph-capture-size: 2048
       max-num-batched-tokens: 2048
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      attention-config: '{"backend": "FLASHINFER", "use_trtllm_attention": true, "indexer_kv_dtype": "fp8"}'
       tensor-parallel-size: 1
       data-parallel-size: 4
       data-parallel-rpc-port: 13345
@@ -92,8 +94,8 @@ backend:
       max-model-len: 2304
       language-model-only: true
       kv-cache-dtype: fp8
-      stream-interval: 32
-      max-num-seqs: 512
+      stream-interval: 100
+      max-num-seqs: 1024
       max-num-batched-tokens: 16384
       max-cudagraph-capture-size: 2048
 
@@ -101,5 +103,5 @@ benchmark:
   type: "sa-bench"
   isl: 1024
   osl: 1024
-  concurrencies: "2048"
+  concurrencies: "8192"
   req_rate: "inf"
