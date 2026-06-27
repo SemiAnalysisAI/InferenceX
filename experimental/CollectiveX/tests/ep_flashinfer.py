@@ -256,16 +256,19 @@ class FlashInferBackend:
         if MoeAlltoAll is None:
             raise _loud("MoeAlltoAll lookup", "flashinfer.comm.MoeAlltoAll not found",
                         AttributeError("MoeAlltoAll"))
-        # kwarg names have drifted across releases; try the documented set + positional fallback.
+        # kwarg names have drifted across releases; hidden_size is REQUIRED (else MoeAlltoAll asserts
+        # "hidden_size must be provided if workspace_size_per_rank is not provided"). Try the
+        # documented set + positional fallback.
+        hs = int(self.args.hidden)
         variants = [
-            ((self.mapping,), dict(max_num_tokens=self.max_num_tokens,
-                                   top_k=self.top_k, num_experts=self.num_experts)),
-            ((self.mapping,), dict(max_num_tokens=self.max_num_tokens,
-                                   top_k=self.top_k, ep_size=self.world_size,
-                                   num_experts=self.num_experts)),
-            ((self.mapping, self.max_num_tokens, self.top_k, self.num_experts), {}),
-            ((self.mapping,), dict(max_num_tokens_per_rank=self.max_num_tokens,
-                                   top_k=self.top_k, num_experts=self.num_experts)),
+            ((self.mapping,), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
+                                   num_experts=self.num_experts, hidden_size=hs)),
+            ((self.mapping,), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
+                                   num_experts=self.num_experts, hidden_size=hs,
+                                   ep_size=self.world_size)),
+            ((self.mapping, self.max_num_tokens, self.top_k, self.num_experts, hs), {}),
+            ((self.mapping,), dict(max_num_tokens_per_rank=self.max_num_tokens, top_k=self.top_k,
+                                   num_experts=self.num_experts, hidden_size=hs)),
         ]
         self.a2a, idx = _call_variants("MoeAlltoAll(...)", MoeAlltoAll, variants)
         self.path = "moe_alltoall"
