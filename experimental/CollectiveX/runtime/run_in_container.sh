@@ -204,7 +204,25 @@ cx_build_uccl() {
   # path once torch is imported (rpath). The adapter (ep_uccl.py) imports torch before uccl.ep too.
   python3 -c "import torch; from uccl.ep import Buffer; print('uccl.ep ready')" >&2 \
     || { cx_log "ERROR: uccl.ep import failed (cu12 runtime on LD_LIBRARY_PATH?)"; return 1; }
-  cx_log "UCCL EP ready ($UCCL_COMMIT)"
+  # Vendor UCCL's DeepEP-API wrapper (ep/deep_ep_wrapper/deep_ep) under a NON-conflicting name
+  # (uccl_deepep) so it doesn't shadow the container's real deep_ep. Its Buffer(group, num_nvl_bytes,
+  # ...) takes a torch ProcessGroup (matching DeepEP + ep_uccl.py's calls) and runs the full
+  # proxy/IPC-handle/runtime.sync bootstrap that the low-level uccl.ep.Buffer(rank,num_ranks) lacks.
+  rm -rf /tmp/uccl_src /tmp/uccl_deepep_pkg
+  if git clone --depth 1 https://github.com/uccl-project/uccl /tmp/uccl_src >&2 2>&1 \
+     && [ -d /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep ]; then
+    mkdir -p /tmp/uccl_deepep_pkg/uccl_deepep
+    cp /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep/*.py /tmp/uccl_deepep_pkg/uccl_deepep/ 2>/dev/null
+    export PYTHONPATH="/tmp/uccl_deepep_pkg:${PYTHONPATH:-}"
+    if python3 -c "import torch; from uccl_deepep import Buffer; print('uccl_deepep wrapper ready')" >&2; then
+      export CX_UCCL_WRAPPER=1
+    else
+      cx_log "WARN: uccl_deepep wrapper import failed — falling back to low-level uccl.ep"
+    fi
+  else
+    cx_log "WARN: uccl deep_ep_wrapper not vendored (clone/path) — low-level uccl.ep fallback"
+  fi
+  cx_log "UCCL EP ready ($UCCL_COMMIT, wrapper=${CX_UCCL_WRAPPER:-0})"
 }
 
 run_deepep_suite() {

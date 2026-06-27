@@ -37,8 +37,14 @@ import torch
 import torch.distributed as dist
 
 try:
-    from uccl.ep import Buffer  # type: ignore
     import uccl  # for version/provenance
+    try:
+        # PREFERRED: vendored deep_ep_wrapper (cx_build_uccl -> uccl_deepep). Buffer(group, ...)
+        # takes a torch ProcessGroup (matches DeepEP + this adapter's calls) + runs UCCL's full
+        # proxy/IPC/runtime.sync bootstrap. Fallback: low-level uccl.ep.Buffer(rank,num_ranks,...).
+        from uccl_deepep import Buffer  # type: ignore
+    except Exception:
+        from uccl.ep import Buffer  # type: ignore
 except Exception as exc:  # pragma: no cover - needs the installed uccl wheel + cu12 runtime
     print("ERROR: uccl.ep import failed — `pip install uccl nvidia-cuda-runtime-cu12` and "
           "prepend the cu12 lib dir to LD_LIBRARY_PATH at job setup (cx_build_uccl). "
