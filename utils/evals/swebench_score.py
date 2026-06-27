@@ -26,7 +26,7 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Iterator, Optional
+from typing import Iterator, Optional
 
 DEFAULT_DATASET = "princeton-nlp/SWE-bench_Lite"
 DEFAULT_TASK = "swebench_lite"
