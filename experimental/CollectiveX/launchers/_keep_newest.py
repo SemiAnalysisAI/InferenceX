@@ -36,7 +36,9 @@ def cfg_key(d):
     # (dedup to newest), but a capped cross-vendor cohort run (T<=16) keeps its own identity vs the
     # full-ladder per-GPU run (T<=128) — so both survive (per-GPU completeness AND the matched cohort).
     wl = d.get("workload") or {}
-    return (sku, d.get("backend"), sh.get("hidden"), sh.get("topk"), sh.get("experts"),
+    # kernel_gen (DeepEP v1/v2) is part of the config identity — keep both generations, never collapse.
+    kgen = sh.get("kernel_gen") or ("v1" if d.get("backend") == "deepep" else "n-a")
+    return (sku, d.get("backend"), kgen, sh.get("hidden"), sh.get("topk"), sh.get("experts"),
             sh.get("dispatch_dtype"), d.get("mode"), d.get("measurement_contract"),
             f"{sh.get('routing')}{'+eplb' if e.get('enabled') else ''}",
             d.get("ep_size"), d.get("phase"), sh.get("activation_profile", "normal"),

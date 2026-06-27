@@ -830,6 +830,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank, "dispatch_dtype": args.dispatch_dtype,
         "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
+        # DeepEP kernel generation (v1 = NVSHMEM, v2 = NCCL-Gin) — part of line identity so a V2 run
+        # is never conflated with V1 in comparison_key / plot / cohort. Derived from deepep_version;
+        # "n-a" for non-DeepEP backends. (Existing V1 docs lack this field -> read as "v1".)
+        "kernel_gen": ("v2" if str((backend.backend_provenance or {}).get("deepep_version", "")).startswith("2")
+                       else "v1" if str((backend.backend_provenance or {}).get("deepep_version", "")).startswith("1")
+                       else "n-a"),
         # temporal snapshot + uneven allocation change the realized workload, so they are part of
         # the line identity (fold into comparison_key). Default 0/none reproduce the prior key for
         # non-temporal even runs in spirit (the value is recorded either way).

@@ -100,6 +100,10 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
         cl = " [cl]" if contract == "cached-layout-comm-only-v1" else ""   # cached-layout flag
         backend = d.get("backend")
         ep = d.get("ep_size")
+        # DeepEP kernel generation (v1 NVSHMEM / v2 NCCL-Gin); default v1 for legacy deepep docs
+        # without the field, n-a for non-deepep. Folds into the line key + label so V1/V2 are distinct.
+        kgen = sh.get("kernel_gen") or ("v1" if backend == "deepep" else "n-a")
+        kg = f" {kgen}" if kgen == "v2" else ""   # only annotate v2 (keep v1 labels unchanged)
         # Routing axis: base distribution + EPLB. "zipf+eplb" is the balanced-by-replication
         # variant of zipf; uniform is the baseline (omitted from the label to keep it short).
         eplb_doc = d.get("eplb") or {}
@@ -117,7 +121,7 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
         # FULL per-line label: SKU·EP·backend·dtype[·LL][·resource][·cached-layout][·routing].
         # EP is explicit because a SKU can span EP degrees (GB300 EP4 on one NVL72 tray, EP8
         # across two); routing is explicit so balanced/zipf/zipf+eplb don't collide with uniform.
-        label = f'{sku.upper()} EP{ep} · {backend} · {dtype}{ll}{rs}{cl}{rt}'
+        label = f'{sku.upper()} EP{ep} · {backend}{kg} · {dtype}{ll}{rs}{cl}{rt}'
         repro = d.get("reproduction", {})
         gr = repro.get("git_run") or {}
         rid = d.get("routing_identity", {})
@@ -145,7 +149,8 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
             "eplb_before": eplb_doc.get("imbalance_before"), "eplb_after": eplb_doc.get("imbalance_after"),
             # ep + routing in the key so EP4/EP8 and uniform/balanced/zipf/zipf+eplb of one SKU
             # get distinct colors/lines (sku stays ckey.split("|")[0] for the family lookup).
-            "ckey": f"{sku}|{backend}|{dtype}|{mode}|{rmode}|{contract}|ep{ep}|{routing_disp}",  # config identity (color)
+            "kgen": kgen,
+            "ckey": f"{sku}|{backend}|{dtype}|{mode}|{rmode}|{contract}|ep{ep}|{routing_disp}|{kgen}",  # config identity (color); kgen so V1/V2 are distinct lines
             "label": label,
             "dash": "" if dtype == "bf16" else "6 4",   # bf16 solid, fp8 dashed (2nd cue)
             "color": COLORS.get(sku, "#555"),           # provisional; reassigned below

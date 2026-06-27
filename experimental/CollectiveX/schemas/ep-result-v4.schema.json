@@ -64,6 +64,7 @@
         "dispatch_dtype": {"type": "string", "enum": ["bf16", "fp8"]},
         "routing": {"type": "string"},
         "eplb": {"type": "boolean"}, "num_logical_experts": {"type": "integer"},
+        "kernel_gen": {"type": "string"},
         "activation_profile": {"type": "string"},
         "quant": {
           "type": "object",

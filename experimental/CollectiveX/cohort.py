@@ -64,6 +64,7 @@ def fingerprint(doc: dict, path: str) -> dict:
         "comparison_class": doc.get("comparison_class"),
         "measurement_contract": doc.get("measurement_contract"),
         "dispatch_dtype": sh.get("dispatch_dtype"),
+        "kernel_gen": sh.get("kernel_gen") or ("v1" if doc.get("backend") == "deepep" else "n-a"),
         "activation_profile": sh.get("activation_profile", "normal"),
         "combine_quant_mode": q.get("combine_quant_mode", "none"),
         "trace_signature": wl.get("trace_signature") or (doc.get("routing_identity") or {}).get("trace_signature"),
@@ -87,8 +88,8 @@ def cohort_key(fp: dict) -> tuple:
     """Identity a cohort's members must share. sku/backend/topology deliberately EXCLUDED — those
     are what a cross-hardware chart compares."""
     return (fp["mode"], fp["phase"], fp["ep_size"], fp["resource_mode"], fp["comparison_class"],
-            fp["measurement_contract"], fp["dispatch_dtype"], fp["activation_profile"],
-            fp["combine_quant_mode"], fp["trace_signature"])
+            fp["measurement_contract"], fp["dispatch_dtype"], fp["kernel_gen"],
+            fp["activation_profile"], fp["combine_quant_mode"], fp["trace_signature"])
 
 
 def cohort_id(members: list) -> str:
@@ -176,8 +177,8 @@ def build(results_dir: str, pin_sha: bool) -> dict:
         ev = evaluate_cohort(members, pin_sha)
         ev["key"] = {"mode": ck[0], "phase": ck[1], "ep_size": ck[2], "resource_mode": ck[3],
                      "comparison_class": ck[4], "measurement_contract": ck[5],
-                     "dispatch_dtype": ck[6], "activation_profile": ck[7],
-                     "combine_quant_mode": ck[8], "trace_signature": ck[9]}
+                     "dispatch_dtype": ck[6], "kernel_gen": ck[7], "activation_profile": ck[8],
+                     "combine_quant_mode": ck[9], "trace_signature": ck[10]}
         out.append(ev)
     out.sort(key=lambda c: (not c["official_eligible"], -c["n_members"]))
     return {"results_dir": results_dir, "pin_sha": pin_sha, "n_cohorts": len(out),
