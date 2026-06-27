@@ -1,0 +1,45 @@
+kimik2.5-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
+  image: yukiozzz/kimi-lmc-mc-rocm:dmabuf
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 24, 32, 40, 48, 56 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+          - "ROUTER_TYPE=vllm-router"
+          - "PREFILL_KV_CONNECTOR=moriio-lmcachemp"
+          - "DECODE_KV_CONNECTOR=moriio"
+          - "IBDEVICES=rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
+          - "VLLM_MORIIO_CONNECTOR_READ_MODE=1"
+          - "NCCL_IB_DISABLE=1"
+          - "EXTRA_DOCKER_MOUNTS=-v /opt/amd/ainic/deb-repo:/ainic-repo:ro"
+          - "ENABLE_PREFIX_CACHING=1"
+          - "MAX_MODEL_LEN=262144"
+          - "WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060826_256k"
+          - "LMCACHE_L1_SIZE_GB=1200"
+          - "LMCACHE_L1_INIT_SIZE_GB=20"
+          - "LMCACHE_L1_READ_TTL_SECONDS=7200"
+          - "LMCACHE_CHUNK_SIZE=256"
+          - "LMCACHE_MAX_WORKERS=8"
+          - "LMCACHE_MP_MQ_TIMEOUT=1200"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
