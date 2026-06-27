@@ -50,7 +50,7 @@ for rid in $RUNS; do
             -o -name '*_all_reduce_*.json' -o -name '*_all_gather_*.json' \
             -o -name '*_reduce_scatter_*.json' -o -name '*_alltoall_*.json' \
             -o -name '*_offload_*.json' -o -name '*_copy_engine_*.json' -o -name '*_kvcache_*.json' \
-            -o -name '*_rl_mesh_*.json' \) -print)
+            -o -name '*_rl_mesh_*.json' -o -name '*_allreduce_fw_*.json' \) -print)
   else
     echo "WARN: download failed for run $rid" >&2
   fi

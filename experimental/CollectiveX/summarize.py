@@ -44,8 +44,8 @@ def load_results(results_dir: str, runner: str | None, ts: str | None) -> list[d
 # Families summarize.py recognizes: EP (moe), NCCL primitives, and the single-process
 # memcpy-family collectives (offload/copy-engine/kv-cache). A doc of any other family is
 # ignored; a run that produces ONLY recognized families must not be reported as "nothing".
-CLI_FAMILIES = ("nccl", "moe", "offload", "copy-engine", "kv-cache", "rl-mesh")
-COLLECTIVE_FAMILIES = ("offload", "copy-engine", "kv-cache", "rl-mesh")
+CLI_FAMILIES = ("nccl", "moe", "offload", "copy-engine", "kv-cache", "rl-mesh", "allreduce-fw")
+COLLECTIVE_FAMILIES = ("offload", "copy-engine", "kv-cache", "rl-mesh", "allreduce-fw")
 
 
 def _peak_busbw(rows):

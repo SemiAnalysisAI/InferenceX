@@ -62,6 +62,18 @@ CAP = {
         "quant_modes": ["none"],
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
+    "flashinfer": {
+        # FlashInfer EP (flashinfer.comm.MoeAlltoAll, pre-installed). NVIDIA; MNNVL symmetric
+        # workspace. bf16 normal layout-and-dispatch; fp8 + the trtllm one-sided variant reserved.
+        "vendors": ["nvidia"],
+        "modes": ["normal"],
+        "dtypes": ["bf16"],
+        "contracts": ["layout-and-dispatch-v1"],
+        "transports": ["nvlink", "mnnvl"],
+        "combine_dtypes": ["bf16"],
+        "quant_modes": ["none"],
+        "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
+    },
     "mori": {
         "vendors": ["amd"],
         "modes": ["normal"],
@@ -81,10 +93,11 @@ COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
 # axes (mode/dtype/contract/phase) don't apply, so they pass validation unconditionally on their
 # vendors. (offload/copy-engine are NVIDIA-only; kv-cache + rl-mesh run anywhere with CUDA/NCCL.)
 HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia"],
-                  "kv-cache": ["nvidia", "amd"], "rl-mesh": ["nvidia", "amd"]}
+                  "kv-cache": ["nvidia", "amd"], "rl-mesh": ["nvidia", "amd"],
+                  "allreduce-fw": ["nvidia", "amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
-VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl"], "amd": ["rccl", "mori"]}
+VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl", "flashinfer"], "amd": ["rccl", "mori"]}
 
 
 def resolve(sku, backend, mode="normal", dtype="bf16",

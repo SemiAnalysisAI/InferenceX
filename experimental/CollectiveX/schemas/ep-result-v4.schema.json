@@ -12,7 +12,7 @@
     "schema_version": {"type": "integer", "minimum": 3},
     "family": {"const": "moe"},
     "runner": {"type": "string"},
-    "backend": {"type": "string", "enum": ["deepep", "mori", "aiter", "uccl"]},
+    "backend": {"type": "string", "enum": ["deepep", "mori", "aiter", "uccl", "flashinfer"]},
     "mode": {"type": "string", "enum": ["normal", "ll"]},
     "phase": {"type": "string", "enum": ["decode", "prefill"]},
     "ep_size": {"type": "integer", "minimum": 1},

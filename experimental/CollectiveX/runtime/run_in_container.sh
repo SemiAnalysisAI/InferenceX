@@ -277,18 +277,41 @@ run_rl_mesh() {
   return "$rc"
 }
 
+run_allreduce_fw() {
+  # Framework custom all-reduce (flashinfer one-shot/two-shot + sglang/vllm), multi-process torchrun.
+  cx_log "allreduce-fw bench ngpus=$CX_NGPUS"
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
+      torchrun --nproc_per_node="$CX_NGPUS" tests/allreduce_fw_bench.py \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-nvlink}" \
+      --env-json "$ENVJSON" --out "results/${CX_RUNNER}_allreduce_fw_${CX_TS}.json"
+  local rc=$?
+  [ "$rc" = 0 ] || cx_log "WARN: allreduce-fw failed/timed out rc=$rc"
+  return "$rc"
+}
+
+run_flashinfer_suite() {
+  # FlashInfer EP (flashinfer.comm.MoeAlltoAll) — pre-installed in the sglang image, so just
+  # import-check (no build), then the generic EP sweep (run_ep.py --backend flashinfer).
+  if ! python3 -c "import flashinfer.comm" 2>/dev/null; then
+    cx_log "WARN: flashinfer.comm not importable — cannot run flashinfer EP"; return 1
+  fi
+  run_ep_suite flashinfer
+}
+
 rc=0
 case "$CX_BENCH" in
   nccl)        run_nccl_suite || rc=1 ;;
   deepep)      run_deepep_suite || rc=1 ;;
   mori)        run_mori_suite || rc=1 ;;
   uccl)        run_uccl_suite || rc=1 ;;
+  flashinfer)  run_flashinfer_suite || rc=1 ;;
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
   rl-mesh)     run_rl_mesh || rc=1 ;;
+  allreduce-fw) run_allreduce_fw || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|offload|copy-engine|kv-cache|rl-mesh|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.
