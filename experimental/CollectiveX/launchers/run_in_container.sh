@@ -200,7 +200,9 @@ cx_build_uccl() {
   cu12lib="$(python3 -c "import nvidia.cuda_runtime as m, os; print(os.path.join(os.path.dirname(m.__file__),'lib'))" 2>/dev/null)"
   [ -n "$cu12lib" ] && export LD_LIBRARY_PATH="$cu12lib:${LD_LIBRARY_PATH:-}"
   export UCCL_COMMIT="pkg-$(python3 -c 'import importlib.metadata as m; print(m.version("uccl"))' 2>/dev/null || echo uccl)"
-  python3 -c "from uccl.ep import Buffer; print('uccl.ep ready')" >&2 \
+  # import torch FIRST: uccl.ep's C extension links libc10.so (torch), which is only on the loader
+  # path once torch is imported (rpath). The adapter (ep_uccl.py) imports torch before uccl.ep too.
+  python3 -c "import torch; from uccl.ep import Buffer; print('uccl.ep ready')" >&2 \
     || { cx_log "ERROR: uccl.ep import failed (cu12 runtime on LD_LIBRARY_PATH?)"; return 1; }
   cx_log "UCCL EP ready ($UCCL_COMMIT)"
 }

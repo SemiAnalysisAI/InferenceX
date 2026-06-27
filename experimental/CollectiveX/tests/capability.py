@@ -75,6 +75,10 @@ CAP = {
 }
 # nccl/rccl are collective primitives, not EP dispatch/combine — phase is meaningless.
 COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
+# Single-process host/GPU memcpy-family benchmarks (family != moe): not EP backends, so the
+# EP capability axes (mode/dtype/contract/phase) don't apply — they pass validation unconditionally
+# on NVIDIA. (offload/copy-engine are NVIDIA-only; kv-cache raw-memcpy runs anywhere with CUDA.)
+HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia"], "kv-cache": ["nvidia", "amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
 VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl"], "amd": ["rccl", "mori"]}
@@ -94,6 +98,10 @@ def resolve(sku, backend, mode="normal", dtype="bf16",
         if vendor not in COLLECTIVE[backend]:
             return False, f"{backend} is not the {vendor} collective backend"
         return True, "collective primitive (phase/dtype/mode/contract not applicable)"
+    if backend in HOST_GPU_BENCH:
+        if vendor not in HOST_GPU_BENCH[backend]:
+            return False, f"{backend} bench not available on {vendor}"
+        return True, f"{backend} host/GPU memcpy-family bench (EP axes not applicable)"
     cap = CAP.get(backend)
     if cap is None:
         return False, f"unknown backend '{backend}'"
