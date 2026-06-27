@@ -41,6 +41,24 @@ SKU_FAMILY = {
 }
 PALETTE = ["#17becf", "#bcbd22", "#7f7f7f", "#393b79", "#637939"]      # fallback for unknown SKUs
 
+# MoE (hidden, top-k, routed-experts) -> human model name. Used to label the model-shape selector
+# + coverage + tooltips. DeepSeek-V3/V4 (7168/8/256) is the cross-hardware headline shape; the
+# others are official canonical results at additional model dims. An unlisted shape is labelled by
+# its dims (see model_name) so a new model is still selectable the moment its data lands.
+MODEL_NAMES = {
+    (7168, 8, 256): "DeepSeek-V3/V4",
+    (6144, 8, 256): "MiniMax-M3",
+    (7168, 8, 384): "Kimi-K2",
+    (4096, 8, 128): "Qwen3.5",
+    (7168, 8, 288): "DeepSeek-V3 (EPLB physical)",
+}
+
+
+def model_name(shape: dict) -> str:
+    """Map a result shape to a model name; fall back to the dims for an unregistered shape."""
+    h, k, e = shape.get("hidden"), shape.get("topk"), shape.get("experts")
+    return MODEL_NAMES.get((h, k, e)) or f"shape {h}/{k}/{e}"
+
 
 def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
     series = []
@@ -162,6 +180,9 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
             "trace_sig": rid.get("trace_signature"),
             "samples": (rows and d["rows"][0].get("samples_pooled")) or None,
             "prov": d.get("backend_provenance", {}),
+            # model name (from the MoE shape) so the model-shape selector / legend / coverage can
+            # name a series; the raw shape stays for the dims-based match in the chart filter.
+            "model": model_name(sh),
             "shape": sh, "rows": rows,
         })
     # NOTE (goal Part 1, "plot/artifact integrity"): raw series are IMMUTABLE after loading.
@@ -495,13 +516,29 @@ const PREFILL_MIN = _dpf.length? Math.min(..._dpf) : 128;
 // AND the single cross-hardware headline MoE shape (DeepSeek-V3 7168/8/256) — so the page opens on
 // exactly the apples-to-apples headline cohort, never a mixed-shape official set. Every broader set
 // (official / publishable / all) stays one click away.
+// MODEL-SHAPE selector (follow-up): each result carries a MoE shape (hidden/topk/experts) named in
+// Python (s.model). The headline shape is DeepSeek-V3/V4 (7168/8/256). The option list is built
+// DYNAMICALLY from the shapes ACTUALLY present in DATA (a shape with no data is never offered);
+// each option is keyed by "hidden/topk/experts" and labelled "<ModelName> (h/topk/e)". "all" = every
+// shape. Default = the headline shape so the opening view is unchanged.
 const HEADLINE_SHAPE = {hidden:7168, topk:8, experts:256};
-function isHeadlineShape(s){ const sh=s.shape||{};
-  return sh.hidden===HEADLINE_SHAPE.hidden && sh.topk===HEADLINE_SHAPE.topk && sh.experts===HEADLINE_SHAPE.experts; }
+const SHAPE_KEY = sh => (sh? (sh.hidden+'/'+sh.topk+'/'+sh.experts) : '?');
+const HEADLINE_SHAPE_KEY = HEADLINE_SHAPE.hidden+'/'+HEADLINE_SHAPE.topk+'/'+HEADLINE_SHAPE.experts;
+// {shapeKey -> "Model (h/topk/e)"} for every distinct shape in DATA, headline first then by size.
+const MODELS = (()=>{
+  const seen={}; DATA.forEach(s=>{ const k=SHAPE_KEY(s.shape); if(!(k in seen)) seen[k]=s.model||('shape '+k); });
+  const keys=Object.keys(seen).sort((a,b)=>{ if(a===HEADLINE_SHAPE_KEY) return -1; if(b===HEADLINE_SHAPE_KEY) return 1; return a.localeCompare(b,undefined,{numeric:true}); });
+  const o={all:"All shapes"}; keys.forEach(k=>{ o[k]=seen[k]+' ('+k+')'; }); return o;
+})();
+const MODEL_DEFAULT = (HEADLINE_SHAPE_KEY in MODELS)? HEADLINE_SHAPE_KEY : Object.keys(MODELS).filter(k=>k!=="all")[0];
+function modelOk(s){ return ST.model==="all" || SHAPE_KEY(s.shape)===ST.model; }
+// isHeadlineShape now means "matches the SELECTED model shape" (defaults to DeepSeek-V3/V4), so the
+// official-headline filter follows the model selector instead of being pinned to one shape.
+function isHeadlineShape(s){ return modelOk(s); }
 const PUB = {"official-headline":"Official headline", official:"Official only", publishable:"Publishable", all:"All (incl. diagnostic)"};
 function pubOk(s){
   if(ST.pub==="all") return true;
-  if(ST.pub==="official-headline") return s.pub==="official" && !!s.wid && isHeadlineShape(s);  // headline cohort only
+  if(ST.pub==="official-headline") return s.pub==="official" && !!s.wid && isHeadlineShape(s);  // official + selected model shape
   if(ST.pub==="official") return s.pub==="official" && !!s.wid;   // official => canonical wid required
   // publishable = official + comparable, but ONLY with a NON-NULL workload id (goal P0: every
   // plotted official/comparable result carries non-null workload identity). A seeded-runtime
@@ -528,16 +565,19 @@ const HEADLINE_DISTRIBUTION = "uniform";
 // back to backend-default if no normalized data exists for the headline cell, so the chart is never
 // empty on first paint while still defaulting to normalized whenever it is present.
 const ST  = {op:"roundtrip", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p99",
-             suite:"resource-constrained", dtype:"bf16", ep:"8",
+             suite:"resource-constrained", dtype:"bf16", ep:"8", model:MODEL_DEFAULT,
              routing:HEADLINE_DISTRIBUTION, pub:"official-headline"};
-// Count series visible under a candidate state (used only for graceful headline fallback).
+// Count series visible under a candidate state (used only for graceful headline fallback). Model-
+// aware: the candidate carries o.model, and the official-headline branch matches that shape.
 function _visCount(o){ return DATA.filter(s=>s.phase===o.phase
     && (o.suite==="all"||s.suite===o.suite) && (o.routing==="all"||s.routing===o.routing)
     && (o.dtype==="all"||s.dtype===o.dtype) && (o.ep==="all"||String(s.ep)===o.ep)
-    && _pubOkFor(s,o.pub)).length; }
-function _pubOkFor(s,pub){
+    && (o.model==="all"||SHAPE_KEY(s.shape)===o.model)
+    && _pubOkFor(s,o.pub,o.model)).length; }
+function _pubOkFor(s,pub,model){
   if(pub==="all") return true;
-  if(pub==="official-headline") return s.pub==="official" && !!s.wid && isHeadlineShape(s);
+  const shapeOk = (model==null||model==="all"||SHAPE_KEY(s.shape)===model);
+  if(pub==="official-headline") return s.pub==="official" && !!s.wid && shapeOk;
   if(pub==="official") return s.pub==="official" && !!s.wid;
   return !["diagnostic","invalid","failed"].includes(s.pub) && !!s.wid;
 }
@@ -585,13 +625,14 @@ const mapLin=(v,a,b,p,q)=>p+(v-a)/(b-a)*(q-p);
 function chart(o){
   const W=o.w||900, H=o.h||520, m={l:64,r:16,t:34,b:46};
   const pct=o.pct||"p99", suite=o.suite||"all", routing=o.routing||"all";
-  // o.dtype / o.epf are the MAIN-chart headline filters (default-off so the grid, which faces by
-  // EP via o.ep, is unaffected). epf is a string ("all"|"8"|…); dtype is a string ("all"|"bf16"|…).
+  // o.dtype / o.epf / o.model are the MAIN-chart headline filters (default-off so the grid, which
+  // faces by EP via o.ep, is unaffected). epf "all"|"8"…; dtype "all"|"bf16"…; model "all"|"hidden/topk/experts".
   const sl = DATA.filter(s=>s.phase===o.phase && (o.ep==null || s.ep===o.ep)
                             && (suite==="all" || s.suite===suite)
                             && (routing==="all" || s.routing===routing)
                             && (!o.dtype || o.dtype==="all" || s.dtype===o.dtype)
-                            && (!o.epf || o.epf==="all" || String(s.ep)===o.epf) && pubOk(s));
+                            && (!o.epf || o.epf==="all" || String(s.ep)===o.epf)
+                            && (!o.model || o.model==="all" || SHAPE_KEY(s.shape)===o.model) && pubOk(s));
   const pts = sl.map(s=>({s, P:s.rows.map(r=>({x:xval(r,o.x), y:metric(r,o.op,o.y,pct), r}))
                                      .filter(p=>p.x>0 && (o.ylog? p.y>0 : p.y>=0)
                                                 && (o.phase!=="prefill" || p.r.t>=PREFILL_MIN))}));
@@ -632,6 +673,7 @@ function chart(o){
                 +(g.s.repo?'  ·  '+g.s.repo:'');
       s+='<circle class="pt" cx="'+xv(p.x).toFixed(1)+'" cy="'+yv(p.y).toFixed(1)+'" r="3.2" fill="'+g.s.color+'">'+
       '<title>'+g.s.label+'  ['+pct+']  ('+g.s.pub+')'+
+      '\nmodel='+(g.s.model||'?')+'  (hidden/topk/experts '+SHAPE_KEY(g.s.shape)+')'+
       '\nT/rank='+p.r.t+'  ·  global='+p.r.gt+
       '\n'+YK[o.y]+' = '+fmt(p.y)+(o.y==='lat'?' µs':o.y==='bw'?' GB/s':'')+
       '\ndispatch  µs p50/p90/p99 = '+D.p50.toFixed(1)+'/'+D.p90.toFixed(1)+'/'+D.p99.toFixed(1)+
@@ -674,15 +716,19 @@ function guardNote(vis){
   if(eps.length>1) w.push('mixed EP degree '+eps.join('/')+' — compare only on the global-tokens x-axis');
   return w.length? '<div class="guard">⚠ not a direct comparison: '+w.join('; ')+'</div>' : '';
 }
-function legend(phase, ep, suite, routing, dtype, epf){
+function legend(phase, ep, suite, routing, dtype, epf, model){
   return '<div class="legend">'+DATA.filter(s=>s.phase===phase && (ep==null||s.ep===ep)
                                               && (!suite||suite==="all"||s.suite===suite)
                                               && (!routing||routing==="all"||s.routing===routing)
                                               && (!dtype||dtype==="all"||s.dtype===dtype)
+                                              && (!model||model==="all"||SHAPE_KEY(s.shape)===model)
                                               && (!epf||epf==="all"||String(s.ep)===epf) && pubOk(s)).map(s=>{
     const sw = s.dash ? 'background:repeating-linear-gradient(90deg,'+s.color+' 0 5px,transparent 5px 9px)'
                       : 'background:'+s.color;   // dashed swatch = fp8 (matches the line)
-    return '<span class="it"><span class="sw" style="'+sw+'"></span>'+s.label+'</span>';
+    // when shapes are mixed ("All shapes"), prefix the model so same-config lines of different
+    // models are distinguishable; a single-model view keeps the original (uncluttered) label.
+    const lab = (model==="all"? '['+(s.model||'?')+'] ' : '')+s.label;
+    return '<span class="it"><span class="sw" style="'+sw+'"></span>'+lab+'</span>';
   }).join('')+'</div>';
 }
 function seg(name,opts,cur){
@@ -691,6 +737,7 @@ function seg(name,opts,cur){
 }
 function renderControls(){
   document.getElementById('controls').innerHTML =
+    '<div class="grp"><span class="lab">Model shape (headline=DeepSeek-V3/V4)</span>'+seg('model',MODELS,ST.model)+'</div>'+
     '<div class="grp"><span class="lab">Operation</span>'+seg('op',OPS,ST.op)+'</div>'+
     '<div class="grp"><span class="lab">Phase</span>'+seg('phase',{decode:"Decode",prefill:"Prefill"},ST.phase)+'</div>'+
     '<div class="grp"><span class="lab">Percentile</span>'+seg('pct',PCT,ST.pct)+'</div>'+
@@ -709,14 +756,15 @@ function renderControls(){
     renderControls(); renderMain(); renderGrid(); renderHeatmaps(); });
 }
 function renderMain(){
-  const tags=(ST.dtype==='all'?'':' · '+ST.dtype)+(ST.ep==='all'?'':' · EP'+ST.ep);
+  const mtag=(ST.model==='all'?' · all shapes':' · '+(MODELS[ST.model]||ST.model));
+  const tags=mtag+(ST.dtype==='all'?'':' · '+ST.dtype)+(ST.ep==='all'?'':' · EP'+ST.ep);
   document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,xlog:ST.xlog,ylog:ST.ylog,
-    pct:ST.pct, suite:ST.suite, routing:ST.routing, dtype:ST.dtype, epf:ST.ep,
+    pct:ST.pct, suite:ST.suite, routing:ST.routing, dtype:ST.dtype, epf:ST.ep, model:ST.model,
     title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+tags+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
   const vis=DATA.filter(s=>s.phase===ST.phase && (ST.suite==="all"||s.suite===ST.suite)
                            && (ST.routing==="all"||s.routing===ST.routing)
-                           && dtOk(s) && epOk(s) && pubOk(s));
-  document.getElementById('mlegend').innerHTML = guardNote(vis)+legend(ST.phase, null, ST.suite, ST.routing, ST.dtype, ST.ep);
+                           && dtOk(s) && epOk(s) && modelOk(s) && pubOk(s));
+  document.getElementById('mlegend').innerHTML = guardNote(vis)+legend(ST.phase, null, ST.suite, ST.routing, ST.dtype, ST.ep, ST.model);
 }
 function renderGrid(){
   // SEPARATE panels per (phase, EP degree); within a panel, the SUITE selector keeps
@@ -830,9 +878,10 @@ function renderCoverage(){
   const cls={official:'#2ca02c','comparable-experimental':'#d6a72b',legacy:'#7f7f7f',
              diagnostic:'#9467bd',invalid:'#d62728',failed:'#a30000'};
   const by={}; DATA.forEach(s=>{ (by[s.sku]=by[s.sku]||[]).push(s); });
-  let h='<table class="cov"><tr><th>SKU</th><th>EP</th><th>config</th><th>phase</th><th>routing</th><th>workload</th><th>status</th><th>correct pts</th></tr>';
+  let h='<table class="cov"><tr><th>SKU</th><th>model (h/topk/e)</th><th>EP</th><th>config</th><th>phase</th><th>routing</th><th>workload</th><th>status</th><th>correct pts</th></tr>';
   Object.keys(by).sort().forEach(sku=>{
-    by[sku].sort((a,b)=>(a.ep-b.ep)||a.label.localeCompare(b.label)).forEach(s=>{
+    // sort by model then EP then label so the per-model coverage (which SKUs have which shape) groups.
+    by[sku].sort((a,b)=>(a.model||'').localeCompare(b.model||'')||(a.ep-b.ep)||a.label.localeCompare(b.label)).forEach(s=>{
       const ok=s.rows.filter(r=>r.correct).length;
       // dispatch dtype / mode / contract, + combine-quant + activation profile ONLY when non-default
       // (so today's bf16/none/normal rows stay uncluttered; a PR311 quant-combine run shows /cq:…).
@@ -841,14 +890,15 @@ function renderCoverage(){
       // workload identity column (goal P1): canonical wid, else flag wid=null as an official blocker.
       const wcell = s.wid? ('<span title="canonical workload">'+s.wid.slice(0,10)+'</span>')
                          : '<span style="color:#d6a72b" title="non-canonical (seeded-runtime) — cannot be official">wid=null ⚠</span>';
-      h+='<tr><td>'+sku+'</td><td>'+s.ep+'</td><td>'+cfg+'</td><td>'+s.phase+'</td><td>'+s.routing+'</td>'
+      h+='<tr><td>'+sku+'</td><td>'+(s.model||'?')+' <span class="mono" style="font-size:10px">'+SHAPE_KEY(s.shape)+'</span></td>'
+        +'<td>'+s.ep+'</td><td>'+cfg+'</td><td>'+s.phase+'</td><td>'+s.routing+'</td>'
         +'<td>'+wcell+'</td>'
         +'<td><span class="badge" style="background:'+(cls[s.pub]||'#555')+'">'+s.pub+'</span></td>'
         +'<td>'+ok+'/'+s.rows.length+'</td></tr>';
     });
   });
   document.getElementById('coverage').innerHTML=h+'</table>'
-    +'<p class="note">workload=wid is the canonical workload id; <b>wid=null</b> marks a seeded-runtime (non-canonical) line that is capped at comparable-experimental and is hidden from the Official view. Status is machine-derived from validity (goal P1).</p>';
+    +'<p class="note">model column = the MoE shape (hidden/topk/experts) named per the model registry; this is the per-model coverage (which SKUs ran which model shape). workload=wid is the canonical workload id; <b>wid=null</b> marks a seeded-runtime (non-canonical) line that is capped at comparable-experimental and is hidden from the Official view. Status is machine-derived from validity (goal P1).</p>';
 }
 // Failed / quarantined cases (goal immediate P2 "preserve failed cases in aggregation"): no-row
 // failed-case records (classified wedge/timeout/crash) + diagnostic/invalid/failed docs, surfaced
