@@ -189,6 +189,89 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
     return series
 
 
+def load_nccl_series(results_dir: str) -> list[dict]:
+    """Load family=nccl docs (run_nccl.py output) into JS-friendly series — ADDITIVE to the
+    family=moe series; routed to the All-reduce / All-gather tabs by `op`. One series per result
+    doc (a single op x runner x topology x transport sweep over message sizes). Color is assigned
+    per (sku, topology_class, transport) config within the SKU's hue family, matching the EP plot's
+    convention so a SKU is readable at a glance. invalid docs are kept but flagged (greyed in the UI)
+    so a failed/zero-busbw run is excluded from comparison rather than silently dropped (goal P1)."""
+    series = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "nccl" or not d.get("rows"):
+            continue
+        runner = d.get("runner") or "?"
+        sku = runner.split("_")[0].split("-")[0]
+        topo = d.get("topology_class") or "?"
+        transport = d.get("transport") or ""
+        op = d.get("op") or "?"
+        status = d.get("status") or "?"
+        valid = status == "valid"
+        rows = []
+        for r in d["rows"]:
+            # busbw_gbps is the best (max) across placements; pull the matching time from whichever
+            # placement that came from so latency + bandwidth describe the same observation. Default
+            # to out-of-place (the conventional headline) when busbw is absent/zero (latency-bound
+            # small messages report 0 GB/s — kept for the latency view, dropped from the bw view by y>0).
+            oop, ip = r.get("out_of_place") or {}, r.get("in_place") or {}
+            best_bw = r.get("busbw_gbps")
+            if best_bw is not None and ip.get("busbw_gbps") is not None and \
+               ip.get("busbw_gbps") == best_bw and (oop.get("busbw_gbps") or -1) != best_bw:
+                t_us, algbw = ip.get("time_us"), ip.get("algbw_gbps")
+            else:
+                t_us, algbw = oop.get("time_us"), oop.get("algbw_gbps")
+            if r.get("size_bytes") is None or t_us is None:
+                continue
+            rows.append({
+                "size": r["size_bytes"], "dtype": r.get("dtype"),
+                "t_us": t_us, "algbw": algbw, "busbw": best_bw,
+                "oop_us": oop.get("time_us"), "ip_us": ip.get("time_us"),
+                "correct": r.get("correct"),
+            })
+        if not rows:
+            continue
+        rows.sort(key=lambda x: x["size"])
+        tlab = f" · {transport}" if transport else ""
+        # label carries provenance (topology + transport); world-size disambiguates same-topo runs.
+        label = f'{sku.upper()} · {topo}{tlab} (ws{d.get("world_size","?")})'
+        series.append({
+            "op": op, "sku": sku, "runner": runner,
+            "topo": topo, "transport": transport,
+            "world_size": d.get("world_size"), "nodes": d.get("nodes"),
+            "dtype": (rows[0].get("dtype") if rows else None),
+            "comparison_class": d.get("comparison_class"),
+            "comparison_key": d.get("comparison_key"),
+            "contract": d.get("measurement_contract"),
+            "avg_busbw": (d.get("summary") or {}).get("avg_busbw_gbps"),
+            "status": status, "valid": valid,
+            # config identity for color: a (sku, topology, transport, world-size) cohort is one line.
+            "ckey": f"{sku}|{topo}|{transport}|ws{d.get('world_size')}",
+            "label": label, "color": COLORS.get(sku, "#555"),  # provisional; reassigned below
+            "rows": rows,
+        })
+    # DISTINCT color per config key within the SKU family (same scheme as the EP series), so an
+    # all-reduce line keeps a SKU-readable hue and same-SKU topologies stay distinguishable.
+    by_sku: dict[str, list[str]] = {}
+    for ck in sorted({s["ckey"] for s in series}):
+        by_sku.setdefault(ck.split("|")[0], []).append(ck)
+    ckcolor: dict[str, str] = {}
+    fb = 0
+    for sku, cks in by_sku.items():
+        fam = SKU_FAMILY.get(sku)
+        for j, ck in enumerate(cks):
+            if fam:
+                ckcolor[ck] = fam[j % len(fam)]
+            else:
+                ckcolor[ck] = PALETTE[fb % len(PALETTE)]; fb += 1
+    for s in series:
+        s["color"] = ckcolor[s["ckey"]]
+    return series
+
+
 # Budgets (µs) for the "max tokens / rank under a p99 round-trip budget" decision view (goal P3-D,
 # the previously-missing metric). Picked to bracket a typical decode SLO band.
 RT_BUDGETS_US = [100, 250, 500]
@@ -891,6 +974,128 @@ function renderProvenance(){
   });
   el.innerHTML=h+'</table>';
 }
+// ===== NCCL collective primitives (family=nccl) — All-reduce / All-gather tabs (goal P2/P3) =====
+// NCCL is a separate dataset from the EP series (DATA); these helpers read NCCL (injected below) and
+// never touch DATA/ST, so the EP tabs are completely unaffected. Each line is one (runner, topology,
+// transport) sweep over message size. Two evidence views per op (NST.metric, per tab):
+//   busbw   — bus bandwidth (GB/s) vs message size, log-log (the "bandwidth vs payload" view);
+//   latency — op time (µs) vs message size (the "latency vs size" view; log-x, LINEAR-y by default
+//             so the flat small-message latency floor is read directly — goal "latency-focused
+//             small tensor shapes"). Toggle the y-scale for the large-message ramp.
+const NSTATE = {};   // per-op view state, seeded lazily so all-reduce + all-gather toggle independently
+function nstate(op){ return NSTATE[op] || (NSTATE[op] = {metric:"busbw", xlog:true, ylog:false}); }
+const NMETRIC = {busbw:"Bus bandwidth (GB/s)", latency:"Op time (µs)"};
+function ncclSeries(op){ return (typeof NCCL!=="undefined"? NCCL : []).filter(s=>s.op===op); }
+// y value for a row under the active metric. busbw is 0 for latency-bound small messages — those
+// points are dropped from the (log) bandwidth view (yv>0 filter) but ALL sizes show in latency.
+function ncclY(r, metric){ return metric==="busbw" ? (r.busbw||0) : r.t_us; }
+function ncclChart(op){
+  const st=nstate(op), metric=st.metric;
+  const W=900, H=460, m={l:66,r:16,t:34,b:46};
+  const X0=m.l,X1=W-m.r,Y0=H-m.b,Y1=m.t;
+  const sl=ncclSeries(op);
+  // build per-series point lists; for busbw (log y) keep y>0 only, for latency keep all.
+  const pts=sl.map(s=>({s, P:s.rows.map(r=>({x:r.size, y:ncclY(r,metric), r}))
+                                    .filter(p=>p.x>0 && (metric==="busbw" ? p.y>0 : p.y>=0))}));
+  let xs=[], ys=[]; pts.forEach(g=>g.P.forEach(p=>{xs.push(p.x);ys.push(p.y);}));
+  if(!xs.length) return '<svg viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="axl" text-anchor="middle">no data</text></svg>';
+  const xmn=Math.min(...xs), xmx=Math.max(...xs);
+  const ylog = st.ylog;   // both metrics honor the Y-scale toggle (busbw defaults log via the toggle)
+  let ymn=Math.min(...ys), ymx=Math.max(...ys);
+  if(ylog){ const pos=ys.filter(v=>v>0); ymn=pos.length?Math.min(...pos):1; } else { ymn=Math.min(0,ymn); }
+  if(ymx===ymn) ymx=ymn+1;
+  const xlog=st.xlog;
+  const xv=v=>xlog?mapLog(v,xmn,xmx,X0,X1):mapLin(v,xmn,xmx,X0,X1);
+  const yv=v=>ylog?mapLog(Math.max(v,ymn),ymn,ymx,Y0,Y1):mapLin(v,ymn,ymx,Y0,Y1);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" role="img">';
+  s+='<text x="'+X0+'" y="20" class="ttl">'+NMETRIC[metric]+' vs message size — '+(op==="all_reduce"?"all-reduce":op==="all_gather"?"all-gather":op)+'</text>';
+  // y grid + ticks
+  (ylog?logTicks(ymn,ymx):linTicks(ymn,ymx)).forEach(v=>{const y=yv(v); s+='<line class="gl" x1="'+X0+'" y1="'+y+'" x2="'+X1+'" y2="'+y+'"/>'+
+    '<text class="tk" x="'+(X0-7)+'" y="'+(y+3.5)+'" text-anchor="end">'+fmt(v)+'</text>';});
+  // x grid + ticks (message size, log decades; label the actual sweep points sparsely via logTicks)
+  (xlog?logTicks(xmn,xmx):linTicks(xmn,xmx)).forEach(v=>{const x=xv(v); s+='<line class="gl" x1="'+x+'" y1="'+Y0+'" x2="'+x+'" y2="'+Y1+'"/>'+
+    '<text class="tk" x="'+x+'" y="'+(Y0+16)+'" text-anchor="middle">'+fmt(v)+'B</text>';});
+  s+='<line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X1+'" y2="'+Y0+'"/><line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X0+'" y2="'+Y1+'"/>';
+  s+='<text class="axl" x="'+((X0+X1)/2)+'" y="'+(H-6)+'" text-anchor="middle">Message size (bytes)'+(xlog?'  (log)':'')+'</text>';
+  s+='<text class="axl" transform="translate(15,'+((Y0+Y1)/2)+') rotate(-90)" text-anchor="middle">'+NMETRIC[metric]+(ylog?'  (log)':'')+'</text>';
+  pts.forEach(g=>{ if(!g.P.length) return;
+    const d=g.P.map((p,i)=>(i?'L':'M')+xv(p.x).toFixed(1)+' '+yv(p.y).toFixed(1)).join(' ');
+    // invalid runs (zero-busbw / failed check) are greyed + dashed + dimmed so they read as EXCLUDED,
+    // not as a peer measurement (goal P1: a failed run is preserved-but-flagged, never silently shown).
+    const col=g.s.valid? g.s.color : '#666';
+    const dash=g.s.valid? '' : ' stroke-dasharray="3 4"';
+    const op_attr=g.s.valid? '' : ' opacity="0.5"';
+    s+='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2"'+dash+op_attr+'/>';
+    g.P.forEach(p=>{ const r=p.r;
+      s+='<circle class="pt" cx="'+xv(p.x).toFixed(1)+'" cy="'+yv(p.y).toFixed(1)+'" r="3.2" fill="'+col+'"'+op_attr+'>'+
+      '<title>'+g.s.label+(g.s.valid?'':'  [INVALID — excluded]')+
+      '\nsize='+fmt(r.size)+'B'+(r.dtype?'  ·  '+r.dtype:'')+
+      '\nbusbw = '+(r.busbw!=null?fmt(r.busbw)+' GB/s':'n/a')+(r.algbw!=null?'  ·  algbw '+fmt(r.algbw)+' GB/s':'')+
+      '\ntime  = '+(r.t_us!=null?r.t_us.toFixed(2)+' µs':'n/a')+
+      (r.oop_us!=null||r.ip_us!=null?'\nout-of-place '+(r.oop_us!=null?r.oop_us.toFixed(2):'?')+' µs  ·  in-place '+(r.ip_us!=null?r.ip_us.toFixed(2):'?')+' µs':'')+
+      '\ntopology='+g.s.topo+(g.s.transport?'  ·  transport='+g.s.transport:'')+'  ·  world='+g.s.world_size+
+      '\ncontract='+(g.s.contract||'?')+'  ·  class='+(g.s.comparison_class||'?')+'  ·  status='+g.s.status+
+      (r.correct===false?'  ✗ check failed':'')+
+      '</title></circle>'; });
+  });
+  s+='</svg>'; return s;
+}
+function ncclLegend(op){
+  const sl=ncclSeries(op);
+  if(!sl.length) return '';
+  return '<div class="legend">'+sl.map(s=>{
+    const col=s.valid? s.color : '#666';
+    const sw = s.valid? 'background:'+col
+                      : 'background:repeating-linear-gradient(90deg,'+col+' 0 4px,transparent 4px 8px)';
+    return '<span class="it"><span class="sw" style="'+sw+'"></span>'+s.label+(s.valid?'':' (invalid — excluded)')+'</span>';
+  }).join('')+'</div>';
+}
+// not-a-direct-comparison guard for NCCL: mixed topology/transport/dtype/contract overlaid in one op.
+function ncclGuard(op){
+  const sl=ncclSeries(op).filter(s=>s.valid); if(sl.length<2) return '';
+  const w=[];
+  const tp=[...new Set(sl.map(s=>s.topo))]; if(tp.length>1) w.push('mixed topology ('+tp.join(', ')+')');
+  const tr=[...new Set(sl.map(s=>s.transport).filter(Boolean))]; if(tr.length>1) w.push('mixed transport ('+tr.join(', ')+')');
+  const dt=[...new Set(sl.map(s=>s.dtype).filter(Boolean))]; if(dt.length>1) w.push('mixed dtype ('+dt.join(', ')+')');
+  const ck=[...new Set(sl.map(s=>s.contract).filter(Boolean))]; if(ck.length>1) w.push('mixed contract ('+ck.join(', ')+')');
+  return w.length? '<div class="guard">⚠ not a direct comparison: '+w.join('; ')+' — topology-class is part of the comparison key (B200·IB vs GB200·MNNVL are distinct fabrics).</div>' : '';
+}
+function ncclSeg(op,grp,opts,cur){
+  return '<div class="seg">'+Object.entries(opts).map(([k,v])=>
+    '<button data-nop="'+op+'" data-ngrp="'+grp+'" data-val="'+k+'" class="'+(k===cur?'on':'')+'">'+v+'</button>').join('')+'</div>';
+}
+// Render one NCCL op tab (panelId holds .ncc-ctl/.ncc-chart/.ncc-leg children). Robust to zero data:
+// the whole panel collapses to a "no data yet" note (never a crashing/empty chart).
+function renderNccl(op, panelId){
+  const el=document.getElementById(panelId); if(!el) return;
+  const sl=ncclSeries(op);
+  if(!sl.length){
+    el.innerHTML='<div class="soon">No <b>'+(op==="all_reduce"?"all-reduce":op==="all_gather"?"all-gather":op)+
+      '</b> results yet. This tab populates automatically once a family=nccl '+op+
+      ' sweep lands in the results directory (nccl-tests via run_nccl.py).</div>';
+    return;
+  }
+  const st=nstate(op);
+  const ctl='<div class="controls">'+
+    '<div class="grp"><span class="lab">Metric</span>'+ncclSeg(op,'metric',NMETRIC,st.metric)+'</div>'+
+    '<div class="grp"><span class="lab">X scale</span>'+ncclSeg(op,'xlog',{true:"Log",false:"Linear"},String(st.xlog))+'</div>'+
+    '<div class="grp"><span class="lab">Y scale</span>'+ncclSeg(op,'ylog',{true:"Log",false:"Linear"},String(st.ylog))+'</div>'+
+    '</div>';
+  el.innerHTML=ctl+'<div class="card"><div class="ncc-chart">'+ncclChart(op)+'</div></div>'+
+    '<div>'+ncclGuard(op)+ncclLegend(op)+'</div>'+
+    '<p class="note">One line per (SKU, topology-class, transport) sweep. '+
+    'busbw view drops latency-bound small messages that report 0 GB/s; the latency view (log-x, '+
+    'linear-y default) shows the flat small-message floor directly. Invalid runs (zero-busbw / failed '+
+    'correctness check) are greyed + dashed and excluded from comparison. Measured by nccl-tests '+
+    '(out-of-place + in-place; busbw = best placement); standardized contract — these are stock-NCCL '+
+    'fabric numbers, not framework-integrated EP times. Hover a point for algbw / placements / provenance.</p>';
+  // wire toggles (scoped to this panel via data-nop) -> mutate this op's state + re-render it.
+  el.querySelectorAll('.controls button[data-nop]').forEach(b=>b.onclick=()=>{
+    const g=b.dataset.ngrp, v=b.dataset.val;
+    st[g]= (g==='xlog'||g==='ylog')? v==='true' : v;
+    renderNccl(op, panelId);
+  });
+}
 // TABS (goal P3-C): pure JS/CSS. Toggle .on on a nav button + its matching .tab panel. Disabled
 // buttons (suites not built yet) are inert. Re-renders the active tab's charts so SVGs that need a
 // real layout (the main chart) paint correctly when first shown.
@@ -898,6 +1103,8 @@ function showTab(id){
   document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id===id));
   document.querySelectorAll('.tabs button[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===id));
   if(id==='tab-ep'){ renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); }
+  if(id==='tab-allreduce'){ renderNccl('all_reduce','allreduce'); }
+  if(id==='tab-allgather'){ renderNccl('all_gather','allgather'); }
 }
 function setupTabs(){
   document.querySelectorAll('.tabs button[data-tab]').forEach(b=>{ if(!b.disabled) b.onclick=()=>showTab(b.dataset.tab); });
@@ -932,6 +1139,7 @@ function setupTabs(){
   resolveHeadlineDefaults();   // pick a non-empty opening view (keeps normalized as the default)
   renderControls(); renderCards(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps();
   renderDecision(); renderProvenance(); renderCoverage(); renderSensitivity(); renderFailed();
+  renderNccl('all_reduce','allreduce'); renderNccl('all_gather','allgather');  // family=nccl tabs (no-op if empty)
   setupTabs();
 })();
 """
@@ -1006,17 +1214,27 @@ def main() -> int:
     except Exception as exc:  # never let the decision tab break the main plot
         print(f"  (decision views skipped: {exc!r})", file=sys.stderr)
     cards = summary_cards(series, sens_rows, failed, ll_rows)
+    # NCCL collective-primitive series (family=nccl), routed to the All-reduce / All-gather tabs.
+    # ADDITIVE: independent of the family=moe EP series above; an empty list simply leaves the tabs
+    # as "no data yet" placeholders (GHA nccl runs may still be in flight).
+    nccl_series = load_nccl_series(args.results_dir)
+    nccl_ops = {s["op"] for s in nccl_series}
+    has_ar, has_ag = "all_reduce" in nccl_ops, "all_gather" in nccl_ops
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     # Tab nav (goal P3-C): real clickable tabs. Built suites are enabled; not-yet-built collective
-    # suites are disabled "coming soon" placeholders so the framework's scope is visible.
+    # suites are disabled "coming soon" placeholders so the framework's scope is visible. All-reduce /
+    # All-gather enable as soon as a family=nccl sweep for that op is present (else stay disabled).
+    def _navbtn(tab, label, enabled):
+        return (f'<button data-tab="{tab}">{label}</button>' if enabled
+                else f'<button disabled title="no {label} results yet">{label}</button>')
     tabnav = ('<div class="tabs">'
               '<button data-tab="tab-ep" class="on">EP dispatch / combine</button>'
               '<button data-tab="tab-decision">Decision</button>'
               '<button data-tab="tab-evidence">Evidence</button>'
               '<button disabled title="suite not built yet">KV-cache transfer</button>'
-              '<button disabled title="suite not built yet">All-reduce</button>'
-              '<button disabled title="suite not built yet">All-gather</button>'
-              '<button disabled title="suite not built yet">RL mesh</button>'
+              + _navbtn("tab-allreduce", "All-reduce", has_ar)
+              + _navbtn("tab-allgather", "All-gather", has_ag)
+              + '<button disabled title="suite not built yet">RL mesh</button>'
               '<button disabled title="suite not built yet">Copy-engine / SDMA</button>'
               '</div>')
     # Tab panels. EP = the existing chart + grid + scaling + heatmaps (unchanged behavior).
@@ -1037,18 +1255,30 @@ def main() -> int:
                     '<h2>Distribution sensitivity <span style="font-weight:400;color:var(--mut)">— NOT the headline (headline = uniform)</span></h2><div id="sensitivity"></div>'
                     '<h2>Failed / quarantined cases</h2><div id="failed"></div>'
                     '<h2>Coverage</h2><div id="coverage"></div></div>')
-    placeholder = ('<p class="note">The collective suites below are part of the CollectiveX framework but '
-                   'have no results yet — their tabs are disabled placeholders until the suites land.</p>')
+    # NCCL collective tabs (family=nccl): the panel body is rendered by renderNccl() when the tab is
+    # shown (and once at boot). Robust to zero data — renderNccl prints a "no data yet" note.
+    tab_allreduce = ('<div class="tab" id="tab-allreduce">'
+                     '<p class="sub">Standardized NCCL <b>all-reduce</b> (nccl-tests): bus bandwidth vs payload and op-time vs message size. One line per (SKU, topology-class, transport). Topology-class is part of the comparison key, so distinct fabrics are never silently overlaid.</p>'
+                     '<div id="allreduce"></div></div>')
+    tab_allgather = ('<div class="tab" id="tab-allgather">'
+                     '<p class="sub">Standardized NCCL <b>all-gather</b> (nccl-tests): bus bandwidth vs payload and op-time vs message size. One line per (SKU, topology-class, transport).</p>'
+                     '<div id="allgather"></div></div>')
+    placeholder = ('<p class="note">The remaining collective suites (KV-cache transfer, RL mesh, '
+                   'copy-engine / SDMA) are part of the CollectiveX framework but have no results yet — '
+                   'their tabs are disabled placeholders until the suites land.</p>')
     html = HEAD \
         + '<div class="cards" id="cards"></div>' \
-        + tabnav + tab_ep + tab_decision + tab_evidence + placeholder \
+        + tabnav + tab_ep + tab_decision + tab_evidence + tab_allreduce + tab_allgather + placeholder \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
-        + f'{len(series)} EP sweeps. Latency (p50/p90/p99 selector) is the primary metric; the ' \
+        + f'{len(series)} EP sweeps' + (f' + {len(nccl_series)} NCCL sweeps' if nccl_series else '') + '. ' \
+        + 'Latency (p50/p90/p99 selector) is the primary EP metric; the EP ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
-        + 'bandwidth. dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
+        + 'bandwidth. The All-reduce / All-gather tabs show stock-NCCL bus bandwidth + op time. ' \
+        + 'dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
         + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) \
         + ";\nconst FAILED = " + json.dumps(failed) + ";\nconst DECISION = " + json.dumps(decision) \
-        + ";\nconst CARDS = " + json.dumps(cards) + ";\n" + JS + "\n</script>\n" + TAIL
+        + ";\nconst CARDS = " + json.dumps(cards) + ";\nconst NCCL = " + json.dumps(nccl_series) \
+        + ";\n" + JS + "\n</script>\n" + TAIL
     with open(args.out, "w") as fh:
         fh.write(html)
     phases = sorted({s["phase"] for s in series})
