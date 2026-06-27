@@ -438,14 +438,17 @@ class FlashInferBackend:
         # No expert compute (identity expert). bf16 recv is the "expert output" as-is; FlashInfer's
         # combine reads back from the SAME workspace the dispatch populated, so combine() is told
         # the payload is already in the workspace (payload_in_workspace=True) when supported. We
-        # stash the recv payload as combine_input. CLONE it to a fresh (non-workspace) buffer: the
-        # dispatch recv aliases the symmetric workspace, and combine(payload_in_workspace=True)
-        # demands the payload sit at the exact workspace combine-region pointer (mismatch ->
-        # RuntimeError). A clone is an unambiguous external tensor for payload_in_workspace=False,
-        # which has the kernel copy our identity-expert output into the workspace itself.
+        # Per the FlashInfer source: dispatch returns recv [ep_size, max_tokens, hidden]; combine
+        # wants payload [ep_size, max_tokens, elements_per_token] — the SAME shape. For the identity
+        # expert the recv IS the expert output, so hand recv[0] straight to combine (NO clone — a
+        # clone of the workspace-backed recv broke the layout and async-corrupted CUDA). combine is
+        # called with payload_in_workspace=False so the kernel stages this tensor itself.
         # (fp8 would dequant here, like ep_deepep.py — see TODO.)
-        h.combine_input = h.recv_payload.contiguous().clone() if torch.is_tensor(h.recv_payload) \
-            else h.recv_payload
+        h.combine_input = h.recv_payload
+        if self.rank == 0 and not getattr(self, "_shape_logged", False) and torch.is_tensor(h.recv_payload):
+            self._shape_logged = True
+            print(f"[ep_flashinfer] recv/combine payload shape={tuple(h.recv_payload.shape)} "
+                  f"dtype={h.recv_payload.dtype}", flush=True)
         return None
 
     def combine(self, p, h):
