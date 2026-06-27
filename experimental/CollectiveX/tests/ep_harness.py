@@ -611,23 +611,35 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 for _ in range(warm_burst):
                     bh = backend.dispatch(problem); backend.stage(problem, bh); backend.combine(problem, bh)
                 torch.cuda.synchronize()
-            disp_iters = time_us(torch, lambda p=problem: backend.dispatch(p), args.warmup, args.iters)
+            # roundtrip_only backends (stateful paired dispatch/combine FSM, e.g. FlashInfer
+            # MoeAlltoAll): isolated/looped dispatch timing corrupts the symmetric workspace, so
+            # ONLY the paired roundtrip is measurable. Mirror rt into disp/comb (flagged) so the
+            # schema + plot have values; isolated_sum is meaningless for these (== 2x roundtrip).
+            roundtrip_only = getattr(backend, "roundtrip_only", False)
 
-            def prep(p=problem):
-                hh = backend.dispatch(p); backend.stage(p, hh); return hh
-            if backend.combine_needs_redispatch:
-                comb_iters = time_us(torch, lambda hh, p=problem: backend.combine(p, hh),
-                                     args.warmup, args.iters, pre=prep)
-            else:
-                hh = prep()
-                comb_iters = time_us(torch, lambda p=problem, hx=hh: backend.combine(p, hx),
-                                     args.warmup, args.iters)
-            # MEASURED round trip (goal P1: not a sum of percentiles): one timed region over
-            # dispatch -> stage (no-op "expert" transform) -> combine -> output ready. Captures
-            # shared sync / launch amortization / overlap that the isolated_sum cannot.
             def rt_once(p=problem):
                 hh = backend.dispatch(p); backend.stage(p, hh); return backend.combine(p, hh)
-            rt_iters = time_us(torch, lambda p=problem: rt_once(p), args.warmup, args.iters)
+
+            if roundtrip_only:
+                rt_iters = time_us(torch, lambda p=problem: rt_once(p), args.warmup, args.iters)
+                disp_iters = comb_iters = rt_iters
+            else:
+                disp_iters = time_us(torch, lambda p=problem: backend.dispatch(p),
+                                     args.warmup, args.iters)
+
+                def prep(p=problem):
+                    hh = backend.dispatch(p); backend.stage(p, hh); return hh
+                if backend.combine_needs_redispatch:
+                    comb_iters = time_us(torch, lambda hh, p=problem: backend.combine(p, hh),
+                                         args.warmup, args.iters, pre=prep)
+                else:
+                    hh = prep()
+                    comb_iters = time_us(torch, lambda p=problem, hx=hh: backend.combine(p, hx),
+                                         args.warmup, args.iters)
+                # MEASURED round trip (goal P1: not a sum of percentiles): one timed region over
+                # dispatch -> stage (no-op "expert" transform) -> combine -> output ready. Captures
+                # shared sync / launch amortization / overlap that the isolated_sum cannot.
+                rt_iters = time_us(torch, lambda p=problem: rt_once(p), args.warmup, args.iters)
             # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
             disp_pool[T] += _reduce_vec(torch, dist, device, disp_iters, MAX)
             comb_pool[T] += _reduce_vec(torch, dist, device, comb_iters, MAX)

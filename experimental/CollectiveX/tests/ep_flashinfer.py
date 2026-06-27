@@ -163,6 +163,11 @@ class FlashInferBackend:
     # sample, so combine always sees a "dispatched" state; dispatch() resets the FSM to idle at its
     # start so the dispatch-timing loop + the roundtrip (paired) timing all stay valid.
     combine_needs_redispatch = True
+    # MoeAlltoAll's paired dispatch/combine FSM means isolated/looped dispatch timing corrupts the
+    # symmetric workspace (CUDA launch failure). Only the PAIRED roundtrip is measurable — the
+    # harness times the roundtrip and mirrors it into dispatch/combine (isolated_sum is N/A here).
+    # The roundtrip IS goal P0's headline metric, so this is the right measurement for this backend.
+    roundtrip_only = True
     # Blackwell (B300/GB300) drops GPU clocks during the tiny small-T points, so the harness
     # re-ramps clocks at each shape before timing it. Harmless (just untimed iters) on H100/H200.
     wants_warm_burst = True
