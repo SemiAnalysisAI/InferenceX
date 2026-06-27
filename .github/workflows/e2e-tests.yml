@@ -22,7 +22,7 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval framework (lm-eval | swebench). Overrides the recipe default."
+                description: "Eval framework (lm-eval | swebench). Default lm-eval."
                 required: false
                 type: string
                 default: "lm-eval"
@@ -51,7 +51,7 @@ on:
                 type: string
                 default: ""
             eval-framework:
-                description: "Eval framework (lm-eval | swebench). Overrides the recipe default."
+                description: "Eval framework (lm-eval | swebench). Default lm-eval."
                 required: false
                 type: string
                 default: "lm-eval"

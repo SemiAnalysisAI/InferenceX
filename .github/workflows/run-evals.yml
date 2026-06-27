@@ -4,7 +4,7 @@ run-name: "/run-evals PR #${{ github.event.issue.number }}"
 # Comment-triggered, eval-only run of ONE eval on ONE recipe (no perf sweep).
 # Usage in a PR comment:
 #   /run-evals <eval> <config-key> [conc] [master-config]
-# where <eval> is one of: gsm8k | gpqa | swebench_lite (alias: swebench).
+# where <eval> is one of: gsm8k | gpqa[_diamond] | swebench[_lite].
 # Example: /run-evals swebench_lite dsr1-fp4-b200-sglang 16
 # Mirrors pr-comment-sweep.yml; differs only in parsing + the eval mapping it
 # forwards to e2e-tests.yml (eval-framework / eval-task).
@@ -55,7 +55,7 @@ jobs:
           master_override="${parts[3]:-}"
           if [[ -z "$eval_name" || -z "$config_key" ]]; then
             echo "usage: /run-evals <eval> <config-key> [conc] [master-config]" >&2
-            echo "valid evals: gsm8k | gpqa | swebench_lite" >&2
+            echo "valid evals: gsm8k | gpqa[_diamond] | swebench[_lite]" >&2
             exit 1
           fi
 
@@ -65,7 +65,7 @@ jobs:
             gpqa|gpqa_diamond)      framework="lm-eval";  task="utils/evals/gpqa_diamond.yaml" ;;
             swebench|swebench_lite) framework="swebench"; task="utils/evals/swebench_lite.yaml" ;;
             *)
-              echo "unknown eval '$eval_name' (valid: gsm8k, gpqa, swebench_lite)" >&2
+              echo "unknown eval '$eval_name' (valid: gsm8k, gpqa[_diamond], swebench[_lite])" >&2
               exit 1
               ;;
           esac
@@ -136,7 +136,10 @@ jobs:
             core.setOutput('ref', sha);
 
       - name: Reply with run link
-        if: ${{ github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/run-evals') && github.repository_owner == 'SemiAnalysisAI' }}
+        # always() so a parse failure (bad eval name / missing config-key /
+        # unrecognized HW token) still gets a reply explaining why, instead of
+        # silently doing nothing and forcing the user into the Actions logs.
+        if: ${{ always() && github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/run-evals') && github.repository_owner == 'SemiAnalysisAI' }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         continue-on-error: true
         env:
@@ -146,6 +149,7 @@ jobs:
           EVAL_FRAMEWORK: ${{ steps.parse.outputs.eval-framework }}
           CAN_BYPASS: ${{ steps.auth.outputs.can-bypass }}
           PINNED_REF: ${{ steps.ref_comment.outputs.ref }}
+          PARSE_OUTCOME: ${{ steps.parse.outcome }}
         with:
           github-token: ${{ github.token }}
           script: |
@@ -154,13 +158,19 @@ jobs:
             const issue_number = context.issue.number;
             const runUrl = process.env.RUN_URL;
             const author = process.env.AUTHOR;
-            const genCmd = process.env.GEN_CMD || '';
-            const framework = process.env.EVAL_FRAMEWORK || '';
-            const canBypass = (process.env.CAN_BYPASS || '').toLowerCase() === 'true';
-            const pinned = process.env.PINNED_REF || '';
-            const shortSha = pinned ? pinned.slice(0, 7) : '';
-            const approvalMsg = canBypass ? 'Approval: not required (trusted collaborator).' : "Approval: required in environment 'Outside Collaborator E2E Test'.";
-            const body = `@${author} Kicking off an eval-only run (framework: \`${framework}\`).\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n${approvalMsg}`;
+            let body;
+            if ((process.env.PARSE_OUTCOME || '') !== 'success') {
+              // Parsing failed (or was skipped) — point the user at the error.
+              body = `@${author} \`/run-evals\` couldn't parse that command — see ${runUrl} for the exact error.\n\nUsage: \`/run-evals <eval> <config-key> [conc] [master-config]\`\nValid evals: \`gsm8k\` | \`gpqa[_diamond]\` | \`swebench[_lite]\``;
+            } else {
+              const genCmd = process.env.GEN_CMD || '';
+              const framework = process.env.EVAL_FRAMEWORK || '';
+              const canBypass = (process.env.CAN_BYPASS || '').toLowerCase() === 'true';
+              const pinned = process.env.PINNED_REF || '';
+              const shortSha = pinned ? pinned.slice(0, 7) : '';
+              const approvalMsg = canBypass ? 'Approval: not required (trusted collaborator).' : "Approval: required in environment 'Outside Collaborator E2E Test'.";
+              body = `@${author} Kicking off an eval-only run (framework: \`${framework}\`).\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n${approvalMsg}`;
+            }
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
 
   approval:
