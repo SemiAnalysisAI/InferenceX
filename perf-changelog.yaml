@@ -4295,3 +4295,10 @@
     - "Update the MiniMax-M3 MXFP8 MI355X vLLM EAGLE3 benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
     - "Benchmark configuration, EAGLE3 draft model, serving flags, and search space are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1941
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Update the MiniMax-M3 MXFP8 MI355X vLLM image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
+    - "Benchmark serving flags and TP/EP/DP-attention search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1942
