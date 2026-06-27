@@ -189,6 +189,123 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
     return series
 
 
+# Budgets (µs) for the "max tokens / rank under a p99 round-trip budget" decision view (goal P3-D,
+# the previously-missing metric). Picked to bracket a typical decode SLO band.
+RT_BUDGETS_US = [100, 250, 500]
+
+
+def _rt_p99(row):
+    """measured round-trip p99 for a plot_ep row (v4 nested dict, falls back to isolated_sum)."""
+    rt = row.get("roundtrip") or {}
+    return rt.get("p99")
+
+
+def max_tokens_under_budget(series, budgets=RT_BUDGETS_US):
+    """For each (sku, backend, phase, dtype, ep) HEADLINE cell (official, DeepSeek-V3 shape, uniform
+    routing), the largest tokens/rank whose MEASURED round-trip p99 <= each budget. This is the
+    "how much load fits under an SLO" number the chart did not previously expose. Honest about
+    misses: a budget no measured point satisfies reports None (rendered as '—')."""
+    cells = {}
+    for s in series:
+        sh = s.get("shape") or {}
+        if not (s.get("pub") == "official" and s.get("wid")
+                and sh.get("hidden") == 7168 and sh.get("topk") == 8 and sh.get("experts") == 256
+                and s.get("routing") == "uniform"):
+            continue
+        key = (s["sku"], s["backend"], s["phase"], s["dtype"], s["ep"], s.get("mode", "normal"))
+        pts = cells.setdefault(key, [])
+        for r in s["rows"]:
+            q = _rt_p99(r)
+            if q and r.get("t"):
+                pts.append((r["t"], q))
+    out = []
+    for (sku, backend, phase, dtype, ep, mode), pts in sorted(cells.items()):
+        pts.sort()
+        row = {"sku": sku, "backend": backend, "phase": phase, "dtype": dtype, "ep": ep, "mode": mode}
+        for b in budgets:
+            ok = [t for (t, q) in pts if q <= b]
+            row[f"b{b}"] = max(ok) if ok else None
+        # only emit a row if at least one budget is satisfiable (keeps the table to useful cells)
+        if any(row.get(f"b{b}") is not None for b in budgets):
+            out.append(row)
+    return out
+
+
+def summary_cards(series, sens_rows, failed, ll_rows):
+    """Industry-summary headline cards (goal P3-F), computed from the loaded series. Each card is
+    {title, value, sub, [warn], [href]}. Comparisons use the MEASURED round-trip p99 on the official
+    DeepSeek-V3 headline cohort so the cards match the default chart view. ll_rows is analyze_ep's
+    ll_crossover() output (used for the LL→normal crossover card)."""
+    def headline(s):
+        sh = s.get("shape") or {}
+        return (s.get("pub") == "official" and s.get("wid")
+                and sh.get("hidden") == 7168 and sh.get("topk") == 8 and sh.get("experts") == 256
+                and s.get("routing") == "uniform")
+
+    def best_rt(pred, T_decode=64, T_prefill=256):
+        """lowest round-trip p99 over series matching pred, at the phase's headline token count."""
+        best = None
+        for s in series:
+            if not (headline(s) and pred(s)):
+                continue
+            T = T_decode if s["phase"] == "decode" else T_prefill
+            for r in s["rows"]:
+                if r.get("t") == T:
+                    q = _rt_p99(r)
+                    if q and (best is None or q < best[0]):
+                        best = (q, s, T)
+        return best
+
+    cards = []
+
+    def fmt_best(b, label):
+        if not b:
+            cards.append({"title": label, "value": "no data", "sub": "no official headline cell at this phase/EP"})
+            return
+        q, s, T = b
+        cards.append({"title": label,
+                      "value": f"{s['backend']} · {s['sku'].upper()}",
+                      "sub": f"{q:.0f} µs RT p99 · {s['dtype']} · T={T}"})
+
+    fmt_best(best_rt(lambda s: s["phase"] == "decode" and s["ep"] == 8), "Best backend · decode EP8")
+    fmt_best(best_rt(lambda s: s["phase"] == "prefill" and s["ep"] == 8), "Best backend · prefill EP8")
+
+    # LL crossover (measured-roundtrip basis, p50): first cell with a real crossover token count.
+    crosses = [r for r in (ll_rows or [])
+               if r.get("basis") == "measured-roundtrip" and r.get("stat") == "p50"
+               and isinstance(r.get("normal_faster_at_T"), int)]
+    if crosses:
+        c = min(crosses, key=lambda r: r["normal_faster_at_T"])
+        cards.append({"title": "LL → normal crossover",
+                      "value": f"T≈{c['normal_faster_at_T']} tok/rank",
+                      "sub": f"{c['sku'].upper()} EP{c['ep']} {c['dtype']} · normal RT p50 wins above this (measured)"})
+    else:
+        cards.append({"title": "LL → normal crossover", "value": "none in range",
+                      "sub": "normal RT never beats LL within the measured token ladder"})
+
+    # Resource-normalized vs backend-default winners (decode EP8 headline).
+    rn = best_rt(lambda s: s["phase"] == "decode" and s["ep"] == 8 and s["suite"] == "resource-constrained")
+    bd = best_rt(lambda s: s["phase"] == "decode" and s["ep"] == 8 and s["suite"] == "backend-default")
+    fmt_best(rn, "Resource-normalized winner")
+    fmt_best(bd, "Backend-default winner")
+
+    # Most unstable configuration: highest distribution-sensitivity ratio (p99 worst/uniform).
+    if sens_rows:
+        w = max(sens_rows, key=lambda g: g.get("distribution_sensitivity_ratio") or 0)
+        cards.append({"title": "Most unstable config", "warn": True,
+                      "value": f"{w['sku'].upper()} · {w['backend']} {w['phase']}",
+                      "sub": f"{w['distribution_sensitivity_ratio']:.2f}× p99 under {w.get('worst_distribution','?')} vs uniform"})
+    else:
+        cards.append({"title": "Most unstable config", "value": "n/a", "sub": "no multi-distribution group yet"})
+
+    # Known invalid / diagnostic cases (count + link to the Evidence tab's failed table).
+    n = len(failed or [])
+    cards.append({"title": "Invalid / diagnostic cases", "warn": n > 0,
+                  "value": str(n), "sub": ("see Evidence ▸ failed table" if n else "none — all runs publishable"),
+                  "href": "#tab-evidence"})
+    return cards
+
+
 HEAD = """<!doctype html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>CollectiveX — EP dispatch / combine</title>
@@ -224,6 +341,41 @@ svg{display:block;width:100%;height:auto}
 .ttl{fill:var(--ink);font-size:13px;font-weight:600}
 circle.pt{stroke:#0f1115;stroke-width:1}
 @media(max-width:760px){.grid{grid-template-columns:1fr}}
+/* Tabs (goal P3-C): pure CSS/JS, no libs. One nav row; one .tab panel shown at a time. */
+.tabs{display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--line);margin:8px 0 16px}
+.tabs button{background:transparent;color:var(--mut);border:0;border-bottom:2px solid transparent;padding:9px 14px;font-size:13px;cursor:pointer;font-weight:600}
+.tabs button:hover{color:var(--ink)}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tabs button:disabled{color:#555;cursor:not-allowed;font-weight:400}
+.tabs button:disabled:hover{color:#555}
+.tab{display:none}.tab.on{display:block}
+.soon{color:var(--mut);font-size:13px;background:var(--panel);border:1px dashed var(--line);border-radius:10px;padding:22px 18px;margin:8px 0}
+.soon b{color:var(--ink)}
+/* Industry summary cards (goal P3-F): a responsive row of headline takeaways. */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(214px,1fr));gap:10px;margin:6px 0 4px}
+.kcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.kcard .kt{font-size:11px;letter-spacing:.03em;text-transform:uppercase;color:var(--mut);margin-bottom:5px}
+.kcard .kv{font-size:15px;font-weight:700;color:var(--ink);line-height:1.25}
+.kcard .ks{font-size:11.5px;color:var(--mut);margin-top:3px}
+.kcard.warn{border-color:#6b4f1f}.kcard.warn .kv{color:#f0c674}
+.kcard a{color:var(--accent);text-decoration:none}.kcard a:hover{text-decoration:underline}
+/* Decision tables (goal P3-D): compact, same palette as the coverage tables. */
+table.dec{border-collapse:collapse;font-size:12px;width:100%;margin:4px 0 20px}
+table.dec th,table.dec td{border:1px solid var(--line);padding:3px 8px;text-align:left;white-space:nowrap}
+table.dec th{color:var(--mut);font-weight:600}
+table.dec td.num{text-align:right;font-variant-numeric:tabular-nums}
+.win{color:#2ca02c;font-weight:600}
+/* Provenance drawer (goal P3-E): collapsible per-series provenance + artifact links. */
+details.prov{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:4px 12px;margin:6px 0 18px}
+details.prov>summary{cursor:pointer;color:var(--ink);font-weight:600;font-size:13px;padding:7px 0;list-style:none}
+details.prov>summary::-webkit-details-marker{display:none}
+details.prov>summary:before{content:"▸ ";color:var(--mut)}
+details.prov[open]>summary:before{content:"▾ "}
+table.prov{border-collapse:collapse;font-size:11.5px;width:100%;margin:6px 0 8px}
+table.prov th,table.prov td{border:1px solid var(--line);padding:3px 7px;text-align:left;white-space:nowrap}
+table.prov th{color:var(--mut)}
+table.prov a{color:var(--accent);text-decoration:none}table.prov a:hover{text-decoration:underline}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--mut)}
 </style></head><body><div class="wrap">
 <h1>CollectiveX — EP dispatch / combine</h1>
 <p class="sub" id="prov"></p>
@@ -256,24 +408,65 @@ const PREFILL_MIN = _dpf.length? Math.min(..._dpf) : 128;
 // view is publication-valid; "publishable" = official + comparable-experimental + legacy v3.
 // The OFFICIAL view additionally drops wid=null lines (a non-canonical workload can never be
 // official — goal P1) so an official chart can never show a wid=null or non-official cohort.
-const PUB = {publishable:"Publishable", official:"Official only", all:"All (incl. diagnostic)"};
+// "official-headline" (goal P0-1a, B6/B7) is the DEFAULT opening filter: official + canonical wid
+// AND the single cross-hardware headline MoE shape (DeepSeek-V3 7168/8/256) — so the page opens on
+// exactly the apples-to-apples headline cohort, never a mixed-shape official set. Every broader set
+// (official / publishable / all) stays one click away.
+const HEADLINE_SHAPE = {hidden:7168, topk:8, experts:256};
+function isHeadlineShape(s){ const sh=s.shape||{};
+  return sh.hidden===HEADLINE_SHAPE.hidden && sh.topk===HEADLINE_SHAPE.topk && sh.experts===HEADLINE_SHAPE.experts; }
+const PUB = {"official-headline":"Official headline", official:"Official only", publishable:"Publishable", all:"All (incl. diagnostic)"};
 function pubOk(s){
   if(ST.pub==="all") return true;
+  if(ST.pub==="official-headline") return s.pub==="official" && !!s.wid && isHeadlineShape(s);  // headline cohort only
   if(ST.pub==="official") return s.pub==="official" && !!s.wid;   // official => canonical wid required
   // publishable = official + comparable, but ONLY with a NON-NULL workload id (goal P0: every
   // plotted official/comparable result carries non-null workload identity). A seeded-runtime
   // (wid=null) line is shown only in the "All (incl. diagnostic)" view, never as publishable.
   return !["diagnostic","invalid","failed"].includes(s.pub) && !!s.wid;
 }
+// dtype + EP-degree filters (goal P0-1a/B2): the headline opens on BF16 + EP8, but "All" keeps
+// every dtype / EP degree selectable. Applied to the MAIN chart + legend only (the grid + heatmaps
+// facet by EP themselves). Built from the data so a new dtype/EP shows up automatically.
+const DTYPES = (()=>{ const o={all:"All"}; [...new Set(DATA.map(s=>s.dtype))].sort().forEach(d=>{o[d]=d;}); return o; })();
+const EPS = (()=>{ const o={all:"All"}; [...new Set(DATA.map(s=>s.ep))].sort((a,b)=>a-b).forEach(e=>{o[String(e)]="EP"+e;}); return o; })();
+function dtOk(s){ return ST.dtype==="all" || s.dtype===ST.dtype; }
+function epOk(s){ return ST.ep==="all" || String(s.ep)===ST.ep; }
 // HEADLINE DISTRIBUTION CONTRACT (goal P2 "define one headline distribution"): uniform is the
 // single cross-hardware headline — controlled, deterministic, and present on every SKU, so it is
 // the apples-to-apples reference. balanced / zipf / zipf+eplb / hotspot* are SENSITIVITY views
 // (see the Distribution-sensitivity section), NOT peer headline dimensions. (Long-term headline
 // will come from InferenceX trace replay; zipf+eplb is the interim load-realism reference.)
 const HEADLINE_DISTRIBUTION = "uniform";
-// Default to ONE suite (not all) + publishable + the headline distribution (goal P1/P2).
-const ST  = {op:"dispatch", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p50",
-             suite:"backend-default", routing:HEADLINE_DISTRIBUTION, pub:"publishable"};
+// HEADLINE OPENING VIEW (goal P0-1a, B2/B6/B7): the page opens on the MEASURED round trip at p99,
+// resource-constrained (normalized) suite, BF16, EP8, uniform routing, DeepSeek-V3 shape, official
+// headline cohort. Every other value stays selectable via the toggles below — this only sets what
+// the page OPENS with. resolveHeadlineDefaults() (called once at boot) falls the resource suite
+// back to backend-default if no normalized data exists for the headline cell, so the chart is never
+// empty on first paint while still defaulting to normalized whenever it is present.
+const ST  = {op:"roundtrip", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p99",
+             suite:"resource-constrained", dtype:"bf16", ep:"8",
+             routing:HEADLINE_DISTRIBUTION, pub:"official-headline"};
+// Count series visible under a candidate state (used only for graceful headline fallback).
+function _visCount(o){ return DATA.filter(s=>s.phase===o.phase
+    && (o.suite==="all"||s.suite===o.suite) && (o.routing==="all"||s.routing===o.routing)
+    && (o.dtype==="all"||s.dtype===o.dtype) && (o.ep==="all"||String(s.ep)===o.ep)
+    && _pubOkFor(s,o.pub)).length; }
+function _pubOkFor(s,pub){
+  if(pub==="all") return true;
+  if(pub==="official-headline") return s.pub==="official" && !!s.wid && isHeadlineShape(s);
+  if(pub==="official") return s.pub==="official" && !!s.wid;
+  return !["diagnostic","invalid","failed"].includes(s.pub) && !!s.wid;
+}
+// Resolve the opening view so the FIRST paint is never empty, while keeping normalized as the
+// preferred default. Fallback order is least-surprising-first: relax the suite (normalized ->
+// backend-default), then the dtype, then the EP degree, then the publication breadth. Each step
+// only fires if the current candidate yields no visible series.
+function resolveHeadlineDefaults(){
+  if(_visCount(ST)>0) return;
+  const ladder=[["suite","all"],["dtype","all"],["ep","all"],["pub","publishable"],["pub","all"]];
+  for(const [k,v] of ladder){ ST[k]=v; if(_visCount(ST)>0) return; }
+}
 
 function xval(r,xk){ return xk==="t"? r.t : r.gt; }
 function metric(r,op,yk,pct){
@@ -309,9 +502,13 @@ const mapLin=(v,a,b,p,q)=>p+(v-a)/(b-a)*(q-p);
 function chart(o){
   const W=o.w||900, H=o.h||520, m={l:64,r:16,t:34,b:46};
   const pct=o.pct||"p99", suite=o.suite||"all", routing=o.routing||"all";
+  // o.dtype / o.epf are the MAIN-chart headline filters (default-off so the grid, which faces by
+  // EP via o.ep, is unaffected). epf is a string ("all"|"8"|…); dtype is a string ("all"|"bf16"|…).
   const sl = DATA.filter(s=>s.phase===o.phase && (o.ep==null || s.ep===o.ep)
                             && (suite==="all" || s.suite===suite)
-                            && (routing==="all" || s.routing===routing) && pubOk(s));
+                            && (routing==="all" || s.routing===routing)
+                            && (!o.dtype || o.dtype==="all" || s.dtype===o.dtype)
+                            && (!o.epf || o.epf==="all" || String(s.ep)===o.epf) && pubOk(s));
   const pts = sl.map(s=>({s, P:s.rows.map(r=>({x:xval(r,o.x), y:metric(r,o.op,o.y,pct), r}))
                                      .filter(p=>p.x>0 && (o.ylog? p.y>0 : p.y>=0)
                                                 && (o.phase!=="prefill" || p.r.t>=PREFILL_MIN))}));
@@ -394,10 +591,12 @@ function guardNote(vis){
   if(eps.length>1) w.push('mixed EP degree '+eps.join('/')+' — compare only on the global-tokens x-axis');
   return w.length? '<div class="guard">⚠ not a direct comparison: '+w.join('; ')+'</div>' : '';
 }
-function legend(phase, ep, suite, routing){
+function legend(phase, ep, suite, routing, dtype, epf){
   return '<div class="legend">'+DATA.filter(s=>s.phase===phase && (ep==null||s.ep===ep)
                                               && (!suite||suite==="all"||s.suite===suite)
-                                              && (!routing||routing==="all"||s.routing===routing) && pubOk(s)).map(s=>{
+                                              && (!routing||routing==="all"||s.routing===routing)
+                                              && (!dtype||dtype==="all"||s.dtype===dtype)
+                                              && (!epf||epf==="all"||String(s.ep)===epf) && pubOk(s)).map(s=>{
     const sw = s.dash ? 'background:repeating-linear-gradient(90deg,'+s.color+' 0 5px,transparent 5px 9px)'
                       : 'background:'+s.color;   // dashed swatch = fp8 (matches the line)
     return '<span class="it"><span class="sw" style="'+sw+'"></span>'+s.label+'</span>';
@@ -413,6 +612,8 @@ function renderControls(){
     '<div class="grp"><span class="lab">Phase</span>'+seg('phase',{decode:"Decode",prefill:"Prefill"},ST.phase)+'</div>'+
     '<div class="grp"><span class="lab">Percentile</span>'+seg('pct',PCT,ST.pct)+'</div>'+
     '<div class="grp"><span class="lab">Suite</span>'+seg('suite',SUITE,ST.suite)+'</div>'+
+    '<div class="grp"><span class="lab">Dispatch dtype</span>'+seg('dtype',DTYPES,ST.dtype)+'</div>'+
+    '<div class="grp"><span class="lab">EP degree</span>'+seg('ep',EPS,ST.ep)+'</div>'+
     '<div class="grp"><span class="lab">Routing (headline='+HEADLINE_DISTRIBUTION+')</span>'+seg('routing',ROUTING,ST.routing)+'</div>'+
     '<div class="grp"><span class="lab">Publication</span>'+seg('pub',PUB,ST.pub)+'</div>'+
     '<div class="grp"><span class="lab">X-axis</span>'+seg('x',XK,ST.x)+'</div>'+
@@ -425,12 +626,14 @@ function renderControls(){
     renderControls(); renderMain(); renderGrid(); renderHeatmaps(); });
 }
 function renderMain(){
+  const tags=(ST.dtype==='all'?'':' · '+ST.dtype)+(ST.ep==='all'?'':' · EP'+ST.ep);
   document.getElementById('chart').innerHTML = chart({op:ST.op,phase:ST.phase,x:ST.x,y:ST.y,xlog:ST.xlog,ylog:ST.ylog,
-    pct:ST.pct, suite:ST.suite, routing:ST.routing,
-    title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
+    pct:ST.pct, suite:ST.suite, routing:ST.routing, dtype:ST.dtype, epf:ST.ep,
+    title:OPS[ST.op]+' — '+ST.phase+' · '+ST.pct+(ST.routing==='all'?'':' · '+ST.routing)+tags+' ('+YK[ST.y].toLowerCase()+' vs '+XK[ST.x].toLowerCase()+')'});
   const vis=DATA.filter(s=>s.phase===ST.phase && (ST.suite==="all"||s.suite===ST.suite)
-                           && (ST.routing==="all"||s.routing===ST.routing) && pubOk(s));
-  document.getElementById('mlegend').innerHTML = guardNote(vis)+legend(ST.phase, null, ST.suite, ST.routing);
+                           && (ST.routing==="all"||s.routing===ST.routing)
+                           && dtOk(s) && epOk(s) && pubOk(s));
+  document.getElementById('mlegend').innerHTML = guardNote(vis)+legend(ST.phase, null, ST.suite, ST.routing, ST.dtype, ST.ep);
 }
 function renderGrid(){
   // SEPARATE panels per (phase, EP degree); within a panel, the SUITE selector keeps
@@ -570,7 +773,7 @@ function renderCoverage(){
 // MoRI resource-nonconforming) — kept, labelled, excluded from official/comparable.
 function renderFailed(){
   const el=document.getElementById('failed'); if(!el) return;
-  if(!window.FAILED || !FAILED.length){ el.innerHTML='<p class="note">No failed or quarantined cases — every run completed and is publishable.</p>'; return; }
+  if(typeof FAILED==='undefined' || !FAILED.length){ el.innerHTML='<p class="note">No failed or quarantined cases — every run completed and is publishable.</p>'; return; }
   const cls={failed:'#a30000',invalid:'#d62728',diagnostic:'#9467bd'};
   let h='<table class="cov"><tr><th>SKU</th><th>backend</th><th>phase</th><th>config</th><th>status</th><th>reason / failure mode</th><th>rc</th></tr>';
   FAILED.slice().sort((a,b)=>(a.sku||'').localeCompare(b.sku||'')).forEach(r=>{
@@ -585,7 +788,7 @@ function renderFailed(){
 // tokens/rank, computed by tests/sensitivity.py and injected as SENS.
 function renderSensitivity(){
   const el=document.getElementById('sensitivity'); if(!el) return;
-  if(!window.SENS || !SENS.length){ el.innerHTML='<p class="note">No multi-distribution groups in this view (need uniform + a stressor at matched tokens/rank).</p>'; return; }
+  if(typeof SENS==='undefined' || !SENS.length){ el.innerHTML='<p class="note">No multi-distribution groups in this view (need uniform + a stressor at matched tokens/rank).</p>'; return; }
   let h='<table class="cov"><tr><th>SKU</th><th>backend</th><th>phase</th><th>config</th><th>headline p99 µs</th><th>worst dist @T</th><th>sensitivity</th><th>EPLB zipf→+eplb</th></tr>';
   SENS.slice().sort((a,b)=>(a.sku.localeCompare(b.sku))||a.backend.localeCompare(b.backend)||a.phase.localeCompare(b.phase)).forEach(r=>{
     const cfg=r.dispatch_dtype+'·'+r.mode+'·'+(r.contract||'').replace('-v1','');
@@ -598,6 +801,109 @@ function renderSensitivity(){
   });
   el.innerHTML=h+'</table>'
     +'<p class="note">distribution_sensitivity_ratio = p99(worst stressor distribution) ÷ p99(uniform) at matched tokens/rank — how much routing skew/spread degrades this backend (>1 = fragile, ~1 = robust). Stressors exclude the min-comm best case + EPLB-remedied runs. A single number, NOT a chart dimension (tests/sensitivity.py).</p>';
+}
+// Industry summary cards (goal P3-F): CARDS is precomputed in Python (main()) from the loaded
+// series so the numbers match the analysis modules exactly. Rendered as a responsive grid.
+function renderCards(){
+  const el=document.getElementById('cards'); if(!el) return;
+  // bare reference (NOT window.CARDS): top-level const in a classic <script> binds lexically, it is
+  // NOT a property of window — so guard on the binding the same way the chart guards on DATA.
+  if(typeof CARDS==='undefined' || !CARDS.length){ el.innerHTML=''; return; }
+  el.innerHTML=CARDS.map(c=>{
+    const v = c.href? '<a href="'+c.href+'">'+c.value+'</a>' : c.value;
+    return '<div class="kcard'+(c.warn?' warn':'')+'"><div class="kt">'+c.title+'</div>'
+         + '<div class="kv">'+v+'</div>'+(c.sub?'<div class="ks">'+c.sub+'</div>':'')+'</div>';
+  }).join('');
+}
+// Construct a GitHub Actions run URL from the per-series git_run (goal P3-E "raw-artifact links").
+// Falls back to a relative href to the run_id (no repo) — callers handle a fully missing run_id.
+function runUrl(s){
+  if(s.repo && s.run_id) return 'https://github.com/'+s.repo+'/actions/runs'+'/'+s.run_id;
+  if(s.run_id) return '#run-'+s.run_id;          // no repo in data — link to the id anchor
+  return null;
+}
+// DECISION views (goal P3-D): all computed in Python (analyze_ep + the budget metric) and injected
+// as DECISION, so each table renders from the ACTUAL results via the same matching logic the CLI uses.
+function _tbl(headers, rows){
+  if(!rows.length) return '<p class="note">No matching cells in the current result set.</p>';
+  return '<table class="dec"><tr>'+headers.map(h=>'<th'+(h.num?' class="num"':'')+'>'+h.t+'</th>').join('')+'</tr>'
+    + rows.map(r=>'<tr>'+r.map(c=>(typeof c==='object')?'<td class="num">'+c.v+'</td>':'<td>'+c+'</td>').join('')+'</tr>').join('')
+    + '</table>';
+}
+function renderDecision(){
+  const el=document.getElementById('decision'); if(!el) return;
+  const D=(typeof DECISION!=='undefined')?DECISION:{};   // bare const, not a window property
+  let h='';
+  // 1. Recommendations — lowest-p99-dispatch config at the headline token count, per (sku,phase).
+  h+='<h2>Recommended config — lowest dispatch p99 at the headline token count</h2>';
+  h+=_tbl([{t:'SKU'},{t:'phase'},{t:'@T',num:1},{t:'best dispatch p99 (µs)',num:1},{t:'EP',num:1},{t:'config'}],
+    (D.recommendations||[]).map(r=>[r.sku.toUpperCase(),r.phase,{v:r.at_T},{v:'<span class="win">'+r.lowest_p99_dispatch_us+'</span>'},{v:r.ep},r.config]));
+  // 2. Max tokens/rank under a p99 round-trip budget (the previously-missing metric).
+  const bs=(D.budgets||[]);
+  h+='<h2>Max tokens / rank under a p99 round-trip budget <span style="font-weight:400;color:var(--mut)">— official headline (DeepSeek-V3, uniform)</span></h2>';
+  h+=_tbl([{t:'SKU'},{t:'backend'},{t:'phase'},{t:'dtype'},{t:'EP',num:1},{t:'mode'}].concat(bs.map(b=>({t:'≤'+b+'µs',num:1}))),
+    (D.max_tokens_under_budget||[]).map(r=>[r.sku.toUpperCase(),r.backend,r.phase,r.dtype,{v:r.ep},r.mode]
+      .concat(bs.map(b=>({v:(r['b'+b]==null?'—':r['b'+b])})))));
+  // 3. LL vs normal crossover (measured-roundtrip + isolated-kernel bases).
+  h+='<h2>LL → normal crossover <span style="font-weight:400;color:var(--mut)">— token count where normal overtakes low-latency</span></h2>';
+  h+=_tbl([{t:'SKU'},{t:'EP',num:1},{t:'dtype'},{t:'stat'},{t:'basis'},{t:'normal faster at T'}],
+    (D.ll_crossover||[]).map(r=>[r.sku.toUpperCase(),{v:r.ep},r.dtype,r.stat,r.basis,String(r.normal_faster_at_T)]));
+  // 4. Resource Pareto — latency vs achieved comm-resource fraction (curve summarized to endpoints).
+  h+='<h2>Resource ↔ latency Pareto <span style="font-weight:400;color:var(--mut)">— dispatch p50 across the comm-fraction ladder (fixed-kernel excluded)</span></h2>';
+  h+=_tbl([{t:'SKU'},{t:'phase'},{t:'dtype'},{t:'@T',num:1},{t:'pts',num:1},{t:'min frac',num:1},{t:'p50 @min',num:1},{t:'max frac',num:1},{t:'p50 @max',num:1}],
+    (D.resource_pareto||[]).map(r=>{const c=r.curve; const a=c[0],z=c[c.length-1];
+      return [r.sku.toUpperCase(),r.phase,r.dtype,{v:r.T},{v:r.n_points},{v:a.achieved_fraction},{v:a.dispatch_p50},{v:z.achieved_fraction},{v:z.dispatch_p50}];}));
+  // 5. Topology penalty — EP4 vs EP8 dispatch p50.
+  h+='<h2>Topology penalty <span style="font-weight:400;color:var(--mut)">— lower-EP vs higher-EP dispatch p50 at matched tokens/rank</span></h2>';
+  h+=_tbl([{t:'SKU'},{t:'phase'},{t:'dtype'},{t:'@T',num:1},{t:'low-EP p50',num:1},{t:'high-EP p50',num:1},{t:'penalty %',num:1}],
+    (D.topology_penalty||[]).map(r=>{const ks=Object.keys(r).filter(k=>/^ep\d+_p50$/.test(k)).sort();
+      return [r.sku.toUpperCase(),r.phase,r.dtype,{v:r.T},{v:r[ks[0]]},{v:r[ks[1]]},{v:(r.penalty_pct>0?'+':'')+r.penalty_pct}];}));
+  // 6. Routing-skew penalty — zipf* vs matched uniform dispatch amplification.
+  h+='<h2>Routing-skew penalty <span style="font-weight:400;color:var(--mut)">— zipf* dispatch p50/p99 amplification vs matched uniform</span></h2>';
+  const sk=(D.skew_penalty||[]).slice().sort((a,b)=>b.p99_amplification-a.p99_amplification).slice(0,40);
+  h+=_tbl([{t:'SKU'},{t:'EP',num:1},{t:'phase'},{t:'routing'},{t:'@T',num:1},{t:'p50 ×',num:1},{t:'p99 ×',num:1}],
+    sk.map(r=>[r.sku.toUpperCase(),{v:r.ep},r.phase,r.routing,{v:r.T},{v:r.p50_amplification},{v:'<span class="'+(r.p99_amplification>=1.5?'win':'')+'" style="'+(r.p99_amplification>=1.5?'color:#d62728':'')+'">'+r.p99_amplification+'</span>'}]));
+  h+='<p class="note">All decision tables are computed by analyze_ep.py (same matching logic as the CLI) over the loaded results; the budget table adds the "max tokens under a p99 round-trip SLO" metric. Only matching (workload, topology, contract, backend, resource) cells are compared. Skew table truncated to the 40 worst p99 amplifications.</p>';
+  el.innerHTML=h;
+}
+// PROVENANCE drawer (goal P3-E): collapsible per-series git_run / source_sha / run_id /
+// image_digest / backend_provenance + a raw-artifact link to the GitHub Actions run (or a relative
+// href when the repo is absent). One row per series; opens collapsed so it never crowds the chart.
+function renderProvenance(){
+  const el=document.getElementById('provdrawer'); if(!el) return;
+  const rows=DATA.slice().sort((a,b)=>(a.sku.localeCompare(b.sku))||(a.ep-b.ep)||a.label.localeCompare(b.label));
+  let h='<table class="prov"><tr><th>series</th><th>pub</th><th>workload_id</th><th>source SHA</th>'
+       +'<th>image digest</th><th>backend provenance</th><th>artifact / run</th></tr>';
+  rows.forEach(s=>{
+    const url=runUrl(s);
+    const link = url? '<a href="'+url+'" target="_blank" rel="noopener">'+(s.run_id||'run')+'</a>'
+                    : (s.run_id? s.run_id : '<a href="'+'#'+'" title="no run id">'+'—'+'</a>');
+    const prov=s.prov||{};
+    const pv=(prov.deepep_version?('deepep '+prov.deepep_version):'')
+            +(prov.mori_commit?(' mori '+prov.mori_commit):'')
+            +(prov.num_sms!=null?(' · '+prov.num_sms+'/'+(prov.device_sms||'?')+' SM'):'');
+    h+='<tr><td>'+s.label+'</td><td>'+s.pub+'</td>'
+      +'<td class="mono">'+(s.wid?s.wid.slice(0,12):'<span style="color:#d6a72b">null</span>')+'</td>'
+      +'<td class="mono">'+(s.source_sha||'?')+'</td>'
+      +'<td class="mono">'+(s.image_digest||'?')+'</td>'
+      +'<td class="mono">'+(pv||'?')+'</td>'
+      +'<td>'+link+'</td></tr>';
+  });
+  el.innerHTML=h+'</table>';
+}
+// TABS (goal P3-C): pure JS/CSS. Toggle .on on a nav button + its matching .tab panel. Disabled
+// buttons (suites not built yet) are inert. Re-renders the active tab's charts so SVGs that need a
+// real layout (the main chart) paint correctly when first shown.
+function showTab(id){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('on', t.id===id));
+  document.querySelectorAll('.tabs button[data-tab]').forEach(b=>b.classList.toggle('on', b.dataset.tab===id));
+  if(id==='tab-ep'){ renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); }
+}
+function setupTabs(){
+  document.querySelectorAll('.tabs button[data-tab]').forEach(b=>{ if(!b.disabled) b.onclick=()=>showTab(b.dataset.tab); });
+  // honor a #tab-evidence style hash (e.g. the diagnostic-cases card link) on load.
+  const hash=(location.hash||'').replace('#','');
+  showTab(document.getElementById(hash)? hash : 'tab-ep');
 }
 (function(){
   const sh=(DATA[0]||{shape:{}}).shape||{};
@@ -623,7 +929,10 @@ function renderSensitivity(){
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
     'Backends: '+provs.join(', ')+'. Hover a point for p50/p90/p99, contract, suite, and its workflow run.';
-  renderControls(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); renderCoverage(); renderSensitivity(); renderFailed();
+  resolveHeadlineDefaults();   // pick a non-empty opening view (keeps normalized as the default)
+  renderControls(); renderCards(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps();
+  renderDecision(); renderProvenance(); renderCoverage(); renderSensitivity(); renderFailed();
+  setupTabs();
 })();
 """
 
@@ -676,21 +985,70 @@ def main() -> int:
                      if g["distribution_sensitivity_ratio"] is not None]
     except Exception as exc:  # never let the summary break the main plot
         print(f"  (sensitivity summary skipped: {exc!r})", file=sys.stderr)
+    # DECISION views (goal P3-D): compute from the ACTUAL results via analyze_ep's matching logic
+    # (recommendations / ll_crossover / resource_pareto / topology_penalty / skew_penalty), plus the
+    # previously-missing "max tokens under p99 budget" metric. analyze_ep reads the same JSONs.
+    decision = {"budgets": RT_BUDGETS_US,
+                "max_tokens_under_budget": max_tokens_under_budget(series)}
+    ll_rows = []
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import analyze_ep as _ae
+        _aser = _ae.load(args.results_dir)
+        ll_rows = _ae.ll_crossover(_aser)
+        decision.update({
+            "recommendations": _ae.recommendations(_aser),
+            "ll_crossover": ll_rows,
+            "resource_pareto": _ae.resource_pareto(_aser),
+            "topology_penalty": _ae.topology_penalty(_aser),
+            "skew_penalty": _ae.skew_penalty(_aser),
+        })
+    except Exception as exc:  # never let the decision tab break the main plot
+        print(f"  (decision views skipped: {exc!r})", file=sys.stderr)
+    cards = summary_cards(series, sens_rows, failed, ll_rows)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
-    html = HEAD + '<div class="controls" id="controls"></div>' \
-        + '<div class="card"><div id="chart"></div></div><div id="mlegend"></div>' \
-        + '<div id="grid"></div>' \
-        + '<h2>Scaling (strong + weak — distinct contracts)</h2><div id="scaling"></div>' \
-        + '<h2>Heatmaps</h2><div id="heatmaps"></div>' \
-        + '<h2>Distribution sensitivity <span style="font-weight:400;color:var(--mut)">— NOT the headline (headline = uniform)</span></h2><div id="sensitivity"></div>' \
-        + '<h2>Failed / quarantined cases</h2><div id="failed"></div>' \
-        + '<h2>Coverage</h2><div id="coverage"></div>' \
+    # Tab nav (goal P3-C): real clickable tabs. Built suites are enabled; not-yet-built collective
+    # suites are disabled "coming soon" placeholders so the framework's scope is visible.
+    tabnav = ('<div class="tabs">'
+              '<button data-tab="tab-ep" class="on">EP dispatch / combine</button>'
+              '<button data-tab="tab-decision">Decision</button>'
+              '<button data-tab="tab-evidence">Evidence</button>'
+              '<button disabled title="suite not built yet">KV-cache transfer</button>'
+              '<button disabled title="suite not built yet">All-reduce</button>'
+              '<button disabled title="suite not built yet">All-gather</button>'
+              '<button disabled title="suite not built yet">RL mesh</button>'
+              '<button disabled title="suite not built yet">Copy-engine / SDMA</button>'
+              '</div>')
+    # Tab panels. EP = the existing chart + grid + scaling + heatmaps (unchanged behavior).
+    tab_ep = ('<div class="tab on" id="tab-ep">'
+              '<div class="controls" id="controls"></div>'
+              '<div class="card"><div id="chart"></div></div><div id="mlegend"></div>'
+              '<details class="prov"><summary>Provenance &amp; raw artifacts — git run / source SHA / image digest / backend (every series)</summary>'
+              '<div id="provdrawer"></div>'
+              '<p class="note">Each row links to its GitHub Actions run (github.com/&lt;repo&gt;/actions/runs/&lt;run_id&gt;); a series with no repo links to its run id anchor. workload_id / source SHA / image digest / backend build pin the result.</p></details>'
+              '<div id="grid"></div>'
+              '<h2>Scaling (strong + weak — distinct contracts)</h2><div id="scaling"></div>'
+              '<h2>Heatmaps</h2><div id="heatmaps"></div>'
+              '</div>')
+    tab_decision = ('<div class="tab" id="tab-decision">'
+                    '<p class="sub">Decision-oriented summaries computed by analyze_ep.py from the loaded results (best config by latency budget, LL crossover, resource↔latency Pareto, topology + routing-skew penalties) plus the max-tokens-under-a-p99-SLO metric.</p>'
+                    '<div id="decision"></div></div>')
+    tab_evidence = ('<div class="tab" id="tab-evidence">'
+                    '<h2>Distribution sensitivity <span style="font-weight:400;color:var(--mut)">— NOT the headline (headline = uniform)</span></h2><div id="sensitivity"></div>'
+                    '<h2>Failed / quarantined cases</h2><div id="failed"></div>'
+                    '<h2>Coverage</h2><div id="coverage"></div></div>')
+    placeholder = ('<p class="note">The collective suites below are part of the CollectiveX framework but '
+                   'have no results yet — their tabs are disabled placeholders until the suites land.</p>')
+    html = HEAD \
+        + '<div class="cards" id="cards"></div>' \
+        + tabnav + tab_ep + tab_decision + tab_evidence + placeholder \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
         + f'{len(series)} EP sweeps. Latency (p50/p90/p99 selector) is the primary metric; the ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
         + 'bandwidth. dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
         + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) \
-        + ";\nconst FAILED = " + json.dumps(failed) + ";\n" + JS + "\n</script>\n" + TAIL
+        + ";\nconst FAILED = " + json.dumps(failed) + ";\nconst DECISION = " + json.dumps(decision) \
+        + ";\nconst CARDS = " + json.dumps(cards) + ";\n" + JS + "\n</script>\n" + TAIL
     with open(args.out, "w") as fh:
         fh.write(html)
     phases = sorted({s["phase"] for s in series})

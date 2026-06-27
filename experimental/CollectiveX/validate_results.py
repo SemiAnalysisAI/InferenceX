@@ -133,6 +133,14 @@ def main() -> int:
     ap.add_argument("--schema", default=os.path.join(os.path.dirname(__file__), "schemas", "ep-result-v4.schema.json"))
     ap.add_argument("--require-official", action="store_true",
                     help="fail if any non-legacy doc is not 'official'")
+    ap.add_argument("--regression", action="store_true",
+                    help="also run threshold-based performance-regression detection (regression.py) "
+                         "over the same files and fail if any hard regression (outside run-to-run "
+                         "noise) is found, so one CI step gates on validity AND performance")
+    ap.add_argument("--regression-metric", default="roundtrip", help="regression op (default roundtrip)")
+    ap.add_argument("--regression-pct", default="p99", help="regression percentile (default p99)")
+    ap.add_argument("--regression-threshold", type=float, default=0.10,
+                    help="regression fractional threshold (default 0.10)")
     a = ap.parse_args()
     schema = None
     if a.schema and os.path.exists(a.schema):
@@ -199,6 +207,18 @@ def main() -> int:
             for T, hs in sorted(conflicts.items()):
                 print(f"        T={T}: " + "; ".join(f"{h[:10]}=[{', '.join(fs)}]" for h, fs in hs.items()))
     print(f"\n{'FAILED' if bad else 'PASS'}: {len(files)} files, {bad} problem(s)")
+
+    # Optional performance-regression gate (goal P1 "Add regression thresholds"). Imported lazily so
+    # validation carries no new dependency/behavior unless --regression is passed. A hard regression
+    # (a >threshold slowdown outside this point's run-to-run noise) folds into the non-zero exit.
+    if a.regression:
+        import regression as _reg
+        rep = _reg.analyze(a.paths, metric=a.regression_metric, pct=a.regression_pct,
+                           threshold=a.regression_threshold)
+        print()
+        print(_reg.to_markdown(rep))
+        if rep["hard_regressions"]:
+            bad += rep["hard_regressions"]
     return 1 if bad else 0
 
 

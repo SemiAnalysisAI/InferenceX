@@ -8,6 +8,18 @@ because the generator is not prefix-consistent across sizes.
       --routing uniform --ep 8 --hidden 7168 --topk 8 --experts 256 --seed 67 \\
       --tokens-ladder "1 2 4 8 16 32 64 128 256 512"
 
+Or by NAMED model manifest (goal P1 model-shape coverage) — dims resolved from configs/workloads.yaml
+(synthetic + model_derived; experts <- experts|routed_experts). Explicit --hidden/--topk/--experts
+still override per field, so the env-var-driven in-container path (CX_HIDDEN/CX_TOPK/CX_EXPERTS) is
+unchanged; this just lets a SKU stage a model shape by name:
+
+  python3 tests/make_workloads.py --out-dir /data/cx_workloads --workload kimi-k2-v1 --routing uniform --ep 8
+
+--id-only prints the deterministic workload_id per ladder point WITHOUT torch/numpy (the id is a hash
+of the identity params, not the bytes) — runnable on a login node / in CI to prove cross-SKU identity:
+
+  python3 tests/make_workloads.py --workload kimi-k2-v1 --ep 8 --id-only
+
 Generate every routing the suites need by running once per --routing. Idempotent (same id => same
 file). The dir is the cross-hardware artifact: copy it to each cluster so all consume identical bytes.
 """
@@ -20,30 +32,85 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import workload as wl   # noqa: E402
 
+# Repo root holds configs/ (this file is in tests/). Used only for --workload name resolution.
+_REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def resolve_manifest(name):
+    """Look a workload name up in configs/workloads.yaml and return (hidden, topk, experts).
+    Searches synthetic + model_derived; expert count = `experts` or (for model-derived) `routed_experts`.
+    Raises SystemExit with the known names if the manifest is absent. Pure PyYAML + stdlib."""
+    import yaml
+    path = os.path.join(_REPO, "configs", "workloads.yaml")
+    cfg = yaml.safe_load(open(path))
+    known = []
+    for section in ("synthetic", "model_derived"):
+        sec = cfg.get(section) or {}
+        known += list(sec)
+        m = sec.get(name)
+        if m is None:
+            continue
+        experts = m.get("experts", m.get("routed_experts"))
+        if m.get("hidden") is None or m.get("topk") is None or experts is None:
+            raise SystemExit(f"workload '{name}' is missing hidden/topk/experts in {path}")
+        return int(m["hidden"]), int(m["topk"]), int(experts)
+    raise SystemExit(f"unknown --workload '{name}'; known: {sorted(known)}")
+
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Generate canonical CollectiveX workloads")
-    ap.add_argument("--out-dir", required=True)
-    ap.add_argument("--routing", required=True)
+    ap.add_argument("--out-dir", help="required unless --id-only")
+    ap.add_argument("--workload", help="named manifest in configs/workloads.yaml (sets hidden/topk/experts)")
+    ap.add_argument("--routing", default="uniform")
     ap.add_argument("--ep", type=int, required=True, help="ep_size (global_tokens = T * ep)")
-    ap.add_argument("--hidden", type=int, default=7168)
-    ap.add_argument("--topk", type=int, default=8)
-    ap.add_argument("--experts", type=int, default=256)
+    ap.add_argument("--hidden", type=int, help="override (default 7168, or the --workload's hidden)")
+    ap.add_argument("--topk", type=int, help="override (default 8, or the --workload's topk)")
+    ap.add_argument("--experts", type=int, help="override (default 256, or the --workload's experts)")
     ap.add_argument("--seed", type=int, default=67)
     ap.add_argument("--tokens-ladder", default="1 2 4 8 16 32 64 128 256 512")
+    ap.add_argument("--id-only", action="store_true",
+                    help="print deterministic workload_id per point WITHOUT torch/numpy (no files written)")
     a = ap.parse_args()
-    epr = a.experts // a.ep
+
+    # Resolve dims: a named --workload supplies defaults; explicit --hidden/--topk/--experts override
+    # per field. With neither, fall back to the historical ds-like-ref defaults (7168/8/256).
+    base_h, base_t, base_e = (7168, 8, 256)
+    if a.workload:
+        base_h, base_t, base_e = resolve_manifest(a.workload)
+    hidden = a.hidden if a.hidden is not None else base_h
+    topk = a.topk if a.topk is not None else base_t
+    experts = a.experts if a.experts is not None else base_e
+
+    if not a.id_only and not a.out_dir:
+        ap.error("--out-dir is required unless --id-only")
+
     ladder = sorted({int(t) for t in a.tokens_ladder.replace(",", " ").split() if int(t) > 0})
+    epr = experts // a.ep
+    label = f"workload={a.workload} " if a.workload else ""
+
+    if a.id_only:
+        # Identity-only path: the workload_id is a hash of (generator|routing|hidden|topk|experts|gt|seed),
+        # so it is fully determined WITHOUT generating the trace. Proves cross-SKU identity in CI/login.
+        made = []
+        for T in ladder:
+            gt = T * a.ep
+            wid = wl.compute_workload_id(a.routing, hidden, topk, experts, gt, a.seed)
+            made.append((T, gt, wid))
+            print(f"  T={T:<5} gt={gt:<6} routing={a.routing} -> {wid}")
+        print(f"{label}id-only: {len(made)} workload_id(s) "
+              f"(hidden={hidden} topk={topk} experts={experts} ep={a.ep} routing={a.routing} seed={a.seed})")
+        return 0
+
     os.makedirs(a.out_dir, exist_ok=True)
     made = []
     for T in ladder:
         gt = T * a.ep
-        idx, w, man = wl.build_workload(a.hidden, a.topk, a.experts, a.routing, gt, a.seed, epr)
+        idx, w, man = wl.build_workload(hidden, topk, experts, a.routing, gt, a.seed, epr)
         wid = wl.save_workload(a.out_dir, idx, w, man)
         made.append((T, gt, wid))
         print(f"  T={T:<5} gt={gt:<6} routing={a.routing} -> {wid}  "
               f"(trace sha {man['checksums']['trace'][:12]})")
-    print(f"wrote {len(made)} canonical workloads to {a.out_dir} (routing={a.routing}, ep={a.ep})")
+    print(f"{label}wrote {len(made)} canonical workloads to {a.out_dir} (routing={a.routing}, ep={a.ep})")
     return 0
 
 

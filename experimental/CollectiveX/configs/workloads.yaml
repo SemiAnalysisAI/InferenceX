@@ -19,6 +19,63 @@ synthetic:
     note: "Controlled baseline used through v3/v4 (DeepSeek-V3-shaped)."
 
 model_derived:
+  # --- PINNED, NAMED model manifests (goal P1 "Add workload manifests"). The "-v1" suffix freezes
+  # the (hidden, topk, routed_experts) shape behind an immutable name so a published result can cite
+  # `kimi-k2-v1` and have it mean exactly these dims forever; if a future model rev changes a dim it
+  # gets a "-v2" manifest, never a silent edit here. These are the names referenced for model-shape
+  # coverage. The legacy unsuffixed entries below are kept for back-compat with existing suites.
+  # canonical workload_id folds (hidden, topk, routed_experts) -> identical bytes on every SKU.
+  deepseek-v3-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    expert_alignment: 128
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: false           # DeepSeek-V3 EP serving shape; identical dims to the ds-like-ref baseline
+  deepseek-v4-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    expert_alignment: 128
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: false           # matches the validated DSV3/V4 serving shape used on these clusters
+  minimax-m3-v1:
+    kind: model-derived
+    hidden: 6144
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: true
+  kimi-k2-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 384
+    shared_experts: 1
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: true
+  qwen3.5-v1:
+    kind: model-derived
+    hidden: 4096
+    topk: 8
+    routed_experts: 128
+    shared_experts: 0
+    dispatch_dtype: bf16
+    combine_dtype: bf16
+    verify: true
+
+  # --- LEGACY unsuffixed entries (kept for back-compat with ep-models-v1 and analyze_ep envelope
+  # matching). Prefer the "-v1" names above for new work. deepseek-v4/minimax-m3/qwen3.5 mirror their
+  # "-v1" shapes exactly; kimi-k2.x == kimi-k2-v1; glm-5 has no "-v1" (not in the goal's manifest set).
   deepseek-v4:
     kind: model-derived
     hidden: 7168
