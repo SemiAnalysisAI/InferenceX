@@ -157,7 +157,12 @@ class FlashInferBackend:
     name = "flashinfer"
     # FlashInfer combine reuses the dispatch workspace/handle (no re-dispatch needed before
     # a timed combine), mirroring DeepEP normal mode — combine consumes the recv payload.
-    combine_needs_redispatch = False
+    # MoeAlltoAll is a stateful idle->dispatched->idle FSM (asserts "dispatch called twice without
+    # combine"). The harness times dispatch in isolation (loops it) AND combine in isolation. Setting
+    # this True makes the combine-timing loop run an untimed dispatch+stage (pre=) before each combine
+    # sample, so combine always sees a "dispatched" state; dispatch() resets the FSM to idle at its
+    # start so the dispatch-timing loop + the roundtrip (paired) timing all stay valid.
+    combine_needs_redispatch = True
     # Blackwell (B300/GB300) drops GPU clocks during the tiny small-T points, so the harness
     # re-ramps clocks at each shape before timing it. Harmless (just untimed iters) on H100/H200.
     wants_warm_burst = True
@@ -352,9 +357,23 @@ class FlashInferBackend:
         )
         return p
 
+    def _reset_moe_fsm(self):
+        # Force the MoeAlltoAll FSM back to idle so a fresh dispatch is legal. The harness loops
+        # dispatch in isolation (and re-dispatches before each combine); a pending "dispatched"
+        # state from a prior un-combined dispatch would assert. Discarding it is fine for timing
+        # (each dispatch re-populates the workspace). Defensive: the internal attr may move.
+        a = getattr(self, "a2a", None)
+        st = getattr(a, "_state", None)
+        if st is not None and getattr(st, "phase", "idle") != "idle":
+            try:
+                st.phase = "idle"
+            except Exception:
+                pass
+
     def dispatch(self, p):
         if self.trtllm:
             return self._dispatch_trtllm(p)
+        self._reset_moe_fsm()
         # MoeAlltoAll.dispatch(token_selected_experts, input_payloads, runtime_max_tokens_per_rank)
         # -> the recv payload(s) on this rank (the tokens routed to this rank's local experts).
         # The recv may be a single Tensor or a list (one per input payload); normalize below.
