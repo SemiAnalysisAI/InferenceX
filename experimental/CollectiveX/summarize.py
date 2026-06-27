@@ -36,13 +36,32 @@ def load_results(results_dir: str, runner: str | None, ts: str | None) -> list[d
                 d = json.load(fh)
         except (json.JSONDecodeError, OSError):
             continue
-        if d.get("family") in ("nccl", "moe"):
+        if d.get("family") in CLI_FAMILIES:
             docs.append(d)
     return docs
 
 
+# Families summarize.py recognizes: EP (moe), NCCL primitives, and the single-process
+# memcpy-family collectives (offload/copy-engine/kv-cache). A doc of any other family is
+# ignored; a run that produces ONLY recognized families must not be reported as "nothing".
+CLI_FAMILIES = ("nccl", "moe", "offload", "copy-engine", "kv-cache")
+COLLECTIVE_FAMILIES = ("offload", "copy-engine", "kv-cache")
+
+
 def _peak_busbw(rows):
     return max((r.get("busbw_gbps") or 0.0 for r in rows), default=0.0)
+
+
+def _coll_peak(d) -> float:
+    """Peak bandwidth (GB/s) across a collective doc — rows carry bandwidth_gb_s; kv-cache
+    nests rows under groups. Defensive: returns 0.0 if none found."""
+    best = 0.0
+    for r in d.get("rows", []) or []:
+        best = max(best, r.get("bandwidth_gb_s") or 0.0)
+    for g in d.get("groups", []) or []:
+        for r in g.get("rows", []) or []:
+            best = max(best, r.get("bandwidth_gb_s") or 0.0)
+    return best
 
 
 _OP_ORDER = ["all_reduce", "reduce_scatter", "all_gather", "alltoall"]
@@ -144,13 +163,19 @@ def _moe_sweep_table(d):
     return out
 
 
-def render_plain(nccl, moe, n_valid, total) -> str:
+def render_plain(nccl, moe, coll, n_valid, total) -> str:
     out = []
     hdr = "CollectiveX results"
-    if nccl or moe:
-        d0 = (nccl + moe)[0]
+    anchor = (nccl + moe + coll)
+    if anchor:
+        d0 = anchor[0]
         hdr += f" — runner={d0.get('runner')} topology={d0.get('topology_class')} transport={d0.get('transport')}"
     out += ["=" * len(hdr), hdr, "=" * len(hdr)]
+    if coll:
+        out.append("\nMemcpy-family collectives (offload / copy-engine / kv-cache):")
+        out.append(f"  {'family':<13}{'status':<9}{'peak bw (GB/s)':>15}")
+        for d in sorted(coll, key=lambda x: x.get("family", "")):
+            out.append(f"  {d.get('family',''):<13}{d.get('status',''):<9}{_coll_peak(d):>15.1f}")
     if nccl:
         out.append(f"\nNCCL primitives (world={nccl[0].get('world_size')}, dtype={nccl[0].get('dtype')}):")
         out.append(f"  {'op':<16}{'status':<9}{'peak busbw':>12}{'lat floor':>10}{'avg busbw':>11}")
@@ -176,11 +201,18 @@ def _emoji(status) -> str:
     return "✅ valid" if status == "valid" else f"❌ {status}"
 
 
-def render_markdown(nccl, moe, n_valid, total) -> str:
+def render_markdown(nccl, moe, coll, n_valid, total) -> str:
     out = []
-    if nccl or moe:
-        d0 = (nccl + moe)[0]
+    anchor = (nccl + moe + coll)
+    if anchor:
+        d0 = anchor[0]
         out.append(f"## CollectiveX results — `{d0.get('runner')}` · {d0.get('topology_class')} · {d0.get('transport') or 'n/a'}")
+    if coll:
+        out.append("\n### Memcpy-family collectives\n")
+        out.append("| family | status | peak bw (GB/s) |")
+        out.append("|---|---|--:|")
+        for d in sorted(coll, key=lambda x: x.get("family", "")):
+            out.append(f"| `{d.get('family','')}` | {_emoji(d.get('status'))} | {_coll_peak(d):.1f} |")
     if nccl:
         out.append(f"\n### NCCL/RCCL primitives (world={nccl[0].get('world_size')}, dtype={nccl[0].get('dtype')})\n")
         out.append("| op | status | peak busbw (GB/s) | lat floor (µs) |")
@@ -239,14 +271,15 @@ def main() -> int:
     docs = load_results(args.results_dir, args.runner, args.ts)
     nccl = [d for d in docs if d["family"] == "nccl"]
     moe = [d for d in docs if d["family"] == "moe"]
+    coll = [d for d in docs if d["family"] in COLLECTIVE_FAMILIES]
     total = len(docs)
     n_valid = sum(d.get("status") == "valid" for d in docs)
 
     if args.markdown:
-        print(render_markdown(nccl, moe, n_valid, total))
+        print(render_markdown(nccl, moe, coll, n_valid, total))
         return 0  # reporting step — never fail the job here
 
-    print(render_plain(nccl, moe, n_valid, total))
+    print(render_plain(nccl, moe, coll, n_valid, total))
     if total == 0:
         print("ERROR: no result files found — benchmark produced nothing.")
         return 1
