@@ -14,8 +14,8 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CX_DIR="$(cd "$HERE/.." && pwd)"; REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
-# shellcheck source=common.sh
-source "$HERE/common.sh"
+# shellcheck source=../runtime/common.sh
+source "$HERE/../runtime/common.sh"
 
 PARTITION="${CX_PARTITION:-batch_1}"; ACCOUNT="${CX_ACCOUNT:-benchmark}"
 NODES="${CX_NODES:-2}"; GPN="${CX_GPUS_PER_NODE:-4}"
@@ -49,7 +49,7 @@ if [ "$NODES" -le 1 ]; then   # ---- EP4: single tray, run_in_container (torchru
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
   srun --jobid="$JOB_ID" --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:/ix" \
     --no-container-mount-home --container-workdir=/ix/experimental/CollectiveX --no-container-entrypoint \
-    --export=ALL bash /ix/experimental/CollectiveX/launchers/run_in_container.sh
+    --export=ALL bash /ix/experimental/CollectiveX/runtime/run_in_container.sh
   cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"; exit 0
 fi
 

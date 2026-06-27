@@ -2,7 +2,7 @@
 # CollectiveX — H200 single-node SKU adapter (8x H200, NVLink island, x86_64, SM90).
 #
 # Thin adapter: H200-specific allocation/container, then hands off to
-# launchers/run_in_container.sh (CX_BENCH = nccl | deepep | all). Mirrors
+# runtime/run_in_container.sh (CX_BENCH = nccl | deepep | all). Mirrors
 # launch_b200-dgxc.sh; H200 differs in: partition `main` (14x 8-GPU H200 nodes),
 # NO account (open scheduler), home is shared NFS (compute-visible, so no
 # CX_STAGE_DIR), and the sglang image is imported on first use (not pre-staged).
@@ -18,8 +18,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CX_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
-# shellcheck source=common.sh
-source "$HERE/common.sh"
+# shellcheck source=../runtime/common.sh
+source "$HERE/../runtime/common.sh"
 
 RUNNER_NAME="${RUNNER_NAME:-h200}"
 PARTITION="${CX_PARTITION:-main}"            # H200 cluster's only partition (sinfo: main*)
@@ -68,7 +68,7 @@ srun --jobid="$JOB_ID" \
   --no-container-mount-home \
   --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
   --no-container-entrypoint --export=ALL \
-  bash "$MOUNT_DIR/experimental/CollectiveX/launchers/run_in_container.sh"
+  bash "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh"
 
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
 cx_log "done — JSON artifacts under $MOUNT_SRC/experimental/CollectiveX/results/"

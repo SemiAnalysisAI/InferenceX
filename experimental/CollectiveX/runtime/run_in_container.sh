@@ -19,8 +19,8 @@
 set -euo pipefail
 
 cd /ix/experimental/CollectiveX
-# shellcheck source=common.sh
-source launchers/common.sh
+# shellcheck source=../runtime/common.sh
+source runtime/common.sh
 mkdir -p results
 
 : "${CX_RUNNER:?CX_RUNNER not set}"

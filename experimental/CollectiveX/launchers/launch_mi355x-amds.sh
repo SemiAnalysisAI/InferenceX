@@ -24,8 +24,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CX_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
-# shellcheck source=common.sh
-source "$HERE/common.sh"
+# shellcheck source=../runtime/common.sh
+source "$HERE/../runtime/common.sh"
 
 RUNNER_NAME="${RUNNER_NAME:-mi355x-amds}"
 PARTITION="${CX_PARTITION:-compute}"
@@ -104,7 +104,7 @@ srun --jobid="$JOB_ID" \
   --container-writable --container-remap-root --no-container-mount-home \
   --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
   --no-container-entrypoint --export=ALL \
-  bash "$MOUNT_DIR/experimental/CollectiveX/launchers/run_in_container.sh"
+  bash "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh"
 
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
 # ROCm can leave gpucore.* dumps in the workdir on a crash; clear them so the

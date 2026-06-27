@@ -23,8 +23,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CX_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
-# shellcheck source=common.sh
-source "$HERE/common.sh"
+# shellcheck source=../runtime/common.sh
+source "$HERE/../runtime/common.sh"
 
 RUNNER_NAME="${RUNNER_NAME:-gb200-nv}"
 PARTITION="${CX_PARTITION:-batch}"
@@ -69,7 +69,7 @@ if [ "$NODES" -le 1 ]; then
     --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
     --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
     --no-container-entrypoint --export=ALL \
-    bash "$MOUNT_DIR/experimental/CollectiveX/launchers/run_in_container.sh"
+    bash "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh"
   cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
   cx_log "done — JSON artifacts under $MOUNT_SRC/experimental/CollectiveX/results/"
   exit 0
@@ -103,7 +103,7 @@ srun --jobid="$JOB_ID" --ntasks=1 --nodes=1 "${COMMON_MOUNT[@]}" \
   bash -c '
     set -euo pipefail
     cd /ix/experimental/CollectiveX
-    source launchers/common.sh
+    source runtime/common.sh
     mkdir -p results
     cx_build_nccl_tests "$PWD/.nccl-tests" 1 >/dev/null
     python3 env_capture.py --out "results/env_${CX_RUNNER}_${CX_TS}.json" --timestamp "$CX_TS"

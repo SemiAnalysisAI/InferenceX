@@ -20,8 +20,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CX_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
-# shellcheck source=common.sh
-source "$HERE/common.sh"
+# shellcheck source=../runtime/common.sh
+source "$HERE/../runtime/common.sh"
 
 CX_BENCH="${CX_BENCH:-nccl}"
 [ "$CX_BENCH" = "nccl" ] || cx_die "launch_b200-dgxc-slurm.sh supports CX_BENCH=nccl only (got '$CX_BENCH'); multi-node DeepEP is a follow-up"
@@ -72,7 +72,7 @@ srun --jobid="$JOB_ID" --ntasks=1 --nodes=1 "${COMMON_MOUNT[@]}" --export=ALL,CX
   bash -c '
     set -euo pipefail
     cd /ix/experimental/CollectiveX
-    source launchers/common.sh
+    source runtime/common.sh
     mkdir -p results
     cx_build_nccl_tests "$PWD/.nccl-tests" 1 >/dev/null
     python3 env_capture.py --out "results/env_${CX_RUNNER}_${CX_TS}.json" --timestamp "$CX_TS"

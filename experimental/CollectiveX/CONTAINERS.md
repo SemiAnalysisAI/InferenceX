@@ -2,7 +2,7 @@
 
 One **multi-arch, digest-pinned** container is used for all NVIDIA SKUs, so B200
 (x86_64) and GB200 (aarch64) share a single reference and the cross-vendor
-comparison is truly same-image. Set in `launchers/common.sh` (`cx_default_image`).
+comparison is truly same-image. Set in `runtime/common.sh` (`cx_default_image`).
 
 ## Default container (all NVIDIA SKUs)
 

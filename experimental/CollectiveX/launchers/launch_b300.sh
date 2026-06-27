@@ -2,7 +2,7 @@
 # CollectiveX — B300 single-node SKU adapter (8x B300 SXM6, NVLink island, x86_64, SM100).
 #
 # Thin adapter: B300-specific allocation/container, then hands off to
-# launchers/run_in_container.sh (CX_BENCH = nccl | deepep | all). Mirrors
+# runtime/run_in_container.sh (CX_BENCH = nccl | deepep | all). Mirrors
 # launch_h200.sh; B300 differs in: partition `batch_1` with a REQUIRED account
 # (`benchmark`), and the compute-visible share is /data (10.3.26.100:/data) — NOT
 # /home and NOT the node-local /scratch, both invisible to compute nodes here. Both
@@ -19,8 +19,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CX_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
-# shellcheck source=common.sh
-source "$HERE/common.sh"
+# shellcheck source=../runtime/common.sh
+source "$HERE/../runtime/common.sh"
 
 RUNNER_NAME="${RUNNER_NAME:-b300}"
 PARTITION="${CX_PARTITION:-batch_1}"
@@ -63,7 +63,7 @@ srun --jobid="$JOB_ID" \
   --no-container-mount-home \
   --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
   --no-container-entrypoint --export=ALL \
-  bash "$MOUNT_DIR/experimental/CollectiveX/launchers/run_in_container.sh"
+  bash "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh"
 
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
 cx_log "done — JSON artifacts under $MOUNT_SRC/experimental/CollectiveX/results/"

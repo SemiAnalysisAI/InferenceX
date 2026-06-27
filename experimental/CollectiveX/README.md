@@ -20,8 +20,8 @@ already ran for real on both B200 (8× NVLink island) and GB200 (4× NVL72 MNNVL
 | `tests/ep_harness.py` | shared EP harness: token ladder, separated timing, correctness gate, doc emission (stdlib top) |
 | `tests/ep_deepep.py`, `tests/ep_mori.py` | per-backend adapters (DeepEP / MoRI) implementing the harness protocol |
 | `plot.py` | latency/bus-bw curves, B200-vs-GB200 overlay with a comparison guard (matplotlib) |
-| `launchers/common.sh` | shared helpers: image resolve, enroot squash, staging, nccl-tests build |
-| `launchers/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/mori/all) over `CX_PHASE` |
+| `runtime/common.sh` | shared helpers: image resolve, enroot squash, staging, nccl-tests build |
+| `runtime/run_in_container.sh` | generic in-container dispatcher — runs `CX_BENCH` (nccl/deepep/mori/all) over `CX_PHASE` |
 | `launchers/launch_<sku>.sh` | per-SKU adapters: `launch_b200-dgxc.sh` (8× NVLink), `launch_b200-dgxc-slurm.sh` (2-node IB), `launch_gb200-nv.sh` (NVL72 MNNVL), `launch_mi355x-amds.sh` (8× XGMI, AMD MoRI + rccl) |
 | `CONTAINERS.md` | the pinned multi-arch container + audited library versions |
 | `results/` | flat JSON artifacts (+ `plots/`, raw captures) |
