@@ -138,14 +138,22 @@ def main() -> int:
         else:
             dist.init_process_group("nccl")
 
-    backend = Backend(args, rank, world_size, local_rank, device)
-    if rank == 0:
-        print(f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
-              f"world={world_size} ep_size={world_size} hidden={args.hidden} "
-              f"topk={args.topk} experts={args.experts} dtype={args.dispatch_dtype} "
-              f"routing={args.routing} seed={args.seed}")
-
-    rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)
+    # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
+    # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
+    # uncaught exception is otherwise invisible in CI. Print on every rank (prefixed) then re-raise.
+    try:
+        backend = Backend(args, rank, world_size, local_rank, device)
+        if rank == 0:
+            print(f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
+                  f"world={world_size} ep_size={world_size} hidden={args.hidden} "
+                  f"topk={args.topk} experts={args.experts} dtype={args.dispatch_dtype} "
+                  f"routing={args.routing} seed={args.seed}")
+        rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)
+    except Exception:
+        import traceback
+        print(f"[run_ep][rank{rank}] backend={args.backend} FAILED:\n" + traceback.format_exc(),
+              flush=True)
+        raise
     # finalize() handles backend-specific teardown: DeepEP returns rc cleanly;
     # MoRI hard-exits past its post-shmem_finalize teardown assertion.
     return backend.finalize(rc)

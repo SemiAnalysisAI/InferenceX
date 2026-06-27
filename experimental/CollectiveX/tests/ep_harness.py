@@ -79,7 +79,8 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--hidden", type=int, default=7168)
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
-    ap.add_argument("--dispatch-dtype", default="bf16", choices=["bf16", "fp8"])
+    ap.add_argument("--dispatch-dtype", default="bf16",
+                    choices=["bf16", "fp8", "fp8-pertoken", "fp8-directcast"])
     # Combine-path precision/quant is a SEPARATE axis from dispatch (review: don't let
     # dispatch_dtype=fp8 imply the whole EP path is quantized). Today every backend combines
     # bf16 with no quant (combine_quant_mode=none); a future quantized combine (e.g. ROCm/MoRI
