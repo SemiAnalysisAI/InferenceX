@@ -43,8 +43,9 @@ CAP = {
         # Combine path is a SEPARATE axis from dispatch dtype (review): today combine is bf16
         # with no quant on every backend regardless of dispatch_dtype. fp8/quantized combine is
         # reserved until a kernel is wired — capability rejects it so it can't be silently faked.
-        "combine_dtypes": ["bf16"],
-        "quant_modes": ["none"],
+        "combine_dtypes": ["bf16"],           # quantized combine (mxfp8/mxfp4/nvfp4) is in flashinfer
+        "quant_modes": ["none"],              # moe_a2a_combine (PR3376/3643, merged) but MNNVL-gated on
+                                              # x86_64 — reserved, see docs/upstream_precision.md + gated.md
         # routing/EPLB/activation semantics (goal P2 "distribution + quant-combine constraints in
         # capabilities"): DeepEP honors any trace (routing is a pure trace transform) + EPLB.
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
@@ -67,8 +68,8 @@ CAP = {
         "dtypes": ["bf16"],                   # DISPATCH-side precision
         "contracts": ["layout-and-dispatch-v1"],
         "transports": ["xgmi", "rdma"],
-        "combine_dtypes": ["bf16"],           # + "fp8" when the MoRI quant_type combine path (PR311) lands
-        "quant_modes": ["none"],              # + the PR311 mode id once validated
+        "combine_dtypes": ["bf16"],           # + "fp8" via MoRI PR311 (merged): QuantType::Fp8BlockwiseQuant
+        "quant_modes": ["none"],              # + "fp8_blockwise" (MoRI PR311) once wired — see docs/upstream_precision.md
         # MoRI also honors any trace + EPLB (a routing-trace transform), bf16 value-neutral.
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
