@@ -466,6 +466,57 @@ def load_kvcache_series(results_dir: str) -> list[dict]:
     return _assign_coll_colors(series)
 
 
+def load_rlmesh_series(results_dir: str) -> list[dict]:
+    """family=rl-mesh (RL trainer<->generator weight-transfer mesh). ONE line per (sku, direction,
+    pattern) so trainer->gen vs gen->trainer AND paired (1:1 send/recv) vs redistribute (disjoint
+    all-to-all reshard) are all visible. groups-nested like kv-cache (each group carries its own
+    rows[]: transfer_bytes -> bandwidth_gb_s / time_ms). Dedup to newest doc per (sku, transport);
+    note the mesh split (trainer N <-> generator M). ADDITIVE."""
+    docs = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "rl-mesh" or not d.get("groups"):
+            continue
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        docs.append(((sku, d.get("transport")), d.get("generated_at"), d))
+    # short direction labels keep the legend compact (raw direction stays in `op` for grouping).
+    short = {"trainer_to_generator": "trn→gen", "generator_to_trainer": "gen→trn"}
+    series = []
+    for d in _dedup_newest(docs):
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        valid = (d.get("status") or "?") == "valid"
+        peak = d.get("peak_bandwidth_gb_s")
+        ws, tr, gr = d.get("world_size"), d.get("trainer_ranks"), d.get("generator_ranks")
+        note = (f"peak {peak:.0f} GB/s" if peak is not None else "")
+        if ws is not None:
+            note += f" · world={ws}: trainer {tr} ↔ generator {gr}"
+        for g in d["groups"]:
+            direction, pattern = g.get("direction"), g.get("pattern")
+            topo = g.get("topology_class") or d.get("transport") or "?"
+            rows = []
+            for r in (g.get("rows") or []):
+                if r.get("transfer_bytes") is None or r.get("bandwidth_gb_s") is None:
+                    continue
+                rows.append({"size": r["transfer_bytes"], "bw": r.get("bandwidth_gb_s"),
+                             "lat": r.get("time_ms"), "correct": r.get("correct")})
+            if not rows:
+                continue
+            rows.sort(key=lambda x: x["size"])
+            dlab = short.get(direction, direction)
+            series.append({
+                "family": "rl-mesh", "sku": sku, "topo": topo, "transport": d.get("transport") or "",
+                "op": direction, "sub": pattern, "valid": valid, "status": d.get("status") or "?",
+                "note": note,
+                "label": f'{sku.upper()} · {dlab} · {pattern}',
+                "ckey": f'{sku}|{direction}|{pattern}', "color": COLORS.get(sku, "#555"),
+                "rows": rows,
+            })
+    return _assign_coll_colors(series)
+
+
 # Budgets (µs) for the "max tokens / rank under a p99 round-trip budget" decision view (goal P3-D,
 # the previously-missing metric). Picked to bracket a typical decode SLO band.
 RT_BUDGETS_US = [100, 250, 500]
@@ -1334,6 +1385,7 @@ function collArr(name){
   if(name==="OFFLOAD")    return (typeof OFFLOAD!=="undefined"&&OFFLOAD)?OFFLOAD:[];
   if(name==="COPYENGINE") return (typeof COPYENGINE!=="undefined"&&COPYENGINE)?COPYENGINE:[];
   if(name==="KVCACHE")    return (typeof KVCACHE!=="undefined"&&KVCACHE)?KVCACHE:[];
+  if(name==="RLMESH")     return (typeof RLMESH!=="undefined"&&RLMESH)?RLMESH:[];
   return [];
 }
 function collChart(arr, st, title){
@@ -1428,6 +1480,8 @@ function renderCopyEngine(){ renderColl('COPYENGINE','copyengine','copy-engine /
   'Copy-engine (SDMA) vs SM-driven copy at matched op/size — the copy-engine should reach near-peak bandwidth while using almost no SMs, leaving compute free.'); }
 function renderKvCache(){ renderColl('KVCACHE','kvcache','KV-cache transfer','ms',
   'KV-cache block transfer: paged vs contiguous layout across directions (D→H / H→D / device-local / device-remote). Contiguous layout transfers far faster than paged (scatter/gather overhead).'); }
+function renderRlMesh(){ renderColl('RLMESH','rlmesh','RL mesh','ms',
+  'RL trainer↔generator weight-transfer mesh: trainer→gen vs gen→trainer, paired (1:1 send/recv) vs redistribute (disjoint all-to-all reshard). The redistribute pattern stresses the fabric harder than paired.'); }
 // TABS (goal P3-C): pure JS/CSS. Toggle .on on a nav button + its matching .tab panel. Disabled
 // buttons (suites not built yet) are inert. Re-renders the active tab's charts so SVGs that need a
 // real layout (the main chart) paint correctly when first shown.
@@ -1440,6 +1494,7 @@ function showTab(id){
   if(id==='tab-offload'){ renderOffload(); }
   if(id==='tab-copyengine'){ renderCopyEngine(); }
   if(id==='tab-kvcache'){ renderKvCache(); }
+  if(id==='tab-rlmesh'){ renderRlMesh(); }
 }
 function setupTabs(){
   document.querySelectorAll('.tabs button[data-tab]').forEach(b=>{ if(!b.disabled) b.onclick=()=>showTab(b.dataset.tab); });
@@ -1475,7 +1530,7 @@ function setupTabs(){
   renderControls(); renderCards(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps();
   renderDecision(); renderProvenance(); renderCoverage(); renderSensitivity(); renderFailed();
   renderNccl('all_reduce','allreduce'); renderNccl('all_gather','allgather');  // family=nccl tabs (no-op if empty)
-  renderOffload(); renderCopyEngine(); renderKvCache();   // data-movement collective tabs (no-op if empty)
+  renderOffload(); renderCopyEngine(); renderKvCache(); renderRlMesh();   // data-movement collective tabs (no-op if empty)
   setupTabs();
 })();
 """
@@ -1561,7 +1616,9 @@ def main() -> int:
     offload_series = load_offload_series(args.results_dir)
     copyengine_series = load_copy_engine_series(args.results_dir)
     kvcache_series = load_kvcache_series(args.results_dir)
+    rlmesh_series = load_rlmesh_series(args.results_dir)
     has_offload, has_copy, has_kv = bool(offload_series), bool(copyengine_series), bool(kvcache_series)
+    has_rl = bool(rlmesh_series)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     # Tab nav (goal P3-C): real clickable tabs. Built suites are enabled; not-yet-built collective
     # suites are disabled "coming soon" placeholders so the framework's scope is visible. Each
@@ -1578,8 +1635,8 @@ def main() -> int:
               + _navbtn("tab-offload", "CPU-GPU offload", has_offload)
               + _navbtn("tab-kvcache", "KV-cache transfer", has_kv)
               + _navbtn("tab-copyengine", "Copy-engine / SDMA", has_copy)
-              + '<button disabled title="suite not built yet">RL mesh</button>'
-              '</div>')
+              + _navbtn("tab-rlmesh", "RL mesh", has_rl)
+              + '</div>')
     # Tab panels. EP = the existing chart + grid + scaling + heatmaps (unchanged behavior).
     tab_ep = ('<div class="tab on" id="tab-ep">'
               '<div class="controls" id="controls"></div>'
@@ -1616,20 +1673,23 @@ def main() -> int:
     tab_copyengine = ('<div class="tab" id="tab-copyengine">'
                       '<p class="sub"><b>Copy-engine / SDMA</b> vs SM-driven copy at matched op/size — the copy-engine reaches near-peak bandwidth using almost no SMs. One line per (SKU, op, engine).</p>'
                       '<div id="copyengine"></div></div>')
-    placeholder = ('<p class="note">The remaining collective suite (RL mesh) is part of the '
-                   'CollectiveX framework but has no results yet — its tab is a disabled placeholder '
-                   'until the suite lands.</p>')
+    tab_rlmesh = ('<div class="tab" id="tab-rlmesh">'
+                  '<p class="sub"><b>RL mesh</b> — trainer↔generator weight transfer: <b>trainer→gen vs gen→trainer</b> and <b>paired</b> (1:1 send/recv) vs <b>redistribute</b> (disjoint all-to-all reshard). One line per (SKU, direction, pattern).</p>'
+                  '<div id="rlmesh"></div></div>')
+    # Every collective suite now has results except where a SKU is still landing; tabs without data
+    # stay disabled via _navbtn, so no standing "coming soon" note is needed.
+    placeholder = ''
     html = HEAD \
         + '<div class="cards" id="cards"></div>' \
         + tabnav + tab_ep + tab_decision + tab_evidence + tab_allreduce + tab_allgather \
-        + tab_offload + tab_kvcache + tab_copyengine + placeholder \
+        + tab_offload + tab_kvcache + tab_copyengine + tab_rlmesh + placeholder \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
         + f'{len(series)} EP sweeps' + (f' + {len(nccl_series)} NCCL sweeps' if nccl_series else '') \
-        + (f' + {len(offload_series)} offload + {len(copyengine_series)} copy-engine + {len(kvcache_series)} KV-cache lines'
-           if (has_offload or has_copy or has_kv) else '') + '. ' \
+        + (f' + {len(offload_series)} offload + {len(copyengine_series)} copy-engine + {len(kvcache_series)} KV-cache + {len(rlmesh_series)} RL-mesh lines'
+           if (has_offload or has_copy or has_kv or has_rl) else '') + '. ' \
         + 'Latency (p50/p90/p99 selector) is the primary EP metric; the EP ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
-        + 'bandwidth. The All-reduce / All-gather + offload / copy-engine / KV-cache tabs show measured ' \
+        + 'bandwidth. The All-reduce / All-gather + offload / copy-engine / KV-cache / RL-mesh tabs show measured ' \
         + 'bandwidth + latency vs transfer size. dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
         + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) \
         + ";\nconst FAILED = " + json.dumps(failed) + ";\nconst DECISION = " + json.dumps(decision) \
@@ -1637,6 +1697,7 @@ def main() -> int:
         + ";\nconst OFFLOAD = " + json.dumps(offload_series) \
         + ";\nconst COPYENGINE = " + json.dumps(copyengine_series) \
         + ";\nconst KVCACHE = " + json.dumps(kvcache_series) \
+        + ";\nconst RLMESH = " + json.dumps(rlmesh_series) \
         + ";\n" + JS + "\n</script>\n" + TAIL
     with open(args.out, "w") as fh:
         fh.write(html)
