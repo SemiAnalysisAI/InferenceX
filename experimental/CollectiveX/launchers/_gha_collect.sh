@@ -42,9 +42,13 @@ tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 got=0
 for rid in $RUNS; do
   if gh run download "$rid" --dir "$tmp/$rid" >/dev/null 2>&1; then
-    # copy only the EP result + env JSONs; artifact dirs may nest per phase
+    # copy the EP result + env JSONs + the NCCL collective op results (family=nccl,
+    # named <runner>_<op>_<ts>.json); artifact dirs may nest per phase
     while IFS= read -r f; do cp -f "$f" "$RESULTS/" && got=$((got+1)); done \
-      < <(find "$tmp/$rid" -name '*deepep*.json' -o -name '*mori*.json' -o -name 'env_*.json')
+      < <(find "$tmp/$rid" \( -name '*deepep*.json' -o -name '*mori*.json' -o -name '*uccl*.json' \
+            -o -name '*flashinfer*.json' -o -name 'env_*.json' \
+            -o -name '*_all_reduce_*.json' -o -name '*_all_gather_*.json' \
+            -o -name '*_reduce_scatter_*.json' -o -name '*_alltoall_*.json' \) -print)
   else
     echo "WARN: download failed for run $rid" >&2
   fi
