@@ -171,6 +171,10 @@ run_ep_suite() {
 cx_build_deepep_v2() {
   local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*) arch="10.0";; esac
   cx_log "DeepEP V2: building from source (TORCH_CUDA_ARCH_LIST=$arch) — overrides bundled V1"
+  # PEP 668: newer images (H200/B300) ship an externally-managed Python that refuses `pip install`.
+  # PIP_BREAK_SYSTEM_PACKAGES is honored by pip>=23.0.1 and silently ignored by older pip (H100),
+  # so this is safe across every image; --break-system-packages as a flag would error on old pip.
+  export PIP_BREAK_SYSTEM_PACKAGES=1
   pip install -q "nvidia-nccl-cu13>=2.30.4" >&2 2>&1 || cx_log "WARN: nvidia-nccl-cu13 install warning"
   rm -rf /tmp/DeepEP_v2
   git clone --depth 1 https://github.com/deepseek-ai/DeepEP /tmp/DeepEP_v2 >&2 2>&1 \
