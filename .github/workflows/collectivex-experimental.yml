@@ -41,10 +41,6 @@ on:
         description: nccl-tests max message size
         type: string
         default: '8G'
-      ngpus:
-        description: GPUs per node (blank = SKU default)
-        type: string
-        default: ''
       nodes:
         description: Node count (gb200 multi-node MNNVL; 2 = 8 GPU). Blank/1 = single node.
         type: string
@@ -55,19 +51,12 @@ on:
         type: choice
         default: both
         options: [both, decode, prefill]
-      iters:
-        # Timed iterations PER TRIAL (blank = harness default 200). LOWER it (e.g. 20-30) for the
-        # MoRI/MI355X large-T probe: MoRI wedges (unkillable D-state) under SUSTAINED iters>=200 at
-        # T>=32, but completed T=64-128 at moderate iters in earlier runs.
-        description: Timed iters per trial (blank = 200; lower for the MoRI large-T probe)
-        type: string
-        default: ''
-      trials:
-        description: Independent timed trials (blank = 3; lower for the MoRI large-T probe)
-        type: string
-        default: ''
-      warmup:
-        description: Untimed warmup iters per point (blank = 32; lower for the MoRI large-T probe)
+      timing:
+        # Combined timing knobs "iters:trials:warmup" (GitHub caps workflow_dispatch at 25 inputs,
+        # so these share one). Blank = harness defaults (200:3:32). LOWER all three for the MoRI/
+        # MI355X large-T probe (e.g. "8:1:4"): MoRI wedges (unkillable D-state) under SUSTAINED
+        # collectives at T>=32; minimal iters/trials/warmup is the only way to reach >64 tok/rank.
+        description: 'Timing "iters:trials:warmup" (blank = 200:3:32; e.g. 8:1:4 for the MoRI large-T probe)'
         type: string
         default: ''
       tokens_ladder:
@@ -253,7 +242,6 @@ jobs:
       CX_OPS: ${{ inputs.ops }}
       CX_MIN_BYTES: ${{ inputs.min_bytes }}
       CX_MAX_BYTES: ${{ inputs.max_bytes }}
-      CX_NGPUS: ${{ inputs.ngpus }}
       CX_NODES: ${{ inputs.nodes }}
       CX_PHASE: ${{ matrix.phase }}
       CX_TOKENS_LADDER: ${{ inputs.tokens_ladder }}
@@ -274,9 +262,7 @@ jobs:
       CX_EXPERTS: ${{ inputs.experts }}
       CX_ROUTING_STEP: ${{ inputs.routing_step }}
       CX_UNEVEN_TOKENS: ${{ inputs.uneven_tokens }}
-      CX_ITERS: ${{ inputs.iters }}
-      CX_TRIALS: ${{ inputs.trials }}
-      CX_WARMUP: ${{ inputs.warmup }}
+      CX_TIMING: ${{ inputs.timing }}
       # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
       # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}

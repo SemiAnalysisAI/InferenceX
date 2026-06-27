@@ -31,6 +31,17 @@ CX_BENCH="${CX_BENCH:-nccl}"
 CX_TRANSPORT="${CX_TRANSPORT:-}"
 ENVJSON="results/env_${CX_RUNNER}_${CX_TS}.json"
 
+# CX_TIMING="iters:trials:warmup" unpacks into the individual knobs (one workflow input feeds three,
+# since GitHub caps workflow_dispatch at 25 inputs). Blank fields keep their defaults. Used for the
+# MoRI/MI355X large-T probe (e.g. "8:1:4" — minimal sustained load to dodge the wedge).
+if [ -n "${CX_TIMING:-}" ]; then
+  _ti="${CX_TIMING%%:*}"; _rest="${CX_TIMING#*:}"; _tt="${_rest%%:*}"; _tw="${_rest#*:}"
+  [ -n "$_ti" ] && [ "$_ti" != "$CX_TIMING" ] && export CX_ITERS="$_ti"
+  [ -n "$_tt" ] && [ "$_tt" != "$_rest" ] && export CX_TRIALS="$_tt"
+  [ -n "$_tw" ] && [ "$_tw" != "$_rest" ] && export CX_WARMUP="$_tw"
+  cx_log "CX_TIMING=$CX_TIMING -> iters=${CX_ITERS:-200} trials=${CX_TRIALS:-3} warmup=${CX_WARMUP:-32}"
+fi
+
 cx_log "in-container: runner=$CX_RUNNER ngpus=$CX_NGPUS bench=$CX_BENCH topo=$CX_TOPO"
 python3 env_capture.py --out "$ENVJSON" --timestamp "$CX_TS"
 
