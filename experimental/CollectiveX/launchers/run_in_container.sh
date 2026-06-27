@@ -134,7 +134,7 @@ run_ep_suite() {
         --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-uniform}" \
         ${CX_EPLB:+--eplb} ${CX_WORKLOAD_DIR:+--workload-dir "$CX_WORKLOAD_DIR"} \
         --num-sms "${CX_NUM_SMS:-24}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-200}" \
-        --trials "${CX_TRIALS:-3}" \
+        --trials "${CX_TRIALS:-3}" --warmup "${CX_WARMUP:-32}" \
         --measurement-contract "${CX_MEASUREMENT_CONTRACT:-layout-and-dispatch-v1}" \
         --resource-mode "${CX_RESOURCE_MODE:-normalized}" --sm-fraction "${CX_SM_FRACTION:-0.18}" \
         --activation-profile "${CX_ACTIVATION_PROFILE:-normal}" --placement "${CX_PLACEMENT:-packed}" \
