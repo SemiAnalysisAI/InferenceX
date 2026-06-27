@@ -293,6 +293,179 @@ def load_nccl_series(results_dir: str) -> list[dict]:
     return series
 
 
+def _assign_coll_colors(series: list[dict]) -> list[dict]:
+    """Assign a DISTINCT color per `ckey` within each SKU's hue family (same scheme as the EP / NCCL
+    series), so a collective line keeps a SKU-readable hue and same-SKU configs stay distinguishable."""
+    by_sku: dict[str, list[str]] = {}
+    for ck in sorted({s["ckey"] for s in series}):
+        by_sku.setdefault(ck.split("|")[0], []).append(ck)
+    ckcolor: dict[str, str] = {}
+    fb = 0
+    for sku, cks in by_sku.items():
+        fam = SKU_FAMILY.get(sku)
+        for j, ck in enumerate(cks):
+            if fam:
+                ckcolor[ck] = fam[j % len(fam)]
+            else:
+                ckcolor[ck] = PALETTE[fb % len(PALETTE)]; fb += 1
+    for s in series:
+        s["color"] = ckcolor[s["ckey"]]
+    return series
+
+
+def _dedup_newest(docs: list) -> list:
+    """Keep one doc per dedup-key, newest generated_at wins (the decode+prefill jobs ran the SAME
+    single-process bench, so two files share a (sku,config) — drawing both would double every line).
+    `docs` is a list of (dedup_key, generated_at, payload); returns the surviving payloads."""
+    best: dict = {}
+    for key, gen, payload in docs:
+        cur = best.get(key)
+        if cur is None or (gen or "") > (cur[0] or ""):
+            best[key] = (gen, payload)
+    return [payload for _, payload in best.values()]
+
+
+def load_offload_series(results_dir: str) -> list[dict]:
+    """family=offload (CPU<->GPU offload). ONE line per (sku, op, host_memory) so pinned-vs-pageable
+    and h2d-vs-d2h are directly visible (goal P2 "GPU->CPU / CPU->GPU bandwidth/latency, pinned vs
+    pageable"). Dedup to newest doc per (sku, topology, transport); surface the overlap % from
+    diagnostics as a per-doc note. ADDITIVE — independent of the family=moe series."""
+    docs = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "offload" or not d.get("rows"):
+            continue
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        # dedup key: a (sku, topology, transport) cohort is one bench regardless of decode/prefill job.
+        docs.append(((sku, d.get("topology_class"), d.get("transport")), d.get("generated_at"), d))
+    series = []
+    for d in _dedup_newest(docs):
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        topo = d.get("topology_class") or "?"
+        transport = d.get("transport") or ""
+        valid = (d.get("status") or "?") == "valid"
+        ov = ((d.get("diagnostics") or {}).get("overlap_with_compute") or {})
+        peak = d.get("peak_bandwidth_gbps")
+        note = (f"peak {peak:.0f} GB/s" if peak is not None else "")
+        if ov.get("overlap_pct") is not None:
+            note += f" · copy/compute overlap {ov['overlap_pct']:.0f}%"
+        numa = (d.get("diagnostics") or {}).get("numa") or {}
+        if numa.get("node_count") is not None:
+            note += f" · {numa['node_count']} NUMA node(s)"
+        lines: dict = {}   # (op, host_memory) -> rows
+        for r in d["rows"]:
+            if r.get("size_bytes") is None or r.get("bandwidth_gbps") is None:
+                continue
+            lines.setdefault((r.get("op"), r.get("host_memory")), []).append({
+                "size": r["size_bytes"], "bw": r.get("bandwidth_gbps"), "lat": r.get("latency_us")})
+        for (op, host), rows in lines.items():
+            rows.sort(key=lambda x: x["size"])
+            series.append({
+                "family": "offload", "sku": sku, "topo": topo, "transport": transport,
+                "op": op, "sub": host, "valid": valid, "status": d.get("status") or "?",
+                "note": note, "peak": peak,
+                "label": f'{sku.upper()} · {op} · {host}',
+                "ckey": f'{sku}|{op}|{host}', "color": COLORS.get(sku, "#555"),
+                "rows": rows,
+            })
+    return _assign_coll_colors(series)
+
+
+def load_copy_engine_series(results_dir: str) -> list[dict]:
+    """family=copy-engine (SDMA copy engine vs SM-driven copy). ONE line per (sku, op, engine) so the
+    copy-engine-vs-SM comparison (the headline of this view) is direct. Dedup to newest doc per
+    (sku, topology, transport); carry copy_engine_uses_near_zero_sms as a note. ADDITIVE."""
+    docs = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "copy-engine" or not d.get("rows"):
+            continue
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        docs.append(((sku, d.get("topology_class"), d.get("transport")), d.get("generated_at"), d))
+    series = []
+    for d in _dedup_newest(docs):
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        topo = d.get("topology_class") or "?"
+        transport = d.get("transport") or ""
+        valid = (d.get("status") or "?") == "valid"
+        peak = d.get("peak_bandwidth_gbps")
+        nz = d.get("copy_engine_uses_near_zero_sms")
+        note = (f"peak {peak:.0f} GB/s" if peak is not None else "")
+        if nz is not None:
+            note += f" · copy-engine uses near-zero SMs: {'yes' if nz else 'no'}"
+        lines: dict = {}   # (op, engine) -> rows
+        for r in d["rows"]:
+            if r.get("size_bytes") is None or r.get("bandwidth_gbps") is None:
+                continue
+            lines.setdefault((r.get("op"), r.get("engine")), []).append({
+                "size": r["size_bytes"], "bw": r.get("bandwidth_gbps"), "lat": r.get("latency_us")})
+        for (op, engine), rows in lines.items():
+            rows.sort(key=lambda x: x["size"])
+            series.append({
+                "family": "copy-engine", "sku": sku, "topo": topo, "transport": transport,
+                "op": op, "sub": engine, "valid": valid, "status": d.get("status") or "?",
+                "note": note, "peak": peak,
+                "label": f'{sku.upper()} · {op} · {engine}',
+                "ckey": f'{sku}|{op}|{engine}', "color": COLORS.get(sku, "#555"),
+                "rows": rows,
+            })
+    return _assign_coll_colors(series)
+
+
+def load_kvcache_series(results_dir: str) -> list[dict]:
+    """family=kv-cache (KV block transfer). ONE line per (sku, direction, layout, backend) so paged-
+    vs-contiguous and the direction breakdown are visible. groups[] each carry their own rows[]
+    (transfer_bytes -> bandwidth_gb_s / time_ms). Dedup to newest doc per (sku, transport); note the
+    declared-unwired backends. ADDITIVE."""
+    docs = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "kv-cache" or not d.get("groups"):
+            continue
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        docs.append(((sku, d.get("transport")), d.get("generated_at"), d))
+    series = []
+    for d in _dedup_newest(docs):
+        sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
+        valid = (d.get("status") or "?") == "valid"
+        unwired = d.get("declared_unwired_backends") or []
+        wired = d.get("wired_backends") or []
+        note = (f"wired: {', '.join(wired)}" if wired else "")
+        if unwired:
+            note += f" · declared-unwired: {', '.join(unwired)}"
+        for g in d["groups"]:
+            direction, layout, backend = g.get("direction"), g.get("layout"), g.get("backend")
+            topo = g.get("topology_class") or d.get("transport") or "?"
+            rows = []
+            for r in (g.get("rows") or []):
+                if r.get("transfer_bytes") is None or r.get("bandwidth_gb_s") is None:
+                    continue
+                rows.append({"size": r["transfer_bytes"], "bw": r.get("bandwidth_gb_s"),
+                             "lat": r.get("time_ms"), "size_class": r.get("size_class"),
+                             "correct": r.get("correct")})
+            if not rows:
+                continue
+            rows.sort(key=lambda x: x["size"])
+            series.append({
+                "family": "kv-cache", "sku": sku, "topo": topo, "transport": d.get("transport") or "",
+                "op": direction, "sub": f'{layout}/{backend}', "valid": valid, "status": d.get("status") or "?",
+                "note": note,
+                "label": f'{sku.upper()} · {direction} · {layout} · {backend}',
+                "ckey": f'{sku}|{direction}|{layout}|{backend}', "color": COLORS.get(sku, "#555"),
+                "rows": rows,
+            })
+    return _assign_coll_colors(series)
+
+
 # Budgets (µs) for the "max tokens / rank under a p99 round-trip budget" decision view (goal P3-D,
 # the previously-missing metric). Picked to bracket a typical decode SLO band.
 RT_BUDGETS_US = [100, 250, 500]
@@ -1146,6 +1319,115 @@ function renderNccl(op, panelId){
     renderNccl(op, panelId);
   });
 }
+// ===== Data-movement collective families (offload / copy-engine / kv-cache) — generic tab =====
+// These 3 families share ONE shape: each series is one config line {label,color,valid,note,op,sub,
+// rows:[{size,bw,lat}]} and the view is "bandwidth vs size + latency vs size, log-log". A single
+// generic renderer (renderColl) drives all three from their injected global array (OFFLOAD /
+// COPYENGINE / KVCACHE), exactly like renderNccl drives the NCCL tabs. ADDITIVE: reads only its own
+// array + its own per-panel state; never touches DATA/ST/NCCL, so EP + NCCL tabs are unaffected.
+const CSTATE = {};   // per-panel view state, seeded lazily so each collective tab toggles independently
+function cstate(id, latUnit){ return CSTATE[id] || (CSTATE[id] = {metric:"bw", xlog:true, ylog:true, latUnit}); }
+// resolve the injected family array by name. MUST use the bare const (a top-level const in a classic
+// <script> binds lexically — it is NOT a property of window/globalThis), the same way ncclSeries
+// references the bare NCCL. typeof-guarded so a missing array is an empty list, never a crash.
+function collArr(name){
+  if(name==="OFFLOAD")    return (typeof OFFLOAD!=="undefined"&&OFFLOAD)?OFFLOAD:[];
+  if(name==="COPYENGINE") return (typeof COPYENGINE!=="undefined"&&COPYENGINE)?COPYENGINE:[];
+  if(name==="KVCACHE")    return (typeof KVCACHE!=="undefined"&&KVCACHE)?KVCACHE:[];
+  return [];
+}
+function collChart(arr, st, title){
+  const W=900, H=460, m={l:70,r:16,t:34,b:46};
+  const X0=m.l,X1=W-m.r,Y0=H-m.b,Y1=m.t;
+  const metric=st.metric, useBw=metric==="bw";
+  const ylabel = useBw ? "Bandwidth (GB/s)" : ("Latency ("+(st.latUnit||"µs")+")");
+  const pts=arr.map(s=>({s, P:s.rows.map(r=>({x:r.size, y:(useBw?r.bw:r.lat), r}))
+                                    .filter(p=>p.x>0 && p.y!=null && (st.ylog? p.y>0 : p.y>=0))}));
+  let xs=[], ys=[]; pts.forEach(g=>g.P.forEach(p=>{xs.push(p.x);ys.push(p.y);}));
+  if(!xs.length) return '<svg viewBox="0 0 '+W+' '+H+'"><text x="'+(W/2)+'" y="'+(H/2)+'" class="axl" text-anchor="middle">no data</text></svg>';
+  const xmn=Math.min(...xs), xmx=Math.max(...xs);
+  const ylog=st.ylog; let ymn=Math.min(...ys), ymx=Math.max(...ys);
+  if(ylog){ const pos=ys.filter(v=>v>0); ymn=pos.length?Math.min(...pos):1; } else { ymn=Math.min(0,ymn); }
+  if(ymx===ymn) ymx=ymn+1;
+  const xlog=st.xlog;
+  const xv=v=>xlog?mapLog(v,xmn,xmx,X0,X1):mapLin(v,xmn,xmx,X0,X1);
+  const yv=v=>ylog?mapLog(Math.max(v,ymn),ymn,ymx,Y0,Y1):mapLin(v,ymn,ymx,Y0,Y1);
+  let s='<svg viewBox="0 0 '+W+' '+H+'" role="img">';
+  s+='<text x="'+X0+'" y="20" class="ttl">'+title+'</text>';
+  (ylog?logTicks(ymn,ymx):linTicks(ymn,ymx)).forEach(v=>{const y=yv(v); s+='<line class="gl" x1="'+X0+'" y1="'+y+'" x2="'+X1+'" y2="'+y+'"/>'+
+    '<text class="tk" x="'+(X0-7)+'" y="'+(y+3.5)+'" text-anchor="end">'+fmt(v)+'</text>';});
+  (xlog?logTicks(xmn,xmx):linTicks(xmn,xmx)).forEach(v=>{const x=xv(v); s+='<line class="gl" x1="'+x+'" y1="'+Y0+'" x2="'+x+'" y2="'+Y1+'"/>'+
+    '<text class="tk" x="'+x+'" y="'+(Y0+16)+'" text-anchor="middle">'+fmt(v)+'B</text>';});
+  s+='<line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X1+'" y2="'+Y0+'"/><line class="ax" x1="'+X0+'" y1="'+Y0+'" x2="'+X0+'" y2="'+Y1+'"/>';
+  s+='<text class="axl" x="'+((X0+X1)/2)+'" y="'+(H-6)+'" text-anchor="middle">Transfer size (bytes)'+(xlog?'  (log)':'')+'</text>';
+  s+='<text class="axl" transform="translate(15,'+((Y0+Y1)/2)+') rotate(-90)" text-anchor="middle">'+ylabel+(ylog?'  (log)':'')+'</text>';
+  pts.forEach(g=>{ if(!g.P.length) return;
+    const col=g.s.valid? g.s.color : '#666';
+    const dash=g.s.valid? '' : ' stroke-dasharray="3 4"';
+    const op_attr=g.s.valid? '' : ' opacity="0.5"';
+    const d=g.P.map((p,i)=>(i?'L':'M')+xv(p.x).toFixed(1)+' '+yv(p.y).toFixed(1)).join(' ');
+    s+='<path d="'+d+'" fill="none" stroke="'+col+'" stroke-width="2"'+dash+op_attr+'/>';
+    g.P.forEach(p=>{ const r=p.r;
+      s+='<circle class="pt" cx="'+xv(p.x).toFixed(1)+'" cy="'+yv(p.y).toFixed(1)+'" r="3.2" fill="'+col+'"'+op_attr+'>'+
+      '<title>'+g.s.label+(g.s.valid?'':'  [INVALID — excluded]')+
+      '\nsize='+fmt(r.size)+'B'+(r.size_class?'  ·  '+r.size_class:'')+
+      '\nbandwidth = '+(r.bw!=null?fmt(r.bw)+' GB/s':'n/a')+
+      '\nlatency = '+(r.lat!=null?r.lat.toFixed(3)+' '+(st.latUnit||'µs'):'n/a')+
+      (r.correct===false?'\n✗ correctness check failed':'')+
+      (g.s.note?'\n'+g.s.note:'')+
+      '</title></circle>'; });
+  });
+  s+='</svg>'; return s;
+}
+function collLegend(arr){
+  if(!arr.length) return '';
+  return '<div class="legend">'+arr.map(s=>{
+    const col=s.valid? s.color : '#666';
+    const sw = s.valid? 'background:'+col : 'background:repeating-linear-gradient(90deg,'+col+' 0 4px,transparent 4px 8px)';
+    return '<span class="it"><span class="sw" style="'+sw+'"></span>'+s.label+(s.valid?'':' (invalid — excluded)')+'</span>';
+  }).join('')+'</div>';
+}
+function collSeg(panelId,grp,opts,cur){
+  return '<div class="seg">'+Object.entries(opts).map(([k,v])=>
+    '<button data-cid="'+panelId+'" data-cgrp="'+grp+'" data-val="'+k+'" class="'+(k===cur?'on':'')+'">'+v+'</button>').join('')+'</div>';
+}
+// Render one data-movement collective tab. arrName = injected global ("OFFLOAD"|"COPYENGINE"|
+// "KVCACHE"); latUnit = the latency unit for that family ("µs" or "ms"). Robust to zero data.
+function renderColl(arrName, panelId, emptyLabel, latUnit, footNote){
+  const el=document.getElementById(panelId); if(!el) return;
+  const arr=collArr(arrName);
+  if(!arr.length){
+    el.innerHTML='<div class="soon">No <b>'+emptyLabel+'</b> results yet. This tab populates '+
+      'automatically once a family result for it lands in the results directory.</div>';
+    return;
+  }
+  const st=cstate(panelId, latUnit);
+  const CMETRIC={bw:"Bandwidth (GB/s)", lat:"Latency ("+(latUnit||"µs")+")"};
+  const ctl='<div class="controls">'+
+    '<div class="grp"><span class="lab">Metric</span>'+collSeg(panelId,'metric',CMETRIC,st.metric)+'</div>'+
+    '<div class="grp"><span class="lab">X scale</span>'+collSeg(panelId,'xlog',{true:"Log",false:"Linear"},String(st.xlog))+'</div>'+
+    '<div class="grp"><span class="lab">Y scale</span>'+collSeg(panelId,'ylog',{true:"Log",false:"Linear"},String(st.ylog))+'</div>'+
+    '</div>';
+  const title=CMETRIC[st.metric]+' vs transfer size';
+  // a per-sku notes line (peak / overlap / near-zero-sms / unwired) — one note per distinct (sku,note).
+  const seen={}; const notes=[];
+  arr.forEach(s=>{ const k=s.sku+'|'+(s.note||''); if(s.note && !seen[k]){ seen[k]=1; notes.push(s.sku.toUpperCase()+': '+s.note); } });
+  el.innerHTML=ctl+'<div class="card"><div class="coll-chart">'+collChart(arr,st,title)+'</div></div>'+
+    '<div>'+collLegend(arr)+'</div>'+
+    (notes.length? '<p class="note">'+notes.join(' &nbsp;·&nbsp; ')+'</p>' : '')+
+    '<p class="note">'+footNote+' Single-process micro-benchmark; one line per config. Invalid runs are greyed + dashed and excluded from comparison. Hover a point for size / bandwidth / latency. Decode+prefill jobs are deduped to the newest run per (SKU, config) so lines are not doubled.</p>';
+  el.querySelectorAll('.controls button[data-cid]').forEach(b=>b.onclick=()=>{
+    const g=b.dataset.cgrp, v=b.dataset.val;
+    st[g]= (g==='xlog'||g==='ylog')? v==='true' : v;
+    renderColl(arrName, panelId, emptyLabel, latUnit, footNote);
+  });
+}
+function renderOffload(){ renderColl('OFFLOAD','offload','CPU↔GPU offload','µs',
+  'CPU↔GPU offload: host-to-device + device-to-host copy bandwidth/latency, pinned vs pageable host memory (goal P2). Pinned host memory should sustain markedly higher bandwidth than pageable.'); }
+function renderCopyEngine(){ renderColl('COPYENGINE','copyengine','copy-engine / SDMA','µs',
+  'Copy-engine (SDMA) vs SM-driven copy at matched op/size — the copy-engine should reach near-peak bandwidth while using almost no SMs, leaving compute free.'); }
+function renderKvCache(){ renderColl('KVCACHE','kvcache','KV-cache transfer','ms',
+  'KV-cache block transfer: paged vs contiguous layout across directions (D→H / H→D / device-local / device-remote). Contiguous layout transfers far faster than paged (scatter/gather overhead).'); }
 // TABS (goal P3-C): pure JS/CSS. Toggle .on on a nav button + its matching .tab panel. Disabled
 // buttons (suites not built yet) are inert. Re-renders the active tab's charts so SVGs that need a
 // real layout (the main chart) paint correctly when first shown.
@@ -1155,6 +1437,9 @@ function showTab(id){
   if(id==='tab-ep'){ renderMain(); renderGrid(); renderScaling(); renderHeatmaps(); }
   if(id==='tab-allreduce'){ renderNccl('all_reduce','allreduce'); }
   if(id==='tab-allgather'){ renderNccl('all_gather','allgather'); }
+  if(id==='tab-offload'){ renderOffload(); }
+  if(id==='tab-copyengine'){ renderCopyEngine(); }
+  if(id==='tab-kvcache'){ renderKvCache(); }
 }
 function setupTabs(){
   document.querySelectorAll('.tabs button[data-tab]').forEach(b=>{ if(!b.disabled) b.onclick=()=>showTab(b.dataset.tab); });
@@ -1190,6 +1475,7 @@ function setupTabs(){
   renderControls(); renderCards(); renderMain(); renderGrid(); renderScaling(); renderHeatmaps();
   renderDecision(); renderProvenance(); renderCoverage(); renderSensitivity(); renderFailed();
   renderNccl('all_reduce','allreduce'); renderNccl('all_gather','allgather');  // family=nccl tabs (no-op if empty)
+  renderOffload(); renderCopyEngine(); renderKvCache();   // data-movement collective tabs (no-op if empty)
   setupTabs();
 })();
 """
@@ -1270,10 +1556,16 @@ def main() -> int:
     nccl_series = load_nccl_series(args.results_dir)
     nccl_ops = {s["op"] for s in nccl_series}
     has_ar, has_ag = "all_reduce" in nccl_ops, "all_gather" in nccl_ops
+    # Data-movement collective families (follow-up): CPU<->GPU offload, copy-engine/SDMA, KV-cache.
+    # ADDITIVE + independent of the family=moe series; an empty list leaves the tab as a placeholder.
+    offload_series = load_offload_series(args.results_dir)
+    copyengine_series = load_copy_engine_series(args.results_dir)
+    kvcache_series = load_kvcache_series(args.results_dir)
+    has_offload, has_copy, has_kv = bool(offload_series), bool(copyengine_series), bool(kvcache_series)
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     # Tab nav (goal P3-C): real clickable tabs. Built suites are enabled; not-yet-built collective
-    # suites are disabled "coming soon" placeholders so the framework's scope is visible. All-reduce /
-    # All-gather enable as soon as a family=nccl sweep for that op is present (else stay disabled).
+    # suites are disabled "coming soon" placeholders so the framework's scope is visible. Each
+    # collective tab enables as soon as a result for its family lands (else stays disabled).
     def _navbtn(tab, label, enabled):
         return (f'<button data-tab="{tab}">{label}</button>' if enabled
                 else f'<button disabled title="no {label} results yet">{label}</button>')
@@ -1281,11 +1573,12 @@ def main() -> int:
               '<button data-tab="tab-ep" class="on">EP dispatch / combine</button>'
               '<button data-tab="tab-decision">Decision</button>'
               '<button data-tab="tab-evidence">Evidence</button>'
-              '<button disabled title="suite not built yet">KV-cache transfer</button>'
               + _navbtn("tab-allreduce", "All-reduce", has_ar)
               + _navbtn("tab-allgather", "All-gather", has_ag)
+              + _navbtn("tab-offload", "CPU-GPU offload", has_offload)
+              + _navbtn("tab-kvcache", "KV-cache transfer", has_kv)
+              + _navbtn("tab-copyengine", "Copy-engine / SDMA", has_copy)
               + '<button disabled title="suite not built yet">RL mesh</button>'
-              '<button disabled title="suite not built yet">Copy-engine / SDMA</button>'
               '</div>')
     # Tab panels. EP = the existing chart + grid + scaling + heatmaps (unchanged behavior).
     tab_ep = ('<div class="tab on" id="tab-ep">'
@@ -1313,21 +1606,37 @@ def main() -> int:
     tab_allgather = ('<div class="tab" id="tab-allgather">'
                      '<p class="sub">Standardized NCCL <b>all-gather</b> (nccl-tests): bus bandwidth vs payload and op-time vs message size. One line per (SKU, topology-class, transport).</p>'
                      '<div id="allgather"></div></div>')
-    placeholder = ('<p class="note">The remaining collective suites (KV-cache transfer, RL mesh, '
-                   'copy-engine / SDMA) are part of the CollectiveX framework but have no results yet — '
-                   'their tabs are disabled placeholders until the suites land.</p>')
+    # Data-movement collective tabs: bodies rendered by renderColl() at boot + on tab show. Zero-data safe.
+    tab_offload = ('<div class="tab" id="tab-offload">'
+                   '<p class="sub">CPU↔GPU <b>offload</b>: host-to-device + device-to-host copy bandwidth/latency, <b>pinned vs pageable</b> host memory. One line per (SKU, op, host-memory).</p>'
+                   '<div id="offload"></div></div>')
+    tab_kvcache = ('<div class="tab" id="tab-kvcache">'
+                   '<p class="sub"><b>KV-cache</b> block transfer: <b>paged vs contiguous</b> layout across directions (D→H / H→D / device-local / device-remote). One line per (SKU, direction, layout, backend).</p>'
+                   '<div id="kvcache"></div></div>')
+    tab_copyengine = ('<div class="tab" id="tab-copyengine">'
+                      '<p class="sub"><b>Copy-engine / SDMA</b> vs SM-driven copy at matched op/size — the copy-engine reaches near-peak bandwidth using almost no SMs. One line per (SKU, op, engine).</p>'
+                      '<div id="copyengine"></div></div>')
+    placeholder = ('<p class="note">The remaining collective suite (RL mesh) is part of the '
+                   'CollectiveX framework but has no results yet — its tab is a disabled placeholder '
+                   'until the suite lands.</p>')
     html = HEAD \
         + '<div class="cards" id="cards"></div>' \
-        + tabnav + tab_ep + tab_decision + tab_evidence + tab_allreduce + tab_allgather + placeholder \
+        + tabnav + tab_ep + tab_decision + tab_evidence + tab_allreduce + tab_allgather \
+        + tab_offload + tab_kvcache + tab_copyengine + placeholder \
         + '<p class="note">Self-contained (inline SVG, no external scripts). Generated from ' \
-        + f'{len(series)} EP sweeps' + (f' + {len(nccl_series)} NCCL sweeps' if nccl_series else '') + '. ' \
+        + f'{len(series)} EP sweeps' + (f' + {len(nccl_series)} NCCL sweeps' if nccl_series else '') \
+        + (f' + {len(offload_series)} offload + {len(copyengine_series)} copy-engine + {len(kvcache_series)} KV-cache lines'
+           if (has_offload or has_copy or has_kv) else '') + '. ' \
         + 'Latency (p50/p90/p99 selector) is the primary EP metric; the EP ' \
         + 'bandwidth axis is a LOGICAL routed-payload rate (per-op bytes ÷ latency), not bus/alg ' \
-        + 'bandwidth. The All-reduce / All-gather tabs show stock-NCCL bus bandwidth + op time. ' \
-        + 'dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
+        + 'bandwidth. The All-reduce / All-gather + offload / copy-engine / KV-cache tabs show measured ' \
+        + 'bandwidth + latency vs transfer size. dtype/mode/resource/contract vary per line — see labels + provenance.</p>' \
         + "<script>\nconst DATA = " + json.dumps(series) + ";\nconst SENS = " + json.dumps(sens_rows) \
         + ";\nconst FAILED = " + json.dumps(failed) + ";\nconst DECISION = " + json.dumps(decision) \
         + ";\nconst CARDS = " + json.dumps(cards) + ";\nconst NCCL = " + json.dumps(nccl_series) \
+        + ";\nconst OFFLOAD = " + json.dumps(offload_series) \
+        + ";\nconst COPYENGINE = " + json.dumps(copyengine_series) \
+        + ";\nconst KVCACHE = " + json.dumps(kvcache_series) \
         + ";\n" + JS + "\n</script>\n" + TAIL
     with open(args.out, "w") as fh:
         fh.write(html)
