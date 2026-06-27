@@ -187,8 +187,10 @@ append_lm_eval_summary
 - Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
-- Knobs: `SWEBENCH_DATASET`, `SWEBENCH_TASK_NAME`, `SWEBENCH_MAX_WORKERS`,
-  `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only).
+- Knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
+  `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only). The
+  scoring dataset is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
+  `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
 - **Requires Docker + ~120 GB disk on the scoring host.** This is an MVP; the single-shot prompt and
   diff extraction still need tuning to reach published resolved-rates, and the `thresholds.json` entry
   needs calibration from a baseline run.

@@ -977,8 +977,10 @@ META
 # pipeline (append_lm_eval_summary / collect / validate) is unchanged.
 #
 # Env knobs:
-#   SWEBENCH_DATASET       (default princeton-nlp/SWE-bench_Lite)
-#   SWEBENCH_TASK_NAME     (default swebench_lite)
+#   SWEBENCH_TASK_NAME     (default swebench_lite) selects utils/evals/<name>.yaml
+#   SWEBENCH_DATASET       optional; must equal the YAML's dataset_path (the
+#                          scoring dataset is derived from the YAML so generation
+#                          and scoring never diverge) -- mismatch fails fast
 #   SWEBENCH_MAX_WORKERS   (default 4) harness Docker workers
 #   SWEBENCH_NAMESPACE     pass "" on arm/Mac to build images locally
 #   SWEBENCH_SKIP_SCORE    "true" => generate + stage predictions only, no Docker
@@ -989,10 +991,29 @@ run_swebench_eval() {
     local gen_dir
     gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
 
+    # Keep the scoring dataset in lockstep with the generation YAML: the harness
+    # must score against the same instance set lm-eval generated patches for, or
+    # the instance IDs won't match. Derive it from the task YAML; if
+    # SWEBENCH_DATASET is set it must agree (fail-fast rather than mis-score).
+    local yaml_path="${EVAL_TASKS_DIR:-utils/evals/${task_name}.yaml}"
+    local dataset
+    dataset=$(awk '/^dataset_path:[[:space:]]/{print $2; exit}' "$yaml_path" 2>/dev/null)
+    if [ -z "$dataset" ]; then
+        echo "ERROR: could not read dataset_path from ${yaml_path}" >&2
+        rm -rf "$gen_dir" 2>/dev/null || true
+        return 1
+    fi
+    if [ -n "${SWEBENCH_DATASET:-}" ] && [ "${SWEBENCH_DATASET}" != "$dataset" ]; then
+        echo "ERROR: SWEBENCH_DATASET='${SWEBENCH_DATASET}' disagrees with ${yaml_path} dataset_path='${dataset}'." >&2
+        echo "       Generation and scoring must use the same dataset; edit the YAML or unset SWEBENCH_DATASET." >&2
+        rm -rf "$gen_dir" 2>/dev/null || true
+        return 1
+    fi
+
     # 1. Generation via lm-eval (reuses endpoint wiring, _patch_lm_eval, etc.).
     #    run_lm_eval already passes --log_samples, which is what we consume.
     local prev_tasks_dir="${EVAL_TASKS_DIR:-}"
-    export EVAL_TASKS_DIR="${EVAL_TASKS_DIR:-utils/evals/${task_name}.yaml}"
+    export EVAL_TASKS_DIR="$yaml_path"
     local gen_rc=0
     run_lm_eval "$@" --results-dir "$gen_dir" || gen_rc=$?
     export EVAL_TASKS_DIR="$prev_tasks_dir"
@@ -1031,7 +1052,7 @@ run_swebench_eval() {
         --out-dir "$out_dir" \
         --model-name "${MODEL_NAME:-$MODEL}" \
         --task-name "$task_name" \
-        --dataset-name "${SWEBENCH_DATASET:-princeton-nlp/SWE-bench_Lite}" \
+        --dataset-name "$dataset" \
         --max-workers "${SWEBENCH_MAX_WORKERS:-4}" \
         --lm-eval-version "$lm_eval_version" \
         ${SWEBENCH_NAMESPACE+--namespace "$SWEBENCH_NAMESPACE"} \

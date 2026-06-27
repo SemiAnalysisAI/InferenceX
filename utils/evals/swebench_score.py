@@ -39,6 +39,44 @@ _FENCED_DIFF_RE = re.compile(
 )
 _DIFF_GIT_RE = re.compile(r"(?:^|\n)(diff --git .*)", re.DOTALL)
 
+# Line prefixes that belong to a (git) unified-diff body. Anything else marks
+# the end of the patch.
+_DIFF_LINE_PREFIXES = (
+    "diff ", "index ", "--- ", "+++ ", "@@", "+", "-", " ", "\\",
+    "old mode ", "new mode ", "new file mode ", "deleted file mode ",
+    "rename ", "copy ", "similarity ", "dissimilarity ",
+    "Binary files ", "GIT binary patch",
+)
+
+
+def _trim_to_diff_body(text: str) -> str:
+    """Keep only the leading run of diff-shaped lines, dropping trailing prose.
+
+    Models frequently emit a bare patch followed by an explanation ("Notes:",
+    "This fixes #123."). With no terminator that tail gets glued onto the patch
+    and rejected by ``git apply``, scoring the instance unresolved. Blank lines
+    are kept only when the diff resumes after them; a blank line followed by
+    non-diff text ends the patch.
+    """
+    lines = text.splitlines()
+    out: list[str] = []
+    i, n = 0, len(lines)
+    while i < n:
+        if lines[i].startswith(_DIFF_LINE_PREFIXES):
+            out.append(lines[i])
+            i += 1
+            continue
+        if lines[i] == "":
+            j = i
+            while j < n and lines[j] == "":
+                j += 1
+            if j < n and lines[j].startswith(_DIFF_LINE_PREFIXES):
+                out.extend(lines[i:j])  # interior blank line(s); diff resumes
+                i = j
+                continue
+        break  # trailing blank(s)+prose, or any other non-diff line
+    return "\n".join(out)
+
 
 def extract_patch(text: str) -> str:
     """Pull a unified diff out of a model generation.
@@ -50,19 +88,28 @@ def extract_patch(text: str) -> str:
     """
     if not text:
         return ""
+
+    def _finish(body: str) -> str:
+        body = _trim_to_diff_body(body).strip("\n")
+        return body + "\n" if body else ""
+
     # 1. Prefer a fenced block that actually looks like a diff.
     for match in _FENCED_DIFF_RE.finditer(text):
         body = match.group("body")
         if "diff --git" in body or body.lstrip().startswith(("--- ", "+++ ")):
-            return body.strip("\n") + "\n"
-    # 2. Fall back to the first ``diff --git`` to end-of-text.
+            return _finish(body)
+    # 2. Fall back to a bare ``diff --git``, trimmed to the diff body so
+    #    trailing prose can't corrupt the patch.
     git_match = _DIFF_GIT_RE.search(text)
     if git_match:
-        return git_match.group(1).strip("\n") + "\n"
-    # 3. Last resort: a lone fenced block, or the raw text.
+        trimmed = _finish(git_match.group(1))
+        if trimmed:
+            return trimmed
+    # 3. Last resort: a lone fenced block (fence-bounded), or the raw text.
     lone = _FENCED_DIFF_RE.search(text)
     if lone:
-        return lone.group("body").strip("\n") + "\n"
+        body = lone.group("body").strip("\n")
+        return body + "\n" if body else ""
     return text.strip("\n") + "\n" if text.strip() else ""
 
 

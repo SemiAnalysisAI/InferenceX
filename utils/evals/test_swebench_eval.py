@@ -40,6 +40,33 @@ def test_extract_patch_bare_diff_git():
     assert "no fence" not in patch
 
 
+def test_extract_patch_bare_diff_strips_trailing_prose():
+    # A bare diff followed by an explanation must not glue the prose onto the
+    # patch (git apply would reject it -> instance scored unresolved).
+    text = (
+        "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1 +1 @@\n-old\n+new\n"
+        "\nNotes:\nThis fixes #123.\n"
+    )
+    patch = sbs.extract_patch(text)
+    assert patch.rstrip().endswith("+new")
+    assert "Notes:" not in patch
+    assert "This fixes" not in patch
+
+
+def test_extract_patch_keeps_multi_file_and_interior_context():
+    # Multiple files + a blank context line (represented as " ") stay intact.
+    text = (
+        "```diff\n"
+        "diff --git a/a b/a\n@@ -1,2 +1,2 @@\n context\n-x\n+y\n"
+        "diff --git a/b b/b\n@@ -1 +1 @@\n-p\n+q\n"
+        "```\nthanks!"
+    )
+    patch = sbs.extract_patch(text)
+    assert "diff --git a/a b/a" in patch
+    assert "diff --git a/b b/b" in patch
+    assert "thanks" not in patch
+
+
 def test_extract_patch_empty_when_no_diff():
     assert sbs.extract_patch("") == ""
     # Prose with no diff markers falls back to the raw text (harness will reject).
