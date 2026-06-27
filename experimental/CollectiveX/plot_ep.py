@@ -104,6 +104,15 @@ def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
         # variant of zipf; uniform is the baseline (omitted from the label to keep it short).
         eplb_doc = d.get("eplb") or {}
         routing_disp = f'{sh.get("routing", "?")}+eplb' if eplb_doc.get("enabled") else sh.get("routing", "?")
+        # temporal step + uneven allocation are distinct workloads — fold into the routing label so
+        # moving-hotspot snapshots / uneven variants draw as separate lines, not overlaid.
+        _repro = d.get("reproduction") or {}
+        _step = _repro.get("routing_step", 0)
+        _uneven = _repro.get("uneven_tokens", "none")
+        if _step:
+            routing_disp += f"@s{_step}"
+        if _uneven != "none":
+            routing_disp += f"·{_uneven}"
         rt = "" if routing_disp == "uniform" else f' ·{routing_disp}'
         # FULL per-line label: SKU·EP·backend·dtype[·LL][·resource][·cached-layout][·routing].
         # EP is explicit because a SKU can span EP degrees (GB300 EP4 on one NVL72 tray, EP8

@@ -85,8 +85,11 @@ fire_tuple() {  # pipe-separated tuple
   IFS='|' read -r sku beng phase dtype mode contract routing eplb rmode act placement rstep uneven hidden topk experts lad <<<"$1"
   local a=( -f sku="$sku" -f benchmark="$beng" -f phase="$phase" -f dispatch_dtype="$dtype"
             -f mode="$mode" -f contract="$contract" -f routing="$routing" -f resource_mode="$rmode"
-            -f canonical=true -f activation_profile="$act" -f placement="$placement"
-            -f uneven_tokens="$uneven" )
+            -f activation_profile="$act" -f placement="$placement" -f uneven_tokens="$uneven" )
+  # canonical workload requires a fixed serialized trace: incompatible with uneven allocation
+  # (variable per-rank gt) AND with routing_step != 0 (make_workloads has no step-specific trace).
+  # Those diagnostic suites run seeded-runtime (comparable-experimental).
+  [ "$uneven" = none ] && [ "$rstep" = 0 ] && a+=( -f canonical=true )
   [ "$eplb" = true ] && a+=( -f eplb=true )
   [ "$rstep" != 0 ] && a+=( -f routing_step="$rstep" )
   [ -n "$hidden" ]   && a+=( -f hidden="$hidden" )

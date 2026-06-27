@@ -167,11 +167,17 @@ def main() -> int:
             continue
         errs, warns, status = validate_doc(doc, schema, f)
         ck = doc.get("comparison_key")
-        if ck:
+        # routing_step (temporal) + uneven_tokens change the realized workload but are NOT in the
+        # comparison_key (they live in reproduction) — include them in the cross-run grouping so a
+        # moving-hotspot step / uneven-allocation variant isn't falsely flagged as a conflicting
+        # same-config workload.
+        repro = doc.get("reproduction") or {}
+        gk = (ck, repro.get("routing_step", 0), repro.get("uneven_tokens", "none")) if ck else None
+        if gk:
             for r in doc.get("rows", []):
                 T, rh = r.get("tokens_per_rank"), r.get("routing_hash")
                 if T is not None and rh:
-                    by_ck.setdefault(ck, {}).setdefault(T, {}).setdefault(rh, []).append(os.path.basename(f))
+                    by_ck.setdefault(gk, {}).setdefault(T, {}).setdefault(rh, []).append(os.path.basename(f))
         tag = "OK" if not errs else "FAIL"
         if errs:
             bad += 1
@@ -184,11 +190,12 @@ def main() -> int:
             print(f"        note: {w}")
     # report cross-run identity CONFLICTS: same comparison_key + same T but DIFFERENT routing bytes
     # (a genuine "not the same workload" — different hardware ran different routing for one point).
-    for ck, perT in by_ck.items():
+    for gk, perT in by_ck.items():
+        ck = gk[0]
         conflicts = {T: hs for T, hs in perT.items() if len(hs) > 1}
         if conflicts:
             bad += 1
-            print(f"[FAIL] comparison_key {ck[:12]}: per-T routing-hash CONFLICT — not the same workload:")
+            print(f"[FAIL] comparison_key {ck[:12]} (step={gk[1]},uneven={gk[2]}): per-T routing-hash CONFLICT — not the same workload:")
             for T, hs in sorted(conflicts.items()):
                 print(f"        T={T}: " + "; ".join(f"{h[:10]}=[{', '.join(fs)}]" for h, fs in hs.items()))
     print(f"\n{'FAILED' if bad else 'PASS'}: {len(files)} files, {bad} problem(s)")

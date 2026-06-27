@@ -23,7 +23,7 @@ esac; done
 
 if [ -z "$RUNS" ]; then
   [ -n "$SINCE" ] || { echo "need --since <ISO8601> or --runs <ids>" >&2; exit 2; }
-  RUNS="$(gh run list --workflow="$WF" -L 100 \
+  RUNS="$(gh run list --workflow="$WF" -L "${CX_COLLECT_LIMIT:-500}" \
             --json databaseId,event,conclusion,createdAt \
             --jq "[.[] | select(.event==\"workflow_dispatch\" and .conclusion==\"success\" and .createdAt>=\"$SINCE\")] | .[].databaseId" )"
 fi

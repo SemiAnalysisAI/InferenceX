@@ -18,3 +18,5 @@ notes.md
 goal.md
 # superseded seeded-runtime GHA results (canonical counterpart exists); kept out of the plot glob
 _seeded_archive/
+# newest-good-per-config kept in results/; superseded runs moved here (out of the plot glob)
+_superseded/

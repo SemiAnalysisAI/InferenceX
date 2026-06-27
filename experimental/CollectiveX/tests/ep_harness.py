@@ -830,6 +830,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank, "dispatch_dtype": args.dispatch_dtype,
         "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
+        # temporal snapshot + uneven allocation change the realized workload, so they are part of
+        # the line identity (fold into comparison_key). Default 0/none reproduce the prior key for
+        # non-temporal even runs in spirit (the value is recorded either way).
+        "routing_step": routing_step, "uneven_tokens": uneven,
         # value distribution of expert inputs — part of the workload identity (review: quant
         # combine can be value-sensitive). "normal" today; folds into comparison_key.
         "activation_profile": args.activation_profile,
