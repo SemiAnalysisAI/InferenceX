@@ -76,10 +76,12 @@ CAP = {
 }
 # nccl/rccl are collective primitives, not EP dispatch/combine — phase is meaningless.
 COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
-# Single-process host/GPU memcpy-family benchmarks (family != moe): not EP backends, so the
-# EP capability axes (mode/dtype/contract/phase) don't apply — they pass validation unconditionally
-# on NVIDIA. (offload/copy-engine are NVIDIA-only; kv-cache raw-memcpy runs anywhere with CUDA.)
-HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia"], "kv-cache": ["nvidia", "amd"]}
+# Non-EP benchmarks (family != moe): memcpy-family (offload/copy-engine/kv-cache) + the RL
+# trainer<->generator mesh transfer (rl-mesh, multi-process NCCL send/recv). The EP capability
+# axes (mode/dtype/contract/phase) don't apply, so they pass validation unconditionally on their
+# vendors. (offload/copy-engine are NVIDIA-only; kv-cache + rl-mesh run anywhere with CUDA/NCCL.)
+HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia"],
+                  "kv-cache": ["nvidia", "amd"], "rl-mesh": ["nvidia", "amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
 VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl"], "amd": ["rccl", "mori"]}
