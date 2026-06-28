@@ -333,10 +333,14 @@ def run_gpu(args) -> tuple[list[dict], dict, str | None]:
         return [], {}, f"torch unavailable: {exc!r}"
     if not torch.cuda.is_available():
         return [], {}, "torch.cuda.is_available() is False (no GPU in this container)"
-    # NVIDIA-only gate: AMD SDMA is explicitly out of scope.
-    if getattr(torch.version, "hip", None):
-        return [], {}, ("ROCm/HIP build detected — copy-engine bench is NVIDIA-only "
-                        "(AMD SDMA path is out of scope; refusing rather than mislabeling)")
+    # Accelerator-aware: on NVIDIA the off-SM DMA path is the copy engine; on AMD/ROCm the same
+    # async stream-copy lowers to the SDMA (System DMA) engines (the "AMD SDMA path"). The bench
+    # body is identical (torch.cuda maps to HIP); we label the DMA engine honestly per accelerator
+    # and let the non-interference probe characterize SDMA-vs-CU interference (pynvml is absent on
+    # ROCm, so _sm_validation falls back to the pure-torch non-interference path automatically).
+    is_rocm = bool(getattr(torch.version, "hip", None))
+    accel = "rocm" if is_rocm else "cuda"
+    copy_engine_kind = "sdma" if is_rocm else "copy-engine"
 
     dtype = {"float16": torch.float16, "bfloat16": torch.bfloat16,
              "float32": torch.float32}[args.dtype]
@@ -359,6 +363,9 @@ def run_gpu(args) -> tuple[list[dict], dict, str | None]:
                                         args.validation_bytes, max(10, args.iters)),
         "device_name": torch.cuda.get_device_name(0),
         "multiprocessor_count": torch.cuda.get_device_properties(0).multi_processor_count,
+        "accelerator": accel,
+        "copy_engine_kind": copy_engine_kind,   # "sdma" on AMD/ROCm, "copy-engine" on NVIDIA
+        "hip_version": getattr(torch.version, "hip", None),
     }
     return rows, diagnostics, None
 
@@ -402,6 +409,10 @@ def build_doc(args, rows: list[dict], diagnostics: dict, error: str | None) -> d
         "curve_keys": curve_keys,
         "status": "valid" if transferred else "invalid",
         "error": error,
+        # "copy-engine" on NVIDIA, "sdma" on AMD/ROCm (same off-SM DMA-engine role) — labeled so the
+        # AMD SDMA result is not conflated with the NVIDIA copy-engine result in the plot.
+        "accelerator": diagnostics.get("accelerator"),
+        "copy_engine_kind": diagnostics.get("copy_engine_kind"),
         "peak_bandwidth_gbps": round(peak_bw, 3),
         "copy_engine_uses_near_zero_sms": diagnostics.get("sm_validation", {}).get(
             "copy_engine_uses_near_zero_sms"),

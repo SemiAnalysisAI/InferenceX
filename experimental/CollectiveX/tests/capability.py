@@ -136,7 +136,7 @@ COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
 # trainer<->generator mesh transfer (rl-mesh, multi-process NCCL send/recv). The EP capability
 # axes (mode/dtype/contract/phase) don't apply, so they pass validation unconditionally on their
 # vendors. (offload/copy-engine are NVIDIA-only; kv-cache + rl-mesh run anywhere with CUDA/NCCL.)
-HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia"],
+HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia", "amd"],
                   "kv-cache": ["nvidia", "amd"], "rl-mesh": ["nvidia", "amd"],
                   "allreduce-fw": ["nvidia", "amd"],
                   # nixl = the NIXL point-to-point transfer bench (kv-cache family) + the device-EP
