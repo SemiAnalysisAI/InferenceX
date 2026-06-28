@@ -317,6 +317,55 @@ def _module_exists(name: str) -> bool:
         return False
 
 
+def _build_aiter(torch, dist, dev, world, rank, dtype):
+    """AITER (AMD) custom/quick all-reduce — aiter.dist.device_communicators.custom_all_reduce.
+    CustomAllreduce (the wrapper owns the IPC buffer), else the raw aiter.ops.custom_all_reduce.
+    Fully guarded -> skip on absence (e.g. NVIDIA image has no aiter). The AMD framework-AR tier."""
+    # (a) the AITER distributed wrapper (preferred — manages the shared IPC buffer).
+    for modpath in ("aiter.dist.device_communicators.custom_all_reduce",
+                    "aiter.dist.device_communicators.quick_all_reduce"):
+        try:
+            mod = __import__(modpath, fromlist=["x"])
+        except Exception:
+            mod = None
+        if mod is None:
+            continue
+        cls = getattr(mod, "CustomAllreduce", None) or getattr(mod, "QuickAllReduce", None) \
+            or getattr(mod, "CustomAllReduce", None)
+        if cls is None:
+            continue
+        try:
+            obj = None
+            for kwargs in ({"group": dist.group.WORLD, "device": dev},
+                           {"group": dist.group.WORLD, "device": local_device_index(dev)},
+                           {"device": dev}, {}):
+                try:
+                    obj = cls(**kwargs); break
+                except Exception:
+                    continue
+            if obj is not None:
+                for name in ("custom_all_reduce", "quick_all_reduce", "all_reduce", "__call__"):
+                    if hasattr(obj, name):
+                        method = getattr(obj, name)
+                        def run(t, _m=method):
+                            out = _m(t)
+                            if out is not None and out.data_ptr() != t.data_ptr():
+                                t.copy_(out)
+                        return {"runner": run, "free": getattr(obj, "close", None),
+                                "note": f"{modpath}.{cls.__name__}"}
+        except Exception:
+            pass
+    # (b) raw aiter.ops kernels — need an explicit IPC handle we can't reconstruct here -> record present.
+    try:
+        import aiter  # noqa: F401
+        if _module_exists("aiter.ops.custom_all_reduce"):
+            return {"runner": None, "skip": "aiter.ops.custom_all_reduce present but needs IPC-buffer "
+                                            "setup only the aiter wrapper provides (wrapper init failed)"}
+    except Exception:
+        pass
+    return {"runner": None, "skip": "aiter not importable (not in this image) / no usable custom AR wrapper"}
+
+
 def local_device_index(dev) -> int:
     return dev.index if getattr(dev, "index", None) is not None else 0
 
@@ -330,6 +379,7 @@ def _impl_registry():
         ("flashinfer-twoshot", lambda *a: _build_flashinfer(*a, variant="twoshot"), "flashinfer"),
         ("sglang", lambda *a: _build_sglang(*a), "sglang"),
         ("vllm", lambda *a: _build_vllm(*a), "vllm"),
+        ("aiter", lambda *a: _build_aiter(*a), "aiter"),
     ]
 
 
