@@ -34,6 +34,96 @@ except Exception as exc:  # pragma: no cover - needs the AMD MoRI image
           f"(rocm/sgl-dev:...-mori-...). {exc!r}", file=sys.stderr)
     raise
 
+# e4m3fnuz (the ROCm-native fp8) finite max. AMD's "fnuz" (finite, no -0/Inf/NaN-unsigned) e4m3
+# saturates at 240.0 — the dispatch fp8 cast scales each block so its amax maps to this.
+_FP8_FNUZ_MAX = 240.0
+_FP8_BLOCK = 128  # MoRI/DeepSeek blockwise fp8: one scale per 128-elem hidden block (7168%128==0)
+
+
+def _mori_quant_introspect():
+    """Describe MoRI's quant API (enum members + ctor/dispatch signatures + quant/scale helpers).
+
+    FNUZ fp8 dispatch on MoRI keys off EpDispatchCombineConfig.quant_type, which PR311 extended with
+    QuantType::Fp8BlockwiseQuant — but how that value is EXPOSED to Python (enum attr vs accepted
+    string vs int) differs by build. We print this to stderr at construction so a GHA run's log is
+    self-documenting: even if the run wedges or the quant_type guess is wrong, the next iteration has
+    MoRI's exact surface without needing interactive SSH (which stalls on the shared cluster)."""
+    import inspect
+    info = {}
+    ops = getattr(mori, "ops", None)
+    try:
+        info["config_sig"] = str(inspect.signature(mori.ops.EpDispatchCombineConfig.__init__))
+    except Exception as e:
+        info["config_sig"] = f"<err {e!r}>"
+    for meth in ("dispatch", "combine"):
+        try:
+            info[f"{meth}_sig"] = str(inspect.signature(getattr(mori.ops.EpDispatchCombineOp, meth)))
+        except Exception as e:
+            info[f"{meth}_sig"] = f"<err {e!r}>"
+    # Any enum / helper whose name mentions quant or scale (the QuantType enum + any quantize fn).
+    surface = {}
+    for nm in (dir(ops) if ops else []):
+        if nm.startswith("_"):
+            continue
+        if "quant" in nm.lower() or "scale" in nm.lower():
+            obj = getattr(ops, nm)
+            members = {}
+            for m in dir(obj):
+                if m.startswith("_"):
+                    continue
+                try:
+                    members[m] = int(getattr(obj, m))
+                except Exception:
+                    members[m] = str(type(getattr(obj, m)).__name__)
+            surface[nm] = members or str(type(obj).__name__)
+    info["quant_surface"] = surface
+    return info
+
+
+def _fp8_quant_type_candidates():
+    """Ordered (value, label) candidates for MoRI's blockwise-fp8 quant_type. The config currently
+    accepts the STRING "none", so strings are viable; we still try the typed enum first (PR311's
+    QuantType::Fp8BlockwiseQuant). __init__ keeps the first that constructs."""
+    ops = mori.ops
+    out = []
+    for enum_name in ("EpDispatchCombineQuantType", "QuantType", "DispatchCombineQuantType"):
+        enum = getattr(ops, enum_name, None)
+        if enum is None:
+            continue
+        for member in dir(enum):
+            ml = member.lower()
+            if member.startswith("_") or "fp8" not in ml:
+                continue
+            try:
+                out.append((getattr(enum, member), f"{enum_name}.{member}"))
+            except Exception:
+                pass
+    # String fallbacks (best guess first) — mirror the PR311 naming.
+    for s in ("fp8_blockwise", "Fp8BlockwiseQuant", "fp8", "Fp8"):
+        out.append((s, f"str:{s}"))
+    return out
+
+
+def _quant_blockwise_fp8_fnuz(x, block=_FP8_BLOCK):
+    """bf16 [T,H] -> (e4m3fnuz [T,H], f32 per-block scales [T,H//block]). Per-128-block amax scaling
+    onto the fnuz finite range. Caller-side quantization (MoRI transports the fp8 payload + scales;
+    the combine reduces and the harness dequantizes for the consistency-correctness gate)."""
+    T, H = x.shape
+    assert H % block == 0, f"hidden {H} not a multiple of fp8 block {block}"
+    nb = H // block
+    xb = x.float().view(T, nb, block)
+    amax = xb.abs().amax(dim=2).clamp_min(1e-8)          # [T, nb]
+    scale = amax / _FP8_FNUZ_MAX                          # f32 dequant scale
+    xq = (xb / scale.unsqueeze(2)).clamp(-_FP8_FNUZ_MAX, _FP8_FNUZ_MAX).to(torch.float8_e4m3fnuz)
+    return xq.view(T, H), scale
+
+
+def _dequant_blockwise_fp8_fnuz(xq, scale, block=_FP8_BLOCK):
+    """Inverse of _quant_blockwise_fp8_fnuz: e4m3fnuz [T,H] + f32 [T,H//block] -> bf16-range f32 [T,H]."""
+    T, H = xq.shape
+    nb = H // block
+    return (xq.float().view(T, nb, block) * scale.unsqueeze(2)).view(T, H)
+
 
 class MoRIBackend:
     name = "mori"
@@ -46,13 +136,14 @@ class MoRIBackend:
     wants_warm_burst = False
     # Capabilities — run_ep.py REJECTS anything outside these BEFORE construction (no
     # fallback/mislabel). DISPATCH precision and the SEPARATE combine path are distinct axes
-    # (review: dispatch_dtype=fp8 must NOT imply quantized combine). Today MoRI combines bf16
-    # with quant_type="none". PR311 WIRING POINT: when the ROCm/MoRI fp8 quant_type combine
-    # path is validated, add "fp8" to SUPPORTED_COMBINE_DTYPES + the mode id to
-    # SUPPORTED_COMBINE_QUANT_MODES here, flip quant_type below, and set the combine_* attrs
-    # ep_harness reads. Keep in sync with capability.py CAP["mori"].
-    SUPPORTED_DISPATCH_DTYPES = {"bf16"}        # + "fp8" once a dispatch-side fp8 cast is wired
-    SUPPORTED_COMBINE_DTYPES = {"bf16"}         # + "fp8" once the PR311 quant combine lands
+    # (review: dispatch_dtype=fp8 must NOT imply quantized combine). bf16 is the default; fp8
+    # routes the AMD-native blockwise path (QuantType::Fp8BlockwiseQuant, MoRI PR311) — caller-side
+    # e4m3fnuz block-128 quantization transported through the MoRI A2A, dequantized for the
+    # consistency-correctness gate. The combine OUTPUT stays bf16 (quant_type drives transport, the
+    # reduction emits bf16) so SUPPORTED_COMBINE_DTYPES is unchanged. Keep in sync with
+    # capability.py CAP["mori"].
+    SUPPORTED_DISPATCH_DTYPES = {"bf16", "fp8"}  # fp8 = e4m3fnuz blockwise (FNUZ dispatch variant)
+    SUPPORTED_COMBINE_DTYPES = {"bf16"}         # + "fp8" once the PR311 quant combine OUTPUT lands
     SUPPORTED_COMBINE_QUANT_MODES = {"none"}    # + the PR311 mode id once validated
     SUPPORTED_PRECISIONS = SUPPORTED_DISPATCH_DTYPES  # back-compat alias (run_ep.py / older refs)
     SUPPORTED_MODES = {"normal"}           # MoRI has no separate low-latency entrypoint
@@ -114,17 +205,59 @@ class MoRIBackend:
         mori.shmem.shmem_torch_process_group_init("default")
 
         self._cap = self.buffer_cap(args)
+        # Dispatch precision: bf16 (quant_type="none", scale_dim=0) or fp8 (e4m3fnuz blockwise — the
+        # FNUZ variant). For fp8 we DUMP MoRI's quant API to stderr (the GHA log is then self-
+        # documenting even if the run wedges or the guess is wrong — SSH inspection stalls on the
+        # shared cluster) and resolve quant_type by trying candidates until the config constructs.
+        self._fp8 = (args.dispatch_dtype == "fp8")
+        self._quant_label = "none"
+        scale_dim = 0
+        quant_type = "none"
+        if self._fp8:
+            import json as _json
+            print("MORI_QUANT_API " + _json.dumps(_mori_quant_introspect()), file=sys.stderr, flush=True)
+            assert args.hidden % _FP8_BLOCK == 0, f"hidden {args.hidden} not divisible by fp8 block {_FP8_BLOCK}"
+            scale_dim = args.hidden // _FP8_BLOCK
+            cands = _fp8_quant_type_candidates()
+            print(f"MORI_FP8_CANDIDATES {[l for _, l in cands]}", file=sys.stderr, flush=True)
+            for val, label in cands:
+                try:
+                    mori.ops.EpDispatchCombineConfig(
+                        data_type=torch.bfloat16, rank=rank, world_size=world_size,
+                        hidden_dim=args.hidden, scale_dim=scale_dim,
+                        scale_type_size=torch.tensor([], dtype=torch.float32).element_size(),
+                        max_token_type_size=torch.tensor([], dtype=torch.float32).element_size(),
+                        max_num_inp_token_per_rank=max(512, self._cap),
+                        num_experts_per_rank=self.experts_per_rank,
+                        num_experts_per_token=args.topk,
+                        use_external_inp_buf=False, quant_type=val)
+                    quant_type, self._quant_label = val, label
+                    break
+                except Exception as e:
+                    print(f"MORI_FP8_REJECT {label}: {e!r}", file=sys.stderr, flush=True)
+            if quant_type == "none":
+                raise RuntimeError("no MoRI quant_type candidate accepted for fp8 blockwise — see "
+                                   "MORI_QUANT_API above for this build's actual quant surface")
+            print(f"MORI_FP8_QUANT_TYPE {self._quant_label}", file=sys.stderr, flush=True)
+            self.fp8_in_timing = True  # caller-side cast, cached on the problem (untimed steady state)
+        # fp8 carries a per-block f32 scale; bf16 keeps the 1-byte sentinel the bring-up used.
+        _scale_elt = torch.tensor([], dtype=(torch.float32 if self._fp8 else torch.float8_e4m3fnuz)).element_size()
         self.config = mori.ops.EpDispatchCombineConfig(
             data_type=torch.bfloat16, rank=rank, world_size=world_size,
-            hidden_dim=args.hidden, scale_dim=0,
-            scale_type_size=torch.tensor([], dtype=torch.float8_e4m3fnuz).element_size(),
+            hidden_dim=args.hidden, scale_dim=scale_dim,
+            scale_type_size=_scale_elt,
             max_token_type_size=torch.tensor([], dtype=torch.float32).element_size(),
             max_num_inp_token_per_rank=max(512, self._cap),
             num_experts_per_rank=self.experts_per_rank,
             num_experts_per_token=args.topk,
-            use_external_inp_buf=False, quant_type="none",
+            use_external_inp_buf=False, quant_type=quant_type,
         )
         self.op = mori.ops.EpDispatchCombineOp(self.config)
+        # fp8 blockwise carries fp8 quant error -> loosen the correctness gate to the fp8 class
+        # (the harness reads backend.tolerance; bf16 default 5e-2). The combine reduces the
+        # (dequantized) payload per rank, compared against x*unique_ranks within this tolerance class.
+        if self._fp8:
+            self.tolerance = 1.5e-1
         # Provenance: MoRI has no pip version; pin via MORI_COMMIT, else the image tag
         # the launcher exported (COLLECTIVEX_IMAGE carries the mori build tag), so the
         # provenance gate has something real rather than "unknown".
@@ -139,6 +272,10 @@ class MoRIBackend:
             "dispatch_warps": self.dispatch_warps, "combine_warps": self.combine_warps,
             "device_cus": dev_cus, "sm_fraction": (self.block_num / dev_cus),
             "tuned_source": self._tuned_source,
+            "dispatch_dtype": args.dispatch_dtype,
+            "quant_type": self._quant_label,
+            "fp8_format": ("e4m3fnuz" if self._fp8 else None),
+            "fp8_block": (_FP8_BLOCK if self._fp8 else None),
         }
 
     def buffer_cap(self, args):
@@ -148,22 +285,37 @@ class MoRIBackend:
 
     def make_problem(self, T, idx, weights, x):
         # Shared-trace slice: idx[T,topk] -> int32 (MoRI expects int32 expert ids);
-        # weights[T,topk] f32; x[T,hidden] bf16; scales is a real (T,0) fp8 tensor
-        # (not None) since scale_dim==0.
+        # weights[T,topk] f32; x[T,hidden] bf16. bf16: scales is the (T,0) fp8 sentinel (scale_dim==0).
+        # fp8: a sized [T, hidden/128] f32 scale buffer (scale_dim>0) the blockwise-fp8 kernel uses.
         indices = idx.to(torch.int32)
-        scales = torch.empty((T, 0), dtype=torch.float8_e4m3fnuz, device=self.device)
+        if self._fp8:
+            nb = x.size(1) // _FP8_BLOCK
+            scales = torch.empty((T, nb), dtype=torch.float32, device=self.device)
+        else:
+            scales = torch.empty((T, 0), dtype=torch.float8_e4m3fnuz, device=self.device)
         return types.SimpleNamespace(T=T, x=x, indices=indices,
                                      weights=weights.to(torch.float32), scales=scales)
 
     def dispatch(self, p):
-        (dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num) = self.op.dispatch(
+        (dispatch_output, dispatch_weights, out_scales, dispatch_indices, recv_num) = self.op.dispatch(
             p.x, p.weights, p.scales, p.indices,
             block_num=self.block_num, warp_per_block=self.dispatch_warps)
         total_recv = int(recv_num[0].item())  # read BEFORE combine (combine resets recv_num)
+        # Form the bf16 combine input. If the blockwise-fp8 kernel returned an fp8 payload (+ its
+        # per-block scales), dequant it; if it already dequantized to bf16, use it directly. Both
+        # the bf16 path and the kernel-dequantized fp8 path land here as a plain .to(bf16).
+        if dispatch_output.dtype in (torch.float8_e4m3fnuz, torch.float8_e4m3fn):
+            deq = _dequant_blockwise_fp8_fnuz(dispatch_output[:total_recv].contiguous(),
+                                              out_scales[:total_recv].contiguous().to(torch.float32))
+            combine_input = torch.zeros((dispatch_output.size(0), dispatch_output.size(1)),
+                                        dtype=torch.bfloat16, device=self.device)
+            combine_input[:total_recv] = deq.to(torch.bfloat16)
+        else:
+            combine_input = dispatch_output.to(torch.bfloat16)
         return types.SimpleNamespace(
             dispatch_output=dispatch_output, dispatch_weights=dispatch_weights,
             dispatch_indices=dispatch_indices, total_recv=total_recv,
-            combine_input=dispatch_output.to(torch.bfloat16))
+            combine_input=combine_input)
 
     def stage(self, p, h):
         # comm-only contract: stage the "expert outputs" into MoRI's registered

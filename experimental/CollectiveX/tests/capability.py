@@ -118,7 +118,10 @@ CAP = {
     "mori": {
         "vendors": ["amd"],
         "modes": ["normal"],
-        "dtypes": ["bf16"],                   # DISPATCH-side precision
+        # DISPATCH-side precision. fp8 = e4m3fnuz blockwise (the ROCm-native FNUZ format) via MoRI's
+        # quant_type=Fp8BlockwiseQuant (PR311); ep_mori.py resolves the exact quant_type at runtime
+        # and dumps MoRI's quant API to the log. bf16 combine OUTPUT unchanged (combine_dtypes below).
+        "dtypes": ["bf16", "fp8"],
         "contracts": ["layout-and-dispatch-v1"],
         "transports": ["xgmi", "rdma"],
         "combine_dtypes": ["bf16"],           # + "fp8" via MoRI PR311 (merged): QuantType::Fp8BlockwiseQuant
