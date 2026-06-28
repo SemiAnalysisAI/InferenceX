@@ -139,6 +139,9 @@ run_ep_suite() {
   local mn_args=""
   if [ -n "${CX_NNODES:-}" ] && [ "${CX_NNODES}" -gt 1 ]; then
     mn_args="--nnodes=${CX_NNODES} --node-rank=${CX_NODE_RANK:-0} --master-addr=${CX_MASTER_ADDR:-127.0.0.1} --master-port=${CX_MASTER_PORT:-29500}"
+    # pin the gloo/NCCL TCP bootstrap to the routable NIC (the hostname may be loopback-aliased).
+    # shellcheck source=_xnode_net.sh
+    source runtime/_xnode_net.sh 2>/dev/null || true
     cx_log "multi-node torchrun: $mn_args (cross-node EP, world=$((CX_NNODES*CX_NGPUS)))"
   fi
   for phase in $phases; do

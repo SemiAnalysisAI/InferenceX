@@ -116,7 +116,9 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
   MA="$(scontrol show node "$_mn" 2>/dev/null | grep -oE 'NodeAddr=[^ ]+' | head -1 | cut -d= -f2)"; [ -z "$MA" ] && MA="$_mn"; MP=29557
   cx_log "rendezvous master node=$_mn addr=$MA:$MP"
   phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
-  WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; cd /ix/experimental/CollectiveX; exec python3 tests/run_ep.py "$@"'
+  # source _xnode_net.sh inside each rank: pins GLOO/NCCL_SOCKET_IFNAME to the routable 10.x NIC so
+  # gloo's per-rank connectFullMesh advertises the reachable iface (not the 127.0.1.1 hostname alias).
+  WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; cd /ix/experimental/CollectiveX; source runtime/_xnode_net.sh 2>/dev/null || true; exec python3 tests/run_ep.py "$@"'
   rc=0
   for ph in $phases; do
     out="results/${RUNNER_NAME}_${CX_BENCH}_${ph}_${TS}.json"
