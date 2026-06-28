@@ -102,6 +102,19 @@ CAP = {
         "quant_modes": ["none"],
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
+    "deepep-hybrid": {
+        # DeepEP hybrid-ep branch (NVIDIA TMA HybridEPBuffer), built from source by
+        # cx_build_deepep_hybrid. Intranode NVLink path (<=8 ranks, one NVLink domain). bf16 normal
+        # layout-and-dispatch only; fp8 (use_fp8) + internode NVLink<->RDMA forwarding are further lift.
+        "vendors": ["nvidia"],
+        "modes": ["normal"],
+        "dtypes": ["bf16"],
+        "contracts": ["layout-and-dispatch-v1"],
+        "transports": ["nvlink"],
+        "combine_dtypes": ["bf16"],
+        "quant_modes": ["none"],
+        "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
+    },
     "mori": {
         "vendors": ["amd"],
         "modes": ["normal"],

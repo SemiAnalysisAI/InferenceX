@@ -28,7 +28,8 @@ import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
-    ap.add_argument("--backend", required=True, choices=["deepep", "mori", "uccl", "flashinfer"])
+    ap.add_argument("--backend", required=True,
+                    choices=["deepep", "deepep-hybrid", "mori", "uccl", "flashinfer"])
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
@@ -86,6 +87,8 @@ def main() -> int:
         from ep_uccl import UCCLBackend as Backend
     elif args.backend == "flashinfer":
         from ep_flashinfer import FlashInferBackend as Backend
+    elif args.backend == "deepep-hybrid":
+        from ep_deepep_hybrid import DeepEPHybridBackend as Backend
     else:
         from ep_deepep import DeepEPBackend as Backend
     if args.num_ep_groups != 1:

@@ -188,6 +188,36 @@ cx_build_deepep_v2() {
   cx_log "DeepEP V2 ready ($DEEPEP_COMMIT)"
 }
 
+# Build the DeepEP `hybrid-ep` branch (NVIDIA's TMA-based impl: HybridEPBuffer, intranode NVLink +
+# internode RDMA/NIXL). Three container-specific fixes, all probe-confirmed on the B300 sglang image:
+#   1. CUDA-13 moved cccl/libcudacxx headers to <cuda>/include/cccl/ (not on nvcc's default path) —
+#      its nvshmem_tensor.h #includes <cuda/std/tuple> -> add that dir via CPATH/NVCC_PREPEND_FLAGS.
+#   2. The final link wants -l:libnvshmem_host.so but the bundled nvshmem ships only .so.3 -> create
+#      the unversioned symlink.
+#   3. NVSHMEM_DIR set to the bundled nvshmem enables build; unset => intranode-only (internode/LL off).
+# Intranode HybridEPBuffer (single NVLink domain, <=8 ranks) needs no multi-node/NVSHMEM bring-up.
+cx_build_deepep_hybrid() {
+  local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*|b200*) arch="10.0";; esac
+  cx_log "DeepEP hybrid-ep: building NVIDIA TMA branch from source (TORCH_CUDA_ARCH_LIST=$arch)"
+  export PIP_BREAK_SYSTEM_PACKAGES=1
+  export NVSHMEM_DIR="$(python3 -c 'import os,nvidia.nvshmem as n; print(os.path.dirname(n.__file__))' 2>/dev/null || echo /usr/local/lib/python3.12/dist-packages/nvidia/nvshmem)"
+  local cccl; cccl="$(echo /usr/local/cuda*/targets/*/include/cccl | awk '{print $1}')"
+  [ -d "$cccl" ] && { export CPATH="$cccl:${CPATH:-}"; export NVCC_PREPEND_FLAGS="-I$cccl ${NVCC_PREPEND_FLAGS:-}"; }
+  [ -e "$NVSHMEM_DIR/lib/libnvshmem_host.so.3" ] && ln -sf libnvshmem_host.so.3 "$NVSHMEM_DIR/lib/libnvshmem_host.so" 2>/dev/null || true
+  export LD_LIBRARY_PATH="$NVSHMEM_DIR/lib:${LD_LIBRARY_PATH:-}"
+  rm -rf /tmp/DeepEP_hybrid
+  git clone --depth 1 --branch hybrid-ep https://github.com/deepseek-ai/DeepEP /tmp/DeepEP_hybrid >&2 2>&1 \
+    || { cx_log "ERROR: hybrid-ep git clone failed"; return 1; }
+  export DEEPEP_COMMIT="hybrid-$(git -C /tmp/DeepEP_hybrid rev-parse --short HEAD 2>/dev/null || echo hybrid-ep)"
+  ( cd /tmp/DeepEP_hybrid && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+      python3 setup.py build_ext --inplace ) >&2 2>&1 \
+    || { cx_log "ERROR: hybrid-ep build failed (arch=$arch; cccl/nvshmem?)"; return 1; }
+  export PYTHONPATH="/tmp/DeepEP_hybrid:${PYTHONPATH:-}"
+  python3 -c "import deep_ep; assert hasattr(deep_ep,'HybridEPBuffer'); print('built hybrid-ep deep_ep', getattr(deep_ep,'__version__','?'))" >&2 \
+    || { cx_log "ERROR: hybrid-ep import / HybridEPBuffer missing after build"; return 1; }
+  cx_log "DeepEP hybrid-ep ready ($DEEPEP_COMMIT)"
+}
+
 # UCCL EP (uccl.ep.Buffer is a DeepEP-API clone). The prebuilt wheel is cu12; on a cu13
 # image its kernels need a cu12 CUDA runtime on LD_LIBRARY_PATH (probe-confirmed). PEP-668
 # images need PIP_BREAK_SYSTEM_PACKAGES. Best-effort; failure to import fails loudly.
@@ -267,6 +297,12 @@ run_uccl_suite() {
   cx_build_uccl || { cx_log "WARN: UCCL EP setup failed — cannot run uccl"; return 1; }
   run_ep_suite uccl
 }
+run_deepep_hybrid_suite() {
+  # DeepEP hybrid-ep branch (NVIDIA TMA HybridEPBuffer) — build from source (cccl + libnvshmem
+  # fixes), then the generic EP sweep (run_ep.py --backend deepep-hybrid). Intranode NVLink path.
+  cx_build_deepep_hybrid || { cx_log "WARN: hybrid-ep setup failed — cannot run deepep-hybrid"; return 1; }
+  run_ep_suite deepep-hybrid
+}
 
 run_collective_bench() {
   # Single-process host/GPU memcpy-family collectives (NOT torchrun): CPU-GPU offload,
@@ -328,6 +364,7 @@ case "$CX_BENCH" in
   mori)        run_mori_suite || rc=1 ;;
   uccl)        run_uccl_suite || rc=1 ;;
   flashinfer)  run_flashinfer_suite || rc=1 ;;
+  deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
