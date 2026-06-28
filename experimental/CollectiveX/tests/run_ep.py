@@ -134,12 +134,22 @@ def main() -> int:
     # MoRI inits its shmem on a process group it registers as "default" and wants
     # the gloo+nccl combo with an explicit device_id (per its reference test);
     # DeepEP uses a plain nccl group.
+    # Cross-node rendezvous: env:// (TCPStore at MASTER_ADDR:PORT) is the default and is byte-identical
+    # to single-node behavior. But on the H100/H200/MI355X fleets the rank-0 MASTER_ADDR (the scontrol
+    # management-subnet NodeAddr) is NOT reachable from a peer rank's enroot container net namespace, so
+    # the TCPStore bootstrap times out before any RDMA transport engages. When CX_RDZV_FILE points at a
+    # path on the COMPUTE-VISIBLE shared mount, init via a FileStore instead: ranks exchange the store
+    # (and NCCL's unique-id) through the shared file, and NCCL then connects peers over the IB fabric
+    # (which IS routable cross-node) rather than the unreachable management TCP. Opt-in; unset = today.
     if not dist.is_initialized():
+        _rdzv = os.environ.get("CX_RDZV_FILE")
+        _fstore = {"init_method": f"file://{_rdzv}", "rank": rank, "world_size": world_size} if _rdzv else {}
         if args.backend == "mori":
-            dist.init_process_group(backend="cpu:gloo,cuda:nccl", rank=rank,
-                                    world_size=world_size, device_id=device)
+            dist.init_process_group(backend="cpu:gloo,cuda:nccl", rank=rank, world_size=world_size,
+                                    device_id=device,
+                                    **({"init_method": f"file://{_rdzv}"} if _rdzv else {}))
         else:
-            dist.init_process_group("nccl")
+            dist.init_process_group("nccl", **_fstore)
 
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
