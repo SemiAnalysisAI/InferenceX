@@ -76,10 +76,10 @@ if [ "$NODES" -le 1 ]; then
 fi
 
 # ----------------------------------------------------------------------------
-# Multi-node MNNVL (nccl only): mirrors launch_b200-dgxc-slurm but stays on the
-# NVL72 NVLink fabric. Build nccl-tests MPI=1, run each op across WORLD ranks
-# (1 GPU/rank) via srun --mpi=pmix, parse on the login node.
-[ "$CX_BENCH" = "nccl" ] || cx_die "GB200 multi-node supports CX_BENCH=nccl only (got '$CX_BENCH')"
+# Multi-node MNNVL over the NVL72 NVLink fabric. CX_BENCH=nccl -> nccl-tests across WORLD ranks
+# (build MPI=1, srun --mpi=pmix, parse on login). Any EP backend (deepep/uccl/flashinfer) -> the
+# EP multi-srun path ported from launch_gb300-nv.sh: run_ep.py across WORLD srun tasks (1 GPU/rank,
+# per-rank RANK/LOCAL_RANK from SLURM_*), intranode NVLink across <=8 MNNVL ranks. One config/dispatch.
 MPI_FLAG="${CX_SRUN_MPI:-pmix}"
 declare -A BIN=( [all_reduce]=all_reduce_perf [all_gather]=all_gather_perf
                  [reduce_scatter]=reduce_scatter_perf [alltoall]=alltoall_perf )
@@ -96,6 +96,34 @@ COMMON_MOUNT=(--container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$M
               --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX"
               --no-container-entrypoint)
 ENVJSON="$MOUNT_SRC/experimental/CollectiveX/results/env_${RUNNER_NAME}_${TS}.json"
+
+# EP backends (deepep/uccl/flashinfer): run run_ep.py across WORLD srun tasks over MNNVL, then exit
+# (the nccl-tests path below is nccl-only). Ported verbatim from launch_gb300-nv.sh's EP8 path.
+if [ "$CX_BENCH" != "nccl" ]; then
+  MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29553
+  mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
+  phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
+  WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
+  for ph in $phases; do
+    out="results/${RUNNER_NAME}_${CX_BENCH}_${ph}_${TS}.json"
+    cx_log "EP$WORLD $ph $CX_BENCH ${CX_DISPATCH_DTYPE:-bf16}/${CX_MODE:-normal} routing=${CX_ROUTING:-uniform}"
+    # shellcheck disable=SC2086
+    timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$WORLD" \
+      --ntasks-per-node="$GPUS_PER_NODE" "${COMMON_MOUNT[@]}" \
+      --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP",NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1,MC_FORCE_MNNVL=1 \
+      bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" \
+        --mode "${CX_MODE:-normal}" --measurement-contract "${CX_MEASUREMENT_CONTRACT:-layout-and-dispatch-v1}" \
+        --routing "${CX_ROUTING:-uniform}" ${CX_EPLB:+--eplb} --resource-mode "${CX_RESOURCE_MODE:-tuned}" \
+        --tokens-ladder "${CX_TOKENS_LADDER:-}" --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" \
+        --experts "${CX_EXPERTS:-256}" --warmup "${CX_WARMUP:-32}" --iters "${CX_ITERS:-200}" \
+        --trials "${CX_TRIALS:-3}" --seed "${CX_SEED:-67}" --runner "$RUNNER_NAME" --topology-class "$CX_TOPO" \
+        --transport "$CX_TRANSPORT" --out "$out" </dev/null 2>&1 | tail -8
+    cx_log "EP$WORLD $ph rc=${PIPESTATUS[0]}"
+  done
+  cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
+  cx_log "done — EP artifacts under $CX_DIR/results/"
+  exit 0
+fi
 
 # 1) Build nccl-tests (MPI=1) + capture environment (single task, one node).
 srun --jobid="$JOB_ID" --ntasks=1 --nodes=1 "${COMMON_MOUNT[@]}" \
