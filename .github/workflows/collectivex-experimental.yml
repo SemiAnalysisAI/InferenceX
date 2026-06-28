@@ -29,7 +29,7 @@ on:
         description: Which benchmark to run
         type: choice
         default: nccl
-        options: [nccl, deepep, deepep-hybrid, mori, uccl, flashinfer, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, all]
+        options: [nccl, deepep, deepep-hybrid, mori, uccl, flashinfer, flashinfer-combine-fp8, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, all]
       ops:
         description: NCCL ops (space-separated); blank = default set
         type: string
@@ -245,7 +245,13 @@ jobs:
         # the same work twice). EP backends: 'both' -> decode + prefill; else a single job.
         phase: ${{ fromJSON((inputs.benchmark == 'nccl' || inputs.benchmark == 'rccl') && '["na"]' || (inputs.phase == 'both' && '["decode","prefill"]' || format('["{0}"]', inputs.phase))) }}
     env:
-      CX_BENCH: ${{ inputs.benchmark }}
+      # flashinfer-combine-fp8 = the flashinfer EP backend with a QUANTIZED COMBINE OUTPUT (fp8 e4m3
+      # via the newer moe_a2a_combine output_dtype). Map it to CX_BENCH=flashinfer + CX_COMBINE_DTYPE=fp8
+      # (run_flashinfer_suite upgrades flashinfer when CX_COMBINE_DTYPE!=bf16). Input-cap-safe (a
+      # benchmark CHOICE, not a new input).
+      CX_BENCH: ${{ inputs.benchmark == 'flashinfer-combine-fp8' && 'flashinfer' || inputs.benchmark }}
+      CX_COMBINE_DTYPE: ${{ inputs.benchmark == 'flashinfer-combine-fp8' && 'fp8' || 'bf16' }}
+      CX_COMBINE_QUANT_MODE: ${{ inputs.benchmark == 'flashinfer-combine-fp8' && 'fp8' || 'none' }}
       CX_OPS: ${{ inputs.ops }}
       CX_MIN_BYTES: ${{ inputs.min_bytes }}
       CX_MAX_BYTES: ${{ inputs.max_bytes }}
@@ -289,9 +295,12 @@ jobs:
         if: inputs.benchmark != 'all'
         run: |
           python3 experimental/CollectiveX/tests/capability.py \
-            --sku "${{ inputs.sku }}" --backend "${{ inputs.benchmark }}" \
+            --sku "${{ inputs.sku }}" \
+            --backend "${{ inputs.benchmark == 'flashinfer-combine-fp8' && 'flashinfer' || inputs.benchmark }}" \
             --mode "${{ inputs.mode }}" --dtype "${{ inputs.dispatch_dtype }}" \
-            --contract "${{ inputs.contract }}"
+            --contract "${{ inputs.contract }}" \
+            --combine-dtype "${{ inputs.benchmark == 'flashinfer-combine-fp8' && 'fp8' || 'bf16' }}" \
+            --combine-quant-mode "${{ inputs.benchmark == 'flashinfer-combine-fp8' && 'fp8' || 'none' }}"
       - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }} (${{ matrix.phase }})
         env:
           RUNNER_NAME: ${{ runner.name }}

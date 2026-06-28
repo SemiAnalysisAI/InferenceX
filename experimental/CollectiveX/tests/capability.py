@@ -96,10 +96,12 @@ CAP = {
         "dtypes": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "nvfp4"],
         "contracts": ["layout-and-dispatch-v1"],
         "transports": ["nvlink", "mnnvl"],
-        # Combine stays bf16/none: MoeAlltoAll.combine has NO output_dtype param in 0.6.8.post1
-        # (PR3376/3643 not in this wheel) — quantized COMBINE output is genuinely unavailable here.
-        "combine_dtypes": ["bf16"],
-        "quant_modes": ["none"],
+        # Combine: bf16 default, OR a quantized COMBINE OUTPUT (fp8 e4m3) via moe_a2a_combine
+        # output_dtype — present in a NEWER flashinfer (PR3376/3643), pulled in by the run's
+        # cx_build_flashinfer_latest upgrade (the bundled 0.6.8.post1 lacks it). nvfp4/mxfp8 combine
+        # reserved (fp4/e8m0 output packing) until fp8-combine is GHA-validated.
+        "combine_dtypes": ["bf16", "fp8"],
+        "quant_modes": ["none", "fp8"],
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
     "deepep-hybrid": {

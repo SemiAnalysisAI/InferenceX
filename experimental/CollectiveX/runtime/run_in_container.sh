@@ -348,9 +348,31 @@ run_allreduce_fw() {
   return "$rc"
 }
 
+# Upgrade FlashInfer in-container to the latest wheel — the bundled 0.6.8.post1 lacks the
+# quantized-COMBINE OUTPUT path (moe_a2a_combine output_dtype/output_scales, added in a newer
+# release; confirmed in the main-branch source). A combine-quant run needs it; the dispatch path
+# (bf16/fp8/mxfp8/nvfp4) is unaffected and stays on whatever is installed. Best-effort: a failed
+# upgrade leaves the run on the bundled version (the combine-quant adapter then rejects loudly).
+cx_build_flashinfer_latest() {
+  cx_log "FlashInfer: upgrading to latest wheel for quantized-combine output (moe_a2a_combine output_dtype)"
+  export PIP_BREAK_SYSTEM_PACKAGES=1
+  local before after
+  before="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
+  pip install -q -U flashinfer-python >&2 2>&1 || cx_log "WARN: flashinfer upgrade pip warning"
+  after="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
+  export FLASHINFER_COMMIT="pkg-$after"
+  cx_log "FlashInfer upgrade: $before -> $after"
+  python3 -c "import inspect, flashinfer.comm as c; assert 'output_dtype' in str(inspect.signature(c.MoeAlltoAll.combine)), 'combine still has no output_dtype'; print('combine output_dtype: present')" >&2 \
+    || { cx_log "ERROR: upgraded FlashInfer combine still lacks output_dtype — cannot quant-combine"; return 1; }
+}
+
 run_flashinfer_suite() {
-  # FlashInfer EP (flashinfer.comm.MoeAlltoAll) — pre-installed in the sglang image, so just
-  # import-check (no build), then the generic EP sweep (run_ep.py --backend flashinfer).
+  # FlashInfer EP (flashinfer.comm.MoeAlltoAll) — pre-installed in the sglang image. When a
+  # combine-quant run is requested (CX_COMBINE_DTYPE != bf16), first upgrade FlashInfer to a wheel
+  # that has the quantized-combine OUTPUT path; otherwise run on the bundled version (dispatch path).
+  if [ -n "${CX_COMBINE_DTYPE:-}" ] && [ "${CX_COMBINE_DTYPE}" != "bf16" ]; then
+    cx_build_flashinfer_latest || { cx_log "WARN: flashinfer combine-quant setup failed"; return 1; }
+  fi
   if ! python3 -c "import flashinfer.comm" 2>/dev/null; then
     cx_log "WARN: flashinfer.comm not importable — cannot run flashinfer EP"; return 1
   fi

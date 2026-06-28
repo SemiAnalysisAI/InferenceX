@@ -335,10 +335,12 @@ class FlashInferBackend:
     # step the way DeepEP's get_dispatch_layout can — so cached-layout-comm-only-v1 and
     # runtime-visible-v1 (fp8) are NOT offered.
     SUPPORTED_CONTRACTS = {"layout-and-dispatch-v1"}
-    # Combine path is bf16 / none today (the harness default); declared explicitly so the
-    # capability gate and run_ep.py agree (they getattr these with bf16/none defaults anyway).
-    SUPPORTED_COMBINE_DTYPES = {"bf16"}
-    SUPPORTED_COMBINE_QUANT_MODES = {"none"}
+    # Combine path: bf16 (default) OR a quantized COMBINE OUTPUT via the newer flashinfer
+    # moe_a2a_combine output_dtype (fp8 e4m3 wired; the bundled 0.6.8.post1 has no output_dtype, so
+    # a combine-quant run upgrades FlashInfer first via cx_build_flashinfer_latest). nvfp4/mxfp8
+    # combine reserved (fp4/e8m0 output packing — extend once fp8-combine is GHA-validated).
+    SUPPORTED_COMBINE_DTYPES = {"bf16", "fp8"}
+    SUPPORTED_COMBINE_QUANT_MODES = {"none", "fp8"}
 
     def __init__(self, args, rank, world_size, local_rank, device):
         self.args = args
@@ -366,6 +368,33 @@ class FlashInferBackend:
         # the layout-and-dispatch-v1 contract (producer hands quantized activations). Recorded honestly.
         self.fp8_in_timing = False if self.quant_kind else None
         self.scale_layout = self.quant_label
+
+        # Combine-side quant (SEPARATE axis from dispatch): a quantized COMBINE OUTPUT via the newer
+        # flashinfer moe_a2a_combine output_dtype (the bundled 0.6.8.post1 has NO output_dtype, so a
+        # combine-quant run upgrades FlashInfer first — cx_build_flashinfer_latest). The combine
+        # kernel emits the per-source-token reduction already as fp8 + per-token scales; we dequant
+        # (cached, untimed) for the correctness gate. The quantized reduction is what's TIMED.
+        self.combine_dtype = getattr(args, "combine_dtype", "bf16")
+        self.combine_quant = self.combine_dtype not in ("bf16", None, "")
+        self.combine_input_dtype = self.combine_dtype
+        self.combine_quant_mode = getattr(args, "combine_quant_mode", "none")
+        self.combine_quant_in_timing = True if self.combine_quant else None
+        self.combine_dequant_in_timing = False if self.combine_quant else None
+        self._qc_out_dtype = None
+        self._qc_scale_shape = None   # cached working output_scales shape (discovered on first combine)
+        if self.combine_quant:
+            import inspect as _inspect
+            if "output_dtype" not in str(_inspect.signature(fi_comm.MoeAlltoAll.combine)):
+                raise RuntimeError(
+                    "combine-quant requested but flashinfer.comm.MoeAlltoAll.combine has NO output_dtype — "
+                    "this wheel (likely 0.6.8.post1) predates PR3376/3643. The run must upgrade FlashInfer "
+                    "first (CX_COMBINE_DTYPE!=bf16 triggers cx_build_flashinfer_latest in run_in_container.sh).")
+            self._qc_out_dtype = {"fp8": torch.float8_e4m3fn}.get(self.combine_dtype)
+            if self._qc_out_dtype is None:
+                raise RuntimeError(f"combine_dtype={self.combine_dtype} not wired (fp8 only so far)")
+            # quantized-combine round-trip is looser than the bf16 reconstruction (fp8 ~1/16 +
+            # whatever the dispatch added); keep at least the dispatch tol.
+            self.tolerance = max(self.tolerance, 1.6e-1)
 
         # TensorRT-LLM lineage: MoeAlltoAll LIVES IN flashinfer.comm.trtllm_moe_alltoall (the
         # "throughput backend" — the TRT-LLM NVLink one-sided AllToAll over an MNNVL symmetric
@@ -411,6 +440,9 @@ class FlashInferBackend:
             # quant provenance (None/bf16 path -> nulls). scale_layout + dispatch_dtype name the recipe.
             "dispatch_dtype": self.dispatch_dtype, "quant_kind": self.quant_kind,
             "scale_layout": self.scale_layout, "quant_in_timing": self.fp8_in_timing,
+            # combine-side quant (a SEPARATE axis): a quantized COMBINE OUTPUT (fp8 e4m3) when set.
+            "combine_dtype": self.combine_dtype, "combine_quant": self.combine_quant,
+            "combine_quant_in_timing": self.combine_quant_in_timing,
             "resource_mode": args.resource_mode,
             # FlashInfer MoE A2A occupancy is fixed by the library (a symmetric-memory kernel, not
             # an SM/CU budget we set) — like DeepEP LL. Recorded as a fixed-kernel run so the
@@ -581,6 +613,8 @@ class FlashInferBackend:
         return None
 
     def combine(self, p, h):
+        if self.combine_quant:
+            return self._combine_quant(p, h)
         # MoeAlltoAll.combine(payload, runtime_max_tokens_per_rank, payload_in_workspace=False)
         # -> the per-source-token reduced result on this rank ([T, hidden] bf16). Because the
         # dispatch populated the symmetric workspace, the data is already there: try
@@ -598,6 +632,61 @@ class FlashInferBackend:
         combined, idx = _call_variants("MoeAlltoAll.combine(...)", self.a2a.combine, variants)
         h.combine_variant = idx
         return self._as_tensor(combined)
+
+    def _combine_quant(self, p, h):
+        # Quantized COMBINE OUTPUT (fp8 e4m3): the kernel reduces the top_k copies per source token
+        # and emits the result already as fp8 + per-token scales (written into output_scales, which
+        # we allocate). The fp8 reduction is what's TIMED; we dequant (cached on the problem,
+        # UNTIMED — deterministic recv) -> bf16 for the correctness gate, like the dispatch quant path.
+        #
+        # SINGLE-SHOT output_scales shape (NOT a defensive multi-try loop): MoeAlltoAll is a stateful
+        # FSM (combine asserts phase=="dispatched"), so a failed combine attempt corrupts the state and
+        # a second attempt fails differently. We pick the most-likely shape (per-token [T,1], the e4m3
+        # activation convention) and let a wrong guess surface as ONE clean LOUD error in the GHA log
+        # (which names the shape to switch to) rather than cascading FSM failures. CX_QC_SCALE overrides:
+        #   "pertoken" (default) -> [T,1] ; "block128" -> [T,H/128] ; "none" -> no output_scales arg.
+        H = int(getattr(self, "hidden", 0)) or int(self.args.hidden)
+        T = p.T
+        mode = os.environ.get("CX_QC_SCALE", "pertoken")
+        if mode == "block128":
+            sc = torch.zeros(T, max(1, H // 128), device=self.device, dtype=torch.float32)
+        elif mode == "none":
+            sc = None
+        else:
+            sc = torch.zeros(T, 1, device=self.device, dtype=torch.float32)
+        kw = dict(payload_in_workspace=False, output_dtype=self._qc_out_dtype)
+        if sc is not None:
+            kw["output_scales"] = sc
+        try:
+            out = self.a2a.combine(h.combine_input, T, **kw)
+        except Exception as exc:
+            raise _loud(f"MoeAlltoAll.combine(output_dtype=fp8, output_scales={mode})",
+                        f"quant-combine call failed (try CX_QC_SCALE in pertoken|block128|none); "
+                        f"combine sig: try `help(flashinfer.comm.MoeAlltoAll.combine)`", exc)
+        if self.rank == 0 and not getattr(self, "_qc_logged", False):
+            self._qc_logged = True
+            oq = out[0] if isinstance(out, (tuple, list)) else out
+            print(f"[ep_flashinfer] combine-quant fp8 OK output_scales={mode} "
+                  f"out={tuple(oq.shape)}:{oq.dtype}", flush=True)
+        return self._finish_qcombine(p, out, sc, H)
+
+    def _finish_qcombine(self, p, out, sc, H):
+        out_q = out[0] if isinstance(out, (tuple, list)) else out
+        cached = getattr(p, "_qc_dequant", None)
+        if cached is None:
+            of = out_q.float()
+            if sc is not None and torch.is_tensor(sc) and sc.dim() >= 2 and sc.shape[-1] >= 1:
+                T = of.shape[0]
+                blocks = sc.shape[-1]
+                if blocks > 1 and (H % blocks) == 0:
+                    bs = H // blocks
+                    cached = (of.view(T, blocks, bs) * sc.view(T, blocks, 1)).reshape(T, H).to(torch.bfloat16)
+                else:
+                    cached = (of * sc.reshape(T, 1)).to(torch.bfloat16)   # per-token scale
+            else:
+                cached = of.to(torch.bfloat16)
+            p._qc_dequant = cached
+        return cached
 
     @staticmethod
     def _as_tensor(x):
