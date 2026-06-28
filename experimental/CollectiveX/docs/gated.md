@@ -37,15 +37,24 @@ is: vendor `deep_ep_wrapper` under a non-colliding name + replicate the proxy/IP
 proxy bootstrap; NOT a hard blocker). Adapter `tests/ep_uccl.py` + `cx_build_uccl` + capability/schema
 remain wired as scaffolding; `benchmark=uccl` currently fails loudly (preserved failed-case), not faked.
 
-### NIXL EP — BLOCKED (container toolchain)
-The pip `nixl 1.0.1` is the **host RDMA transfer** library (`nixl_agent.register_memory/transfer`),
-**not** MoE EP. The real EP lives in the NIXL source repo at `examples/device/ep` (a DeepEP clone) and
-requires a from-source **meson** build of the whole NIXL stack. That build **hard-fails on Abseil**:
-the container ships `libabsl 20220623` (no `absl_log`) and meson refuses the subproject fallback; also
-missing `cuobjclient-13.1` and UCX `-dev` headers (only runtime `libucx0` is present). Unblocking needs
-Abseil-from-source + cuobjclient + UCX dev headers — a base-image change, not a benchmark change. The
-adapter is writable the moment that build is solved (the API is the DeepEP clone, identical to
-`ep_uccl.py`).
+### NIXL — transfer DONE (container switch); device-EP blocked on UCX GPU Device API
+Two distinct things. **(1) NIXL host RDMA transfer** (`nixl_agent.register_memory / get_xfer_descs /
+initialize_xfer / transfer`) — the fabric dynamo uses for KV movement — is **WIRED + valid**
+(`tests/nixl_transfer.py`, `CX_BENCH=nixl`). It needed a **container switch** (the sglang multiarch
+image has no NIXL build deps): `cx_default_image` selects `nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:
+1.3.0-dev.1-cuda13` for `CX_BENCH=nixl`. B300 run 28314858649: NIXL 0.10.1, UCX backend, 2 in-process
+agents — dtod-local **94 GB/s**, dtod-remote **24 GB/s** (dtoh/htod hit a NIC dmabuf `ibv_reg_mr Bad
+address` limit; GPU↔GPU is the KV-handoff path that matters).
+
+**(2) NIXL device-EP** (`examples/device/ep`, a DeepEP fork) — the from-source **meson** build. The
+container switch was the directive's exact ask ("switch containers and see if it fixes"), and it
+**CLEARED the documented Abseil 20220623 blocker**: the dynamo image ships **Abseil 20250814** (meson
+subproject) + meson/ninja/pybind11 3.0.2/cmake, and `meson setup` now SUCCEEDS (build-probe
+`cx_probe_nixl_ep`, run 28314858649 log). The **new precise blocker** is `UCX GPU Device API: NO` — the
+device-EP target needs UCX's device-initiated (GPU-side put/get) API, which this image's UCX lacks, so
+`nixl_ep_cpp` does not build. Unblocking now needs a UCX built `--with-gpu-device-api` (a base-image
+concern), NOT Abseil/cuobjclient. The adapter would mirror `ep_deepep.py` (the buffer.py API is a DeepEP
+clone) the moment that UCX build lands.
 
 ### FlashInfer EP / TensorRT-LLM NVLink one-sided AllToAll — DONE on H100 + B300 (H200 runner gated)
 `flashinfer.comm.MoeAlltoAll` (which LIVES IN `flashinfer.comm.trtllm_moe_alltoall` — it IS the
@@ -102,9 +111,14 @@ cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fr
 - **H100 combine — build-time-limited (NOT arch):** the ~70-min in-container flashinfer-main source
   build exceeds the H100 runner's job budget (SIGTERM). B300's longer budget lets it land. A pre-staged
   flashinfer-main wheel (one-time build) would remove the per-run rebuild; deferred.
-- **Direct-cast FP8 combine:** the working combine emits SCALED mxfp8, not unscaled direct-cast
-  (`output_scalar_scale`-only) — a same-kernel further-lift. MoRI fp8_blockwise combine (AMD, PR311)
-  remains a separate AMD path.
+- **Direct-cast FP8 combine — kernel limit (evidenced, B300 run 28315037266):** ATTEMPTED via
+  `CX_QC_SCALE=scalar` (`output_dtype=float8_e4m3fn` + `output_scalar_scale`, NO per-block
+  `output_scales`). The kernel ASSERTS `Check failed: (output.dtype()==payload.dtype()) is false:
+  output_dtype without output_scales must match payload dtype` — i.e. an fp8 output REQUIRES per-block
+  `output_scales`; a scalar-only/unscaled direct-cast fp8 combine is **not a supported moe_a2a_combine
+  mode**. The SCALED mxfp8/nvfp4 outputs are the only fp8/fp4 combine paths. (Also confirmed the nightly
+  `flashinfer 0.6.13` wheel now carries `output_dtype` — the ~70-min main-source build is no longer
+  needed for combine-quant.) MoRI fp8_blockwise combine (AMD, PR311) remains a separate AMD path.
 
 ## Topology and rack-scale
 
@@ -135,8 +149,20 @@ placement policies (packed/striped/runtime-native/adversarial), and locality/top
   (recorded as skipped if the framework's distributed wrapper isn't importable in the sglang image);
   AITER is AMD. RL mesh-to-mesh + all-gather DP-attention→TP-MoE shapes: covered by the standardized
   sweeps (rl-mesh + all-gather families).
-- **KV-cache backends NIXL / MoonCake / MoRI-IO:** declared but not wired (raw memcpy + CPU-pinned are
-  wired); MoRI-IO is AMD-only (out of NVIDIA scope).
+- **KV-cache backends:** raw memcpy + CPU-pinned WIRED; **NIXL WIRED** (`tests/nixl_transfer.py`, B300
+  via the dynamo-container switch — see the NIXL section above); **MoRI-IO WIRED** (`tests/
+  mori_io_transfer.py`, MI355X, `mori.io` IOEngine RDMA p2p). **MoonCake** remains not wired — needs the
+  Mooncake transfer-engine library, which is in none of the CollectiveX containers (would require
+  importing a Mooncake image or building it from source).
 
-## Out of scope for "NVIDIA chips"
-AMD SDMA copy path, MI355X cross-node EP, MoRI-IO KV backend — these are AMD/MI355X items.
+## AMD / MI355X items — now ATTEMPTED via GHA (no longer "out of scope")
+The directive's container-switch + AMD-lift asks. All run via GHA on the MI355X MoRI image:
+- **FNUZ fp8 dispatch (MoRI):** `dispatch_dtype=fp8` on the mori backend = e4m3fnuz blockwise via MoRI's
+  `quant_type` (PR311 `Fp8BlockwiseQuant`); `ep_mori.py` resolves the quant_type at runtime + dumps
+  MoRI's quant API to the log. capability admits `mori fp8`.
+- **AMD SDMA copy path:** `copy_engine_bench.py` no longer refuses on ROCm — the off-SM DMA path IS the
+  SDMA engine; labeled `copy_engine_kind=sdma` / `accelerator=rocm` (vs NVIDIA `copy-engine`). The
+  non-interference probe characterizes SDMA-vs-CU interference (pynvml absent → graceful fallback).
+- **MoRI-IO KV backend:** `tests/mori_io_transfer.py` (above).
+- **MI355X cross-node EP:** still blocked on the DeepEP internode path (same NVSHMEM/IBGDA integration as
+  the NVIDIA cross-node item; single-node MI355X EP is covered by the MoRI sweep).
