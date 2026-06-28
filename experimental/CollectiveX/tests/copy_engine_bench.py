@@ -209,6 +209,44 @@ def _victim_kernel_factory(torch, device):
     return victim, [m, m, m, inner]
 
 
+def _attention_victim_factory(torch, device):
+    """An SM-bound ATTENTION victim (scaled_dot_product_attention = the flash-attention kernel) for
+    the copy-vs-attention interference probe (goal "Interference with attention kernels"). Decode-ish
+    attention shape [batch, heads, seq, head_dim]; repeated to saturate the SMs for a stable duration."""
+    import torch.nn.functional as _F
+    b_, h_, s_, d_ = 8, 32, 2048, 128
+    q = torch.randn(b_, h_, s_, d_, device=device, dtype=torch.float16)
+    k = torch.randn(b_, h_, s_, d_, device=device, dtype=torch.float16)
+    v = torch.randn(b_, h_, s_, d_, device=device, dtype=torch.float16)
+    inner = 6
+
+    def victim():
+        o = q
+        for _ in range(inner):
+            o = _F.scaled_dot_product_attention(o, k, v)
+        return o
+
+    return victim, [b_, h_, s_, d_, inner]
+
+
+def _probe_victim(torch, victim, copy_engine_copy, sm_copy, dst, src, copy_stream, iters):
+    """Time a victim alone vs concurrent with a copy-engine copy vs concurrent with an SM-copy.
+    Returns (t_victim_us, t_with_ce_us, t_with_sm_us, ce_slowdown, sm_slowdown, near_zero)."""
+    for _ in range(3):
+        victim(); copy_engine_copy(); sm_copy()
+    torch.cuda.synchronize()
+    t_victim = _time_loop(torch, lambda: victim(), iters)
+    t_with_ce = _time_loop(torch, lambda: (copy_engine_copy(), victim()), iters)
+    t_with_sm = _time_loop(torch, lambda: (sm_copy(), victim()), iters)
+    copy_stream.synchronize()
+    ce_slow = (t_with_ce / t_victim) if t_victim > 0 else None
+    sm_slow = (t_with_sm / t_victim) if t_victim > 0 else None
+    near_zero = (ce_slow is not None and sm_slow is not None
+                 and ce_slow < 1.15 and (sm_slow - ce_slow) > 0.05)
+    return (round(t_victim * 1e3, 4), round(t_with_ce * 1e3, 4), round(t_with_sm * 1e3, 4),
+            round(ce_slow, 4) if ce_slow else None, round(sm_slow, 4) if sm_slow else None, bool(near_zero))
+
+
 def _sm_validation(torch, device, nbytes: int, iters: int) -> dict:
     """Return evidence the copy-engine path uses ~0 SMs.
 
@@ -322,6 +360,25 @@ def _sm_validation(torch, device, nbytes: int, iters: int) -> dict:
     except Exception as exc:
         result["non_interference"] = {"error": repr(exc)}
         result["method"] = result["method"] or "failed"
+
+    # ---- copy-vs-ATTENTION interference (goal "Interference with attention kernels") ----
+    # Same probe with a flash-attention (scaled_dot_product_attention) victim instead of GEMM, so
+    # the copy engine's non-interference is shown against BOTH expert-GEMM and attention kernels.
+    try:
+        avictim, ashape = _attention_victim_factory(torch, device)
+        tv, tce, tsm, ce_s, sm_s, az = _probe_victim(
+            torch, avictim,
+            lambda: _copy_engine_copy(torch, dst, src, copy_stream),
+            lambda: _sm_copy(torch, dst, src, copy_stream),
+            dst, src, copy_stream, iters)
+        result["non_interference_attention"] = {
+            "victim_kernel": "scaled_dot_product_attention x6 (fp16 [8,32,2048,128])",
+            "attn_shape": ashape, "t_victim_us": tv,
+            "t_victim_with_copy_engine_us": tce, "t_victim_with_sm_copy_us": tsm,
+            "ce_slowdown": ce_s, "sm_slowdown": sm_s, "ce_slowdown_threshold": 1.15}
+        result["copy_engine_uses_near_zero_sms_attention"] = az
+    except Exception as exc:
+        result["non_interference_attention"] = {"error": repr(exc)}
 
     return result
 
