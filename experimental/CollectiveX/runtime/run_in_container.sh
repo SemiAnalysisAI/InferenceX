@@ -133,13 +133,22 @@ run_ep_suite() {
   phases="${CX_PHASE:-decode}"
   [ "$phases" = "both" ] && phases="decode prefill"
   cx_stage_canonical || true   # sets CX_WORKLOAD_DIR when CX_CANONICAL=1 (official cohort)
+  # Multi-node torchrun (CROSS-NODE EP): when CX_NNODES>1 (set per-node by a multi-node launcher
+  # with CX_NODE_RANK/CX_MASTER_ADDR), rendezvous across nodes so run_ep spans CX_NNODES*CX_NGPUS
+  # ranks over the inter-node fabric (IB/RDMA). UCCL EP is internode-native; this is goal 182.
+  local mn_args=""
+  if [ -n "${CX_NNODES:-}" ] && [ "${CX_NNODES}" -gt 1 ]; then
+    mn_args="--nnodes=${CX_NNODES} --node-rank=${CX_NODE_RANK:-0} --master-addr=${CX_MASTER_ADDR:-127.0.0.1} --master-port=${CX_MASTER_PORT:-29500}"
+    cx_log "multi-node torchrun: $mn_args (cross-node EP, world=$((CX_NNODES*CX_NGPUS)))"
+  fi
   for phase in $phases; do
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
     # Hard wall-clock guard: a wedged collective (e.g. a backend that hangs at a shape)
     # must FAIL FAST, never burn the whole job timeout. timeout -k sends SIGKILL after
     # a grace period. Override with CX_RUN_TIMEOUT (seconds).
+    # shellcheck disable=SC2086
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
-        torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
+        torchrun $mn_args --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
         --phase "$phase" --tokens-ladder "$ladder" --mode "${CX_MODE:-normal}" \
         --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
         --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-uniform}" \

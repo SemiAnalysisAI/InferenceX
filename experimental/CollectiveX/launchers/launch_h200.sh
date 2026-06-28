@@ -55,6 +55,34 @@ cx_log "squash=$SQUASH_FILE  mount=$MOUNT_SRC -> $MOUNT_DIR"
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
+# ---- Cross-node H100/H200 EP (goal 182): allocate N nodes, run ONE container task per node, and let
+# run_in_container's torchrun rendezvous across nodes (CX_NNODES/CX_NODE_RANK/CX_MASTER_ADDR) so the EP
+# spans NODES*8 ranks over the inter-node IB fabric. UCCL EP is internode-native (RDMA/IB) — the right
+# backend here (DeepEP normal-internode asserts out). Squash + repo are on compute-visible NFS already.
+if [ "${CX_NODES:-1}" -gt 1 ]; then
+  NODES="${CX_NODES}"
+  cx_log "H200 CROSS-NODE EP: nodes=$NODES world=$((NODES*NGPUS)) bench=$CX_BENCH (IB; UCCL internode-native)"
+  salloc --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --nodes="$NODES" --gres=gpu:"$NGPUS" \
+         --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+  JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node)"
+  trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
+  MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"
+  cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N)] master=$MA"
+  export CX_TOPO="h200-multinode-ib" CX_TRANSPORT="rdma"
+  # one task/node; CX_NODE_RANK is the per-node SLURM_NODEID (set inside the task, not via --export).
+  srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 \
+    --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
+    --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
+    --no-container-entrypoint \
+    --export=ALL,CX_NNODES="$NODES",CX_MASTER_ADDR="$MA",CX_MASTER_PORT=29561 \
+    bash -c 'export CX_NODE_RANK=${SLURM_NODEID:-0}; exec bash "$0"' \
+      "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh" || cx_log "WARN: cross-node H200 EP rc=$?"
+  cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
+  cx_log "done — cross-node H200 EP artifacts under results/"
+  exit 0
+fi
+
 salloc --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --gres=gpu:"$NGPUS" \
        --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
 JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
