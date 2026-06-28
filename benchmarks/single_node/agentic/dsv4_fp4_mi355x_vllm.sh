@@ -157,12 +157,13 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "200MB",
-  "protocol": "rdma",
+  "protocol": "tcp",
   "device_name": "",
   "enable_offload": false
 }
 EOF
 # (srok) 
+  #"protocol": "rdma",
   #"device_name": "mlx5_0",
   #"local_buffer_size": "4GB",
         export MOONCAKE_CONFIG_PATH
