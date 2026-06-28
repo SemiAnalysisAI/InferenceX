@@ -27,7 +27,7 @@ scancel_sync() {
 # Pin to the known-good mi300x nodes; others are unavailable:
 #   chi-mi300x-033,037: down*
 #   chi-mi300x-049:     down 
-export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-chi-mi300x-033.ord.vultr.cpe.ice.amd.com,chi-mi300x-037.ord.vultr.cpe.ice.amd.com,chi-mi300x-049.ord.vultr.cpe.ice.amd.com}"
+export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-chi-mi300x-033,chi-mi300x-037,chi-mi300x-049}"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
     set -x
@@ -56,7 +56,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         mkdir -p "$art_dir"
 
         cp -r "$BENCHMARK_LOGS_DIR"/submit_*.log "$art_dir/" 2>/dev/null || true
-        if [[ -n "${JOB_ID:-}" ]]; then
+        if [[ "${JOB_ID:-}" =~ ^[0-9]+$ ]]; then
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
             scontrol show job "$JOB_ID" > "$art_dir/scontrol_job_${JOB_ID}.txt" 2>&1 || true
             sacct -j "$JOB_ID" --format=JobID,JobName,State,ExitCode,Elapsed,NodeList%80 > "$art_dir/sacct_job_${JOB_ID}.txt" 2>&1 || true
@@ -106,6 +106,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             save_multinode_diagnostics
         fi
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
+        if [[ ! "${JOB_ID:-}" =~ ^[0-9]+$ ]]; then
+            err_file="$BENCHMARK_LOGS_DIR/slurm_job-unknown.err"
+        fi
         if [[ -s "$err_file" ]]; then
             echo "=== Slurm job stderr ==="
             tail -100 "$err_file"
@@ -125,7 +128,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}" > "$SUBMIT_LOG" 2>&1
     SUBMIT_RC=$?
     cat "$SUBMIT_LOG"
-    JOB_ID=$(tail -n 1 "$SUBMIT_LOG" || true)
+    JOB_ID=$(grep -E '^[0-9]+$' "$SUBMIT_LOG" | tail -n 1 || true)
     if [[ "$SUBMIT_RC" -ne 0 ]]; then
         echo "ERROR: Failed to submit multi-node job via benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
         echo "=== Submit log ==="
