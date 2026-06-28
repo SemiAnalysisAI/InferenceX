@@ -356,19 +356,22 @@ run_allreduce_fw() {
 cx_build_flashinfer_latest() {
   cx_log "FlashInfer: upgrading to latest wheel for quantized-combine output (moe_a2a_combine output_dtype)"
   export PIP_BREAK_SYSTEM_PACKAGES=1
-  # The version check couples flashinfer-python to flashinfer-cubin (+ jit-cache): upgrading only
-  # flashinfer-python (0.6.8.post1 -> 0.6.13) leaves cubin behind and `import flashinfer` raises a
-  # version-mismatch. Upgrade the WHOLE family together; FLASHINFER_DISABLE_VERSION_CHECK=1 is a
-  # belt-and-suspenders bypass (exported so the run inherits it) in case a sub-pkg still lags.
+  # moe_a2a_combine output_dtype is on flashinfer MAIN but NOT in the latest PyPI release (0.6.13) —
+  # so `pip -U flashinfer-python` (PyPI) is insufficient. Install from the NIGHTLY wheel index
+  # (built from main): flashinfer-python (--no-deps; the container already has torch etc.) + the
+  # matching cubin + cu130 jit-cache. FLASHINFER_DISABLE_VERSION_CHECK=1 bypasses any residual
+  # sub-package skew. Falls back to a PyPI -U (which then asserts-out cleanly if it lacks output_dtype).
   export FLASHINFER_DISABLE_VERSION_CHECK=1
-  local before after
+  local before after NIDX="https://flashinfer.ai/whl/nightly"
   before="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
-  pip install -q -U flashinfer-python flashinfer-cubin flashinfer-jit-cache >&2 2>&1 \
-    || pip install -q -U flashinfer-python flashinfer-cubin >&2 2>&1 \
-    || cx_log "WARN: flashinfer upgrade pip warning"
+  { pip install -q -U --pre flashinfer-python --index-url "$NIDX/" --no-deps >&2 2>&1 \
+      && pip install -q -U --pre flashinfer-cubin --index-url "$NIDX/" >&2 2>&1 \
+      && pip install -q -U --pre flashinfer-jit-cache --index-url "$NIDX/cu130" >&2 2>&1; } \
+    || { cx_log "WARN: flashinfer nightly index failed — falling back to PyPI -U"; \
+         pip install -q -U flashinfer-python flashinfer-cubin flashinfer-jit-cache >&2 2>&1 || true; }
   after="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
   export FLASHINFER_COMMIT="pkg-$after"
-  cx_log "FlashInfer upgrade: $before -> $after"
+  cx_log "FlashInfer upgrade (nightly): $before -> $after"
   python3 -c "import inspect, flashinfer.comm as c; assert 'output_dtype' in str(inspect.signature(c.MoeAlltoAll.combine)), 'combine still has no output_dtype'; print('combine output_dtype: present')" >&2 \
     || { cx_log "ERROR: upgraded FlashInfer combine still lacks output_dtype — cannot quant-combine"; return 1; }
 }
