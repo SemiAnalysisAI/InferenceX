@@ -96,8 +96,9 @@ cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fr
   e4m3 + UE8M0 block-32 (the source-spec'd layout); dequant `e4m3 * 2^(e8m0-127)`. Valid, `correct=True`
   ×8 (`backend_provenance.combine_quant=True`, `flashinfer_stack` captured). FP32-accum is the kernel's
   internal reduce; scale-transport (e8m0) + tolerance-class (1.6e-1 vs bf16 5e-2) are exercised.
-- **NVFP4 combine:** `output_dtype=uint8 (packed e2m1) + e4m3 vec-16 scales + output_scalar_scale`; wired
-  + dispatched on B300 (the fp4 path is Blackwell-native, like nvfp4 dispatch).
+- **NVFP4 combine — DONE on B300:** `output_dtype=uint8 (packed e2m1) + e4m3 vec-16 scales +
+  output_scalar_scale`; dequant via `e2m1_and_ufp8sf_scale_to_float` (the e4m3 scales viewed as uint8
+  ufp8). Valid, `correct=True` ×8 (Blackwell-native fp4, like nvfp4 dispatch).
 - **H100 combine — build-time-limited (NOT arch):** the ~70-min in-container flashinfer-main source
   build exceeds the H100 runner's job budget (SIGTERM). B300's longer budget lets it land. A pre-staged
   flashinfer-main wheel (one-time build) would remove the per-run rebuild; deferred.
