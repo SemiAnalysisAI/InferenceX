@@ -146,7 +146,10 @@ HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia", "amd"],
                   # mori-io = MoRI-IO RDMA p2p transfer engine (mori.io); AMD MoRI image only.
                   "mori-io": ["amd"],
                   # nccl-kv = NCCL/RCCL p2p KV transfer (torch.distributed send/recv); both vendors.
-                  "nccl-kv": ["nvidia", "amd"]}
+                  "nccl-kv": ["nvidia", "amd"],
+                  # mooncake = Mooncake transfer-engine RDMA KV transfer (pip-installed); both vendors
+                  # (transfer_write_on_cuda / _on_hip), needs an RDMA NIC.
+                  "mooncake": ["nvidia", "amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
 VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl", "flashinfer"], "amd": ["rccl", "mori"]}

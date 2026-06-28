@@ -29,7 +29,7 @@ on:
         description: Which benchmark to run
         type: choice
         default: nccl
-        options: [nccl, deepep, deepep-hybrid, mori, uccl, flashinfer, flashinfer-combine-fp8, flashinfer-combine-fp8-directcast, flashinfer-combine-nvfp4, nixl, mori-io, nccl-kv, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, all]
+        options: [nccl, deepep, deepep-hybrid, mori, uccl, flashinfer, flashinfer-combine-fp8, flashinfer-combine-fp8-directcast, flashinfer-combine-nvfp4, nixl, mori-io, nccl-kv, mooncake, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, all]
       ops:
         description: NCCL ops (space-separated); blank = default set
         type: string

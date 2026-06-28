@@ -452,6 +452,23 @@ PY
   fi
 }
 
+run_mooncake_suite() {
+  # MoonCake KV transfer (the goal's kv-cache 'mooncake' backend). Mooncake is in no CollectiveX
+  # container -> pip-install mooncake-transfer-engine first (the directive's "import a new one", as a
+  # pip import). Then the single-process RDMA loopback bench. Needs an RDMA NIC.
+  local out="results/${CX_RUNNER}_mooncake_${CX_TS}.json" rc=0
+  export PIP_BREAK_SYSTEM_PACKAGES=1
+  if ! python3 -c "import mooncake.engine" 2>/dev/null; then
+    cx_log "mooncake: pip install mooncake-transfer-engine"
+    pip install -q mooncake-transfer-engine >&2 2>&1 || cx_log "WARN: mooncake pip install failed"
+  fi
+  cx_log "mooncake transfer bench -> $out"
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" python3 tests/mooncake_transfer.py \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-rdma}" \
+      --env-json "$ENVJSON" --out "$out" || { rc=$?; cx_log "WARN: mooncake failed/timed out rc=$rc"; }
+  return "$rc"
+}
+
 run_nccl_kv_suite() {
   # NCCL/RCCL KV-cache transfer (the goal's kv-cache 'nccl'/'rccl' backend). torchrun 2 ranks,
   # rank0 dist.send -> rank1 dist.recv of KV-block-sized buffers. NCCL on NVIDIA, RCCL on ROCm
@@ -520,13 +537,14 @@ case "$CX_BENCH" in
   nixl)        run_nixl_suite || rc=1 ;;
   mori-io)     run_mori_io_suite || rc=1 ;;
   nccl-kv)     run_nccl_kv_suite || rc=1 ;;
+  mooncake)    run_mooncake_suite || rc=1 ;;
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
   rl-mesh)     run_rl_mesh || rc=1 ;;
   allreduce-fw) run_allreduce_fw || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|mooncake|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.
