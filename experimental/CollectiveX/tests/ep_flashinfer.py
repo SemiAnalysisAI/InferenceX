@@ -688,6 +688,17 @@ class FlashInferBackend:
             kw = dict(payload_in_workspace=False, output_dtype=self._qc_out_dtype,
                       output_scales=sc, output_scalar_scale=self._qc_scalar)
             label = f"nvfp4 output_scales=e4m3[{T},{blocks}] scalar={self._qc_scalar}"
+        elif os.environ.get("CX_QC_SCALE") == "scalar":
+            # DIRECT-CAST fp8 combine: a single per-tensor output_scalar_scale, NO per-block
+            # output_scales (the unscaled/global-scaled e4m3 emit — goal "Direct-cast FP8 combine").
+            # The working mxfp8 path emits SCALED e4m3+e8m0; this probes whether the same kernel also
+            # supports the scalar-only mode. If the kernel REQUIRES per-block output_scales for fp8
+            # output, the call below raises and the run records that (the documented kernel limit).
+            sc = None
+            self._qc_scalar = float(os.environ.get("CX_QC_FP8_SCALAR", "1.0"))
+            kw = dict(payload_in_workspace=False, output_dtype=self._qc_out_dtype,
+                      output_scalar_scale=self._qc_scalar)
+            label = f"fp8-directcast output_scalar_scale={self._qc_scalar} (no per-block scales)"
         else:
             # MXFP8 combine: e4m3 output + UE8M0 uint8 scales vec-32 (the main-source spec).
             mode = os.environ.get("CX_QC_SCALE", "block32")
@@ -725,6 +736,11 @@ class FlashInferBackend:
                     out_q.reshape(T, -1).contiguous(), sc_u8,
                     global_scale_tensor=gsf, sf_vec_size=16, is_sf_swizzled_layout=False)
                 cached = o.reshape(T, H).to(device=out_q.device, dtype=torch.bfloat16)
+            elif sc is None:
+                # direct-cast fp8: single global scalar, no per-block scales -> x = e4m3 * scalar
+                cached = (out_q.float() * float(getattr(self, "_qc_scalar", 1.0))).to(torch.bfloat16)
+                p._qc_dequant = cached
+                return cached
             else:
                 of = out_q.float()
                 blocks = sc.shape[-1] if torch.is_tensor(sc) and sc.dim() >= 2 else 1
