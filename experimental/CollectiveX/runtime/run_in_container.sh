@@ -356,9 +356,16 @@ run_allreduce_fw() {
 cx_build_flashinfer_latest() {
   cx_log "FlashInfer: upgrading to latest wheel for quantized-combine output (moe_a2a_combine output_dtype)"
   export PIP_BREAK_SYSTEM_PACKAGES=1
+  # The version check couples flashinfer-python to flashinfer-cubin (+ jit-cache): upgrading only
+  # flashinfer-python (0.6.8.post1 -> 0.6.13) leaves cubin behind and `import flashinfer` raises a
+  # version-mismatch. Upgrade the WHOLE family together; FLASHINFER_DISABLE_VERSION_CHECK=1 is a
+  # belt-and-suspenders bypass (exported so the run inherits it) in case a sub-pkg still lags.
+  export FLASHINFER_DISABLE_VERSION_CHECK=1
   local before after
   before="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
-  pip install -q -U flashinfer-python >&2 2>&1 || cx_log "WARN: flashinfer upgrade pip warning"
+  pip install -q -U flashinfer-python flashinfer-cubin flashinfer-jit-cache >&2 2>&1 \
+    || pip install -q -U flashinfer-python flashinfer-cubin >&2 2>&1 \
+    || cx_log "WARN: flashinfer upgrade pip warning"
   after="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
   export FLASHINFER_COMMIT="pkg-$after"
   cx_log "FlashInfer upgrade: $before -> $after"
