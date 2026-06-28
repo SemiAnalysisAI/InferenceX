@@ -293,6 +293,82 @@ def load_nccl_series(results_dir: str) -> list[dict]:
     return series
 
 
+def load_allreduce_fw_series(results_dir: str) -> list[dict]:
+    """Load family=allreduce-fw docs (allreduce_fw_bench.py output) into JS-friendly series — ADDITIVE,
+    and shaped IDENTICALLY to load_nccl_series so they flow through the SAME All-reduce tab path with no
+    JS changes. One series per (doc, group/impl) so the nccl baseline, flashinfer-oneshot, and
+    flashinfer-twoshot lines each get their own color and are directly comparable. op is set to the same
+    "all_reduce" key the All-reduce tab filters on. `skipped` rows (no size, or no latency and no busbw)
+    are dropped so a not-applicable size doesn't draw a phantom point."""
+    series = []
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
+        try:
+            d = json.load(open(path))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if d.get("family") != "allreduce-fw" or not d.get("groups"):
+            continue
+        runner = d.get("runner") or "?"
+        sku = runner.split("_")[0].split("-")[0]
+        transport = d.get("transport") or ""
+        status = d.get("status") or "?"
+        valid = status == "valid"
+        for g in d["groups"]:
+            impl = g.get("impl") or "?"
+            world_size = g.get("world_size", d.get("world_size"))
+            topo = g.get("topology_class") or d.get("topology_class") or "?"
+            dtype = g.get("dtype") or d.get("dtype")
+            rows = []
+            for r in (g.get("rows") or []):
+                size = r.get("size_bytes")
+                t_us = r.get("latency_us")
+                busbw = r.get("busbw_gbps")
+                # drop `skipped` rows: no size, or neither a latency nor a (nonzero) bandwidth observation.
+                if size is None or (t_us is None and busbw in (None, 0)):
+                    continue
+                rows.append({
+                    "size": size, "dtype": dtype,
+                    "t_us": t_us, "algbw": r.get("algbw_gbps"), "busbw": busbw,
+                    "correct": r.get("correct"),
+                })
+            if not rows:
+                continue
+            rows.sort(key=lambda x: x["size"])
+            # label MUST carry the impl so nccl vs flashinfer-oneshot vs flashinfer-twoshot are distinct.
+            label = f'{sku.upper()} · {impl} (fw-AR · ws{world_size})'
+            series.append({
+                "op": "all_reduce", "sku": sku, "runner": runner,
+                "topo": topo, "transport": transport,
+                "world_size": world_size, "nodes": d.get("nodes"),
+                "dtype": dtype,
+                "comparison_class": d.get("comparison_class"),
+                "comparison_key": g.get("comparison_key") or d.get("comparison_key"),
+                "contract": d.get("measurement_contract"),
+                "status": status, "valid": valid,
+                # config identity for color: each impl is its own line within the SKU family.
+                "ckey": f"{sku}|fwar|{impl}|ws{world_size}",
+                "label": label, "color": COLORS.get(sku, "#555"),  # provisional; reassigned below
+                "rows": rows,
+            })
+    # DISTINCT color per config key within the SKU family (same scheme as load_nccl_series), so each
+    # impl keeps a SKU-readable hue and the three impls stay distinguishable.
+    by_sku: dict[str, list[str]] = {}
+    for ck in sorted({s["ckey"] for s in series}):
+        by_sku.setdefault(ck.split("|")[0], []).append(ck)
+    ckcolor: dict[str, str] = {}
+    fb = 0
+    for sku, cks in by_sku.items():
+        fam = SKU_FAMILY.get(sku)
+        for j, ck in enumerate(cks):
+            if fam:
+                ckcolor[ck] = fam[j % len(fam)]
+            else:
+                ckcolor[ck] = PALETTE[fb % len(PALETTE)]; fb += 1
+    for s in series:
+        s["color"] = ckcolor[s["ckey"]]
+    return series
+
+
 def _assign_coll_colors(series: list[dict]) -> list[dict]:
     """Assign a DISTINCT color per `ckey` within each SKU's hue family (same scheme as the EP / NCCL
     series), so a collective line keeps a SKU-readable hue and same-SKU configs stay distinguishable."""
@@ -1609,6 +1685,11 @@ def main() -> int:
     # ADDITIVE: independent of the family=moe EP series above; an empty list simply leaves the tabs
     # as "no data yet" placeholders (GHA nccl runs may still be in flight).
     nccl_series = load_nccl_series(args.results_dir)
+    # Framework custom all-reduce (family=allreduce-fw): nccl baseline vs flashinfer-oneshot/twoshot.
+    # ADDITIVE — appended into the same list so it flows through the SAME All-reduce tab path, the
+    # has_ar / nccl_ops detection, and the `const NCCL` serialization with zero extra JS.
+    fwar_series = load_allreduce_fw_series(args.results_dir)
+    nccl_series = nccl_series + fwar_series
     nccl_ops = {s["op"] for s in nccl_series}
     has_ar, has_ag = "all_reduce" in nccl_ops, "all_gather" in nccl_ops
     # Data-movement collective families (follow-up): CPU<->GPU offload, copy-engine/SDMA, KV-cache.
