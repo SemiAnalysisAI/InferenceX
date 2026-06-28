@@ -220,13 +220,22 @@ class _MicroscaleRecipe:
     _MX_BLOCK = 32   # mxfp8 e8m0 block size
     _NV_VEC = 16     # nvfp4 e4m3 scale block size (sf_vec_size)
 
+    _MXFP4_VEC = 32  # mxfp4 e8m0 block size (sf_vec_size)
+    # OCP e2m1 magnitudes indexed by (exp<<1)|mant (3 low bits); bit3 = sign.
+    _E2M1_MAG = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
+
     def __init__(self, kind):
-        self.kind = kind  # "mxfp8" | "nvfp4"  (mxfp4 dropped: its SF is tile-padded, not per-token
-                          # movable through the A2A — see docs/gated.md).
+        self.kind = kind  # "mxfp8" | "nvfp4" | "mxfp4"
+        # mxfp4 is reachable after all: mxfp4_quantize() forces a tile-padded SWIZZLED SF, but the
+        # lower-level fp4_quantize(sf_vec_size=32, sf_use_ue8m0=True, is_sf_swizzled_layout=False)
+        # emits e2m1 + e8m0 in a LINEAR per-token layout (movable through the A2A). dequant is a manual
+        # e2m1 LUT * 2^(e8m0-127) (no flashinfer linear-mxfp4 dequant exists; mxfp4_dequantize wants
+        # swizzled). The dispatch gate is consistency-based, so this validates the comm honestly.
         import flashinfer as _fi
         self._fi = _fi
         need = {"mxfp8": ("mxfp8_quantize",),
-                "nvfp4": ("fp4_quantize", "e2m1_and_ufp8sf_scale_to_float")}[kind]
+                "nvfp4": ("fp4_quantize", "e2m1_and_ufp8sf_scale_to_float"),
+                "mxfp4": ("fp4_quantize",)}[kind]
         for fn in need:
             if not hasattr(_fi, fn):
                 raise _loud(f"{kind} quantizer lookup", f"flashinfer.{fn} not found",
@@ -236,12 +245,18 @@ class _MicroscaleRecipe:
         # Returns (q, sf) — BOTH per-token (first-dim == T) so the A2A moves them as a payload list.
         # mxfp8: q [T,H] e4m3, sf [T, H/32] e8m0(uint8), LINEAR (is_sf_swizzled_layout=False).
         # nvfp4: q [T, H/2] uint8 (packed e2m1), sf [T, H/16] uint8 (ufp8 e4m3), per-tensor global sf.
+        # mxfp4: q [T, H/2] uint8 (packed e2m1), sf [T, H/32] uint8 (e8m0), LINEAR — via fp4_quantize.
         fi = self._fi
         xt = x.contiguous()
         T, H = xt.shape
         if self.kind == "mxfp8":
             q, sf = fi.mxfp8_quantize(xt, is_sf_swizzled_layout=False)
             sf = sf.reshape(T, H // self._MX_BLOCK)
+        elif self.kind == "mxfp4":
+            q, sf = fi.fp4_quantize(xt, sf_vec_size=self._MXFP4_VEC, sf_use_ue8m0=True,
+                                    is_sf_swizzled_layout=False)
+            if sf.dim() == 1:
+                sf = sf.reshape(T, -1)
         else:  # nvfp4: global_scale maps amax -> the max representable (e4m3max * e2m1max = 448*6);
                # dequant divides by it. (the reciprocal — amax/(448*6) — yields ~0 output, relerr~1.)
             gsf = ((_FP8_MAX * 6.0) / xt.float().abs().amax().clamp(min=1e-4)).reshape(1)
@@ -268,6 +283,21 @@ class _MicroscaleRecipe:
             qf = q.reshape(N, H // B, B).float()
             sff = sf.reshape(N, H // B).float()
             out = (qf * torch.pow(torch.tensor(2.0, device=q.device), sff - 127.0).unsqueeze(-1)).reshape(N, H)
+        elif self.kind == "mxfp4":
+            # Manual e2m1 (LUT) + e8m0 block-32 decode (no flashinfer linear-mxfp4 dequant exists).
+            Hp = q.shape[-1]
+            H = Hp * 2
+            qb = q.reshape(N, Hp)
+            lut = torch.tensor(self._E2M1_MAG, device=q.device, dtype=torch.float32)
+            def _dec(nib):  # nib uint8 [N,Hp] 0..15 -> signed e2m1 magnitude
+                sign = 1.0 - 2.0 * ((nib >> 3) & 1).float()
+                return sign * lut[(nib & 0x7).long()]
+            lo = _dec(qb & 0xF)
+            hi = _dec((qb >> 4) & 0xF)          # byte packs [v_lo, v_hi]
+            vals = torch.stack([lo, hi], dim=-1).reshape(N, H)
+            blk = H // self._MXFP4_VEC
+            scale = torch.pow(torch.tensor(2.0, device=q.device), sf.reshape(N, blk).float() - 127.0)
+            out = (vals.view(N, blk, self._MXFP4_VEC) * scale.view(N, blk, 1)).reshape(N, H)
         else:  # nvfp4 — DEVICE dequant (e2m1 + ufp8 e4m3 scale + per-tensor global), linear layout.
             qf = q.reshape(N, q.shape[-1]).contiguous()
             sff = sf.reshape(N, sf.shape[-1]).contiguous()
@@ -283,14 +313,15 @@ class _MicroscaleRecipe:
 
 
 # dispatch_dtype -> (label, kind). kind selects the cast/dequant path in make_problem/stage.
-# mxfp4 is intentionally absent — FlashInfer's mxfp4_quantize emits only a tile-padded [pad(T),H/32]
-# scale-factor that does not move through a per-token A2A (docs/gated.md). mxfp8 (MX 8-bit) + nvfp4
-# (NV 4-bit) ARE here — they cover the OCP-microscaling dispatch goal on this working path.
+# mxfp4 uses fp4_quantize(sf_use_ue8m0=True, is_sf_swizzled_layout=False) — a LINEAR e8m0 SF that
+# moves per-token through the A2A (mxfp4_quantize's tile-padded swizzled SF does NOT; that was the
+# old blocker). mxfp8/mxfp4/nvfp4 + the e4m3 fp8 recipes cover the OCP-microscaling dispatch goal.
 _QUANT_RECIPES = {
     "fp8":            ("per-block-128", "e4m3"),
     "fp8-pertoken":   ("per-token", "e4m3"),
     "fp8-directcast": ("direct-cast", "e4m3"),
     "mxfp8":          ("mxfp8-e8m0-block32", "mxfp8"),
+    "mxfp4":          ("mxfp4-e8m0-block32", "mxfp4"),
     "nvfp4":          ("nvfp4-e4m3-block16", "nvfp4"),
 }
 _E4M3_CASTS = {"fp8": _e4m3_block128_cast, "fp8-pertoken": _e4m3_pertoken_cast,
@@ -328,7 +359,7 @@ class FlashInferBackend:
     #                     stage(). Covers goal's "MXFP8 / MXFP4 / NVFP4 dispatch" — reachable on
     #                     this working path because FlashInfer ships the quantize/dequantize kernels.
     SUPPORTED_PRECISIONS = {"bf16", "fp8", "fp8-pertoken", "fp8-directcast",
-                            "mxfp8", "nvfp4"}
+                            "mxfp8", "mxfp4", "nvfp4"}
     SUPPORTED_MODES = {"normal"}
     # Only the contract whose timing boundary FlashInfer can honor: layout (the dispatch
     # send-counts) is computed inside dispatch and cannot be hoisted to a separate untimed

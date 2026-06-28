@@ -68,7 +68,7 @@ on:
         description: EP dispatch payload precision (fp8 scale-layout recipes + FlashInfer OCP-microscaling mxfp8/nvfp4)
         type: choice
         default: bf16
-        options: [bf16, fp8, fp8-pertoken, fp8-directcast, mxfp8, nvfp4]
+        options: [bf16, fp8, fp8-pertoken, fp8-directcast, mxfp8, mxfp4, nvfp4]
       mode:
         # normal = high-throughput kernels (decode+prefill); ll = DeepEP low-latency
         # (decode-shaped, fp8 cast in-kernel). LL is rejected on backends without it

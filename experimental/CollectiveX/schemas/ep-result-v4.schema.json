@@ -61,7 +61,7 @@
       "properties": {
         "hidden": {"type": "integer"}, "topk": {"type": "integer"},
         "experts": {"type": "integer"}, "experts_per_rank": {"type": "integer"},
-        "dispatch_dtype": {"type": "string", "enum": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "nvfp4"]},
+        "dispatch_dtype": {"type": "string", "enum": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "mxfp4", "nvfp4"]},
         "routing": {"type": "string"},
         "eplb": {"type": "boolean"}, "num_logical_experts": {"type": "integer"},
         "kernel_gen": {"type": "string"},

@@ -40,7 +40,7 @@ def _sku_arch(sku: str) -> str:
 # format — FlashInfer's fp4 quantize/dequantize does NOT round-trip correctly on Hopper sm90
 # (validated: nvfp4 dispatch correct=True on B300, correct=False on H100). mxfp8 (e4m3) is fine on
 # Hopper. Gated here so a Hopper nvfp4 dispatch is cleanly REJECTED, not run-and-marked-invalid.
-ARCH_ONLY_DTYPES = {"nvfp4": "blackwell"}
+ARCH_ONLY_DTYPES = {"nvfp4": "blackwell", "mxfp4": "blackwell"}
 
 # Backend capability table — MIRRORS the adapter SUPPORTED_* sets (the runtime source of
 # truth). Keep in sync with ep_deepep.py / ep_mori.py. LL is decode-only; cached-layout is
@@ -91,9 +91,7 @@ CAP = {
         #   (OCP-microscaling via FlashInfer's native quantize/dequantize kernels).
         "vendors": ["nvidia"],
         "modes": ["normal"],
-        # mxfp4 excluded: FlashInfer's mxfp4_quantize emits a tile-padded SF that can't move
-        # through a per-token A2A (docs/gated.md). mxfp8 + nvfp4 cover the microscaling dispatch goal.
-        "dtypes": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "nvfp4"],
+        "dtypes": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "mxfp4", "nvfp4"],
         "contracts": ["layout-and-dispatch-v1"],
         "transports": ["nvlink", "mnnvl"],
         # Combine: bf16 default, OR a quantized COMBINE OUTPUT (fp8 e4m3) via moe_a2a_combine
