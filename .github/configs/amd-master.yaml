@@ -2895,8 +2895,10 @@ minimaxm3-fp8-mi300x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+      # TP8/EP1 across the full conc range. The prior EP8 row at conc256
+      # regressed throughput (434 vs 905 tok/s/gpu @ conc256, EP8 vs EP1); EP1
+      # is also the topology the AITER uplift was measured against.
+      - { tp: 8, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
