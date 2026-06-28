@@ -339,8 +339,8 @@ class FlashInferBackend:
     # moe_a2a_combine output_dtype (fp8 e4m3 wired; the bundled 0.6.8.post1 has no output_dtype, so
     # a combine-quant run upgrades FlashInfer first via cx_build_flashinfer_latest). nvfp4/mxfp8
     # combine reserved (fp4/e8m0 output packing — extend once fp8-combine is GHA-validated).
-    SUPPORTED_COMBINE_DTYPES = {"bf16", "fp8"}
-    SUPPORTED_COMBINE_QUANT_MODES = {"none", "fp8"}
+    SUPPORTED_COMBINE_DTYPES = {"bf16", "fp8", "nvfp4"}
+    SUPPORTED_COMBINE_QUANT_MODES = {"none", "fp8", "nvfp4"}
 
     def __init__(self, args, rank, world_size, local_rank, device):
         self.args = args
@@ -389,9 +389,11 @@ class FlashInferBackend:
                     "combine-quant requested but flashinfer.comm.MoeAlltoAll.combine has NO output_dtype — "
                     "this wheel (likely 0.6.8.post1) predates PR3376/3643. The run must upgrade FlashInfer "
                     "first (CX_COMBINE_DTYPE!=bf16 triggers cx_build_flashinfer_latest in run_in_container.sh).")
-            self._qc_out_dtype = {"fp8": torch.float8_e4m3fn}.get(self.combine_dtype)
+            # fp8 -> e4m3 output + UE8M0 uint8 vec-32 scales (= MXFP8). nvfp4 -> uint8 packed-e2m1
+            # output + e4m3 vec-16 scales + a per-tensor output_scalar_scale (the fp4 path).
+            self._qc_out_dtype = {"fp8": torch.float8_e4m3fn, "nvfp4": torch.uint8}.get(self.combine_dtype)
             if self._qc_out_dtype is None:
-                raise RuntimeError(f"combine_dtype={self.combine_dtype} not wired (fp8 only so far)")
+                raise RuntimeError(f"combine_dtype={self.combine_dtype} not wired (fp8|nvfp4)")
             # quantized-combine round-trip is looser than the bf16 reconstruction (fp8 ~1/16 +
             # whatever the dispatch added); keep at least the dispatch tol.
             self.tolerance = max(self.tolerance, 1.6e-1)
@@ -647,38 +649,58 @@ class FlashInferBackend:
         # The fp8 reduction is what's TIMED. CX_QC_SCALE override: "block32" (default) | "pertoken"[T,1].
         H = int(getattr(self, "hidden", 0)) or int(self.args.hidden)
         T = p.T
-        mode = os.environ.get("CX_QC_SCALE", "block32")
-        blocks = 1 if mode == "pertoken" else max(1, H // self._QC_VEC)
-        sc = torch.zeros(T, blocks, device=self.device, dtype=torch.uint8)
+        if self.combine_dtype == "nvfp4":
+            # NVFP4 combine: uint8 packed-e2m1 output + e4m3 (float8) scales vec-16 + per-tensor scalar.
+            blocks = max(1, H // 16)
+            sc = torch.zeros(T, blocks, device=self.device, dtype=torch.float8_e4m3fn)
+            self._qc_scalar = float(os.environ.get("CX_QC_NVFP4_SCALAR", "1.0"))
+            kw = dict(payload_in_workspace=False, output_dtype=self._qc_out_dtype,
+                      output_scales=sc, output_scalar_scale=self._qc_scalar)
+            label = f"nvfp4 output_scales=e4m3[{T},{blocks}] scalar={self._qc_scalar}"
+        else:
+            # MXFP8 combine: e4m3 output + UE8M0 uint8 scales vec-32 (the main-source spec).
+            mode = os.environ.get("CX_QC_SCALE", "block32")
+            blocks = 1 if mode == "pertoken" else max(1, H // self._QC_VEC)
+            sc = torch.zeros(T, blocks, device=self.device, dtype=torch.uint8)
+            kw = dict(payload_in_workspace=False, output_dtype=self._qc_out_dtype, output_scales=sc)
+            label = f"mxfp8 output_scales=uint8[{T},{blocks}]"
         try:
-            out = self.a2a.combine(h.combine_input, T, payload_in_workspace=False,
-                                   output_dtype=self._qc_out_dtype, output_scales=sc)
+            out = self.a2a.combine(h.combine_input, T, **kw)
         except Exception as exc:
-            raise _loud(f"MoeAlltoAll.combine(output_dtype=fp8, output_scales=uint8[T,{blocks}])",
-                        f"quant-combine call failed (CX_QC_SCALE={mode}; UE8M0 vec-32 per the main source)",
-                        exc)
+            raise _loud(f"MoeAlltoAll.combine({label})",
+                        f"quant-combine call failed ({self.combine_dtype}; per the main-source spec)", exc)
         if self.rank == 0 and not getattr(self, "_qc_logged", False):
             self._qc_logged = True
             oq = out[0] if isinstance(out, (tuple, list)) else out
-            print(f"[ep_flashinfer] combine-quant mxfp8 OK output_scales=uint8[{T},{blocks}] "
-                  f"out={tuple(oq.shape)}:{oq.dtype}", flush=True)
+            print(f"[ep_flashinfer] combine-quant {label} OK out={tuple(oq.shape)}:{oq.dtype}", flush=True)
         return self._finish_qcombine(p, out, sc, H)
 
     def _finish_qcombine(self, p, out, sc, H):
-        # Dequant the MXFP8 combine output: e4m3 * 2^(UE8M0_uint8 - 127), per block-32 (or per-token).
+        # Dequant the quantized combine output (cached, UNTIMED) -> bf16 for the correctness gate.
+        #   mxfp8: e4m3 * 2^(UE8M0_uint8 - 127), per block-32.
+        #   nvfp4: e2m1_and_ufp8sf_scale_to_float(packed-e2m1, e4m3-scales, global=1/scalar), vec-16.
         out_q = out[0] if isinstance(out, (tuple, list)) else out
         cached = getattr(p, "_qc_dequant", None)
         if cached is None:
-            of = out_q.float()
-            T = of.shape[0]
-            blocks = sc.shape[-1] if torch.is_tensor(sc) and sc.dim() >= 2 else 1
-            if blocks > 1 and (H % blocks) == 0:
-                bs = H // blocks
-                scale = torch.pow(torch.tensor(2.0, device=of.device), sc.float() - 127.0)  # e8m0 decode
-                cached = (of.view(T, blocks, bs) * scale.view(T, blocks, 1)).reshape(T, H).to(torch.bfloat16)
+            T = out_q.shape[0]
+            if self.combine_dtype == "nvfp4":
+                gsf = torch.tensor([1.0 / max(1e-6, getattr(self, "_qc_scalar", 1.0))], dtype=torch.float32)
+                # nvfp4 dequant via the flashinfer e2m1 decoder (linear layout, vec-16)
+                import flashinfer as _fi
+                o = _fi.e2m1_and_ufp8sf_scale_to_float(
+                    out_q.reshape(T, -1).contiguous(), sc.reshape(T, -1).contiguous(),
+                    global_scale_tensor=gsf, sf_vec_size=16, is_sf_swizzled_layout=False)
+                cached = o.reshape(T, H).to(device=out_q.device, dtype=torch.bfloat16)
             else:
-                scale = torch.pow(torch.tensor(2.0, device=of.device), sc.float().reshape(T, 1) - 127.0)
-                cached = (of * scale).to(torch.bfloat16)
+                of = out_q.float()
+                blocks = sc.shape[-1] if torch.is_tensor(sc) and sc.dim() >= 2 else 1
+                if blocks > 1 and (H % blocks) == 0:
+                    bs = H // blocks
+                    scale = torch.pow(torch.tensor(2.0, device=of.device), sc.float() - 127.0)  # e8m0
+                    cached = (of.view(T, blocks, bs) * scale.view(T, blocks, 1)).reshape(T, H).to(torch.bfloat16)
+                else:
+                    scale = torch.pow(torch.tensor(2.0, device=of.device), sc.float().reshape(T, 1) - 127.0)
+                    cached = (of * scale).to(torch.bfloat16)
             p._qc_dequant = cached
         return cached
 

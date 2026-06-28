@@ -100,8 +100,8 @@ CAP = {
         # output_dtype — present in a NEWER flashinfer (PR3376/3643), pulled in by the run's
         # cx_build_flashinfer_latest upgrade (the bundled 0.6.8.post1 lacks it). nvfp4/mxfp8 combine
         # reserved (fp4/e8m0 output packing) until fp8-combine is GHA-validated.
-        "combine_dtypes": ["bf16", "fp8"],
-        "quant_modes": ["none", "fp8"],
+        "combine_dtypes": ["bf16", "fp8", "nvfp4"],
+        "quant_modes": ["none", "fp8", "nvfp4"],
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
     "deepep-hybrid": {
