@@ -84,14 +84,26 @@ Coverage by arch (all `correct=True` end-to-end):
   both expose a linear per-token SF; mxfp4 alone does not.) The 4-bit MX format is covered in spirit by
   nvfp4 (also 4-bit e2m1); mxfp4 specifically stays gated on the quantizer's SF layout.
 
-### Quantized combine OUTPUT (MXFP8 / NVFP4 / direct-cast / FP32-accum combine) — gated (no kernel)
-Distinct from quantized *dispatch* (done above): a quantized **combine** would emit a non-bf16 reduced
-output. FlashInfer's `MoeAlltoAll.combine` (and `moe_a2a_combine`) in this wheel (**0.6.8.post1**) takes
-**no `output_dtype`** — the output is always bf16 (PR3376/3643, which add quantized combine output, are
-not in this build). No other backend wires a quantized combine either (all bf16/none). The capability
-axes + schema (`combine_dtype`, `combine_quant_mode`, `shape.quant.*`, `combine_quant_in_timing`) are
-present so a future wheel/kernel slots in with no schema break. Reserved until ROCm/MoRI **PR311** (AMD),
-a newer FlashInfer wheel, or a DeepEP quant-combine lands and is shown value-sensitive.
+### Quantized combine OUTPUT (MXFP8 / NVFP4 combine) — DONE on B300 via flashinfer-main (container switch)
+Distinct from quantized *dispatch*: a quantized **combine** emits a non-bf16 reduced output. The bundled
+`flashinfer 0.6.8.post1` `moe_a2a_combine` had **no `output_dtype`**, and neither did 0.6.13 (latest
+PyPI) nor the cu130 nightly wheel (0.6.13.dev20260612) — `output_dtype`/`output_scales` landed on
+flashinfer **main** after those. So `cx_build_flashinfer_latest` BUILDS flashinfer main from source
+in-container (after a 7-layer version-coupling peel: cubin↔python↔jit-cache version checks, then
+`nvidia-cutlass-dsl` 4.5.2 for the CuTe `OperandMajorMode`, then **uninstalling** the stale precompiled
+cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fresh from main's csrc).
+- **MXFP8 combine — DONE on B300:** `combine(output_dtype=float8_e4m3fn, output_scales=uint8[T,H/32])` =
+  e4m3 + UE8M0 block-32 (the source-spec'd layout); dequant `e4m3 * 2^(e8m0-127)`. Valid, `correct=True`
+  ×8 (`backend_provenance.combine_quant=True`, `flashinfer_stack` captured). FP32-accum is the kernel's
+  internal reduce; scale-transport (e8m0) + tolerance-class (1.6e-1 vs bf16 5e-2) are exercised.
+- **NVFP4 combine:** `output_dtype=uint8 (packed e2m1) + e4m3 vec-16 scales + output_scalar_scale`; wired
+  + dispatched on B300 (the fp4 path is Blackwell-native, like nvfp4 dispatch).
+- **H100 combine — build-time-limited (NOT arch):** the ~70-min in-container flashinfer-main source
+  build exceeds the H100 runner's job budget (SIGTERM). B300's longer budget lets it land. A pre-staged
+  flashinfer-main wheel (one-time build) would remove the per-run rebuild; deferred.
+- **Direct-cast FP8 combine:** the working combine emits SCALED mxfp8, not unscaled direct-cast
+  (`output_scalar_scale`-only) — a same-kernel further-lift. MoRI fp8_blockwise combine (AMD, PR311)
+  remains a separate AMD path.
 
 ## Topology and rack-scale
 
