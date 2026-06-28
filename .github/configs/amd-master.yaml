@@ -3185,26 +3185,26 @@ dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
     agentic-coding:
     - duration: 1800
       search-space:
+      # - spec-decoding: "none"
+      #   conc-list: [ 1,4,8,16,32,64,128 ]
+      #   offloading: none
+      #   prefill:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: false
+      #     additional-settings:
+      #     - "PREFILL_NODES=1"
+      #   decode:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: false
+      #     additional-settings:
+      #     - "DECODE_NODES=1"
+      #     - "DECODE_MTP_SIZE=0"
       - spec-decoding: "none"
-        conc-list: [ 1,2 ]
-        offloading: none
-        prefill:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "PREFILL_NODES=1"
-        decode:
-          num-worker: 1
-          tp: 8
-          ep: 1
-          dp-attn: false
-          additional-settings:
-          - "DECODE_NODES=1"
-          - "DECODE_MTP_SIZE=0"
-      - spec-decoding: "none"
-        conc-list: [ 1 ]
+        conc-list: [ 32,64,128 ]
         offloading: hicache
         total-cpu-dram-gb: 2418
         prefill:
@@ -3235,5 +3235,9 @@ minimaxm3-fp8-mi355x-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, ep: 1, offloading: none, conc-list: [48] }
-      - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [48] }
+      - { tp: 4, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 8, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 8, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }

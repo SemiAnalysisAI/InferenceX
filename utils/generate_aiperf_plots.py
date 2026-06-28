@@ -7,7 +7,13 @@ the legacy kv-cache-tester pipeline produced. The launchers feed this
 $RESULT_DIR after each run so downstream tooling and humans see the
 same visual.
 
-Layout (6 rows x 2 cols, suptitle "vLLM Server Metrics During Benchmark"):
+Backend-aware: server-metric panels resolve both the vLLM (``vllm:``) and
+SGLang (``sglang:``) Prometheus names, mirroring aiperf's own accumulator
+mapping. The suptitle reflects the detected backend. Panels with no
+backend equivalent (KV-offload bytes, prompt-source 3-way split for SGLang,
+etc.) render empty rather than erroring.
+
+Layout (6 rows x 2 cols, suptitle "<Backend> Server Metrics During Benchmark"):
     (0,0) KV Cache Utilization Over Time (HBM + External)
     (0,1) Request Queue Depth (running / waiting / total)
     (1,0) Prefix Cache Hit Rate Per Interval (GPU / External / Combined)
@@ -185,6 +191,57 @@ def aggregate_timeseries(
     return times, values
 
 
+def detect_backend(server_metrics: dict) -> str | None:
+    """Infer the inference backend from the exported metric-name prefixes.
+
+    aiperf keys ``server_metrics["metrics"]`` by the raw Prometheus family
+    name, so the prefix (``vllm:`` vs ``sglang:``) identifies the server.
+    """
+    metrics = server_metrics.get("metrics") or {}
+    n_sgl = sum(1 for k in metrics if k.startswith("sglang:"))
+    n_vllm = sum(1 for k in metrics if k.startswith("vllm:"))
+    if not n_sgl and not n_vllm:
+        return None
+    return "sglang" if n_sgl >= n_vllm and n_sgl else "vllm"
+
+
+def aggregate_timeseries_any(
+    server_metrics: dict, names, t0_ns: int | None, **kwargs
+) -> tuple[list[float], list[float]]:
+    """aggregate_timeseries over the first candidate name that yields data.
+
+    Lets a panel accept both the vLLM and SGLang spelling of a metric without
+    the caller knowing which backend produced the export.
+    """
+    for name in names:
+        times, values = aggregate_timeseries(server_metrics, name, t0_ns, **kwargs)
+        if times:
+            return times, values
+    return [], []
+
+
+def _sglang_host_usage_pct(
+    server_metrics: dict, t0_ns: int | None
+) -> tuple[list[float], list[float]]:
+    """SGLang HiCache CPU (L2) tier fill = host_used / host_total, as a fraction.
+
+    SGLang has no ``cpu_cache_usage_perc`` gauge; it exposes the host pool's
+    used/total token counts instead (HiCache-enabled runs only).
+    """
+    ut, uv = aggregate_timeseries(
+        server_metrics, "sglang:hicache_host_used_tokens", t0_ns, aggregator=max
+    )
+    _, tv = aggregate_timeseries(
+        server_metrics, "sglang:hicache_host_total_tokens", t0_ns, aggregator=max
+    )
+    if not ut:
+        return [], []
+    total_cap = max(tv) if tv else 0.0
+    if total_cap <= 0:
+        return [], []
+    return ut, [u / total_cap for u in uv]
+
+
 def rolling_average(values: list[float], window: int) -> list[float]:
     if window <= 1 or not values:
         return list(values)
@@ -205,12 +262,22 @@ def rolling_window(n: int, max_window: int = 50) -> int:
 
 
 def panel_kv_cache_usage(ax, server_metrics: dict, t0_ns: int | None) -> None:
-    times, values = aggregate_timeseries(
-        server_metrics, "vllm:kv_cache_usage_perc", t0_ns, aggregator=max
+    # GPU HBM KV usage: vLLM gauge (v1/v0 spellings) or SGLang token_usage.
+    times, values = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:kv_cache_usage_perc", "vllm:gpu_cache_usage_perc", "sglang:token_usage"),
+        t0_ns,
+        aggregator=max,
     )
-    cpu_times, cpu_values = aggregate_timeseries(
-        server_metrics, "vllm:cpu_kv_cache_usage_perc", t0_ns, aggregator=max
+    # CPU/external tier: vLLM offload gauge, else SGLang HiCache host ratio.
+    cpu_times, cpu_values = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:cpu_kv_cache_usage_perc", "vllm:cpu_cache_usage_perc"),
+        t0_ns,
+        aggregator=max,
     )
+    if not cpu_values:
+        cpu_times, cpu_values = _sglang_host_usage_pct(server_metrics, t0_ns)
 
     def _norm(v: float) -> float:
         return v * 100.0 if 0 <= v <= 1.0 else v
@@ -242,11 +309,17 @@ def panel_kv_cache_usage(ax, server_metrics: dict, t0_ns: int | None) -> None:
 
 
 def panel_queue_depth(ax, server_metrics: dict, t0_ns: int | None) -> None:
-    rt, rv = aggregate_timeseries(
-        server_metrics, "vllm:num_requests_running", t0_ns, aggregator=max
+    rt, rv = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:num_requests_running", "sglang:num_running_reqs"),
+        t0_ns,
+        aggregator=max,
     )
-    wt, wv = aggregate_timeseries(
-        server_metrics, "vllm:num_requests_waiting", t0_ns, aggregator=max
+    wt, wv = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:num_requests_waiting", "sglang:num_queue_reqs"),
+        t0_ns,
+        aggregator=max,
     )
     if rt:
         win = rolling_window(len(rv))
@@ -310,6 +383,33 @@ def panel_prefix_cache_hit_rate(ax, server_metrics: dict, t0_ns: int | None) -> 
         "vllm:external_prefix_cache_queries",
         t0_ns,
     )
+    # SGLang folds radix (HBM) + HiCache (host) hits into one counter pair;
+    # there is no GPU/external split. Prefer the cumulative counter deltas
+    # (cached_tokens / prompt_tokens) over the per-batch cache_hit_rate gauge,
+    # which reads 0 between requests during low-concurrency agentic replay.
+    sgl_t, sgl_r = ([], [])
+    if not gpu_t and not ext_t:
+        sgl_t, sgl_r = _hit_rate_intervals(
+            server_metrics, "sglang:cached_tokens", "sglang:prompt_tokens", t0_ns
+        )
+        if not sgl_t:
+            gt, gv = aggregate_timeseries(
+                server_metrics, "sglang:cache_hit_rate", t0_ns, aggregator=max
+            )
+            if gt:
+                sgl_t = gt
+                sgl_r = [v * 100.0 if 0 <= v <= 1.0 else v for v in gv]
+    if sgl_t:
+        ax.scatter(sgl_t, sgl_r, alpha=0.3, s=5, c="green", label="SGLang (radix+host)")
+        win = rolling_window(len(sgl_r))
+        if win > 1:
+            ax.plot(
+                sgl_t,
+                rolling_average(sgl_r, win),
+                "green",
+                linewidth=2,
+                label=f"SGLang avg (n={win})",
+            )
     if gpu_t:
         ax.scatter(gpu_t, gpu_r, alpha=0.3, s=5, c="purple", label="GPU (HBM)")
         win = rolling_window(len(gpu_r))
@@ -348,7 +448,7 @@ def panel_prefix_cache_hit_rate(ax, server_metrics: dict, t0_ns: int | None) -> 
                     linewidth=2,
                     label=f"Combined avg (n={win})",
                 )
-    if gpu_t or has_ext:
+    if gpu_t or has_ext or sgl_t:
         ax.legend(loc="best", fontsize=8)
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Hit Rate (%)")
@@ -358,11 +458,17 @@ def panel_prefix_cache_hit_rate(ax, server_metrics: dict, t0_ns: int | None) -> 
 
 
 def panel_throughput(ax, server_metrics: dict, t0_ns: int | None) -> None:
-    gen_t, gen_v = aggregate_timeseries(
-        server_metrics, "vllm:generation_tokens", t0_ns, value_key_priority=("rate",)
+    gen_t, gen_v = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:generation_tokens", "sglang:generation_tokens"),
+        t0_ns,
+        value_key_priority=("rate",),
     )
-    prompt_t, prompt_v = aggregate_timeseries(
-        server_metrics, "vllm:prompt_tokens", t0_ns, value_key_priority=("rate",)
+    prompt_t, prompt_v = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:prompt_tokens", "sglang:prompt_tokens"),
+        t0_ns,
+        value_key_priority=("rate",),
     )
     if gen_t and prompt_t and len(gen_t) == len(prompt_t):
         total = [g + p for g, p in zip(gen_v, prompt_v)]
@@ -404,57 +510,133 @@ def panel_throughput(ax, server_metrics: dict, t0_ns: int | None) -> None:
     ax.grid(True, alpha=0.3)
 
 
+def _offload_direction(
+    server_metrics: dict, t0_ns: int | None, direction: str
+) -> tuple[list[float], list[float], list[float], str | None]:
+    """Per-direction KV-offload series, backend-aware.
+
+    ``direction`` is ``"gpu_to_cpu"`` or ``"cpu_to_gpu"``. Returns
+    ``(times, rates, cumulative, unit)`` where ``unit`` is ``"bytes"`` (vLLM)
+    or ``"tok"`` (SGLang); ``([], [], [], None)`` when neither is present.
+
+    - vLLM: ``vllm:kv_offload_bytes_<dir>`` counter (bytes; per-slice total +
+      rate).
+    - SGLang exposes no offload byte counter; the equivalents are in tokens:
+        * cpu_to_gpu -> ``sglang:load_back_tokens`` (host-tier prefix loaded
+          back into GPU HBM).
+        * gpu_to_cpu -> positive deltas of ``sglang:hicache_host_used_tokens``
+          (net writes into the host pool; approximate — eviction lowers
+          occupancy and is not separately re-counted).
+    """
+    name = f"vllm:kv_offload_bytes_{direction}"
+    t, totals = aggregate_timeseries(
+        server_metrics, name, t0_ns, value_key_priority=("total",)
+    )
+    if t and any(v > 0 for v in totals):
+        _, rates = aggregate_timeseries(
+            server_metrics, name, t0_ns, value_key_priority=("rate",)
+        )
+        cum, run = [], 0.0
+        for v in totals:
+            run += v
+            cum.append(run)
+        return t, (rates or totals), cum, "bytes"
+
+    if direction == "cpu_to_gpu":
+        t, totals = aggregate_timeseries(
+            server_metrics,
+            "sglang:load_back_tokens",
+            t0_ns,
+            value_key_priority=("total",),
+        )
+        if not t:
+            return [], [], [], None
+        _, rates = aggregate_timeseries(
+            server_metrics,
+            "sglang:load_back_tokens",
+            t0_ns,
+            value_key_priority=("rate",),
+        )
+        cum, run = [], 0.0
+        for v in totals:
+            run += v
+            cum.append(run)
+        return t, (rates or totals), cum, "tok"
+
+    # gpu_to_cpu (SGLang): net writes inferred from host-pool occupancy growth.
+    t, occ = aggregate_timeseries(
+        server_metrics, "sglang:hicache_host_used_tokens", t0_ns, aggregator=max
+    )
+    if not t:
+        return [], [], [], None
+    rates: list[float] = []
+    cum: list[float] = []
+    run = 0.0
+    prev: float | None = None
+    prev_t: float | None = None
+    for tt, v in zip(t, occ):
+        if prev is None:
+            rates.append(0.0)
+            cum.append(0.0)
+        else:
+            delta = max(v - prev, 0.0)
+            width = max(tt - prev_t, 1e-9)
+            rates.append(delta / width)
+            run += delta
+            cum.append(run)
+        prev, prev_t = v, tt
+    return t, rates, cum, "tok"
+
+
 def panel_kv_offload_transfer_rate(
     ax, server_metrics: dict, t0_ns: int | None
 ) -> None:
-    g2c_t, g2c_v = aggregate_timeseries(
-        server_metrics,
-        "vllm:kv_offload_bytes_gpu_to_cpu",
-        t0_ns,
-        value_key_priority=("rate",),
-    )
-    c2g_t, c2g_v = aggregate_timeseries(
-        server_metrics,
-        "vllm:kv_offload_bytes_cpu_to_gpu",
-        t0_ns,
-        value_key_priority=("rate",),
-    )
-    has_data = (g2c_t and any(v > 0 for v in g2c_v)) or (
-        c2g_t and any(v > 0 for v in c2g_v)
+    g2c_t, g2c_r, _, g2c_unit = _offload_direction(server_metrics, t0_ns, "gpu_to_cpu")
+    c2g_t, c2g_r, _, c2g_unit = _offload_direction(server_metrics, t0_ns, "cpu_to_gpu")
+    unit = g2c_unit or c2g_unit
+
+    def _scale(vs: list[float]) -> list[float]:
+        return [v / 1e6 for v in vs] if unit == "bytes" else list(vs)
+
+    has_data = (g2c_t and any(v > 0 for v in g2c_r)) or (
+        c2g_t and any(v > 0 for v in c2g_r)
     )
     if has_data:
         if g2c_t:
-            mb = [v / 1e6 for v in g2c_v]
-            ax.scatter(g2c_t, mb, alpha=0.15, s=3, c="blue")
-            win = rolling_window(len(mb))
+            vs = _scale(g2c_r)
+            ax.scatter(g2c_t, vs, alpha=0.15, s=3, c="blue")
+            win = rolling_window(len(vs))
             if win > 1:
                 ax.plot(
                     g2c_t,
-                    rolling_average(mb, win),
+                    rolling_average(vs, win),
                     "b-",
                     linewidth=1.5,
                     label=f"GPU→CPU (avg n={win})",
                 )
             else:
-                ax.plot(g2c_t, mb, "b-", linewidth=1, alpha=0.8, label="GPU→CPU")
+                ax.plot(g2c_t, vs, "b-", linewidth=1, alpha=0.8, label="GPU→CPU")
         if c2g_t:
-            mb = [v / 1e6 for v in c2g_v]
-            ax.scatter(c2g_t, mb, alpha=0.15, s=3, c="red")
-            win = rolling_window(len(mb))
+            vs = _scale(c2g_r)
+            ax.scatter(c2g_t, vs, alpha=0.15, s=3, c="red")
+            win = rolling_window(len(vs))
             if win > 1:
                 ax.plot(
                     c2g_t,
-                    rolling_average(mb, win),
+                    rolling_average(vs, win),
                     "r-",
                     linewidth=1.5,
                     label=f"CPU→GPU (avg n={win})",
                 )
             else:
-                ax.plot(c2g_t, mb, "r-", linewidth=1, alpha=0.8, label="CPU→GPU")
+                ax.plot(c2g_t, vs, "r-", linewidth=1, alpha=0.8, label="CPU→GPU")
         ax.legend(fontsize=8)
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Transfer Rate (MB/s)")
-    ax.set_title("KV Offload Transfer Rate")
+    ax.set_ylabel("Transfer Rate (tokens/s)" if unit == "tok" else "Transfer Rate (MB/s)")
+    title = "KV Offload Transfer Rate"
+    if unit == "tok":
+        title += " (HiCache, tokens)"
+    ax.set_title(title)
     ax.grid(True, alpha=0.3)
 
 
@@ -475,6 +657,27 @@ def panel_prefill_source_breakdown(
     e_t, e_v = _prompt_token_source_series(
         server_metrics, "external_kv_transfer", t0_ns
     )
+    # SGLang has no prompt_tokens_by_source breakdown. Derive a 2-way split
+    # from the counter deltas: cache hit = cached_tokens, computed =
+    # prompt_tokens - cached_tokens (radix + HiCache host folded together).
+    sglang_mode = False
+    if not (c_t or h_t or e_t):
+        pt, pv = aggregate_timeseries(
+            server_metrics, "sglang:prompt_tokens", t0_ns, value_key_priority=("total",)
+        )
+        ct, ctv = aggregate_timeseries(
+            server_metrics, "sglang:cached_tokens", t0_ns, value_key_priority=("total",)
+        )
+        if pt:
+            sglang_mode = True
+            cached_at = dict(zip(ct, ctv))
+            h_t, h_v, c_t, c_v = [], [], [], []
+            for t, p in zip(pt, pv):
+                cached = cached_at.get(t, 0.0)
+                h_t.append(t)
+                h_v.append(cached)
+                c_t.append(t)
+                c_v.append(max(p - cached, 0.0))
     # Align timestamps: use the union of all sample timestamps.
     if not (c_t or h_t or e_t):
         ax.set_xlabel("Time (s)")
@@ -522,12 +725,17 @@ def panel_prefill_source_breakdown(
             pct_c.append(0.0)
             pct_h.append(0.0)
             pct_e.append(0.0)
+    labels = (
+        ["Computed", "Cache Hit (radix+host)", "External"]
+        if sglang_mode
+        else ["Prefill", "HBM Cache Hit", "Offload Cache Hit"]
+    )
     ax.stackplot(
         samples,
         pct_c,
         pct_h,
         pct_e,
-        labels=["Prefill", "HBM Cache Hit", "Offload Cache Hit"],
+        labels=labels,
         colors=["coral", "steelblue", "mediumseagreen"],
         alpha=0.8,
     )
@@ -542,24 +750,26 @@ def panel_prefill_source_breakdown(
 def panel_kv_offload_cumulative(
     ax,
     server_metrics: dict,
-    metric_name: str,
+    direction: str,
     title: str,
     color: str,
     t0_ns: int | None,
 ) -> None:
-    times, values = aggregate_timeseries(
-        server_metrics, metric_name, t0_ns, value_key_priority=("total",)
-    )
-    if times and any(v > 0 for v in values):
-        cumulative: list[float] = []
-        running = 0.0
-        for v in values:
-            running += v
-            cumulative.append(running / 1e9)  # GB
-        ax.plot(times, cumulative, f"{color}-", linewidth=1.5)
-        ax.fill_between(times, cumulative, alpha=0.2, color=color)
+    times, _, cum, unit = _offload_direction(server_metrics, t0_ns, direction)
+    if unit == "tok":
+        ylabel, scale = "Cumulative (M tokens)", 1e6
+    else:
+        ylabel, scale = "Cumulative Transfer (GB)", 1e9
+    if times and any(v > 0 for v in cum):
+        yvals = [v / scale for v in cum]
+        ax.plot(times, yvals, f"{color}-", linewidth=1.5)
+        ax.fill_between(times, yvals, alpha=0.2, color=color)
+    # SGLang's GPU→CPU is inferred from host-pool occupancy growth, not a
+    # dedicated write counter — flag it as approximate.
+    if unit == "tok" and direction == "gpu_to_cpu":
+        title += " (approx)"
     ax.set_xlabel("Time (s)")
-    ax.set_ylabel("Cumulative Transfer (GB)")
+    ax.set_ylabel(ylabel)
     ax.set_title(title)
     ax.grid(True, alpha=0.3)
 
@@ -597,8 +807,13 @@ def panel_per_record_metric(
 
 
 def panel_preemptions(ax, server_metrics: dict, t0_ns: int | None) -> None:
-    times, values = aggregate_timeseries(
-        server_metrics, "vllm:num_preemptions", t0_ns, value_key_priority=("total",)
+    # SGLang exposes the same concept as `num_retracted_reqs_total` (counter;
+    # parser strips `_total`).
+    times, values = aggregate_timeseries_any(
+        server_metrics,
+        ("vllm:num_preemptions", "sglang:num_retracted_reqs"),
+        t0_ns,
+        value_key_priority=("total",),
     )
     if not times:
         ax.set_xlabel("Time (s)")
@@ -708,8 +923,10 @@ def main(argv: list[str]) -> int:
         # Interactivity: tokens/sec from per-token latency (ms).
         interactivities.append(1000.0 / itl if itl and itl > 0 else 0.0)
 
+    backend = detect_backend(server_metrics)
+    backend_label = {"sglang": "SGLang", "vllm": "vLLM"}.get(backend, "Server")
     fig, axes = plt.subplots(6, 2, figsize=(14, 24))
-    fig.suptitle("vLLM Server Metrics During Benchmark", fontsize=14)
+    fig.suptitle(f"{backend_label} Server Metrics During Benchmark", fontsize=14)
 
     panel_kv_cache_usage(axes[0, 0], server_metrics, t0_ns)
     panel_queue_depth(axes[0, 1], server_metrics, t0_ns)
@@ -720,7 +937,7 @@ def main(argv: list[str]) -> int:
     panel_kv_offload_cumulative(
         axes[3, 0],
         server_metrics,
-        "vllm:kv_offload_bytes_gpu_to_cpu",
+        "gpu_to_cpu",
         "KV Offload: GPU → CPU (Cumulative)",
         "b",
         t0_ns,
@@ -728,7 +945,7 @@ def main(argv: list[str]) -> int:
     panel_kv_offload_cumulative(
         axes[3, 1],
         server_metrics,
-        "vllm:kv_offload_bytes_cpu_to_gpu",
+        "cpu_to_gpu",
         "KV Offload: CPU → GPU (Cumulative)",
         "r",
         t0_ns,
