@@ -157,7 +157,26 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    BENCHMARK_SCRIPT="benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
+    if [[ ! -f "$BENCHMARK_SCRIPT" && "$BENCHMARK_SUBDIR" == "multi_node/agentic" ]]; then
+        FALLBACK_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
+        if [[ -f "$FALLBACK_SCRIPT" ]]; then
+            echo "WARNING: $BENCHMARK_SCRIPT not found; falling back to $FALLBACK_SCRIPT" >&2
+            BENCHMARK_SCRIPT="$FALLBACK_SCRIPT"
+        fi
+    fi
+    if [[ ! -f "$BENCHMARK_SCRIPT" ]]; then
+        echo "ERROR: benchmark script not found: $BENCHMARK_SCRIPT" >&2
+        exit 1
+    fi
+    if ! JOB_ID=$(bash "$BENCHMARK_SCRIPT"); then
+        echo "ERROR: benchmark script failed before returning a Slurm job id: $BENCHMARK_SCRIPT" >&2
+        exit 1
+    fi
+    if [[ -z "${JOB_ID//[[:space:]]/}" ]]; then
+        echo "ERROR: benchmark script returned an empty Slurm job id: $BENCHMARK_SCRIPT" >&2
+        exit 1
+    fi
 
     # Wait for job to complete
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
