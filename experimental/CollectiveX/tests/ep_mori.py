@@ -253,6 +253,12 @@ class MoRIBackend:
             self.fp8_in_timing = True  # the e4m3fnuz direct-cast is internal to dispatch (in timing)
         # scale_dim==0 in both bf16 and fp8-direct-cast paths -> the 1-byte sentinel element size.
         _scale_elt = torch.tensor([], dtype=torch.float8_e4m3fnuz).element_size()
+        # zero-copy mode = NOT use_external_inp_buf. MoRI ASSERTS "Fp8DirectCast is not supported in
+        # zero-copy mode" (dispatch_combine.cpp:454, evidenced on MI355X run 28318485335), and the
+        # source also gates Fp8BlockwiseQuant on --zero-copy 0. So fp8 MUST use the external-input-buf
+        # (non-zero-copy) path; the dispatch copies the input to its staging buffer internally
+        # (EpDispatchCopyToStaging). bf16 keeps the validated zero-copy path (use_external_inp_buf=False).
+        _use_ext_inp_buf = bool(self._fp8)
         self.config = mori.ops.EpDispatchCombineConfig(
             data_type=torch.bfloat16, rank=rank, world_size=world_size,
             hidden_dim=args.hidden, scale_dim=scale_dim,
@@ -261,7 +267,7 @@ class MoRIBackend:
             max_num_inp_token_per_rank=max(512, self._cap),
             num_experts_per_rank=self.experts_per_rank,
             num_experts_per_token=args.topk,
-            use_external_inp_buf=False, quant_type=quant_type,
+            use_external_inp_buf=_use_ext_inp_buf, quant_type=quant_type,
         )
         self.op = mori.ops.EpDispatchCombineOp(self.config)
         # fp8 blockwise carries fp8 quant error -> loosen the correctness gate to the fp8 class
