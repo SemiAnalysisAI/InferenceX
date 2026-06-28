@@ -377,7 +377,12 @@ cx_build_flashinfer_latest() {
   # deep_ep-v2 + hybrid-ep; cutlass-dsl 4.5.2 is now installed; JIT-first build, time-boxed).
   if ! python3 -c "import inspect, flashinfer.comm as c; assert 'output_dtype' in str(inspect.signature(c.MoeAlltoAll.combine))" 2>/dev/null; then
     cx_log "FlashInfer nightly wheel lacks combine output_dtype — building flashinfer main from source"
-    rm -rf /tmp/fi_main
+    # Uninstall the precompiled cubin + jit-cache FIRST: they ship the OLD 10-arg moe_a2a_combine
+    # kernel, which the main Python wrapper (14-arg, with output_dtype) then mis-calls ("Expected 10
+    # but got 14 arguments"). Removing them forces get_moe_alltoall_module() to JIT-compile the
+    # kernel FRESH from main's csrc at runtime (14-arg, matching the wrapper).
+    pip uninstall -y flashinfer-cubin flashinfer-jit-cache >&2 2>&1 || true
+    rm -rf /tmp/fi_main ~/.cache/flashinfer 2>/dev/null || true
     if git clone --recursive --depth 1 https://github.com/flashinfer-ai/flashinfer.git /tmp/fi_main >&2 2>&1; then
       ( cd /tmp/fi_main && timeout 2400 pip install -q --no-build-isolation . >&2 2>&1 ) \
         || cx_log "WARN: flashinfer main source build failed/timed out"
