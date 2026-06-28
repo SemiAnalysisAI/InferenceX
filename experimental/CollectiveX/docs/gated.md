@@ -157,9 +157,14 @@ placement policies (packed/striped/runtime-native/adversarial), and locality/top
 
 ## AMD / MI355X items — now ATTEMPTED via GHA (no longer "out of scope")
 The directive's container-switch + AMD-lift asks. All run via GHA on the MI355X MoRI image:
-- **FNUZ fp8 dispatch (MoRI):** `dispatch_dtype=fp8` on the mori backend = e4m3fnuz blockwise via MoRI's
-  `quant_type` (PR311 `Fp8BlockwiseQuant`); `ep_mori.py` resolves the quant_type at runtime + dumps
-  MoRI's quant API to the log. capability admits `mori fp8`.
+- **FNUZ fp8 dispatch (MoRI) — VALIDATED (e4m3fnuz):** `dispatch_dtype=fp8` on the mori backend routes
+  MoRI's `quant_type=fp8_direct_cast` — the ROCm-native e4m3fnuz format (the self-introspecting adapter
+  found the valid set is `['none','fp8_direct_cast']`; the guessed `fp8_blockwise` is rejected by this
+  build). Required `use_external_inp_buf=True` (Fp8DirectCast asserts in zero-copy mode) + gating against
+  the e4m3fnuz consistency reference. MI355X run 28318788729: T=2/4/8 `correct=True`, max_rel **3e-4**,
+  disp_p99 ~45-70µs. The run's status=invalid is solely MoRI's forced-T=1 ramp point (a single-token
+  relErr-metric instability, rank-0 max_rel=3e-4 — not a comm error). Full 5-run resolution chain (each
+  peeling one layer via the GHA log alone — no SSH) in notes.md.
 - **AMD SDMA copy path:** `copy_engine_bench.py` no longer refuses on ROCm — the off-SM DMA path IS the
   SDMA engine; labeled `copy_engine_kind=sdma` / `accelerator=rocm` (vs NVIDIA `copy-engine`). The
   non-interference probe characterizes SDMA-vs-CU interference (pynvml absent → graceful fallback).
