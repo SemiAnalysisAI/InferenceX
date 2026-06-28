@@ -138,7 +138,10 @@ COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
 # vendors. (offload/copy-engine are NVIDIA-only; kv-cache + rl-mesh run anywhere with CUDA/NCCL.)
 HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia"],
                   "kv-cache": ["nvidia", "amd"], "rl-mesh": ["nvidia", "amd"],
-                  "allreduce-fw": ["nvidia", "amd"]}
+                  "allreduce-fw": ["nvidia", "amd"],
+                  # nixl = the NIXL point-to-point transfer bench (kv-cache family) + the device-EP
+                  # build-probe; runs in the dynamo tensorrtllm-runtime container (NVIDIA-only).
+                  "nixl": ["nvidia"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
 VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl", "flashinfer"], "amd": ["rccl", "mori"]}

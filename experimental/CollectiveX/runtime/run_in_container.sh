@@ -410,6 +410,63 @@ PY
     || { cx_log "ERROR: upgraded FlashInfer combine still lacks output_dtype — cannot quant-combine"; return 1; }
 }
 
+# NIXL device-EP build-probe — the gated EP item (goal "NIXL EP"). The OLD sglang image blocked the
+# meson build on Abseil 20220623; this runs in the dynamo tensorrtllm-runtime image (container switch)
+# and reports whether THIS container clears it. Reports the build deps the meson tree needs (nixl lib,
+# Abseil, meson/ninja/ucx) then attempts `meson setup` (which enumerates any missing dep) + a
+# time-boxed compile. Informational: logs the precise outcome; never fails the suite (the transfer
+# bench is the guaranteed datapoint). If it SUCCEEDS we wire ep_nixl.py against nixl_ep_cpp next.
+cx_probe_nixl_ep() {
+  cx_log "NIXL device-EP build-probe (gated EP item — does examples/device/ep build on this container?)"
+  export PIP_BREAK_SYSTEM_PACKAGES=1
+  python3 - >&2 2>&1 <<'PY' || true
+import importlib.metadata as m, shutil, glob
+def v(p):
+    try: return m.version(p)
+    except Exception: return "absent"
+print("NIXL_EP_PROBE deps: nixl=%s meson=%s ninja=%s pybind11=%s cmake=%s" %
+      (v("nixl"), shutil.which("meson"), shutil.which("ninja"), v("pybind11"), shutil.which("cmake")))
+# Abseil version was the OLD container's blocker (20220623) — report what THIS container ships.
+hits = glob.glob("/usr/**/libabsl_base*", recursive=True) + glob.glob("/opt/**/libabsl_base*", recursive=True)
+print("NIXL_EP_PROBE abseil libs:", hits[:4] or "not found on /usr,/opt")
+try:
+    import nixl, os; print("NIXL_EP_PROBE nixl at", os.path.dirname(nixl.__file__))
+except Exception as e:
+    print("NIXL_EP_PROBE nixl import:", repr(e))
+PY
+  pip install -q meson ninja pybind11 >&2 2>&1 || cx_log "NIXL_EP_PROBE: meson/ninja/pybind11 pip warn"
+  rm -rf /tmp/nixl_src
+  git clone --depth 1 https://github.com/ai-dynamo/nixl /tmp/nixl_src >&2 2>&1 \
+    || { cx_log "NIXL_EP_PROBE: clone failed (compute-node network?)"; return 0; }
+  # The device-EP example links nixl_lib built in the same meson tree -> meson-setup the whole
+  # project (deps it can't find are enumerated here = the documented new-container blocker), then a
+  # time-boxed compile. tail the output so the GHA log captures the decisive lines.
+  ( cd /tmp/nixl_src && timeout 1500 bash -c '
+      echo "--- meson setup ---"; meson setup build 2>&1 | tail -30
+      echo "--- meson compile (time-boxed) ---"; meson compile -C build 2>&1 | tail -40
+    ' ) >&2 2>&1 || true
+  if find /tmp/nixl_src/build -name 'nixl_ep_cpp*.so' 2>/dev/null | grep -q .; then
+    cx_log "NIXL_EP_PROBE: SUCCESS — nixl_ep_cpp built on this container (wire ep_nixl.py next)"
+  else
+    cx_log "NIXL_EP_PROBE: nixl_ep_cpp NOT produced — see 'meson setup' output above for the blocker"
+  fi
+}
+
+run_nixl_suite() {
+  # NIXL (ai-dynamo/nixl) — runs in the dynamo tensorrtllm-runtime image (cx_default_image switched
+  # CX_IMAGE for CX_BENCH=nixl). Two parts: (1) the NIXL point-to-point TRANSFER bench (the wired
+  # KV-cache 'nixl' backend — a guaranteed datapoint when nixl imports); (2) the device-EP build-probe
+  # (the gated NIXL EP item). The transfer result drives the suite's pass/fail; the probe is logged.
+  local out rc=0
+  out="results/${CX_RUNNER}_nixl_${CX_TS}.json"
+  cx_log "nixl transfer bench -> $out"
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" python3 tests/nixl_transfer.py --direction all \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-nvlink}" \
+      --env-json "$ENVJSON" --out "$out" || { rc=$?; cx_log "WARN: nixl transfer failed/timed out rc=$rc"; }
+  cx_probe_nixl_ep || true   # informational; never fails the suite
+  return "$rc"
+}
+
 run_flashinfer_suite() {
   # FlashInfer EP (flashinfer.comm.MoeAlltoAll) — pre-installed in the sglang image. When a
   # combine-quant run is requested (CX_COMBINE_DTYPE != bf16), first upgrade FlashInfer to a wheel
@@ -431,13 +488,14 @@ case "$CX_BENCH" in
   uccl)        run_uccl_suite || rc=1 ;;
   flashinfer)  run_flashinfer_suite || rc=1 ;;
   deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
+  nixl)        run_nixl_suite || rc=1 ;;
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
   rl-mesh)     run_rl_mesh || rc=1 ;;
   allreduce-fw) run_allreduce_fw || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.

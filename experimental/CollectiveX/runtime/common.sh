@@ -30,7 +30,21 @@ CX_IMAGE_MULTIARCH="lmsysorg/sglang:v0.5.11-cu130"
 # pinned yet — pin once validated on the runner. See CONTAINERS.md.
 CX_IMAGE_AMD_MORI="rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2"
 
+# NIXL stack: the sglang multiarch image has neither the NIXL agent nor the device-EP build deps,
+# and its Abseil (20220623) is what blocked the NIXL EP meson build (docs/gated.md). The dynamo
+# tensorrtllm-runtime image (CUDA-13, 2026) ships NIXL + a modern Abseil/UCX — the container-switch
+# the gated NIXL item calls for. Selected automatically for CX_BENCH=nixl on NVIDIA SKUs (override
+# with CX_IMAGE). Listed in .github/configs/nvidia-master.yaml.
+CX_IMAGE_NIXL="${CX_IMAGE_NIXL:-nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13}"
+
 cx_default_image() {
+  # CX_BENCH=nixl needs the NIXL/dynamo container — switch automatically on NVIDIA SKUs (CX_BENCH is
+  # already in the inherited env at this point). AMD keeps the MoRI image (no NIXL build there).
+  if [ "${CX_BENCH:-}" = "nixl" ]; then
+    case "$1" in
+      b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$CX_IMAGE_NIXL"; return ;;
+    esac
+  fi
   case "$1" in
     mi355x*|mi350x*|mi325x*|mi300x*) echo "$CX_IMAGE_AMD_MORI" ;;
     b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$CX_IMAGE_MULTIARCH" ;;
