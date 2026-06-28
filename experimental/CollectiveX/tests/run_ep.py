@@ -29,7 +29,7 @@ import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
     ap.add_argument("--backend", required=True,
-                    choices=["deepep", "deepep-hybrid", "mori", "uccl", "flashinfer"])
+                    choices=["deepep", "deepep-hybrid", "mori", "uccl", "nccl-ep", "flashinfer"])
     ep_harness.add_common_args(ap)
     args = ap.parse_args()
 
