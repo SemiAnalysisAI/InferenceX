@@ -215,7 +215,9 @@ def _sglang_vllm_ca_runner(ps, torch, dev, world, rank, fw):
         tp = ps.get_tp_group()
     except Exception as e:
         return {"runner": None, "skip": f"{fw} distributed init failed: {e!r}"}
-    ca = getattr(tp, "ca_comm", None)
+    # sglang/vllm expose ca_comm directly on the GroupCoordinator; aiter nests it under
+    # device_communicator.ca_comm — try both.
+    ca = getattr(tp, "ca_comm", None) or getattr(getattr(tp, "device_communicator", None), "ca_comm", None)
     if ca is None or getattr(ca, "disabled", True):
         return {"runner": None,
                 "skip": f"{fw} TP group ca_comm absent/disabled (no custom-AR at world={world}; "
@@ -263,52 +265,16 @@ def _module_exists(name: str) -> bool:
 
 
 def _build_aiter(torch, dist, dev, world, rank, dtype):
-    """AITER (AMD) custom/quick all-reduce — aiter.dist.device_communicators.custom_all_reduce.
-    CustomAllreduce (the wrapper owns the IPC buffer), else the raw aiter.ops.custom_all_reduce.
-    Fully guarded -> skip on absence (e.g. NVIDIA image has no aiter). The AMD framework-AR tier."""
-    # (a) the AITER distributed wrapper (preferred — manages the shared IPC buffer).
-    for modpath in ("aiter.dist.device_communicators.custom_all_reduce",
-                    "aiter.dist.device_communicators.quick_all_reduce"):
-        try:
-            mod = __import__(modpath, fromlist=["x"])
-        except Exception:
-            mod = None
-        if mod is None:
-            continue
-        cls = getattr(mod, "CustomAllreduce", None) or getattr(mod, "QuickAllReduce", None) \
-            or getattr(mod, "CustomAllReduce", None)
-        if cls is None:
-            continue
-        try:
-            obj = None
-            for kwargs in ({"group": dist.group.WORLD, "device": dev},
-                           {"group": dist.group.WORLD, "device": local_device_index(dev)},
-                           {"device": dev}, {}):
-                try:
-                    obj = cls(**kwargs); break
-                except Exception:
-                    continue
-            if obj is not None:
-                for name in ("custom_all_reduce", "quick_all_reduce", "all_reduce", "__call__"):
-                    if hasattr(obj, name):
-                        method = getattr(obj, name)
-                        def run(t, _m=method):
-                            out = _m(t)
-                            if out is not None and out.data_ptr() != t.data_ptr():
-                                t.copy_(out)
-                        return {"runner": run, "free": getattr(obj, "close", None),
-                                "note": f"{modpath}.{cls.__name__}"}
-        except Exception:
-            pass
-    # (b) raw aiter.ops kernels — need an explicit IPC handle we can't reconstruct here -> record present.
+    """AITER (AMD) custom all-reduce via its GroupCoordinator. aiter.dist.parallel_state forked
+    vllm's (same init_distributed_environment / initialize_model_parallel / get_tp_group), with
+    ca_comm nested under device_communicator — so the shared serving-init helper drives it. The
+    first version constructed the wrapper BARE and got a nan; replicating the init gives a working
+    ca_comm. Skips on absence (NVIDIA image has no aiter)."""
     try:
-        import aiter  # noqa: F401
-        if _module_exists("aiter.ops.custom_all_reduce"):
-            return {"runner": None, "skip": "aiter.ops.custom_all_reduce present but needs IPC-buffer "
-                                            "setup only the aiter wrapper provides (wrapper init failed)"}
-    except Exception:
-        pass
-    return {"runner": None, "skip": "aiter not importable (not in this image) / no usable custom AR wrapper"}
+        from aiter.dist import parallel_state as ps
+    except Exception as e:
+        return {"runner": None, "skip": f"aiter.dist import failed (not in image?): {e!r}"}
+    return _sglang_vllm_ca_runner(ps, torch, dev, world, rank, "aiter")
 
 
 def local_device_index(dev) -> int:
