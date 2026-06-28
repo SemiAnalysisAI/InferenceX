@@ -144,7 +144,9 @@ HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia", "amd"],
                   # build-probe; runs in the dynamo tensorrtllm-runtime container (NVIDIA-only).
                   "nixl": ["nvidia"],
                   # mori-io = MoRI-IO RDMA p2p transfer engine (mori.io); AMD MoRI image only.
-                  "mori-io": ["amd"]}
+                  "mori-io": ["amd"],
+                  # nccl-kv = NCCL/RCCL p2p KV transfer (torch.distributed send/recv); both vendors.
+                  "nccl-kv": ["nvidia", "amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
 VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl", "flashinfer"], "amd": ["rccl", "mori"]}

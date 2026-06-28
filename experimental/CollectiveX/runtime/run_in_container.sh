@@ -452,6 +452,20 @@ PY
   fi
 }
 
+run_nccl_kv_suite() {
+  # NCCL/RCCL KV-cache transfer (the goal's kv-cache 'nccl'/'rccl' backend). torchrun 2 ranks,
+  # rank0 dist.send -> rank1 dist.recv of KV-block-sized buffers. NCCL on NVIDIA, RCCL on ROCm
+  # (same torch.distributed API). Needs >=2 GPUs.
+  local out="results/${CX_RUNNER}_nccl_kv_${CX_TS}.json" rc=0 np=2
+  [ "$CX_NGPUS" -lt 2 ] && { cx_log "WARN: nccl-kv needs >=2 GPUs (have $CX_NGPUS)"; return 1; }
+  cx_log "nccl-kv transfer bench (2-rank send/recv) -> $out"
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
+      torchrun --nproc_per_node="$np" tests/nccl_kv_transfer.py \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-nvlink}" \
+      --env-json "$ENVJSON" --out "$out" || { rc=$?; cx_log "WARN: nccl-kv failed/timed out rc=$rc"; }
+  return "$rc"
+}
+
 run_mori_io_suite() {
   # MoRI-IO (ROCm/mori mori.io) — AMD RDMA p2p transfer engine, bundled in the AMD MoRI image. The
   # WIRED kv-cache 'mori-io' backend (a guaranteed datapoint when mori.io imports + RDMA loopback
@@ -505,13 +519,14 @@ case "$CX_BENCH" in
   deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
   nixl)        run_nixl_suite || rc=1 ;;
   mori-io)     run_mori_io_suite || rc=1 ;;
+  nccl-kv)     run_nccl_kv_suite || rc=1 ;;
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
   rl-mesh)     run_rl_mesh || rc=1 ;;
   allreduce-fw) run_allreduce_fw || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|mori-io|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.
