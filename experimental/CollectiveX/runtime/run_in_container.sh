@@ -374,7 +374,20 @@ cx_build_flashinfer_latest() {
   pip install -q -U nvidia-cutlass-dsl >&2 2>&1 || cx_log "WARN: nvidia-cutlass-dsl upgrade warning"
   after="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
   export FLASHINFER_COMMIT="pkg-$after"
+  # Record the EXACT upgraded library stack for reproducibility — the upgrade happens AFTER
+  # env_capture, so these versions live nowhere else. CX_FLASHINFER_STACK is read into the result's
+  # backend_provenance by ep_flashinfer. Also logged to the GHA log even if the run later fails.
+  export CX_FLASHINFER_STACK="$(python3 - <<'PY' 2>/dev/null || echo 'capture-failed'
+import importlib.metadata as m
+def v(p):
+    try: return m.version(p)
+    except Exception: return "absent"
+pkgs=["flashinfer-python","flashinfer-cubin","flashinfer-jit-cache","nvidia-cutlass-dsl","torch"]
+print(" ".join(f"{p}={v(p)}" for p in pkgs))
+PY
+)"
   cx_log "FlashInfer upgrade (nightly): $before -> $after"
+  cx_log "FlashInfer stack: $CX_FLASHINFER_STACK"
   python3 -c "import inspect, flashinfer.comm as c; assert 'output_dtype' in str(inspect.signature(c.MoeAlltoAll.combine)), 'combine still has no output_dtype'; print('combine output_dtype: present')" >&2 \
     || { cx_log "ERROR: upgraded FlashInfer combine still lacks output_dtype — cannot quant-combine"; return 1; }
 }

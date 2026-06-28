@@ -433,6 +433,9 @@ class FlashInferBackend:
         self.backend_provenance = {
             "flashinfer_version": ver,
             "flashinfer_commit": os.environ.get("FLASHINFER_COMMIT") or f"pkg-{ver}",
+            # exact upgraded library stack (flashinfer-python/cubin/jit-cache + cutlass-dsl + torch),
+            # set by cx_build_flashinfer_latest — the only record of post-env_capture upgrade versions.
+            "flashinfer_stack": os.environ.get("CX_FLASHINFER_STACK"),
             "mode": "normal", "path": self.path, "trtllm": self.trtllm,
             # MoeAlltoAll's home module — proves this EP path IS the TRT-LLM one-sided throughput A2A.
             "backend_lineage": "flashinfer.comm.trtllm_moe_alltoall.MoeAlltoAll",
