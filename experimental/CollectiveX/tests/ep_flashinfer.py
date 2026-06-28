@@ -38,10 +38,13 @@ The alternative (combine applies softmax gate weights, like DeepEP LL) would giv
 validates which FlashInfer actually implements and flips ONE constant (_ROUTING_FACTOR).
 Tolerance bf16 ~5e-2 (FlashInfer dispatch keeps bf16 end-to-end; no fp8 round-trip yet).
 
-STATUS: bf16 / normal / layout-and-dispatch-v1 only (fp8 is behind a clearly-marked
-TODO below). The MoeAlltoAll workspace bootstraps inside the single torch.distributed
-NCCL group of same-user ranks (MNNVL symmetric memory) — no special caps assumed here;
-the launcher/image owns CAP_SYS_PTRACE / FABRIC plumbing (docs/gated.md).
+STATUS: normal / layout-and-dispatch-v1. Dispatch precisions: bf16; fp8/fp8-pertoken/
+fp8-directcast (e4m3, DeepEP convention); mxfp8/mxfp4/nvfp4 (OCP-microscaling via
+FlashInfer's native quantizers — the A2A moves [q, scale_factor] as a payload LIST, dequant
+in stage()). Combine stays bf16 (MoeAlltoAll.combine has no output_dtype in 0.6.8.post1).
+The MoeAlltoAll workspace bootstraps inside the single torch.distributed NCCL group of
+same-user ranks (MNNVL symmetric memory) — the launcher/image owns CAP_SYS_PTRACE / FABRIC
+plumbing (docs/gated.md; H200 runner denies the ptrace cap the MNNVL fd-share needs).
 """
 from __future__ import annotations
 
@@ -153,6 +156,149 @@ def _build_mapping(world_size, rank):
     return mapping, idx
 
 
+# --------------------------------------------------------------------------------------
+# Quantized dispatch recipes. FlashInfer's MoE A2A dispatch takes input_payloads as a LIST
+# of [local_num_tokens, *] tensors and moves them as bytes (dtype-agnostic) — so a quantized
+# dispatch = pass [q, scale_factor] as the payload list, recv [recv_q, recv_sf], then DEQUANT
+# in stage() (UNTIMED, outside the comm window — the quant/dequant mirrors a producer handing
+# already-quantized activations, exactly like ep_deepep's layout-and-dispatch-v1 contract).
+#
+# Two families:
+#   * e4m3 block-128 / per-token / direct-cast — pure-torch (identical convention to ep_deepep,
+#     so FlashInfer-fp8 and DeepEP-fp8 are the SAME operating point on different transports).
+#   * mxfp8 / mxfp4 / nvfp4 — FlashInfer's native OCP-microscaling quantizers (mxfp8_quantize,
+#     mxfp4_quantize, nvfp4_quantize) + their matching dequantizers. These check goal's
+#     "MXFP8 / MXFP4 / NVFP4 dispatch" — reachable here precisely because the A2A is a byte
+#     mover and FlashInfer ships the quantize/dequantize kernels (flashinfer 0.6.8.post1).
+# The comm-correctness gate compares against the DEQUANTIZED cast that was actually sent
+# (ref = dequant(quant(x)) * factor), so it verifies the COMM, not the quantizer — same as
+# ep_deepep.expected(). Tolerance per format (4-bit fp4 is far looser than 8-bit fp8).
+_FP8_MAX = 448.0
+_FP8_BLOCK = 128
+
+
+def _e4m3_block128_cast(x):
+    # PER-BLOCK-128 e4m3 (DeepEP default convention): scales [T, H//128] f32.
+    T, H = x.shape
+    xv = x.float().view(T, H // _FP8_BLOCK, _FP8_BLOCK)
+    amax = xv.abs().amax(dim=2).clamp(min=1e-4)
+    x_fp8 = (xv * (_FP8_MAX / amax.unsqueeze(2))).to(torch.float8_e4m3fn).view(T, H)
+    return x_fp8, (amax / _FP8_MAX).contiguous()
+
+
+def _e4m3_pertoken_cast(x):
+    T, H = x.shape
+    amax = x.float().abs().amax(dim=1, keepdim=True).clamp(min=1e-4)
+    x_fp8 = (x.float() * (_FP8_MAX / amax)).to(torch.float8_e4m3fn)
+    scales = (amax / _FP8_MAX).expand(T, H // _FP8_BLOCK).contiguous()
+    return x_fp8, scales
+
+
+def _e4m3_directcast(x):
+    T, H = x.shape
+    x_fp8 = x.float().clamp(-_FP8_MAX, _FP8_MAX).to(torch.float8_e4m3fn)
+    scales = torch.ones((T, H // _FP8_BLOCK), dtype=torch.float32, device=x.device)
+    return x_fp8, scales
+
+
+def _e4m3_dequant_nd(x_fp8, scales):
+    # Works for [R,H]+[R,H//128] (2D) and [E,S,H]+[E,S,H//128] (3D recv). Last dim is H; scale
+    # repeats per 128-block.
+    *lead, H = x_fp8.shape
+    blocks = H // _FP8_BLOCK
+    xv = x_fp8.float().reshape(*lead, blocks, _FP8_BLOCK)
+    return (xv * scales.reshape(*lead, blocks, 1)).reshape(*lead, H).to(torch.bfloat16)
+
+
+class _MicroscaleRecipe:
+    """FlashInfer-native mxfp8 / mxfp4 / nvfp4 quant+dequant, validated on the runner via the
+    library's own kernels. Quantize on a flat [N, H] view (the A2A moves per-token payloads),
+    keep the swizzled scale-factor as a SECOND payload, dequant the 3D recv by flattening the
+    [ep, max_tokens] dims to [N, H] (the SF swizzle is per-row so the flatten is layout-safe),
+    then reshaping back. Imports flashinfer lazily so a wheel without these kernels fails LOUD."""
+
+    _MX_BLOCK = 32   # mxfp8 e8m0 block size
+    _NV_VEC = 16     # nvfp4 e4m3 scale block size (sf_vec_size)
+
+    def __init__(self, kind):
+        self.kind = kind  # "mxfp8" | "nvfp4"  (mxfp4 dropped: its SF is tile-padded, not per-token
+                          # movable through the A2A — see docs/gated.md).
+        import flashinfer as _fi
+        self._fi = _fi
+        need = {"mxfp8": ("mxfp8_quantize",),
+                "nvfp4": ("fp4_quantize", "e2m1_and_ufp8sf_scale_to_float")}[kind]
+        for fn in need:
+            if not hasattr(_fi, fn):
+                raise _loud(f"{kind} quantizer lookup", f"flashinfer.{fn} not found",
+                            AttributeError(fn))
+
+    def cast(self, x):
+        # Returns (q, sf) — BOTH per-token (first-dim == T) so the A2A moves them as a payload list.
+        # mxfp8: q [T,H] e4m3, sf [T, H/32] e8m0(uint8), LINEAR (is_sf_swizzled_layout=False).
+        # nvfp4: q [T, H/2] uint8 (packed e2m1), sf [T, H/16] uint8 (ufp8 e4m3), per-tensor global sf.
+        fi = self._fi
+        xt = x.contiguous()
+        T, H = xt.shape
+        if self.kind == "mxfp8":
+            q, sf = fi.mxfp8_quantize(xt, is_sf_swizzled_layout=False)
+            sf = sf.reshape(T, H // self._MX_BLOCK)
+        else:  # nvfp4: global_scale maps amax -> the max representable (e4m3max * e2m1max = 448*6);
+               # dequant divides by it. (the reciprocal — amax/(448*6) — yields ~0 output, relerr~1.)
+            gsf = ((_FP8_MAX * 6.0) / xt.float().abs().amax().clamp(min=1e-4)).reshape(1)
+            q, sf = fi.fp4_quantize(xt, global_scale=gsf, sf_vec_size=self._NV_VEC,
+                                    sf_use_ue8m0=False, is_sf_swizzled_layout=False)
+            self._gsf = gsf
+            if sf.dim() == 1:
+                sf = sf.reshape(T, -1)
+        return q.contiguous(), sf.contiguous()
+
+    def dequant_nd(self, q, sf):
+        # q/sf are recv tensors — 2D [T,*] (the x_ref path) or 3D [E,S,*] (the stage recv path).
+        # Flatten leading dims to [N,*], dequant on device, reshape back. NO host round-trip.
+        lead = q.shape[:-1]
+        N = 1
+        for d in lead:
+            N *= d
+        if self.kind == "mxfp8":
+            # Manual DEVICE e8m0 dequant (FlashInfer ships only a CPU mxfp8_dequantize_host, too slow
+            # in the timing loop): x ~= q_e4m3 * 2^(sf_uint8 - 127), per block-32. Verified to match
+            # mxfp8_dequantize_host on the runner (see cx_fi_quant_smoke).
+            H = q.shape[-1]
+            B = self._MX_BLOCK
+            qf = q.reshape(N, H // B, B).float()
+            sff = sf.reshape(N, H // B).float()
+            out = (qf * torch.pow(torch.tensor(2.0, device=q.device), sff - 127.0).unsqueeze(-1)).reshape(N, H)
+        else:  # nvfp4 — DEVICE dequant (e2m1 + ufp8 e4m3 scale + per-tensor global), linear layout.
+            qf = q.reshape(N, q.shape[-1]).contiguous()
+            sff = sf.reshape(N, sf.shape[-1]).contiguous()
+            # dequant divides by the global scale -> pass its RECIPROCAL (verified on the runner:
+            # quant gsf=(448*6)/amax + dequant 1/gsf -> relerr ~0.09 = the 4-bit nvfp4 floor).
+            gsf = getattr(self, "_gsf", None)
+            out = self._fi.e2m1_and_ufp8sf_scale_to_float(
+                qf, sff, global_scale_tensor=(1.0 / gsf).cpu() if gsf is not None else None,
+                sf_vec_size=self._NV_VEC, is_sf_swizzled_layout=False)
+        H = out.shape[-1]
+        # e2m1_and_ufp8sf_scale_to_float returns on CPU; move back to the payload's device.
+        return out.reshape(*lead, H).to(device=q.device, dtype=torch.bfloat16)
+
+
+# dispatch_dtype -> (label, kind). kind selects the cast/dequant path in make_problem/stage.
+# mxfp4 is intentionally absent — FlashInfer's mxfp4_quantize emits only a tile-padded [pad(T),H/32]
+# scale-factor that does not move through a per-token A2A (docs/gated.md). mxfp8 (MX 8-bit) + nvfp4
+# (NV 4-bit) ARE here — they cover the OCP-microscaling dispatch goal on this working path.
+_QUANT_RECIPES = {
+    "fp8":            ("per-block-128", "e4m3"),
+    "fp8-pertoken":   ("per-token", "e4m3"),
+    "fp8-directcast": ("direct-cast", "e4m3"),
+    "mxfp8":          ("mxfp8-e8m0-block32", "mxfp8"),
+    "nvfp4":          ("nvfp4-e4m3-block16", "nvfp4"),
+}
+_E4M3_CASTS = {"fp8": _e4m3_block128_cast, "fp8-pertoken": _e4m3_pertoken_cast,
+               "fp8-directcast": _e4m3_directcast}
+# Per-format comm-correctness tolerance (round-trip of the dequantized cast through the comm).
+_QUANT_TOL = {"e4m3": 1.25e-1, "mxfp8": 1.5e-1, "mxfp4": 3.5e-1, "nvfp4": 3.0e-1}
+
+
 class FlashInferBackend:
     name = "flashinfer"
     # FlashInfer combine reuses the dispatch workspace/handle (no re-dispatch needed before
@@ -172,16 +318,17 @@ class FlashInferBackend:
     # re-ramps clocks at each shape before timing it. Harmless (just untimed iters) on H100/H200.
     wants_warm_burst = True
     # Capabilities — run_ep.py REJECTS anything outside these BEFORE construction (no
-    # fallback/mislabel). Start bf16 / normal / layout-and-dispatch only.
-    #   bf16: FlashInfer MoeAlltoAll keeps bf16 payloads end-to-end (no quant round trip).
-    #   fp8 : TODO (see SUPPORTED_PRECISIONS note) — FlashInfer supports mxfp8/nvfp4 payloads via
-    #         moe_a2a (PR3376/3643) but it is MNNVL-gated on x86_64; not wired here yet.
-    SUPPORTED_PRECISIONS = {"bf16"}
-    # TODO(fp8): add "fp8" once the per-token-block (or mx/nvfp4) payload path is wired AND
-    # hardware-validated on an MNNVL-capable runner. FlashInfer's moe_a2a takes multiple input
-    # payloads (x + scales) as the input_payloads list; the dispatch call already passes a list,
-    # so fp8 = append the scale tensor + set the payload dtype, then dequant in stage() like
-    # ep_deepep.py. Gated until then (docs/gated.md, goal.md "MXFP8 dispatch ⛔ gated").
+    # fallback/mislabel).
+    #   bf16            : MoeAlltoAll keeps bf16 payloads end-to-end (no quant round trip).
+    #   fp8*            : e4m3 dispatch (per-block-128 / per-token / direct-cast) — SAME convention
+    #                     as ep_deepep, so FlashInfer-fp8 == DeepEP-fp8 operating point, different
+    #                     transport (the TRT-LLM throughput A2A vs DeepEP NVLink).
+    #   mxfp8/mxfp4/nvfp4: OCP-microscaling dispatch via FlashInfer's native quantizers. The A2A
+    #                     moves [q, scale_factor] as a payload LIST (byte-agnostic), dequant in
+    #                     stage(). Covers goal's "MXFP8 / MXFP4 / NVFP4 dispatch" — reachable on
+    #                     this working path because FlashInfer ships the quantize/dequantize kernels.
+    SUPPORTED_PRECISIONS = {"bf16", "fp8", "fp8-pertoken", "fp8-directcast",
+                            "mxfp8", "nvfp4"}
     SUPPORTED_MODES = {"normal"}
     # Only the contract whose timing boundary FlashInfer can honor: layout (the dispatch
     # send-counts) is computed inside dispatch and cannot be hoisted to a separate untimed
@@ -203,14 +350,28 @@ class FlashInferBackend:
         self.group = dist.group.WORLD
         assert args.dispatch_dtype in self.SUPPORTED_PRECISIONS and args.mode in self.SUPPORTED_MODES, \
             "run_ep.py must reject unsupported dtype/mode before constructing the backend"
-        # bf16 round-trip reconstruction error is ~5e-3; 5e-2 leaves headroom (kept identical to
-        # the other bf16 adapters so the gate is comparable). Recorded in the artifact.
-        self.tolerance = 5e-2
-        # No quant in the timed window today (bf16 end-to-end). Recorded honestly.
-        self.fp8_in_timing = None
+        # Quant recipe (None for bf16). e4m3 = pure-torch cast (DeepEP convention); mx/nvfp4 =
+        # FlashInfer-native quantizer. dispatch passes [q, sf]; stage() dequants (UNTIMED).
+        self.dispatch_dtype = args.dispatch_dtype
+        self.quant_label, self.quant_kind = _QUANT_RECIPES.get(args.dispatch_dtype, (None, None))
+        self._micro = None
+        if self.quant_kind in ("mxfp8", "mxfp4", "nvfp4"):
+            self._micro = _MicroscaleRecipe(self.quant_kind)   # lazy flashinfer import, LOUD if absent
+        elif self.quant_kind == "e4m3":
+            self._e4m3_cast = _E4M3_CASTS[args.dispatch_dtype]
+        # bf16 round-trip error ~5e-3 (tol 5e-2); fp8 e4m3 ~1/16; fp4 (4-bit) far looser. Per-format
+        # tolerance recorded in the artifact so the looser quant gate is explicit, not hidden.
+        self.tolerance = _QUANT_TOL.get(self.quant_kind, 5e-2)
+        # The quant CAST + recv-DEQUANT run in make_problem/stage (OUTSIDE the timed comm window) —
+        # the layout-and-dispatch-v1 contract (producer hands quantized activations). Recorded honestly.
+        self.fp8_in_timing = False if self.quant_kind else None
+        self.scale_layout = self.quant_label
 
-        # The TensorRT-LLM one-sided variant (env CX_FLASHINFER_TRTLLM=1) routes the SAME
-        # interface through trtllm_moe_alltoall / moe_a2a_* instead of the MoeAlltoAll class.
+        # TensorRT-LLM lineage: MoeAlltoAll LIVES IN flashinfer.comm.trtllm_moe_alltoall (the
+        # "throughput backend" — the TRT-LLM NVLink one-sided AllToAll over an MNNVL symmetric
+        # workspace). So this adapter's DEFAULT path IS the TRT-LLM one-sided EP; CX_FLASHINFER_TRTLLM
+        # only flips the provenance label (there is no separate functional path — both call the same
+        # moe_a2a_dispatch/combine kernels). Kept as a label so the artifact can be tagged trtllm.
         self.trtllm = os.environ.get("CX_FLASHINFER_TRTLLM", "0") == "1"
 
         self.top_k = int(args.topk)
@@ -230,22 +391,26 @@ class FlashInferBackend:
                   f"(world={world_size} rank={rank} tp=1 moe_ep={world_size} moe_tp=1)",
                   file=sys.stderr)
 
-        # Construct the comm object. The MoeAlltoAll class allocates its MNNVL symmetric
-        # workspace internally; the trtllm path initializes via moe_a2a_initialize +
-        # get_workspace_size_per_rank. Both are tried defensively and recorded.
-        self.path = "moe_alltoall"
-        self.a2a = None            # the MoeAlltoAll instance (class path)
-        self.workspace = None      # the trtllm workspace tensor(s) (functional path)
+        # Construct the comm object. MoeAlltoAll (in flashinfer.comm.trtllm_moe_alltoall) IS the
+        # TRT-LLM throughput-backend one-sided A2A — it allocates its MNNVL symmetric workspace
+        # internally and calls the same moe_a2a_dispatch/combine kernels the functional API exposes.
+        # So we ALWAYS construct it; the trtllm flag only tags provenance (no separate path).
+        self.path = "trtllm_moe_alltoall" if self.trtllm else "moe_alltoall"
+        self.a2a = None
+        self.workspace = None
         self.ws_size = None
-        if self.trtllm:
-            self._init_trtllm(ver)
-        else:
-            self._init_moe_alltoall(ver)
+        self._init_moe_alltoall(ver)
 
         self.backend_provenance = {
             "flashinfer_version": ver,
             "flashinfer_commit": os.environ.get("FLASHINFER_COMMIT") or f"pkg-{ver}",
             "mode": "normal", "path": self.path, "trtllm": self.trtllm,
+            # MoeAlltoAll's home module — proves this EP path IS the TRT-LLM one-sided throughput A2A.
+            "backend_lineage": "flashinfer.comm.trtllm_moe_alltoall.MoeAlltoAll",
+            "transport": "trtllm-throughput-backend-onesided",
+            # quant provenance (None/bf16 path -> nulls). scale_layout + dispatch_dtype name the recipe.
+            "dispatch_dtype": self.dispatch_dtype, "quant_kind": self.quant_kind,
+            "scale_layout": self.scale_layout, "quant_in_timing": self.fp8_in_timing,
             "resource_mode": args.resource_mode,
             # FlashInfer MoE A2A occupancy is fixed by the library (a symmetric-memory kernel, not
             # an SM/CU budget we set) — like DeepEP LL. Recorded as a fixed-kernel run so the
@@ -307,42 +472,6 @@ class FlashInferBackend:
         if self.rank == 0:
             print(f"[flashinfer] MoeAlltoAll constructed via variant #{idx}", file=sys.stderr)
 
-    def _init_trtllm(self, ver):
-        """Functional one-sided path: moe_a2a_initialize + get_workspace_size_per_rank
-        (the TensorRT-LLM NVLink one-sided AllToAll). dispatch/combine then go through
-        moe_a2a_dispatch / moe_a2a_combine (or trtllm_moe_alltoall). Sizing the workspace
-        here is best-effort + defensive; the per-call wiring is in _dispatch_trtllm."""
-        self.path = "trtllm_moe_alltoall"
-        get_ws = getattr(fi_comm, "get_workspace_size_per_rank", None)
-        init = getattr(fi_comm, "moe_a2a_initialize", None)
-        if get_ws is not None:
-            try:
-                self.ws_size, _ = _call_variants(
-                    "get_workspace_size_per_rank(...)", get_ws,
-                    [((), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
-                               num_experts=self.num_experts, ep_size=self.world_size)),
-                     ((self.max_num_tokens, self.top_k, self.num_experts, self.world_size), {}),
-                     ((self.max_num_tokens, self.top_k, self.num_experts), {})])
-            except Exception as exc:
-                # not fatal at construction — surface at first dispatch if it actually blocks
-                if self.rank == 0:
-                    print(f"[flashinfer] WARN: get_workspace_size_per_rank probe failed: {exc!r}",
-                          file=sys.stderr)
-        if init is not None:
-            try:
-                self.workspace, _ = _call_variants(
-                    "moe_a2a_initialize(...)", init,
-                    [((self.mapping,), dict(max_num_tokens=self.max_num_tokens, top_k=self.top_k,
-                                            num_experts=self.num_experts)),
-                     ((self.mapping, self.max_num_tokens, self.top_k, self.num_experts), {})])
-            except Exception as exc:
-                if self.rank == 0:
-                    print(f"[flashinfer] WARN: moe_a2a_initialize probe failed: {exc!r}",
-                          file=sys.stderr)
-        if self.rank == 0:
-            print(f"[flashinfer] trtllm one-sided path initialized "
-                  f"(ws_size={self.ws_size})", file=sys.stderr)
-
     def buffer_cap(self, args):
         # The symmetric workspace is sized for max_num_tokens per rank; cap the sweep there
         # (reported by the harness, never silently truncated).
@@ -350,16 +479,29 @@ class FlashInferBackend:
 
     def make_problem(self, T, idx, weights, x):
         # idx[T,topk] int64, weights[T,topk] f32, x[T,hidden] bf16 — the shared trace slice.
-        # FlashInfer's dispatch wants: token_selected_experts = idx (the per-token expert IDs),
-        # input_payloads = [x] (a list — fp8 would append the scale tensor here, see TODO).
         # token_selected_experts is commonly int32 in TensorRT-LLM kernels; keep an int32 copy
         # alongside the int64 (the harness/expected use int64; the kernel call uses int32).
+        # input_payloads = [x] for bf16, or [q, scale_factor] for a quantized dispatch — the cast
+        # runs HERE (UNTIMED preprocessing). x_ref = the dequantized cast = the COMM correctness
+        # reference (so the gate verifies the all-to-all, not the quantizer).
         p = types.SimpleNamespace(
             T=int(T), x=x,
             topk_idx=idx.to(torch.int64),
             topk_idx_i32=idx.to(torch.int32),
             topk_weights=weights.to(torch.float32),
+            payloads=None, x_ref=None,
         )
+        if self.quant_kind == "e4m3":
+            q, sf = self._e4m3_cast(x)
+            p.payloads = [q, sf]
+            p.x_ref = _e4m3_dequant_nd(q, sf)
+        elif self._micro is not None:
+            q, sf = self._micro.cast(x)
+            p.payloads = [q, sf]
+            p.x_ref = self._micro.dequant_nd(q, sf)   # 2D recv path (lead=(T,)) = source-token ref
+        else:  # bf16
+            p.payloads = [x]
+            p.x_ref = x
         return p
 
     def _reset_moe_fsm(self):
@@ -376,48 +518,22 @@ class FlashInferBackend:
                 pass
 
     def dispatch(self, p):
-        if self.trtllm:
-            return self._dispatch_trtllm(p)
         self._reset_moe_fsm()
         # MoeAlltoAll.dispatch(token_selected_experts, input_payloads, runtime_max_tokens_per_rank)
-        # -> the recv payload(s) on this rank (the tokens routed to this rank's local experts).
-        # The recv may be a single Tensor or a list (one per input payload); normalize below.
+        # -> a LIST of recv tensors [ep_size, max_tokens, *] (one per input payload, same order).
+        # input_payloads = p.payloads ([x] bf16, or [q, scale_factor] for a quantized dispatch).
         variants = [
-            ((p.topk_idx_i32, [p.x], p.T), {}),
-            ((p.topk_idx_i32, [p.x]), dict(runtime_max_tokens_per_rank=p.T)),
-            ((p.topk_idx_i32, [p.x]), dict(runtime_max_tokens=p.T)),
-            ((p.topk_idx, [p.x], p.T), {}),                       # int64 idx fallback
-            ((p.topk_idx_i32, p.x, p.T), {}),                     # single-tensor payload fallback
+            ((p.topk_idx_i32, p.payloads, p.T), {}),
+            ((p.topk_idx_i32, p.payloads), dict(runtime_max_tokens_per_rank=p.T)),
+            ((p.topk_idx_i32, p.payloads), dict(runtime_max_tokens=p.T)),
+            ((p.topk_idx, p.payloads, p.T), {}),                  # int64 idx fallback
         ]
         recv, idx = _call_variants("MoeAlltoAll.dispatch(...)", self.a2a.dispatch, variants)
-        recv_payload = self._first_payload(recv)
-        return types.SimpleNamespace(recv=recv, recv_payload=recv_payload,
-                                     dispatch_variant=idx, combine_input=None)
-
-    def _dispatch_trtllm(self, p):
-        # Functional one-sided path. Prefer the explicit moe_a2a_dispatch; fall back to the
-        # bundled trtllm_moe_alltoall if that's the only entry point. Both are tried defensively.
-        moe_a2a_dispatch = getattr(fi_comm, "moe_a2a_dispatch", None)
-        trtllm_a2a = getattr(fi_comm, "trtllm_moe_alltoall", None)
-        if moe_a2a_dispatch is not None:
-            variants = [
-                ((self.workspace, p.topk_idx_i32, [p.x], p.T), {}),
-                ((self.workspace, p.topk_idx_i32, [p.x]), dict(runtime_max_tokens_per_rank=p.T)),
-                ((p.topk_idx_i32, [p.x], p.T), {}),
-            ]
-            recv, idx = _call_variants("moe_a2a_dispatch(...)", moe_a2a_dispatch, variants)
-        elif trtllm_a2a is not None:
-            variants = [
-                ((self.workspace, p.topk_idx_i32, [p.x], p.T), {}),
-                ((p.topk_idx_i32, [p.x], p.T), {}),
-            ]
-            recv, idx = _call_variants("trtllm_moe_alltoall(...)", trtllm_a2a, variants)
-        else:
-            raise _loud("trtllm dispatch lookup",
-                        "neither flashinfer.comm.moe_a2a_dispatch nor trtllm_moe_alltoall found",
-                        AttributeError("moe_a2a_dispatch/trtllm_moe_alltoall"))
-        recv_payload = self._first_payload(recv)
-        return types.SimpleNamespace(recv=recv, recv_payload=recv_payload,
+        recv_list = list(recv) if isinstance(recv, (list, tuple)) else [recv]
+        recv_q = recv_list[0]
+        recv_sf = recv_list[1] if len(recv_list) > 1 else None
+        return types.SimpleNamespace(recv=recv, recv_q=recv_q, recv_sf=recv_sf,
+                                     recv_payload=self._first_payload(recv),
                                      dispatch_variant=idx, combine_input=None)
 
     @staticmethod
@@ -435,25 +551,36 @@ class FlashInferBackend:
         return recv  # leave as-is; recv_tokens guards with is_tensor
 
     def stage(self, p, h):
-        # No expert compute (identity expert). bf16 recv is the "expert output" as-is; FlashInfer's
-        # combine reads back from the SAME workspace the dispatch populated, so combine() is told
-        # the payload is already in the workspace (payload_in_workspace=True) when supported. We
-        # Per the FlashInfer source: dispatch returns recv [ep_size, max_tokens, hidden]; combine
-        # wants payload [ep_size, max_tokens, elements_per_token] — the SAME shape. For the identity
-        # expert the recv IS the expert output, so hand recv[0] straight to combine (NO clone — a
-        # clone of the workspace-backed recv broke the layout and async-corrupted CUDA). combine is
-        # called with payload_in_workspace=False so the kernel stages this tensor itself.
-        # (fp8 would dequant here, like ep_deepep.py — see TODO.)
-        h.combine_input = h.recv_payload
-        if self.rank == 0 and not getattr(self, "_shape_logged", False) and torch.is_tensor(h.recv_payload):
+        # No expert compute (identity expert). For bf16, the recv IS the "expert output" as-is —
+        # combine reads back from the SAME workspace dispatch populated, so we hand recv[0] straight
+        # to combine (NO clone — a clone of the workspace-backed recv broke the layout and
+        # async-corrupted CUDA; combine is called payload_in_workspace=False so the kernel stages it).
+        # For a QUANTIZED dispatch, DEQUANT the recv (recv_q + recv_sf) -> bf16 HERE (UNTIMED, outside
+        # the comm window): this is the bf16 "expert input" that combine reduces. The dequant produces
+        # a fresh tensor (not workspace-backed), which combine stages via payload_in_workspace=False.
+        if self.quant_kind:
+            # Dequant is UNTIMED preprocessing (layout-and-dispatch-v1) — but FlashInfer is
+            # roundtrip_only, so stage() runs INSIDE the timed dispatch->combine loop. The recv is
+            # DETERMINISTIC for a fixed problem (same x + routing -> same workspace contents), so we
+            # dequant ONCE and cache it on the problem; steady-state timing then measures comm only
+            # (the dequant is amortized, exactly as DeepEP's separately-timed stage is untimed). This
+            # keeps FlashInfer-fp8 comparable to DeepEP-fp8 (same timing boundary) and stops the
+            # CPU-side nvfp4 dequant from dominating the roundtrip.
+            ci = getattr(p, "_combine_input_cache", None)
+            if ci is None:
+                ci = (_e4m3_dequant_nd(h.recv_q, h.recv_sf) if self.quant_kind == "e4m3"
+                      else self._micro.dequant_nd(h.recv_q, h.recv_sf))
+                p._combine_input_cache = ci
+            h.combine_input = ci
+        else:
+            h.combine_input = h.recv_payload
+        if self.rank == 0 and not getattr(self, "_shape_logged", False) and torch.is_tensor(h.combine_input):
             self._shape_logged = True
-            print(f"[ep_flashinfer] recv/combine payload shape={tuple(h.recv_payload.shape)} "
-                  f"dtype={h.recv_payload.dtype}", flush=True)
+            print(f"[ep_flashinfer] dtype={self.dispatch_dtype} recv_q={tuple(h.recv_q.shape)}:{h.recv_q.dtype}"
+                  f" combine_input={tuple(h.combine_input.shape)}:{h.combine_input.dtype}", flush=True)
         return None
 
     def combine(self, p, h):
-        if self.trtllm:
-            return self._combine_trtllm(p, h)
         # MoeAlltoAll.combine(payload, runtime_max_tokens_per_rank, payload_in_workspace=False)
         # -> the per-source-token reduced result on this rank ([T, hidden] bf16). Because the
         # dispatch populated the symmetric workspace, the data is already there: try
@@ -469,22 +596,6 @@ class FlashInferBackend:
             ((h.combine_input,), dict(runtime_max_tokens_per_rank=p.T)),
         ]
         combined, idx = _call_variants("MoeAlltoAll.combine(...)", self.a2a.combine, variants)
-        h.combine_variant = idx
-        return self._as_tensor(combined)
-
-    def _combine_trtllm(self, p, h):
-        moe_a2a_combine = getattr(fi_comm, "moe_a2a_combine", None)
-        if moe_a2a_combine is None:
-            raise _loud("trtllm combine lookup",
-                        "flashinfer.comm.moe_a2a_combine not found",
-                        AttributeError("moe_a2a_combine"))
-        variants = [
-            ((self.workspace, h.combine_input, p.T), dict(payload_in_workspace=True)),
-            ((self.workspace, h.combine_input, p.T), {}),
-            ((h.combine_input, p.T), dict(payload_in_workspace=True)),
-            ((h.combine_input, p.T), {}),
-        ]
-        combined, idx = _call_variants("moe_a2a_combine(...)", moe_a2a_combine, variants)
         h.combine_variant = idx
         return self._as_tensor(combined)
 
@@ -505,7 +616,9 @@ class FlashInferBackend:
         #   "ranks" (default) -> x * distinct_ranks_per_token   (per-rank-sum combine)
         #   "topk"            -> x * top_k                       (if combine sums every expert copy)
         #   "weight-sum"      -> x * sum(topk_weights)           (if combine applies the gate)
-        ref = p.x.float()
+        # For a quantized dispatch, compare against the DEQUANTIZED cast that was actually sent
+        # (p.x_ref = dequant(quant(x))), so the gate verifies the COMM not the quantizer. bf16 -> x.
+        ref = (p.x_ref if p.x_ref is not None else p.x).float()
         if _ROUTING_FACTOR == "weight-sum":
             factor = p.topk_weights.sum(dim=1, keepdim=True)        # [T, 1]
         elif _ROUTING_FACTOR == "topk":

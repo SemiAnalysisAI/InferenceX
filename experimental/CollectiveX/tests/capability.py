@@ -65,13 +65,21 @@ CAP = {
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
     "flashinfer": {
-        # FlashInfer EP (flashinfer.comm.MoeAlltoAll, pre-installed). NVIDIA; MNNVL symmetric
-        # workspace. bf16 normal layout-and-dispatch; fp8 + the trtllm one-sided variant reserved.
+        # FlashInfer EP = flashinfer.comm.trtllm_moe_alltoall.MoeAlltoAll (pre-installed) — the
+        # TRT-LLM throughput-backend one-sided A2A over an MNNVL symmetric workspace. The A2A is a
+        # dtype-agnostic byte-mover taking input_payloads as a LIST, so a quantized dispatch =
+        # move [q, scale_factor] + dequant in stage(). DISPATCH precisions:
+        #   bf16; fp8/fp8-pertoken/fp8-directcast (e4m3, DeepEP convention); mxfp8/mxfp4/nvfp4
+        #   (OCP-microscaling via FlashInfer's native quantize/dequantize kernels).
         "vendors": ["nvidia"],
         "modes": ["normal"],
-        "dtypes": ["bf16"],
+        # mxfp4 excluded: FlashInfer's mxfp4_quantize emits a tile-padded SF that can't move
+        # through a per-token A2A (docs/gated.md). mxfp8 + nvfp4 cover the microscaling dispatch goal.
+        "dtypes": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "nvfp4"],
         "contracts": ["layout-and-dispatch-v1"],
         "transports": ["nvlink", "mnnvl"],
+        # Combine stays bf16/none: MoeAlltoAll.combine has NO output_dtype param in 0.6.8.post1
+        # (PR3376/3643 not in this wheel) — quantized COMBINE output is genuinely unavailable here.
         "combine_dtypes": ["bf16"],
         "quant_modes": ["none"],
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,

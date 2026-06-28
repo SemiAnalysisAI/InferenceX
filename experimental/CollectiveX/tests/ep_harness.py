@@ -51,7 +51,11 @@ SCHEMA_VERSION = 3  # v3: explicit contracts, pooled trials p50/p90/p99, routing
 DECODE_LADDER = [1, 2, 4, 8, 16, 32, 64, 128]
 PREFILL_LADDER = [128, 256, 512, 1024, 2048, 4096]
 
-_DTYPE_BYTES = {"bf16": 2, "fp16": 2, "fp8": 1}
+# Dispatch-payload element size (bytes/element of hidden) for the derived-bandwidth estimate.
+# fp8/mxfp8 = 1B e4m3/e8m0; mxfp4/nvfp4 = 0.5B (4-bit e2m1, 2 values/byte) — the headline metric
+# is measured LATENCY (dtype-independent); only the secondary GB/s estimate uses this.
+_DTYPE_BYTES = {"bf16": 2, "fp16": 2, "fp8": 1, "fp8-pertoken": 1, "fp8-directcast": 1,
+                "mxfp8": 1, "mxfp4": 0.5, "nvfp4": 0.5}
 
 # Phase profiles (goal P2 "decode/prefill representation"): decode/prefill are token-size REGIMES
 # that also carry distinct serving semantics — NOT merely ladder aliases. Emitted into the doc so a
@@ -80,7 +84,8 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
     ap.add_argument("--dispatch-dtype", default="bf16",
-                    choices=["bf16", "fp8", "fp8-pertoken", "fp8-directcast"])
+                    choices=["bf16", "fp8", "fp8-pertoken", "fp8-directcast",
+                             "mxfp8", "nvfp4"])
     # Combine-path precision/quant is a SEPARATE axis from dispatch (review: don't let
     # dispatch_dtype=fp8 imply the whole EP path is quantized). Today every backend combines
     # bf16 with no quant (combine_quant_mode=none); a future quantized combine (e.g. ROCm/MoRI
