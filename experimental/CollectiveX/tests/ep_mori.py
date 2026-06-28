@@ -292,7 +292,7 @@ class MoRIBackend:
             "dispatch_dtype": args.dispatch_dtype,
             "quant_type": self._quant_label,
             "fp8_format": ("e4m3fnuz" if self._fp8 else None),
-            "fp8_block": (_FP8_BLOCK if self._fp8 else None),
+            "fp8_mode": ("direct_cast" if self._fp8 else None),  # internal cast, scale_dim=0, no blocks
         }
 
     def buffer_cap(self, args):
@@ -339,12 +339,20 @@ class MoRIBackend:
 
     def expected(self, p, h):
         # MoRI combine sums one copy per destination RANK ⇒ combined[i] ≈
-        # x[i] * (#unique destination ranks among the token's topk experts).
+        # ref[i] * (#unique destination ranks among the token's topk experts).
         pes = p.indices.long() // self.experts_per_rank
         unique_pes = torch.tensor(
             [len(set(row.tolist())) for row in pes], device=self.device, dtype=torch.float32
         ).unsqueeze(1)
-        return p.x.float() * unique_pes, p.T
+        ref = p.x.float()
+        if self._fp8:
+            # fp8_direct_cast transports e4m3fnuz, so gate against the SAME direct-cast reference
+            # (consistency — like the flashinfer mxfp8/nvfp4 paths): combined = reduce(e4m3fnuz(x)),
+            # ref = e4m3fnuz(x)*ranks, so the e4m3 rounding CANCELS. A bf16 reference instead carries
+            # the full e4m3 error into relErr, which spuriously fails the per-rank gate at T=1 (the
+            # relErr denominator there is a single token's magnitude — a near-zero token inflates it).
+            ref = p.x.to(torch.float8_e4m3fnuz).float()
+        return ref * unique_pes, p.T
 
     def recv_tokens(self, h):
         return int(h.total_recv)
