@@ -83,6 +83,57 @@ cx_log "squash(node-local)=$SQUASH_FILE  lock=$LOCK_FILE  mount=$MOUNT_SRC -> $M
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
+# ---- Cross-node MI355X EP (goal 183): MoRI is RDMA-native (ionic_rdma) — it registers a symmetric
+# heap per rank and dispatches/combines over RDMA, so it spans nodes natively. CX_NODES>1 allocates
+# N nodes (pinned to the warm-squash nodes via CX_NODELIST so no cold import), imports the squash on
+# each, then multi-sruns run_ep across NODES*8 ranks (1 GPU/rank, RANK/LOCAL_RANK from SLURM_*) — the
+# same multi-srun shape the GB300 EP8 path uses. Reduced timing (MoRI wedges under sustained load).
+if [ "${CX_NODES:-1}" -gt 1 ]; then
+  NODES="${CX_NODES}"; WORLD=$((NODES * NGPUS))
+  cx_log "MI355X CROSS-NODE EP: nodes=$NODES world=$WORLD bench=$CX_BENCH (MoRI RDMA internode)"
+  if [ -n "$NODELIST" ]; then
+    salloc --partition="$PARTITION" --nodelist="$NODELIST" --nodes="$NODES" --gres=gpu:"$NGPUS" \
+           --ntasks-per-node="$NGPUS" --exclusive --cpus-per-task=16 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+  else
+    salloc --partition="$PARTITION" --exclude="$EXCLUDE_NODES" --nodes="$NODES" --gres=gpu:"$NGPUS" \
+           --ntasks-per-node="$NGPUS" --exclusive --cpus-per-task=16 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+  fi
+  JOB_ID="$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node)"
+  trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
+  cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N 2>/dev/null)]"
+  # import the squash on EVERY allocated node (1 task/node).
+  srun --jobid="$JOB_ID" --ntasks-per-node=1 bash -c "
+    mkdir -p \"$(dirname "$LOCK_FILE")\" 2>/dev/null || true
+    exec 9>\"$LOCK_FILE\" 2>/dev/null; flock -w 600 9 2>/dev/null || true
+    unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1 && echo \"squash present: $SQUASH_FILE\" \
+      || { rm -f \"$SQUASH_FILE\"; enroot import -o \"$SQUASH_FILE\" \"docker://$IMAGE\" </dev/null; }
+  " || cx_log "WARN: multi-node squash import had issues on a node"
+  MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29557
+  phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
+  WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; cd /ix/experimental/CollectiveX; exec python3 tests/run_ep.py "$@"'
+  rc=0
+  for ph in $phases; do
+    out="results/${RUNNER_NAME}_${CX_BENCH}_${ph}_${TS}.json"
+    # shellcheck disable=SC2086
+    timeout -k 30 "${CX_RUN_TIMEOUT:-1800}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$WORLD" \
+      --ntasks-per-node="$NGPUS" --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
+      --container-writable --container-remap-root --no-container-mount-home \
+      --container-workdir="$MOUNT_DIR/experimental/CollectiveX" --no-container-entrypoint \
+      --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP" \
+      bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --tokens-ladder "${CX_TOKENS_LADDER:-1 2 4 8}" \
+        --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
+        --measurement-contract layout-and-dispatch-v1 --routing "${CX_ROUTING:-uniform}" \
+        --iters "${CX_ITERS:-8}" --trials "${CX_TRIALS:-1}" --warmup "${CX_WARMUP:-4}" --seed 67 \
+        --runner "$RUNNER_NAME" --topology-class mi355x-multinode-rdma --transport rdma --out "$out" </dev/null 2>&1 | tail -12
+    cx_log "cross-node $ph rc=${PIPESTATUS[0]}"
+  done
+  cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
+  rm -f "$MOUNT_SRC"/experimental/CollectiveX/gpucore.* 2>/dev/null || true
+  cx_log "done — cross-node MI355X EP artifacts under results/"
+  exit 0
+fi
+
 # Pin to specific nodes (CX_NODELIST) when set, else exclude the known-bad ones.
 if [ -n "$NODELIST" ]; then
   cx_log "node pin: --nodelist=$NODELIST"
