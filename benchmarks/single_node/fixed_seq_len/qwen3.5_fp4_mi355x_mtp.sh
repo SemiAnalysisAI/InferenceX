@@ -15,14 +15,17 @@ if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
 fi
 
-hf download "$MODEL"
+if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export SGLANG_USE_AITER=1
-export SGLANG_USE_AITER_UNIFIED_ATTN=1
-export AITER_FLYDSL_FORCE=1
+# AllReduce latency on TP=2: INT4 quick-reduce + single-stage AITER AllReduce.
+export ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export AITER_AR_1STAGE=1
+# Built-in MTP head (NEXTN) runs on the ROCm-hardened spec-v1 chain path.
+export SGLANG_ENABLE_SPEC_V2=0
 
 SERVER_LOG=/workspace/server.log
-MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.8}
+MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.85}
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -40,9 +43,11 @@ python3 -m sglang.launch_server --model-path=$MODEL --trust-remote-code \
 --model-loader-extra-config '{"enable_multithread_load": true}' \
 --watchdog-timeout 1200  \
 --disable-radix-cache \
---enable-aiter-allreduce-fusion --max-running-requests $CONC \
---page-size 16 \
---speculative-algorithm EAGLE \
+--enable-dp-attention \
+--mamba-ssm-dtype bfloat16 \
+--disable-shared-experts-fusion \
+--max-running-requests $CONC \
+--speculative-algorithm NEXTN \
 --speculative-num-steps 3 \
 --speculative-eagle-topk 1 \
 --speculative-num-draft-tokens 4 \
