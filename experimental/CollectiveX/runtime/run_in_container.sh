@@ -452,6 +452,21 @@ PY
   fi
 }
 
+run_mori_io_suite() {
+  # MoRI-IO (ROCm/mori mori.io) — AMD RDMA p2p transfer engine, bundled in the AMD MoRI image. The
+  # WIRED kv-cache 'mori-io' backend (a guaranteed datapoint when mori.io imports + RDMA loopback
+  # works on the ionic_rdma NICs). Single process, 2 IOEngines, GPU0<->GPU1 RDMA read.
+  if ! python3 -c "import mori.io" 2>/dev/null; then
+    cx_log "WARN: mori.io not importable — needs the AMD MoRI image; cannot run mori-io"; return 1
+  fi
+  local out="results/${CX_RUNNER}_mori_io_${CX_TS}.json" rc=0
+  cx_log "mori-io transfer bench -> $out"
+  timeout -k 30 "${CX_RUN_TIMEOUT:-900}" python3 tests/mori_io_transfer.py \
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "${CX_TRANSPORT:-rdma}" \
+      --env-json "$ENVJSON" --out "$out" || { rc=$?; cx_log "WARN: mori-io failed/timed out rc=$rc"; }
+  return "$rc"
+}
+
 run_nixl_suite() {
   # NIXL (ai-dynamo/nixl) — runs in the dynamo tensorrtllm-runtime image (cx_default_image switched
   # CX_IMAGE for CX_BENCH=nixl). Two parts: (1) the NIXL point-to-point TRANSFER bench (the wired
@@ -489,13 +504,14 @@ case "$CX_BENCH" in
   flashinfer)  run_flashinfer_suite || rc=1 ;;
   deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
   nixl)        run_nixl_suite || rc=1 ;;
+  mori-io)     run_mori_io_suite || rc=1 ;;
   offload)     run_collective_bench offload || rc=1 ;;
   copy-engine) run_collective_bench copy-engine || rc=1 ;;
   kv-cache)    run_collective_bench kv-cache || rc=1 ;;
   rl-mesh)     run_rl_mesh || rc=1 ;;
   allreduce-fw) run_allreduce_fw || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|mori-io|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.

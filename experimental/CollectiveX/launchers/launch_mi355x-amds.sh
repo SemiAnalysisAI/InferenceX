@@ -50,12 +50,13 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 #                 NVIDIA-only and self-skip on the ROCm image, leaving a valid RCCL-baseline curve)
 #   copy-engine — off-SM DMA copy vs CU-kernel copy; on ROCm the DMA path IS the SDMA engine
 #                 (the AMD SDMA path), labeled copy_engine_kind=sdma in the result
+#   mori-io     — MoRI-IO RDMA p2p transfer engine (mori.io; AMD analog of NIXL) GPU0<->GPU1
 # Default mori; honor an explicit CX_BENCH within this set. NVIDIA-only EP backends
-# (deepep/uccl/flashinfer/deepep-hybrid/offload) fall back to mori (capability also
+# (deepep/uccl/flashinfer/deepep-hybrid/offload/nixl) fall back to mori (capability also
 # rejects them on amd, so a dispatch of those to mi355x is a no-op the validator catches first).
 export CX_BENCH="${CX_BENCH:-mori}"
 case "$CX_BENCH" in
-  mori|nccl|kv-cache|rl-mesh|allreduce-fw|copy-engine) ;;
+  mori|nccl|kv-cache|rl-mesh|allreduce-fw|copy-engine|mori-io) ;;
   *) cx_log "mi355x: CX_BENCH='$CX_BENCH' is NVIDIA-only / unsupported on AMD; using mori"; export CX_BENCH=mori ;;
 esac
 export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"

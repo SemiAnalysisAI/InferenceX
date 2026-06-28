@@ -141,7 +141,9 @@ HOST_GPU_BENCH = {"offload": ["nvidia"], "copy-engine": ["nvidia", "amd"],
                   "allreduce-fw": ["nvidia", "amd"],
                   # nixl = the NIXL point-to-point transfer bench (kv-cache family) + the device-EP
                   # build-probe; runs in the dynamo tensorrtllm-runtime container (NVIDIA-only).
-                  "nixl": ["nvidia"]}
+                  "nixl": ["nvidia"],
+                  # mori-io = MoRI-IO RDMA p2p transfer engine (mori.io); AMD MoRI image only.
+                  "mori-io": ["amd"]}
 
 # 'all' resolves to a DEFINED per-vendor backend set (not the same across vendors).
 VENDOR_BACKENDS = {"nvidia": ["nccl", "deepep", "uccl", "flashinfer"], "amd": ["rccl", "mori"]}
