@@ -130,6 +130,21 @@ CAP = {
         # MoRI also honors any trace + EPLB (a routing-trace transform), bf16 value-neutral.
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
+    "nccl-ep": {
+        # NCCL/RCCL all-to-all EP (tests/ep_nccl.py) — the canonical token-shuffle EP built on pure
+        # torch.distributed collectives (all_to_all_single), no custom RDMA. Runs on BOTH vendors
+        # (NCCL on NVIDIA, RCCL on AMD — identical API) and is the only EP backend that survives
+        # cross-node WITHOUT GPUDirect-RDMA: NCCL/RCCL host-stage the all-to-all, where UCCL's
+        # ibv_reg_mr (EINVAL) and MoRI's RDMA registration abort. bf16 / normal / layout-and-dispatch.
+        "vendors": ["nvidia", "amd"],
+        "modes": ["normal"],
+        "dtypes": ["bf16"],
+        "contracts": ["layout-and-dispatch-v1"],
+        "transports": ["nvlink", "rdma", "xgmi"],
+        "combine_dtypes": ["bf16"],
+        "quant_modes": ["none"],
+        "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
+    },
 }
 # nccl/rccl are collective primitives, not EP dispatch/combine — phase is meaningless.
 COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}

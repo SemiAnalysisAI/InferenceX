@@ -327,6 +327,13 @@ run_uccl_suite() {
   cx_build_uccl || { cx_log "WARN: UCCL EP setup failed — cannot run uccl"; return 1; }
   run_ep_suite uccl
 }
+run_nccl_ep_suite() {
+  # NCCL/RCCL all-to-all EP (tests/ep_nccl.py) — pure torch.distributed collectives, already in every
+  # image (no build). The canonical token-shuffle EP + the only cross-node path that survives without
+  # GPUDirect-RDMA: NCCL host-stages where UCCL's ibv_reg_mr / MoRI's RDMA registration abort. Works
+  # cross-node via the FileStore rendezvous (CX_RDZV_FILE) on both NVIDIA (nccl) and AMD (rccl).
+  run_ep_suite nccl-ep
+}
 run_deepep_hybrid_suite() {
   # DeepEP hybrid-ep branch (NVIDIA TMA HybridEPBuffer) — build from source (cccl + libnvshmem
   # fixes), then the generic EP sweep (run_ep.py --backend deepep-hybrid). Intranode NVLink path.
@@ -579,6 +586,7 @@ case "$CX_BENCH" in
   deepep)      run_deepep_suite || rc=1 ;;
   mori)        run_mori_suite || rc=1 ;;
   uccl)        run_uccl_suite || rc=1 ;;
+  nccl-ep)     run_nccl_ep_suite || rc=1 ;;
   flashinfer)  run_flashinfer_suite || rc=1 ;;
   deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
   nixl)        run_nixl_suite || rc=1 ;;
@@ -591,7 +599,7 @@ case "$CX_BENCH" in
   rl-mesh)     run_rl_mesh || rc=1 ;;
   allreduce-fw) run_allreduce_fw || rc=1 ;;
   all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|mooncake|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
+  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|nccl-ep|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|mooncake|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
 esac
 
 # Summary table for the log; also fails the job if no valid results were produced.

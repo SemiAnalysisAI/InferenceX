@@ -115,6 +115,10 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
   _mn="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"
   MA="$(scontrol show node "$_mn" 2>/dev/null | grep -oE 'NodeAddr=[^ ]+' | head -1 | cut -d= -f2)"; [ -z "$MA" ] && MA="$_mn"; MP=29557
   cx_log "rendezvous master node=$_mn addr=$MA:$MP"
+  # FileStore rendezvous on the shared mount: nccl-ep (pure rccl PG, no gloo) inits via file:// and
+  # sidesteps BOTH the TCPStore master-addr reach AND the gloo connectFullMesh 127.0.1.1 alias. MoRI
+  # (gloo+nccl) still consumes MASTER_ADDR; run_ep.py prefers CX_RDZV_FILE when set (harmless for mori).
+  RDZV="$MOUNT_DIR/experimental/CollectiveX/.rdzv_${JOB_ID}"; rm -f "$MOUNT_SRC/experimental/CollectiveX/.rdzv_${JOB_ID}" 2>/dev/null || true
   phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
   # source _xnode_net.sh inside each rank: pins GLOO/NCCL_SOCKET_IFNAME to the routable 10.x NIC so
   # gloo's per-rank connectFullMesh advertises the reachable iface (not the 127.0.1.1 hostname alias).
@@ -127,7 +131,7 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
       --ntasks-per-node="$NGPUS" --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
       --container-writable --container-remap-root --no-container-mount-home \
       --container-workdir="$MOUNT_DIR/experimental/CollectiveX" --no-container-entrypoint \
-      --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP" \
+      --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP",CX_RDZV_FILE="$RDZV" \
       bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --tokens-ladder "${CX_TOKENS_LADDER:-1 2 4 8}" \
         --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
         --measurement-contract layout-and-dispatch-v1 --routing "${CX_ROUTING:-uniform}" \

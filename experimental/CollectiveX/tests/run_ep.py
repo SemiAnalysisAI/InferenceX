@@ -83,6 +83,8 @@ def main() -> int:
     # mislabel (review/goal). All ranks reject identically.
     if args.backend == "mori":
         from ep_mori import MoRIBackend as Backend
+    elif args.backend == "nccl-ep":
+        from ep_nccl import NCCLBackend as Backend
     elif args.backend == "uccl":
         from ep_uccl import UCCLBackend as Backend
     elif args.backend == "flashinfer":
