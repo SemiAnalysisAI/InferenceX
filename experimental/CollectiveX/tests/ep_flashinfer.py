@@ -687,8 +687,11 @@ class FlashInferBackend:
                 gsf = torch.tensor([1.0 / max(1e-6, getattr(self, "_qc_scalar", 1.0))], dtype=torch.float32)
                 # nvfp4 dequant via the flashinfer e2m1 decoder (linear layout, vec-16)
                 import flashinfer as _fi
+                # the combine wrote the nvfp4 scales as float8_e4m3fn, but the e2m1 decoder wants the
+                # raw ufp8 bytes as uint8 — reinterpret (same 1-byte storage), don't cast.
+                sc_u8 = sc.reshape(T, -1).contiguous().view(torch.uint8)
                 o = _fi.e2m1_and_ufp8sf_scale_to_float(
-                    out_q.reshape(T, -1).contiguous(), sc.reshape(T, -1).contiguous(),
+                    out_q.reshape(T, -1).contiguous(), sc_u8,
                     global_scale_tensor=gsf, sf_vec_size=16, is_sf_swizzled_layout=False)
                 cached = o.reshape(T, H).to(device=out_q.device, dtype=torch.bfloat16)
             else:
