@@ -91,8 +91,9 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     # bf16 with no quant (combine_quant_mode=none); a future quantized combine (e.g. ROCm/MoRI
     # PR311) sets these WITHOUT changing --dispatch-dtype. Defaults reproduce today exactly;
     # capability.py gates unsupported values.
-    ap.add_argument("--combine-dtype", default="bf16", choices=["bf16", "fp8"],
-                    help="combine-input precision (today bf16 everywhere; fp8 = future quant combine)")
+    ap.add_argument("--combine-dtype", default="bf16", choices=["bf16", "fp8", "nvfp4"],
+                    help="combine OUTPUT precision (bf16 default; fp8=MXFP8 e4m3+e8m0, nvfp4=e2m1 — "
+                         "quantized combine via flashinfer-main moe_a2a_combine output_dtype)")
     ap.add_argument("--combine-quant-mode", default="none",
                     help="combine quantization mode; 'none' today. capability.py rejects unwired modes")
     # Activation VALUE distribution of expert inputs (goal P2). normal = seeded N(0,1) (the only
