@@ -636,58 +636,49 @@ class FlashInferBackend:
         h.combine_variant = idx
         return self._as_tensor(combined)
 
+    _QC_VEC = 32   # fp8 combine output uses UE8M0 scales, vector size 32 (flashinfer main source)
+
     def _combine_quant(self, p, h):
-        # Quantized COMBINE OUTPUT (fp8 e4m3): the kernel reduces the top_k copies per source token
-        # and emits the result already as fp8 + per-token scales (written into output_scales, which
-        # we allocate). The fp8 reduction is what's TIMED; we dequant (cached on the problem,
-        # UNTIMED — deterministic recv) -> bf16 for the correctness gate, like the dispatch quant path.
-        #
-        # SINGLE-SHOT output_scales shape (NOT a defensive multi-try loop): MoeAlltoAll is a stateful
-        # FSM (combine asserts phase=="dispatched"), so a failed combine attempt corrupts the state and
-        # a second attempt fails differently. We pick the most-likely shape (per-token [T,1], the e4m3
-        # activation convention) and let a wrong guess surface as ONE clean LOUD error in the GHA log
-        # (which names the shape to switch to) rather than cascading FSM failures. CX_QC_SCALE overrides:
-        #   "pertoken" (default) -> [T,1] ; "block128" -> [T,H/128] ; "none" -> no output_scales arg.
+        # Quantized COMBINE OUTPUT. Pinned from the flashinfer-main source: combine(output_dtype=
+        # float8_e4m3fn) emits the reduced result as e4m3 + UE8M0 scale factors "packed in torch.uint8,
+        # vector size 32" (linear layout) — i.e. MXFP8 (e4m3 + e8m0 block-32). So output_scales MUST be
+        # uint8 [T, H/32] (the kernel WRITES it; first run failed "float32 vs uint8"). We dequant
+        # (cached, UNTIMED — deterministic recv) via e8m0: x = e4m3 * 2^(scale_uint8 - 127) per block-32.
+        # The fp8 reduction is what's TIMED. CX_QC_SCALE override: "block32" (default) | "pertoken"[T,1].
         H = int(getattr(self, "hidden", 0)) or int(self.args.hidden)
         T = p.T
-        mode = os.environ.get("CX_QC_SCALE", "pertoken")
-        if mode == "block128":
-            sc = torch.zeros(T, max(1, H // 128), device=self.device, dtype=torch.float32)
-        elif mode == "none":
-            sc = None
-        else:
-            sc = torch.zeros(T, 1, device=self.device, dtype=torch.float32)
-        kw = dict(payload_in_workspace=False, output_dtype=self._qc_out_dtype)
-        if sc is not None:
-            kw["output_scales"] = sc
+        mode = os.environ.get("CX_QC_SCALE", "block32")
+        blocks = 1 if mode == "pertoken" else max(1, H // self._QC_VEC)
+        sc = torch.zeros(T, blocks, device=self.device, dtype=torch.uint8)
         try:
-            out = self.a2a.combine(h.combine_input, T, **kw)
+            out = self.a2a.combine(h.combine_input, T, payload_in_workspace=False,
+                                   output_dtype=self._qc_out_dtype, output_scales=sc)
         except Exception as exc:
-            raise _loud(f"MoeAlltoAll.combine(output_dtype=fp8, output_scales={mode})",
-                        f"quant-combine call failed (try CX_QC_SCALE in pertoken|block128|none); "
-                        f"combine sig: try `help(flashinfer.comm.MoeAlltoAll.combine)`", exc)
+            raise _loud(f"MoeAlltoAll.combine(output_dtype=fp8, output_scales=uint8[T,{blocks}])",
+                        f"quant-combine call failed (CX_QC_SCALE={mode}; UE8M0 vec-32 per the main source)",
+                        exc)
         if self.rank == 0 and not getattr(self, "_qc_logged", False):
             self._qc_logged = True
             oq = out[0] if isinstance(out, (tuple, list)) else out
-            print(f"[ep_flashinfer] combine-quant fp8 OK output_scales={mode} "
+            print(f"[ep_flashinfer] combine-quant mxfp8 OK output_scales=uint8[{T},{blocks}] "
                   f"out={tuple(oq.shape)}:{oq.dtype}", flush=True)
         return self._finish_qcombine(p, out, sc, H)
 
     def _finish_qcombine(self, p, out, sc, H):
+        # Dequant the MXFP8 combine output: e4m3 * 2^(UE8M0_uint8 - 127), per block-32 (or per-token).
         out_q = out[0] if isinstance(out, (tuple, list)) else out
         cached = getattr(p, "_qc_dequant", None)
         if cached is None:
             of = out_q.float()
-            if sc is not None and torch.is_tensor(sc) and sc.dim() >= 2 and sc.shape[-1] >= 1:
-                T = of.shape[0]
-                blocks = sc.shape[-1]
-                if blocks > 1 and (H % blocks) == 0:
-                    bs = H // blocks
-                    cached = (of.view(T, blocks, bs) * sc.view(T, blocks, 1)).reshape(T, H).to(torch.bfloat16)
-                else:
-                    cached = (of * sc.reshape(T, 1)).to(torch.bfloat16)   # per-token scale
+            T = of.shape[0]
+            blocks = sc.shape[-1] if torch.is_tensor(sc) and sc.dim() >= 2 else 1
+            if blocks > 1 and (H % blocks) == 0:
+                bs = H // blocks
+                scale = torch.pow(torch.tensor(2.0, device=of.device), sc.float() - 127.0)  # e8m0 decode
+                cached = (of.view(T, blocks, bs) * scale.view(T, blocks, 1)).reshape(T, H).to(torch.bfloat16)
             else:
-                cached = of.to(torch.bfloat16)
+                scale = torch.pow(torch.tensor(2.0, device=of.device), sc.float().reshape(T, 1) - 127.0)
+                cached = (of * scale).to(torch.bfloat16)
             p._qc_dequant = cached
         return cached
 
