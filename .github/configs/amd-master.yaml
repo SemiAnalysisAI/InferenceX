@@ -2490,7 +2490,7 @@ dsv4-fp4-mi355x-vllm-agentic-lmcache:
     #- duration: 10800
       search-space:
       #- { tp: 8, ep: 1, dp-attn: false, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [16, 32, 40, 48, 56] }
-      - { tp: 8, ep: 1, dp-attn: false, offloading: cpu, total-cpu-dram-gb: 1500, conc-list: [32] }
+      - { tp: 8, ep: 1, dp-attn: false, offloading: cpu, total-cpu-dram-gb: 600, conc-list: [32] }
 
       #- { tp: 8, ep: 1, dp-attn: false, offloading: none, conc-list: [8, 16, 32, 64, 72] }
       #- { tp: 8, ep: 1, dp-attn: false, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [8, 16, 32, 64, 72] }
