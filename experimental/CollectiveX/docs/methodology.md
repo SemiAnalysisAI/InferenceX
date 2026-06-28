@@ -364,5 +364,21 @@ rank sees the full token set for expert routing. The collected payload is `[tota
 bf16. The standardized all-gather sweep is a geometric byte ladder that **spans the payload-size
 range of this handoff** (a few KiB per-rank shard up to the tens-of-MiB full-batch gather), so the
 latency/bandwidth curves in the All-gather tab cover the DP-attention→TP-MoE handoff sizes directly.
-Naming exact per-model (hidden, token-count) points as labeled shapes — rather than reading them off
-the byte sweep — is a further-lift refinement; the size coverage is already present.
+
+**Named per-model handoff shapes.** The gathered payload is `total_tokens × hidden × 2` bytes (bf16).
+The table names the exact points for each model's EP shape (`hidden` from the `-v1` workload manifests),
+at a representative decode batch (256 tokens) and prefill chunk (4096 tokens), and the nearest covering
+point on the geometric all-gather byte ladder — so the named shapes are explicit, not just read off the
+sweep:
+
+| Model            | hidden | decode (256 tok) | prefill (4096 tok) | covered by all-gather sweep |
+|------------------|-------:|-----------------:|-------------------:|-----------------------------|
+| DeepSeek-V3/V4   |  7168  | 3.67 MB          | 58.7 MB            | yes (1 MiB–64 MiB band)     |
+| Kimi-K2          |  7168  | 3.67 MB          | 58.7 MB            | yes (1 MiB–64 MiB band)     |
+| MiniMax-M3       |  6144  | 3.15 MB          | 50.3 MB            | yes (1 MiB–64 MiB band)     |
+| Qwen3.5          |  4096  | 2.10 MB          | 33.6 MB            | yes (1 MiB–64 MiB band)     |
+
+All four models' decode and prefill handoffs land inside the standardized sweep's 1–64 MiB span, so the
+All-gather tab's measured latency/bandwidth at those byte points IS the per-model DP-attention→TP-MoE
+handoff cost (read the curve at the model's column value). The shapes are model-derived (hidden) ×
+serving-regime (token count); the byte ladder is dtype-agnostic so an fp8 handoff halves each figure.
