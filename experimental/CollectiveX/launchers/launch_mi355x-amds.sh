@@ -109,7 +109,12 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
     unsquashfs -l \"$SQUASH_FILE\" >/dev/null 2>&1 && echo \"squash present: $SQUASH_FILE\" \
       || { rm -f \"$SQUASH_FILE\"; enroot import -o \"$SQUASH_FILE\" \"docker://$IMAGE\" </dev/null; }
   " || cx_log "WARN: multi-node squash import had issues on a node"
-  MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29557
+  # MASTER_ADDR must be the rank-0 node's ROUTABLE IP, not its hostname: MI355X /etc/hosts aliases
+  # the hostname to 127.0.1.1 (loopback), which made gloo rendezvous fail "connect refused
+  # remote=[127.0.1.1]". scontrol NodeAddr gives the routable address; fall back to hostname.
+  _mn="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"
+  MA="$(scontrol show node "$_mn" 2>/dev/null | grep -oE 'NodeAddr=[^ ]+' | head -1 | cut -d= -f2)"; [ -z "$MA" ] && MA="$_mn"; MP=29557
+  cx_log "rendezvous master node=$_mn addr=$MA:$MP"
   phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
   WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; cd /ix/experimental/CollectiveX; exec python3 tests/run_ep.py "$@"'
   rc=0

@@ -67,8 +67,12 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
   JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
   [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node)"
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
-  MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"
-  cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N)] master=$MA"
+  # MASTER_ADDR = the rank-0 node's ROUTABLE IP (NodeAddr), not its hostname: the first attempt hung
+  # 900s on "connect to worker-1:29561" because the hostname wasn't reachable cross-node. NodeAddr is
+  # the routable address; fall back to hostname.
+  _mn="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"
+  MA="$(scontrol show node "$_mn" 2>/dev/null | grep -oE 'NodeAddr=[^ ]+' | head -1 | cut -d= -f2)"; [ -z "$MA" ] && MA="$_mn"
+  cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N)] master node=$_mn addr=$MA"
   export CX_TOPO="h200-multinode-ib" CX_TRANSPORT="rdma"
   # one task/node; CX_NODE_RANK is the per-node SLURM_NODEID (set inside the task, not via --export).
   srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 \
