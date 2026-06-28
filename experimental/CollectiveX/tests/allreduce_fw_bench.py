@@ -199,114 +199,59 @@ def _build_flashinfer(torch, dist, dev, world, rank, dtype, variant):
                     f"(hidden={H}, out-of-place + copy-back)"}
 
 
+def _sglang_vllm_ca_runner(ps, torch, dev, world, rank, fw):
+    """Shared: replicate the framework's SERVING distributed init (init_distributed_environment +
+    initialize_model_parallel) on the existing torchrun group, then return a run() that calls the TP
+    GroupCoordinator's custom-allreduce. sglang AND vllm expose the identical parallel_state API
+    (sglang forked vllm's), so one helper drives both. The serving init is exactly the context the
+    CustomAllreduce wrapper needs (it builds ca_comm only after initialize_model_parallel) — which is
+    why a bare-wrapper construction skipped before. Fully guarded -> skip dict on any failure."""
+    try:
+        if not ps.model_parallel_is_initialized():
+            ps.init_distributed_environment(world_size=world, rank=rank,
+                                            distributed_init_method="env://",
+                                            local_rank=local_device_index(dev), backend="nccl")
+            ps.initialize_model_parallel(tensor_model_parallel_size=world)
+        tp = ps.get_tp_group()
+    except Exception as e:
+        return {"runner": None, "skip": f"{fw} distributed init failed: {e!r}"}
+    ca = getattr(tp, "ca_comm", None)
+    if ca is None or getattr(ca, "disabled", True):
+        return {"runner": None,
+                "skip": f"{fw} TP group ca_comm absent/disabled (no custom-AR at world={world}; "
+                        f"needs >1 rank + a supported topology/size)"}
+
+    def run(t, _ca=ca):
+        if hasattr(_ca, "should_custom_ar") and not _ca.should_custom_ar(t):
+            raise _SkipSize(f"{fw} ca_comm: size outside custom-AR range")
+        out = _ca.custom_all_reduce(t)
+        if out is not None and out.data_ptr() != t.data_ptr():
+            t.copy_(out)
+    return {"runner": run, "free": getattr(tp, "destroy", None),
+            "note": f"{fw} GroupCoordinator.ca_comm.custom_all_reduce (serving init replicated)"}
+
+
 def _build_sglang(torch, dist, dev, world, rank, dtype):
-    """SGLang 'quick all-reduce' / custom all-reduce (sgl_kernel). SGLang wraps its custom AR
-    in sglang.srt.distributed.device_communicators.custom_all_reduce.CustomAllreduce; the raw
-    kernels are in sgl_kernel.allreduce. We try the high-level wrapper first (it owns the IPC
-    workspace setup), then the raw kernel. Both GUESSED + fully guarded -> skip on absence."""
-    # (a) the SGLang distributed wrapper (preferred — manages the shared IPC buffer).
+    """SGLang custom all-reduce. The wrapper builds its IPC buffer only inside the framework's
+    distributed init (initialize_model_parallel) — so replicate that on the torchrun group and use
+    the TP group's ca_comm (the prior bare-CustomAllreduce construction skipped for exactly this)."""
     try:
-        from sglang.srt.distributed.device_communicators import custom_all_reduce as sgl_car
-    except Exception:
-        sgl_car = None
-    if sgl_car is not None:
-        cls = getattr(sgl_car, "CustomAllreduce", None) or getattr(sgl_car, "CustomAllReduce", None)
-        if cls is not None:
-            try:
-                obj = None
-                for kwargs in ({"group": dist.group.WORLD, "device": dev},
-                               {"group": dist.group.WORLD, "device": local_device_index(dev)},
-                               {"device": dev}, {}):
-                    try:
-                        obj = cls(**kwargs)
-                        break
-                    except Exception:
-                        continue
-                if obj is not None:
-                    method = None
-                    for name in ("custom_all_reduce", "all_reduce", "quick_all_reduce", "__call__"):
-                        if hasattr(obj, name):
-                            method = getattr(obj, name)
-                            break
-                    if method is not None:
-                        def run(t, _m=method):
-                            out = _m(t)
-                            if out is not None and out.data_ptr() != t.data_ptr():
-                                t.copy_(out)
-                        free = getattr(obj, "close", None)
-                        return {"runner": run, "free": free,
-                                "note": f"sglang.srt...custom_all_reduce.{cls.__name__}"}
-            except Exception:
-                pass
-    # (b) raw sgl_kernel custom/quick all-reduce. The raw API needs explicit IPC handle setup we
-    #     can't reliably reconstruct here; probe for a self-contained entrypoint, else skip.
-    try:
-        import sgl_kernel  # noqa: F401
-        allreduce_mod = getattr(__import__("sgl_kernel.allreduce", fromlist=["allreduce"]),
-                                "allreduce", None) if _module_exists("sgl_kernel.allreduce") else None
-    except Exception:
-        allreduce_mod = None
-    if allreduce_mod is not None:
-        for fname in ("all_reduce", "custom_all_reduce", "quick_all_reduce"):
-            fn = getattr(allreduce_mod, fname, None)
-            if callable(fn):
-                # Raw kernels generally require a registered IPC buffer / meta handle as extra
-                # args; without the wrapper we cannot supply those safely. Record as present-
-                # but-not-self-wireable rather than guess a buffer layout and risk corruption.
-                return {"runner": None,
-                        "skip": f"sgl_kernel.allreduce.{fname} present but needs IPC-buffer setup "
-                                f"only the sglang wrapper provides (wrapper import failed)"}
-    return {"runner": None,
-            "skip": "sglang present but no usable custom/quick all-reduce wrapper "
-                    "(probed sglang.srt...custom_all_reduce.CustomAllreduce + sgl_kernel.allreduce)"}
+        from sglang.srt.distributed import parallel_state as ps
+    except Exception as e:
+        return {"runner": None, "skip": f"sglang.srt.distributed import failed (not in image?): {e!r}"}
+    return _sglang_vllm_ca_runner(ps, torch, dev, world, rank, "sglang")
 
 
 def _build_vllm(torch, dist, dev, world, rank, dtype):
-    """vLLM in-tree custom all-reduce. vllm.distributed.device_communicators.custom_all_reduce.
-    CustomAllreduce owns the IPC workspace; we construct it against the world group and call its
-    custom_all_reduce/all_reduce. vLLM may not be installed -> skip. GUESSED ctor shapes."""
-    mod = None
-    for path in ("vllm.distributed.device_communicators.custom_all_reduce",
-                 "vllm.distributed.custom_all_reduce"):
-        if _module_exists(path):
-            try:
-                mod = __import__(path, fromlist=["x"])
-                break
-            except Exception:
-                mod = None
-    if mod is None:
-        return None
-    cls = getattr(mod, "CustomAllreduce", None) or getattr(mod, "CustomAllReduce", None)
-    if cls is None:
-        return {"runner": None, "skip": "vllm custom_all_reduce module present but no CustomAllreduce class"}
+    """vLLM in-tree custom all-reduce via its GroupCoordinator — same serving-init replication as
+    sglang (vllm.distributed.parallel_state has the identical init/get_tp_group/ca_comm API). vLLM
+    isn't in the sglang image, so this runs under the vLLM container switch (CX_BENCH=allreduce-fw +
+    sku/image -> a vllm image); skips on absence."""
     try:
-        obj = None
-        for kwargs in ({"group": dist.group.WORLD, "device": dev},
-                       {"group": dist.group.WORLD, "device": local_device_index(dev)},
-                       {"device": dev}, {}):
-            try:
-                obj = cls(**kwargs)
-                break
-            except Exception:
-                continue
-        if obj is None:
-            return {"runner": None, "skip": "vllm CustomAllreduce present but no ctor signature accepted"}
-        method = None
-        for name in ("custom_all_reduce", "all_reduce", "__call__"):
-            if hasattr(obj, name):
-                method = getattr(obj, name)
-                break
-        if method is None:
-            return {"runner": None, "skip": "vllm CustomAllreduce has no all_reduce method"}
-
-        def run(t, _m=method):
-            out = _m(t)
-            if out is not None and out.data_ptr() != t.data_ptr():
-                t.copy_(out)
-        free = getattr(obj, "close", None)
-        return {"runner": run, "free": free, "note": f"vllm...custom_all_reduce.{cls.__name__}"}
-    except Exception as exc:
-        return {"runner": None, "skip": f"vllm custom all-reduce setup raised: {exc!r}"}
+        from vllm.distributed import parallel_state as ps
+    except Exception as e:
+        return {"runner": None, "skip": f"vllm.distributed import failed (not in image — needs a vLLM container): {e!r}"}
+    return _sglang_vllm_ca_runner(ps, torch, dev, world, rank, "vllm")
 
 
 def _module_exists(name: str) -> bool:
