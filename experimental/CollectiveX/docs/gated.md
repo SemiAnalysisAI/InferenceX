@@ -122,19 +122,21 @@ cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fr
 
 ## Topology and rack-scale
 
-### Cross-node EP / GB200·GB300 NVL72 EP16/32/64 — BLOCKED (internode-DeepEP integration)
-`platforms.yaml` is `internode: false` for every SKU ("asserts out until >8 ranks"). The DeepEP NVLink
-kernel `Buffer(group, nvl, 0)` is **intranode-only** (≤8 ranks — including MNNVL trays, which is why
-GB300 EP8 over 2 trays works). EP16/32/64 needs the DeepEP **internode** path (NVSHMEM/IBGDA) built +
-a multi-node torchrun/srun launcher + internode buffer sizing — a substantial integration not yet
-wired. Multi-node **hardware exists** (H200 has 13 idle nodes), so this is an integration gap, not a
-hardware gap. **What IS done:** structured topology metadata (nodes/gpus/domain/transport/placement),
-placement policies (packed/striped/runtime-native/adversarial), and locality/topology metrics
-(same-node/same-domain/cross-node/RDMA fractions) — all captured per result.
-- **GB200 NVL72:** no validated GB200 platform/runner in the fleet (`launch_gb200-nv.sh` exists but no
-  validated `platforms.yaml` entry). Hardware gap.
-- **GB300 NVL72 EP8:** works over MNNVL (`gb300-nv`), but capacity-limited per project decision; EP16+
-  needs the internode path above.
+### NVL72 rack-scale EP — DONE up to EP64 via FlashInfer-MNNVL; cross-node-over-IB still internode-gap
+**Within an NVL72 NVLink domain, EP8/16/32/64 are DONE.** The key: DeepEP's NVLink `Buffer(group,nvl,0)`
+is intranode-only (≤8 ranks, incl. MNNVL trays → GB300/GB200 EP8 over 2 trays via deepep), BUT
+**FlashInfer's MoeAlltoAll MNNVL symmetric workspace SPANS the whole NVL72 NVLink domain** — so
+`benchmark=flashinfer nodes=4/8/16` runs EP16/32/64 across 4/8/16 trays. Validated correct=True:
+GB300 EP8 (28319504164) + EP16 (28319809968); GB200 EP8 (28319793439, after porting the GB300 EP
+multi-srun path into launch_gb200-nv.sh — was nccl-only) + EP16 (28319971335) + EP64 (28319975631,
+ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrency-group collision
+(the group omitted inputs.nodes — fixed). Bounded only by NVL72 tray CAPACITY, not the method.
+- **Cross-node over InfiniBand (H100/H200, goal 182):** genuinely needs internode-DeepEP (NVSHMEM/
+  IBGDA over IB) — FlashInfer MNNVL + DeepEP intranode are both NVLink-domain only and do NOT span IB.
+  This is the remaining internode-integration gap (multi-node H200 hardware exists; the IBGDA build +
+  a 2-node H200 EP launcher are unwired). Distinct from the NVL72 rack-scale above (one NVLink domain).
+- **Cross-node MI355X (goal 183, "if available"):** needs a multi-node MI355X allocation + internode
+  RCCL/MoRI; the MI355X launcher is single-node (8 GPU). Single-node MI355X EP is covered by the MoRI sweep.
 
 ## Other inference collectives (NVIDIA scope)
 
