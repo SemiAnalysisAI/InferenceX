@@ -54,9 +54,11 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 # Default mori; honor an explicit CX_BENCH within this set. NVIDIA-only EP backends
 # (deepep/uccl/flashinfer/deepep-hybrid/offload/nixl) fall back to mori (capability also
 # rejects them on amd, so a dispatch of those to mi355x is a no-op the validator catches first).
+# nccl-ep IS supported on AMD: it is pure torch.distributed all_to_all_single over RCCL (the
+# cross-node EP path that host-stages where MoRI's custom RDMA aborts — goal 183).
 export CX_BENCH="${CX_BENCH:-mori}"
 case "$CX_BENCH" in
-  mori|nccl|kv-cache|rl-mesh|allreduce-fw|copy-engine|mori-io|nccl-kv) ;;
+  mori|nccl-ep|nccl|kv-cache|rl-mesh|allreduce-fw|copy-engine|mori-io|nccl-kv) ;;
   *) cx_log "mi355x: CX_BENCH='$CX_BENCH' is NVIDIA-only / unsupported on AMD; using mori"; export CX_BENCH=mori ;;
 esac
 export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
