@@ -58,6 +58,10 @@ case "$CX_BENCH" in
 esac
 export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
 export CX_TOPO="mi355x-xgmi" CX_TRANSPORT="xgmi"
+# MI355X is a shared cluster with slow cold enroot imports + node contention; the default 900s
+# per-phase wall-clock guard is too tight here (MoRI prefill at large T + a busy node times out).
+# Raise to 1800s (fits inside the 60-min salloc). Override with CX_RUN_TIMEOUT.
+export CX_RUN_TIMEOUT="${CX_RUN_TIMEOUT:-1800}"
 export COLLECTIVEX_IMAGE="$IMAGE" COLLECTIVEX_IMAGE_DIGEST="${CX_IMAGE_DIGEST:-}"
 
 cx_log "runner=$RUNNER_NAME partition=$PARTITION ngpus=$NGPUS bench=$CX_BENCH image=$IMAGE"
