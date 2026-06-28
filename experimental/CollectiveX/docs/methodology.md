@@ -342,3 +342,27 @@ are flagged as "not the same workload." It deliberately keys on per-T hashes (no
 - **Preserved failed-case** records (`record_type == "failed-case"`, emitted by the runner on a
   wedge/timeout/crash) are reported as preserved cases, **not** validation errors — the project
   rule is "do not silently discard failed or incorrect results."
+
+## Collective suites: all-reduce / all-gather / framework AR — serving-use mapping
+
+The non-EP collective families map to specific inference-serving communication patterns:
+
+### All-reduce (`family=nccl` op=all_reduce + `family=allreduce-fw`)
+TP all-reduce of activations — the per-layer reduction across a tensor-parallel group after the
+attention/MLP matmuls. Two tiers measured in the SAME All-reduce tab so they are directly comparable:
+- **NCCL ring** (`run_nccl.py`, nccl-tests): the bandwidth-optimal baseline; wins at large messages.
+- **Framework custom AR** (`allreduce_fw_bench.py`): FlashInfer one-shot + two-shot via
+  `trtllm_allreduce_fusion` (pattern `kAllReduce`). One-shot is a single NVLink round that beats the
+  ring in the small-message latency-bound regime (the few-KiB..few-MiB activations a decode step
+  all-reduces); two-shot trades a second round for higher bandwidth as the message grows (and needs
+  `token_num > tp_size`). The crossover is exactly the decision this tab visualizes.
+
+### All-gather (`family=nccl` op=all_gather) — DP-attention → TP-MoE handoff
+In SGLang/DeepSeek-style serving, **data-parallel attention** runs each DP rank over its own token
+shard, then the hidden states are **all-gathered** before the **tensor-parallel MoE** so every TP
+rank sees the full token set for expert routing. The collected payload is `[total_tokens, hidden]`
+bf16. The standardized all-gather sweep is a geometric byte ladder that **spans the payload-size
+range of this handoff** (a few KiB per-rank shard up to the tens-of-MiB full-batch gather), so the
+latency/bandwidth curves in the All-gather tab cover the DP-attention→TP-MoE handoff sizes directly.
+Naming exact per-model (hidden, token-count) points as labeled shapes — rather than reading them off
+the byte sweep — is a further-lift refinement; the size coverage is already present.
