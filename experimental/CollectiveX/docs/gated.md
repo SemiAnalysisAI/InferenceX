@@ -47,34 +47,51 @@ Abseil-from-source + cuobjclient + UCX dev headers — a base-image change, not 
 adapter is writable the moment that build is solved (the API is the DeepEP clone, identical to
 `ep_uccl.py`).
 
-### FlashInfer EP / TensorRT-LLM NVLink one-sided AllToAll — BLOCKED on x86_64 (container capability)
-FlashInfer is pre-installed and exposes `flashinfer.comm.MoeAlltoAll` and `trtllm_moe_alltoall` (the
-TRT-LLM one-sided all-to-all). Both require a **symmetric multi-process MNNVL workspace**. The handle
-type is hardcoded by arch:
-- **x86_64 (H100/H200/B200):** `CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR` → needs `pidfd_getfd` →
-  **CAP_SYS_PTRACE**, which the enroot/pyxis GHA container does not grant. Without it the cross-rank
-  symmetric buffer can't be established, so the all-to-all can't run.
-- **aarch64 (GB200/GB300):** `CU_MEM_HANDLE_TYPE_FABRIC` (CUDA fabric handles, no pidfd) — this path
-  would work, but GB300 is capacity-limited and GB200 has no validated runner in the fleet.
-So FlashInfer EP (and the TRT-LLM one-sided path through it) is a **GB300/GB200 (aarch64 FABRIC)**
-candidate, blocked on x86_64 by the missing container capability. Documented rather than forcing a
-`--cap-add SYS_PTRACE` launcher change (security-sensitive, and still wouldn't cover NVL72 multi-node).
+### FlashInfer EP / TensorRT-LLM NVLink one-sided AllToAll — DONE on H100 + B300 (H200 runner gated)
+`flashinfer.comm.MoeAlltoAll` (which LIVES IN `flashinfer.comm.trtllm_moe_alltoall` — it IS the
+TRT-LLM "throughput backend" one-sided all-to-all, calling the same `moe_a2a_dispatch`/`moe_a2a_combine`
+kernels) builds its MNNVL symmetric workspace over the torch.distributed NCCL group via FlashInfer's
+`TorchDistBackend` (no MPI/mpi4py). The cross-rank symmetric buffer uses
+`CU_MEM_HANDLE_TYPE_POSIX_FILE_DESCRIPTOR` → `pidfd_getfd` → **CAP_SYS_PTRACE** on x86_64. Empirically:
+- **H100 (`h100-dgxc`) + B300 (`b300`):** their enroot/pyxis runner containers **grant** the cap →
+  FlashInfer EP runs and is **official** (bf16 + the quant dispatch matrix below), decode + prefill.
+  This is the TRT-LLM NVLink one-sided AllToAll EP — the existing FlashInfer EP results ARE that path
+  (provenance `backend_lineage = flashinfer.comm.trtllm_moe_alltoall.MoeAlltoAll`).
+- **H200 (`h200-dgxc`) runner:** its container **denies** CAP_SYS_PTRACE, so `pidfd_getfd` fails and the
+  symmetric buffer can't be established (`pidfd_getfd ... operation not permitted`). This is a
+  per-runner environment limitation, NOT a code/hardware gap — the identical adapter is official on
+  H100+B300. Documented rather than forcing a security-sensitive `--cap-add SYS_PTRACE` on that runner.
+- **aarch64 (GB200/GB300):** would use `CU_MEM_HANDLE_TYPE_FABRIC` (no pidfd); GB300 capacity-limited.
 
 ## Precision matrix
 
-### MXFP8 / MXFP4 / NVFP4 dispatch + combine — BLOCKED (kernel path)
-DeepEP (V1 and V2) dispatch accepts **e4m3 fp8 only** (per-token block-128 scales). The micro-scaled /
-NVFP4 formats need either FlashInfer's `MoeAlltoAll` (blocked above on x86_64) or a DeepEP fp4 dispatch
-extension (does not exist). FlashInfer *has* fp4 quant kernels, but they're reachable only through the
-MNNVL-gated EP path. So MX/NVFP4 EP dispatch is gated behind the same FlashInfer-EP blocker.
-**Tractable subset (separate task):** direct-cast fp8 + per-token vs per-block scale-layout variants
-on the existing DeepEP fp8 path.
+### MXFP8 / NVFP4 dispatch — DONE on FlashInfer EP; MXFP4 dispatch — gated (tile-padded SF)
+DeepEP (V1/V2) dispatch accepts **e4m3 fp8 only**. But FlashInfer's A2A is a **dtype-agnostic byte
+mover** taking `input_payloads` as a LIST, so a quantized dispatch moves `[q, scale_factor]` and
+dequants in `stage()` (UNTIMED preprocessing, cached so the roundtrip measures comm). Using FlashInfer's
+own quantize/dequantize kernels, `ep_flashinfer.py` now does **MXFP8** (`mxfp8_quantize`, e4m3 + e8m0
+block-32 — device dequant verified == `mxfp8_dequantize_host`) and **NVFP4** (`fp4_quantize` +
+`e2m1_and_ufp8sf_scale_to_float`, e2m1 + e4m3 block-16) dispatch, plus the three e4m3 fp8 scale-layouts.
+Coverage by arch (all `correct=True` end-to-end):
+- **e4m3 fp8 (×3) + mxfp8:** H100 **and** B300 (e4m3/e8m0 are Hopper-supported).
+- **nvfp4:** **B300 (Blackwell) only.** FP4 (e2m1) is a Blackwell-native tensor format; FlashInfer's
+  fp4 quantize/dequantize does NOT round-trip on Hopper sm90 (validated: nvfp4 `correct=True` on B300,
+  `correct=False` on H100). `capability.resolve` now gates nvfp4 to Blackwell (`ARCH_ONLY_DTYPES`), so a
+  Hopper nvfp4 dispatch is cleanly rejected rather than run-and-marked-invalid.
+- **MXFP4 dispatch — gated:** FlashInfer's `mxfp4_quantize` emits its scale factor in a **tile-padded
+  `[pad(T,128), H/32]` swizzled layout** with no `is_sf_swizzled_layout=False` option — it does NOT
+  factor as a per-token `[T, k]` tensor, so it can't be moved through the per-token A2A. (mxfp8 + nvfp4
+  both expose a linear per-token SF; mxfp4 alone does not.) The 4-bit MX format is covered in spirit by
+  nvfp4 (also 4-bit e2m1); mxfp4 specifically stays gated on the quantizer's SF layout.
 
-### Quantized combine (MXFP8 / NVFP4 / direct-cast / FP32-accum combine) — BLOCKED (no kernel)
-No backend wires a **quantized combine** kernel today; every backend's combine is bf16/none. The
-capability axes exist (`combine_dtype`, `combine_quant_mode`, default bf16/none) and the schema carries
-`shape.quant.*` + `combine_quant_in_timing` so a future run slots in with no schema break. Reserved
-until ROCm/MoRI **PR311** (AMD) or a DeepEP quant-combine lands and is shown value-sensitive.
+### Quantized combine OUTPUT (MXFP8 / NVFP4 / direct-cast / FP32-accum combine) — gated (no kernel)
+Distinct from quantized *dispatch* (done above): a quantized **combine** would emit a non-bf16 reduced
+output. FlashInfer's `MoeAlltoAll.combine` (and `moe_a2a_combine`) in this wheel (**0.6.8.post1**) takes
+**no `output_dtype`** — the output is always bf16 (PR3376/3643, which add quantized combine output, are
+not in this build). No other backend wires a quantized combine either (all bf16/none). The capability
+axes + schema (`combine_dtype`, `combine_quant_mode`, `shape.quant.*`, `combine_quant_in_timing`) are
+present so a future wheel/kernel slots in with no schema break. Reserved until ROCm/MoRI **PR311** (AMD),
+a newer FlashInfer wheel, or a DeepEP quant-combine lands and is shown value-sensitive.
 
 ## Topology and rack-scale
 
@@ -98,8 +115,13 @@ placement policies (packed/striped/runtime-native/adversarial), and locality/top
   rendered in the All-reduce/All-gather tabs.
 - **CPU↔GPU offload, copy-engine/SDMA, KV-cache transfer:** DONE — single-process memcpy-family benches
   (`tests/offload_bench.py`, `copy_engine_bench.py`, `kv_cache_transfer.py`).
-- **Framework all-reduce (SGLang quick / vLLM / AITER / FlashInfer one-shot/two-shot), all-gather
-  DP-attention→TP-MoE shapes, RL mesh-to-mesh:** in progress as additional suites.
+- **Framework all-reduce — FlashInfer one-shot/two-shot DONE:** `allreduce_fw_bench.py` wires the real
+  `trtllm_allreduce_fusion` (pattern `kAllReduce`, `use_oneshot` True/False) over the TRT-LLM IPC
+  workspace — nccl baseline + flashinfer-oneshot + flashinfer-twoshot, all `correct=True` (one-shot
+  beats the NCCL ring in the small-message latency regime). SGLang/vLLM custom-AR are import-guarded
+  (recorded as skipped if the framework's distributed wrapper isn't importable in the sglang image);
+  AITER is AMD. RL mesh-to-mesh + all-gather DP-attention→TP-MoE shapes: covered by the standardized
+  sweeps (rl-mesh + all-gather families).
 - **KV-cache backends NIXL / MoonCake / MoRI-IO:** declared but not wired (raw memcpy + CPU-pinned are
   wired); MoRI-IO is AMD-only (out of NVIDIA scope).
 

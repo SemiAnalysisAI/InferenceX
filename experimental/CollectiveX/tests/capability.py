@@ -24,6 +24,24 @@ SKU_VENDOR = {
     "mi355x": "amd", "mi350x": "amd", "mi325x": "amd", "mi300x": "amd",
 }
 
+
+def _sku_arch(sku: str) -> str:
+    s = (sku or "").lower()
+    if s.startswith(("gb300", "gb200", "b300", "b200")):
+        return "blackwell"
+    if s.startswith(("h100", "h200")):
+        return "hopper"
+    if s.startswith("mi3"):
+        return "cdna"
+    return "unknown"
+
+
+# Dispatch dtypes that need a specific GPU arch. NVFP4 (e2m1 4-bit) is a Blackwell-native tensor
+# format — FlashInfer's fp4 quantize/dequantize does NOT round-trip correctly on Hopper sm90
+# (validated: nvfp4 dispatch correct=True on B300, correct=False on H100). mxfp8 (e4m3) is fine on
+# Hopper. Gated here so a Hopper nvfp4 dispatch is cleanly REJECTED, not run-and-marked-invalid.
+ARCH_ONLY_DTYPES = {"nvfp4": "blackwell"}
+
 # Backend capability table — MIRRORS the adapter SUPPORTED_* sets (the runtime source of
 # truth). Keep in sync with ep_deepep.py / ep_mori.py. LL is decode-only; cached-layout is
 # normal-only; MoRI is bf16/normal/layout-and-dispatch only.
@@ -137,6 +155,10 @@ def resolve(sku, backend, mode="normal", dtype="bf16",
         return False, f"{backend} modes={cap['modes']} (got '{mode}')"
     if dtype not in cap["dtypes"]:
         return False, f"{backend} dispatch dtypes={cap['dtypes']} (got '{dtype}')"
+    need_arch = ARCH_ONLY_DTYPES.get(dtype)
+    if need_arch and _sku_arch(sku) != need_arch:
+        return False, (f"{dtype} dispatch requires {need_arch} (FP4 is Blackwell-native; FlashInfer's "
+                       f"fp4 kernels don't round-trip on Hopper); SKU '{sku}' is {_sku_arch(sku)}")
     if contract not in cap["contracts"]:
         return False, f"{backend} contracts={cap['contracts']} (got '{contract}')"
     if mode == "ll" and contract == "cached-layout-comm-only-v1":
