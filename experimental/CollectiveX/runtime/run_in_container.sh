@@ -369,6 +369,9 @@ cx_build_flashinfer_latest() {
       && pip install -q -U --pre flashinfer-jit-cache --index-url "$NIDX/cu130" >&2 2>&1; } \
     || { cx_log "WARN: flashinfer nightly index failed — falling back to PyPI -U"; \
          pip install -q -U flashinfer-python flashinfer-cubin flashinfer-jit-cache >&2 2>&1 || true; }
+  # The nightly (main) flashinfer's CuTe-DSL kernels import newer cutlass.cute symbols (e.g.
+  # OperandMajorMode) than the bundled nvidia-cutlass-dsl provides — upgrade it to match (PyPI).
+  pip install -q -U nvidia-cutlass-dsl >&2 2>&1 || cx_log "WARN: nvidia-cutlass-dsl upgrade warning"
   after="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
   export FLASHINFER_COMMIT="pkg-$after"
   cx_log "FlashInfer upgrade (nightly): $before -> $after"
