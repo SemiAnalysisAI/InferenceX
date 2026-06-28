@@ -156,7 +156,7 @@ case "$OFFLOADING" in
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
-  "local_buffer_size": "4GB",
+  "local_buffer_size": "200MB",
   "protocol": "rdma",
   "device_name": "",
   "enable_offload": false
@@ -164,6 +164,7 @@ case "$OFFLOADING" in
 EOF
 # (srok) 
   #"device_name": "mlx5_0",
+  #"local_buffer_size": "4GB",
         export MOONCAKE_CONFIG_PATH
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
