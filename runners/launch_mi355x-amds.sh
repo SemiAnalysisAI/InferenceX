@@ -287,6 +287,14 @@ PY
     if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
         JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
         if [ -d "$JOB_LOGS_DIR" ]; then
+            shopt -s nullglob
+            for result_file in "$JOB_LOGS_DIR"/workspace_artifacts/*.json "$JOB_LOGS_DIR"/*.json; do
+                [ -f "$result_file" ] || continue
+                echo "Staging agentic result JSON from $result_file"
+                cp "$result_file" "$GITHUB_WORKSPACE/"
+            done
+            shopt -u nullglob
+
             # trace_replay.sh always nests artifacts under agentic/conc_<N>/.
             # Copy the whole agentic/ tree so the conc_<N>/ subdirs are
             # preserved for the LOGS/agentic/conc_*/... upload globs.
@@ -305,6 +313,15 @@ PY
                 # chown to the invoking user (the same one that runs git clean)
                 # via sudo (already passwordless here for rm -rf), then force it
                 # writable so it always stays cleanable.
+                sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                chmod -R u+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
+            elif [ -d "$JOB_LOGS_DIR/LOGS/agentic" ]; then
+                echo "Staging vLLM agentic raw artifacts from $JOB_LOGS_DIR/LOGS/agentic"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+                cp -r "$JOB_LOGS_DIR/LOGS/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic/conc_${CONC}"
+                cp -r "$JOB_LOGS_DIR/LOGS/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/conc_${CONC}/"
                 sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 chmod -R u+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
