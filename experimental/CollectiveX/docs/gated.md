@@ -154,7 +154,9 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   the AMD analogue of UCCL's GPUDirect-RDMA wall. nccl-ep runs on RCCL (identical `all_to_all_single`
   API) over a 2-node MI355X allocation with the same FileStore rendezvous (the MI355X multi-srun gained
   `CX_RDZV_FILE`; nccl-ep uses a pure rccl PG, sidestepping the gloo `connectFullMesh` 127.0.1.1 alias
-  too). Validation in flight (run 28327089664).
+  too — and `nccl-ep` had to be added to the MI355X launcher's AMD-bench allowlist, else it silently
+  fell back to MoRI). **DONE:** MI355X nodes=2 / **world=16 over RoCE/IB**, run 28328718973,
+  **correct=True** T=1→8, disp_p50 345–431µs, status=comparable-experimental.
 
 ## Other inference collectives (NVIDIA scope)
 
