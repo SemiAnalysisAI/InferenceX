@@ -329,6 +329,59 @@ else
     ROLE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
 fi
 echo "[KV] PREFILL_KV_CONNECTOR=${PREFILL_KV_CONNECTOR:-moriio}; DECODE_KV_CONNECTOR=${DECODE_KV_CONNECTOR:-moriio}; rank connector=${ROLE_KV_CONNECTOR}"
+echo "[KV] KVT_PREFILL=${KVT_PREFILL}"
+echo "[KV] KVT_DECODE=${KVT_DECODE}"
+
+dump_ci_runtime_diagnostics() {
+    echo "=== CI runtime diagnostics (${host_name}, rank ${NODE_RANK}) ==="
+    echo "github.sha=${GITHUB_SHA:-unset}"
+    (cd /workspace && git rev-parse HEAD 2>/dev/null | sed 's/^/git rev-parse HEAD=/') || true
+    echo "git diff --stat HEAD:"
+    (cd /workspace && git diff --stat HEAD 2>/dev/null) || true
+    echo "python/vllm/mori/torch:"
+    python3 - <<'PY' || true
+import inspect
+mods = {}
+for name in ("vllm", "mori", "torch"):
+    try:
+        mod = __import__(name)
+        print(name, getattr(mod, "__version__", "no-version"), getattr(mod, "__file__", "no-file"))
+    except Exception as exc:
+        print(name, "IMPORT_ERROR", repr(exc))
+try:
+    import mori
+    from mori.io import IOEngine
+    import vllm.distributed.kv_transfer.kv_connector.v1.moriio.moriio_engine as me
+    print("IOEngine methods", [x for x in dir(IOEngine) if "read" in x.lower() or "write" in x.lower() or "register" in x.lower() or "wait" in x.lower()])
+    print("moriio_engine", me.__file__)
+    for attr in ("register_local_tensor", "build_session", "write_remote_data", "read_remote_data"):
+        fn = getattr(me.MoRIIOWrapper, attr, None)
+        print(f"--- MoRIIOWrapper.{attr} ---")
+        print(inspect.getsource(fn) if fn is not None else "missing")
+except Exception as exc:
+    print("moriio introspection error", repr(exc))
+PY
+    echo "selected launch env:"
+    env | sort | grep -E '^(PREFILL_KV_CONNECTOR|DECODE_KV_CONNECTOR|VLLM_MORIIO_CONNECTOR_READ_MODE|MAX_MODEL_LEN|MAX_NUM_SEQS|ENABLE_PREFIX_CACHING|EVAL_CONC|EVAL_LIMIT|EVAL_MAX_OUTPUT_TOKENS|IBDEVICES|MORI_RDMA_DEVICES|MORI_RDMA_TC|MORI_IO_TC|MORI_RDMA_SL|MORI_IO_SL|UCX_NET_DEVICES|UCX_IB_GID_INDEX|NCCL_IB_DISABLE|ROUTER_TYPE|ROUTER_PORT|PROXY_PING_PORT|LMCACHE_|VLLM_.*MORI|VLLM_.*PREFIX|VLLM_.*CACHE)' || true
+    echo "node/network inventory:"
+    hostname || true
+    hostname -I || true
+    ip -o addr || true
+    ip route || true
+    ls -l /dev/infiniband 2>/dev/null || true
+    ibv_devinfo -v 2>/dev/null || true
+    rdma link 2>/dev/null || true
+    nicctl show qos 2>/dev/null || true
+    for d in /sys/class/infiniband/*; do
+        [ -e "$d" ] || continue
+        echo "$d"
+        cat "$d/device/numa_node" 2>/dev/null || true
+        readlink -f "$d/device" 2>/dev/null || true
+    done
+    echo "=== end CI runtime diagnostics (${host_name}, rank ${NODE_RANK}) ==="
+}
+
+dump_ci_runtime_diagnostics
 
 # vLLM runtime environment (static vars moved to env.sh; these depend on per-node state)
 setup_vllm_env() {
@@ -498,6 +551,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --trust-remote-code \
         --kv-transfer-config '${KVT_PREFILL}' \
         ${PREFILL_SERVER_CONFIG}"
+    echo "[PREFILL_VLLM_SERVE_COMMAND] ${PREFILL_CMD}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
@@ -698,6 +752,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$xP" ]; then
         --trust-remote-code \
         --kv-transfer-config '${KVT_PREFILL}' \
         ${PREFILL_SERVER_CONFIG}"
+    echo "[PREFILL_VLLM_SERVE_COMMAND] ${PREFILL_CMD}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $PREFILL_CMD"
@@ -758,6 +813,7 @@ else
         --trust-remote-code \
         --kv-transfer-config '${KVT_DECODE}' \
         ${DECODE_SERVER_CONFIG}"
+    echo "[DECODE_VLLM_SERVE_COMMAND] ${DECODE_CMD}"
 
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $DECODE_CMD"

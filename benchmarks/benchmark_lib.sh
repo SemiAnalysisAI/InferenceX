@@ -721,6 +721,7 @@ run_lm_eval() {
     local temperature=0
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    local eval_limit="${EVAL_LIMIT:-}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -748,17 +749,30 @@ run_lm_eval() {
     if [ "$max_output_tokens" -gt 16384 ]; then
         max_output_tokens=16384
     fi
+    if [ -n "${EVAL_MAX_OUTPUT_TOKENS:-}" ]; then
+        max_output_tokens="${EVAL_MAX_OUTPUT_TOKENS}"
+    fi
     echo "Eval budget: eval_context_len=${eval_context_len}, max_output_tokens=${max_output_tokens}"
+    echo "Eval config: tasks=${tasks_dir}, results_dir=${results_dir}, num_concurrent=${concurrent_requests}, limit=${eval_limit:-unset}, model=${MODEL_NAME}, base_url=${openai_chat_base}"
 
     # Export for append_lm_eval_summary to pick up
     export EVAL_RESULT_DIR="$results_dir"
-    set -x
-    python3 -m lm_eval --model local-chat-completions --apply_chat_template \
-      --tasks "${tasks_dir}" \
-      --output_path "${results_dir}" \
-      --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+    lm_eval_cmd=(
+      python3 -m lm_eval --model local-chat-completions --apply_chat_template
+      --tasks "${tasks_dir}"
+      --output_path "${results_dir}"
+      --log_samples
+      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}"
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
+    )
+    if [ -n "$eval_limit" ]; then
+      lm_eval_cmd+=(--limit "$eval_limit")
+    fi
+    printf 'Eval command:'
+    printf ' %q' "${lm_eval_cmd[@]}"
+    printf '\n'
+    set -x
+    "${lm_eval_cmd[@]}"
     local eval_exit=$?
     set +x
     return $eval_exit

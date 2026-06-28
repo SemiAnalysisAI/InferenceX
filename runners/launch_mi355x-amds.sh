@@ -51,6 +51,17 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
+    echo "=== InferenceX runner identity ==="
+    echo "github.sha=${GITHUB_SHA:-unset}"
+    echo "git rev-parse HEAD=$(git rev-parse HEAD 2>/dev/null || true)"
+    echo "git status --short:"
+    git status --short 2>/dev/null || true
+    echo "git diff --stat HEAD:"
+    git diff --stat HEAD 2>/dev/null || true
+    echo "CONTAINER_IMAGE=${IMAGE:-${CONTAINER_IMAGE:-unset}}"
+    echo "FRAMEWORK=${FRAMEWORK:-unset} MODEL=${MODEL:-unset} RESULT_FILENAME=${RESULT_FILENAME:-unset}"
+    echo "=================================="
+
     # Ensure root-owned files are cleaned up even on early exit to prevent
     # EACCES errors when the next GH Actions job checks out on this runner.
     # Always preserve slurm logs as CI artifacts for debugging.

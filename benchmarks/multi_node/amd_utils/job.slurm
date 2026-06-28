@@ -301,6 +301,37 @@ echo "NNODES:      ${NNODES}"
 echo "REPO DIR:    ${DI_REPO_DIR}"
 echo "USER:        ${USER_NAME}"
 
+echo "=== InferenceX Slurm job identity ==="
+echo "github.sha=${GITHUB_SHA:-unset}"
+git -C "$DI_REPO_DIR" rev-parse HEAD 2>/dev/null | sed 's/^/git rev-parse HEAD=/' || true
+echo "git diff --stat HEAD:"
+git -C "$DI_REPO_DIR" diff --stat HEAD 2>/dev/null || true
+echo "DOCKER_IMAGE_NAME=${DOCKER_IMAGE_NAME}"
+eval "$DOCKER_CMD_DETECT"
+$DOCKER_CMD image inspect "$DOCKER_IMAGE_NAME" --format '{{.Id}} {{.RepoTags}} {{.Created}}' 2>/dev/null || true
+echo "VLLM_ROUTER_IMAGE=${VLLM_ROUTER_IMAGE}"
+$DOCKER_CMD image inspect "$VLLM_ROUTER_IMAGE" --format '{{.Id}} {{.RepoTags}} {{.Created}}' 2>/dev/null || true
+echo "=== Host RDMA/network inventory on selected nodes ==="
+srun --nodelist="$SELECTED_NODELIST_SRUN" bash -lc '
+  set +e
+  echo "===== host $(hostname) ====="
+  hostname
+  hostname -I || true
+  ip -o addr || true
+  ip route || true
+  ls -l /dev/infiniband 2>/dev/null || true
+  ibv_devinfo -v 2>/dev/null || true
+  rdma link 2>/dev/null || true
+  nicctl show qos 2>/dev/null || true
+  for d in /sys/class/infiniband/*; do
+    [ -e "$d" ] || continue
+    echo "$d"
+    cat "$d/device/numa_node" 2>/dev/null || true
+    readlink -f "$d/device" 2>/dev/null || true
+  done
+'
+echo "====================================="
+
 # Reduce log spam
 export TQDM_MININTERVAL=20
 
@@ -334,6 +365,9 @@ export ENGINE=$ENGINE
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
+export EVAL_LIMIT="${EVAL_LIMIT:-}"
+export EVAL_MAX_OUTPUT_TOKENS="${EVAL_MAX_OUTPUT_TOKENS:-}"
+export EVAL_TASKS_DIR="${EVAL_TASKS_DIR:-}"
 export FRAMEWORK="${FRAMEWORK:-}"
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"
@@ -357,6 +391,11 @@ export VLLM_BIND_IP="${VLLM_BIND_IP:-}"
 export PREFILL_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio}"
 export DECODE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
 export MC_PROTOCOL="${MC_PROTOCOL:-tcp}"
+export MORI_RDMA_DEVICES="${MORI_RDMA_DEVICES:-}"
+export MORI_IO_TC="${MORI_IO_TC:-}"
+export MORI_RDMA_SL="${MORI_RDMA_SL:-}"
+export MORI_IO_SL="${MORI_IO_SL:-}"
+export UCX_IB_GID_INDEX="${UCX_IB_GID_INDEX:-}"
 export LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
 export LMCACHE_PORT="${LMCACHE_PORT:-5555}"
 export LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -425,6 +464,9 @@ DOCKER_ENV_COMMON=(
     -e RUN_EVAL=\$RUN_EVAL
     -e EVAL_ONLY=\$EVAL_ONLY
     -e EVAL_CONC=\$EVAL_CONC
+    -e EVAL_LIMIT=\$EVAL_LIMIT
+    -e EVAL_MAX_OUTPUT_TOKENS=\$EVAL_MAX_OUTPUT_TOKENS
+    -e EVAL_TASKS_DIR=\$EVAL_TASKS_DIR
     -e FRAMEWORK=\$FRAMEWORK
     -e PRECISION=\$PRECISION
     -e MODEL_PREFIX=\$MODEL_PREFIX
@@ -469,6 +511,11 @@ DOCKER_ENV_COMMON=(
     -e PREFILL_KV_CONNECTOR=\$PREFILL_KV_CONNECTOR
     -e DECODE_KV_CONNECTOR=\$DECODE_KV_CONNECTOR
     -e MC_PROTOCOL=\$MC_PROTOCOL
+    -e MORI_RDMA_DEVICES=\$MORI_RDMA_DEVICES
+    -e MORI_IO_TC=\$MORI_IO_TC
+    -e MORI_RDMA_SL=\$MORI_RDMA_SL
+    -e MORI_IO_SL=\$MORI_IO_SL
+    -e UCX_IB_GID_INDEX=\$UCX_IB_GID_INDEX
     -e LMCACHE_HOST=\$LMCACHE_HOST
     -e LMCACHE_PORT=\$LMCACHE_PORT
     -e LMCACHE_HTTP_PORT=\$LMCACHE_HTTP_PORT
@@ -654,6 +701,7 @@ fi  # end: if ENGINE == atom-disagg
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+    echo \"[ROUTER_CMD] image=$VLLM_ROUTER_IMAGE vllm-router --vllm-pd-disaggregation --kv-connector moriio --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} --port ${ROUTER_PORT} --host 0.0.0.0 --policy consistent_hash --prefill-policy consistent_hash --decode-policy consistent_hash --log-level info\"
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
