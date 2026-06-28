@@ -177,7 +177,7 @@ concurrency:
   # The group includes the resource/value/placement axes (sm_fraction, resource_mode,
   # activation_profile, placement) too — otherwise a Pareto sm-fraction sweep or an activation/
   # placement sweep (same dtype/mode/contract/routing/phase) would self-cancel down to ~2 runs.
-  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.benchmark }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.placement }}-${{ inputs.hidden }}-${{ inputs.topk }}-${{ inputs.experts }}-${{ inputs.routing_step }}-${{ inputs.uneven_tokens }}
+  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.benchmark }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.placement }}-${{ inputs.hidden }}-${{ inputs.topk }}-${{ inputs.experts }}-${{ inputs.routing_step }}-${{ inputs.uneven_tokens }}-${{ inputs.nodes }}
   cancel-in-progress: false
 
 permissions:
