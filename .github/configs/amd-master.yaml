@@ -2485,7 +2485,7 @@ dsv4-fp4-mi355x-vllm-agentic-lmcache:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - duration: 3600
       search-space:
       - { tp: 8, ep: 1, dp-attn: false, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [16, 32, 40, 48, 56] }
       #- { tp: 8, ep: 1, dp-attn: false, offloading: none, conc-list: [8, 16, 32, 64, 72] }
