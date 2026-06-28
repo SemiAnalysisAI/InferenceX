@@ -120,106 +120,83 @@ def _build_nccl(torch, dist, dev, world, rank, dtype):
     return {"runner": run, "note": "torch.distributed.all_reduce (NCCL ring)"}
 
 
-def _build_flashinfer(torch, dist, dev, world, rank, dtype, variant):
-    """FlashInfer custom all-reduce, one-shot vs two-shot as distinct impls.
+# FlashInfer custom AR works on a [token_num, hidden_dim] activation tensor (the TP all-reduce
+# shape), so the flashinfer impls sweep this fixed hidden and reshape the bench's flat buffer to
+# [numel/H, H]. Sizes not a multiple of H (only the smallest 1 KiB point) raise _SkipSize -> the
+# bench records a skipped row and continues (does NOT mark the impl failed).
+_FI_AR_HIDDEN = 2048
 
-    FlashInfer's custom AR lives under flashinfer.comm and has moved across releases. We try,
-    in order, the surfaces that have existed (all guarded; first that yields a working closure
-    wins). The `variant` ("oneshot"/"twoshot") selects the strategy where the API exposes one.
-    GUESSED entrypoints (no GPU here to confirm against 0.6.8): trtllm_allreduce_fusion,
-    trtllm_custom_all_reduce, the CustomAllReduce/AllReduce workspace classes, and a one_shot/
-    two_shot_all_reduce free function. If none import or none accept this world/dtype, return
-    None -> recorded as skipped."""
-    try:
-        import flashinfer  # noqa: F401
-    except Exception:
-        return None
+
+class _SkipSize(Exception):
+    """Raised by an impl's run() for a size its kernel can't shape (skip that size, keep the impl)."""
+
+
+def _build_flashinfer(torch, dist, dev, world, rank, dtype, variant):
+    """FlashInfer custom all-reduce, one-shot vs two-shot as distinct impls — the REAL contract
+    (pinned on B300, flashinfer 0.6.8.post1): trtllm_allreduce_fusion with pattern_code=
+    AllReduceFusionPattern.kAllReduce (pure AR, no fusion) and use_oneshot True/False selecting
+    one-shot vs two-shot. The IPC workspace comes from trtllm_create_ipc_workspace_for_all_reduce_
+    fusion(tp_rank, tp_size, max_token_num, hidden_dim, group) -> (ipc_handles, workspace_ptrs[7]).
+    Both variants validated correct=True at EP2. (These APIs carry a deprecation note toward a future
+    allreduce.py, but are the functional one/two-shot entrypoints in this wheel.)"""
     try:
         import flashinfer.comm as ficomm
+        from flashinfer.comm import trtllm_ar as fi_ar
     except Exception:
-        ficomm = None
-    if ficomm is None:
-        return {"runner": None, "skip": "flashinfer present but flashinfer.comm absent"}
-
-    want_oneshot = (variant == "oneshot")
-    inp_holder = {}
-
-    # (a) trtllm fusion all-reduce — flashinfer's TRT-LLM-derived one/two-shot fused AR. The
-    #     signature varies by release; we probe for an enum/kwarg that selects the strategy and
-    #     wrap it so .runner(t) does an in-place all-reduce-sum. Heavily guarded + GUESSED.
+        return None
     fusion = getattr(ficomm, "trtllm_allreduce_fusion", None)
-    if fusion is not None:
-        try:
-            # Strategy/pattern enums live in flashinfer.comm in recent releases; absence is fine.
-            strat_enum = getattr(ficomm, "AllReduceStrategyType", None) \
-                or getattr(ficomm, "AllReduceStrategy", None)
-            one = two = None
-            if strat_enum is not None:
-                one = getattr(strat_enum, "ONESHOT", None) or getattr(strat_enum, "ONE_SHOT", None)
-                two = getattr(strat_enum, "TWOSHOT", None) or getattr(strat_enum, "TWO_SHOT", None)
-            chosen = one if want_oneshot else two
-            if chosen is None:
-                # API present but can't express this variant -> let the explicit one/two-shot
-                # free functions (branch c) or the class (branch b) try instead.
-                raise RuntimeError("strategy enum lacks requested variant")
+    mkws = getattr(ficomm, "trtllm_create_ipc_workspace_for_all_reduce_fusion", None)
+    rmws = getattr(ficomm, "trtllm_destroy_ipc_workspace_for_all_reduce_fusion", None)
+    Pat = getattr(fi_ar, "AllReduceFusionPattern", None) or getattr(ficomm, "AllReduceFusionPattern", None)
+    if fusion is None or mkws is None or Pat is None or not hasattr(Pat, "kAllReduce"):
+        return {"runner": None,
+                "skip": "flashinfer.comm lacks trtllm_allreduce_fusion / IPC workspace / "
+                        "AllReduceFusionPattern.kAllReduce"}
+    H = _FI_AR_HIDDEN
+    use_oneshot = (variant == "oneshot")
+    max_tok = max(1, (DEFAULT_MAX_BYTES // _DTYPE_BYTES[dtype]) // H)
+    try:
+        ws = mkws(rank, world, max_tok, H, group=dist.group.WORLD)
+    except Exception as exc:
+        return {"runner": None, "skip": f"fusion IPC workspace creation failed: {exc!r}"}
+    ipc_handles = ws[0] if isinstance(ws, (list, tuple)) else None
+    ws_ptrs = ws[1] if isinstance(ws, (list, tuple)) and len(ws) >= 2 else None
+    pat = Pat.kAllReduce
+    out_buf = {}
 
-            def run(t, _f=fusion, _s=chosen):
-                # Defensive call: try the (allreduce_in, strategy=) shape; if the real signature
-                # differs the first warmup call raises and the impl is dropped (caught upstream).
-                _f(t, strategy=_s)
-            return {"runner": run, "note": f"flashinfer.comm.trtllm_allreduce_fusion strategy={variant}"}
-        except Exception:
-            pass  # fall through to other surfaces
+    def run(t, _f=fusion, _pat=pat, _os=use_oneshot, _wp=ws_ptrs):
+        numel = t.numel()
+        if numel < H or (numel % H) != 0:
+            raise _SkipSize(f"size {numel} elems not a multiple of hidden {H}")
+        Tn = numel // H
+        # Two-shot splits the sequence dim across ranks -> it asserts token_num > tp_size. One-shot
+        # has no such floor. Skip (don't fail) the small sizes where two-shot can't run.
+        if not _os and Tn <= world:
+            raise _SkipSize(f"two-shot needs token_num({Tn}) > tp_size({world})")
+        inp = t.view(Tn, H)
+        out = out_buf.get(Tn)
+        if out is None:
+            out = torch.empty_like(inp)
+            out_buf[Tn] = out
+        _f(allreduce_in=inp, world_size=world, world_rank=rank, token_num=Tn, hidden_dim=H,
+           workspace_ptrs=_wp, launch_with_pdl=False, trigger_completion_at_end=True,
+           fp32_acc=True, pattern_code=_pat, use_oneshot=_os, allreduce_out=out,
+           residual_in=None, residual_out=None, norm_out=None, quant_out=None, scale_out=None,
+           rms_gamma=None, rms_eps=None, scale_factor=None, layout_code=None)
+        # The kernel is out-of-place; copy back so the bench's in-place run(t) contract + its
+        # correctness check (which reads t) hold. The copy is small vs the AR and noted in the row.
+        t.copy_(out.view(-1))
 
-    # (b) a CustomAllReduce / AllReduce workspace object (vLLM-style: construct once with a
-    #     buffer, call per tensor). GUESSED class names + ctor; if it constructs and exposes a
-    #     callable that does an in-place AR we use it. one-shot vs two-shot usually a ctor flag.
-    cls = getattr(ficomm, "CustomAllReduce", None) or getattr(ficomm, "AllReduce", None)
-    if cls is not None:
-        try:
-            obj = None
-            for kwargs in ({"group": dist.group.WORLD, "device": dev},
-                           {"world_size": world, "rank": rank, "device": dev},
-                           {"max_size": DEFAULT_MAX_BYTES}, {}):
-                try:
-                    obj = cls(**kwargs)
-                    break
-                except Exception:
-                    continue
-            if obj is not None:
-                method = None
-                for name in ("all_reduce", "custom_all_reduce", "one_shot_all_reduce" if want_oneshot
-                             else "two_shot_all_reduce", "__call__"):
-                    if hasattr(obj, name):
-                        method = getattr(obj, name)
-                        break
-                if method is not None:
-                    def run(t, _m=method):
-                        out = _m(t)
-                        if out is not None and out.data_ptr() != t.data_ptr():
-                            t.copy_(out)
-                    free = getattr(obj, "close", None) or getattr(obj, "destroy", None)
-                    return {"runner": run, "free": free,
-                            "note": f"flashinfer.comm.{cls.__name__} ({variant})"}
-        except Exception:
-            pass
+    def free():
+        if rmws is not None and ipc_handles is not None:
+            try:
+                rmws(ipc_handles, group=dist.group.WORLD)
+            except Exception:
+                pass
 
-    # (c) explicit one_shot_all_reduce / two_shot_all_reduce free functions. GUESSED names.
-    fn_name = "one_shot_all_reduce" if want_oneshot else "two_shot_all_reduce"
-    fn = getattr(ficomm, fn_name, None) or getattr(ficomm, fn_name.replace("_all_reduce", "_custom_all_reduce"), None)
-    if fn is not None:
-        try:
-            def run(t, _f=fn):
-                out = _f(t)
-                if out is not None and out.data_ptr() != t.data_ptr():
-                    t.copy_(out)
-            return {"runner": run, "note": f"flashinfer.comm.{fn_name}"}
-        except Exception:
-            pass
-    _ = inp_holder  # (kept for symmetry; explicit workspaces would stash here)
-    return {"runner": None,
-            "skip": f"flashinfer.comm present but no usable {variant} all-reduce entrypoint "
-                    f"(probed trtllm_allreduce_fusion / CustomAllReduce / {fn_name})"}
+    return {"runner": run, "free": free,
+            "note": f"flashinfer.comm.trtllm_allreduce_fusion kAllReduce use_oneshot={use_oneshot} "
+                    f"(hidden={H}, out-of-place + copy-back)"}
 
 
 def _build_sglang(torch, dist, dev, world, rank, dtype):
@@ -458,6 +435,13 @@ def main() -> int:
                 def step(_t=t):
                     run(_t)
                 ms = _bench(step, torch, args.warmup, args.iters)
+            except _SkipSize as sk:
+                # The kernel can't shape this size (e.g. below the custom-AR hidden) — record a
+                # skipped row and CONTINUE; do NOT fail the impl (it works at the other sizes).
+                rows.append({"size_bytes": actual_bytes, "latency_us": None,
+                             "algbw_gbps": 0.0, "busbw_gbps": 0.0, "correct": None,
+                             "skipped": str(sk)})
+                continue
             except Exception as exc:
                 rows.append({"size_bytes": actual_bytes, "latency_us": None,
                              "algbw_gbps": 0.0, "busbw_gbps": 0.0, "correct": None,
