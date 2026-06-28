@@ -372,6 +372,19 @@ cx_build_flashinfer_latest() {
   # The nightly (main) flashinfer's CuTe-DSL kernels import newer cutlass.cute symbols (e.g.
   # OperandMajorMode) than the bundled nvidia-cutlass-dsl provides — upgrade it to match (PyPI).
   pip install -q -U nvidia-cutlass-dsl >&2 2>&1 || cx_log "WARN: nvidia-cutlass-dsl upgrade warning"
+  # The cu130 nightly WHEEL (0.6.13.dev20260612) still predates the combine output_dtype PR — if it's
+  # absent, build flashinfer MAIN from source (the container has the cu130 toolchain that built
+  # deep_ep-v2 + hybrid-ep; cutlass-dsl 4.5.2 is now installed; JIT-first build, time-boxed).
+  if ! python3 -c "import inspect, flashinfer.comm as c; assert 'output_dtype' in str(inspect.signature(c.MoeAlltoAll.combine))" 2>/dev/null; then
+    cx_log "FlashInfer nightly wheel lacks combine output_dtype — building flashinfer main from source"
+    rm -rf /tmp/fi_main
+    if git clone --recursive --depth 1 https://github.com/flashinfer-ai/flashinfer.git /tmp/fi_main >&2 2>&1; then
+      ( cd /tmp/fi_main && timeout 2400 pip install -q --no-build-isolation . >&2 2>&1 ) \
+        || cx_log "WARN: flashinfer main source build failed/timed out"
+    else
+      cx_log "WARN: flashinfer main clone failed (compute-node network?)"
+    fi
+  fi
   after="$(python3 -c 'import flashinfer;print(flashinfer.__version__)' 2>/dev/null || echo none)"
   export FLASHINFER_COMMIT="pkg-$after"
   # Record the EXACT upgraded library stack for reproducibility — the upgrade happens AFTER
