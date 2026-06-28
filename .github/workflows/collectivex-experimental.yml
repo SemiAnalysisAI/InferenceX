@@ -29,7 +29,7 @@ on:
         description: Which benchmark to run
         type: choice
         default: nccl
-        options: [nccl, deepep, deepep-hybrid, mori, uccl, flashinfer, flashinfer-combine-fp8, flashinfer-combine-fp8-directcast, flashinfer-combine-nvfp4, nixl, mori-io, nccl-kv, mooncake, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, all]
+        options: [nccl, deepep, deepep-hybrid, mori, uccl, flashinfer, flashinfer-combine-fp8, flashinfer-combine-fp8-directcast, flashinfer-combine-nvfp4, nixl, mori-io, nccl-kv, mooncake, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, allreduce-fw-vllm, all]
       ops:
         description: NCCL ops (space-separated); blank = default set
         type: string
@@ -249,7 +249,11 @@ jobs:
       # (MXFP8 e4m3+e8m0, or NVFP4 e2m1, via the flashinfer-main moe_a2a_combine output_dtype). Map to
       # CX_BENCH=flashinfer + CX_COMBINE_DTYPE (run_flashinfer_suite builds flashinfer-main when
       # CX_COMBINE_DTYPE!=bf16). Input-cap-safe (a benchmark CHOICE, not a new input).
-      CX_BENCH: ${{ startsWith(inputs.benchmark, 'flashinfer-combine') && 'flashinfer' || inputs.benchmark }}
+      CX_BENCH: ${{ startsWith(inputs.benchmark, 'flashinfer-combine') && 'flashinfer' || (inputs.benchmark == 'allreduce-fw-vllm' && 'allreduce-fw' || inputs.benchmark) }}
+      # allreduce-fw-vllm = the framework all-reduce bench in a vLLM container (container switch for
+      # the vLLM custom-AR, goal 215) — set CX_IMAGE to a vLLM cuda image; the launcher uses CX_IMAGE
+      # when non-empty, else cx_default_image. Input-cap-safe (a benchmark CHOICE).
+      CX_IMAGE: ${{ inputs.benchmark == 'allreduce-fw-vllm' && 'vllm/vllm-openai:latest' || '' }}
       # startsWith catches both flashinfer-combine-fp8 and -fp8-directcast (both fp8 combine output;
       # the -directcast variant differs only in CX_QC_SCALE=scalar below — a single output_scalar_scale,
       # no per-block scales = the unscaled direct-cast fp8 combine).
@@ -300,7 +304,7 @@ jobs:
         run: |
           python3 experimental/CollectiveX/tests/capability.py \
             --sku "${{ inputs.sku }}" \
-            --backend "${{ startsWith(inputs.benchmark, 'flashinfer-combine') && 'flashinfer' || inputs.benchmark }}" \
+            --backend "${{ startsWith(inputs.benchmark, 'flashinfer-combine') && 'flashinfer' || (inputs.benchmark == 'allreduce-fw-vllm' && 'allreduce-fw' || inputs.benchmark) }}" \
             --mode "${{ inputs.mode }}" --dtype "${{ inputs.dispatch_dtype }}" \
             --contract "${{ inputs.contract }}" \
             --combine-dtype "${{ startsWith(inputs.benchmark, 'flashinfer-combine-fp8') && 'fp8' || (inputs.benchmark == 'flashinfer-combine-nvfp4' && 'nvfp4' || 'bf16') }}" \
