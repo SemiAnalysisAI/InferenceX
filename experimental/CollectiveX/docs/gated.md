@@ -125,7 +125,7 @@ cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fr
 
 ## Topology and rack-scale
 
-### NVL72 rack-scale EP — DONE up to EP64 via FlashInfer-MNNVL; cross-node-over-IB still internode-gap
+### NVL72 rack-scale EP — DONE up to EP64 via FlashInfer-MNNVL; cross-node-over-IB DONE via nccl-ep
 **Within an NVL72 NVLink domain, EP8/16/32/64 are DONE.** The key: DeepEP's NVLink `Buffer(group,nvl,0)`
 is intranode-only (≤8 ranks, incl. MNNVL trays → GB300/GB200 EP8 over 2 trays via deepep), BUT
 **FlashInfer's MoeAlltoAll MNNVL symmetric workspace SPANS the whole NVL72 NVLink domain** — so
@@ -134,12 +134,27 @@ GB300 EP8 (28319504164) + EP16 (28319809968); GB200 EP8 (28319793439, after port
 multi-srun path into launch_gb200-nv.sh — was nccl-only) + EP16 (28319971335) + EP64 (28319975631,
 ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrency-group collision
 (the group omitted inputs.nodes — fixed). Bounded only by NVL72 tray CAPACITY, not the method.
-- **Cross-node over InfiniBand (H100/H200, goal 182):** genuinely needs internode-DeepEP (NVSHMEM/
-  IBGDA over IB) — FlashInfer MNNVL + DeepEP intranode are both NVLink-domain only and do NOT span IB.
-  This is the remaining internode-integration gap (multi-node H200 hardware exists; the IBGDA build +
-  a 2-node H200 EP launcher are unwired). Distinct from the NVL72 rack-scale above (one NVLink domain).
-- **Cross-node MI355X (goal 183, "if available"):** needs a multi-node MI355X allocation + internode
-  RCCL/MoRI; the MI355X launcher is single-node (8 GPU). Single-node MI355X EP is covered by the MoRI sweep.
+- **Cross-node over InfiniBand (H100/H200, goal 182) — DONE via nccl-ep.** Two layers had to fall:
+  (1) **Rendezvous:** torch's `env://` TCPStore *and* torchrun's elastic-agent store advertise the
+  rank-0 management-subnet NodeAddr, which is NOT reachable from a peer rank's enroot container net
+  namespace (900s connect timeout; runs 28325250919 / 28326334616). Solved with a shared-mount
+  **FileStore** (`CX_RDZV_FILE`) + a **local NGPUS-process spawn** (no torchrun elastic agent) — the PG
+  bootstraps through the shared file and NCCL then connects peers over IB. (2) **Data path:** the custom
+  one-sided RDMA backends do NOT survive cross-node — UCCL's `ibv_reg_mr` fails EINVAL → `free():
+  corrupted unsorted chunks` → SIGSEGV (run 28326528672, *after* the rendezvous now forms), DeepEP
+  normal-internode asserts out — because they need GPUDirect-RDMA peer-memory registration the cluster's
+  IB HCAs / container don't expose. The portable fix is a transport that host-stages gracefully:
+  **nccl-ep** (`tests/ep_nccl.py`), the canonical NCCL `all_to_all_single` token-shuffle EP. H200
+  nodes=2 / **world=16 over IB**, run 28327088942: **correct=True at every T(1→128)**, disp_p50
+  547–808µs, status=comparable-experimental (single-node world=8 validated first, run 28327013318). The
+  same nccl-ep path covers H100. (IBGDA/internode-DeepEP would be a faster one-sided path but needs the
+  driver capability — gated; nccl-ep is the validated, portable cross-node EP.)
+- **Cross-node MI355X (goal 183, "if available") — via nccl-ep on RCCL.** MoRI's RDMA registration also
+  aborts cross-node (SIGABRT, run 28325251742, *after* the rendezvous master is correctly resolved) —
+  the AMD analogue of UCCL's GPUDirect-RDMA wall. nccl-ep runs on RCCL (identical `all_to_all_single`
+  API) over a 2-node MI355X allocation with the same FileStore rendezvous (the MI355X multi-srun gained
+  `CX_RDZV_FILE`; nccl-ep uses a pure rccl PG, sidestepping the gloo `connectFullMesh` 127.0.1.1 alias
+  too). Validation in flight (run 28327089664).
 
 ## Other inference collectives (NVIDIA scope)
 
@@ -179,5 +194,7 @@ The directive's container-switch + AMD-lift asks. All run via GHA on the MI355X 
   SDMA engine; labeled `copy_engine_kind=sdma` / `accelerator=rocm` (vs NVIDIA `copy-engine`). The
   non-interference probe characterizes SDMA-vs-CU interference (pynvml absent → graceful fallback).
 - **MoRI-IO KV backend:** `tests/mori_io_transfer.py` (above).
-- **MI355X cross-node EP:** still blocked on the DeepEP internode path (same NVSHMEM/IBGDA integration as
-  the NVIDIA cross-node item; single-node MI355X EP is covered by the MoRI sweep).
+- **MI355X cross-node EP (goal 183):** the custom-RDMA MoRI path aborts cross-node (SIGABRT, GPUDirect-
+  RDMA wall) — same class as UCCL on NVIDIA — so cross-node MI355X EP runs via **nccl-ep on RCCL**
+  (NCCL/RCCL `all_to_all_single`, host-staged over IB) with the shared-mount FileStore rendezvous. See
+  the rack-scale section above; single-node MI355X EP is covered by the MoRI sweep.
