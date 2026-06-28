@@ -41,12 +41,20 @@ NODELIST="${CX_NODELIST:-}"
 MOUNT_DIR=/ix
 TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 
-# AMD backends wired: mori (MoRI EP dispatch/combine) and nccl (collective
-# primitives via rccl-tests). Default mori; honor an explicit CX_BENCH.
+# AMD backends/benches wired on MI355X (ROCm/CDNA4):
+#   mori        — MoRI EP dispatch/combine (the AMD EP backend)
+#   nccl        — collective primitives via rccl-tests (the ROCm nccl-tests fork)
+#   kv-cache    — KV block transfer (HIP memcpy family; capability allows amd)
+#   rl-mesh     — RL trainer<->generator mesh (torch.distributed -> RCCL on ROCm)
+#   allreduce-fw— framework all-reduce (RCCL baseline; the flashinfer one/two-shot impls are
+#                 NVIDIA-only and self-skip on the ROCm image, leaving a valid RCCL-baseline curve)
+# Default mori; honor an explicit CX_BENCH within this set. NVIDIA-only benches
+# (deepep/uccl/flashinfer/deepep-hybrid/offload/copy-engine) fall back to mori (capability also
+# rejects them on amd, so a dispatch of those to mi355x is a no-op the validator catches first).
 export CX_BENCH="${CX_BENCH:-mori}"
 case "$CX_BENCH" in
-  mori|nccl) ;;
-  *) cx_log "mi355x: CX_BENCH='$CX_BENCH' unsupported on AMD (want mori|nccl); using mori"; export CX_BENCH=mori ;;
+  mori|nccl|kv-cache|rl-mesh|allreduce-fw) ;;
+  *) cx_log "mi355x: CX_BENCH='$CX_BENCH' is NVIDIA-only / unsupported on AMD; using mori"; export CX_BENCH=mori ;;
 esac
 export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
 export CX_TOPO="mi355x-xgmi" CX_TRANSPORT="xgmi"
