@@ -253,7 +253,31 @@ def _build_vllm(torch, dist, dev, world, rank, dtype):
         from vllm.distributed import parallel_state as ps
     except Exception as e:
         return {"runner": None, "skip": f"vllm.distributed import failed (not in image — needs a vLLM container): {e!r}"}
-    return _sglang_vllm_ca_runner(ps, torch, dev, world, rank, "vllm")
+    # vLLM's CustomAllreduce is a CustomOp that asserts an ACTIVE VllmConfig at instantiation
+    # ("Current vLLM config is not set" — observed on vllm/vllm-openai). Enter set_current_vllm_config
+    # PERSISTENTLY so the init + the timed run() calls all see the config (it sets a contextvar);
+    # free() exits it. Guarded: a vLLM without this API proceeds without (the helper reports failures).
+    cm = None
+    try:
+        from vllm.config import VllmConfig, set_current_vllm_config
+        cm = set_current_vllm_config(VllmConfig())
+        cm.__enter__()
+    except Exception:
+        cm = None
+    built = _sglang_vllm_ca_runner(ps, torch, dev, world, rank, "vllm")
+    if cm is not None:
+        _orig_free = built.get("free")
+        def _free(_of=_orig_free, _cm=cm):
+            try:
+                if _of:
+                    _of()
+            finally:
+                try:
+                    _cm.__exit__(None, None, None)
+                except Exception:
+                    pass
+        built["free"] = _free
+    return built
 
 
 def _module_exists(name: str) -> bool:

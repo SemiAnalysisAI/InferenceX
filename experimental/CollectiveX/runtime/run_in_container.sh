@@ -435,14 +435,31 @@ except Exception as e:
     print("NIXL_EP_PROBE nixl import:", repr(e))
 PY
   pip install -q meson ninja pybind11 >&2 2>&1 || cx_log "NIXL_EP_PROBE: meson/ninja/pybind11 pip warn"
+  # The device-EP build needs UCX's GPU device API header <ucp/api/device/ucp_device_impl.h>; the
+  # dynamo image's UCX lacks it (meson "UCX GPU Device API: NO"). Build a recent UCX from source WITH
+  # CUDA (ships the device-API header) and point pkg-config at it — the directive's "see if a build
+  # fixes it". If the header is still absent (device-comm needs GPUDirect-Async driver support), the
+  # meson reports NO again and that precise wall is documented.
+  if ! find /usr /opt -name 'ucp_device_impl.h' 2>/dev/null | grep -q .; then
+    cx_log "NIXL_EP_PROBE: building UCX from source with CUDA device API -> /opt/ucx-dev"
+    rm -rf /tmp/ucx_src
+    if git clone --depth 1 https://github.com/openucx/ucx /tmp/ucx_src >&2 2>&1; then
+      ( cd /tmp/ucx_src && timeout 1300 bash -c '
+          ./autogen.sh >/dev/null 2>&1
+          ./configure --prefix=/opt/ucx-dev --with-cuda=/usr/local/cuda --enable-mt --without-go --without-java >/dev/null 2>&1
+          make -j"$(nproc)" install 2>&1 | tail -4' ) >&2 2>&1 || cx_log "NIXL_EP_PROBE: UCX build failed/timed out"
+      export PKG_CONFIG_PATH="/opt/ucx-dev/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+      export LD_LIBRARY_PATH="/opt/ucx-dev/lib:${LD_LIBRARY_PATH:-}"
+    fi
+    find /opt/ucx-dev -name 'ucp_device_impl.h' 2>/dev/null | head -1 | sed 's/^/NIXL_EP_PROBE built-ucx device header: /' >&2 || true
+  fi
   rm -rf /tmp/nixl_src
   git clone --depth 1 https://github.com/ai-dynamo/nixl /tmp/nixl_src >&2 2>&1 \
     || { cx_log "NIXL_EP_PROBE: clone failed (compute-node network?)"; return 0; }
-  # The device-EP example links nixl_lib built in the same meson tree -> meson-setup the whole
-  # project (deps it can't find are enumerated here = the documented new-container blocker), then a
-  # time-boxed compile. tail the output so the GHA log captures the decisive lines.
+  # meson-setup the whole project (it now sees the source-built UCX via PKG_CONFIG_PATH -> the "UCX
+  # GPU Device API" line shows YES/NO), then a time-boxed compile. tail the decisive lines to the log.
   ( cd /tmp/nixl_src && timeout 1500 bash -c '
-      echo "--- meson setup ---"; meson setup build 2>&1 | tail -30
+      echo "--- meson setup ---"; meson setup build 2>&1 | tail -34
       echo "--- meson compile (time-boxed) ---"; meson compile -C build 2>&1 | tail -40
     ' ) >&2 2>&1 || true
   if find /tmp/nixl_src/build -name 'nixl_ep_cpp*.so' 2>/dev/null | grep -q .; then
