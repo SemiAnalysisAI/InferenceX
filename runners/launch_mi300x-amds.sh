@@ -51,11 +51,59 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
-    cleanup_and_save_logs() {
-        if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
-            local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
-            mkdir -p "$art_dir"
+    save_multinode_diagnostics() {
+        local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+        mkdir -p "$art_dir"
+
+        cp -r "$BENCHMARK_LOGS_DIR"/submit_*.log "$art_dir/" 2>/dev/null || true
+        if [[ -n "${JOB_ID:-}" ]]; then
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+            scontrol show job "$JOB_ID" > "$art_dir/scontrol_job_${JOB_ID}.txt" 2>&1 || true
+            sacct -j "$JOB_ID" --format=JobID,JobName,State,ExitCode,Elapsed,NodeList%80 > "$art_dir/sacct_job_${JOB_ID}.txt" 2>&1 || true
+        fi
+
+        squeue -u "$USER" > "$art_dir/squeue_${USER}.txt" 2>&1 || true
+        {
+            echo "RUNNER_NAME=${RUNNER_NAME:-}"
+            echo "RUNNER_TYPE=${RUNNER_TYPE:-}"
+            echo "SLURM_ACCOUNT=${SLURM_ACCOUNT:-}"
+            echo "SLURM_PARTITION=${SLURM_PARTITION:-}"
+            echo "SLURM_EXCLUDE_NODES=${SLURM_EXCLUDE_NODES:-}"
+            echo "SCRIPT_NAME=${SCRIPT_NAME:-}"
+            echo "BENCHMARK_SUBDIR=${BENCHMARK_SUBDIR:-}"
+            echo "BENCHMARK_LOGS_DIR=${BENCHMARK_LOGS_DIR:-}"
+            echo "MODEL=${MODEL:-}"
+            echo "MODEL_NAME=${MODEL_NAME:-}"
+            echo "MODEL_PATH=${MODEL_PATH:-}"
+            echo "FRAMEWORK=${FRAMEWORK:-}"
+            echo "PRECISION=${PRECISION:-}"
+            echo "ISL=${ISL:-}"
+            echo "OSL=${OSL:-}"
+            echo "CONC_LIST=${CONC_LIST:-}"
+            echo "PREFILL_NODES=${PREFILL_NODES:-}"
+            echo "PREFILL_NUM_WORKERS=${PREFILL_NUM_WORKERS:-}"
+            echo "PREFILL_TP=${PREFILL_TP:-}"
+            echo "PREFILL_EP=${PREFILL_EP:-}"
+            echo "PREFILL_DP_ATTN=${PREFILL_DP_ATTN:-}"
+            echo "DECODE_NODES=${DECODE_NODES:-}"
+            echo "DECODE_NUM_WORKERS=${DECODE_NUM_WORKERS:-}"
+            echo "DECODE_TP=${DECODE_TP:-}"
+            echo "DECODE_EP=${DECODE_EP:-}"
+            echo "DECODE_DP_ATTN=${DECODE_DP_ATTN:-}"
+            echo "RUN_EVAL=${RUN_EVAL:-}"
+            echo "EVAL_ONLY=${EVAL_ONLY:-}"
+            echo "EVAL_CONC=${EVAL_CONC:-}"
+            echo "RESULT_FILENAME=${RESULT_FILENAME:-}"
+        } > "$art_dir/launcher_env.txt" 2>&1 || true
+
+        if compgen -G "$art_dir/*" > /dev/null; then
+            tar -czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$art_dir" . 2>/dev/null || true
+        fi
+    }
+
+    cleanup_and_save_logs() {
+        if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+            save_multinode_diagnostics
         fi
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
         if [[ -s "$err_file" ]]; then
@@ -73,7 +121,26 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node"
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    SUBMIT_LOG="$BENCHMARK_LOGS_DIR/submit_${SCRIPT_NAME%.sh}.log"
+    bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}" > "$SUBMIT_LOG" 2>&1
+    SUBMIT_RC=$?
+    cat "$SUBMIT_LOG"
+    JOB_ID=$(tail -n 1 "$SUBMIT_LOG" || true)
+    if [[ "$SUBMIT_RC" -ne 0 ]]; then
+        echo "ERROR: Failed to submit multi-node job via benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
+        echo "=== Submit log ==="
+        cat "$SUBMIT_LOG" || true
+        echo "=================="
+        exit 1
+    fi
+
+    if [[ ! "$JOB_ID" =~ ^[0-9]+$ ]]; then
+        echo "ERROR: Expected numeric Slurm job id, got '$JOB_ID'"
+        echo "=== Submit log ==="
+        cat "$SUBMIT_LOG" || true
+        echo "=================="
+        exit 1
+    fi
 
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
 
@@ -82,7 +149,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID"
+            scontrol show job "$JOB_ID" || true
+            save_multinode_diagnostics
             exit 1
         fi
         sleep 5
