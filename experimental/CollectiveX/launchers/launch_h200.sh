@@ -55,20 +55,20 @@ cx_log "squash=$SQUASH_FILE  mount=$MOUNT_SRC -> $MOUNT_DIR"
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
-# ---- Cross-node H100/H200 EP (goal 182): allocate N nodes and multi-srun run_ep across NODES*NGPUS
-# ranks (1 GPU/rank, RANK/LOCAL_RANK from SLURM_*) — the same shape the MI355X + GB300 EP paths use.
-# This deliberately AVOIDS torchrun: torchrun's elastic agent runs its OWN cross-node TCPStore at
-# --master-addr, which (like the PG store) cannot be reached from a peer's enroot container net
-# namespace (the management-subnet NodeAddr is not in the container's net view — the prior torchrun
-# attempt timed out 900s at exactly that bootstrap). Instead the ranks rendezvous via a FileStore on
-# the compute-visible shared mount (CX_RDZV_FILE): NCCL exchanges its unique-id through the shared
-# file, then connects peers over the IB fabric (routable cross-node). UCCL EP is internode-native
-# (RDMA/IB); DeepEP normal-internode asserts out. Squash + repo are on compute-visible NFS already.
+# ---- Cross-node H100/H200 EP (goal 182): allocate N nodes, run ONE container task per node, and let
+# run_in_container build uccl (per node) then spawn its NGPUS local ranks rendezvousing via a FileStore
+# on the shared mount (CX_RDZV_FILE). This deliberately AVOIDS torchrun: torchrun's elastic agent runs
+# its OWN cross-node TCPStore at --master-addr, unreachable from a peer's enroot container net namespace
+# (the management-subnet NodeAddr is not in the container's net view — the prior torchrun attempt timed
+# out 900s at exactly that bootstrap, while the FileStore path got past it). The build MUST be in-
+# container per node (uccl is pip-installed, not in the image), so one-container-per-node — NOT multi-
+# srun-per-rank — is required: separate per-rank containers are ephemeral and would each lack uccl.
+# UCCL EP is internode-native (RDMA/IB); DeepEP normal-internode asserts out. Repo on compute-vis NFS.
 if [ "${CX_NODES:-1}" -gt 1 ]; then
-  NODES="${CX_NODES}"; WORLD=$((NODES * NGPUS))
-  cx_log "H200 CROSS-NODE EP: nodes=$NODES world=$WORLD bench=$CX_BENCH (IB; UCCL internode-native; FileStore rdzv)"
+  NODES="${CX_NODES}"
+  cx_log "H200 CROSS-NODE EP: nodes=$NODES world=$((NODES*NGPUS)) bench=$CX_BENCH (IB; UCCL internode-native; FileStore rdzv)"
   salloc --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --nodes="$NODES" --gres=gpu:"$NGPUS" \
-         --ntasks-per-node="$NGPUS" --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+         --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
   JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
   [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node)"
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
@@ -77,23 +77,14 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
   # FileStore rendezvous file on the shared mount (same underlying file on every node); fresh per job.
   RDZV="$MOUNT_DIR/experimental/CollectiveX/.rdzv_${JOB_ID}"
   rm -f "$MOUNT_SRC/experimental/CollectiveX/.rdzv_${JOB_ID}" 2>/dev/null || true
-  IFS=: read -r IT TR WU <<<"${CX_TIMING:-8:1:4}"; IT="${IT:-8}"; TR="${TR:-1}"; WU="${WU:-4}"
-  phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
-  WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; cd /ix/experimental/CollectiveX; source runtime/_xnode_net.sh 2>/dev/null || true; exec python3 tests/run_ep.py "$@"'
-  for ph in $phases; do
-    out="results/${RUNNER_NAME}_${CX_BENCH}_${ph}_${TS}.json"
-    # shellcheck disable=SC2086
-    timeout -k 30 "${CX_RUN_TIMEOUT:-1800}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$WORLD" \
-      --ntasks-per-node="$NGPUS" --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
-      --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
-      --no-container-entrypoint --export=ALL,CX_RDZV_FILE="$RDZV" \
-      bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --tokens-ladder "${CX_TOKENS_LADDER:-1 2 4 8}" \
-        --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
-        --measurement-contract layout-and-dispatch-v1 --routing "${CX_ROUTING:-uniform}" \
-        --iters "$IT" --trials "$TR" --warmup "$WU" --seed 67 \
-        --runner "$RUNNER_NAME" --topology-class h200-multinode-ib --transport rdma --out "$out" </dev/null 2>&1 | tail -14
-    cx_log "cross-node $ph rc=${PIPESTATUS[0]}"
-  done
+  # one task/node; CX_NODE_RANK is the per-node SLURM_NODEID (set inside the task, not via --export).
+  srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 \
+    --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
+    --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
+    --no-container-entrypoint \
+    --export=ALL,CX_NNODES="$NODES",CX_RDZV_FILE="$RDZV" \
+    bash -c 'export CX_NODE_RANK=${SLURM_NODEID:-0}; exec bash "$0"' \
+      "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh" || cx_log "WARN: cross-node H200 EP rc=$?"
   rm -f "$MOUNT_SRC/experimental/CollectiveX/.rdzv_${JOB_ID}" 2>/dev/null || true
   cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
   cx_log "done — cross-node H200 EP artifacts under results/"

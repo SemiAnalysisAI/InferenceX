@@ -133,40 +133,58 @@ run_ep_suite() {
   phases="${CX_PHASE:-decode}"
   [ "$phases" = "both" ] && phases="decode prefill"
   cx_stage_canonical || true   # sets CX_WORKLOAD_DIR when CX_CANONICAL=1 (official cohort)
-  # Multi-node torchrun (CROSS-NODE EP): when CX_NNODES>1 (set per-node by a multi-node launcher
-  # with CX_NODE_RANK/CX_MASTER_ADDR), rendezvous across nodes so run_ep spans CX_NNODES*CX_NGPUS
-  # ranks over the inter-node fabric (IB/RDMA). UCCL EP is internode-native; this is goal 182.
-  local mn_args=""
+  # CROSS-NODE EP (goal 182): when CX_NNODES>1 (set per-node by a multi-node launcher with
+  # CX_NODE_RANK + CX_RDZV_FILE) we span CX_NNODES*CX_NGPUS ranks over the inter-node fabric. We do
+  # NOT use torchrun: its elastic agent runs its OWN cross-node TCPStore at --master-addr, which is
+  # unreachable from a peer rank's enroot container net namespace (the management-subnet NodeAddr is
+  # not in the container's net view — torchrun timed out 900s at exactly that bootstrap). Instead each
+  # node spawns its NGPUS local ranks directly (global RANK = CX_NODE_RANK*NGPUS + local) and they
+  # rendezvous via a FileStore on the compute-visible shared mount (CX_RDZV_FILE, consumed by
+  # run_ep.py), so NCCL exchanges its unique-id through the shared file and connects peers over IB.
+  local xnode=0
   if [ -n "${CX_NNODES:-}" ] && [ "${CX_NNODES}" -gt 1 ]; then
-    mn_args="--nnodes=${CX_NNODES} --node-rank=${CX_NODE_RANK:-0} --master-addr=${CX_MASTER_ADDR:-127.0.0.1} --master-port=${CX_MASTER_PORT:-29500}"
-    # pin the gloo/NCCL TCP bootstrap to the routable NIC (the hostname may be loopback-aliased).
+    xnode=1
     # shellcheck source=_xnode_net.sh
     source runtime/_xnode_net.sh 2>/dev/null || true
-    cx_log "multi-node torchrun: $mn_args (cross-node EP, world=$((CX_NNODES*CX_NGPUS)))"
+    : "${CX_RDZV_FILE:=$PWD/.rdzv_${CX_TS}}"; export CX_RDZV_FILE
+    cx_log "cross-node EP: nnodes=$CX_NNODES node_rank=${CX_NODE_RANK:-0} world=$((CX_NNODES*CX_NGPUS)) rdzv=file://$CX_RDZV_FILE (no torchrun agent)"
   fi
   for phase in $phases; do
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
-    # Hard wall-clock guard: a wedged collective (e.g. a backend that hangs at a shape)
-    # must FAIL FAST, never burn the whole job timeout. timeout -k sends SIGKILL after
-    # a grace period. Override with CX_RUN_TIMEOUT (seconds).
-    # shellcheck disable=SC2086
-    timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
-        torchrun $mn_args --nproc_per_node="$CX_NGPUS" tests/run_ep.py --backend "$backend" \
-        --phase "$phase" --tokens-ladder "$ladder" --mode "${CX_MODE:-normal}" \
-        --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}" \
-        --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-uniform}" \
-        ${CX_EPLB:+--eplb} ${CX_WORKLOAD_DIR:+--workload-dir "$CX_WORKLOAD_DIR"} \
-        --num-sms "${CX_NUM_SMS:-24}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-200}" \
-        --trials "${CX_TRIALS:-3}" --warmup "${CX_WARMUP:-32}" \
-        --measurement-contract "${CX_MEASUREMENT_CONTRACT:-layout-and-dispatch-v1}" \
-        --resource-mode "${CX_RESOURCE_MODE:-normalized}" --sm-fraction "${CX_SM_FRACTION:-0.18}" \
-        --activation-profile "${CX_ACTIVATION_PROFILE:-normal}" --placement "${CX_PLACEMENT:-packed}" \
-        --routing-step "${CX_ROUTING_STEP:-0}" --uneven-tokens "${CX_UNEVEN_TOKENS:-none}" \
-        --combine-dtype "${CX_COMBINE_DTYPE:-bf16}" --combine-quant-mode "${CX_COMBINE_QUANT_MODE:-none}" \
-        ${CX_WAIVE_ANOMALY:+--waive-anomaly} \
-        --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT" \
-        --env-json "$ENVJSON" --out "results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
-    rc_run=$?
+    local out="results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
+    # Common run_ep.py args (shared by single-node torchrun + cross-node local-spawn).
+    local -a EPARGS=(--backend "$backend" --phase "$phase" --tokens-ladder "$ladder" --mode "${CX_MODE:-normal}"
+      --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}"
+      --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" --routing "${CX_ROUTING:-uniform}"
+      --num-sms "${CX_NUM_SMS:-24}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-200}"
+      --trials "${CX_TRIALS:-3}" --warmup "${CX_WARMUP:-32}"
+      --measurement-contract "${CX_MEASUREMENT_CONTRACT:-layout-and-dispatch-v1}"
+      --resource-mode "${CX_RESOURCE_MODE:-normalized}" --sm-fraction "${CX_SM_FRACTION:-0.18}"
+      --activation-profile "${CX_ACTIVATION_PROFILE:-normal}" --placement "${CX_PLACEMENT:-packed}"
+      --routing-step "${CX_ROUTING_STEP:-0}" --uneven-tokens "${CX_UNEVEN_TOKENS:-none}"
+      --combine-dtype "${CX_COMBINE_DTYPE:-bf16}" --combine-quant-mode "${CX_COMBINE_QUANT_MODE:-none}"
+      --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
+      --env-json "$ENVJSON" --out "$out")
+    [ -n "${CX_EPLB:-}" ] && EPARGS+=(--eplb)
+    [ -n "${CX_WORKLOAD_DIR:-}" ] && EPARGS+=(--workload-dir "$CX_WORKLOAD_DIR")
+    [ -n "${CX_WAIVE_ANOMALY:-}" ] && EPARGS+=(--waive-anomaly)
+    # Hard wall-clock guard: a wedged collective must FAIL FAST (timeout -k SIGKILLs after grace).
+    if [ "$xnode" = 1 ]; then
+      # Cross-node: spawn NGPUS local ranks, FileStore rendezvous (no torchrun agent). Only the global
+      # rank 0 writes --out; the rest participate in the collectives. wait collects every rank's rc.
+      local base=$(( ${CX_NODE_RANK:-0} * CX_NGPUS )) world=$(( CX_NNODES * CX_NGPUS )) i; local -a pids=()
+      for i in $(seq 0 $((CX_NGPUS - 1))); do
+        RANK=$((base + i)) LOCAL_RANK="$i" WORLD_SIZE="$world" \
+          timeout -k 30 "${CX_RUN_TIMEOUT:-900}" python3 tests/run_ep.py "${EPARGS[@]}" &
+        pids+=($!)
+      done
+      rc_run=0; for i in "${pids[@]}"; do wait "$i" || rc_run=$?; done
+    else
+      # shellcheck disable=SC2086
+      timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
+          torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py "${EPARGS[@]}"
+      rc_run=$?
+    fi
     if [ "$rc_run" != 0 ]; then
       cx_log "WARN: $backend $phase run failed/timed out rc=$rc_run (CX_RUN_TIMEOUT=${CX_RUN_TIMEOUT:-900}s)"
       emit_failed_case "$backend" "$phase" "$rc_run"   # preserve the classified failed case
