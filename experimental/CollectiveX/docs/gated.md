@@ -50,11 +50,14 @@ address` limit; GPU↔GPU is the KV-handoff path that matters).
 container switch was the directive's exact ask ("switch containers and see if it fixes"), and it
 **CLEARED the documented Abseil 20220623 blocker**: the dynamo image ships **Abseil 20250814** (meson
 subproject) + meson/ninja/pybind11 3.0.2/cmake, and `meson setup` now SUCCEEDS (build-probe
-`cx_probe_nixl_ep`, run 28314858649 log). The **new precise blocker** is `UCX GPU Device API: NO` — the
-device-EP target needs UCX's device-initiated (GPU-side put/get) API, which this image's UCX lacks, so
-`nixl_ep_cpp` does not build. Unblocking now needs a UCX built `--with-gpu-device-api` (a base-image
-concern), NOT Abseil/cuobjclient. The adapter would mirror `ep_deepep.py` (the buffer.py API is a DeepEP
-clone) the moment that UCX build lands.
+`cx_probe_nixl_ep`, run 28314858649 log). The next blocker is `UCX GPU Device API: NO` (the device-EP
+needs UCX's device-initiated GPU put/get API via `<ucp/api/device/ucp_device_impl.h>`). **Build attempt
+made:** `cx_probe_nixl_ep` now BUILDS UCX from source with `--with-cuda` and points pkg-config at it —
+but `meson setup` STILL reports `UCX GPU Device API : NO` (run 28320702204). So it is NOT a missing
+build flag: UCX's device API compiles in only with GPUDirect-Async / device-initiated-comm **driver +
+hardware** support (IBGDA/GDAKI), a base-platform capability absent here — not a container/build fix.
+`nixl_ep_cpp` therefore does not build; the adapter (mirroring `ep_deepep.py`) waits on a platform with
+that device-comm support. Evidenced terminal wall.
 
 ### FlashInfer EP / TensorRT-LLM NVLink one-sided AllToAll — DONE on H100 + B300 (H200 runner gated)
 `flashinfer.comm.MoeAlltoAll` (which LIVES IN `flashinfer.comm.trtllm_moe_alltoall` — it IS the
@@ -147,10 +150,15 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
 - **Framework all-reduce — FlashInfer one-shot/two-shot DONE:** `allreduce_fw_bench.py` wires the real
   `trtllm_allreduce_fusion` (pattern `kAllReduce`, `use_oneshot` True/False) over the TRT-LLM IPC
   workspace — nccl baseline + flashinfer-oneshot + flashinfer-twoshot, all `correct=True` (one-shot
-  beats the NCCL ring in the small-message latency regime). SGLang/vLLM custom-AR are import-guarded
-  (recorded as skipped if the framework's distributed wrapper isn't importable in the sglang image);
-  AITER is AMD. RL mesh-to-mesh + all-gather DP-attention→TP-MoE shapes: covered by the standardized
-  sweeps (rl-mesh + all-gather families).
+  beats the NCCL ring in the small-message latency regime). **SGLang/vLLM/AITER custom-AR — now DONE**
+  by REPLICATING the framework's serving distributed-init (init_distributed_environment +
+  initialize_model_parallel) on the torchrun group and using the TP GroupCoordinator's
+  ca_comm.custom_all_reduce (the wrapper builds ca_comm only inside that init — a bare ctor skipped):
+  sglang H200 175 GB/s correct=True (run 28320404895); AITER MI355X 367.8 GB/s correct=True (run
+  28320579741, aiter.dist.parallel_state, ca_comm under device_communicator); vLLM via the
+  allreduce-fw-vllm CONTAINER SWITCH to vllm/vllm-openai + entering set_current_vllm_config(VllmConfig())
+  (its CustomAllreduce is a CustomOp asserting an active config), H200 correct=True (run 28320699661).
+  RL mesh-to-mesh + all-gather DP-attention→TP-MoE shapes: covered by the standardized sweeps.
 - **KV-cache backends:** raw memcpy + CPU-pinned WIRED; **NIXL WIRED** (`tests/nixl_transfer.py`, B300
   via the dynamo-container switch — see the NIXL section above); **MoRI-IO WIRED** (`tests/
   mori_io_transfer.py`, MI355X, `mori.io` IOEngine RDMA p2p). **MoonCake** remains not wired — needs the
