@@ -133,34 +133,50 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ -z "${NODELIST:-}" ]]; then
         NUM_NODES_REQUIRED=$((PREFILL_NODES + DECODE_NODES))
         SUBMIT_HOST=$(hostname -s)
-        SELECTED_NODES=("$SUBMIT_HOST")
+        NODELIST_DISCOVERY_TIMEOUT="${NODELIST_DISCOVERY_TIMEOUT:-900}"
+        NODELIST_DISCOVERY_INTERVAL="${NODELIST_DISCOVERY_INTERVAL:-30}"
+        discovery_start=$(date +%s)
 
-        echo "Building NODELIST with submit host first: ${SUBMIT_HOST}"
-        while IFS= read -r candidate; do
-            [[ -n "$candidate" ]] || continue
-            [[ "$candidate" == "$SUBMIT_HOST" ]] && continue
-            if [[ ",${SLURM_EXCLUDE_NODES}," == *",${candidate},"* ]]; then
-                continue
-            fi
+        while true; do
+            SELECTED_NODES=("$SUBMIT_HOST")
+            echo "Building NODELIST with submit host first: ${SUBMIT_HOST}"
 
-            if timeout 20s srun --nodes=1 --ntasks=1 --time=00:02:00 --partition="$SLURM_PARTITION" --nodelist="$candidate" \
-                bash -lc "test -d /tmp && test -w /tmp" >/dev/null 2>&1; then
-                SELECTED_NODES+=("$candidate")
-                echo "Added NODELIST candidate with writable /tmp: $candidate"
-            else
-                echo "Skipping NODELIST candidate without writable /tmp: $candidate"
-            fi
+            while IFS= read -r candidate; do
+                [[ -n "$candidate" ]] || continue
+                [[ "$candidate" == "$SUBMIT_HOST" ]] && continue
+                if [[ ",${SLURM_EXCLUDE_NODES}," == *",${candidate},"* ]]; then
+                    continue
+                fi
 
-            if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
+                if timeout 20s srun --nodes=1 --ntasks=1 --time=00:02:00 --partition="$SLURM_PARTITION" --nodelist="$candidate" \
+                    bash -lc "test -d /tmp && test -w /tmp" >/dev/null 2>&1; then
+                    SELECTED_NODES+=("$candidate")
+                    echo "Added NODELIST candidate with writable /tmp: $candidate"
+                else
+                    echo "Skipping NODELIST candidate without writable /tmp: $candidate"
+                fi
+
+                if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
+                    break
+                fi
+            done < <(sinfo -h -N -p "$SLURM_PARTITION" -t idle,mix,alloc -o "%N" | sort -u)
+
+            if [[ "${#SELECTED_NODES[@]}" -eq "$NUM_NODES_REQUIRED" ]]; then
                 break
             fi
-        done < <(sinfo -h -N -p "$SLURM_PARTITION" -t idle,mix,alloc -o "%N" | sort -u)
 
-        if [[ "${#SELECTED_NODES[@]}" -ne "$NUM_NODES_REQUIRED" ]]; then
-            echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} usable nodes with writable /tmp for staging." >&2
-            echo "Selected nodes so far: ${SELECTED_NODES[*]}" >&2
-            exit 1
-        fi
+            now=$(date +%s)
+            elapsed=$((now - discovery_start))
+            if (( elapsed >= NODELIST_DISCOVERY_TIMEOUT )); then
+                echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} usable nodes with writable /tmp for staging after ${elapsed}s." >&2
+                echo "Selected nodes so far: ${SELECTED_NODES[*]}" >&2
+                sinfo -N -p "$SLURM_PARTITION" -o "%N %T" >&2 || true
+                exit 1
+            fi
+
+            echo "Only found ${#SELECTED_NODES[@]}/${NUM_NODES_REQUIRED} usable nodes; retrying in ${NODELIST_DISCOVERY_INTERVAL}s..."
+            sleep "$NODELIST_DISCOVERY_INTERVAL"
+        done
 
         NODELIST=$(IFS=,; echo "${SELECTED_NODES[*]}")
         export NODELIST
