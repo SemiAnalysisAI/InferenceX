@@ -42,6 +42,14 @@ image = base_env['IMAGE']
 with open(f'{result_filename}.json') as f:
     bmk_result = json.load(f)
 
+# Offline in-process runs (utils/bench_offline/run_offline.py) report
+# per-decode-step TPOT and step throughput. Their dispatch value is
+# SPEC_DECODING=offline, but the row should describe the actual run config:
+# spec_decoding reflects whether MTP draft tokens were enabled.
+is_offline = str(bmk_result.get('engine_mode', '')).lower() == 'offline'
+if is_offline:
+    spec_decoding = 'mtp' if int(bmk_result.get('mtp', 0) or 0) > 0 else 'none'
+
 data = {
     'hw': hw,
     'conc': int(bmk_result['max_concurrency']),
@@ -56,7 +64,23 @@ data = {
     'osl': int(osl),
 }
 
+if is_offline:
+    data['engine_mode'] = 'offline'
+    # "simulated_uniform_random" = idealized expert-balance simulation;
+    # "real" = honest routing. Rows
+    # with different values must not be compared against each other.
+    data['moe_routing'] = bmk_result.get('moe_routing', 'unknown')
+    data['tpot_unit'] = bmk_result.get('tpot_unit', 'decode_step')
+    if bmk_result.get('decode_steps_target') is not None:
+        data['decode_steps'] = int(bmk_result['decode_steps_target'])
+    if bmk_result.get('spec_tokens_per_step_observed') is not None:
+        data['spec_tokens_per_step_observed'] = float(
+            bmk_result['spec_tokens_per_step_observed'])
+
 is_multinode = os.environ.get('IS_MULTINODE', 'false').lower() == 'true'
+
+if is_offline and is_multinode:
+    raise ValueError("Offline in-process results are single-node only.")
 
 if is_multinode:
     # TODO: Eventually will have to have a separate condition in here for multinode disagg and
@@ -112,22 +136,45 @@ else:
     ep_size = int(single_node_env['EP_SIZE'])
     dp_attention = single_node_env['DP_ATTENTION']
 
-    single_node_data = {
-        'is_multinode': False,
-        'tp': tp_size,
-        'ep': ep_size,
-        'dp_attention': dp_attention,
-        'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
-        'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
-        'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
-    }
+    if is_offline:
+        # Offline decode-step semantics: throughput is requests_per_chip /
+        # per-step TPOT. MTP bonus tokens are excluded from headline metrics.
+        # Input throughput is zeroed so total throughput equals the decode-step
+        # output throughput.
+        step_tput_per_gpu = (
+            (int(bmk_result['max_concurrency']) / tp_size)
+            / (float(bmk_result['mean_tpot_ms']) / 1000.0))
+        single_node_data = {
+            'is_multinode': False,
+            'tp': tp_size,
+            'ep': ep_size,
+            'dp_attention': dp_attention,
+            'tput_per_gpu': step_tput_per_gpu,
+            'output_tput_per_gpu': step_tput_per_gpu,
+            'input_tput_per_gpu': 0.0,
+        }
+    else:
+        single_node_data = {
+            'is_multinode': False,
+            'tp': tp_size,
+            'ep': ep_size,
+            'dp_attention': dp_attention,
+            'tput_per_gpu': float(bmk_result['total_token_throughput']) / tp_size,
+            'output_tput_per_gpu': float(bmk_result['output_throughput']) / tp_size,
+            'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / tp_size,
+        }
 
     data = data | single_node_data
 
 for key, value in bmk_result.items():
     if key.endswith('ms'):
         data[key.replace('_ms', '')] = float(value) / 1000.0
-    if 'tpot' in key:
+    # tpot→intvty conversion: only for *_ms latency fields (skips
+    # non-numeric fields like tpot_unit, count fields like
+    # tpot_sample_count, std_tpot_ms which can be 0, and zero-valued
+    # latencies that would divide by zero).
+    if (key.endswith('_ms') and 'tpot' in key and not key.startswith('std_')
+            and float(value) > 0):
         data[key.replace('_ms', '').replace(
             'tpot', 'intvty')] = 1000.0 / float(value)
 

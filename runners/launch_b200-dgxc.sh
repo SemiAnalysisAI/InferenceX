@@ -406,7 +406,11 @@ else
     # MODEL is a local path.
     export MODEL="$MODEL_PATH"
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    case "$SPEC_DECODING" in
+        mtp)     SPEC_SUFFIX='_mtp' ;;
+        offline) SPEC_SUFFIX='_offline' ;;  # in-process engine (offline decode-step)
+        *)       SPEC_SUFFIX='' ;;
+    esac
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b200_vllm.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else).

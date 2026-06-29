@@ -379,7 +379,11 @@ else
     fi
 
     SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    case "$SPEC_DECODING" in
+        mtp)     SPEC_SUFFIX='_mtp' ;;
+        offline) SPEC_SUFFIX='_offline' ;;  # in-process engine (offline decode-step)
+        *)       SPEC_SUFFIX='' ;;
+    esac
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else)

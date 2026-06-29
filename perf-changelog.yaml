@@ -3628,7 +3628,6 @@
     - "Correct the chunk prefill setting size under tp8/dp8 config."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1715
   
-
 - config-keys:
     - dsv4-fp4-gb200-dynamo-sglang
   description:
@@ -4302,3 +4301,23 @@
     - "Update the MiniMax-M3 MXFP8 MI355X vLLM image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
     - "Benchmark serving flags and TP/EP/DP-attention search space are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1942
+
+- config-keys:
+    - dsv4-fp4-b200-vllm-offline
+    - dsv4-fp4-b200-sglang-offline
+    - dsv4-fp4-b200-trt-offline
+    - dsv4-fp4-b300-vllm-offline
+    - dsv4-fp4-b300-sglang-offline
+    - dsv4-fp4-b300-trt-offline
+    - dsv4-fp8-h200-vllm-offline
+    - dsv4-fp8-h200-vllm-offline-2n
+    - dsv4-fp8-h200-sglang-offline
+    - dsv4-fp4-gb200-vllm-offline
+    - dsv4-fp4-gb300-vllm-offline
+    - dsv4-fp4-gb300-vllm-offline-16chip
+  description:
+    - "Add offline decode-step DSV4 configs (in-process engine.generate, one warmup + one timed lockstep InfiniteBench batch) on B200/B300/H200"
+    - "OSL=256 counts decode steps (main-model forward passes): TPOT is per decode step and output throughput is steps/s/GPU; MTP bonus tokens are excluded from headline metrics and observed acceptance is recorded separately"
+    - "spec-decoding=offline routes launchers to dsv4_fp4_<sku>_<framework>_offline.sh; MTP draft tokens default to 3 (DSV4_OFFLINE_MTP_SPEC_TOKENS to override)"
+    - "MoE routing defaults to simulated uniform_random via VLLM_MOE_ROUTING_SIMULATION_STRATEGY for idealized expert balance (DSV4_OFFLINE_ROUTING_SIM=none for honest routing); SGLang/TRT have no such knob and fall back to real routing; every result records what ran in moe_routing"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX

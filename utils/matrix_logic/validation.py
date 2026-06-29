@@ -87,7 +87,7 @@ class SingleNodeMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "draft_model", "offline", "none"] = Field(
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
@@ -126,7 +126,7 @@ class MultiNodeMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "draft_model", "offline", "none"] = Field(
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
@@ -177,7 +177,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value)
     precision: str
     framework: str
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "draft_model", "offline", "none"] = Field(
         alias=Fields.SPEC_DECODING.value
     )
     runner: str
@@ -283,7 +283,7 @@ class SingleNodeSearchSpaceEntry(BaseModel):
 
     tp: int
     ep: Optional[int] = None
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "draft_model", "offline", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
     dp_attn: Optional[bool] = Field(
         default=None, alias=Fields.DP_ATTN.value)
@@ -303,7 +303,7 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     """Multinode search space configuration."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "draft_model", "offline", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: WorkerConfig
     decode: WorkerConfig
@@ -346,7 +346,7 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     tp: Optional[int] = None
     ep: Optional[int] = None
     dp_attn: Optional[bool] = Field(default=None, alias=Fields.DP_ATTN.value)
-    spec_decoding: Literal["mtp", "draft_model", "none"] = Field(
+    spec_decoding: Literal["mtp", "draft_model", "offline", "none"] = Field(
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None

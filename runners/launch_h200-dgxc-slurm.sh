@@ -279,12 +279,28 @@ else
     DOCKER_IMAGE=$(echo "$IMAGE" | sed 's/#/\//g')
     LOCK_FILE="${SQUASH_FILE}.lock"
 
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    if [[ $TP -gt 8 ]]; then
+        ALLOC_NODES=2
+        ALLOC_GPUS="gpu:8"
+        SRUN_MULTI="--nodes=2 --ntasks=2 --ntasks-per-node=1"
+    else
+        ALLOC_NODES=1
+        ALLOC_GPUS="gpu:$TP"
+        SRUN_MULTI=""
+    fi
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --nodes=$ALLOC_NODES --gres=$ALLOC_GPUS --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    if [[ $ALLOC_NODES -gt 1 ]]; then
+        MASTER_ADDR=$(scontrol show hostname "$(squeue -j "$JOB_ID" -o "%N" -h)" | head -n1)
+        export MASTER_ADDR
+        echo "Resolved MASTER_ADDR=$MASTER_ADDR for job $JOB_ID"
+    fi
 
     # Use flock to serialize concurrent imports to the same squash file
     # Override ENROOT_CACHE_PATH to avoid permission issues with system-wide cache on worker nodes
-    srun --jobid=$JOB_ID bash -c "
+    srun --jobid=$JOB_ID $SRUN_MULTI bash -c "
         export ENROOT_CACHE_PATH=\$HOME/.cache/enroot
         mkdir -p \$ENROOT_CACHE_PATH
         exec 9>\"$LOCK_FILE\"
@@ -297,7 +313,11 @@ else
         fi
     "
 
-    SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+    case "$SPEC_DECODING" in
+        mtp)     SPEC_SUFFIX='_mtp' ;;
+        offline) SPEC_SUFFIX='_offline' ;;
+        *)       SPEC_SUFFIX='' ;;
+    esac
     BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_h200"
     BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
@@ -311,7 +331,7 @@ else
         CONTAINER_MOUNT_DIR=/workspace
     fi
 
-    srun --jobid=$JOB_ID \
+    srun --jobid=$JOB_ID $SRUN_MULTI \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
         --no-container-mount-home \

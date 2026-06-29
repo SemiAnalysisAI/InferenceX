@@ -96,6 +96,17 @@ check_env_vars() {
     fi
 }
 
+# Number of speculative draft tokens for DSV4 runs, derived from
+# SPEC_DECODING. `mtp` serving configs default to 2 draft tokens; `offline`
+# in-process decode-step configs default to 3.
+dsv4_mtp_spec_tokens_for_spec_decoding() {
+    case "${SPEC_DECODING:-none}" in
+        mtp)     printf '%s\n' "${DSV4_MTP_SPEC_TOKENS:-2}" ;;
+        offline) printf '%s\n' "${DSV4_OFFLINE_MTP_SPEC_TOKENS:-${DSV4_MTP_SPEC_TOKENS:-3}}" ;;
+        *)       printf '0\n' ;;
+    esac
+}
+
 # Wait for server to be ready by polling the health endpoint
 # All parameters are required
 # Parameters:

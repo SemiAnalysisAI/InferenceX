@@ -17,7 +17,10 @@ from validation import (
 
 seq_len_stoi = {
     "1k1k": (1024, 1024),
-    "8k1k": (8192, 1024)
+    "8k1k": (8192, 1024),
+    # Offline decode-step benchmark shape: 8192 input tokens, 256 decode
+    # steps (OSL counts main-model forward passes for offline configs).
+    "8k256": (8192, 256),
 }
 
 MIN_EVAL_CONC = 16
@@ -1244,7 +1247,7 @@ def main():
         nargs='+',
         choices=list(seq_len_stoi.keys()),
         required=False,
-        help='Only include these sequence length configurations (e.g., 1k1k 8k1k)'
+        help='Only include these sequence length configurations (e.g., 1k1k 8k1k 8k256)'
     )
     test_config_keys_parser.add_argument(
         '-h', '--help',

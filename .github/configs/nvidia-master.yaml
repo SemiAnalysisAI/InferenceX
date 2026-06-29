@@ -3295,6 +3295,56 @@ dsv4-fp8-h200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1, spec-decoding: mtp }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
+# Offline decode-step DSV4 benchmarks - H200 FP8.
+# 8k ISL x 256 decode-step lockstep batches. vLLM can use simulated
+# uniform_random expert routing; SGLang falls back to real routing. No TRT entry
+# - no DSV4 TRT image for Hopper.
+dsv4-fp8-h200-vllm-offline:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, ep: 1, dp-attn: false, conc-start: 8, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+dsv4-fp8-h200-sglang-offline:
+  image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200-dgxc
+  precision: fp8
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, ep: 1, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+dsv4-fp8-h200-vllm-offline-2n:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: h200-dgxc
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 16, ep: 16, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
   # DeepSeek-V4-Pro B300 single-node aggregate recipe from the submitted B300
   # pareto sweep. The single-node schema has no explicit data-parallel-size
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
@@ -3418,6 +3468,184 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+
+# Offline (in-process engine.generate) DSV4 configs: one warmup + one timed
+# lockstep batch of InfiniteBench prompts, ISL=8192 input tokens, OSL=256
+# *decode steps* (main-model forward passes). TPOT is per decode step and
+# throughput is steps/s/GPU. spec-decoding=offline routes the launcher to
+# dsv4_fp4_<sku>_<framework>_offline.sh; MTP draft tokens default to 3 inside
+# those scripts (DSV4_OFFLINE_MTP_SPEC_TOKENS to override). MoE routing defaults
+# to simulated uniform_random for idealized expert balance
+# (DSV4_OFFLINE_ROUTING_SIM=none for honest routing). Only vLLM supports it
+# (VLLM_MOE_ROUTING_SIMULATION_STRATEGY); SGLang/TRT fall back to real routing
+# and every row records `moe_routing`.
+dsv4-fp4-b200-vllm-offline:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, conc-start: 8, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+dsv4-fp4-b200-sglang-offline:
+  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, conc-start: 8, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+dsv4-fp4-b200-trt-offline:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-9aa3715
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b200-dsv4
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, conc-start: 8, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+# B300 single-node (8-GPU HGX B300) DEP=8 — each GPU is a DP-attention rank
+# (tp=1) with experts sharded 8-way. DEP-only (the pure-TP=8 line was dropped:
+# we want the DEP shape, not tensor parallelism). x86 host,
+# so the plain v0.21.0 image (no -ubuntu2404).
+dsv4-fp4-b300-vllm-offline:
+  image: vllm/vllm-openai:v0.21.0
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+# GB200 single-node (one 4-GPU Grace-Blackwell tray) offline decode-step
+# bench. DEP=4: each GPU is an independent DP-attention rank (tp=1) with
+# experts sharded 4-way. Uses the multi-arch -ubuntu2404 image tag (the
+# GB200 login/compute nodes are aarch64 Grace; the plain v0.21.0 tag is
+# x86-only). Runs via the new single-node branch in launch_gb200-nv.sh.
+# NOTE: confirmed NOT to fit — the /mnt/numa1 checkpoint is the native
+# FP8 806 GB one, and DEP-4 needs >184 GB/GPU (OOM during weight load,
+# run 27449109824). Kept for reference; use the gb300 sibling below.
+dsv4-fp4-gb200-vllm-offline:
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+# GB300 sibling of dsv4-fp4-gb200-vllm-offline - same offline decode-step
+# shape, but on a 4-GPU GB300 tray (288 GB HBM per GPU): the ~230-270 GB
+# per-rank DEP-4 footprint of the native FP8 checkpoint fits here.
+# Runs via the single-node branch in launch_gb300-nv.sh; weights come
+# from compute-local /scratch/models/DeepSeek-V4-Pro.
+# runner is gb300-nv (not generic gb300): the generic label is shared
+# by the NV and CW pools, and only launch_gb300-nv.sh has the
+# single-node branch (a CW machine picked up the first dispatch and
+# died in launch_gb300-cw.sh's framework check — run 27449509674).
+dsv4-fp4-gb300-vllm-offline:
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+# GB300 16-chip DEP=16 - 4 trays (4 GPUs each) in one NVL72 rack, cross-tray
+# DP/EP over NVLink. multinode:false keeps the offline bench-script path; launch_gb300-nv.sh
+# detects TP>4 and allocates TP/4 = 4 nodes (one bench-script task per tray,
+# SLURM_PROCID = DP node_rank). Conc is the global batch, split evenly across
+# all 16 DP ranks, so the sweep uses multiples of 16 to give every rank an
+# equal batch: {32,64,128,256,512} -> per-rank {2,4,8,16,32}, matching the
+# DEP=4 per-GPU batch for a direct per-chip comparison.
+dsv4-fp4-gb300-vllm-offline-16chip:
+  image: vllm/vllm-openai:v0.21.0-ubuntu2404
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb300-nv
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 16, ep: 16, dp-attn: true, conc-start: 32, conc-end: 512, spec-decoding: offline }
+
+dsv4-fp4-b300-sglang-offline:
+  image: lmsysorg/sglang:nightly-dev-cu13-20260610-f332e526
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, conc-start: 8, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
+
+dsv4-fp4-b300-trt-offline:
+  image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: trt
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 256
+      search-space:
+      - { tp: 8, conc-start: 8, conc-end: 128, spec-decoding: offline }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 8, conc-end: 128, spec-decoding: offline }
 
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130

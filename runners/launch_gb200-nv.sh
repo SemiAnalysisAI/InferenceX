@@ -136,6 +136,51 @@ export EVAL_ONLY="${EVAL_ONLY:-false}"
 export ISL="$ISL"
 export OSL="$OSL"
 
+# ---------------------------------------------------------------------------
+# Single-node path (multinode: false configs, e.g. the offline decode-step DSV4
+# offline bench). Mirrors launch_b300-nv.sh's single-node branch: salloc
+# one 4-GPU GB200 node and run the bench script inside the container via
+# pyxis. The squash import above already ran on the (aarch64) login node.
+# ---------------------------------------------------------------------------
+if [[ "$IS_MULTINODE" != "true" ]]; then
+    # DSV4 weights live on compute-node-local NVMe — same path the srt-slurm
+    # recipes alias. Other models fall back to HF download in-container.
+    if [[ $MODEL_PREFIX == "dsv4" ]]; then
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+    fi
+
+    case "$SPEC_DECODING" in
+        mtp)     SPEC_SUFFIX='_mtp' ;;
+        offline) SPEC_SUFFIX='_offline' ;;
+        *)       SPEC_SUFFIX='' ;;
+    esac
+    BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_gb200"
+    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        BENCH_SCRIPT="${BENCH_BASE}${SPEC_SUFFIX}.sh"
+    fi
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # The compute-local NVMe model dir must be bind-mounted into the container.
+    MODEL_MOUNT=""
+    [[ "${MODEL_PATH:-}" == /* ]] && MODEL_MOUNT=",$MODEL_PATH:$MODEL_PATH"
+
+    srun --jobid=$JOB_ID \
+        --mpi=none \
+        --container-image=$SQUASH_FILE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace${MODEL_MOUNT} \
+        --no-container-mount-home \
+        --container-workdir=/workspace \
+        --no-container-entrypoint --export=ALL,PORT=8888 \
+        bash "$BENCH_SCRIPT"
+    RC=$?
+
+    scancel "$JOB_ID"
+    exit $RC
+fi
+
 # Legacy path that doesn't use srt-slurm
 if [[ $FRAMEWORK == "dynamo-sglang" && -z "$CONFIG_FILE" ]]; then
     export IMAGE=$SQUASH_FILE

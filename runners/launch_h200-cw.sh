@@ -6,7 +6,11 @@ export PORT=8888
 
 MODEL_CODE="${EXP_NAME%%_*}"
 FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "trt" ]] && printf '_trt' || printf '')
-SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
+case "$SPEC_DECODING" in
+    mtp)     SPEC_SUFFIX='_mtp' ;;
+    offline) SPEC_SUFFIX='_offline' ;;
+    *)       SPEC_SUFFIX='' ;;
+esac
 
 PARTITION="h200"
 SQUASH_FILE="/mnt/vast/gharunner/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"

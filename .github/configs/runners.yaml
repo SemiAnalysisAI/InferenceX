@@ -161,3 +161,16 @@ gb300:
 - 'gb300-nv_0'
 - 'gb300-nv_1'
 - 'gb300-nv_2'
+# NV-pinned alias of gb300: the generic gb300 GHA label is shared with
+# the CW pool, so configs that must land on NV machines (e.g. the
+# single-node offline bench, which only launch_gb300-nv.sh supports)
+# use runner: gb300-nv. This key makes --runner-type gb300-nv valid.
+gb300-nv:
+- 'gb300-nv_0'
+- 'gb300-nv_1'
+- 'gb300-nv_2'
+gb300-cw:
+- 'gb300-cw_0'
+- 'gb300-cw_1'
+- 'gb300-cw_2'
+- 'gb300-cw_3'

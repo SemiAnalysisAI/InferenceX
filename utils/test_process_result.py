@@ -649,3 +649,101 @@ class TestPowerAggregationIntegration:
         patched = json.loads(agg_path.read_text())
         assert "avg_power_w" not in patched
         assert "joules_per_output_token" not in patched
+
+
+# =============================================================================
+# Test offline decode-step results
+# =============================================================================
+
+class TestOfflineResults:
+    """Offline results report per-decode-step TPOT; throughput must follow
+    requests_per_chip / step_time."""
+
+    @pytest.fixture
+    def offline_env_vars(self, base_env_vars):
+        return {
+            **base_env_vars,
+            "RUNNER_TYPE": "b300",
+            "FRAMEWORK": "sglang",
+            "PRECISION": "fp4",
+            "SPEC_DECODING": "offline",
+            "MODEL_PREFIX": "dsv4",
+            "ISL": "8192",
+            "OSL": "256",
+            "TP": "16",
+            "EP_SIZE": "16",
+            "DP_ATTENTION": "true",
+        }
+
+    @pytest.fixture
+    def offline_benchmark_result(self):
+        """Representative decode-step sample: TPOT 19.03 ms per decode step
+        on 16 chips -> 210.19 steps/s/chip."""
+        return {
+            "model_id": "deepseek-ai/DeepSeek-V4-Pro",
+            "engine_mode": "offline",
+            "mtp": 3,
+            "max_concurrency": 64,
+            "total_token_throughput": 3363.1,
+            "output_throughput": 3363.1,
+            "mean_tpot_ms": 19.03,
+            "median_tpot_ms": 19.0,
+            "std_tpot_ms": 0.0,
+            "tpot_unit": "decode_step",
+            "decode_steps_target": 256,
+            "spec_tokens_per_step_observed": 2.44,
+            "moe_routing": "simulated_uniform_random",
+            "mean_ttft_ms": 1234.5,
+        }
+
+    def test_offline_tput_is_conc_per_gpu_over_step_time(
+            self, tmp_path, offline_env_vars, offline_benchmark_result):
+        result = run_script(tmp_path, offline_env_vars, offline_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        output_data = json.loads(result.stdout)
+
+        expected = (64 / 16) / (19.03 / 1000.0)  # ~210.19 steps/s/chip
+        assert output_data["output_tput_per_gpu"] == pytest.approx(expected)
+        assert output_data["tput_per_gpu"] == pytest.approx(expected)
+        assert output_data["input_tput_per_gpu"] == 0.0
+        assert output_data["mean_intvty"] == pytest.approx(1000.0 / 19.03)
+
+    def test_offline_relabels_spec_decoding_from_mtp(
+            self, tmp_path, offline_env_vars, offline_benchmark_result):
+        result = run_script(tmp_path, offline_env_vars, offline_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        output_data = json.loads(result.stdout)
+
+        # Dispatch value is SPEC_DECODING=offline; the row reports the
+        # actual run config (mtp draft tokens enabled).
+        assert output_data["spec_decoding"] == "mtp"
+        assert output_data["engine_mode"] == "offline"
+        assert output_data["moe_routing"] == "simulated_uniform_random"
+        assert output_data["tpot_unit"] == "decode_step"
+        assert output_data["decode_steps"] == 256
+        assert output_data["spec_tokens_per_step_observed"] == pytest.approx(2.44)
+
+    def test_offline_without_mtp_reports_spec_none(
+            self, tmp_path, offline_env_vars, offline_benchmark_result):
+        offline_benchmark_result["mtp"] = 0
+        result = run_script(tmp_path, offline_env_vars, offline_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        output_data = json.loads(result.stdout)
+        assert output_data["spec_decoding"] == "none"
+
+    def test_offline_string_tpot_field_does_not_crash_intvty(
+            self, tmp_path, offline_env_vars, offline_benchmark_result):
+        """`tpot_unit` contains 'tpot' but is a string — the intvty
+        conversion must skip non-`_ms` keys."""
+        result = run_script(tmp_path, offline_env_vars, offline_benchmark_result)
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        output_data = json.loads(result.stdout)
+        assert "std_intvty" not in output_data
+        assert output_data["std_tpot"] == pytest.approx(0.0)
+
+    def test_offline_multinode_rejected(
+            self, tmp_path, offline_env_vars, offline_benchmark_result):
+        env = {**offline_env_vars, "IS_MULTINODE": "true"}
+        result = run_script(tmp_path, env, offline_benchmark_result)
+        assert result.returncode != 0
+        assert "single-node" in result.stderr

@@ -108,6 +108,88 @@ export EVAL_ONLY="${EVAL_ONLY:-false}"
 export ISL="$ISL"
 export OSL="$OSL"
 
+# ---------------------------------------------------------------------------
+# Single-node path (multinode: false configs, e.g. the offline decode-step DSV4
+# offline bench). Mirrors the launch_gb200-nv.sh single-node branch:
+# salloc one 4-GPU GB300 tray and run the bench script inside the
+# container via pyxis. MODEL_PATH was resolved above (node-local
+# /scratch for DSV4); the squash import already ran on a compute node.
+# ---------------------------------------------------------------------------
+if [[ "$IS_MULTINODE" != "true" ]]; then
+    case "$SPEC_DECODING" in
+        mtp)     SPEC_SUFFIX='_mtp' ;;
+        offline) SPEC_SUFFIX='_offline' ;;
+        *)       SPEC_SUFFIX='' ;;
+    esac
+    BENCH_BASE="benchmarks/single_node/${SCENARIO_SUBDIR}${EXP_NAME%%_*}_${PRECISION}_gb300"
+    BENCH_SCRIPT="${BENCH_BASE}_${FRAMEWORK}${SPEC_SUFFIX}.sh"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        BENCH_SCRIPT="${BENCH_BASE}${SPEC_SUFFIX}.sh"
+    fi
+
+    # A GB300 NVL72 Slurm node is one 4-GPU tray. TP<=4 fits on a single
+    # tray (the DEP=4 offline bench). TP>4 (e.g. DEP=16) spans multiple
+    # trays in the same rack: allocate TP/4 nodes, 4 GPUs each, and run the
+    # bench script once per node (distinct SLURM_PROCID = DP node_rank).
+    # Cross-tray DP/EP NCCL rides the rack NVLink domain; only the initial
+    # TCP rendezvous uses the inter-node IP network (known-good here — this
+    # cluster runs multi-node srt-slurm jobs). Mirrors launch_h200-dgxc-slurm.sh.
+    GPUS_PER_NODE=4
+    if [[ $TP -gt $GPUS_PER_NODE ]]; then
+        ALLOC_NODES=$(( TP / GPUS_PER_NODE ))
+        ALLOC_GPUS="gpu:${GPUS_PER_NODE}"
+        SRUN_MULTI="--nodes=${ALLOC_NODES} --ntasks=${ALLOC_NODES} --ntasks-per-node=1"
+    else
+        ALLOC_NODES=1
+        ALLOC_GPUS="gpu:${TP}"
+        SRUN_MULTI=""
+    fi
+
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N "$ALLOC_NODES" --gres=$ALLOC_GPUS --exclusive --time=180 --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
+
+    # Multi-node DP rendezvous needs the head node's hostname. scontrol runs
+    # on the login node (compute lacks it), so resolve here and export into
+    # the container via --export=ALL.
+    if [[ $ALLOC_NODES -gt 1 ]]; then
+        MASTER_ADDR=$(scontrol show hostname "$(squeue -j "$JOB_ID" -o '%N' -h)" | head -n1)
+        export MASTER_ADDR
+        echo "Resolved MASTER_ADDR=$MASTER_ADDR for job $JOB_ID"
+    fi
+
+    # MODEL_PATH is node-local (/scratch) on compute; bind-mount it so the
+    # bench script's directory check sees it inside the container.
+    MODEL_MOUNT=""
+    if [[ "${MODEL_PATH:-}" == /* ]]; then
+        MODEL_MOUNT=",$MODEL_PATH:$MODEL_PATH"
+    fi
+
+    # Pre-flight: /scratch is node-local, so the model must be staged on
+    # every allocated tray. Fail fast with the offending hostname rather
+    # than letting one node OOM/crash deep into vLLM startup.
+    if [[ $ALLOC_NODES -gt 1 && "${MODEL_PATH:-}" == /* ]]; then
+        if ! srun --jobid=$JOB_ID --nodes=$ALLOC_NODES --ntasks=$ALLOC_NODES --ntasks-per-node=1 \
+                bash -c "test -d '$MODEL_PATH' || { echo \"MISSING $MODEL_PATH on \$(hostname)\"; exit 1; }"; then
+            echo "Model not staged on all $ALLOC_NODES nodes; aborting"
+            scancel "$JOB_ID"
+            exit 1
+        fi
+    fi
+
+    RC=0
+    srun --jobid=$JOB_ID $SRUN_MULTI \
+        --mpi=none \
+        --container-image=$SQUASH_FILE \
+        --container-mounts=$GITHUB_WORKSPACE:/workspace${MODEL_MOUNT} \
+        --no-container-mount-home \
+        --container-workdir=/workspace \
+        --no-container-entrypoint --export=ALL,PORT=8888 \
+        bash "$BENCH_SCRIPT" || RC=$?
+
+    scancel "$JOB_ID"
+    exit $RC
+fi
+
 echo "Cloning srt-slurm repository..."
 RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
 SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
