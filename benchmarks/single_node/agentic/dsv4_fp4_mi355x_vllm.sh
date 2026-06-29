@@ -190,7 +190,7 @@ case "$OFFLOADING" in
   "local_buffer_size": "2GB",
   "protocol": "tcp",
   "device_name": "",
-  "enable_offload": true
+  "enable_offload": false
 }
 EOF
 # (srok)
@@ -207,17 +207,14 @@ EOF
 
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
-        #(srok)
-        #MOONCAKE_KV_LEASE_TTL=60s
-        MOONCAKE_KV_LEASE_TTL=3600s
+        MOONCAKE_KV_LEASE_TTL=60s
+        #MOONCAKE_KV_LEASE_TTL=3600s
 
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
             --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
             --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
             --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
-            --enable_offload=1 \
-            --offload_on_evict=1 \
             > "$MOONCAKE_MASTER_LOG" 2>&1 &
 
         sleep 10
