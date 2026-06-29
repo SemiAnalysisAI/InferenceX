@@ -575,9 +575,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 speedbench_decode_metric_urls="http://${NODE0_ADDR}:8000/metrics"
             fi
             export SPEEDBENCH_DECODE_METRICS_URLS="${SPEEDBENCH_DECODE_METRICS_URLS:-$speedbench_decode_metric_urls}"
-            if [[ "${SPEC_DECODING:-none}" == "mtp" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
-                export SPEEDBENCH_NUM_SPEC_TOKENS="${SPEEDBENCH_NUM_SPEC_TOKENS:-$DECODE_MTP_SIZE}"
-            fi
 
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"

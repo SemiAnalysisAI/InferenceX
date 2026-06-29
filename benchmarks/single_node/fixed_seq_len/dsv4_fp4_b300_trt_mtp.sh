@@ -83,7 +83,6 @@ if [[ "$ISL" -ge 4096 && "$CONC" -ge 128 ]]; then
 else
     MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
 fi
-export SPEEDBENCH_NUM_SPEC_TOKENS="$MTP"
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 # Cap CUDA-graph capture at batch 1024. TRTLLM_MLA_EXTRA_OVERLAP hands MLA
 # prologue tensors across streams without record_stream(), so graph warmup at

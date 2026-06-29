@@ -75,7 +75,6 @@ if [[ "$ISL" -ge 4096 && "$CONC" -ge 128 ]]; then
 else
     MTP="${TRTLLM_DSV4_MTP_NUM_NEXTN_LAYERS:-3}"
 fi
-export SPEEDBENCH_NUM_SPEC_TOKENS="$MTP"
 MAX_BATCH_SIZE=$(( CONC > 16 ? CONC : 16 ))
 CUDA_GRAPH_MAX_BATCH_SIZE="$MAX_BATCH_SIZE"
 if [[ "$DP_ATTENTION" == "true" ]]; then
