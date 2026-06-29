@@ -3258,12 +3258,12 @@ minimaxm3-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - duration: 1800
       search-space:
-      - { tp: 4, ep: 1, offloading: none, conc-list: [64] }
-      - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [64] }
-      - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [64] }
-      # - { tp: 4, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
-      # - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
-      # - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
+      # - { tp: 4, ep: 1, offloading: none, conc-list: [64] }
+      # - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [64] }
+      # - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [64] }
+      - { tp: 4, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
       # - { tp: 8, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
       # - { tp: 8, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
       # - { tp: 8, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
