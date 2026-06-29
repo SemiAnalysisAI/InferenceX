@@ -71,6 +71,11 @@ fi
 # DeepSeek-V4-Pro weights are large; engine startup can exceed default 600s.
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 
+# vllm-project/vllm#43447 keeps local SWA prefix-cache tails sparsely, while
+# vllm-project/vllm#44774 applies the same reachability policy to Mooncake's
+# store mask. 32k matches the trace-replay tuning validated for this workload.
+export VLLM_PREFIX_CACHE_RETENTION_INTERVAL=32768
+
 # VLLM_PREFIX_CACHE_RETENTION_INTERVAL only applies to sliding-window/Mamba
 # models; this vLLM build raises ValueError if it is set for DSv4.
 
@@ -181,6 +186,7 @@ EOF
   #"device_name": "mlx5_0",
   #"local_buffer_size": "4GB",
         export MOONCAKE_CONFIG_PATH
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
         # (srok)
