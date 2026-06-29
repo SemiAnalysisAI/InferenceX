@@ -106,7 +106,12 @@ def main() -> int:
                 nd = max(1, int(c.get("ep") or 8) // 4)
                 if nd > 1:
                     nodes = str(nd)
-            canonical = (c.get("uneven_tokens", "none") == "none" and int(c.get("routing_step", 0)) == 0)
+            # The broad sweep runs SEEDED-runtime (comparable-experimental), NOT pre-staged canonical:
+            # a fixed seed + identical params already yields the same cross-SKU trace for a fair
+            # comparison, without the per-case canonical-manifest staging (overhead + a fragility — the
+            # official cohort is a separate targeted run). run_in_container also re-stages per case if
+            # canonical is ever re-enabled (the CX_WORKLOAD_DIR unset fix).
+            canonical = False
             case = {
                 "backend": beng, "mode": c["mode"], "dtype": c["dtype"], "contract": c["contract"],
                 "routing": c["routing"], "phase": phase, "eplb": bool(c.get("eplb")),

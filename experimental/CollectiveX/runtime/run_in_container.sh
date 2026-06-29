@@ -644,6 +644,11 @@ print("\n".join(f"export {k}={shlex.quote(v)}" for k, v in env.items()))
 PY
 )"
     eval "$_exports"
+    # Each case has its OWN routing/dims -> its own canonical workload manifest. cx_stage_canonical
+    # short-circuits when CX_WORKLOAD_DIR is already set, so without this unset the first case's
+    # staged dir is reused for the rest and run_ep.py can't find the later cases' manifests
+    # (FileNotFoundError .cx_workloads/<wid>.manifest.json). Unset so every case re-stages its own.
+    unset CX_WORKLOAD_DIR 2>/dev/null || true
     cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_PHASE $CX_DISPATCH_DTYPE/$CX_MODE/${CX_MEASUREMENT_CONTRACT/-v1/} rt=$CX_ROUTING eplb=${CX_EPLB:-0}"
     dispatch_bench || rc=1
     ci=$((ci + 1))
