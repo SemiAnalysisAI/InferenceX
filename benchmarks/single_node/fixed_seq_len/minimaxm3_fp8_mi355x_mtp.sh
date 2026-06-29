@@ -180,6 +180,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --kv-cache-dtype fp8 \
+    --linear-backend emulation \
     --attention-backend TRITON_ATTN \
     --moe-backend aiter \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \

@@ -4322,5 +4322,5 @@
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
     - "Enable AITER MoE on MiniMax-M3 MI355X single-node vLLM EAGLE3 MTP benchmarks (MXFP4 and MXFP8): export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1; pass --moe-backend aiter."
-    - "MXFP8 MTP also exports VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6. Mirrors the STP AITER MoE knobs from #1954 with three Inferact/MiniMax-M3-EAGLE3 speculative tokens and --use-chat-template for serving."
+    - "MXFP8 MTP also exports VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 and passes --linear-backend emulation. Mirrors the STP AITER MoE knobs from #1954 with three Inferact/MiniMax-M3-EAGLE3 speculative tokens and --use-chat-template for serving."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1955
