@@ -135,16 +135,18 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         SUBMIT_HOST=$(hostname -s)
         NODELIST_DISCOVERY_TIMEOUT="${NODELIST_DISCOVERY_TIMEOUT:-900}"
         NODELIST_DISCOVERY_INTERVAL="${NODELIST_DISCOVERY_INTERVAL:-30}"
+        MI300X_NODE_INVENTORY="${MI300X_NODE_INVENTORY:-chi-mi300x-034 chi-mi300x-035 chi-mi300x-036 chi-mi300x-043 chi-mi300x-049 chi-mi300x-054 chi-mi300x-057 chi-mi300x-058 chi-mi300x-121}"
         discovery_start=$(date +%s)
 
         while true; do
             SELECTED_NODES=("$SUBMIT_HOST")
             echo "Building NODELIST with submit host first: ${SUBMIT_HOST}"
 
-            while IFS= read -r candidate; do
+            for candidate in $MI300X_NODE_INVENTORY; do
                 [[ -n "$candidate" ]] || continue
                 [[ "$candidate" == "$SUBMIT_HOST" ]] && continue
                 if [[ ",${SLURM_EXCLUDE_NODES}," == *",${candidate},"* ]]; then
+                    echo "Skipping excluded NODELIST candidate: $candidate"
                     continue
                 fi
 
@@ -159,7 +161,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                 if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
                     break
                 fi
-            done < <(sinfo -h -N -p "$SLURM_PARTITION" -t idle,mix,alloc -o "%N" | sort -u)
+            done
 
             if [[ "${#SELECTED_NODES[@]}" -eq "$NUM_NODES_REQUIRED" ]]; then
                 break
@@ -170,6 +172,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             if (( elapsed >= NODELIST_DISCOVERY_TIMEOUT )); then
                 echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} usable nodes with writable /tmp for staging after ${elapsed}s." >&2
                 echo "Selected nodes so far: ${SELECTED_NODES[*]}" >&2
+                echo "MI300X node inventory checked: ${MI300X_NODE_INVENTORY}" >&2
                 sinfo -N -p "$SLURM_PARTITION" -o "%N %T" >&2 || true
                 exit 1
             fi
