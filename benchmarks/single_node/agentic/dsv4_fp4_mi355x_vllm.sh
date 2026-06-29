@@ -176,9 +176,8 @@ case "$OFFLOADING" in
         cd ..
 
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        ## (srok)
-        #export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        #python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
+        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
+        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -188,7 +187,7 @@ case "$OFFLOADING" in
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
-  "local_buffer_size": "2GB",
+  "local_buffer_size": "256MB",
   "protocol": "rdma",
   "device_name": "",
   "enable_offload": false
