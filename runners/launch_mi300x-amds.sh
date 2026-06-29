@@ -117,7 +117,11 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
         sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
     }
-    trap cleanup_and_save_logs EXIT
+    if [[ "${KEEP_LOGS:-0}" == "1" ]]; then
+        trap '' EXIT
+    else
+        trap cleanup_and_save_logs EXIT
+    fi
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_mi300x_${FRAMEWORK}.sh"
     if [[ "$FRAMEWORK" == "sglang-disagg" ]] || [[ "$FRAMEWORK" == "vllm-disagg" ]]; then
@@ -150,10 +154,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
                 break
             fi
-        done < <(sinfo -h -N -p "$SLURM_PARTITION" -t idle -o "%N" | sort -u)
+        done < <(sinfo -h -N -p "$SLURM_PARTITION" -t idle,mix,alloc -o "%N" | sort -u)
 
         if [[ "${#SELECTED_NODES[@]}" -ne "$NUM_NODES_REQUIRED" ]]; then
-            echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} with workspace access." >&2
+            echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} usable nodes with writable /tmp for staging." >&2
             echo "Selected nodes so far: ${SELECTED_NODES[*]}" >&2
             exit 1
         fi
@@ -243,8 +247,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
         cat > collect_latest_results.py <<'PY'
 import os, sys
-sgl_job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
-for path in sorted([f"{sgl_job_dir}/logs/{name}/{framework}_isl_{isl}_osl_{osl}" for name in os.listdir(f"{sgl_job_dir}/logs/") if os.path.isdir(f"{sgl_job_dir}/logs/{name}/{framework}_isl_{isl}_osl_{osl}")], key=os.path.getmtime, reverse=True)[:nexp]:
+job_dir, isl, osl, nexp, framework = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4]), sys.argv[5]
+logs_root = f"{job_dir}/logs/"
+candidates = []
+if os.path.isdir(logs_root):
+    for name in os.listdir(logs_root):
+        subdir = f"{logs_root}{name}/{framework}_isl_{isl}_osl_{osl}"
+        if os.path.isdir(subdir):
+            candidates.append(subdir)
+for path in sorted(candidates, key=os.path.getmtime, reverse=True)[:nexp]:
     print(path)
 PY
 
