@@ -5,6 +5,7 @@
 # minimaxm3_fp4_mi355x_vllm.sh and uses three speculative tokens from
 # Inferact/MiniMax-M3-EAGLE3. The pinned nightly includes upstream AMD
 # MiniMax-M3 SupportsEagle3 support, so no runtime model patch is needed.
+# MoE serving mirrors minimaxm3_fp4_mi355x_vllm.sh (AITER MoE, vllm#46419).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -36,6 +37,9 @@ fi
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -65,6 +69,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
+    --moe-backend aiter \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
     --enable-auto-tool-choice \
