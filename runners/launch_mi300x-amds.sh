@@ -69,6 +69,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "SLURM_ACCOUNT=${SLURM_ACCOUNT:-}"
             echo "SLURM_PARTITION=${SLURM_PARTITION:-}"
             echo "SLURM_EXCLUDE_NODES=${SLURM_EXCLUDE_NODES:-}"
+            echo "NODELIST=${NODELIST:-}"
             echo "SCRIPT_NAME=${SCRIPT_NAME:-}"
             echo "BENCHMARK_SUBDIR=${BENCHMARK_SUBDIR:-}"
             echo "BENCHMARK_LOGS_DIR=${BENCHMARK_LOGS_DIR:-}"
@@ -124,6 +125,49 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node"
     fi
+
+    if [[ -z "${NODELIST:-}" ]]; then
+        NUM_NODES_REQUIRED=$((PREFILL_NODES + DECODE_NODES))
+        SUBMIT_HOST=$(hostname -s)
+        SELECTED_NODES=("$SUBMIT_HOST")
+
+        echo "Building NODELIST with submit host first: ${SUBMIT_HOST}"
+        while IFS= read -r candidate; do
+            [[ -n "$candidate" ]] || continue
+            [[ "$candidate" == "$SUBMIT_HOST" ]] && continue
+            if [[ ",${SLURM_EXCLUDE_NODES}," == *",${candidate},"* ]]; then
+                continue
+            fi
+
+            # Every selected node must see the GitHub workspace and log path:
+            # job.slurm mounts DI_REPO_DIR from this path, and Slurm may pick
+            # any selected node as BatchHost for stdout/stderr creation.
+            if timeout 20s srun --nodes=1 --ntasks=1 --time=00:02:00 --partition="$SLURM_PARTITION" --nodelist="$candidate" \
+                bash -lc "test -d '$GITHUB_WORKSPACE' && mkdir -p '$BENCHMARK_LOGS_DIR' && test -d '$BENCHMARK_LOGS_DIR'" >/dev/null 2>&1; then
+                SELECTED_NODES+=("$candidate")
+                echo "Added NODELIST candidate with workspace/log access: $candidate"
+            else
+                echo "Skipping NODELIST candidate without workspace/log access: $candidate"
+            fi
+
+            if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
+                break
+            fi
+        done < <(sinfo -h -N -p "$SLURM_PARTITION" -t idle -o "%N" | sort -u)
+
+        if [[ "${#SELECTED_NODES[@]}" -ne "$NUM_NODES_REQUIRED" ]]; then
+            echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} with workspace access." >&2
+            echo "Selected nodes so far: ${SELECTED_NODES[*]}" >&2
+            exit 1
+        fi
+
+        NODELIST=$(IFS=,; echo "${SELECTED_NODES[*]}")
+        export NODELIST
+        echo "Using generated NODELIST=${NODELIST}"
+    else
+        echo "Using caller-provided NODELIST=${NODELIST}"
+    fi
+
     SUBMIT_LOG="$BENCHMARK_LOGS_DIR/submit_${SCRIPT_NAME%.sh}.log"
     bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}" > "$SUBMIT_LOG" 2>&1
     SUBMIT_RC=$?

@@ -227,10 +227,19 @@ SHIM_EOF
     export PATH="$SHIM_DIR:$PATH"
     DOCKER_CMD=docker
     echo "[docker-detect] using sg-docker shim on $(hostname)" >&2
+elif command -v sudo >/dev/null 2>&1 && sudo -n docker ps &>/dev/null 2>&1; then
+    DOCKER_CMD="sudo -n docker"
+    echo "[docker-detect] using passwordless sudo docker on $(hostname)" >&2
 else
-    out=$(docker ps 2>&1)
-    echo "[docker-detect] docker ps failed on $(hostname) as $(id -un): $out" >&2
-    DOCKER_CMD="sudo docker"
+    out=$(docker ps 2>&1 || true)
+    echo "[docker-detect] no usable docker command on $(hostname) as $(id -un)" >&2
+    echo "[docker-detect] id: $(id)" >&2
+    echo "[docker-detect] groups: $(groups 2>/dev/null || true)" >&2
+    ls -l /var/run/docker.sock >&2 2>/dev/null || true
+    echo "[docker-detect] docker ps: $out" >&2
+    echo "[docker-detect] sg docker: $(command -v sg >/dev/null 2>&1 && sg docker -c "docker ps" 2>&1 || true)" >&2
+    echo "[docker-detect] sudo docker: $(command -v sudo >/dev/null 2>&1 && sudo -n docker ps 2>&1 || true)" >&2
+    exit 1
 fi'
 
 # Update SLURM environment variables
