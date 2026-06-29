@@ -107,6 +107,10 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
             save_multinode_diagnostics
         fi
+        if [[ "${STAGING_ALLOCATION_ID:-}" =~ ^[0-9]+$ ]] && [[ -n "$(squeue -j "$STAGING_ALLOCATION_ID" --noheader 2>/dev/null)" ]]; then
+            scancel "$STAGING_ALLOCATION_ID" || true
+        fi
+        [[ -n "${WORKSPACE_ARCHIVE:-}" ]] && rm -f "$WORKSPACE_ARCHIVE" 2>/dev/null || true
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
         if [[ ! "${JOB_ID:-}" =~ ^[0-9]+$ ]]; then
             err_file="$BENCHMARK_LOGS_DIR/slurm_job-unknown.err"
@@ -131,81 +135,180 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         BENCHMARK_SUBDIR="single_node"
     fi
 
+    NUM_NODES_REQUIRED=$((PREFILL_NODES + DECODE_NODES))
+    SUBMIT_HOST=$(hostname -s)
+    SANITIZED_RUNNER=$(printf '%s' "${RUNNER_NAME:-runner}" | tr -c 'a-zA-Z0-9_.-' '_')
+    STAGED_WORKSPACE="/tmp/inferencex-${USER}-${GITHUB_RUN_ID:-manual}-${SANITIZED_RUNNER}"
+    JOB_BENCHMARK_LOGS_DIR="${STAGED_WORKSPACE}/benchmark_logs"
+    WORKSPACE_ARCHIVE="${RUNNER_TEMP:-/tmp}/inferencex-workspace-${USER}-${GITHUB_RUN_ID:-manual}-${SANITIZED_RUNNER}.tar"
+
+    NODELIST_DISCOVERY_TIMEOUT="${NODELIST_DISCOVERY_TIMEOUT:-900}"
+    NODELIST_DISCOVERY_INTERVAL="${NODELIST_DISCOVERY_INTERVAL:-30}"
+    NODELIST_ALLOCATION_TIMEOUT="${NODELIST_ALLOCATION_TIMEOUT:-120}"
+    NODELIST_ALLOC_IMMEDIATE="${NODELIST_ALLOC_IMMEDIATE:-${NODELIST_PROBE_IMMEDIATE:-30}}"
+    STAGING_TIMEOUT_SECONDS="${STAGING_TIMEOUT_SECONDS:-600}"
+    STAGING_RETRIES="${STAGING_RETRIES:-3}"
+    STAGING_RETRY_DELAY="${STAGING_RETRY_DELAY:-20}"
+    MI300X_ALLOCATION_TIME="${MI300X_ALLOCATION_TIME:-08:30:00}"
+    MI300X_NODE_INVENTORY="${MI300X_NODE_INVENTORY:-chi-mi300x-034 chi-mi300x-035 chi-mi300x-036 chi-mi300x-043 chi-mi300x-049 chi-mi300x-054 chi-mi300x-057 chi-mi300x-058 chi-mi300x-121}"
+
+    echo "Creating reusable workspace archive at ${WORKSPACE_ARCHIVE}"
+    rm -f "$WORKSPACE_ARCHIVE"
+    tar \
+        --exclude='./benchmark_logs' \
+        --exclude='./benchmark_artifacts' \
+        --exclude='./multinode_server_logs.tar.gz' \
+        --exclude='./.git' \
+        -C "$GITHUB_WORKSPACE" -cf "$WORKSPACE_ARCHIVE" .
+
+    allocate_nodes() {
+        local requested_nodelist=$1
+        local alloc_output
+        local alloc_id
+        local errexit_was_set=0
+
+        [[ $- == *e* ]] && errexit_was_set=1
+
+        echo "Requesting exclusive MI300X allocation from NODELIST=${requested_nodelist}"
+        set +e
+        alloc_output=$(timeout "${NODELIST_ALLOCATION_TIMEOUT}s" salloc \
+            --immediate="$NODELIST_ALLOC_IMMEDIATE" \
+            --partition="$SLURM_PARTITION" \
+            --account="$SLURM_ACCOUNT" \
+            --exclusive \
+            --gres="gpu:${GPUS_PER_NODE}" \
+            -N "$NUM_NODES_REQUIRED" \
+            -n "$NUM_NODES_REQUIRED" \
+            --nodelist="$requested_nodelist" \
+            --time="$MI300X_ALLOCATION_TIME" \
+            --no-shell \
+            --job-name="$RUNNER_NAME" 2>&1)
+        local alloc_rc=$?
+        if [[ "$errexit_was_set" -eq 1 ]]; then
+            set -e
+        else
+            set +e
+        fi
+        printf '%s\n' "$alloc_output"
+
+        if [[ "$alloc_rc" -ne 0 ]]; then
+            return 1
+        fi
+
+        alloc_id=$(awk '/Granted job allocation/ {print $NF}' <<< "$alloc_output" | tail -n 1)
+        if [[ ! "$alloc_id" =~ ^[0-9]+$ ]]; then
+            echo "ERROR: Failed to parse allocation id from salloc output" >&2
+            return 1
+        fi
+
+        STAGING_ALLOCATION_ID="$alloc_id"
+        export STAGING_ALLOCATION_ID
+        return 0
+    }
+
+    stage_workspace_local() {
+        echo "Staging workspace locally on ${SUBMIT_HOST}:${STAGED_WORKSPACE}"
+        rm -rf "$STAGED_WORKSPACE"
+        mkdir -p "$STAGED_WORKSPACE" "$JOB_BENCHMARK_LOGS_DIR"
+        tar -C "$STAGED_WORKSPACE" -xf "$WORKSPACE_ARCHIVE"
+        test -f "$STAGED_WORKSPACE/benchmarks/multi_node/amd_utils/job.slurm"
+        test -d "$JOB_BENCHMARK_LOGS_DIR"
+    }
+
+    stage_workspace_remote_once() {
+        local node=$1
+        timeout "${STAGING_TIMEOUT_SECONDS}s" srun --jobid="$STAGING_ALLOCATION_ID" --overlap \
+            --nodes=1 --ntasks=1 --nodelist="$node" \
+            bash -lc "rm -rf '$STAGED_WORKSPACE' && mkdir -p '$STAGED_WORKSPACE' '$JOB_BENCHMARK_LOGS_DIR' && tar -C '$STAGED_WORKSPACE' -xf - && test -f '$STAGED_WORKSPACE/benchmarks/multi_node/amd_utils/job.slurm' && test -d '$JOB_BENCHMARK_LOGS_DIR'" \
+            < "$WORKSPACE_ARCHIVE"
+    }
+
+    stage_workspace_remote() {
+        local node=$1
+        local attempt
+
+        for ((attempt = 1; attempt <= STAGING_RETRIES; attempt++)); do
+            echo "Staging workspace to ${node}:${STAGED_WORKSPACE} (attempt ${attempt}/${STAGING_RETRIES})"
+            if stage_workspace_remote_once "$node"; then
+                return 0
+            fi
+            echo "WARNING: Failed to stage workspace on ${node} (attempt ${attempt}/${STAGING_RETRIES})" >&2
+            sleep "$STAGING_RETRY_DELAY"
+        done
+
+        return 1
+    }
+
     if [[ -z "${NODELIST:-}" ]]; then
-        NUM_NODES_REQUIRED=$((PREFILL_NODES + DECODE_NODES))
-        SUBMIT_HOST=$(hostname -s)
-        NODELIST_DISCOVERY_TIMEOUT="${NODELIST_DISCOVERY_TIMEOUT:-900}"
-        NODELIST_DISCOVERY_INTERVAL="${NODELIST_DISCOVERY_INTERVAL:-30}"
-        MI300X_NODE_INVENTORY="${MI300X_NODE_INVENTORY:-chi-mi300x-034 chi-mi300x-035 chi-mi300x-036 chi-mi300x-043 chi-mi300x-049 chi-mi300x-054 chi-mi300x-057 chi-mi300x-058 chi-mi300x-121}"
+        CANDIDATE_NODES=()
+        for candidate in $MI300X_NODE_INVENTORY; do
+            [[ -n "$candidate" ]] || continue
+            if [[ ",${SLURM_EXCLUDE_NODES}," == *",${candidate},"* ]]; then
+                echo "Skipping excluded MI300X allocation candidate: $candidate"
+                continue
+            fi
+            CANDIDATE_NODES+=("$candidate")
+        done
+
+        if [[ "${#CANDIDATE_NODES[@]}" -lt "$NUM_NODES_REQUIRED" ]]; then
+            echo "ERROR: Need ${NUM_NODES_REQUIRED} MI300X nodes but only ${#CANDIDATE_NODES[@]} candidates remain after exclusions." >&2
+            echo "MI300X node inventory checked: ${MI300X_NODE_INVENTORY}" >&2
+            echo "SLURM_EXCLUDE_NODES=${SLURM_EXCLUDE_NODES:-}" >&2
+            exit 1
+        fi
+
+        REQUESTED_NODELIST=$(IFS=,; echo "${CANDIDATE_NODES[*]}")
         discovery_start=$(date +%s)
 
         while true; do
-            SELECTED_NODES=("$SUBMIT_HOST")
-            echo "Building NODELIST with submit host first: ${SUBMIT_HOST}"
-
-            for candidate in $MI300X_NODE_INVENTORY; do
-                [[ -n "$candidate" ]] || continue
-                [[ "$candidate" == "$SUBMIT_HOST" ]] && continue
-                if [[ ",${SLURM_EXCLUDE_NODES}," == *",${candidate},"* ]]; then
-                    echo "Skipping excluded NODELIST candidate: $candidate"
-                    continue
-                fi
-
-                if timeout 20s srun --nodes=1 --ntasks=1 --time=00:02:00 --partition="$SLURM_PARTITION" --nodelist="$candidate" \
-                    bash -lc "test -d /tmp && test -w /tmp" >/dev/null 2>&1; then
-                    SELECTED_NODES+=("$candidate")
-                    echo "Added NODELIST candidate with writable /tmp: $candidate"
-                else
-                    echo "Skipping NODELIST candidate without writable /tmp: $candidate"
-                fi
-
-                if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
-                    break
-                fi
-            done
-
-            if [[ "${#SELECTED_NODES[@]}" -eq "$NUM_NODES_REQUIRED" ]]; then
+            if allocate_nodes "$REQUESTED_NODELIST"; then
                 break
             fi
 
             now=$(date +%s)
             elapsed=$((now - discovery_start))
             if (( elapsed >= NODELIST_DISCOVERY_TIMEOUT )); then
-                echo "ERROR: Need ${NUM_NODES_REQUIRED} nodes for multinode job but found ${#SELECTED_NODES[@]} usable nodes with writable /tmp for staging after ${elapsed}s." >&2
-                echo "Selected nodes so far: ${SELECTED_NODES[*]}" >&2
+                echo "ERROR: Failed to allocate ${NUM_NODES_REQUIRED} exclusive MI300X nodes after ${elapsed}s." >&2
+                echo "Requested NODELIST=${REQUESTED_NODELIST}" >&2
                 echo "MI300X node inventory checked: ${MI300X_NODE_INVENTORY}" >&2
                 sinfo -N -p "$SLURM_PARTITION" -o "%N %T" >&2 || true
                 exit 1
             fi
 
-            echo "Only found ${#SELECTED_NODES[@]}/${NUM_NODES_REQUIRED} usable nodes; retrying in ${NODELIST_DISCOVERY_INTERVAL}s..."
+            echo "Allocation not available yet; retrying in ${NODELIST_DISCOVERY_INTERVAL}s..."
             sleep "$NODELIST_DISCOVERY_INTERVAL"
         done
 
-        NODELIST=$(IFS=,; echo "${SELECTED_NODES[*]}")
-        export NODELIST
-        echo "Using generated NODELIST=${NODELIST}"
     else
         echo "Using caller-provided NODELIST=${NODELIST}"
         IFS=',' read -r -a SELECTED_NODES <<< "$NODELIST"
+        if ! allocate_nodes "$NODELIST"; then
+            echo "ERROR: Failed to allocate caller-provided NODELIST=${NODELIST}" >&2
+            exit 1
+        fi
     fi
 
-    SANITIZED_RUNNER=$(printf '%s' "${RUNNER_NAME:-runner}" | tr -c 'a-zA-Z0-9_.-' '_')
-    STAGED_WORKSPACE="/tmp/inferencex-${USER}-${GITHUB_RUN_ID:-manual}-${SANITIZED_RUNNER}"
-    JOB_BENCHMARK_LOGS_DIR="${STAGED_WORKSPACE}/benchmark_logs"
+    ALLOC_NODELIST=$(squeue -h -j "$STAGING_ALLOCATION_ID" -o '%N')
+    if [[ -z "$ALLOC_NODELIST" ]]; then
+        echo "ERROR: Failed to resolve nodelist for allocation ${STAGING_ALLOCATION_ID}" >&2
+        exit 1
+    fi
+    mapfile -t SELECTED_NODES < <(scontrol show hostnames "$ALLOC_NODELIST")
+    NODELIST=$(IFS=,; echo "${SELECTED_NODES[*]}")
+    echo "Using allocated NODELIST=${NODELIST} from allocation ${STAGING_ALLOCATION_ID}"
 
+    export NODELIST
+    export SLURM_REUSE_JOBID="$STAGING_ALLOCATION_ID"
+    export SLURM_JOB_NODELIST="$ALLOC_NODELIST"
+    export SLURM_NODELIST="$ALLOC_NODELIST"
+
+    stage_workspace_local
     for node in "${SELECTED_NODES[@]}"; do
-        echo "Staging workspace to ${node}:${STAGED_WORKSPACE}"
-        tar \
-            --exclude='./benchmark_logs' \
-            --exclude='./benchmark_artifacts' \
-            --exclude='./multinode_server_logs.tar.gz' \
-            --exclude='./.git' \
-            -C "$GITHUB_WORKSPACE" -cf - . | \
-            timeout 120s srun --nodes=1 --ntasks=1 --time=00:05:00 --partition="$SLURM_PARTITION" --nodelist="$node" \
-                bash -lc "rm -rf '$STAGED_WORKSPACE' && mkdir -p '$STAGED_WORKSPACE' '$JOB_BENCHMARK_LOGS_DIR' && tar -C '$STAGED_WORKSPACE' -xf - && test -f '$STAGED_WORKSPACE/benchmarks/multi_node/amd_utils/job.slurm' && test -d '$JOB_BENCHMARK_LOGS_DIR'"
-        stage_status=("${PIPESTATUS[@]}")
-        if [[ "${stage_status[0]}" -ne 0 || "${stage_status[1]}" -ne 0 ]]; then
+        if [[ "$node" == "$SUBMIT_HOST" ]]; then
+            echo "Skipping remote staging for local allocation node ${node}"
+            continue
+        fi
+        if ! stage_workspace_remote "$node"; then
             echo "ERROR: Failed to stage workspace on ${node}" >&2
             exit 1
         fi
@@ -236,26 +339,50 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     fi
 
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
+    REUSE_JOB_PID_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.pid"
 
     sleep 10
 
     while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
-            echo "ERROR: Job $JOB_ID failed before creating log file"
-            scontrol show job "$JOB_ID" || true
-            save_multinode_diagnostics
-            exit 1
+        if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
+            if [[ ! -f "$REUSE_JOB_PID_FILE" ]]; then
+                echo "ERROR: Missing reused job pid file $REUSE_JOB_PID_FILE before log file was created"
+                save_multinode_diagnostics
+                exit 1
+            fi
+            REUSE_JOB_PID=$(<"$REUSE_JOB_PID_FILE")
+            if [[ ! "$REUSE_JOB_PID" =~ ^[0-9]+$ ]] || ! kill -0 "$REUSE_JOB_PID" 2>/dev/null; then
+                echo "ERROR: Reused job $JOB_ID exited before creating log file"
+                save_multinode_diagnostics
+                exit 1
+            fi
+        else
+            if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
+                echo "ERROR: Job $JOB_ID failed before creating log file"
+                scontrol show job "$JOB_ID" || true
+                save_multinode_diagnostics
+                exit 1
+            fi
         fi
         sleep 5
     done
 
     set +x
 
-    (
-        while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
-            sleep 10
-        done
-    ) &
+    if [[ -n "${SLURM_REUSE_JOBID:-}" ]]; then
+        REUSE_JOB_PID=$(<"$REUSE_JOB_PID_FILE")
+        (
+            while kill -0 "$REUSE_JOB_PID" 2>/dev/null; do
+                sleep 10
+            done
+        ) &
+    else
+        (
+            while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
+                sleep 10
+            done
+        ) &
+    fi
     POLL_PID=$!
 
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
