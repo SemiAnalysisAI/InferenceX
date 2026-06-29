@@ -40,6 +40,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export MODEL_PATH="/raid/hf-hub-cache"
     export IBDEVICES="bnxt_re0,bnxt_re1,bnxt_re2,bnxt_re3,bnxt_re4,bnxt_re5,bnxt_re6,bnxt_re7"
     export MORI_RDMA_TC=104
+    export VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260629-e667ebb}"
 
     export MODEL_DIR="$MODEL_PATH"
     export GPUS_PER_NODE=8
