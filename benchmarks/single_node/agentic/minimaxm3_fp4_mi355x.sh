@@ -170,7 +170,7 @@ case "$OFFLOADING" in
         # ZMQ-style host string.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
         LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_PARTITION_GB))}"
-        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
+        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-500}"
         # LMCache read locks are leases on chunks that lookup has promised
         # vLLM can retrieve. The default 300s TTL is too short for this
         # long-context agentic queue: TP8/conc32 can spend >300s between
@@ -181,9 +181,9 @@ case "$OFFLOADING" in
         # (srok) check 256 vs 32
         #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
         LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
+        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$((TP * 2))}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
-        export LMCACHE_BLOCKING_TIMEOUT_SECS=240
+        export LMCACHE_BLOCKING_TIMEOUT_SECS=60
 
         echo "Starting LMCache MP server..."
         LMCACHE_CMD=(
