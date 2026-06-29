@@ -13,10 +13,17 @@
 set -uo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; CXDIR="$(cd "$HERE/.." && pwd)"
 WF="collectivex-experimental.yml"; REF="${CX_REF:-collectivex}"; DRY=0; SUITE=""; ALL=0; ONLYSKU=""
+V2=0; BACKEND_OVERRIDE=""   # full-parity knobs (see below)
 SLEEP="${CX_DISPATCH_SLEEP:-6}"
+# --deepep-v2     : add -f deepep_v2=true to every deepep dispatch (kernel_gen=v2 from-source build).
+# --backend NAME  : remap the suite's `deepep` cases onto NAME (uccl|flashinfer|deepep-hybrid|nccl-ep)
+#                   so the full V1 matrix runs for that library too; capability-invalid cases are
+#                   pre-filtered (so we never fire a dispatch the Validate-capability step would reject).
 while [ $# -gt 0 ]; do case "$1" in
   --suite) SUITE="$2"; shift 2;; --all) ALL=1; shift;; --dry) DRY=1; shift;;
   --only-sku) ONLYSKU="$2"; shift 2;;   # dispatch only this SKU's cases (e.g. backfill one chip)
+  --deepep-v2) V2=1; shift;;
+  --backend) BACKEND_OVERRIDE="$2"; shift 2;;
   --ref) REF="$2"; shift 2;; *) echo "unknown arg: $1" >&2; exit 2;; esac; done
 
 suites_list() { python3 -c "import yaml;print(' '.join(yaml.safe_load(open('$CXDIR/configs/suites.yaml'))['suites']))"; }
@@ -25,7 +32,7 @@ suites_list() { python3 -c "import yaml;print(' '.join(yaml.safe_load(open('$CXD
 
 # Resolve one suite -> pipe-separated dispatch tuples (one per UNIQUE workflow_dispatch input set).
 emit_tuples() {  # suite
-  CX_ONLYSKU="$ONLYSKU" python3 - "$1" "$CXDIR" <<'PY'
+  CX_ONLYSKU="$ONLYSKU" CX_BACKEND_OVERRIDE="$BACKEND_OVERRIDE" python3 - "$1" "$CXDIR" <<'PY'
 import sys, os, json, subprocess
 suite, cxdir = sys.argv[1], sys.argv[2]
 import yaml
@@ -58,6 +65,23 @@ for c in m["cases"]:
     beng = c["backend"]
     if beng not in ("deepep", "mori"):   # collectives aren't EP suites
         continue
+    # --backend override: remap the deepep matrix onto another NVIDIA EP library (mori stays AMD).
+    ov = os.environ.get("CX_BACKEND_OVERRIDE", "")
+    if ov and beng == "deepep":
+        beng = ov
+    # capability pre-filter: skip cases the target backend can't run (e.g. flashinfer has no LL,
+    # deepep-hybrid is bf16/normal/layout only) so we never fire a doomed dispatch.
+    try:
+        if os.path.join(cxdir, "tests") not in sys.path:
+            sys.path.insert(0, os.path.join(cxdir, "tests"))
+        import capability as _cap
+        _ok, _r = _cap.resolve(plat, beng, mode=c["mode"], dtype=c["dtype"], contract=c["contract"],
+                               routing=c["routing"], eplb=bool(c.get("eplb")),
+                               activation_profile=c.get("activation_profile", "normal"))
+        if not _ok:
+            continue
+    except Exception:
+        pass
     sku = SKU.get(plat, plat)
     only = os.environ.get("CX_ONLYSKU", "")
     if only and sku != only:
@@ -94,6 +118,7 @@ fire_tuple() {  # pipe-separated tuple
   # (variable per-rank gt) AND with routing_step != 0 (make_workloads has no step-specific trace).
   # Those diagnostic suites run seeded-runtime (comparable-experimental).
   [ "$uneven" = none ] && [ "$rstep" = 0 ] && a+=( -f canonical=true )
+  [ "$V2" = 1 ] && a+=( -f deepep_v2=true )   # DeepEP V2 from-source build (kernel_gen=v2)
   [ "$eplb" = true ] && a+=( -f eplb=true )
   [ "$rstep" != 0 ] && a+=( -f routing_step="$rstep" )
   [ -n "$hidden" ]   && a+=( -f hidden="$hidden" )
