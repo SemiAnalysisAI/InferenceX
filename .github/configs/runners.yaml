@@ -79,6 +79,17 @@ b200:
 - 'b200-dgxc_07'
 - 'b200-dgxc_08'
 - 'b200-dgxc_09'
+b200-dgxc:
+- 'b200-dgxc_00'
+- 'b200-dgxc_01'
+- 'b200-dgxc_02'
+- 'b200-dgxc_03'
+- 'b200-dgxc_04'
+- 'b200-dgxc_05'
+- 'b200-dgxc_06'
+- 'b200-dgxc_07'
+- 'b200-dgxc_08'
+- 'b200-dgxc_09'
 b200-multinode:
 - 'b200-dgxc-slurm_7'
 - 'b200-dgxc-slurm_8'
@@ -107,6 +118,7 @@ mi325x:
 - 'mi325x-amds_06'
 - 'mi325x-amds_07'
 - 'mi325x-amds_08'
+- 'mi325x-amds_09'
 mi325x-disagg:
 - 'mi325x-amds_00'
 - 'mi325x-amds_01'
@@ -149,8 +161,3 @@ gb300:
 - 'gb300-nv_0'
 - 'gb300-nv_1'
 - 'gb300-nv_2'
-gb300-cw:
-- 'gb300-cw_0'
-- 'gb300-cw_1'
-- 'gb300-cw_2'
-- 'gb300-cw_3'

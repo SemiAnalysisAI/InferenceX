@@ -41,13 +41,12 @@ fi
 
 nvidia-smi
 
-# Common SGLANG env vars (apply to every config).
-export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
+# Common SGLANG env vars.
+export SGLANG_JIT_DEEPGEMM_FAST_WARMUP=1
+export SGLANG_RADIX_FORCE_MISS=1
+export SGLANG_DEFAULT_THINKING=1
+export SGLANG_DSV4_REASONING_EFFORT=max
 export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
-export SGLANG_OPT_USE_JIT_NORM=1
-export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
-export SGLANG_OPT_USE_TOPK_V2=1
-export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 
 # TODO(Cam): the deepseek-v4 sglang images install sglang editable at
 # /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
@@ -75,18 +74,16 @@ DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}
 if [ "${DP_ATTENTION}" = "true" ]; then
     # DP-attn path: flashinfer_mxfp4 + DP-attn (covers conc 16-256).
     export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=0
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=0
-    export SGLANG_OPT_USE_FAST_MASK_EP=1
-    export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
-    export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=8192
+    export SGLANG_REQUEST_STATE_WAIT_TIMEOUT=60
     SPEC_FLAGS=(
         --speculative-algorithm EAGLE
-        --speculative-num-steps 1
+        --speculative-num-steps 3
         --speculative-eagle-topk 1
-        --speculative-num-draft-tokens 2
+        --speculative-num-draft-tokens 4
     )
     export SPEEDBENCH_NUM_SPEC_TOKENS=1
     PARALLEL_ARGS=(
@@ -96,6 +93,7 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --disable-flashinfer-autotune
         --deepep-config "$DEEPEP_CONFIG"
         --cuda-graph-max-bs 256
+        --enable-deepseek-v4-fp4-indexer
     )
     CHUNKED_PREFILL_SIZE=32768
     MEM_FRACTION_STATIC=0.92
@@ -112,6 +110,7 @@ else
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
         --disable-flashinfer-autotune
+        --enable-deepseek-v4-fp4-indexer
     )
     CHUNKED_PREFILL_SIZE=8192
     MEM_FRACTION_STATIC=0.90

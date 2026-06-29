@@ -25,6 +25,8 @@ echo ""
 # at runtime, but the CWD remains the submit-time directory (amd_utils/).
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     MODELS_YAML="$(pwd)/models_vllm.yaml"
+elif [[ "$ENGINE" == "atom-disagg" ]]; then
+    MODELS_YAML="$(pwd)/models_atom.yaml"
 else
     MODELS_YAML="$(pwd)/models.yaml"
 fi
@@ -78,7 +80,6 @@ if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
     export EXTRA_DOCKER_MOUNTS
     echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
 fi
-
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -313,8 +314,10 @@ export IS_MULTINODE="${IS_MULTINODE:-false}"
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
-# vLLM external router container
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260511-e667ebb}"
+# vLLM external router container.
+# NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
+# dated tags are garbage-collected (manifest unknown)
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260617-e667ebb}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
@@ -361,6 +364,7 @@ DOCKER_ENV_COMMON=(
     -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO
     -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
+    -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
     -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
@@ -368,7 +372,7 @@ DOCKER_ENV_COMMON=(
     -e WS_PATH=${WS_PATH}
     -e RUN_EVAL=\$RUN_EVAL
     -e EVAL_ONLY=\$EVAL_ONLY
-    -e EVAL_CONC=\$EVAL_CONC
+    -e \"EVAL_CONC=\$EVAL_CONC\"
     -e FRAMEWORK=\$FRAMEWORK
     -e PRECISION=\$PRECISION
     -e MODEL_PREFIX=\$MODEL_PREFIX
@@ -399,8 +403,23 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e UCX_LOG_LEVEL=warn
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
-        -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
+    )
+elif [[ "$ENGINE" == "atom-disagg" ]]; then
+    DOCKER_ENV_ENGINE=(
+        -e ATOM_WS_PATH=${WS_PATH}
+        -e PREFILL_PORT=${PREFILL_PORT:-8010}
+        -e DECODE_PORT=${DECODE_PORT:-8020}
+        -e ROUTER_PORT=${ROUTER_PORT:-30000}
+        -e HANDSHAKE_PORT=${HANDSHAKE_PORT:-6301}
+        -e MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.85}
+        -e KV_CACHE_DTYPE=${KV_CACHE_DTYPE:-fp8}
+        -e BLOCK_SIZE=${BLOCK_SIZE:-16}
+        -e MAX_NUM_SEQS=${MAX_NUM_SEQS:-256}
+        -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
+        -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
+        -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
+        -e IBDEVICES=${IBDEVICES:-}
     )
 else
     DOCKER_ENV_ENGINE=(
@@ -424,6 +443,84 @@ echo \"Rank \$SLURM_PROCID on \$(hostname)\"
 # Per-node docker privilege detection
 eval \"\$DOCKER_CMD_DETECT\"
 echo \"[docker-detect] rank \$SLURM_PROCID: DOCKER_CMD=\$DOCKER_CMD\"
+
+# Enable out-of-tree RDMA library mounts for atom-disagg (mooncake requires host RDMA stack)
+RDMA_MOUNTS=()
+if [[ "$ENGINE" == "atom-disagg" ]]; then
+
+# When the container base OS differs from the host (e.g. Ubuntu 24.04 image
+# on a 22.04 host), the container's bundled libibverbs/libionic may be
+# ABI-incompatible with the host kernel drivers.  Detect the NIC type and
+# bind-mount the host's out-of-tree RDMA userspace libraries into the
+# container so the RDMA stack always matches the running kernel.
+_detect_nic_type() {
+    if [[ -n \"\${MORI_NIC_TYPE:-}\" ]]; then echo \"\$MORI_NIC_TYPE\"; return; fi
+    local bnxt=0 mlx5=0 ionic=0
+    if [[ -d /sys/class/infiniband ]]; then
+        for dev in /sys/class/infiniband/*; do
+            local name; name=\$(basename \"\$dev\")
+            case \"\$name\" in
+                bnxt_re*) ((bnxt++)) ;; mlx5*) ((mlx5++)) ;; ionic*) ((ionic++)) ;;
+                *)
+                    local drv; drv=\$(basename \"\$(readlink -f \"\$dev/device/driver\" 2>/dev/null)\" 2>/dev/null || true)
+                    case \"\$drv\" in bnxt*) ((bnxt++)) ;; mlx5*) ((mlx5++)) ;; ionic*) ((ionic++)) ;; esac ;;
+            esac
+        done
+    fi
+    if (( bnxt >= mlx5 && bnxt >= ionic && bnxt > 0 )); then echo bnxt
+    elif (( ionic >= mlx5 && ionic > 0 )); then echo ionic
+    else echo mlx5; fi
+}
+
+_find_host_ibverbs() {
+    for c in /usr/lib64/libibverbs.so.1 /lib/x86_64-linux-gnu/libibverbs.so.1 /usr/lib/x86_64-linux-gnu/libibverbs.so.1.14.39.0 /usr/lib/x86_64-linux-gnu/libibverbs.so.1; do
+        local r; r=\$(readlink -f \"\$c\" 2>/dev/null || true)
+        [[ \"\$r\" == *libibverbs.so.1.14.57.0 ]] && continue
+        if [[ -f \"\$r\" ]]; then echo \"\$r\"; return; fi
+    done
+}
+
+_NIC_TYPE=\$(_detect_nic_type)
+echo \"[rdma] NIC type: \${_NIC_TYPE} on \$(hostname)\"
+
+if [[ \"\$_NIC_TYPE\" == \"ionic\" || \"\$_NIC_TYPE\" == \"bnxt\" ]]; then
+    _host_ibv=\$(_find_host_ibverbs)
+    if [[ -n \"\$_host_ibv\" ]]; then
+        RDMA_MOUNTS+=(-v \"\$_host_ibv:/lib/x86_64-linux-gnu/libibverbs.so.1\")
+    fi
+fi
+
+if [[ \"\$_NIC_TYPE\" == \"ionic\" ]]; then
+    for _dir in /usr/local/lib /usr/lib/x86_64-linux-gnu; do
+        for _lib in \"\$_dir\"/libionic*.so; do
+            [[ -f \"\$_lib\" ]] || continue
+            _real=\$(readlink -f \"\$_lib\")
+            [[ -f \"\$_real\" ]] && RDMA_MOUNTS+=(-v \"\$_real:\$_real\")
+            RDMA_MOUNTS+=(-v \"\$_lib:/usr/lib/x86_64-linux-gnu/\$(basename \"\$_lib\")\")
+        done
+    done
+    if [[ -d /usr/lib/x86_64-linux-gnu/libibverbs ]]; then
+        for _lib in /usr/lib/x86_64-linux-gnu/libibverbs/libionic-rdmav*.so; do
+            [[ -f \"\$_lib\" ]] && RDMA_MOUNTS+=(-v \"\$_lib:\$_lib\")
+        done
+    fi
+    [[ -d /etc/libibverbs.d ]] && RDMA_MOUNTS+=(-v /etc/libibverbs.d:/etc/libibverbs.d:ro)
+elif [[ \"\$_NIC_TYPE\" == \"bnxt\" ]]; then
+    for _lib in /usr/local/lib/libbnxt_re-rdmav*.so; do
+        [[ -f \"\$_lib\" ]] && RDMA_MOUNTS+=(-v \"\$_lib:/usr/lib/x86_64-linux-gnu/libibverbs/\$(basename \"\$_lib\")\")
+    done
+    for _lib in /usr/local/lib/libbnxt_re.so; do
+        [[ -f \"\$_lib\" ]] && RDMA_MOUNTS+=(-v \"\$_lib:/usr/lib/x86_64-linux-gnu/\$(basename \"\$_lib\")\")
+    done
+    [[ -d /etc/libibverbs.d ]] && RDMA_MOUNTS+=(-v /etc/libibverbs.d:/etc/libibverbs.d:ro)
+fi
+
+if [[ \${#RDMA_MOUNTS[@]} -gt 0 ]]; then
+    echo \"[rdma] bind-mounts: \${RDMA_MOUNTS[*]}\"
+else
+    echo \"[rdma] no out-of-tree RDMA mounts needed\"
+fi
+fi  # end: if ENGINE == atom-disagg
 
 # Pre-clean (idempotent)
 \$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
@@ -490,6 +587,7 @@ fi
     -v ${BENCHMARK_LOGS_DIR}:/benchmark_logs \
     -v ${DI_REPO_DIR}:${DOCKER_MOUNT_PATH} \
     ${EXTRA_DOCKER_MOUNTS:-} \
+    \${RDMA_MOUNTS[@]+"\${RDMA_MOUNTS[@]}"} \
     ${DOCKER_ENV_COMMON[*]} \
     ${DOCKER_ENV_ENGINE[*]} \
     --name \"$DOCKER_CONT_NAME\" \

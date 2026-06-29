@@ -73,7 +73,7 @@ permissions:
   contents: read
 
 env:
-  HF_TOKEN: ${{ secrets.HF_TOKEN }}
+  HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
   HF_HUB_CACHE: '/mnt/hf_hub_cache/'
   # Drive the single-node path in runners/launch_b300-nv.sh. MODEL is the HF id;
   # its basename (e.g. DeepSeek-V4-Pro) must be in the launcher's STAGED_MODELS so
@@ -207,6 +207,17 @@ jobs:
         with:
           name: speedbench_server_logs-${{ inputs.model-prefix }}
           path: speedbench_results/server_*.log
+          if-no-files-found: ignore
+
+      # Per-request benchmark detail (vllm bench serve --save-detailed): includes
+      # the model's response text per request, so the AL of each cell can be
+      # audited for output correctness (sensible text + correct thinking mode).
+      - name: Upload detailed benchmark results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: speedbench_detailed_results-${{ inputs.model-prefix }}
+          path: speedbench_results/speedbench_*
           if-no-files-found: ignore
 
       - name: Resource cleanup (post-run)

@@ -18,7 +18,7 @@ name: "disagg-gb300-1p1d-dep4-dep16-5-c1024"
 # (which has no dynamo baked in) installs from the pinned hash.
 #
 # Cluster-specific items NOT inlined (require InferenceX-side equivalents):
-#   - slurm.partition (yangminl's gb300-cw uses `hpc-mid`)
+#   - slurm.partition (the source cluster uses `hpc-mid`)
 #   - frontend.nginx_container (yangminl's `nginx-1.27.4.sqsh` path)
 #   - extra_mount: yangminl/sglang-patched/sglang. Earlier diff analysis
 #     showed only `expert_location_dispatch.py` topk_ids int32 cast is an

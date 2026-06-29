@@ -1,22 +1,41 @@
 # Evals
 
-## What?
-Quick graded QnA which measures model performance. Examples of test suites:
-- **gsm8k**: Grade school math questions
-- **gpqa**: Graduate level, Google-Proof multiple choice questions
+Graded QA jobs (`gsm8k`, `gpqa`) catch accuracy regressions from parallelism,
+concurrency, kernels, and other throughput optimizations. They run separately
+from throughput; selection lives in `mark_eval_entries()` in
+`utils/matrix_logic/generate_sweep_configs.py`.
 
-## When?
-Evals run as **separate workflow jobs** from throughput benchmarks. The selection logic is in `mark_eval_entries()` of `utils/matrix_logic/generate_sweep_configs.py`.
+## Selection
 
-**Single-node**: At the highest and median concurrency levels (all TPs), per (model, runner, framework, precision, ISL, OSL, spec-decoding, dp-attn), only for 8k1k.
+- **Single-node:** 8k1k only; highest and median concurrency for every model,
+  runner, framework, precision, TP, and decoding configuration.
+- **Multi-node:** 8k1k only; one job per parallelism topology at its highest
+  eligible concurrency. Rows differing only by concurrency share a topology.
 
-**Multi-node**: One entry per (model, runner, framework, precision, spec-decoding, prefill-dp-attn, decode-dp-attn) with the highest max eligible concurrency, only for 8k1k. The eval job runs at `eval-conc`, the upper median of that config's eligible concurrency list.
+Generator eval modes:
 
-## Why?
-To verify how model outputs are affected by throughput optimizations.
-- TP/Conc might affect model outputs
-- Check kernel implementations for correctness
-- If there was a tradeoff in accuracy for performance
+- Default: throughput plus the selected eval subset.
+- `--no-evals`: throughput only.
+- `--evals-only`: selected evals only.
+- `--all-evals`: every fixed-sequence eval only; equivalent to
+  `--evals-only --all-evals`. Multi-node topologies run all `conc-list` values
+  sequentially on one engine. Agentic configs are excluded.
+
+Changelog entries use `evals-only: true` and `all-evals: true`; `all-evals`
+implies eval-only there. On PRs, the same names are modifier labels:
+`all-evals` expands coverage without suppressing throughput, while `evals-only`
+suppresses it. Modifier runs cannot be reused.
+
+Deduplication is scenario-aware: fixed-sequence coverage does not suppress
+agentic coverage, and `all-evals` wins over default eval coverage.
+
+### Artifact reuse
+
+Default full sweeps may reuse their eval subset. Source coverage is
+authoritative: raw `meta_env.json` identities must match `eval_results_all`,
+and batched evals use `completed_eval_concs`. Policy drift is allowed;
+malformed metadata, duplicates, or raw/aggregate mismatches are not. See
+[workflow reuse](../../.github/workflows/README.md#reusing-an-approved-pr-full-sweep).
 
 ## How?
 `run_eval` in `benchmarks/benchmark_lib.sh` runs EleutherAI/lm-evaluation-harness against the server's OpenAI-compatible endpoint. Concurrency is set via `EVAL_CONCURRENT_REQUESTS` env var (not a CLI flag). Results are collected by `utils/collect_eval_results.py` and published as a summary table.
@@ -34,7 +53,6 @@ All benchmark scripts in `benchmarks/` follow one of two flows:
 # 3. run_benchmark_serving (skipped automatically when EVAL_ONLY=true)
 # 4. Run evals:
 if [ "${RUN_EVAL}" = "true" ]; then
-    # MTP evals also run SpeedBench AL validation first when a reference exists.
     run_eval --framework lm-eval --port "$PORT"
     append_lm_eval_summary  # Writes meta_env.json and moves artifacts
 fi
@@ -52,7 +70,6 @@ Key eval functions in `benchmarks/benchmark_lib.sh`:
 | Function | Description |
 |----------|-------------|
 | `run_eval` | Unified entrypoint - dispatches to framework-specific runner |
-| `run_speedbench_al_eval` | Runs SpeedBench on MTP eval jobs, records measured acceptance length, and defers threshold failure to `validate_scores.py` |
 | `run_lm_eval` | Runs lm-eval harness against the OpenAI-compatible endpoint |
 | `append_lm_eval_summary` | Writes `meta_env.json` and moves eval artifacts to workspace |
 | `_install_lm_eval_deps` | Installs lm-eval dependencies |
@@ -80,6 +97,8 @@ Multi-node evals support two hardware paths:
 - Eval artifacts written to `/logs/eval_results/` inside the container, collected by launch scripts
 - NVIDIA Slurm launch scripts always collect server logs for debugging but skip benchmark result collection when `EVAL_ONLY=true`
 - Env vars threaded: `RUN_EVAL`, `EVAL_ONLY`, `IS_MULTINODE`, `FRAMEWORK`, `PRECISION`, `MODEL_PREFIX`, `RUNNER_TYPE`, `RESULT_FILENAME`, `SPEC_DECODING`, `ISL`, `OSL`, `PREFILL_TP/EP/NUM_WORKERS/DP_ATTN`, `DECODE_TP/EP/NUM_WORKERS/DP_ATTN`, `MODEL_NAME`, `EVAL_CONC`
+
+For multi-node `all-evals`, `EVAL_CONC` is a space-separated list. When it contains multiple values, `run_eval` runs those concurrency points sequentially against the same live engine, stages each result with a `_concN` filename suffix, and records expected/completed/failed points in `meta_env.json`.
 
 ### Workflow structure
 - `e2e-tests.yml`: `test-sweep-evals` (single-node) and `test-sweep-multi-node-evals` (multi-node)
@@ -132,20 +151,20 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_TASKS_DIR` | `utils/evals/gsm8k.yaml` | Path to lm-eval task YAML |
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
-| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval |
-| `SPEEDBENCH_DIR` | `$(pwd)/speed_bench_data` | Prepared SpeedBench dataset directory; resolves to `/workspace/speed_bench_data` or `/ix/speed_bench_data` through the runner's container workdir |
+| `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
+| `SPEEDBENCH_DIR` | `$(pwd)/speed_bench_data` | Prepared SpeedBench dataset directory |
 | `SPEEDBENCH_NUM_SPEC_TOKENS` | script-provided or `2` | MTP level used to select the reference AL row |
-| `SPEEDBENCH_METRICS_FRAMEWORK` | `FRAMEWORK` or `vllm` | Override speculative metrics parser. Supports `vllm`, `sglang`, `trtllm`/`trt`, and `dynamo-*` variants |
-| `SPEEDBENCH_DECODE_METRICS_URLS` | unset | Comma/space-separated decode worker Prometheus `/metrics` URLs for disaggregated runs |
-| `SPEEDBENCH_METRICS_URLS` | unset | Generic comma/space-separated Prometheus endpoints when decode-specific naming is not applicable |
-| `SPEEDBENCH_METRICS_PORTS` | unset | Localhost Prometheus ports to scrape when full URLs are not supplied |
-| `SPEEDBENCH_TRTLLM_JSON_METRICS_URLS` | unset | Optional TRT-LLM JSON iteration-stats `/metrics` endpoints used when Prometheus spec metrics are unavailable |
-| `SPEEDBENCH_TRTLLM_SERVER_LOG` | `SERVER_LOG` | Optional TRT-LLM `print_iter_log` file used to derive SpeedBench AL from generation-token iteration logs when spec metrics are unavailable |
+| `SPEEDBENCH_METRICS_FRAMEWORK` | `FRAMEWORK` or `vllm` | Speculative metrics parser: `vllm`, `sglang`, `trtllm`, or a Dynamo variant |
+| `SPEEDBENCH_DECODE_METRICS_URLS` | unset | Decode-worker Prometheus endpoints for disaggregated runs |
+| `SPEEDBENCH_METRICS_URLS` | unset | Generic Prometheus endpoints |
+| `SPEEDBENCH_METRICS_PORTS` | unset | Localhost Prometheus ports when full URLs are unavailable |
+| `SPEEDBENCH_TRTLLM_JSON_METRICS_URLS` | unset | Optional TRT-LLM JSON iteration-stat endpoints |
+| `SPEEDBENCH_TRTLLM_SERVER_LOG` | `SERVER_LOG` | TRT-LLM iteration log used when spec metrics are unavailable |
 
-SpeedBench AL computes vLLM acceptance length from raw accepted-token and verify-step counters. TRT-LLM prefers its Prometheus acceptance-length gauge and token counters, then falls back to JSON `specDecodingStats` from `/metrics` when the Prometheus spec series are unavailable. Some TRT-LLM MTP configurations enable `print_iter_log` but do not expose `specDecodingStats`; for those, SpeedBench records the server-log byte offset before running SpeedBench and derives accepted/proposed/verify counters from the new `num_generation_tokens` iteration lines. If neither exact spec stats nor server logs are available, SpeedBench records acceptance length from `trtllm_avg_decoded_tokens_per_iter` or JSON `inflightBatchingStats.avgNumDecodedTokensPerIter` and leaves token counters empty. SGLang records its acceptance-length gauge, verify-call counter when present, and derived token counts. Dynamo/disaggregated runs scrape all configured decode endpoints when available, summing counters and averaging gauge-only AL values. The NVIDIA srt-slurm Dynamo eval path also writes a SpeedBench AL artifact from decode-worker `SpecDecoding metrics` log counters when the router eval path does not expose decode-worker metrics endpoints to the benchmarker.
+SpeedBench AL uses counter deltas over the eval request window. vLLM uses accepted-token and verify-step counters. SGLang uses generation-token and verify-call counters. TRT-LLM prefers Prometheus or JSON speculative metrics and falls back to iteration logs or average decoded tokens. Dynamo runs collect metrics from decode workers rather than the router.
 
 ### Score validation
-`utils/evals/validate_scores.py` checks lm-eval results against thresholds in `utils/evals/thresholds.json` and checks `results_speedbench_al_*.json` against the inclusive range from 95% to 105% of the golden AL. It runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
+`utils/evals/validate_scores.py` checks lm-eval results against `utils/evals/thresholds.json` and requires SpeedBench AL to be within 95% to 105% of its golden value. It runs after artifact upload so results are preserved when validation fails.
 
 ### Adding a new eval task
 

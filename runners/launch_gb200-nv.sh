@@ -4,11 +4,6 @@
 
 set -x
 
-USE_SHARED_GB200_WORKSPACE=false
-if [[ $MODEL_PREFIX == "minimaxm2.5" || $MODEL_PREFIX == "dsv4" ]]; then
-    USE_SHARED_GB200_WORKSPACE=true
-fi
-
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
@@ -21,11 +16,14 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/deepseek-r1-0528-fp4-v2/"
         export SRT_SLURM_MODEL_PREFIX="dsr1-fp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Same compute-node-local NVMe path as the dynamo-vllm dsv4
-        # branch — see that branch for rationale. SRT_SLURM_MODEL_PREFIX
-        # matches the model.path alias in our DSV4 sglang recipes.
-        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        # Lustre-resident weights staged on the GB200 external cluster.
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias in our
+        # DSV4 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
+    elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
+        export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
     else
         export MODEL_PATH=$MODEL
     fi
@@ -54,10 +52,7 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Weights live on compute-node local NVMe (/mnt/numa1) — no Lustre
-        # contention, fast startup. SRT_SLURM_MODEL_PREFIX matches the
-        # model.path alias in our DSV4 recipes.
-        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
@@ -65,8 +60,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5"
         export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
+    elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+        export MODEL_PATH="/mnt/lustre01/models/MiniMax-M3-MXFP8"
+        export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
     else
-        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8"
+        echo "Unsupported model prefix/precision combination: $MODEL_PREFIX/$PRECISION. Supported combinations for dynamo-vllm: kimik2.5/fp4, dsv4/fp4, minimaxm2.5/fp4, minimaxm2.5/fp8, minimaxm3/fp8"
         exit 1
     fi
 else
@@ -79,15 +77,22 @@ export SLURM_ACCOUNT="benchmark"
 
 NGINX_IMAGE="nginx:1.27.4"
 
-# === Cluster diagnostic probe for watchtower-hosted GB200 jobs ===
+uses_watchtower_shared_fs() {
+    case "$MODEL_PREFIX" in
+        dsv4|minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# === Cluster diagnostic probe for watchtower-hosted sweeps ===
 # The gb200-nv_* runners may be hosted on different physical clusters
 # (e.g., the legacy NVIDIA Lustre cluster vs Oracle Cloud "watchtower").
 # Print enough info to identify the layout, then pick a writable
 # squash dir on a path that's also visible to compute nodes. Falls
 # back to the legacy sa-shared path so other configs are untouched.
 SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if [[ "$USE_SHARED_GB200_WORKSPACE" == "true" ]]; then
-    echo "=== cluster diagnostic (shared GB200 workspace) ==="
+if uses_watchtower_shared_fs; then
+    echo "=== cluster diagnostic (watchtower sweep) ==="
     echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
     echo "HOME=$HOME"
     echo "HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
@@ -133,8 +138,27 @@ fi
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-enroot import -o $SQUASH_FILE docker://$IMAGE
-enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE
+# Concurrent matrix jobs import to the same shared-FS squash path.
+# Serialize imports and atomically replace invalid images so readers never
+# observe a partially written squash file.
+import_squash() {
+    local squash="$1" image="$2"
+    local lock="${squash}.lock"
+    (
+        exec 9>"$lock"
+        flock -w 1800 9 || { echo "Failed to acquire lock for $squash" >&2; exit 1; }
+        if unsquashfs -l "$squash" > /dev/null 2>&1; then
+            echo "Squash file already exists and is valid, skipping import: $squash"
+        else
+            rm -f "$squash" "$squash".tmp.*
+            enroot import -o "${squash}.tmp.$$" "docker://$image"
+            mv -f "${squash}.tmp.$$" "$squash"
+        fi
+    ) || exit 1
+}
+
+import_squash "$SQUASH_FILE" "$IMAGE"
+import_squash "$NGINX_SQUASH_FILE" "$NGINX_IMAGE"
 
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 
@@ -203,11 +227,12 @@ fi
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
+SRTCTL_SETUP_SCRIPT=""
 # On the watchtower (Oracle) gb200 cluster, /home/slurm-shared is not
 # cross-mounted to compute nodes. Put the srt-slurm workspace and staged
 # InferenceX checkout on a writable shared-FS path that compute can see.
 # Per-run-unique paths avoid races between parallel sweep jobs.
-if [[ "$USE_SHARED_GB200_WORKSPACE" == "true" ]]; then
+if uses_watchtower_shared_fs; then
     SHARED_BASE=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared/gha-runs \
@@ -254,15 +279,17 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
-    # Mirrors the dynamo-vllm dsv4 branch above: pin to the q2-2026
-    # NVIDIA srt-slurm (newer srtctl + dynamo-sglang container alias)
-    # and overlay our hand-rolled DSV4 sglang recipes. NVIDIA/srt-slurm
-    # has no upstream sglang DSV4 disagg recipes yet, hence the overlay.
+    # Stay on NVIDIA/srt-slurm:main (default) — submission branch no
+    # longer needed; overlay our hand-rolled DSV4 sglang recipes onto it.
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    mkdir -p recipes/sglang/qwen3.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -277,6 +304,22 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
         echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
         exit 1
     fi
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout sa-submission-q2-2026 || exit 1
+    mkdir -p recipes/vllm/minimax-m3-gb200-fp8 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb200-fp8" recipes/vllm/minimax-m3-gb200-fp8 || exit 1
+    SRTCTL_SETUP_SCRIPT="minimax-m3-gb200-vllm-fixes.sh"
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+        "configs/$SRTCTL_SETUP_SCRIPT" || exit 1
+elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
+    git checkout main || exit 1
+    mkdir -p recipes/vllm/kimi-k2.5-fp4 || exit 1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/kimi-k2.5-fp4" recipes/vllm/kimi-k2.5-fp4 || exit 1
 elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -300,7 +343,7 @@ source $HOME/.local/bin/env
 # under a head-node-only path, .venv/bin/python3 becomes a broken
 # symlink on compute. Pin the venv to /usr/bin/python3 — a system
 # path that exists at the same location on both head and compute.
-if [[ "$USE_SHARED_GB200_WORKSPACE" == "true" && -x /usr/bin/python3 ]]; then
+if uses_watchtower_shared_fs && [[ -x /usr/bin/python3 ]]; then
     uv venv --seed --python /usr/bin/python3
 else
     uv venv --seed
@@ -317,10 +360,10 @@ echo "Configs available at: $SRT_REPO_DIR/"
 
 # Create srtslurm.yaml for srtctl (used by both frameworks)
 SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
-# Watchtower-hosted jobs: SRT_REPO_DIR was moved to a shared-FS path
+# Watchtower-hosted sweeps: SRT_REPO_DIR was moved to a shared-FS path
 # above so srtctl's outputs/ directory (which lives under
 # SRTCTL_ROOT) is visible to compute nodes.
-if [[ "$USE_SHARED_GB200_WORKSPACE" == "true" ]]; then
+if uses_watchtower_shared_fs; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
 echo "Creating srtslurm.yaml configuration..."
@@ -362,7 +405,7 @@ export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
 # can't see. Stage the relevant subset to shared FS and repoint
 # INFMAX_WORKSPACE there. rsync excludes the srt-slurm clone (already
 # on shared FS) and .git (not needed in container) for speed.
-if [[ "$USE_SHARED_GB200_WORKSPACE" == "true" ]]; then
+if uses_watchtower_shared_fs; then
     SHARED_INFMAX_WORKSPACE="${SHARED_BASE}/infmax-workspace-${RUN_KEY}"
     mkdir -p "$SHARED_INFMAX_WORKSPACE" || exit 1
     rsync -a --delete \
@@ -387,11 +430,16 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
 fi
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+SRTCTL_APPLY_ARGS=(
+    -f "$CONFIG_PATH"
+    --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
-else
-    SRTCTL_OUTPUT=$(srtctl apply -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_APPLY_ARGS+=(--setup-script install-torchao.sh)
+elif [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
@@ -414,35 +462,7 @@ LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
 while ! ls "$LOG_FILE" &>/dev/null; do
     if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
         echo "ERROR: Job $JOB_ID failed before creating log file"
-        JOB_INFO=$(scontrol show job "$JOB_ID" 2>&1 || true)
-        echo "$JOB_INFO"
-        BOOTSTRAP_LOG=""
-        BOOTSTRAP_CANDIDATES=("outputs/sweep_${JOB_ID}.bootstrap.log")
-        SCONTROL_STDERR=$(printf '%s\n' "$JOB_INFO" | awk '{ for (i = 1; i <= NF; i++) if ($i ~ /^StdErr=/) { sub(/^StdErr=/, "", $i); print $i; exit } }')
-        if [ -n "$SCONTROL_STDERR" ]; then
-            BOOTSTRAP_CANDIDATES+=("$SCONTROL_STDERR")
-        fi
-        for candidate in "${BOOTSTRAP_CANDIDATES[@]}"; do
-            [ -n "$candidate" ] || continue
-            for _ in 1 2 3; do
-                if [ -f "$candidate" ]; then
-                    BOOTSTRAP_LOG="$candidate"
-                    break 2
-                fi
-                sleep 2
-            done
-        done
-        if [ -f "$BOOTSTRAP_LOG" ]; then
-            echo "Bootstrap log from $BOOTSTRAP_LOG:"
-            cat "$BOOTSTRAP_LOG"
-            if [ -n "${GITHUB_WORKSPACE:-}" ]; then
-                mkdir -p "$GITHUB_WORKSPACE/LOGS"
-                cp "$BOOTSTRAP_LOG" "$GITHUB_WORKSPACE/LOGS/" || true
-                tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$GITHUB_WORKSPACE/LOGS" . || true
-            fi
-        else
-            echo "Bootstrap log not found. Tried: ${BOOTSTRAP_CANDIDATES[*]}"
-        fi
+        scontrol show job "$JOB_ID"
         exit 1
     fi
     echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
@@ -531,9 +551,6 @@ fi
 # Collect eval results if eval was requested
 if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
     EVAL_DIR="$LOGS_DIR/eval_results"
-    if [[ "${FRAMEWORK:-}" == dynamo* && "${SPEC_DECODING:-none}" == "mtp" ]]; then
-        bash "$GITHUB_WORKSPACE/utils/evals/write_dynamo_speedbench_al_from_logs.sh" "$LOGS_DIR" "$GITHUB_WORKSPACE"
-    fi
     if [ -d "$EVAL_DIR" ]; then
         echo "Extracting eval results from $EVAL_DIR"
         shopt -s nullglob

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from tabulate import tabulate
@@ -9,10 +10,13 @@ from tabulate import tabulate
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from summarize import (
     load_json, MODEL, HARDWARE, FRAMEWORK, PRECISION,
-    TP, EP, CONC, DP_ATTENTION, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF,
+    ISL, OSL, TP, EP, CONC, DP_ATTENTION, TASK, SCORE,
+    EM_STRICT, EM_FLEXIBLE, N_EFF,
     SPEC_DECODING, PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
     DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS
 )
+
+CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def find_eval_sets(root: Path) -> List[Path]:
@@ -36,35 +40,61 @@ def find_eval_sets(root: Path) -> List[Path]:
     return out
 
 
-def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], List[Path]]:
-    """Return (lm_eval_json, speedbench_al_jsons) if present.
-    
-    Checks immediate directory for result JSONs.
+def result_concurrency(path: Path) -> Optional[int]:
+    """Extract a batched eval concurrency from a staged result filename."""
+    match = CONC_SUFFIX_RE.search(path.name)
+    return int(match.group(1)) if match else None
+
+
+def detect_lm_eval_jsons(d: Path, batched: bool = False) -> List[Path]:
+    """Return lm-eval result JSONs from one artifact directory.
+
+    Legacy artifacts contribute their latest result file. Batched artifacts
+    contribute the latest result file for each `_concN` suffix.
     """
-    immediate_jsons = sorted(
-        set(d.glob('results*.json')).union(
-            p for p in d.glob('*.json') if p.name != 'meta_env.json'
-        )
+    immediate_jsons = set(d.glob('results*.json'))
+    immediate_jsons.update(
+        p for p in d.glob('*.json') if p.name != 'meta_env.json'
     )
-    
-    lm_path = None
-    speedbench_paths: List[Path] = []
-    
+    lm_paths = []
+
     for p in immediate_jsons:
         data = load_json(p)
         if not isinstance(data, dict):
             continue
-            
         if 'lm_eval_version' in data:
-            # lm-eval harness - pick latest if multiple
-            if lm_path is None or p.stat().st_mtime > lm_path.stat().st_mtime:
-                lm_path = p
+            lm_paths.append(p)
 
-        if 'speedbench_al_eval_version' in data:
-            speedbench_paths.append(p)
+    if not lm_paths:
+        return []
+    if not batched:
+        return [max(lm_paths, key=lambda path: path.stat().st_mtime)]
 
-    speedbench_paths.sort()
-    return lm_path, speedbench_paths
+    latest_by_conc: Dict[int, Path] = {}
+    for path in lm_paths:
+        conc = result_concurrency(path)
+        if conc is None:
+            continue
+        current = latest_by_conc.get(conc)
+        if current is None or path.stat().st_mtime > current.stat().st_mtime:
+            latest_by_conc[conc] = path
+    return [latest_by_conc[conc] for conc in sorted(latest_by_conc)]
+
+
+def detect_speedbench_jsons(d: Path) -> List[Path]:
+    """Return compact SpeedBench AL result JSONs from one artifact directory."""
+    paths = []
+    for path in d.glob('results*.json'):
+        data = load_json(path)
+        if isinstance(data, dict) and 'speedbench_al_eval_version' in data:
+            paths.append(path)
+    return sorted(paths)
+
+
+def detect_eval_jsons(d: Path) -> Tuple[Optional[Path], List[Path]]:
+    """Return the latest legacy lm-eval JSON and all SpeedBench AL JSONs."""
+    lm_paths = detect_lm_eval_jsons(d)
+    return (lm_paths[0] if lm_paths else None), detect_speedbench_jsons(d)
 
 
 def extract_lm_metrics(json_path: Path) -> List[Dict[str, Any]]:
@@ -159,11 +189,10 @@ def extract_speedbench_al_metrics(json_path: Path) -> List[Dict[str, Any]]:
 
     mode = data.get('thinking_mode', 'unknown')
     mtp = data.get('num_speculative_tokens', 'unknown')
-    task_label = f"speedbench_al/{mode}/mtp{mtp}"
     return [{
         'metric_type': 'speedbench_al',
         'task': 'speedbench_al',
-        'task_label': task_label,
+        'task_label': f"speedbench_al/{mode}/mtp{mtp}",
         'acceptance_length': data.get('acceptance_length'),
         'reference_acceptance_length': data.get('reference_acceptance_length'),
         'min_acceptance_length': data.get('min_acceptance_length'),
@@ -249,6 +278,8 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         'framework': meta.get('framework', 'unknown').lower(),
         'precision': meta.get('precision', 'unknown').lower(),
         'spec_decoding': meta.get('spec_decoding', 'unknown'),
+        'isl': as_int(meta.get('isl', 0), 0),
+        'osl': as_int(meta.get('osl', 0), 0),
         'tp': as_int(meta.get('tp', prefill_tp), prefill_tp),
         'ep': as_int(meta.get('ep', prefill_ep), prefill_ep),
         'prefill_tp': prefill_tp,
@@ -305,13 +336,13 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
     return row
 
 
-def score_cell(r: Dict[str, Any]) -> str:
+def score_cell(row: Dict[str, Any]) -> str:
     """Format the primary score for lm-eval and non-percentage eval rows."""
-    if r.get('score_name') == 'acceptance_length':
-        score = r.get('score')
-        minimum = r.get('speedbench_min_acceptance_length')
-        maximum = r.get('speedbench_max_acceptance_length')
-        passed = r.get('speedbench_passed')
+    if row.get('score_name') == 'acceptance_length':
+        score = row.get('score')
+        minimum = row.get('speedbench_min_acceptance_length')
+        maximum = row.get('speedbench_max_acceptance_length')
+        passed = row.get('speedbench_passed')
         if score is None:
             return 'FAIL'
         try:
@@ -324,7 +355,40 @@ def score_cell(r: Dict[str, Any]) -> str:
             )
         except Exception:
             return str(score)
-    return f"{pct(r['score'])}{se(r['score_se'])}"
+    return f"{pct(row['score'])}{se(row['score_se'])}"
+
+
+def collect_eval_rows(root: Path) -> List[Dict[str, Any]]:
+    """Collect logical eval rows, expanding batched artifacts by concurrency."""
+    rows: List[Dict[str, Any]] = []
+    for d in find_eval_sets(root):
+        meta = load_json(d / 'meta_env.json') or {}
+        batch_concs = meta.get('eval_concs')
+        batched = isinstance(batch_concs, list)
+        allowed_concs: Optional[set[int]] = None
+        if batched:
+            completed_concs = meta.get('completed_eval_concs', batch_concs)
+            if isinstance(completed_concs, list):
+                allowed_concs = {as_int(conc, -1) for conc in completed_concs}
+
+        for lm_path in detect_lm_eval_jsons(d, batched=batched):
+            row_meta = meta
+            if batched:
+                conc = result_concurrency(lm_path)
+                if conc is None or (
+                    allowed_concs is not None and conc not in allowed_concs
+                ):
+                    continue
+                row_meta = {**meta, 'conc': conc}
+
+            metrics_list = extract_lm_metrics(lm_path)
+            for metrics in metrics_list:
+                rows.append(build_row(row_meta, metrics))
+
+        for speedbench_path in detect_speedbench_jsons(d):
+            for metrics in extract_speedbench_al_metrics(speedbench_path):
+                rows.append(build_row(meta, metrics))
+    return rows
 
 
 def main():
@@ -335,25 +399,7 @@ def main():
     root = Path(sys.argv[1])
     exp_name = sys.argv[2]
 
-    rows: List[Dict[str, Any]] = []
-    for d in find_eval_sets(root):
-        meta = load_json(d / 'meta_env.json') or {}
-        lm_path, speedbench_paths = detect_eval_jsons(d)
-
-        metrics_list: List[Dict[str, Any]] = []
-        # Extract metrics - lm-eval returns one row per task.
-        if lm_path:
-            metrics_list.extend(extract_lm_metrics(lm_path))
-        for speedbench_path in speedbench_paths:
-            metrics_list.extend(extract_speedbench_al_metrics(speedbench_path))
-
-        if not metrics_list:
-            continue
-
-        # Build row for each task in the results
-        for m in metrics_list:
-            row = build_row(meta, m)
-            rows.append(row)
+    rows = collect_eval_rows(root)
 
     single_node_rows = [r for r in rows if not r['is_multinode']]
     multinode_rows = [r for r in rows if r['is_multinode']]
@@ -363,24 +409,26 @@ def main():
     single_node_sort_key = (
         (lambda r: (
             r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
-            r['tp'], r['ep'], r['conc'],
+            r['isl'], r['osl'], r['tp'], r['ep'], r['conc'],
         ))
         if sort_by == 'hw'
         else (lambda r: (
             r['model_prefix'], r['hw'], r['framework'], r['precision'],
-            r.get('spec_decoding', ''), r['tp'], r['ep'], r['conc'],
+            r.get('spec_decoding', ''), r['isl'], r['osl'],
+            r['tp'], r['ep'], r['conc'],
         ))
     )
     multinode_sort_key = (
         (lambda r: (
             r['hw'], r['framework'], r['precision'], r.get('spec_decoding', ''),
+            r['isl'], r['osl'],
             r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
             r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
         ))
         if sort_by == 'hw'
         else (lambda r: (
             r['model_prefix'], r['hw'], r['framework'], r['precision'],
-            r.get('spec_decoding', ''),
+            r.get('spec_decoding', ''), r['isl'], r['osl'],
             r['prefill_tp'], r['prefill_ep'], r['prefill_num_workers'],
             r['decode_tp'], r['decode_ep'], r['decode_num_workers'], r['conc'],
         ))
@@ -397,7 +445,7 @@ def main():
         if single_node_rows:
             headers = [
                 MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
-                TP, EP, CONC, DP_ATTENTION,
+                ISL, OSL, TP, EP, CONC, DP_ATTENTION,
                 TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
             ]
             table_rows = [
@@ -407,6 +455,8 @@ def main():
                     r['framework'].upper(),
                     r['precision'].upper(),
                     r['spec_decoding'],
+                    r['isl'],
+                    r['osl'],
                     r['tp'],
                     r['ep'],
                     r['conc'],
@@ -426,6 +476,7 @@ def main():
         if multinode_rows:
             headers = [
                 MODEL_PREFIX, HARDWARE, FRAMEWORK, PRECISION, SPEC_DECODING,
+                ISL, OSL,
                 PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
                 DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS,
                 CONC, TASK, SCORE, EM_STRICT, EM_FLEXIBLE, N_EFF, MODEL,
@@ -437,6 +488,8 @@ def main():
                     r['framework'].upper(),
                     r['precision'].upper(),
                     r['spec_decoding'],
+                    r['isl'],
+                    r['osl'],
                     r['prefill_tp'],
                     r['prefill_ep'],
                     r['prefill_dp_attention'],
