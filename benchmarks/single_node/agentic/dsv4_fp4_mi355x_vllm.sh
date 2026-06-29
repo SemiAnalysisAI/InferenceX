@@ -175,7 +175,7 @@ case "$OFFLOADING" in
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
-  "local_buffer_size": "4GB",
+  "local_buffer_size": "2GB",
   "protocol": "tcp",
   "device_name": "",
   "enable_offload": false
@@ -205,6 +205,8 @@ EOF
             --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
             --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
             > "$MOONCAKE_MASTER_LOG" 2>&1 &
+
+        sleep 10
         MOONCAKE_MASTER_PID=$!
         sleep 2
         if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
