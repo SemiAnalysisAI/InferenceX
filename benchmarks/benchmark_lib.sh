@@ -742,28 +742,6 @@ _prometheus_metric_sum_url() {
     ' <<< "$values"
 }
 
-_prometheus_metric_avg_url() {
-    local url="$1"
-    local name="$2"
-    local values
-    values=$(_prometheus_metric_values_url "$url" "$name") || return 1
-    awk '
-        { sum += $1; count += 1 }
-        END {
-            if (count == 0) {
-                exit 1
-            }
-            printf "%.10f\n", sum / count
-        }
-    ' <<< "$values"
-}
-
-_prometheus_metric_sum() {
-    local port="$1"
-    local name="$2"
-    _prometheus_metric_sum_url "http://0.0.0.0:${port}/metrics" "$name"
-}
-
 _speedbench_normalize_metrics_url() {
     local endpoint="$1"
     endpoint="${endpoint%,}"
@@ -986,106 +964,6 @@ print(
 PY
 }
 
-_speedbench_trtllm_avg_decoded_al() {
-    local port="$1"
-    local value
-    value=$(_speedbench_metric_avg "$port" "trtllm_avg_decoded_tokens_per_iter" 2>/dev/null || true)
-    [[ -n "$value" ]] || return 1
-    awk -v value="$value" '
-        BEGIN {
-            if (value < 1.0) {
-                exit 1
-            }
-            printf "%.4f\n", value
-        }
-    '
-}
-
-_speedbench_trtllm_json_avg_decoded_al() {
-    local port="$1"
-    local urls=()
-    local url
-
-    while IFS= read -r url; do
-        [[ -n "$url" ]] && urls+=("$url")
-    done < <(_speedbench_trtllm_json_metrics_urls "$port")
-
-    [[ "${#urls[@]}" -gt 0 ]] || return 1
-
-    python3 - "${urls[@]}" <<'PY'
-import json
-import os
-import sys
-import urllib.request
-
-
-def number(value, default=0.0):
-    try:
-        if value is None:
-            return default
-        return float(value)
-    except (TypeError, ValueError):
-        return default
-
-
-def stats_from_payload(payload):
-    if isinstance(payload, list):
-        return payload
-    if isinstance(payload, dict):
-        return [payload]
-    return []
-
-
-timeout = float(os.environ.get("SPEEDBENCH_METRICS_CURL_TIMEOUT", "10"))
-weighted_total = 0.0
-total_requests = 0.0
-unweighted_total = 0.0
-unweighted_count = 0
-used_endpoints = 0
-
-for url in sys.argv[1:]:
-    try:
-        with urllib.request.urlopen(url, timeout=timeout) as response:
-            payload = json.load(response)
-    except Exception as exc:  # noqa: BLE001 - diagnostics for CI logs
-        print(f"SpeedBench AL eval: TRT-LLM JSON metrics fetch failed for {url}: {exc}", file=sys.stderr)
-        continue
-
-    endpoint_had_avg = False
-    for stat in stats_from_payload(payload):
-        if not isinstance(stat, dict):
-            continue
-        ifb = stat.get("inflightBatchingStats")
-        if not isinstance(ifb, dict):
-            continue
-
-        avg_decoded = number(ifb.get("avgNumDecodedTokensPerIter"), default=-1.0)
-        if avg_decoded < 1.0:
-            continue
-
-        gen_requests = number(ifb.get("numGenRequests"))
-        endpoint_had_avg = True
-        if gen_requests > 0:
-            weighted_total += avg_decoded * gen_requests
-            total_requests += gen_requests
-        else:
-            unweighted_total += avg_decoded
-            unweighted_count += 1
-
-    if endpoint_had_avg:
-        used_endpoints += 1
-
-if total_requests > 0:
-    acceptance_length = weighted_total / total_requests
-elif unweighted_count > 0:
-    acceptance_length = unweighted_total / unweighted_count
-else:
-    sys.exit(1)
-
-print(f"{acceptance_length:.4f}\t{used_endpoints}")
-PY
-}
-
 _speedbench_trtllm_server_log_metrics() {
     local mtp="$1"
     local start_offset="${2:-0}"
@@ -1192,9 +1070,6 @@ _speedbench_spec_gauge_metric() {
     case "${framework}:${kind}" in
         trtllm:acceptance_length)
             echo "trtllm_spec_decode_acceptance_length"
-            ;;
-        sglang:acceptance_length)
-            echo "sglang:spec_accept_length"
             ;;
         sglang:draft_tokens_per_step)
             echo "sglang:spec_num_draft_tokens"
@@ -1323,73 +1198,6 @@ _speedbench_prepare_dataset() {
     [[ -f "$speedbench_dir/qualitative.jsonl" ]]
 }
 
-_speedbench_apply_chat_template_kwargs_shim() {
-    echo "SpeedBench AL eval: patching vLLM benchmark --chat-template-kwargs support if needed"
-    python3 - <<'PYEOF'
-import vllm.benchmarks.serve as S
-import vllm.benchmarks.datasets.datasets as D
-
-
-def patch(mod, edits, marker):
-    f = mod.__file__
-    with open(f) as handle:
-        src = handle.read()
-    if marker in src:
-        print("already patched:", f)
-        return
-    for old, new in edits:
-        n = src.count(old)
-        assert n == 1, f"anchor matched {n} times in {f}, aborting:\n{old[:80]}..."
-        src = src.replace(old, new, 1)
-    with open(f, "w") as handle:
-        handle.write(src)
-    print("patched OK ->", f)
-
-
-serve_old = '''    parser.add_argument(
-        "--extra-body",'''
-serve_new = '''    parser.add_argument(
-        "--chat-template-kwargs",
-        type=json.loads,
-        default=None,
-        help="JSON dict forwarded to apply_chat_template during "
-        "client-side prompt rendering, e.g. to enable reasoning mode.",
-    )
-    parser.add_argument(
-        "--extra-body",'''
-patch(S, [(serve_old, serve_new)], marker='"--chat-template-kwargs"')
-
-disp_old = '''                output_len=args.speed_bench_output_len,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-disp_new = '''                output_len=args.speed_bench_output_len,
-                chat_template_kwargs=args.chat_template_kwargs,
-                enable_multimodal_chat=args.enable_multimodal_chat,'''
-
-samp_old = '''                # apply template
-                if not skip_chat_template:
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-samp_new = '''                # apply template
-                if not skip_chat_template:
-                    _ctk = kwargs.get("chat_template_kwargs") or {}
-                    prompt = tokenizer.apply_chat_template(
-                        [{"role": "user", "content": prompt}],
-                        add_generation_prompt=True,
-                        tokenize=False,
-                        **_ctk,
-                    )
-
-                prompt_len = len(tokenizer(prompt).input_ids)'''
-patch(D, [(disp_old, disp_new), (samp_old, samp_new)],
-      marker="chat_template_kwargs=args.chat_template_kwargs")
-PYEOF
-}
-
 run_speedbench_al_eval() {
     local port="${PORT:-8888}"
     while [[ $# -gt 0 ]]; do
@@ -1458,26 +1266,6 @@ run_speedbench_al_eval() {
     fi
 
     local thinking_kwargs='{"thinking": true, "reasoning_effort": "high"}'
-    local client="${SPEEDBENCH_CLIENT:-auto}"
-    local use_vllm_client=0
-    if [[ "$client" != "openai" && "$client" != "native" ]] && command -v vllm >/dev/null 2>&1; then
-        use_vllm_client=1
-    fi
-    if [[ "$metrics_framework" == "sglang" ]]; then
-        use_vllm_client=0
-    fi
-
-    local think_args=()
-    if [[ "$mode" == "on" ]]; then
-        if [[ "$use_vllm_client" -eq 1 ]]; then
-            if ! _speedbench_apply_chat_template_kwargs_shim; then
-                echo "SpeedBench AL eval: --chat-template-kwargs shim failed" >&2
-                _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "--chat-template-kwargs shim failed"
-                return 0
-            fi
-            think_args=(--chat-template-kwargs "$thinking_kwargs")
-        fi
-    fi
 
     local accepted_before="" proposed_before="" verify_before="" completion_before=""
     accepted_before=$(_speedbench_spec_counter_sum "$metrics_framework" "$port" "accepted" 2>/dev/null || true)
@@ -1502,56 +1290,31 @@ run_speedbench_al_eval() {
     local bench_rc=0
     local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
     echo "SpeedBench AL eval: running mode=${mode} mtp=${mtp}"
-    if [[ "$use_vllm_client" -eq 1 ]]; then
-        local raw_result_dir
-        raw_result_dir="$(mktemp -d /tmp/speedbench_al_raw-XXXXXX)"
-        local bench_cmd=(
-            vllm bench serve
-            --model "$speedbench_model"
-            --port "$port"
-            --dataset-name speed_bench
-            --dataset-path "$speedbench_dir"
-            --speed-bench-category coding
-            --speed-bench-output-len 4096
-            --num-prompts -1
-            --max-concurrency 1
-            --save-result
-            --result-dir "$raw_result_dir"
-            --result-filename "speedbench_al_${mode}_mtp${mtp}"
-            --trust-remote-code
-            --tokenizer-mode deepseek_v4
-            --temperature 1.0
-            "${think_args[@]}"
-        )
-        "${bench_cmd[@]}" || bench_rc=$?
-        rm -rf "$raw_result_dir" || true
-    else
-        export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
-        local native_cmd=(
-            python3 "$(pwd)/utils/evals/speedbench_client.py"
-            --model "$speedbench_model"
-            --base-url "http://0.0.0.0:${port}"
-            --dataset-path "$speedbench_dir"
-            --category coding
-            --output-len 4096
-            --temperature 1.0
-            --thinking-mode "$mode"
-            --timeout "${SPEEDBENCH_CLIENT_TIMEOUT:-1800}"
-            --retries "${SPEEDBENCH_CLIENT_RETRIES:-2}"
-        )
-        if [[ -n "${SPEEDBENCH_CLIENT_ENDPOINT:-}" ]]; then
-            native_cmd+=(--endpoint "$SPEEDBENCH_CLIENT_ENDPOINT")
-        elif [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
-            native_cmd+=(--endpoint completions)
-        fi
-        if [[ "$mode" == "on" ]]; then
-            native_cmd+=(--thinking-kwargs "$thinking_kwargs")
-        fi
-        if [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
-            native_cmd+=(--dsv4)
-        fi
-        "${native_cmd[@]}" || bench_rc=$?
+    export OPENAI_API_KEY="${OPENAI_API_KEY:-EMPTY}"
+    local client_cmd=(
+        python3 "$(pwd)/utils/evals/speedbench_client.py"
+        --model "$speedbench_model"
+        --base-url "http://0.0.0.0:${port}"
+        --dataset-path "$speedbench_dir"
+        --category coding
+        --output-len 4096
+        --temperature 1.0
+        --thinking-mode "$mode"
+        --timeout "${SPEEDBENCH_CLIENT_TIMEOUT:-1800}"
+        --retries "${SPEEDBENCH_CLIENT_RETRIES:-2}"
+    )
+    if [[ -n "${SPEEDBENCH_CLIENT_ENDPOINT:-}" ]]; then
+        client_cmd+=(--endpoint "$SPEEDBENCH_CLIENT_ENDPOINT")
+    elif [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
+        client_cmd+=(--endpoint completions)
     fi
+    if [[ "$mode" == "on" ]]; then
+        client_cmd+=(--thinking-kwargs "$thinking_kwargs")
+    fi
+    if [[ "${MODEL_PREFIX:-}" == "dsv4" ]]; then
+        client_cmd+=(--dsv4)
+    fi
+    "${client_cmd[@]}" || bench_rc=$?
     if [[ "$bench_rc" -ne 0 ]]; then
         echo "SpeedBench AL eval: client failed with exit code ${bench_rc}" >&2
         _speedbench_write_eval_result "$output" "$mode" "$mtp" "" "" "" "" "$result_framework" "$metric_source_base" "SpeedBench client failed with exit code ${bench_rc}"
@@ -1603,20 +1366,6 @@ run_speedbench_al_eval() {
                     metric_source="trtllm-server-log-generation-tokens-samples${trt_log_samples}"
                 fi
             fi
-            if [[ -z "$al" ]]; then
-                al=$(_speedbench_trtllm_avg_decoded_al "$port" || true)
-                if [[ -n "$al" ]]; then
-                    metric_source="${metric_source_base}-avg-decoded-tokens-endpoints${metrics_endpoint_count}"
-                fi
-            fi
-            if [[ -z "$al" ]]; then
-                local trt_json_avg_metrics="" trt_json_avg_endpoints=""
-                trt_json_avg_metrics=$(_speedbench_trtllm_json_avg_decoded_al "$port" || true)
-                if [[ -n "$trt_json_avg_metrics" ]]; then
-                    IFS=$'\t' read -r al trt_json_avg_endpoints <<< "$trt_json_avg_metrics"
-                    metric_source="trtllm-json-avg-decoded-tokens-endpoints${trt_json_avg_endpoints}"
-                fi
-            fi
         fi
     elif [[ "$metrics_framework" == "sglang" ]]; then
         local draft_depth=""
@@ -1631,22 +1380,12 @@ run_speedbench_al_eval() {
             fi
             metric_source="${metric_source_base}-generation-counter+verify-counter-endpoints${metrics_endpoint_count}"
         fi
-        if [[ -z "$al" ]]; then
-            al=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "acceptance_length" 2>/dev/null | awk '{ printf "%.4f", $1 }' || true)
-            if [[ -n "$al" ]]; then
-                metric_source="${metric_source_base}-gauge-endpoints${metrics_endpoint_count}"
-            fi
-        fi
         if [[ -n "$delta_verify" && "$delta_verify" -gt 0 ]]; then
             if [[ -z "$draft_depth" ]]; then
                 draft_depth=$(_speedbench_spec_gauge_avg "$metrics_framework" "$port" "draft_tokens_per_step" 2>/dev/null || true)
             fi
-            if [[ -n "$draft_depth" ]]; then
-                delta_proposed="${delta_proposed:-$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v depth="$draft_depth" 'BEGIN { value = verify * (depth - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")}"
-            fi
-            if [[ -n "$al" && "$metric_source" != *"generation-counter+verify-counter"* ]]; then
-                delta_acc=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v al="$al" 'BEGIN { value = verify * (al - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")
-                metric_source="${metric_source:-${metric_source_base}-gauge-endpoints${metrics_endpoint_count}}+derived-token-counters"
+            if [[ -n "$draft_depth" && -z "$delta_proposed" ]]; then
+                delta_proposed=$(_speedbench_round_metric "$(awk -v verify="$delta_verify" -v depth="$draft_depth" 'BEGIN { value = verify * (depth - 1); if (value < 0) value = 0; printf "%.10f\n", value }')")
             fi
         fi
     fi

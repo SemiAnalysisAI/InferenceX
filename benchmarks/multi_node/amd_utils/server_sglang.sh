@@ -566,16 +566,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 export EVAL_MAX_MODEL_LEN="$prefill_context_length"
             fi
 
-            speedbench_decode_metric_urls=""
-            for i in $(seq 0 $((yD - 1))); do
-                decode_idx=$((i * DECODE_NODES_PER_WORKER + NODE_OFFSET))
-                speedbench_decode_metric_urls+="${speedbench_decode_metric_urls:+,}http://${IP_ARRAY[$decode_idx]}:8000/metrics"
-            done
-            if [[ -z "$speedbench_decode_metric_urls" ]]; then
-                speedbench_decode_metric_urls="http://${NODE0_ADDR}:8000/metrics"
-            fi
-            export SPEEDBENCH_DECODE_METRICS_URLS="${SPEEDBENCH_DECODE_METRICS_URLS:-$speedbench_decode_metric_urls}"
-
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port 30000 (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else

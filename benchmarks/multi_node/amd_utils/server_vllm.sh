@@ -347,15 +347,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
                 export EVAL_CONCURRENT_REQUESTS=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
             fi
 
-            speedbench_decode_metric_urls=""
-            for decode_ip in ${DECODE_ARGS}; do
-                speedbench_decode_metric_urls+="${speedbench_decode_metric_urls:+,}http://${decode_ip}:${SERVER_PORT}/metrics"
-            done
-            if [[ -z "$speedbench_decode_metric_urls" ]]; then
-                speedbench_decode_metric_urls="http://${NODE0_ADDR}:${SERVER_PORT}/metrics"
-            fi
-            export SPEEDBENCH_DECODE_METRICS_URLS="${SPEEDBENCH_DECODE_METRICS_URLS:-$speedbench_decode_metric_urls}"
-
             if [[ "$DRY_RUN" -eq 1 ]]; then
                 echo "DRY RUN: run_eval --framework lm-eval --port $ROUTER_PORT (conc=${EVAL_CONCURRENT_REQUESTS}, ctx=${EVAL_MAX_MODEL_LEN:-auto})"
             else

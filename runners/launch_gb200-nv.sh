@@ -79,7 +79,7 @@ NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
     case "$MODEL_PREFIX" in
-        dsv4|minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
+        minimaxm2.5|minimaxm3|kimik2.5) return 0 ;;
         *) return 1 ;;
     esac
 }

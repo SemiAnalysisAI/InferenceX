@@ -152,19 +152,9 @@ cat ./evals/agg_eval_all.json | jq '[.[] | select(.hw == "B200")]'
 | `EVAL_RESULT_DIR` | `/tmp/eval_out-*` | Output directory for eval results |
 | `EVAL_MAX_MODEL_LEN` | `16384` | Max context for eval (set by `compute_eval_context_length`) |
 | `EVAL_CONCURRENT_REQUESTS` | `64` | Concurrent requests during eval; a space-separated list enables sequential batched evals against one live engine |
-| `SPEEDBENCH_DIR` | `$(pwd)/speed_bench_data` | Prepared SpeedBench dataset directory |
-| `SPEEDBENCH_NUM_SPEC_TOKENS` | script-provided or `2` | MTP level used to select the reference AL row |
-| `SPEEDBENCH_METRICS_FRAMEWORK` | `FRAMEWORK` or `vllm` | Speculative metrics parser: `vllm`, `sglang`, `trtllm`, or a Dynamo variant |
-| `SPEEDBENCH_DECODE_METRICS_URLS` | unset | Decode-worker Prometheus endpoints for disaggregated runs |
-| `SPEEDBENCH_METRICS_URLS` | unset | Generic Prometheus endpoints |
-| `SPEEDBENCH_METRICS_PORTS` | unset | Localhost Prometheus ports when full URLs are unavailable |
-| `SPEEDBENCH_TRTLLM_JSON_METRICS_URLS` | unset | Optional TRT-LLM JSON iteration-stat endpoints |
-| `SPEEDBENCH_TRTLLM_SERVER_LOG` | `SERVER_LOG` | TRT-LLM iteration log used when spec metrics are unavailable |
-
-SpeedBench AL uses counter deltas over the eval request window. vLLM uses accepted-token and verify-step counters. SGLang uses generation-token and verify-call counters. TRT-LLM prefers Prometheus or JSON speculative metrics and falls back to iteration logs or average decoded tokens. Dynamo runs collect metrics from decode workers rather than the router.
 
 ### Score validation
-`utils/evals/validate_scores.py` checks lm-eval results against `utils/evals/thresholds.json` and requires SpeedBench AL to be within 95% to 105% of its golden value. It runs after artifact upload so results are preserved when validation fails.
+`utils/evals/validate_scores.py` checks eval results against thresholds in `utils/evals/thresholds.json`. Runs as a separate workflow step after artifact upload so results are preserved even if validation fails.
 
 ### Adding a new eval task
 

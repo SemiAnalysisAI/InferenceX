@@ -7,7 +7,7 @@
 # synthetic-acceptance framework: for each thinking mode (on/off) and each
 # EAGLE3 level (num_speculative_tokens), measure the REAL AL on a single
 # SPEED-Bench category (default: coding) and emit a YAML matrix identical in
-# shape to the files under golden_al_distribution/. This measures real EAGLE3
+# shape to benchmarks/speedbench-reference-al.yaml. This measures real EAGLE3
 # acceptance; the synthetic value is injected downstream by the throughput
 # recipe, not here.
 #

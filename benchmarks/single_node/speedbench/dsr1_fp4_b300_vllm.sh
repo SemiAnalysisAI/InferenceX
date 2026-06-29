@@ -5,7 +5,7 @@
 # Produces the golden acceptance-length (AL) reference matrix consumed by the
 # synthetic-acceptance framework: for each MTP level (num_speculative_tokens),
 # measure the REAL AL on a single SPEED-Bench category (default: coding) and emit
-# a YAML matrix identical in shape to the files under golden_al_distribution/.
+# a YAML matrix identical in shape to benchmarks/speedbench-reference-al.yaml.
 # This measures real MTP acceptance; the synthetic value is injected downstream
 # by the throughput recipe, not here.
 #

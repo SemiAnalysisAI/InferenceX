@@ -6,7 +6,7 @@
 # synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
 # level (num_speculative_tokens), measure the REAL AL on a single SPEED-Bench
 # category (default: coding) and emit a YAML matrix identical in shape to
-# golden_al_distribution/qwen3.5_mtp.yaml. This measures real MTP acceptance;
+# benchmarks/speedbench-reference-al.yaml. This measures real MTP acceptance;
 # the synthetic value is injected downstream by the throughput recipe, not here.
 #
 # Adapted from speedbench/dsv4_fp4_b300_vllm.sh. Differences vs DSV4 (deepseek_v4
