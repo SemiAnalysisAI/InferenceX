@@ -3248,7 +3248,7 @@ minimaxm3-fp8-mi355x-vllm-agentic:
 
 minimaxm3-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
-  model: MiniMaxAI/MiniMax-M3-MXFP4
+  model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
   precision: fp4
