@@ -67,8 +67,9 @@ deepseek-v4-pro:
         category="coding",
         output_len=4096,
         temperature=1.0,
-        threshold_ratio=0.90,
-        acceptance_length="2.30",
+        threshold_ratio=0.95,
+        max_threshold_ratio=1.05,
+        acceptance_length="2.50",
         accepted_tokens="13",
         draft_tokens="10",
         verify_steps="10",
@@ -81,7 +82,8 @@ deepseek-v4-pro:
     result = build_result(args)
 
     assert result["reference_acceptance_length"] == 2.50
-    assert result["min_acceptance_length"] == 2.25
+    assert result["min_acceptance_length"] == 2.375
+    assert result["max_acceptance_length"] == 2.625
     assert result["framework"] == "vllm"
     assert result["metric_source"] == "vllm-prometheus-counters-endpoints1"
     assert result["verify_steps"] == 10
@@ -97,8 +99,28 @@ def test_validate_speedbench_al_fails_below_minimum() -> None:
             "thinking_mode": "thinking_on",
             "num_speculative_tokens": 2,
             "acceptance_length": 2.0,
-            "min_acceptance_length": 2.25,
+            "min_acceptance_length": 2.375,
+            "max_acceptance_length": 2.625,
             "passed": False,
+        },
+        "results_speedbench_al.json",
+    )
+
+    assert checked == 1
+    assert ok is False
+
+
+def test_validate_speedbench_al_fails_above_maximum() -> None:
+    ok, checked = validate_speedbench_al(
+        {
+            "speedbench_al_eval_version": 1,
+            "task": "speedbench_al",
+            "thinking_mode": "thinking_on",
+            "num_speculative_tokens": 2,
+            "acceptance_length": 2.7,
+            "min_acceptance_length": 2.375,
+            "max_acceptance_length": 2.625,
+            "passed": True,
         },
         "results_speedbench_al.json",
     )
@@ -117,15 +139,17 @@ def test_collect_eval_results_formats_speedbench_row(tmp_path: Path) -> None:
                 "model": "deepseek-ai/DeepSeek-V4-Pro",
                 "thinking_mode": "thinking_on",
                 "num_speculative_tokens": 2,
-                "acceptance_length": 2.3,
+                "acceptance_length": 2.5,
                 "framework": "sglang",
                 "metric_source": "sglang-prometheus-gauge-endpoints1+derived-token-counters",
                 "accepted_tokens": 13,
                 "verify_steps": 10,
                 "proposed_draft_tokens": 20,
                 "reference_acceptance_length": 2.5,
-                "min_acceptance_length": 2.25,
-                "threshold_ratio": 0.9,
+                "min_acceptance_length": 2.375,
+                "max_acceptance_length": 2.625,
+                "threshold_ratio": 0.95,
+                "max_threshold_ratio": 1.05,
                 "passed": True,
             }
         )
@@ -149,7 +173,8 @@ def test_collect_eval_results_formats_speedbench_row(tmp_path: Path) -> None:
     assert row["speedbench_accepted_tokens"] == 13
     assert row["speedbench_verify_steps"] == 10
     assert row["speedbench_proposed_draft_tokens"] == 20
-    assert score_cell(row) == "2.30 >= 2.25 (PASS)"
+    assert row["speedbench_max_acceptance_length"] == 2.625
+    assert score_cell(row) == "2.50 in [2.38, 2.62] (PASS)"
 
 
 def test_detect_eval_jsons_dedupes_flat_speedbench_result(tmp_path: Path) -> None:
@@ -163,6 +188,7 @@ def test_detect_eval_jsons_dedupes_flat_speedbench_result(tmp_path: Path) -> Non
                 "num_speculative_tokens": 2,
                 "acceptance_length": 2.3,
                 "min_acceptance_length": 2.25,
+                "max_acceptance_length": 2.75,
                 "passed": True,
             }
         )

@@ -1248,7 +1248,8 @@ _speedbench_write_eval_result() {
         --category "coding"
         --output-len "4096"
         --temperature "1.0"
-        --threshold-ratio "0.90"
+        --threshold-ratio "0.95"
+        --max-threshold-ratio "1.05"
     )
     if [[ -n "$framework" ]]; then
         record_cmd+=(--framework "$framework")
@@ -1287,7 +1288,8 @@ _speedbench_reference_available() {
         --model-prefix "${MODEL_PREFIX:-}" \
         --thinking-mode "$mode" \
         --num-speculative-tokens "$mtp" \
-        --threshold-ratio "0.90" >/dev/null
+        --threshold-ratio "0.95" \
+        --max-threshold-ratio "1.05" >/dev/null
 }
 
 _speedbench_prepare_dataset() {

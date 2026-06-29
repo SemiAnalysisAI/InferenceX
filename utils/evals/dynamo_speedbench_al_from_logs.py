@@ -187,6 +187,7 @@ def _record_args(args: argparse.Namespace, metrics: AggregatedMetrics | None) ->
         output_len=args.output_len,
         temperature=args.temperature,
         threshold_ratio=args.threshold_ratio,
+        max_threshold_ratio=args.max_threshold_ratio,
         framework=args.framework,
         metric_source=args.metric_source,
         acceptance_length=None,
@@ -246,7 +247,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--category", default="coding")
     parser.add_argument("--output-len", type=int, default=4096)
     parser.add_argument("--temperature", type=float, default=1.0)
-    parser.add_argument("--threshold-ratio", type=float, default=0.90)
+    parser.add_argument("--threshold-ratio", type=float, default=0.95)
+    parser.add_argument("--max-threshold-ratio", type=float, default=1.05)
     parser.add_argument("--framework", default="dynamo")
     parser.add_argument("--metric-source", default="dynamo-decode-log-counters")
     parser.set_defaults(func=cmd_from_logs)

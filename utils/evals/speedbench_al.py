@@ -15,6 +15,14 @@ MODEL_PREFIX_ALIASES = {
     "dsv4": "deepseek-v4-pro",
 }
 
+DEFAULT_MIN_THRESHOLD_RATIO = 0.95
+DEFAULT_MAX_THRESHOLD_RATIO = 1.05
+
+
+def scaled_threshold(reference: float, ratio: float) -> float:
+    """Scale an AL reference without leaking binary float noise into boundaries."""
+    return round(reference * ratio, 10)
+
 
 def _parse_scalar(value: str) -> Any:
     value = value.strip()
@@ -158,6 +166,7 @@ def _optional_int(value: str | None) -> int | None:
 def build_result(args: argparse.Namespace) -> dict[str, Any]:
     reference_al: float | None = None
     min_acceptance_length: float | None = None
+    max_acceptance_length: float | None = None
     model_key: str | None = None
     mode_key = normalize_mode(args.thinking_mode)
     error: str | None = args.error
@@ -173,7 +182,12 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
                     args.thinking_mode,
                     args.num_speculative_tokens,
                 )
-                min_acceptance_length = reference_al * args.threshold_ratio
+                min_acceptance_length = scaled_threshold(
+                    reference_al, args.threshold_ratio
+                )
+                max_acceptance_length = scaled_threshold(
+                    reference_al, args.max_threshold_ratio
+                )
             except Exception as exc:  # noqa: BLE001 - recorded for CI artifacts
                 error = error or str(exc)
         else:
@@ -190,7 +204,9 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         error is None
         and acceptance_length is not None
         and min_acceptance_length is not None
+        and max_acceptance_length is not None
         and acceptance_length >= min_acceptance_length
+        and acceptance_length <= max_acceptance_length
     )
 
     result = {
@@ -213,7 +229,9 @@ def build_result(args: argparse.Namespace) -> dict[str, Any]:
         "draft_tokens": draft_tokens,
         "reference_acceptance_length": reference_al,
         "threshold_ratio": args.threshold_ratio,
+        "max_threshold_ratio": args.max_threshold_ratio,
         "min_acceptance_length": min_acceptance_length,
+        "max_acceptance_length": max_acceptance_length,
         "passed": passed,
     }
     if error:
@@ -235,7 +253,11 @@ def cmd_resolve(args: argparse.Namespace) -> int:
         "num_speculative_tokens": args.num_speculative_tokens,
         "reference_acceptance_length": reference_al,
         "threshold_ratio": args.threshold_ratio,
-        "min_acceptance_length": reference_al * args.threshold_ratio,
+        "max_threshold_ratio": args.max_threshold_ratio,
+        "min_acceptance_length": scaled_threshold(reference_al, args.threshold_ratio),
+        "max_acceptance_length": scaled_threshold(
+            reference_al, args.max_threshold_ratio
+        ),
     }
     print(json.dumps(payload, sort_keys=True))
     return 0
@@ -248,9 +270,10 @@ def cmd_record(args: argparse.Namespace) -> int:
     status = "PASS" if result["passed"] else "FAIL"
     actual = result.get("acceptance_length")
     minimum = result.get("min_acceptance_length")
+    maximum = result.get("max_acceptance_length")
     print(
         f"{status}: SpeedBench AL {actual} "
-        f"(min {minimum}, mode {result['thinking_mode']}, "
+        f"(range [{minimum}, {maximum}], mode {result['thinking_mode']}, "
         f"mtp {result['num_speculative_tokens']})"
     )
     if args.exit_status and not result["passed"]:
@@ -268,7 +291,12 @@ def build_parser() -> argparse.ArgumentParser:
     resolve.add_argument("--model-prefix", default="")
     resolve.add_argument("--thinking-mode", required=True)
     resolve.add_argument("--num-speculative-tokens", type=int, required=True)
-    resolve.add_argument("--threshold-ratio", type=float, default=0.90)
+    resolve.add_argument(
+        "--threshold-ratio", type=float, default=DEFAULT_MIN_THRESHOLD_RATIO
+    )
+    resolve.add_argument(
+        "--max-threshold-ratio", type=float, default=DEFAULT_MAX_THRESHOLD_RATIO
+    )
     resolve.set_defaults(func=cmd_resolve)
 
     record = subparsers.add_parser("record", help="Write a compact AL eval result")
@@ -281,7 +309,12 @@ def build_parser() -> argparse.ArgumentParser:
     record.add_argument("--category", default="coding")
     record.add_argument("--output-len", type=int, default=4096)
     record.add_argument("--temperature", type=float, default=1.0)
-    record.add_argument("--threshold-ratio", type=float, default=0.90)
+    record.add_argument(
+        "--threshold-ratio", type=float, default=DEFAULT_MIN_THRESHOLD_RATIO
+    )
+    record.add_argument(
+        "--max-threshold-ratio", type=float, default=DEFAULT_MAX_THRESHOLD_RATIO
+    )
     record.add_argument("--framework", default="")
     record.add_argument("--metric-source", default="")
     record.add_argument("--acceptance-length", default=None)

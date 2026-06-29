@@ -167,7 +167,9 @@ def extract_speedbench_al_metrics(json_path: Path) -> List[Dict[str, Any]]:
         'acceptance_length': data.get('acceptance_length'),
         'reference_acceptance_length': data.get('reference_acceptance_length'),
         'min_acceptance_length': data.get('min_acceptance_length'),
+        'max_acceptance_length': data.get('max_acceptance_length'),
         'threshold_ratio': data.get('threshold_ratio'),
+        'max_threshold_ratio': data.get('max_threshold_ratio'),
         'thinking_mode': mode,
         'num_speculative_tokens': mtp,
         'speedbench_framework': data.get('framework'),
@@ -275,7 +277,9 @@ def build_row(meta: Dict[str, Any], m: Dict[str, Any]) -> Dict[str, Any]:
         row['score_se'] = None
         row['speedbench_reference_acceptance_length'] = m.get('reference_acceptance_length')
         row['speedbench_min_acceptance_length'] = m.get('min_acceptance_length')
+        row['speedbench_max_acceptance_length'] = m.get('max_acceptance_length')
         row['speedbench_threshold_ratio'] = m.get('threshold_ratio')
+        row['speedbench_max_threshold_ratio'] = m.get('max_threshold_ratio')
         row['speedbench_thinking_mode'] = m.get('thinking_mode')
         row['speedbench_num_speculative_tokens'] = m.get('num_speculative_tokens')
         row['speedbench_framework'] = m.get('speedbench_framework')
@@ -306,14 +310,18 @@ def score_cell(r: Dict[str, Any]) -> str:
     if r.get('score_name') == 'acceptance_length':
         score = r.get('score')
         minimum = r.get('speedbench_min_acceptance_length')
+        maximum = r.get('speedbench_max_acceptance_length')
         passed = r.get('speedbench_passed')
         if score is None:
             return 'FAIL'
         try:
             status = 'PASS' if passed else 'FAIL'
-            if minimum is None:
+            if minimum is None or maximum is None:
                 return f"{float(score):.2f} ({status})"
-            return f"{float(score):.2f} >= {float(minimum):.2f} ({status})"
+            return (
+                f"{float(score):.2f} in "
+                f"[{float(minimum):.2f}, {float(maximum):.2f}] ({status})"
+            )
         except Exception:
             return str(score)
     return f"{pct(r['score'])}{se(r['score_se'])}"

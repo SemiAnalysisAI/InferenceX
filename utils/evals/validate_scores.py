@@ -30,6 +30,7 @@ def validate_speedbench_al(data: dict, source: str) -> tuple[bool, int]:
 
     actual = data.get("acceptance_length")
     minimum = data.get("min_acceptance_length")
+    maximum = data.get("max_acceptance_length")
     passed = data.get("passed")
     label = (
         f"{data.get('task', 'speedbench_al')} "
@@ -37,17 +38,32 @@ def validate_speedbench_al(data: dict, source: str) -> tuple[bool, int]:
         f"mtp{data.get('num_speculative_tokens', 'unknown')}"
     )
 
-    if passed is True:
-        print(f"PASS: {label} AL = {float(actual):.4f} (>= {float(minimum):.4f})")
+    values_are_numeric = all(
+        isinstance(value, (int, float)) for value in (actual, minimum, maximum)
+    )
+    within_range = values_are_numeric and minimum <= actual <= maximum
+
+    if passed is True and within_range:
+        print(
+            f"PASS: {label} AL = {float(actual):.4f} "
+            f"(range [{float(minimum):.4f}, {float(maximum):.4f}])"
+        )
         return True, 1
 
-    if isinstance(actual, (int, float)) and isinstance(minimum, (int, float)):
+    if values_are_numeric:
+        if actual < minimum:
+            comparison = "below"
+        elif actual > maximum:
+            comparison = "above"
+        else:
+            comparison = "marked failed"
         print(
-            f"FAIL: {label} AL = {actual:.4f} (< {minimum:.4f})",
+            f"FAIL: {label} AL = {actual:.4f} ({comparison}; "
+            f"expected [{minimum:.4f}, {maximum:.4f}])",
             file=sys.stderr,
         )
     else:
-        error = data.get("error", "missing acceptance length or threshold")
+        error = data.get("error", "missing acceptance length or validation bounds")
         print(f"FAIL: {label} in {source}: {error}", file=sys.stderr)
     return False, 1
 
