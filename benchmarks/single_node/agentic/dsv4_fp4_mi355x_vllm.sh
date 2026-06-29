@@ -188,22 +188,22 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "2GB",
-  "protocol": "rdma",
+  "protocol": "tcp",
   "device_name": "",
-  "enable_offload": false
+  "enable_offload": true
 }
 EOF
-# (srok) 
+# (srok)
   #"protocol": "rdma",
   #"device_name": "mlx5_0",
   #"local_buffer_size": "4GB",
         export MOONCAKE_CONFIG_PATH
-        #export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
         # (srok)
-        export MC_WORKERS_PER_CTX=4
-        #export MC_WORKERS_PER_CTX=8
+        #export MC_WORKERS_PER_CTX=4
+        export MC_WORKERS_PER_CTX=8
 
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
@@ -216,6 +216,8 @@ EOF
             --eviction_high_watermark_ratio="$MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO" \
             --eviction_ratio="$MOONCAKE_EVICTION_RATIO" \
             --default_kv_lease_ttl="$MOONCAKE_KV_LEASE_TTL" \
+            --enable_offload=1 \
+            --offload_on_evict=1 \
             > "$MOONCAKE_MASTER_LOG" 2>&1 &
 
         sleep 10
