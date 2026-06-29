@@ -1149,7 +1149,7 @@ build_replay_cmd() {
     # session.
     #
     # The scenario plugin locks: --cache-bust first_turn_prefix and
-    # --trace-idle-gap-cap-seconds 60 (per-trace idle-gap compression
+    # --trace-idle-gap-cap-seconds 10 (per-trace idle-gap compression
     # against parent + subagent request-start timestamps; supersedes the
     # legacy --use-think-time-only / --inter-turn-delay-cap-seconds path),
     # and auto-injects them — so we do not pass them. See
@@ -1183,11 +1183,10 @@ build_replay_cmd() {
     # as benchmarkable data.
     REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
-    # [25%, 75%] of the trace's turn count (was hardcoded 0%-70% upstream).
-    # Avoids starting trajectories right at turn 0 where the KV cache is
-    # cold and skews early steady-state samples.
-    REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
-    REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
+    # [0%, 100%] of the trace's turn count, clamped by AIPerf to leave at
+    # least one profile turn after warmup.
+    REPLAY_CMD+=" --trajectory-start-min-ratio 0.0"
+    REPLAY_CMD+=" --trajectory-start-max-ratio 1.0"
     # Optional cache-pressure warmup for long agentic traces. AIPerf first
     # completes its normal t* snapshot warmup, then continues those exact
     # trajectories with one-token outputs and no idle delays for this many
