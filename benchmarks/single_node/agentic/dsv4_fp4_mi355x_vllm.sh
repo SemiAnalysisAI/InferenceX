@@ -173,7 +173,9 @@ EOF
 
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
-        MOONCAKE_KV_LEASE_TTL=60s
+        #(srok)
+        #MOONCAKE_KV_LEASE_TTL=60s
+        MOONCAKE_KV_LEASE_TTL=3600s
 
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
@@ -191,7 +193,7 @@ EOF
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true},"kv_load_failure_policy":"ignore"}'
         )
         ;;
     lmcache)
