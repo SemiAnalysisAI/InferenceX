@@ -156,7 +156,7 @@ case "$OFFLOADING" in
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
-  "local_buffer_size": "200MB",
+  "local_buffer_size": "4GB",
   "protocol": "tcp",
   "device_name": "",
   "enable_offload": false
@@ -169,7 +169,9 @@ EOF
         export MOONCAKE_CONFIG_PATH
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
-        export MC_WORKERS_PER_CTX=4
+        # (srok)
+        #export MC_WORKERS_PER_CTX=4
+        export MC_WORKERS_PER_CTX=8
 
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
