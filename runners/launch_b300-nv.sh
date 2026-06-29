@@ -98,7 +98,9 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISIO
     # patch anchors, so running the patch there aborts with "missing or ambiguous
     # patch anchor" and the server never starts. Only patch the 0618 image; the
     # perf image needs no patch.
-    if [[ "${IMAGE:-}" != *vllm-minimax-m3-perf* ]]; then
+    if [[ "${IMAGE:-}" == *vllm-minimax-m3-perf-x86_64* ]]; then
+        SRTCTL_SETUP_SCRIPT="minimax-m3-b300-vllm-fixes.sh"
+    elif [[ "${IMAGE:-}" != *vllm-minimax-m3-perf* ]]; then
         SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
     fi
     # NVIDIA/srt-slurm#38
