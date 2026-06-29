@@ -9622,7 +9622,7 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
           ep: 16
           dp-attn: true
 dsv4-fp4-b300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.1
+  image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b300
