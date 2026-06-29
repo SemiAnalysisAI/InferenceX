@@ -396,9 +396,17 @@ PREFILL_SERVER_CONFIG=$(build_server_config "prefill" "$MODEL_NAME" "$PREFILL_TP
 DECODE_SERVER_CONFIG=$(build_server_config "decode" "$MODEL_NAME" "$DECODE_TP_SIZE" "$DECODE_ENABLE_EP" "$DECODE_ENABLE_DP" "$DECODE_MTP_SIZE")
 
 # Expose Prometheus /metrics on the servers when requested (ENABLE_METRICS=1).
+# --enable-cache-report is paired with --enable-metrics so the SGLang
+# sglang:cached_tokens counter is exported for EVERY run (not just the hicache
+# +mooncake path). process_agentic_result.py needs that counter to compute
+# server_gpu_cache_hit_rate (= cached_tokens/prompt_tokens) and, with HiCache,
+# server_external_cache_hit_rate; without it those fields stay null and the
+# "GPU cache hit rate" line / token-source breakdown can't be populated.
 if [[ "${ENABLE_METRICS:-0}" == "1" ]]; then
     [[ "$PREFILL_SERVER_CONFIG" != *"--enable-metrics"* ]] && PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enable-metrics"
     [[ "$DECODE_SERVER_CONFIG" != *"--enable-metrics"* ]] && DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enable-metrics"
+    [[ "$PREFILL_SERVER_CONFIG" != *"--enable-cache-report"* ]] && PREFILL_SERVER_CONFIG="$PREFILL_SERVER_CONFIG --enable-cache-report"
+    [[ "$DECODE_SERVER_CONFIG" != *"--enable-cache-report"* ]] && DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --enable-cache-report"
 fi
 
 if [[ -n "$MODEL_NAME" ]]; then
