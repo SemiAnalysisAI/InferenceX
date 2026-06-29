@@ -146,8 +146,11 @@ CAP = {
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
 }
-# nccl/rccl are collective primitives, not EP dispatch/combine — phase is meaningless.
-COLLECTIVE = {"nccl": ["nvidia"], "rccl": ["amd"]}
+# nccl/rccl are collective primitives, not EP dispatch/combine — phase is meaningless. The `nccl`
+# BENCHMARK runs on BOTH vendors: run_nccl_suite auto-selects nccl-tests on CUDA and rccl-tests on
+# ROCm (same binaries/output), so the All-reduce/All-gather tabs get an MI355X line too. (`rccl` is
+# kept as an explicit amd-only alias for direct dispatch.)
+COLLECTIVE = {"nccl": ["nvidia", "amd"], "rccl": ["amd"]}
 # Non-EP benchmarks (family != moe): memcpy-family (offload/copy-engine/kv-cache) + the RL
 # trainer<->generator mesh transfer (rl-mesh, multi-process NCCL send/recv). The EP capability
 # axes (mode/dtype/contract/phase) don't apply, so they pass validation unconditionally on their
