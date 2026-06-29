@@ -141,10 +141,22 @@ case "$OFFLOADING" in
         # distributed store, so pre-divide the aggregate host-memory budget.
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
-        MOONCAKE_VERSION=0.3.11.post1
-        apt-get update && apt-get install -y libcurl4 libibverbs1 rdma-core librdmacm1 libnuma1 liburing2
-        agentic_pip_install --quiet --no-cache-dir --no-deps \
-            --force-reinstall "mooncake-transfer-engine-non-cuda==$MOONCAKE_VERSION"
+        #MOONCAKE_VERSION=0.3.11.post1
+        #apt-get update && apt-get install -y libcurl4 libibverbs1 rdma-core librdmacm1 libnuma1 liburing2
+        #agentic_pip_install --quiet --no-cache-dir --no-deps \
+        #    --force-reinstall "mooncake-transfer-engine-non-cuda==$MOONCAKE_VERSION"
+
+        git clone https://github.com/kvcache-ai/Mooncake.git
+        cd Mooncake
+        bash dependencies.sh
+        mkdir build
+        cd build
+        cmake ..
+        make -j
+        sudo make install # optional, make it ready to be used by vLLM/SGLang
+        cd ..
+        cd ..
+
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
         python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
@@ -158,7 +170,7 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
-  "protocol": "tcp",
+  "protocol": "rdma",
   "device_name": "",
   "enable_offload": false
 }
