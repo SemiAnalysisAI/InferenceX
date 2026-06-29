@@ -157,6 +157,17 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   too — and `nccl-ep` had to be added to the MI355X launcher's AMD-bench allowlist, else it silently
   fell back to MoRI). **DONE:** MI355X nodes=2 / **world=16 over RoCE/IB**, run 28328718973,
   **correct=True** T=1→8, disp_p50 345–431µs, status=comparable-experimental.
+- **UCCL + DeepEP-hybrid on aarch64 GB200/GB300 — WALL (backend-specific, not the launcher).** The
+  combined `backend=all` sweep confirmed these two fail ENTIRELY on the Grace-Blackwell SKUs: 0 valid
+  docs at BOTH EP4 (single-tray) and EP8 (2-tray MNNVL) — uccl gb200 5/5 EP4 + 6/6 EP8 failed; deepep-
+  hybrid gb200/gb300 same. This is NOT the rack launcher (the positive control is decisive: on the SAME
+  gb200/gb300 clusters, **flashinfer lands 104/68 rack EP8 docs, nccl-ep 98/16, deepep 175/174** incl.
+  the from-source V2 build), and NOT cross-node (it's intra-NVL72). Both backends work on x86 single-node
+  (uccl b300=126/b200=124 valid; deepep-hybrid h100=84/b300=36). Cause: their FROM-SOURCE in-container
+  builds were probe-confirmed on x86 B300 only — uccl's `ibv`/proxy RDMA bootstrap and deepep-hybrid's
+  TMA+NVSHMEM build don't come up on aarch64 Grace-Blackwell. deepep (bundled + V2-from-source), flashinfer
+  (bundled), and nccl-ep (NCCL collectives, host-staged) all run there, so rack-scale coverage is complete
+  via those three. uccl/deepep-hybrid aarch64 = deferred (needs an aarch64 build of each; not retried).
 
 ## Other inference collectives (NVIDIA scope)
 
