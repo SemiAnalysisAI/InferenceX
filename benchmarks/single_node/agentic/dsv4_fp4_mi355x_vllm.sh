@@ -193,7 +193,7 @@ EOF
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true},"kv_load_failure_policy":"ignore"}'
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
         ;;
     lmcache)
