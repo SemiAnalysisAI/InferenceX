@@ -8,6 +8,20 @@
 cx_log() { printf '[collectivex] %s\n' "$*" >&2; }
 cx_die() { printf '[collectivex] FATAL: %s\n' "$*" >&2; exit 1; }
 
+# Allocate via salloc (--no-shell is appended) and echo the GRANTED Slurm job id, parsed from
+# salloc's OWN output. Use INSTEAD of `salloc ...; JOB_ID=$(squeue --name=<name> -h -o %A | head -1)`:
+# that lookup is not unique per allocation, so under GHA-matrix concurrency (several cells calling
+# salloc with the same --job-name on one cluster) it returns a SIBLING cell's job id. Observed on
+# gb300: salloc granted 11354 but the name lookup returned a still-pending 11356 -> srun "Expired or
+# invalid job 11356" -> the cell failed even though its own allocation was fine. Parsing salloc's own
+# "Granted job allocation N" is race-free. salloc progress still streams live to the job log via tee.
+cx_salloc_jobid() {
+  local _t; _t="$(mktemp)"
+  salloc "$@" --no-shell 2>&1 | tee "$_t" >&2 || true
+  sed -n 's/.*Granted job allocation \([0-9][0-9]*\).*/\1/p' "$_t" | head -n1
+  rm -f "$_t"
+}
+
 # Single multi-arch container for ALL NVIDIA SKUs: tag `v0.5.11-cu130` is an OCI
 # image index covering linux/amd64 (B200) + linux/arm64 (GB200); enroot import
 # pulls the matching arch. (cu130 = CUDA 13, system nccl.h in /usr/include, torch 2.9.x.)

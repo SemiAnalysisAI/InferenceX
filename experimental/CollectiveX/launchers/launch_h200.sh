@@ -67,10 +67,9 @@ command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm lo
 if [ "${CX_NODES:-1}" -gt 1 ]; then
   NODES="${CX_NODES}"
   cx_log "H200 CROSS-NODE EP: nodes=$NODES world=$((NODES*NGPUS)) bench=$CX_BENCH (IB; UCCL internode-native; FileStore rdzv)"
-  salloc --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --nodes="$NODES" --gres=gpu:"$NGPUS" \
-         --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
-  JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
-  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node)"
+  JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --nodes="$NODES" --gres=gpu:"$NGPUS" \
+            --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node) from salloc"
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
   cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N)]"
   export CX_TOPO="h200-multinode-ib" CX_TRANSPORT="rdma"
@@ -91,10 +90,9 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
   exit 0
 fi
 
-salloc --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --gres=gpu:"$NGPUS" \
-       --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
-JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
-[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
+JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" ${ACCOUNT:+--account="$ACCOUNT"} --gres=gpu:"$NGPUS" \
+          --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
+[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
 cx_log "JOB_ID=$JOB_ID"
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 

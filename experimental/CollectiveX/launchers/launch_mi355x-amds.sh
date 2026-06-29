@@ -94,14 +94,13 @@ if [ "${CX_NODES:-1}" -gt 1 ]; then
   NODES="${CX_NODES}"; WORLD=$((NODES * NGPUS))
   cx_log "MI355X CROSS-NODE EP: nodes=$NODES world=$WORLD bench=$CX_BENCH (MoRI RDMA internode)"
   if [ -n "$NODELIST" ]; then
-    salloc --partition="$PARTITION" --nodelist="$NODELIST" --nodes="$NODES" --gres=gpu:"$NGPUS" \
-           --ntasks-per-node="$NGPUS" --exclusive --cpus-per-task=16 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --nodelist="$NODELIST" --nodes="$NODES" --gres=gpu:"$NGPUS" \
+              --ntasks-per-node="$NGPUS" --exclusive --cpus-per-task=16 --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
   else
-    salloc --partition="$PARTITION" --exclude="$EXCLUDE_NODES" --nodes="$NODES" --gres=gpu:"$NGPUS" \
-           --ntasks-per-node="$NGPUS" --exclusive --cpus-per-task=16 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+    JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --exclude="$EXCLUDE_NODES" --nodes="$NODES" --gres=gpu:"$NGPUS" \
+              --ntasks-per-node="$NGPUS" --exclusive --cpus-per-task=16 --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
   fi
-  JOB_ID="$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)"
-  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node)"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node) from salloc"
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
   cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N 2>/dev/null)]"
   # import the squash on EVERY allocated node (1 task/node).
@@ -150,14 +149,13 @@ fi
 # Pin to specific nodes (CX_NODELIST) when set, else exclude the known-bad ones.
 if [ -n "$NODELIST" ]; then
   cx_log "node pin: --nodelist=$NODELIST"
-  salloc --partition="$PARTITION" --nodelist="$NODELIST" --gres=gpu:"$NGPUS" \
-         --exclusive --cpus-per-task=128 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+  JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --nodelist="$NODELIST" --gres=gpu:"$NGPUS" \
+            --exclusive --cpus-per-task=128 --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
 else
-  salloc --partition="$PARTITION" --exclude="$EXCLUDE_NODES" --gres=gpu:"$NGPUS" \
-         --exclusive --cpus-per-task=128 --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
+  JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --exclude="$EXCLUDE_NODES" --gres=gpu:"$NGPUS" \
+            --exclusive --cpus-per-task=128 --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
 fi
-JOB_ID="$(squeue --name="$RUNNER_NAME" -h -o %A | head -n1)"
-[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
+[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
 cx_log "JOB_ID=$JOB_ID"
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 

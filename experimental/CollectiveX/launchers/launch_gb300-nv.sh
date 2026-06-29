@@ -43,9 +43,9 @@ MOUNT_SRC="$(cx_stage_repo "$REPO_ROOT" "$CX_STAGE_DIR")"
 command -v salloc >/dev/null || cx_die "salloc not found"
 
 if [ "$NODES" -le 1 ]; then   # ---- EP4: single tray, run_in_container (torchrun -g 4) ----
-  salloc --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$GPN" --exclusive \
-         --time="$TIME_MIN" --no-shell --job-name="$RUNNER"
-  JOB_ID="$(squeue --name="$RUNNER" -u "$USER" -h -o %A | head -n1)"; [ -n "$JOB_ID" ] || cx_die "no JOB_ID"
+  JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$GPN" --exclusive \
+            --time="$TIME_MIN" --job-name="$RUNNER")"
+  [ -n "$JOB_ID" ] || cx_die "no JOB_ID from salloc"
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
   srun --jobid="$JOB_ID" --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:/ix" \
     --no-container-mount-home --container-workdir=/ix/experimental/CollectiveX --no-container-entrypoint \
@@ -54,9 +54,9 @@ if [ "$NODES" -le 1 ]; then   # ---- EP4: single tray, run_in_container (torchru
 fi
 
 # ---- EP8: 2 trays, run_ep.py directly across 8 ranks (no torchrun; MNNVL intranode path) ----
-salloc --partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES" --gres=gpu:"$GPN" \
-       --ntasks-per-node="$GPN" --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER"
-JOB_ID="$(squeue --name="$RUNNER" -u "$USER" -h -o %A | head -n1)"; [ -n "$JOB_ID" ] || cx_die "no JOB_ID"
+JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES" --gres=gpu:"$GPN" \
+          --ntasks-per-node="$GPN" --exclusive --time="$TIME_MIN" --job-name="$RUNNER")"
+[ -n "$JOB_ID" ] || cx_die "no JOB_ID from salloc"
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29551
 mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"

@@ -48,10 +48,9 @@ cx_log "squash=$SQUASH_FILE  mount=$MOUNT_SRC -> $MOUNT_DIR"
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
-salloc --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$NGPUS" \
-       --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
-JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
-[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
+JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$NGPUS" \
+          --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
+[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
 cx_log "JOB_ID=$JOB_ID"
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 

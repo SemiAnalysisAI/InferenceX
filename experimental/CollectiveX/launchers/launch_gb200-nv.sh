@@ -59,10 +59,9 @@ command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm lo
 if [ "$NODES" -le 1 ]; then
   # Single tray (4 GPU): generic dispatcher, -g N single process.
   export CX_NGPUS="$GPUS_PER_NODE"
-  salloc --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$GPUS_PER_NODE" \
-         --exclusive --time="$TIME_MIN" --no-shell --job-name="$RUNNER_NAME"
-  JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
-  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
+  JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --gres=gpu:"$GPUS_PER_NODE" \
+            --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
   cx_log "JOB_ID=$JOB_ID"
   trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
   srun --jobid="$JOB_ID" \
@@ -84,11 +83,9 @@ MPI_FLAG="${CX_SRUN_MPI:-pmix}"
 declare -A BIN=( [all_reduce]=all_reduce_perf [all_gather]=all_gather_perf
                  [reduce_scatter]=reduce_scatter_perf [alltoall]=alltoall_perf )
 
-salloc --partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES" \
-       --gres=gpu:"$GPUS_PER_NODE" --exclusive --time="$TIME_MIN" \
-       --no-shell --job-name="$RUNNER_NAME"
-JOB_ID="$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)"
-[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID"
+JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --nodes="$NODES" \
+          --gres=gpu:"$GPUS_PER_NODE" --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
+[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
 cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N 2>/dev/null)]"
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 
