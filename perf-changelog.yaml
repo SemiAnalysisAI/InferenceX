@@ -4133,6 +4133,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1893
 
 - config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Initial addition of MiniMax-M3 FP8 GB200 disaggregated Dynamo-vLLM benchmark using vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+    - "Allocate FlashInfer MNNVL workspace for one-shot all-reduce and materialize the MSA prefill top-k slice before CSR construction"
+    - "Preserve current Qwen3.5 and Kimi-K2.5 GB200 launcher paths while adding MiniMax-M3 shared-FS staging and atomic image import"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1938
+
+- config-keys:
     - minimaxm3-fp8-gb300-dynamo-vllm
   description:
     - "Update the GB300 MiniMax-M3 Dynamo-vLLM image to vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
@@ -4180,6 +4188,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
 
 - config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Update B300 FP4 SGLang (non-MTP) image to latest nightly: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2 (was nightly-dev-cu13-20260529-a8cfae0b)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1913
+
+- config-keys:
     - minimaxm3-fp8-mi355x-atom-disagg
   description:
     - "Add minimaxm3-fp8-mi355x-atom-disagg CI recipe: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP8"
@@ -4221,6 +4235,15 @@
   description:
     - "Initial submission: MiniMax-M3 MXFP4 disagg (prefill/decode) on MI355X with vLLM over the MoRI-IO KV connector (8k/1k)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1914
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node aggregated vLLM benchmark (no spec decode), runner b200-dgxc"
+    - "Image vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41 (bakes in MiniMax-M3 modelopt NVFP4 support, vllm-project/vllm PR #46380; no runtime patch needed)"
+    - "Weights pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4 (added minimaxm3-fp4 MODEL_PATH branch to launch_b200-dgxc.sh); --block-size 128 (MSA), --language-model-only"
+    - "Sweeps tp 4/8 with and without EP and dp-attn at 1k1k and 8k1k, conc 1-1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1932
 
 - config-keys:
     - minimaxm3-fp8-gb300-dynamo-vllm
@@ -4287,3 +4310,16 @@
     - "Move the MiniMax-M3 MXFP8 B300 Dynamo-vLLM sweep (1k/1k and 8k/1k) to the vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-7a67223 image; the perf image already carries the vLLM fixes, so the minimax-m3-vllm-fixes.sh monkeypatch is skipped on it in launch_b300-nv.sh"
     - "Reshape the 1k/1k disaggregated prefill/decode layouts to 1P DEP4 + 1D DEP8, 1P DEP2 + 2D TEP4, 1P DEP2 + 6D TEP8, 1P DEP2 + 8D TEP8, and 1P DEP2 + 8D TEP4"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1937
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Update the MiniMax-M3 MXFP8 MI355X vLLM image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
+    - "Benchmark serving flags and TP/EP/DP-attention search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1942
+
+- config-keys:
+    - dsv4-fp4-b300-dynamo-vllm
+  description:
+    - "Update the DeepSeek-V4-Pro B300 disaggregated Dynamo-vLLM benchmark to the vllm/vllm-openai:v0.23.0 image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1952
