@@ -4307,4 +4307,4 @@
     - dsv4-fp4-b300-dynamo-vllm
   description:
     - "Update the DeepSeek-V4-Pro B300 disaggregated Dynamo-vLLM benchmark to the vllm/vllm-openai:v0.23.0 image"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1899
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1952
