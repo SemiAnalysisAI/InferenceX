@@ -58,7 +58,7 @@ TS="$(date -u +%Y-%m-%dT%H-%M-%SZ)"
 # cross-node EP path that host-stages where MoRI's custom RDMA aborts — goal 183).
 export CX_BENCH="${CX_BENCH:-mori}"
 case "$CX_BENCH" in
-  mori|nccl-ep|nccl|kv-cache|rl-mesh|allreduce-fw|copy-engine|mori-io|nccl-kv) ;;
+  mori|nccl-ep|nccl|kv-cache|rl-mesh|allreduce-fw|copy-engine|mori-io|nccl-kv|mooncake) ;;
   *) cx_log "mi355x: CX_BENCH='$CX_BENCH' is NVIDIA-only / unsupported on AMD; using mori"; export CX_BENCH=mori ;;
 esac
 export CX_RUNNER="$RUNNER_NAME" CX_NGPUS="$NGPUS" CX_TS="$TS"
