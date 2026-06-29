@@ -100,6 +100,19 @@ cleanup_lmcache_server() {
 
 trap cleanup_lmcache_server EXIT
 
+cleanup_agentic_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$ROUTER_PID" "vLLM router"
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
+    exit "$exit_code"
+}
+trap cleanup_agentic_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 wait_for_lmcache_ready() {
     { set +x; } 2>/dev/null
     local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
@@ -163,9 +176,9 @@ case "$OFFLOADING" in
         cd ..
 
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        # (srok)
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
+        ## (srok)
+        #export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
+        #python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
@@ -190,8 +203,8 @@ EOF
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
         # (srok)
-        #export MC_WORKERS_PER_CTX=4
-        export MC_WORKERS_PER_CTX=8
+        export MC_WORKERS_PER_CTX=4
+        #export MC_WORKERS_PER_CTX=8
 
         MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
         MOONCAKE_EVICTION_RATIO=0.10
@@ -208,7 +221,6 @@ EOF
 
         sleep 10
         MOONCAKE_MASTER_PID=$!
-        sleep 2
         if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
             echo "Mooncake master died during startup." >&2
             cat "$MOONCAKE_MASTER_LOG" >&2
