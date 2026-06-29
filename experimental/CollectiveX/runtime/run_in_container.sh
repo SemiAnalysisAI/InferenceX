@@ -580,27 +580,77 @@ run_flashinfer_suite() {
   run_ep_suite flashinfer
 }
 
+# dispatch_bench runs the CURRENT CX_BENCH (+ CX_* config env) once. The sweep workflow runs many
+# of these per allocation (SHARD mode below), reusing this single container + its built backend.
+dispatch_bench() {
+  local rc=0
+  case "$CX_BENCH" in
+    nccl)        run_nccl_suite || rc=1 ;;
+    deepep)      run_deepep_suite || rc=1 ;;
+    mori)        run_mori_suite || rc=1 ;;
+    uccl)        run_uccl_suite || rc=1 ;;
+    nccl-ep)     run_nccl_ep_suite || rc=1 ;;
+    flashinfer)  run_flashinfer_suite || rc=1 ;;
+    deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
+    nixl)        run_nixl_suite || rc=1 ;;
+    mori-io)     run_mori_io_suite || rc=1 ;;
+    nccl-kv)     run_nccl_kv_suite || rc=1 ;;
+    mooncake)    run_mooncake_suite || rc=1 ;;
+    offload)     run_collective_bench offload || rc=1 ;;
+    copy-engine) run_collective_bench copy-engine || rc=1 ;;
+    kv-cache)    run_collective_bench kv-cache || rc=1 ;;
+    rl-mesh)     run_rl_mesh || rc=1 ;;
+    allreduce-fw) run_allreduce_fw || rc=1 ;;
+    all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
+    *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|nccl-ep|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|mooncake|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
+  esac
+  return $rc
+}
+
 rc=0
-case "$CX_BENCH" in
-  nccl)        run_nccl_suite || rc=1 ;;
-  deepep)      run_deepep_suite || rc=1 ;;
-  mori)        run_mori_suite || rc=1 ;;
-  uccl)        run_uccl_suite || rc=1 ;;
-  nccl-ep)     run_nccl_ep_suite || rc=1 ;;
-  flashinfer)  run_flashinfer_suite || rc=1 ;;
-  deepep-hybrid) run_deepep_hybrid_suite || rc=1 ;;
-  nixl)        run_nixl_suite || rc=1 ;;
-  mori-io)     run_mori_io_suite || rc=1 ;;
-  nccl-kv)     run_nccl_kv_suite || rc=1 ;;
-  mooncake)    run_mooncake_suite || rc=1 ;;
-  offload)     run_collective_bench offload || rc=1 ;;
-  copy-engine) run_collective_bench copy-engine || rc=1 ;;
-  kv-cache)    run_collective_bench kv-cache || rc=1 ;;
-  rl-mesh)     run_rl_mesh || rc=1 ;;
-  allreduce-fw) run_allreduce_fw || rc=1 ;;
-  all)         run_nccl_suite || rc=1; run_deepep_suite || rc=1 ;;
-  *)           cx_die "unknown CX_BENCH=$CX_BENCH (want nccl|deepep|mori|uccl|nccl-ep|flashinfer|deepep-hybrid|nixl|mori-io|nccl-kv|mooncake|offload|copy-engine|kv-cache|rl-mesh|allreduce-fw|all)" ;;
-esac
+if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-/nonexistent}" ]; then
+  # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
+  # All cases share (sku, backend, mode, resource) so the backend build (cx_build_*) is paid once and
+  # cached for the rest. Each case overrides its own dtype/contract/routing/phase/eplb/workload, then
+  # reuses the same per-config path (dispatch_bench). Collapses ~20 dispatches into one allocation.
+  ncases="$(python3 -c "import json;print(len(json.load(open('$CX_SHARD_FILE')).get('cases',[])))" 2>/dev/null || echo 0)"
+  cx_log "SHARD mode: $ncases case(s) in one allocation (shard=$CX_SHARD_FILE)"
+  _cx_ts_base="$CX_TS"   # per-case CX_TS suffix below keeps each case's result file UNIQUE (else
+                         # cases sharing backend+phase overwrite each other at the same timestamp).
+  ci=0
+  while [ "$ci" -lt "$ncases" ]; do
+    export CX_TS="${_cx_ts_base}-c$(printf '%03d' "$ci")"
+    # Map case[ci] fields -> CX_* env (shell-quoted). The setup job pre-resolved hidden/topk/experts
+    # + the token ladder into each case, so the loop is config-only (no workloads.yaml lookup here).
+    _exports="$(python3 - "$CX_SHARD_FILE" "$ci" <<'PY'
+import json, sys, shlex
+c = json.load(open(sys.argv[1]))["cases"][int(sys.argv[2])]
+def g(k, d=""):
+    v = c.get(k, d); return "" if v is None else str(v)
+env = {
+  "CX_BENCH": g("backend"), "CX_MODE": g("mode", "normal"),
+  "CX_DISPATCH_DTYPE": g("dtype", "bf16"),
+  "CX_MEASUREMENT_CONTRACT": g("contract", "layout-and-dispatch-v1"),
+  "CX_ROUTING": g("routing", "uniform"), "CX_PHASE": g("phase", "decode"),
+  "CX_RESOURCE_MODE": g("resource_mode", "normalized"),
+  "CX_ACTIVATION_PROFILE": g("activation_profile", "normal"),
+  "CX_PLACEMENT": g("placement", "packed"), "CX_ROUTING_STEP": g("routing_step", "0"),
+  "CX_UNEVEN_TOKENS": g("uneven_tokens", "none"),
+  "CX_EPLB": "1" if c.get("eplb") else "",
+  "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
+  "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
+}
+print("\n".join(f"export {k}={shlex.quote(v)}" for k, v in env.items()))
+PY
+)"
+    eval "$_exports"
+    cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_PHASE $CX_DISPATCH_DTYPE/$CX_MODE/${CX_MEASUREMENT_CONTRACT/-v1/} rt=$CX_ROUTING eplb=${CX_EPLB:-0}"
+    dispatch_bench || rc=1
+    ci=$((ci + 1))
+  done
+else
+  dispatch_bench || rc=1
+fi
 
 # Summary table for the log; also fails the job if no valid results were produced.
 python3 summarize.py --results-dir results --runner "$CX_RUNNER" --ts "$CX_TS" || rc=1
