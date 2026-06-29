@@ -170,7 +170,7 @@ case "$OFFLOADING" in
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "2GB",
-  "protocol": "rdma",
+  "protocol": "tcp",
   "device_name": "",
   "enable_offload": false
 }
