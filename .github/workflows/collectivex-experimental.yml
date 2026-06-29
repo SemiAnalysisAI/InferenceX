@@ -1,0 +1,353 @@
+name: CollectiveX Experimental
+
+# Orchestration only — all benchmark logic lives in experimental/CollectiveX/.
+# Push to the feature branch runs the MI355X MoRI dispatch/combine benchmark (no
+# merge to main needed); workflow_dispatch runs a chosen SKU + benchmark (the lane
+# for GB200/B200 NCCL, DeepEP, and larger sweeps). Each job lands on the SKU's
+# self-hosted runner and invokes that SKU's launch script — the same
+# launch_${RUNNER_NAME%%_*}.sh convention the serving benchmarks use.
+
+on:
+  push:
+    branches:
+      - collectivex
+    paths:
+      - 'experimental/CollectiveX/**'
+      - '.github/workflows/collectivex-experimental.yml'
+  workflow_dispatch:
+    inputs:
+      sku:
+        # Only SKUs with a matching launchers/launch_<prefix>.sh are offered —
+        # runner.name's prefix selects the script, so an SKU without one fails.
+        description: Self-hosted runner pool (must have a CollectiveX launcher)
+        type: choice
+        default: gb200
+        options: [gb200, b200-dgxc, b200-multinode, mi355x, h100-dgxc, h200, b300, gb300]
+      benchmark:
+        # mori runs only on mi355x; nccl/deepep/uccl/all + the collective benches on NVIDIA SKUs.
+        # offload/copy-engine/kv-cache are single-process memcpy-family collectives (family!=moe).
+        description: Which benchmark to run
+        type: choice
+        default: nccl
+        options: [nccl, deepep, deepep-hybrid, mori, uccl, nccl-ep, flashinfer, flashinfer-combine-fp8, flashinfer-combine-fp8-directcast, flashinfer-combine-nvfp4, nixl, mori-io, nccl-kv, mooncake, offload, copy-engine, kv-cache, rl-mesh, allreduce-fw, allreduce-fw-vllm, all]
+      ops:
+        description: NCCL ops (space-separated); blank = default set
+        type: string
+        default: ''
+      min_bytes:
+        description: nccl-tests min message size
+        type: string
+        default: '8'
+      max_bytes:
+        description: nccl-tests max message size
+        type: string
+        default: '8G'
+      nodes:
+        description: Node count (gb200 multi-node MNNVL; 2 = 8 GPU). Blank/1 = single node.
+        type: string
+        default: ''
+      phase:
+        # EP only. 'both' fans out to one job per phase (decode + prefill).
+        description: EP phase — decode (small T) / prefill (large T); 'both' = a job each
+        type: choice
+        default: both
+        options: [both, decode, prefill]
+      timing:
+        # Combined timing knobs "iters:trials:warmup" (GitHub caps workflow_dispatch at 25 inputs,
+        # so these share one). Blank = harness defaults (200:3:32). LOWER all three for the MoRI/
+        # MI355X large-T probe (e.g. "8:1:4"): MoRI wedges (unkillable D-state) under SUSTAINED
+        # collectives at T>=32; minimal iters/trials/warmup is the only way to reach >64 tok/rank.
+        description: 'Timing "iters:trials:warmup" (blank = 200:3:32; e.g. 8:1:4 for the MoRI large-T probe)'
+        type: string
+        default: ''
+      tokens_ladder:
+        description: EP source-tokens-per-rank sweep (space/comma sep); blank = phase default
+        type: string
+        default: ''
+      dispatch_dtype:
+        description: EP dispatch payload precision (fp8 scale-layout recipes + FlashInfer OCP-microscaling mxfp8/nvfp4)
+        type: choice
+        default: bf16
+        options: [bf16, fp8, fp8-pertoken, fp8-directcast, mxfp8, mxfp4, nvfp4]
+      mode:
+        # normal = high-throughput kernels (decode+prefill); ll = DeepEP low-latency
+        # (decode-shaped, fp8 cast in-kernel). LL is rejected on backends without it
+        # (MoRI) and aborts on fabrics that lack it (B300) — run only where supported.
+        description: EP kernel path — normal or low-latency (LL)
+        type: choice
+        default: normal
+        options: [normal, ll]
+      resource_mode:
+        # normalized = ~sm_fraction of device units (cross-vendor apples-to-apples);
+        # tuned = each backend's own recommended/default launch config.
+        description: Comm resource regime
+        type: choice
+        default: normalized
+        options: [normalized, tuned, default]
+      contract:
+        # layout-and-dispatch-v1 = dispatch timing includes routing-layout gen (the only
+        # contract MoRI honors; use for cross-vendor). cached-layout-comm-only-v1 = layout
+        # hoisted out, pure-comm dispatch (DeepEP normal only).
+        # runtime-visible-v1 = serving-realistic boundary (DeepEP times fp8 cast + layout + comm +
+        # recv-dequant inside dispatch). cached-layout = pure-comm (DeepEP normal only).
+        description: Measurement contract (timing boundary)
+        type: choice
+        default: layout-and-dispatch-v1
+        options: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+      routing:
+        # Routing distribution of the shared trace. uniform=realistic; balanced=load-equalized;
+        # zipf*=skewed; hotspot-*=one hot expert (static/moving); alternating-groups=toggling halves.
+        description: EP routing distribution
+        type: choice
+        default: uniform
+        options: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate,
+                  zipf-heavy, hotspot-single, hotspot-moving, alternating-groups]
+      eplb:
+        # EPLB = replicate hot experts + balanced-place (the remedy for skewed routing). A pure
+        # routing-trace transform; experts -> num_logical+redundant. Meaningful with zipf*.
+        description: Apply EPLB expert replication/placement
+        type: boolean
+        default: false
+      canonical:
+        # Consume a CANONICAL serialized workload (generated deterministically in-container) instead
+        # of seeded-runtime. A canonical-serialized run with full GHA provenance is publication
+        # 'official' — this is the switch that promotes a cohort past comparable-experimental.
+        description: Use canonical serialized workload (official-grade workload identity)
+        type: boolean
+        default: false
+      deepep_v2:
+        # Build DeepEP V2 (NCCL Gin backend) from source in-container, overriding the image's V1
+        # (1.2.1). Hopper(SM90)+Blackwell(SM100) only. Needs compute-node network + NCCL>=2.30.4.
+        description: Use DeepEP V2 kernels (build from source; NVIDIA SM90+ only)
+        type: boolean
+        default: false
+      activation_profile:
+        # Activation VALUE distribution of expert inputs. normal = headline; the others stress a
+        # future quantized combine (latency-neutral under bf16 — the expected null result).
+        description: Activation value profile
+        type: choice
+        default: normal
+        options: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+      placement:
+        # Rank->node/domain placement (locality). Single-node SKUs make these identical; meaningful
+        # on multi-domain SKUs (GB300 NVL72). packed=fill a domain first; striped=spread; adversarial.
+        description: Rank placement
+        type: choice
+        default: packed
+        options: [packed, striped, runtime-native, adversarial]
+      sm_fraction:
+        # normalized comm-resource fraction (DeepEP sm_fraction*SMs / MoRI ~*CUs). Sweep this with
+        # resource_mode=normalized to build the resource-Pareto (latency vs comm fraction). Blank =
+        # harness default 0.18.
+        description: Normalized comm-resource fraction (resource_mode=normalized)
+        type: string
+        default: ''
+      hidden:
+        # MoE hidden dim — set (with topk/experts) for model-derived workloads (ep-models-v1).
+        # Blank = ds-like-ref default 7168.
+        description: MoE hidden dim (model-derived workloads); blank = 7168
+        type: string
+        default: ''
+      topk:
+        description: MoE top-k (model-derived workloads); blank = 8
+        type: string
+        default: ''
+      experts:
+        description: MoE total experts (model-derived workloads); blank = 256
+        type: string
+        default: ''
+      routing_step:
+        # temporal snapshot index for hotspot-moving / alternating-groups (ep-temporal-v1).
+        description: Temporal routing step (hotspot-moving / alternating-groups)
+        type: string
+        default: ''
+      uneven_tokens:
+        # per-rank source-token allocation skew (ep-uneven-tokens-v1).
+        description: Uneven source-token allocation
+        type: choice
+        default: none
+        options: [none, linear, empty-rank]
+
+concurrency:
+  # Group per (SKU + FULL config): GitHub keeps only one running + one pending per group and
+  # cancels the rest, so a coarse per-SKU group made a fan-out of many configs on one SKU
+  # self-cancel down to ~2. Including dtype/mode/contract/routing/eplb/phase gives each config
+  # its OWN group -> all configs survive; they queue only on the runner's own capacity, not on
+  # GitHub concurrency. cancel-in-progress FALSE so a re-dispatch of the SAME config queues.
+  # The group includes the resource/value/placement axes (sm_fraction, resource_mode,
+  # activation_profile, placement) too — otherwise a Pareto sm-fraction sweep or an activation/
+  # placement sweep (same dtype/mode/contract/routing/phase) would self-cancel down to ~2 runs.
+  group: collectivex-${{ github.ref }}-${{ github.event_name }}-${{ inputs.sku || 'push' }}-${{ inputs.benchmark }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.placement }}-${{ inputs.hidden }}-${{ inputs.topk }}-${{ inputs.experts }}-${{ inputs.routing_step }}-${{ inputs.uneven_tokens }}-${{ inputs.nodes }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Push -> MI355X MoRI dispatch/combine. Lands on a free mi355x-amds runner and
+  # runs launch_mi355x-amds.sh (CX_BENCH=mori). The AMD workspace is compute-
+  # visible, so no CX_STAGE_DIR; the launcher defaults to 8 GPUs.
+  experimental:
+    name: CollectiveX Experimental (${{ matrix.phase }})
+    if: github.event_name == 'push'
+    runs-on: mi355x
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        # Push = a fast MoRI SMOKE only (decode). The full sweep is workflow_dispatch.
+        phase: [decode]
+    env:
+      CX_BENCH: mori
+      CX_PHASE: ${{ matrix.phase }}
+      # SMOKE ladder capped at T<=16: MoRI + realistic (fan-out≈5.3) routing currently
+      # WEDGES at T>=32 (under investigation; DeepEP is fine), and an unguarded run hung
+      # ~1 h before the job timeout. Keep the push smoke in the known-good range; run the
+      # full sweep via workflow_dispatch (timeout-guarded). Remove the cap once fixed.
+      CX_TOKENS_LADDER: "1 2 4 8 16"
+      CX_RUN_TIMEOUT: "600"
+      # Pin to the MI355X nodes that hold the node-local squash and have a writable
+      # /var/lib/squash; other nodes need a slow cold import that can fail on lock/
+      # cache permissions. Widen once the squash is staged cluster-wide.
+      CX_NODELIST: mia1-p01-g10,mia1-p01-g15
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
+        with: { clean: true }
+      - name: Launch MI355X MoRI (${{ matrix.phase }})
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+      - name: Results summary
+        if: always()
+        run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collectivex_mi355x_mori_${{ matrix.phase }}_${{ github.run_id }}
+          path: experimental/CollectiveX/results/*.json
+          if-no-files-found: warn
+
+  # Manual dispatch -> chosen SKU + benchmark. Lands on the inputs.sku runner.
+  dispatch:
+    if: github.event_name == 'workflow_dispatch'
+    # The bare `h200` label spans TWO clusters: 14 h200-dgxc runners (login-0; the EP
+    # path is validated there) and 2 h200-cw (CoreWeave) runners that have no
+    # launch_h200-cw.sh and die exit 127. Pin h200 to the h200-dgxc pool so every
+    # dispatch lands where the launcher + FS + partition are known-good. Other SKUs are
+    # single-pool, so pass the sku through unchanged.
+    runs-on: ${{ inputs.sku == 'h200' && 'h200-dgxc' || inputs.sku }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        # nccl/rccl are collective primitives — phase is meaningless, so run ONE job (not
+        # the same work twice). EP backends: 'both' -> decode + prefill; else a single job.
+        phase: ${{ fromJSON((inputs.benchmark == 'nccl' || inputs.benchmark == 'rccl') && '["na"]' || (inputs.phase == 'both' && '["decode","prefill"]' || format('["{0}"]', inputs.phase))) }}
+    env:
+      # flashinfer-combine-{fp8,nvfp4} = the flashinfer EP backend with a QUANTIZED COMBINE OUTPUT
+      # (MXFP8 e4m3+e8m0, or NVFP4 e2m1, via the flashinfer-main moe_a2a_combine output_dtype). Map to
+      # CX_BENCH=flashinfer + CX_COMBINE_DTYPE (run_flashinfer_suite builds flashinfer-main when
+      # CX_COMBINE_DTYPE!=bf16). Input-cap-safe (a benchmark CHOICE, not a new input).
+      CX_BENCH: ${{ startsWith(inputs.benchmark, 'flashinfer-combine') && 'flashinfer' || (inputs.benchmark == 'allreduce-fw-vllm' && 'allreduce-fw' || inputs.benchmark) }}
+      # allreduce-fw-vllm = the framework all-reduce bench in a vLLM container (container switch for
+      # the vLLM custom-AR, goal 215) — set CX_IMAGE to a vLLM cuda image; the launcher uses CX_IMAGE
+      # when non-empty, else cx_default_image. Input-cap-safe (a benchmark CHOICE).
+      CX_IMAGE: ${{ inputs.benchmark == 'allreduce-fw-vllm' && 'vllm/vllm-openai:latest' || '' }}
+      # startsWith catches both flashinfer-combine-fp8 and -fp8-directcast (both fp8 combine output;
+      # the -directcast variant differs only in CX_QC_SCALE=scalar below — a single output_scalar_scale,
+      # no per-block scales = the unscaled direct-cast fp8 combine).
+      CX_COMBINE_DTYPE: ${{ startsWith(inputs.benchmark, 'flashinfer-combine-fp8') && 'fp8' || (inputs.benchmark == 'flashinfer-combine-nvfp4' && 'nvfp4' || 'bf16') }}
+      CX_COMBINE_QUANT_MODE: ${{ startsWith(inputs.benchmark, 'flashinfer-combine-fp8') && 'fp8' || (inputs.benchmark == 'flashinfer-combine-nvfp4' && 'nvfp4' || 'none') }}
+      CX_QC_SCALE: ${{ inputs.benchmark == 'flashinfer-combine-fp8-directcast' && 'scalar' || '' }}
+      CX_OPS: ${{ inputs.ops }}
+      CX_MIN_BYTES: ${{ inputs.min_bytes }}
+      CX_MAX_BYTES: ${{ inputs.max_bytes }}
+      CX_NODES: ${{ inputs.nodes }}
+      CX_PHASE: ${{ matrix.phase }}
+      CX_TOKENS_LADDER: ${{ inputs.tokens_ladder }}
+      CX_DISPATCH_DTYPE: ${{ inputs.dispatch_dtype }}
+      CX_MODE: ${{ inputs.mode }}
+      CX_RESOURCE_MODE: ${{ inputs.resource_mode }}
+      CX_MEASUREMENT_CONTRACT: ${{ inputs.contract }}
+      CX_ROUTING: ${{ inputs.routing }}
+      CX_EPLB: ${{ inputs.eplb && '1' || '' }}
+      # canonical serialized workload (official-grade identity) + value/placement axes (goal P1/P2).
+      CX_CANONICAL: ${{ inputs.canonical && '1' || '' }}
+      CX_DEEPEP_V2: ${{ inputs.deepep_v2 && '1' || '' }}
+      CX_ACTIVATION_PROFILE: ${{ inputs.activation_profile }}
+      CX_PLACEMENT: ${{ inputs.placement }}
+      CX_SM_FRACTION: ${{ inputs.sm_fraction }}
+      # model-derived workload dims (blank = ds-like-ref defaults) + temporal/uneven axes.
+      CX_HIDDEN: ${{ inputs.hidden }}
+      CX_TOPK: ${{ inputs.topk }}
+      CX_EXPERTS: ${{ inputs.experts }}
+      CX_ROUTING_STEP: ${{ inputs.routing_step }}
+      CX_UNEVEN_TOKENS: ${{ inputs.uneven_tokens }}
+      CX_TIMING: ${{ inputs.timing }}
+      # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job) -> a GHA result
+      # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
+      COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      COLLECTIVEX_ARTIFACT_NAME: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ matrix.phase }}_${{ github.run_id }}
+      # GB200/watchtower needs a compute-visible workspace; harmless elsewhere.
+      CX_STAGE_DIR: ${{ inputs.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
+      # MI355X: pin to the warm-squash, writable nodes (see the push job).
+      CX_NODELIST: ${{ inputs.sku == 'mi355x' && 'mia1-p01-g10,mia1-p01-g15' || '' }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
+        with: { clean: true }
+      # Reject an unsupported backend/SKU/mode/dtype/contract BEFORE consuming the runner
+      # (review #3): fail fast on the login node, not after a salloc. 'all' fans out per
+      # vendor in-container, so skip the single-combo check for it.
+      - name: Validate capability
+        if: inputs.benchmark != 'all'
+        run: |
+          python3 experimental/CollectiveX/tests/capability.py \
+            --sku "${{ inputs.sku }}" \
+            --backend "${{ startsWith(inputs.benchmark, 'flashinfer-combine') && 'flashinfer' || (inputs.benchmark == 'allreduce-fw-vllm' && 'allreduce-fw' || inputs.benchmark) }}" \
+            --mode "${{ inputs.mode }}" --dtype "${{ inputs.dispatch_dtype }}" \
+            --contract "${{ inputs.contract }}" \
+            --combine-dtype "${{ startsWith(inputs.benchmark, 'flashinfer-combine-fp8') && 'fp8' || (inputs.benchmark == 'flashinfer-combine-nvfp4' && 'nvfp4' || 'bf16') }}" \
+            --combine-quant-mode "${{ startsWith(inputs.benchmark, 'flashinfer-combine-fp8') && 'fp8' || (inputs.benchmark == 'flashinfer-combine-nvfp4' && 'nvfp4' || 'none') }}"
+      - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }} (${{ matrix.phase }})
+        env:
+          RUNNER_NAME: ${{ runner.name }}
+        run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+      - name: Results summary
+        if: always()
+        run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ matrix.phase }}_${{ github.run_id }}
+          path: experimental/CollectiveX/results/*.json
+          if-no-files-found: warn
+
+  update-frontend-snapshot:
+    name: Update InferenceX-app snapshot
+    needs: [experimental, dispatch]
+    if: >-
+      always() &&
+      (
+        (github.event_name == 'push' && needs.experimental.result == 'success') ||
+        (github.event_name == 'workflow_dispatch' && needs.dispatch.result == 'success')
+      )
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger CollectiveX snapshot update
+        env:
+          FRONTEND_PAT: ${{ secrets.INFX_FRONTEND_PAT }}
+        run: |
+          set -euo pipefail
+          curl -sSf -X POST \
+            -H "Authorization: Bearer $FRONTEND_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
+            -d '{
+              "event_type": "update-collectivex-data",
+              "client_payload": {
+                "source_run_id": "${{ github.run_id }}"
+              }
+            }'

@@ -1,0 +1,146 @@
+# CollectiveX workload registry (goal Part 2). Each workload references an IMMUTABLE canonical
+# manifest (tests/workload.py -> <workload_id>.npz + .manifest.json). Three kinds:
+#   synthetic       — controlled DeepSeek-like baseline (dims real, routing controlled)
+#   model-derived   — REAL model MoE dimensions with controlled routing (shape != routing behavior)
+#   trace-replay    — captured routing behavior (future; needs a captured trace)
+# Model dims marked verify=true must be confirmed against a checked-in model config before any
+# result built on them is promoted past 'comparable-experimental'.
+schema_version: 1
+
+synthetic:
+  ds-like-ref:
+    kind: synthetic
+    hidden: 7168
+    topk: 8
+    experts: 256
+    dispatch_dtype: bf16
+    combine_dtype: bf16
+    routings: [uniform, balanced, zipf]
+    note: "Controlled baseline used through v3/v4 (DeepSeek-V3-shaped)."
+
+model_derived:
+  # --- PINNED, NAMED model manifests (goal P1 "Add workload manifests"). The "-v1" suffix freezes
+  # the (hidden, topk, routed_experts) shape behind an immutable name so a published result can cite
+  # `kimi-k2-v1` and have it mean exactly these dims forever; if a future model rev changes a dim it
+  # gets a "-v2" manifest, never a silent edit here. These are the names referenced for model-shape
+  # coverage. The legacy unsuffixed entries below are kept for back-compat with existing suites.
+  # canonical workload_id folds (hidden, topk, routed_experts) -> identical bytes on every SKU.
+  deepseek-v3-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    expert_alignment: 128
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: false           # DeepSeek-V3 EP serving shape; identical dims to the ds-like-ref baseline
+  deepseek-v4-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    expert_alignment: 128
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: false           # matches the validated DSV3/V4 serving shape used on these clusters
+  minimax-m3-v1:
+    kind: model-derived
+    hidden: 6144
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: true
+  kimi-k2-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 384
+    shared_experts: 1
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: true
+  qwen3.5-v1:
+    kind: model-derived
+    hidden: 4096
+    topk: 8
+    routed_experts: 128
+    shared_experts: 0
+    dispatch_dtype: bf16
+    combine_dtype: bf16
+    verify: true
+
+  # --- LEGACY unsuffixed entries (kept for back-compat with ep-models-v1 and analyze_ep envelope
+  # matching). Prefer the "-v1" names above for new work. deepseek-v4/minimax-m3/qwen3.5 mirror their
+  # "-v1" shapes exactly; kimi-k2.x == kimi-k2-v1; glm-5 has no "-v1" (not in the goal's manifest set).
+  deepseek-v4:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    expert_alignment: 128
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: false           # matches the validated DSV3/V4 serving shape used on these clusters
+  minimax-m3:
+    kind: model-derived
+    hidden: 6144
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: true
+  kimi-k2.x:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 384
+    shared_experts: 1
+    dispatch_dtype: fp8
+    combine_dtype: bf16
+    verify: true
+  glm-5:
+    kind: model-derived
+    hidden: 5120
+    topk: 8
+    routed_experts: 160
+    shared_experts: 1
+    dispatch_dtype: bf16
+    combine_dtype: bf16
+    verify: true
+  qwen3.5:
+    kind: model-derived
+    hidden: 4096
+    topk: 8
+    routed_experts: 128
+    shared_experts: 0
+    dispatch_dtype: bf16
+    combine_dtype: bf16
+    verify: true
+
+# decode vs prefill are workload METADATA, not just token-ladder aliases (goal Part 2). Each point
+# is ONE MoE layer · ONE step · a SINGLE dispatch+combine collective pair (NOT a whole model or
+# several concurrent layers). The harness emits this as `phase_profile` so a T=128 point launched
+# under "prefill" is never silently read as a decode point.
+phase_profiles:
+  decode:
+    token_ladder: [1, 2, 4, 8, 16, 32, 64, 128]
+    description: "one (or few) tokens per active sequence per step; routing varies step-to-step"
+    active_sequences: "one batch of active sequences"
+    tokens_per_iter: "1 (or few) per active sequence"
+    microbatch_distribution: "one decode step across the active sequences"
+    routing_variability: "varies step-to-step (use the temporal routing modes to model this)"
+    represents: "one MoE layer · one decode step · one dispatch+combine collective"
+  prefill:
+    token_ladder: [128, 256, 512, 1024, 2048, 4096]
+    description: "chunked-prefill: many tokens per sequence enter each MoE layer at once"
+    chunk_size: "the tokens/rank point IS the prefill chunk size entering the MoE layer"
+    tokens_entering_moe: "chunk_size * ep_size tokens enter one MoE layer at once"
+    request_mixture: "a single chunked-prefill chunk (no request-mix modelled yet)"
+    chunked_prefill_behavior: "one chunk per measured point"
+    represents: "one MoE layer · one prefill chunk · one dispatch+combine collective"

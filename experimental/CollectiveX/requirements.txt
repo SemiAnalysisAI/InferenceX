@@ -1,0 +1,9 @@
+# CollectiveX spike dependencies.
+#
+# run_nccl.py + env_capture.py : Python standard library only (run anywhere).
+# run_deepep.py                : torch + deep_ep — provided by the benchmark
+#                                container; DeepEP is built at job setup
+#                                (rebuild-deepep), NOT pinned here.
+# plot.py                      : the only thing worth a local venv:
+matplotlib
+numpy

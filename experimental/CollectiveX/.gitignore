@@ -1,0 +1,22 @@
+# in-container nccl-tests build cache
+.nccl-tests/
+# python
+__pycache__/
+*.pyc
+# generated run artifacts: captured env embeds hostnames / GPU UUIDs / NIC GUIDs,
+# so keep results out of git (CI uploads them as workflow artifacts instead).
+# Sanitized headline numbers live in CONTAINERS.md.
+results/*.json
+results/plots/
+results/raw_*.txt
+results/raw_*.txt.stderr
+# superseded SSH-provenance result JSONs moved aside so plot_ep's recursive glob
+# won't double-load them; same hostname/UUID sensitivity as results/.
+_ssh_v4_archive/
+# running local-only reflection log (not a committed artifact)
+notes.md
+goal.md
+# superseded seeded-runtime GHA results (canonical counterpart exists); kept out of the plot glob
+_seeded_archive/
+# newest-good-per-config kept in results/; superseded runs moved here (out of the plot glob)
+_superseded/

@@ -1,0 +1,218 @@
+# CollectiveX named benchmark suites (goal Part 2). A suite binds workloads x platforms x
+# backends x modes x contracts x resource regimes x repetitions x required publication level.
+# generate_matrix.py resolves a suite against platforms.yaml/backends.yaml capabilities BEFORE
+# any GPU is allocated, omitting unsupported combinations with recorded reasons.
+schema_version: 1
+
+# HEADLINE DISTRIBUTION CONTRACT (goal Part 2 "define one headline distribution"). ONE routing
+# profile is the cross-hardware headline; every other distribution is a SENSITIVITY view, never a
+# peer headline dimension. plot_ep.py defaults to this (HEADLINE_DISTRIBUTION) and labels the
+# sensitivity section as "not the headline".
+headline_distribution:
+  routing: uniform
+  basis: synthetic            # synthetic | fitted | replayed — uniform is the controlled synthetic ref
+  rationale: >-
+    uniform is deterministic, controlled, and present on every SKU/backend, so it is the
+    apples-to-apples cross-hardware reference. balanced / zipf / zipf+eplb / hotspot* are
+    sensitivity views. Interim load-realism reference = zipf+eplb (skew + the production remedy);
+    long-term headline will be InferenceX TRACE-REPLAY (captured per-step serving routing) once a
+    replay loader lands — then `basis` becomes `replayed`.
+  sensitivity_distributions: [balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate,
+                              zipf-heavy, hotspot-single, hotspot-moving, alternating-groups]
+
+suites:
+  ep-smoke-v1:
+    description: "fast canary: one small point per platform/backend/mode/contract"
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, gb300, gb200, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    token_points: [8, 64]
+    trials: 1
+    required_publication: comparable-experimental
+
+  ep-nightly-v1:
+    description: "headline matrix: both contracts, bf16+fp8, normal+LL, decode+prefill"
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, b300, b200, gb300, gb200, mi355x]
+    backends: [deepep, mori]
+    modes: [normal, ll]
+    dtypes: [bf16, fp8]
+    contracts: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: official
+
+  ep-models-v1:
+    description: "model-shape envelope: real MoE dimensions, controlled routing"
+    workloads: [deepseek-v4, kimi-k2.x, qwen3.5, glm-5, minimax-m3]
+    platforms: [h100, h200, b300, b200, gb300, gb200, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [fp8, bf16]
+    contracts: [runtime-visible-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-scaling-v1:
+    description: "strong (fixed global tokens) + weak (fixed tokens/rank) scaling across EP degrees"
+    workloads: [ds-like-ref]
+    platforms: [gb300, gb200]            # the only SKU with >1 validated EP degree (EP4 + EP8)
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    scaling: [strong, weak]
+    ep_degrees: [4, 8]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-topology-v1:
+    description: "placement sensitivity: packed vs striped vs adversarial on multi-domain SKUs"
+    workloads: [ds-like-ref]
+    platforms: [gb300, gb200]            # NVL72 tray boundary is the scale-up domain edge
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform, zipf]
+    placements: [packed, striped, adversarial]
+    resource_modes: [tuned]
+    ep_degrees: [8]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-distribution-sensitivity-v1:
+    description: "distribution robustness: ratio p99_worst / p99_headline(uniform) at ANCHOR tokens
+      only. NOT a chart dimension — collapses to one sensitivity number per (sku,backend,phase) via
+      tests/sensitivity.py. BF16/normal today; the value (activation) axis is added when the rig lands."
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, b300, b200, gb300, gb200, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    # headline = uniform; balanced-rank-local = min-comm best case; zipf-heavy/hotspot-single = worst.
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-heavy, hotspot-single]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    # ANCHOR points only (not the full ladder) — the suite answers "how fragile", not "the curve".
+    token_points_decode: [1, 8, 32, 128]
+    token_points_prefill: [128, 512, 2048]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-routing-v1:
+    description: "routing-skew sensitivity + EPLB remedy"
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, b300, b200, gb300, gb200]
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform, balanced, zipf, zipf-mild, zipf-moderate, zipf-heavy, hotspot-single]
+    eplb: [false, true]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-activation-sensitivity-v1:
+    description: "activation-VALUE sensitivity: same trace under each value profile. Under bf16
+      combine the ratio is ~1.0 (value-independent) — the EXPECTED null result that also baselines
+      the rig for when a quantized (value-sensitive) combine lands. Diagnostic, never headline."
+    workloads: [ds-like-ref]
+    platforms: [h100, h200, b300, b200, mi355x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    # the activation value distributions (routing.ACTIVATION_PROFILES). normal = headline.
+    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+    resource_modes: [tuned]
+    phases: [decode]
+    token_points: [1, 8, 32, 128]
+    trials: 3
+    required_publication: diagnostic
+
+  ep-quant-combine-sensitivity-v1:
+    description: "BLOCKED ON PR311 — quantized-combine distribution sensitivity (none/fp8/mxfp8).
+      The rig is ready (combine_quant_mode field + capability gate + comparison_key fold), but no
+      quantized combine kernel is wired, so this suite resolves to ZERO valid cases today (capability
+      rejects combine_quant_mode != none). Kept so the matrix lights up the moment the kernel lands."
+    workloads: [ds-like-ref]
+    platforms: [mi355x]
+    backends: [mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform, zipf, hotspot-single]
+    combine_quant_modes: [none, fp8, mxfp8]   # only 'none' resolves valid until PR311
+    resource_modes: [tuned]
+    phases: [decode]
+    trials: 3
+    required_publication: diagnostic
+
+  ep-placement-v1:
+    description: "placement matrix: packed vs striped vs adversarial. Single-node SKUs make these
+      identical (all same-node); meaningful once a multi-node EP cohort exists. analyze_ep computes
+      the packed-vs-striped topology penalty + locality attribution."
+    workloads: [ds-like-ref]
+    platforms: [gb300, gb200]            # NVL72 tray boundary = the only multi-domain SKU here
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform, zipf]
+    placements: [packed, striped, adversarial]
+    resource_modes: [tuned]
+    ep_degrees: [8]
+    phases: [decode, prefill]
+    trials: 3
+    required_publication: comparable-experimental
+
+  ep-temporal-v1:
+    description: "temporal routing: a hot expert that MOVES across decode steps + expert groups that
+      ALTERNATE. One run per step (--routing-step); analyze across steps. Diagnostic sensitivity view."
+    workloads: [ds-like-ref]
+    platforms: [h100, h200]
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [hotspot-moving, alternating-groups]
+    routing_steps: [0, 1, 2, 3]
+    resource_modes: [tuned]
+    phases: [decode]
+    token_points: [8, 32, 128]
+    trials: 3
+    required_publication: diagnostic
+
+  ep-uneven-tokens-v1:
+    description: "uneven source-token allocation: per-rank token counts vary (global may not divide
+      EP); includes the empty-source-rank case. Records source_token_stats (min/mean/max/CV)."
+    workloads: [ds-like-ref]
+    platforms: [h100, h200]
+    backends: [deepep]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    uneven_tokens: [none, linear, empty-rank]
+    resource_modes: [tuned]
+    phases: [decode]
+    token_points: [8, 32, 128]
+    trials: 3
+    required_publication: diagnostic

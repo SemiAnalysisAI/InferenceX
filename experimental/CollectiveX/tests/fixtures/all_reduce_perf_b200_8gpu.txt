@@ -1,0 +1,50 @@
+# nThread 1 nGpus 8 minBytes 8 maxBytes 8589934592 step: 2(factor) warmup iters: 5 iters: 20 agg iters: 1 validation: 1 graph: 0
+#
+# Using devices
+#  Rank  0 Group  0 Pid  12345 on    b200-node device  0 [0x1b] NVIDIA B200
+#  Rank  1 Group  0 Pid  12345 on    b200-node device  1 [0x43] NVIDIA B200
+#  Rank  2 Group  0 Pid  12345 on    b200-node device  2 [0x52] NVIDIA B200
+#  Rank  3 Group  0 Pid  12345 on    b200-node device  3 [0x61] NVIDIA B200
+#  Rank  4 Group  0 Pid  12345 on    b200-node device  4 [0x9d] NVIDIA B200
+#  Rank  5 Group  0 Pid  12345 on    b200-node device  5 [0xc3] NVIDIA B200
+#  Rank  6 Group  0 Pid  12345 on    b200-node device  6 [0xd1] NVIDIA B200
+#  Rank  7 Group  0 Pid  12345 on    b200-node device  7 [0xdf] NVIDIA B200
+#
+#                                                              out-of-place                       in-place
+#       size         count      type   redop    root     time   algbw   busbw #wrong     time   algbw   busbw #wrong
+#        (B)    (elements)                               (us)  (GB/s)  (GB/s)            (us)  (GB/s)  (GB/s)
+           8             2     float     sum      -1     9.62    0.00    0.00      0     9.60    0.00    0.00      0
+          16             4     float     sum      -1     9.61    0.00    0.00      0     9.59    0.00    0.00      0
+          32             8     float     sum      -1     9.63    0.00    0.00      0     9.62    0.00    0.00      0
+          64            16     float     sum      -1     9.60    0.00    0.00      0     9.58    0.00    0.00      0
+         128            32     float     sum      -1     9.64    0.01    0.02      0     9.63    0.01    0.02      0
+         256            64     float     sum      -1     9.66    0.03    0.05      0     9.64    0.03    0.05      0
+         512           128     float     sum      -1     9.69    0.05    0.09      0     9.67    0.05    0.09      0
+        1024           256     float     sum      -1     9.74    0.11    0.18      0     9.72    0.11    0.18      0
+        2048           512     float     sum      -1     9.82    0.21    0.37      0     9.80    0.21    0.37      0
+        4096          1024     float     sum      -1     9.97    0.41    0.72      0     9.95    0.41    0.72      0
+        8192          2048     float     sum      -1    10.22    0.80    1.40      0    10.20    0.80    1.40      0
+       16384          4096     float     sum      -1    10.81    1.52    2.65      0    10.79    1.52    2.65      0
+       32768          8192     float     sum      -1    11.93    2.75    4.81      0    11.90    2.75    4.81      0
+       65536         16384     float     sum      -1    13.62    4.81    8.42      0    13.59    4.82    8.43      0
+      131072         32768     float     sum      -1    16.94    7.74   13.54      0    16.90    7.76   13.57      0
+      262144         65536     float     sum      -1    23.14   11.33   19.83      0    23.10   11.35   19.86      0
+      524288        131072     float     sum      -1    35.62   14.72   25.76      0    35.55   14.75   25.81      0
+     1048576        262144     float     sum      -1    60.40   17.36   30.38      0    60.30   17.39   30.43      0
+     2097152        524288     float     sum      -1    76.50   27.41   47.97      0    76.40   27.45   48.04      0
+     4194304       1048576     float     sum      -1   110.20   38.06   66.61      0   110.05   38.11   66.70      0
+     8388608       2097152     float     sum      -1   165.80   50.60   88.55      0   165.60   50.66   88.65      0
+    16777216       4194304     float     sum      -1   250.10   67.08  117.40      0   249.80   67.16  117.54      0
+    33554432       8388608     float     sum      -1   360.50   93.08  162.90      0   360.10   93.18  163.07      0
+    67108864      16777216     float     sum      -1   520.80  128.85  225.50      0   520.20  129.00  225.75      0
+   134217728      33554432     float     sum      -1   720.30  186.34  326.10      0   719.50  186.55  326.46      0
+   268435456      67108864     float     sum      -1  1080.50  248.43  434.80      0  1079.20  248.73  435.27      0
+   536870912     134217728     float     sum      -1  1990.20  269.76  472.10      0  1988.50  269.99  472.49      0
+  1073741824     268435456     float     sum      -1  3940.60  272.48  476.84      0  3938.10  272.65  477.14      0
+  2147483648     536870912     float     sum      -1  7850.10  273.56  478.73      0  7846.20  273.69  478.96      0
+  4294967296    1073741824     float     sum      -1 15680.50  273.91  479.34      0 15673.80  274.03  479.55      0
+  8589934592    2147483648     float     sum      -1 31250.80  274.87  481.02      0 31238.10  274.98  481.22      0
+#
+# Out of bounds values : 0 OK
+# Avg bus bandwidth    : 168.42
+#

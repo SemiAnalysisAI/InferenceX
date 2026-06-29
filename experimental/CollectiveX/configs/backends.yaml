@@ -1,0 +1,83 @@
+# CollectiveX backend registry (goal Part 2) — the single source of truth for backend
+# capability, replacing the data split between the adapters and tests/capability.py. Keep in
+# sync with ep_deepep.py / ep_mori.py SUPPORTED_* sets (capability.py mirrors this at runtime).
+schema_version: 1
+backends:
+  deepep:
+    vendor: nvidia
+    modes: [normal, ll]                 # ll is DECODE-ONLY (fixed num_max dispatch)
+    dtypes: [bf16, fp8]                  # DISPATCH-side precision
+    contracts: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+    transports: [nvlink, mnnvl, rdma]
+    ep_max_intranode: 8                  # <=8 ranks = intranode NVL kernel (incl. MNNVL trays)
+    ep_min: 2
+    # combine path + distribution semantics (goal P2 "distribution + quant-combine constraints").
+    # bf16/none combine only (quantized combine reserved until a kernel is wired); honors any
+    # routing trace + EPLB; all activation profiles runnable (value-neutral under bf16).
+    combine_dtypes: [bf16]
+    quant_modes: [none]
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate, zipf-heavy,
+               hotspot-single, hotspot-moving, alternating-groups]
+    eplb: true
+    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+    phase_constraints:
+      ll: {phases: [decode], max_tokens_per_rank: 128}   # LL is a fixed-num_max decode path
+    required_image: "lmsysorg/sglang:v0.5.11-cu130"
+    cap_token_per_rank: 4096             # 4 GiB NVL buffer holds ~4096 tok/rank at hidden=7168
+  uccl:
+    vendor: nvidia
+    modes: [normal, ll]                  # uccl.ep.Buffer is a DeepEP-API clone
+    dtypes: [bf16, fp8]                  # DISPATCH-side precision
+    contracts: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+    transports: [nvlink, rdma]
+    ep_max_intranode: 8
+    ep_min: 2
+    combine_dtypes: [bf16]
+    quant_modes: [none]
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate, zipf-heavy,
+               hotspot-single, hotspot-moving, alternating-groups]
+    eplb: true
+    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+    phase_constraints:
+      ll: {phases: [decode], max_tokens_per_rank: 128}
+    required_image: "lmsysorg/sglang:v0.5.11-cu130"
+    install: "pip install uccl nvidia-cuda-runtime-cu12 (cu12 runtime on LD_LIBRARY_PATH); see cx_build_uccl"
+    cap_token_per_rank: 4096
+  mori:
+    vendor: amd
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    transports: [xgmi, rdma]
+    ep_max_intranode: 8
+    ep_min: 2
+    combine_dtypes: [bf16]               # + fp8 when ROCm/MoRI PR311 quant_type combine lands
+    quant_modes: [none]                  # + the PR311 mode id once validated
+    routings: [uniform, balanced, balanced-rank-local, zipf, zipf-mild, zipf-moderate, zipf-heavy,
+               hotspot-single, hotspot-moving, alternating-groups]
+    eplb: true
+    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+    phase_constraints:
+      normal: {max_tokens_per_rank: 512}   # 2 GiB registerable heap cap at hidden=7168
+    required_image: "rocm/sgl-dev:sglang-0.5.9-rocm720-mi35x-mori-0227-2"
+    cap_token_per_rank: 512
+    fragility: "wedges (D-state) on sustained iters>=200 at T>=32; needs gradual ramp, low iters"
+  aiter:
+    vendor: amd
+    modes: [normal]
+    dtypes: [bf16, fp8]
+    contracts: [layout-and-dispatch-v1]
+    transports: [xgmi, rdma]
+    ep_max_intranode: 8
+    ep_min: 2
+    status: "scaffolded — adapter ep_aiter.py not yet implemented (capability declared, not validated)"
+    required_image: "rocm/sgl-dev (AITER CK MoE EP)"
+
+# 'all' resolves to a DEFINED per-vendor backend set (NOT the same across vendors).
+vendor_backends:
+  nvidia: [nccl, deepep, uccl]
+  amd: [rccl, mori]
+# Collective primitives (not EP dispatch/combine — phase/dtype/mode/contract N/A).
+collective_backends:
+  nccl: [nvidia]
+  rccl: [amd]
