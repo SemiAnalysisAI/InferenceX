@@ -7,8 +7,8 @@ are CHUNKED so no single matrix cell exceeds the GHA 6h job budget. Each case is
 model dims (hidden/topk/experts from workloads.yaml) + token ladder + canonical flag, so the in-
 container shard loop (run_in_container.sh SHARD mode) needs no further config lookup.
 
-Knobs mirror _gha_suite.sh: --backend remaps the deepep matrix onto another EP library (capability-
-filtered), --deepep-v2 threads kernel_gen=v2. Emits a JSON matrix object for `fromJSON` in the
+Knobs: --backends sweeps every EP library in ONE matrix; --backend remaps the deepep matrix onto a
+single other library (capability-filtered); --deepep-v2 threads kernel_gen=v2. Emits a JSON matrix for `fromJSON` in the
 workflow: {"include": [ {id, sku, backend, mode, resource, deepep_v2, n, cases:[...]}, ... ]}.
 
   python3 sweep_matrix.py --suites all --out matrix.json
@@ -107,7 +107,7 @@ def main() -> int:
             rmode = c["resource_mode"]
             lad = _ladder(scfg, phase)
             h, t, e = _dims(wl_cfg, c["workload"])
-            # MoRI envelope guard (mirrors _gha_suite.sh): decode-only, capped ladder, tuned.
+            # MoRI envelope guard: decode-only, capped ladder, tuned.
             if sku == "mi355x":
                 if phase == "prefill":
                     continue
