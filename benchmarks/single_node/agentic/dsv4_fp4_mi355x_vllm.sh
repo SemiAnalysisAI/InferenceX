@@ -199,7 +199,7 @@ EOF
   #"device_name": "mlx5_0",
   #"local_buffer_size": "4GB",
         export MOONCAKE_CONFIG_PATH
-        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+        #export MC_ENABLE_DEST_DEVICE_AFFINITY=1
         export PYTHONHASHSEED=0
         export MC_SLICE_SIZE=1048576
         # (srok)
