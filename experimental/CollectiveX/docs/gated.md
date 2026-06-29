@@ -178,9 +178,19 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   RL mesh-to-mesh + all-gather DP-attention→TP-MoE shapes: covered by the standardized sweeps.
 - **KV-cache backends:** raw memcpy + CPU-pinned WIRED; **NIXL WIRED** (`tests/nixl_transfer.py`, B300
   via the dynamo-container switch — see the NIXL section above); **MoRI-IO WIRED** (`tests/
-  mori_io_transfer.py`, MI355X, `mori.io` IOEngine RDMA p2p). **MoonCake** remains not wired — needs the
-  Mooncake transfer-engine library, which is in none of the CollectiveX containers (would require
-  importing a Mooncake image or building it from source).
+  mori_io_transfer.py`, MI355X, `mori.io` IOEngine RDMA p2p). **MoonCake WIRED on NVIDIA** (`tests/
+  mooncake_transfer.py`, run_mooncake_suite pip-installs the engine; B300 35.4 GB/s via
+  `transfer_write_on_cuda`). **MoonCake on MI355X = ROCm wall (evidenced):** the engine initializes on
+  ROCm (`MOONCAKE_INIT … on rdma device rdma0`) but the pip wheel exposes NO `transfer_write_on_hip`
+  method (only the CUDA one) — `0 groups, status=invalid`, run 28342781762. A HIP transfer path would
+  need an upstream Mooncake ROCm build, not a container/flag fix.
+
+- **MI355X primitives (rccl-tests) tab:** the All-reduce/All-gather tabs render `family=nccl`; the AMD
+  equivalent is `rccl` (`CX_BENCH=nccl` → rccl-tests on the MI355X launcher). Repeated dispatches
+  (28340951946, 28342780904) failed in the runner *checkout/setup* step (exit 2/3, `EACCES` on a shared
+  `LOGS/agentic` dir + missing workspace) — the MI355X GHA runners are shared with the agentic
+  benchmark fleet, so the CollectiveX checkout collides intermittently. This is a runner-contention
+  infra flake, NOT an rccl-tests limitation; it lands when it gets a clean runner.
 
 ## AMD / MI355X items — now ATTEMPTED via GHA (no longer "out of scope")
 The directive's container-switch + AMD-lift asks. All run via GHA on the MI355X MoRI image:
