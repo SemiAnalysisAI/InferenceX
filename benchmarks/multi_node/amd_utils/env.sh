@@ -129,6 +129,20 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
     set +x
     echo "[INFO] IBDEVICES=$IBDEVICES  UCX_NET_DEVICES=$UCX_NET_DEVICES  NCCL_SOCKET_IFNAME=$NCCL_SOCKET_IFNAME  UCX_IB_GID_INDEX=$UCX_IB_GID_INDEX  UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-unset}"
 
+    # MoRIIO uses MORI_* QoS knobs even when it is loaded by vLLM. Keep these
+    # aligned with the UCX traffic class used on the same RoCE fabric.
+    if [[ -z "$MORI_RDMA_TC" && -n "$UCX_IB_TRAFFIC_CLASS" ]]; then
+        export MORI_RDMA_TC="$UCX_IB_TRAFFIC_CLASS"
+    fi
+    if [[ -z "$MORI_IO_TC" && -n "$MORI_RDMA_TC" ]]; then
+        export MORI_IO_TC="$MORI_RDMA_TC"
+    fi
+    if [[ -n "$UCX_IB_SL" ]]; then
+        export MORI_RDMA_SL="${MORI_RDMA_SL:-$UCX_IB_SL}"
+        export MORI_IO_SL="${MORI_IO_SL:-$UCX_IB_SL}"
+    fi
+    echo "[INFO] MORI_RDMA_TC=${MORI_RDMA_TC:-unset}  MORI_IO_TC=${MORI_IO_TC:-unset}  MORI_RDMA_SL=${MORI_RDMA_SL:-unset}  MORI_IO_SL=${MORI_IO_SL:-unset}"
+
 else
     # =========================================================================
     # SGLang/MoRI-specific environment

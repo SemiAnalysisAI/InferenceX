@@ -190,14 +190,11 @@ PY
     fi
 
     # Stage agentic raw artifacts + server logs for the CI upload steps.
-    # server_sglang.sh copies /run_logs/slurm_job-<id> to
-    # $BENCHMARK_LOGS_DIR/logs/slurm_job-<id> on shared storage, and
-    # trace_replay.sh writes each concurrency's aiperf artifacts under
-    # agentic/conc_<N>/ (mirroring agentic_srt.sh). benchmark-multinode-tmpl.yml
-    # uploads them from $GITHUB_WORKSPACE/LOGS/agentic/conc_*/... plus a
-    # multinode_server_logs.tar.gz, so preserve the conc_<N>/ nesting here
-    # before the logs dir is removed below. The agg result JSON is already
-    # written straight to the mounted workspace by process_agentic_result.py.
+    # server_*.sh copies /run_logs/slurm_job-<id> to
+    # $BENCHMARK_LOGS_DIR/logs/slurm_job-<id> on shared storage. Agentic
+    # backends stage raw aiperf artifacts under either agentic/conc_<N>/ or
+    # LOGS/agentic/. benchmark-multinode-tmpl.yml uploads them from
+    # $GITHUB_WORKSPACE/LOGS/agentic.
     if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
         JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
         if [ -d "$JOB_LOGS_DIR" ]; then

@@ -301,6 +301,7 @@ echo "NNODES:      ${NNODES}"
 echo "REPO DIR:    ${DI_REPO_DIR}"
 echo "USER:        ${USER_NAME}"
 
+
 # Reduce log spam
 export TQDM_MININTERVAL=20
 
@@ -341,6 +342,25 @@ export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
+
+# Agentic / custom vLLM-disagg connector knobs (threaded from submit.sh)
+export IS_AGENTIC="${IS_AGENTIC:-0}"
+export DURATION="${DURATION:-1800}"
+export MODEL="${MODEL:-}"
+export ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
+export ROUTER_PORT="${ROUTER_PORT:-30000}"
+export ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
+export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
+export VLLM_BIND_IP="${VLLM_BIND_IP:-}"
+export SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-}"
+export PREFILL_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio}"
+export DECODE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
+export MORI_RDMA_DEVICES="${MORI_RDMA_DEVICES:-}"
+export MORI_IO_TC="${MORI_IO_TC:-}"
+export MORI_RDMA_SL="${MORI_RDMA_SL:-}"
+export MORI_IO_SL="${MORI_IO_SL:-}"
+export UCX_IB_GID_INDEX="${UCX_IB_GID_INDEX:-}"
 
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
@@ -429,6 +449,30 @@ DOCKER_ENV_COMMON=(
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE
     -e IS_MULTINODE=\$IS_MULTINODE
     -e DRY_RUN=\${DRY_RUN:-0}
+    -e MODEL=\$MODEL
+    -e ROUTER_TYPE=\$ROUTER_TYPE
+    -e ROUTER_PORT=\$ROUTER_PORT
+    -e ENABLE_PREFIX_CACHING=\$ENABLE_PREFIX_CACHING
+    -e MAX_NUM_SEQS=\$MAX_NUM_SEQS
+    -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
+    -e VLLM_BIND_IP=\$VLLM_BIND_IP
+    -e SERVED_MODEL_NAME=\$SERVED_MODEL_NAME
+    -e PREFILL_KV_CONNECTOR=\$PREFILL_KV_CONNECTOR
+    -e DECODE_KV_CONNECTOR=\$DECODE_KV_CONNECTOR
+    -e MORI_RDMA_DEVICES=\$MORI_RDMA_DEVICES
+    -e MORI_IO_TC=\$MORI_IO_TC
+    -e MORI_RDMA_SL=\$MORI_RDMA_SL
+    -e MORI_IO_SL=\$MORI_IO_SL
+    -e UCX_IB_GID_INDEX=\$UCX_IB_GID_INDEX
+    -e LMCACHE_HOST=\${LMCACHE_HOST:-}
+    -e LMCACHE_PORT=\${LMCACHE_PORT:-}
+    -e LMCACHE_HTTP_PORT=\${LMCACHE_HTTP_PORT:-}
+    -e LMCACHE_L1_SIZE_GB=\${LMCACHE_L1_SIZE_GB:-}
+    -e LMCACHE_L1_INIT_SIZE_GB=\${LMCACHE_L1_INIT_SIZE_GB:-}
+    -e LMCACHE_L1_READ_TTL_SECONDS=\${LMCACHE_L1_READ_TTL_SECONDS:-}
+    -e LMCACHE_CHUNK_SIZE=\${LMCACHE_CHUNK_SIZE:-}
+    -e LMCACHE_MAX_WORKERS=\${LMCACHE_MAX_WORKERS:-}
+    -e LMCACHE_MP_MQ_TIMEOUT=\${LMCACHE_MP_MQ_TIMEOUT:-}
 )
 
 # Engine-specific env vars
@@ -446,6 +490,12 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
         -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
+        -e IBDEVICES=\${IBDEVICES:-}
+        -e MORI_RDMA_TC=\${MORI_RDMA_TC:-}
+        -e MORI_IO_TC=\${MORI_IO_TC:-}
+        -e MORI_RDMA_SL=\${MORI_RDMA_SL:-}
+        -e MORI_IO_SL=\${MORI_IO_SL:-}
+        -e NCCL_IB_DISABLE=\${NCCL_IB_DISABLE:-}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
@@ -599,6 +649,7 @@ fi  # end: if ENGINE == atom-disagg
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+    echo \"[ROUTER_CMD] image=$VLLM_ROUTER_IMAGE vllm-router --vllm-pd-disaggregation --kv-connector moriio --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} --port ${ROUTER_PORT} --host 0.0.0.0 --policy consistent_hash --prefill-policy consistent_hash --decode-policy consistent_hash --log-level info\"
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \

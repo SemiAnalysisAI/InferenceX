@@ -147,6 +147,21 @@ export RESULT_FILENAME="${RESULT_FILENAME:-}"
 export SPEC_DECODING="${SPEC_DECODING:-}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
 
+# Agentic / custom vLLM-disagg connector knobs (threaded to job.slurm -> Docker).
+export IS_AGENTIC="${IS_AGENTIC:-0}"
+export DURATION="${DURATION:-1800}"
+export MODEL="${MODEL:-}"
+export ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
+export ROUTER_PORT="${ROUTER_PORT:-30000}"
+export ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
+export MAX_NUM_SEQS="${MAX_NUM_SEQS:-}"
+export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
+export VLLM_BIND_IP="${VLLM_BIND_IP:-}"
+export SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-}"
+export PREFILL_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio}"
+export DECODE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
+
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 mkdir -p "$BENCHMARK_LOGS_DIR"

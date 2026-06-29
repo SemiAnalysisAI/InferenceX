@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/../../benchmark_lib.sh"
 
 check_env_vars \
     CONC_LIST \
@@ -32,8 +33,19 @@ cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
-export MODEL_NAME=$MODEL_NAME
+export SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL}"
+export MODEL_NAME="Kimi-K2.5-MXFP4-MoRI-LMCache-Agentic"
 export CONTAINER_IMAGE=$IMAGE
+
+# Kimi vLLM-disagg agentic defaults. Keep these in the recipe, not the matrix
+# YAML, so additional-settings only carries topology knobs.
+export ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
+export PREFILL_KV_CONNECTOR="${PREFILL_KV_CONNECTOR:-moriio-lmcachemp}"
+export DECODE_KV_CONNECTOR="${DECODE_KV_CONNECTOR:-moriio}"
+export VLLM_MORIIO_CONNECTOR_READ_MODE="${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}"
+export NCCL_IB_DISABLE="${NCCL_IB_DISABLE:-1}"
+export ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-1}"
+export MAX_MODEL_LEN="${MAX_MODEL_LEN:-262144}"
 
 # Same EP/DP booleans as dsr1_fp8_mi355x_sglang-disagg.sh → amd_utils/submit.sh
 if [[ "${PREFILL_EP:-1}" -eq 1 ]]; then

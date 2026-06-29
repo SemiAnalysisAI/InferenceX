@@ -1601,6 +1601,40 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
           additional-settings:
           - "DECODE_NODES=2"
 
+# Experimental agentic 1P1D bring-up for MoRIIO RDMA + LMCacheMP through
+# vllm-router. LMCacheMP is intentionally attached only on prefill; decode
+# receives KV through MoRIIO and must not independently load/store the same
+# paged KV blocks.
+kimik2.5-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
+  image: yukiozzz/kimi-lmc-mc-rocm:dmabuf
+  model: amd/Kimi-K2.5-MXFP4
+  model-prefix: kimik2.5
+  runner: mi355x-disagg
+  precision: fp4
+  framework: vllm-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 16, 32, 48, 64 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+
 dsr1-fp4-mi355x-sglang-disagg:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
   model: amd/DeepSeek-R1-0528-MXFP4-v2
