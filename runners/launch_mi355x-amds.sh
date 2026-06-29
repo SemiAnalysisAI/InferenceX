@@ -312,6 +312,7 @@ else
     fi
 
     srun --jobid=$JOB_ID \
+        --mem=0 --propagate=STACK,MEMLOCK \
         --container-mounts=/dev/shm:/dev/shm \
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
