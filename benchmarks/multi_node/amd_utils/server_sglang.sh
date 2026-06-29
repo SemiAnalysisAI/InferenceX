@@ -409,6 +409,24 @@ python3 $SGLANG_WS_PATH/sync.py barrier \
 # Node Role Assignment and Server Launch
 # =============================================================================
 
+# Run a blocking command while watching the local server PID. If the server dies
+# (crash / OOM / killed) the blocking command is aborted and we return non-zero,
+# so the srun task exits non-zero and SLURM's --kill-on-bad-exit tears the whole
+# job down in seconds instead of waiting out the ~1800s barrier timeout.
+wait_or_die() {            # $1 = server pid to watch; rest = blocking command
+    local watch=$1; shift
+    "$@" & local cmd=$!
+    while kill -0 "$cmd" 2>/dev/null; do
+        kill -0 "$watch" 2>/dev/null || {
+            echo "FATAL: $(hostname) local sglang server (pid $watch) died; tearing down job" >&2
+            kill "$cmd" 2>/dev/null || true
+            return 1
+        }
+        sleep 5
+    done
+    wait "$cmd"
+}
+
 if [ "$NODE_RANK" -eq 0 ]; then
     echo "NODE INFO ======================================="
     echo "================================================"
@@ -458,7 +476,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null &
         set +x
         prefill0_pid=$!
     fi
@@ -476,7 +494,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        wait_or_die "$prefill0_pid" bash -c "$BARRIER_CMD" || exit 1
     fi
     echo "Congratulations!!! All prefill and decode servers are up . . ."
 
@@ -514,7 +532,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         if [[ "$DRY_RUN" -eq 1 ]]; then
             echo "DRY RUN: $HEALTH_BARRIER_CMD"
         else
-            eval "$HEALTH_BARRIER_CMD"
+            wait_or_die "$prefill0_pid" bash -c "$HEALTH_BARRIER_CMD" || exit 1
         fi
 
         echo "Router is ready for benchmarking"
@@ -692,7 +710,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null &
         set +x
         prefill_pid=$!
     fi
@@ -707,7 +725,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        wait_or_die "$prefill_pid" bash -c "$BARRIER_CMD" || exit 1
     fi
 
     echo "Waiting until proxy server closes..."
@@ -718,7 +736,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $WAIT_CMD"
     else
-        eval "$WAIT_CMD"
+        wait_or_die "$prefill_pid" bash -c "$WAIT_CMD" || exit 1
     fi
 
     echo "Killing the rank $NODE_RANK prefill server"
@@ -761,7 +779,7 @@ else
     else
         set -x
         eval "$DECODE_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
+            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log >/dev/null &
 
         set +x
         decode_pid=$!
@@ -778,7 +796,7 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $BARRIER_CMD"
     else
-        eval "$BARRIER_CMD"
+        wait_or_die "$decode_pid" bash -c "$BARRIER_CMD" || exit 1
     fi
 
 
@@ -790,7 +808,7 @@ else
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $WAIT_CMD"
     else
-        eval "$WAIT_CMD"
+        wait_or_die "$decode_pid" bash -c "$WAIT_CMD" || exit 1
     fi
 
     echo "Killing the rank $RANK decode server"
