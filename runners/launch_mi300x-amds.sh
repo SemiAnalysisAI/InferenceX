@@ -139,15 +139,12 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
                 continue
             fi
 
-            # Every selected node must see the GitHub workspace and log path:
-            # job.slurm mounts DI_REPO_DIR from this path, and Slurm may pick
-            # any selected node as BatchHost for stdout/stderr creation.
             if timeout 20s srun --nodes=1 --ntasks=1 --time=00:02:00 --partition="$SLURM_PARTITION" --nodelist="$candidate" \
-                bash -lc "test -d '$GITHUB_WORKSPACE' && mkdir -p '$BENCHMARK_LOGS_DIR' && test -d '$BENCHMARK_LOGS_DIR'" >/dev/null 2>&1; then
+                bash -lc "test -d /tmp && test -w /tmp" >/dev/null 2>&1; then
                 SELECTED_NODES+=("$candidate")
-                echo "Added NODELIST candidate with workspace/log access: $candidate"
+                echo "Added NODELIST candidate with writable /tmp: $candidate"
             else
-                echo "Skipping NODELIST candidate without workspace/log access: $candidate"
+                echo "Skipping NODELIST candidate without writable /tmp: $candidate"
             fi
 
             if [[ "${#SELECTED_NODES[@]}" -ge "$NUM_NODES_REQUIRED" ]]; then
@@ -166,10 +163,35 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         echo "Using generated NODELIST=${NODELIST}"
     else
         echo "Using caller-provided NODELIST=${NODELIST}"
+        IFS=',' read -r -a SELECTED_NODES <<< "$NODELIST"
     fi
 
+    SANITIZED_RUNNER=$(printf '%s' "${RUNNER_NAME:-runner}" | tr -c 'a-zA-Z0-9_.-' '_')
+    STAGED_WORKSPACE="/tmp/inferencex-${USER}-${GITHUB_RUN_ID:-manual}-${SANITIZED_RUNNER}"
+    JOB_BENCHMARK_LOGS_DIR="${STAGED_WORKSPACE}/benchmark_logs"
+
+    for node in "${SELECTED_NODES[@]}"; do
+        echo "Staging workspace to ${node}:${STAGED_WORKSPACE}"
+        tar \
+            --exclude='./benchmark_logs' \
+            --exclude='./benchmark_artifacts' \
+            --exclude='./multinode_server_logs.tar.gz' \
+            --exclude='./.git' \
+            -C "$GITHUB_WORKSPACE" -cf - . | \
+            timeout 120s srun --nodes=1 --ntasks=1 --time=00:05:00 --partition="$SLURM_PARTITION" --nodelist="$node" \
+                bash -lc "rm -rf '$STAGED_WORKSPACE' && mkdir -p '$STAGED_WORKSPACE' '$JOB_BENCHMARK_LOGS_DIR' && tar -C '$STAGED_WORKSPACE' -xf - && test -f '$STAGED_WORKSPACE/benchmarks/multi_node/amd_utils/job.slurm' && test -d '$JOB_BENCHMARK_LOGS_DIR'"
+        stage_status=("${PIPESTATUS[@]}")
+        if [[ "${stage_status[0]}" -ne 0 || "${stage_status[1]}" -ne 0 ]]; then
+            echo "ERROR: Failed to stage workspace on ${node}" >&2
+            exit 1
+        fi
+    done
+
+    BENCHMARK_LOGS_DIR="$JOB_BENCHMARK_LOGS_DIR"
+    export BENCHMARK_LOGS_DIR
+
     SUBMIT_LOG="$BENCHMARK_LOGS_DIR/submit_${SCRIPT_NAME%.sh}.log"
-    bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}" > "$SUBMIT_LOG" 2>&1
+    GITHUB_WORKSPACE="$STAGED_WORKSPACE" bash "$STAGED_WORKSPACE/benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}" > "$SUBMIT_LOG" 2>&1
     SUBMIT_RC=$?
     cat "$SUBMIT_LOG"
     JOB_ID=$(grep -E '^[0-9]+$' "$SUBMIT_LOG" | tail -n 1 || true)
