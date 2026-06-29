@@ -136,8 +136,9 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             continue
         if Fields.PREFILL.value not in entry:
             continue
-        if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
-            continue
+        if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
+            if entry.get(Fields.ISL.value) != target_isl or entry.get(Fields.OSL.value) != target_osl:
+                continue
         if not _eligible_eval_concs(entry):
             continue
         key = (
@@ -148,6 +149,9 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
             entry[Fields.SPEC_DECODING.value],
             entry.get(Fields.PREFILL.value, {}).get(Fields.DP_ATTN.value),
             entry.get(Fields.DECODE.value, {}).get(Fields.DP_ATTN.value),
+            entry.get(Fields.SCENARIO_TYPE.value),
+            tuple(entry.get(Fields.PREFILL.value, {}).get(Fields.ADDITIONAL_SETTINGS.value, [])),
+            tuple(entry.get(Fields.DECODE.value, {}).get(Fields.ADDITIONAL_SETTINGS.value, [])),
         )
         mn_groups[key].append((i, entry))
 
@@ -158,11 +162,15 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_concs = _eligible_eval_concs(best_entry)
         mn_eval_conc[best_idx] = eval_concs[len(eval_concs) // 2]
 
-    # Mark the selected entries (skip agentic entries which don't support evals)
+    # Mark the selected entries. Agentic multinode entries support eval-only
+    # through benchmark-multinode-tmpl: EVAL_ONLY skips AIPerf and RUN_EVAL
+    # runs lm-eval against the same disaggregated server stack.
     for i, entry in enumerate(matrix_values):
-        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
-            continue
         entry[Fields.RUN_EVAL.value] = i in eval_indices
+        if i in eval_indices and entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            entry.setdefault(Fields.ISL.value, 0)
+            entry.setdefault(Fields.OSL.value, 0)
+            entry.setdefault(Fields.MAX_MODEL_LEN.value, 0)
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
 

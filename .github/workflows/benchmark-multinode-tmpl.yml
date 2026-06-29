@@ -239,10 +239,18 @@ jobs:
           elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
             expected_count=$(wc -w <<< "$CONC_LIST" | tr -d ' ')
             shopt -s nullglob
-            agentic_results=("${RESULT_FILENAME}"_conc*.json)
+            if [ -f "${RESULT_FILENAME}.json" ]; then
+              agentic_results=("${RESULT_FILENAME}.json")
+            else
+              agentic_results=("${RESULT_FILENAME}"_conc*.json)
+              if [ "${#agentic_results[@]}" -ne "$expected_count" ]; then
+                echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
+                exit 1
+              fi
+            fi
             shopt -u nullglob
-            if [ "${#agentic_results[@]}" -ne "$expected_count" ]; then
-              echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
+            if [ "${#agentic_results[@]}" -eq 0 ]; then
+              echo "Run failed: no agentic result files found." >&2
               exit 1
             fi
             # Existence is not enough: process_agentic_result.py writes the
@@ -321,7 +329,9 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}_conc*.json
+          path: |
+            ${{ env.RESULT_FILENAME }}.json
+            ${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -329,6 +339,13 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
+            LOGS/agentic/benchmark.log
+            LOGS/agentic/benchmark_command.txt
+            LOGS/agentic/workload_distribution_summary.txt
+            LOGS/agentic/workload_distribution_plots.png
+            LOGS/agentic/aiperf_artifacts/profile_export_aiperf.json
+            LOGS/agentic/aiperf_artifacts/detailed_results.csv
+            LOGS/agentic/aiperf_artifacts/debug_trace.jsonl
             LOGS/agentic/conc_*/benchmark.log
             LOGS/agentic/conc_*/benchmark_command.txt
             LOGS/agentic/conc_*/workload_distribution_summary.txt

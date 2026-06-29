@@ -55,12 +55,36 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     # EACCES errors when the next GH Actions job checks out on this runner.
     # Always preserve slurm logs as CI artifacts for debugging.
     # KEEP_LOGS=1 disables the trap entirely (local-debug knob).
-    cleanup_and_save_logs() {
-        if [[ -n "${GITHUB_ACTIONS:-}" && -n "${JOB_ID:-}" ]]; then
-            local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
-            mkdir -p "$art_dir"
+    collect_multinode_debug_logs() {
+        [[ -n "${GITHUB_ACTIONS:-}" ]] || return 0
+        local art_dir="$GITHUB_WORKSPACE/benchmark_artifacts"
+        mkdir -p "$art_dir"
+
+        if [[ -n "${JOB_ID:-}" ]]; then
             cp -r "$BENCHMARK_LOGS_DIR"/slurm_job-${JOB_ID}.{out,err} "$art_dir/" 2>/dev/null || true
+
+            local stdout_path stderr_path
+            stdout_path=$(scontrol show job "$JOB_ID" 2>/dev/null | awk -F= '/StdOut=/{print $2; exit}')
+            stderr_path=$(scontrol show job "$JOB_ID" 2>/dev/null | awk -F= '/StdErr=/{print $2; exit}')
+            [[ -n "$stdout_path" ]] && cp -f "$stdout_path" "$art_dir/" 2>/dev/null || true
+            [[ -n "$stderr_path" ]] && cp -f "$stderr_path" "$art_dir/" 2>/dev/null || true
         fi
+
+        if [[ -d "$BENCHMARK_LOGS_DIR/logs" ]]; then
+            mkdir -p "$art_dir/logs"
+            cp -a "$BENCHMARK_LOGS_DIR/logs/." "$art_dir/logs/" 2>/dev/null || true
+        fi
+
+        find "$BENCHMARK_LOGS_DIR" -maxdepth 5 -type f \( \
+            -name 'server_*.log' -o \
+            -name 'prefill_*.log' -o \
+            -name 'decode_*.log' -o \
+            -name 'lmcache_*.log' \
+        \) -exec cp -f {} "$art_dir/" \; 2>/dev/null || true
+    }
+
+    cleanup_and_save_logs() {
+        collect_multinode_debug_logs
         # Print .err inline so failures are visible in CI output
         local err_file="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID:-unknown}.err"
         if [[ -s "$err_file" ]]; then
@@ -70,6 +94,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         fi
         sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
     }
+
     if [[ "${KEEP_LOGS:-0}" == "1" ]]; then
         trap '' EXIT
     else
@@ -90,7 +115,19 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    BENCHMARK_SCRIPT="benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"
+    if [[ ! -f "$BENCHMARK_SCRIPT" ]]; then
+        echo "ERROR: benchmark script not found: $BENCHMARK_SCRIPT" >&2
+        exit 1
+    fi
+    if ! JOB_ID=$(bash "$BENCHMARK_SCRIPT"); then
+        echo "ERROR: benchmark script failed before returning a Slurm job id: $BENCHMARK_SCRIPT" >&2
+        exit 1
+    fi
+    if [[ -z "${JOB_ID//[[:space:]]/}" ]]; then
+        echo "ERROR: benchmark script returned an empty Slurm job id: $BENCHMARK_SCRIPT" >&2
+        exit 1
+    fi
 
     # Wait for job to complete
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
@@ -198,6 +235,14 @@ PY
     if [[ "${IS_AGENTIC:-0}" == "1" ]]; then
         JOB_LOGS_DIR="$BENCHMARK_LOGS_DIR/logs/slurm_job-${JOB_ID}"
         if [ -d "$JOB_LOGS_DIR" ]; then
+            shopt -s nullglob
+            for result_file in "$JOB_LOGS_DIR"/workspace_artifacts/*.json "$JOB_LOGS_DIR"/*.json; do
+                [ -f "$result_file" ] || continue
+                echo "Staging agentic result JSON from $result_file"
+                cp "$result_file" "$GITHUB_WORKSPACE/"
+            done
+            shopt -u nullglob
+
             # trace_replay.sh always nests artifacts under agentic/conc_<N>/.
             # Copy the whole agentic/ tree so the conc_<N>/ subdirs are
             # preserved for the LOGS/agentic/conc_*/... upload globs.
@@ -216,6 +261,15 @@ PY
                 # chown to the invoking user (the same one that runs git clean)
                 # via sudo (already passwordless here for rm -rf), then force it
                 # writable so it always stays cleanable.
+                sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                chmod -R u+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
+            elif [ -d "$JOB_LOGS_DIR/LOGS/agentic" ]; then
+                echo "Staging vLLM agentic raw artifacts from $JOB_LOGS_DIR/LOGS/agentic"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic"
+                cp -r "$JOB_LOGS_DIR/LOGS/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/"
+                mkdir -p "$GITHUB_WORKSPACE/LOGS/agentic/conc_${CONC}"
+                cp -r "$JOB_LOGS_DIR/LOGS/agentic/." "$GITHUB_WORKSPACE/LOGS/agentic/conc_${CONC}/"
                 sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 chmod -R u+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
