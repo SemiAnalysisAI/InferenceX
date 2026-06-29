@@ -5,14 +5,9 @@
 # is mandatory for MSA sparse attention. Keep the default BF16 KV cache on
 # gfx942: the checkpoint has no calibrated q/prob scales for ROCm FP8
 # attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
-#
-# Two accuracy-safe scheduling levers (both token-for-token identical; GSM8K
-# exact-match holds at 0.96):
-#   --async-scheduling          overlaps CPU input-prep with GPU decode.
-#   --max-num-batched-tokens 16384  amortizes the per-step BF16-emulated MoE
-#     weight read (~95 GB/rank, re-read every prefill step on gfx942) over more
-#     prompt tokens, halving prefill weight-reads vs the 8192 default. Lifts the
-#     decode duty cycle at high concurrency (measured +18% conc64, +7% conc128).
+# --async-scheduling and --max-num-batched-tokens 16384 are accuracy-safe
+# scheduling levers: the larger prefill batch amortizes the per-step
+# BF16-emulated MoE weight read, lifting high-concurrency throughput.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
