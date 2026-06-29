@@ -52,7 +52,11 @@ fi
 resolve_trace_source
 install_agentic_deps
 
-export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
+# (srok)
+#export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
+export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=60
+# (srok)
+export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
 # vLLM router for DEP runs: expands one HTTP backend into one logical worker
 # per DP rank and routes by X-Session-ID (aliased from X-Correlation-ID).
