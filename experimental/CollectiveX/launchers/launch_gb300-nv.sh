@@ -68,10 +68,16 @@ WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCAL
 # from the CX_* env — every field is :-defaulted so set -u never trips on an unset knob (the old bug:
 # bare $CX_DISPATCH_DTYPE here was unbound under sweep, crashing the whole job on its first line).
 cx_ep8_cases() {
-  if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-}" ]; then
+  # CX_SHARD_FILE is workflow-relative (results/.shard_<id>.json, written by the Extract step with
+  # working-directory=experimental/CollectiveX). This EP8 path runs on the SUBMIT HOST where cwd is
+  # the repo root, so resolve it against $CX_DIR (=experimental/CollectiveX) when not found as-is —
+  # else the SHARD branch is skipped and only ONE default case runs instead of the shard's N.
+  local sf="${CX_SHARD_FILE:-}"
+  [ -n "$sf" ] && [ ! -f "$sf" ] && [ -f "$CX_DIR/$sf" ] && sf="$CX_DIR/$sf"
+  if [ -n "$sf" ] && [ -f "$sf" ]; then
     # '|'-separated (NOT tab: tab is IFS-whitespace, so `read` would collapse consecutive tabs and
     # swallow empty fields like a false eplb, shifting every column. No case field contains '|'.)
-    python3 - "$CX_SHARD_FILE" <<'PY'
+    python3 - "$sf" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 for c in d.get("cases", []):

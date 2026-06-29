@@ -104,10 +104,16 @@ if [ "$CX_BENCH" != "nccl" ]; then
   # SWEEP (CX_SHARD_FILE set): one TAB-line per shard case so the rack-scale EP path sweeps EVERY
   # case (parity with single-node). MANUAL: one line per phase from the :-defaulted CX_* env.
   cx_ep_cases() {
-    if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-}" ]; then
+    # CX_SHARD_FILE is workflow-relative (results/.shard_<id>.json, written under
+    # working-directory=experimental/CollectiveX). This path runs on the SUBMIT HOST (cwd=repo root),
+    # so resolve against $CX_DIR when not found as-is — else the SHARD branch is skipped and only ONE
+    # default case runs instead of the shard's N.
+    local sf="${CX_SHARD_FILE:-}"
+    [ -n "$sf" ] && [ ! -f "$sf" ] && [ -f "$CX_DIR/$sf" ] && sf="$CX_DIR/$sf"
+    if [ -n "$sf" ] && [ -f "$sf" ]; then
       # '|'-separated (NOT tab: tab is IFS-whitespace, so `read` collapses consecutive tabs and
       # swallows empty fields like a false eplb, shifting columns. No case field contains '|'.)
-      python3 - "$CX_SHARD_FILE" <<'PY'
+      python3 - "$sf" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
 for c in d.get("cases", []):
