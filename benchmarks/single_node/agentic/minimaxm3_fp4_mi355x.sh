@@ -62,7 +62,6 @@ LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-PREFIX_CACHE_ARGS=()
 
 # ---- Lmcache config ----------------------------------------------------------
 LMCACHE_PID=""
@@ -116,7 +115,9 @@ wait_for_lmcache_ready() {
 }
 
 case "$OFFLOADING" in
-    none) ;;
+    none)
+        OFFLOAD_ARGS=(--enable-prefix-caching=False)
+        ;;
     cpu)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
@@ -205,7 +206,6 @@ case "$OFFLOADING" in
         echo "LMCache server PID: $LMCACHE_PID"
         wait_for_lmcache_ready
 
-        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
         # This gives extra cache hit than disabling hybrid kv cache manager
         OFFLOAD_ARGS=(
@@ -250,7 +250,6 @@ VLLM_CMD=(
     --reasoning-parser minimax_m3
     --enable-auto-tool-choice
     --max-num-seqs "$CONC"
-    "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
