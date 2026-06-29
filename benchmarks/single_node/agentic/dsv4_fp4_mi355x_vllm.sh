@@ -165,7 +165,7 @@ case "$OFFLOADING" in
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
         export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
         # (srok)
-        #python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
+        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
