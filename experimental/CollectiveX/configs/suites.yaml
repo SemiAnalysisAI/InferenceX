@@ -24,7 +24,7 @@ suites:
   ep-smoke-v1:
     description: "fast canary: one small point per platform/backend/mode/contract"
     workloads: [ds-like-ref]
-    platforms: [h100, h200, gb300, mi355x]
+    platforms: [h100, h200, gb300, gb200, mi355x]
     backends: [deepep, mori]
     modes: [normal]
     dtypes: [bf16]
@@ -38,7 +38,7 @@ suites:
   ep-nightly-v1:
     description: "headline matrix: both contracts, bf16+fp8, normal+LL, decode+prefill"
     workloads: [ds-like-ref]
-    platforms: [h100, h200, b300, gb300, mi355x]
+    platforms: [h100, h200, b300, b200, gb300, gb200, mi355x]
     backends: [deepep, mori]
     modes: [normal, ll]
     dtypes: [bf16, fp8]
@@ -52,7 +52,7 @@ suites:
   ep-models-v1:
     description: "model-shape envelope: real MoE dimensions, controlled routing"
     workloads: [deepseek-v4, kimi-k2.x, qwen3.5, glm-5, minimax-m3]
-    platforms: [h100, h200, b300, gb300, mi355x]
+    platforms: [h100, h200, b300, b200, gb300, gb200, mi355x]
     backends: [deepep, mori]
     modes: [normal]
     dtypes: [fp8, bf16]
@@ -66,7 +66,7 @@ suites:
   ep-scaling-v1:
     description: "strong (fixed global tokens) + weak (fixed tokens/rank) scaling across EP degrees"
     workloads: [ds-like-ref]
-    platforms: [gb300]            # the only SKU with >1 validated EP degree (EP4 + EP8)
+    platforms: [gb300, gb200]            # the only SKU with >1 validated EP degree (EP4 + EP8)
     backends: [deepep]
     modes: [normal]
     dtypes: [bf16]
@@ -81,7 +81,7 @@ suites:
   ep-topology-v1:
     description: "placement sensitivity: packed vs striped vs adversarial on multi-domain SKUs"
     workloads: [ds-like-ref]
-    platforms: [gb300]            # NVL72 tray boundary is the scale-up domain edge
+    platforms: [gb300, gb200]            # NVL72 tray boundary is the scale-up domain edge
     backends: [deepep]
     modes: [normal]
     dtypes: [bf16]
@@ -98,7 +98,7 @@ suites:
       only. NOT a chart dimension — collapses to one sensitivity number per (sku,backend,phase) via
       tests/sensitivity.py. BF16/normal today; the value (activation) axis is added when the rig lands."
     workloads: [ds-like-ref]
-    platforms: [h100, h200, b300, gb300, mi355x]
+    platforms: [h100, h200, b300, b200, gb300, gb200, mi355x]
     backends: [deepep, mori]
     modes: [normal]
     dtypes: [bf16]
@@ -116,7 +116,7 @@ suites:
   ep-routing-v1:
     description: "routing-skew sensitivity + EPLB remedy"
     workloads: [ds-like-ref]
-    platforms: [h100, h200, b300, gb300]
+    platforms: [h100, h200, b300, b200, gb300, gb200]
     backends: [deepep]
     modes: [normal]
     dtypes: [bf16]
@@ -133,7 +133,7 @@ suites:
       combine the ratio is ~1.0 (value-independent) — the EXPECTED null result that also baselines
       the rig for when a quantized (value-sensitive) combine lands. Diagnostic, never headline."
     workloads: [ds-like-ref]
-    platforms: [h100, h200, b300, mi355x]
+    platforms: [h100, h200, b300, b200, mi355x]
     backends: [deepep, mori]
     modes: [normal]
     dtypes: [bf16]
@@ -170,7 +170,7 @@ suites:
       identical (all same-node); meaningful once a multi-node EP cohort exists. analyze_ep computes
       the packed-vs-striped topology penalty + locality attribution."
     workloads: [ds-like-ref]
-    platforms: [gb300]            # NVL72 tray boundary = the only multi-domain SKU here
+    platforms: [gb300, gb200]            # NVL72 tray boundary = the only multi-domain SKU here
     backends: [deepep]
     modes: [normal]
     dtypes: [bf16]

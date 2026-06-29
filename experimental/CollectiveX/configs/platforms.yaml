@@ -67,6 +67,39 @@ platforms:
       backends: [deepep]
       max_intranode_gpus: 8        # <=8 ranks use the intranode NVL kernel even across 2 trays
       internode: false             # internode-normal asserts out until >8 ranks (EP16+)
+  b200:
+    vendor: nvidia
+    arch: sm100
+    gpu: "B200 SXM 180GB"
+    gpus_per_node: 8
+    scale_up_domain: 8
+    transport_tiers: [nvlink, ib]
+    runner: b200-dgxc
+    launcher: launch_b200-dgxc.sh
+    ssh: ""                        # GHA self-hosted pool (sku=b200-dgxc); dispatch uses the runner label
+    notes: "B200 8x NVLink (sibling of B300, sm100). Single-node; normal-only (Blackwell LL aborts)."
+    validated:
+      ep_degrees: [8]
+      backends: [deepep]
+      modes: [normal]
+      max_intranode_gpus: 8
+      internode: false
+  gb200:
+    vendor: nvidia
+    arch: sm100
+    gpu: "GB200 Grace-Blackwell (aarch64)"
+    gpus_per_node: 4              # NVL72 compute tray = 4 GPU/node
+    scale_up_domain: 72          # NVL72 MNNVL one NVLink domain
+    transport_tiers: [mnnvl, ib]
+    runner: gb200-nv
+    launcher: launch_gb200-nv.sh
+    ssh: ""                        # GHA self-hosted pool (sku=gb200)
+    notes: "NVL72 sibling of GB300. EP4/EP8 intranode-NVL (<=8 ranks, MNNVL one domain); EP16/32/64 via the multi-tray nodes sweep."
+    validated:
+      ep_degrees: [4, 8]
+      backends: [deepep]
+      max_intranode_gpus: 8
+      internode: false
   mi355x:
     vendor: amd
     arch: gfx950

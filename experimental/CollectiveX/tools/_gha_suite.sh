@@ -51,7 +51,8 @@ def dims(name):
 sys.path.insert(0, cxdir)
 import generate_matrix as gm
 m = gm.generate(suite)
-SKU = {"h100": "h100-dgxc", "h200": "h200", "b300": "b300", "mi355x": "mi355x", "gb300": "gb300"}
+SKU = {"h100": "h100-dgxc", "h200": "h200", "b300": "b300", "b200": "b200-dgxc",
+       "mi355x": "mi355x", "gb300": "gb300", "gb200": "gb200"}
 def ladder(phase):
     if phase == "decode" and s.get("token_points_decode"): return " ".join(map(str, s["token_points_decode"]))
     if phase == "prefill" and s.get("token_points_prefill"): return " ".join(map(str, s["token_points_prefill"]))
@@ -60,8 +61,6 @@ def ladder(phase):
 seen = set(); out = []
 for c in m["cases"]:
     plat = c["platform"]
-    if plat == "gb300":      # compute unavailable (capacity) — skipped per directive
-        continue
     beng = c["backend"]
     if beng not in ("deepep", "mori"):   # collectives aren't EP suites
         continue
@@ -96,10 +95,17 @@ for c in m["cases"]:
         if phase == "prefill":      # MoRI wedges on the prefill ladder — skip
             continue
         lad = "1 2 4 8 16"; rmode = "tuned"
+    # Rack-scale tray mapping: gb200/gb300 are 4 GPU/tray, so an EP degree spans ep/4 trays (nodes).
+    # EP4 = 1 tray (nodes omitted), EP8 = 2 trays (nodes=2). Single-node SKUs (8 GPU) never set nodes.
+    nodes = ""
+    if plat in ("gb200", "gb300"):
+        _nd = max(1, int(c.get("ep") or 8) // 4)
+        if _nd > 1:
+            nodes = str(_nd)
     tup = (sku, beng, phase, c["dtype"], c["mode"], c["contract"], c["routing"],
            "true" if c.get("eplb") else "", rmode, c.get("activation_profile", "normal"),
            c.get("placement", "packed"), str(c.get("routing_step", 0)),
-           c.get("uneven_tokens", "none"), hidden, topk, experts, lad)
+           c.get("uneven_tokens", "none"), hidden, topk, experts, lad, nodes)
     if tup in seen:
         continue
     seen.add(tup)
@@ -110,10 +116,11 @@ PY
 
 N=0
 fire_tuple() {  # pipe-separated tuple
-  IFS='|' read -r sku beng phase dtype mode contract routing eplb rmode act placement rstep uneven hidden topk experts lad <<<"$1"
+  IFS='|' read -r sku beng phase dtype mode contract routing eplb rmode act placement rstep uneven hidden topk experts lad nodes <<<"$1"
   local a=( -f sku="$sku" -f benchmark="$beng" -f phase="$phase" -f dispatch_dtype="$dtype"
             -f mode="$mode" -f contract="$contract" -f routing="$routing" -f resource_mode="$rmode"
             -f activation_profile="$act" -f placement="$placement" -f uneven_tokens="$uneven" )
+  [ -n "$nodes" ] && a+=( -f nodes="$nodes" )   # rack-scale gb200/gb300 multi-tray EP (e.g. EP8=2 trays)
   # canonical workload requires a fixed serialized trace: incompatible with uneven allocation
   # (variable per-rank gt) AND with routing_step != 0 (make_workloads has no step-specific trace).
   # Those diagnostic suites run seeded-runtime (comparable-experimental).
