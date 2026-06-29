@@ -60,13 +60,31 @@ def model_name(shape: dict) -> str:
     return MODEL_NAMES.get((h, k, e)) or f"shape {h}/{k}/{e}"
 
 
-def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
-    series = []
+def _iter_docs(results_dir: str):
+    """Yield every result doc under results_dir: one per *.json file, AND one per line of each
+    *.ndjson (the consolidated aggregate written by aggregate_results.py). This lets the plot read
+    the single aggregate ndjson instead of thousands of individual JSONs — keeping results/ small
+    (the restructure goal). During a transition both may exist; delete the individuals once merged
+    so no doc is double-counted."""
     for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
         try:
-            d = json.load(open(path))
+            yield json.load(open(path))
         except (json.JSONDecodeError, OSError):
             continue
+    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.ndjson"), recursive=True)):
+        try:
+            with open(path) as fh:
+                for line in fh:
+                    line = line.strip()
+                    if line:
+                        yield json.loads(line)
+        except (json.JSONDecodeError, OSError):
+            continue
+
+
+def load_series(results_dir: str, legacy: str = "all") -> list[dict]:
+    series = []
+    for d in _iter_docs(results_dir):
         if d.get("family") != "moe" or not d.get("rows"):
             continue
         # legacy = a v3 doc with no machine-derived publication_status. exclude -> v4-only main
@@ -218,11 +236,7 @@ def load_nccl_series(results_dir: str) -> list[dict]:
     convention so a SKU is readable at a glance. invalid docs are kept but flagged (greyed in the UI)
     so a failed/zero-busbw run is excluded from comparison rather than silently dropped (goal P1)."""
     series = []
-    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
-        try:
-            d = json.load(open(path))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for d in _iter_docs(results_dir):
         if d.get("family") != "nccl" or not d.get("rows"):
             continue
         runner = d.get("runner") or "?"
@@ -301,11 +315,7 @@ def load_allreduce_fw_series(results_dir: str) -> list[dict]:
     "all_reduce" key the All-reduce tab filters on. `skipped` rows (no size, or no latency and no busbw)
     are dropped so a not-applicable size doesn't draw a phantom point."""
     series = []
-    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
-        try:
-            d = json.load(open(path))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for d in _iter_docs(results_dir):
         if d.get("family") != "allreduce-fw" or not d.get("groups"):
             continue
         runner = d.get("runner") or "?"
@@ -407,11 +417,7 @@ def load_offload_series(results_dir: str) -> list[dict]:
     pageable"). Dedup to newest doc per (sku, topology, transport); surface the overlap % from
     diagnostics as a per-doc note. ADDITIVE — independent of the family=moe series."""
     docs = []
-    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
-        try:
-            d = json.load(open(path))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for d in _iter_docs(results_dir):
         if d.get("family") != "offload" or not d.get("rows"):
             continue
         sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
@@ -455,11 +461,7 @@ def load_copy_engine_series(results_dir: str) -> list[dict]:
     copy-engine-vs-SM comparison (the headline of this view) is direct. Dedup to newest doc per
     (sku, topology, transport); carry copy_engine_uses_near_zero_sms as a note. ADDITIVE."""
     docs = []
-    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
-        try:
-            d = json.load(open(path))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for d in _iter_docs(results_dir):
         if d.get("family") != "copy-engine" or not d.get("rows"):
             continue
         sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
@@ -500,11 +502,7 @@ def load_kvcache_series(results_dir: str) -> list[dict]:
     (transfer_bytes -> bandwidth_gb_s / time_ms). Dedup to newest doc per (sku, transport); note the
     declared-unwired backends. ADDITIVE."""
     docs = []
-    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
-        try:
-            d = json.load(open(path))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for d in _iter_docs(results_dir):
         if d.get("family") != "kv-cache" or not d.get("groups"):
             continue
         sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
@@ -549,11 +547,7 @@ def load_rlmesh_series(results_dir: str) -> list[dict]:
     rows[]: transfer_bytes -> bandwidth_gb_s / time_ms). Dedup to newest doc per (sku, transport);
     note the mesh split (trainer N <-> generator M). ADDITIVE."""
     docs = []
-    for path in sorted(glob.glob(os.path.join(results_dir, "**", "*.json"), recursive=True)):
-        try:
-            d = json.load(open(path))
-        except (json.JSONDecodeError, OSError):
-            continue
+    for d in _iter_docs(results_dir):
         if d.get("family") != "rl-mesh" or not d.get("groups"):
             continue
         sku = (d.get("runner") or "?").split("_")[0].split("-")[0]
