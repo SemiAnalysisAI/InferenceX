@@ -66,8 +66,12 @@ elif command -v nicctl &> /dev/null; then
 $1 == "DSCP" && $2 == ":" && $NF == p {
     print $3; exit
 }')
+    # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
+    # arithmetic can't choke and unparseable output falls back to hostname detection.
+    ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
+    ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
 
-    if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
+    if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
         TC=$(( 4 * ND_DSCP ))
         export MORI_RDMA_SL=$ND_PRIO
         export MORI_IO_SL=$ND_PRIO
@@ -149,7 +153,11 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 $1 == "DSCP" && $2 == ":" && $NF == p {
     print $3; exit
 }')
-        if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
+        # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
+        # arithmetic can't choke and unparseable output falls back to hostname detection.
+        ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
+        ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
+        if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
             export UCX_IB_TRAFFIC_CLASS=$(( 4 * ND_DSCP ))
             export UCX_IB_SL=$ND_PRIO
             echo "[INFO] Detected QoS from nicctl: UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS, UCX_IB_SL=$UCX_IB_SL"
