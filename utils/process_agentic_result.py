@@ -412,7 +412,14 @@ def compute_cache_stats(records: list[dict], server_metrics: dict) -> dict:
     |                                              | server_gpu_cache_hit_rate goes to  |
     |                                              | ~0 because delay_cache_blocks=True |
     |                                              | suppresses local hash registration |
-    | SGLang                                       | not yet wired                      |
+    | SGLang (radix only / no offload)             | server_gpu_cache_hit_rate          |
+    |                                              | (= cached_tokens/prompt_tokens),   |
+    |                                              | gpu_kv_cache_usage_pct             |
+    |                                              | (= max sglang:token_usage)         |
+    | SGLang + HiCache (host L2)                   | additionally                       |
+    |                                              | server_external_cache_hit_rate     |
+    |                                              | (= load_back_tokens/prompt_tokens);|
+    |                                              | GPU rate excludes those host hits  |
     """
     result: dict = {
         "theoretical_cache_hit_rate": None,
@@ -550,6 +557,97 @@ def compute_cache_stats(records: list[dict], server_metrics: dict) -> dict:
     gt = _final_value("vllm:generation_tokens")
     if gt is not None:
         result["total_generation_tokens"] = int(gt)
+
+    # -- SGLang server metrics ------------------------------------------------
+    # SGLang exposes different names and, in disaggregated mode, emits the same
+    # counter family on BOTH the prefill and decode endpoints (``engine_type``
+    # label). Prefix caching is a prefill-side concept, so we read the prefill
+    # series only — summing across engines (as _final_value does) double-counts
+    # (e.g. prompt_tokens prefill=6.9M, decode=7.6M). ``sglang:cached_tokens``
+    # additionally carries a ``cache_source`` label that gives a clean tiered
+    # split without any approximation:
+    #   GPU KV cache usage  -> max(sglang:token_usage)              (HBM KV fill)
+    #   GPU cache hit rate   -> cached_tokens{cache_source=device} / prompt
+    #   External cache hit   -> cached_tokens{cache_source=host}   / prompt
+    # Falls back to engine-agnostic series for non-disaggregated SGLang (no
+    # engine_type label).
+    def _sgl_counter_total(name: str, *, engine: str | None, **label_eq) -> float | None:
+        entry = metrics_by_name.get(name)
+        if not isinstance(entry, dict):
+            return None
+
+        def _collect(require_engine: str | None) -> float | None:
+            total = 0.0
+            found = False
+            for s in entry.get("series") or []:
+                if not isinstance(s, dict):
+                    continue
+                labels = s.get("labels") or {}
+                if require_engine is not None and labels.get("engine_type") != require_engine:
+                    continue
+                if any(labels.get(k) != v for k, v in label_eq.items()):
+                    continue
+                stats = s.get("stats")
+                if not isinstance(stats, dict):
+                    continue
+                v = stats.get("total")
+                if v is None:
+                    continue
+                try:
+                    total += float(v)
+                    found = True
+                except (TypeError, ValueError):
+                    continue
+            return total if found else None
+
+        # Prefer the requested engine; fall back to engine-agnostic (single
+        # engine SGLang has no engine_type label at all).
+        val = _collect(engine)
+        return val if val is not None else _collect(None)
+
+    def _sgl_gauge_max(name: str) -> float | None:
+        entry = metrics_by_name.get(name)
+        if not isinstance(entry, dict):
+            return None
+        best: float | None = None
+        for s in entry.get("series") or []:
+            stats = s.get("stats") if isinstance(s, dict) else None
+            if not isinstance(stats, dict):
+                continue
+            v = stats.get("max")
+            if v is None:
+                v = stats.get("avg")
+            if v is None:
+                continue
+            try:
+                fv = float(v)
+            except (TypeError, ValueError):
+                continue
+            best = fv if best is None else max(best, fv)
+        return best
+
+    if result["gpu_kv_cache_usage_pct"] is None:
+        sgl_usage = _sgl_gauge_max("sglang:token_usage")
+        if sgl_usage is not None:
+            result["gpu_kv_cache_usage_pct"] = sgl_usage
+
+    sgl_prompt = _sgl_counter_total("sglang:prompt_tokens", engine="prefill")
+    if sgl_prompt and sgl_prompt > 0:
+        if result["server_gpu_cache_hit_rate"] is None:
+            gpu_hit = _sgl_counter_total(
+                "sglang:cached_tokens", engine="prefill", cache_source="device"
+            )
+            if gpu_hit is None:
+                # No cache_source split exported: treat all cached as device/HBM.
+                gpu_hit = _sgl_counter_total("sglang:cached_tokens", engine="prefill")
+            if gpu_hit is not None:
+                result["server_gpu_cache_hit_rate"] = gpu_hit / sgl_prompt
+        if result["server_external_cache_hit_rate"] is None:
+            host_hit = _sgl_counter_total(
+                "sglang:cached_tokens", engine="prefill", cache_source="host"
+            )
+            if host_hit is not None:
+                result["server_external_cache_hit_rate"] = host_hit / sgl_prompt
 
     # Fallback to per-record sums when server metrics aren't present.
     isls = _extract_per_record_ints(records, "input_sequence_length")
