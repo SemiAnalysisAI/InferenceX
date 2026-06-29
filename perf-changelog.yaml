@@ -4180,6 +4180,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1891
 
 - config-keys:
+    - dsv4-fp4-b300-sglang
+  description:
+    - "Update B300 FP4 SGLang (non-MTP) image to latest nightly: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2 (was nightly-dev-cu13-20260529-a8cfae0b)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1913
+
+- config-keys:
     - minimaxm3-fp8-mi355x-atom-disagg
   description:
     - "Add minimaxm3-fp8-mi355x-atom-disagg CI recipe: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP8"
@@ -4221,6 +4227,15 @@
   description:
     - "Initial submission: MiniMax-M3 MXFP4 disagg (prefill/decode) on MI355X with vLLM over the MoRI-IO KV connector (8k/1k)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1914
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node aggregated vLLM benchmark (no spec decode), runner b200-dgxc"
+    - "Image vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41 (bakes in MiniMax-M3 modelopt NVFP4 support, vllm-project/vllm PR #46380; no runtime patch needed)"
+    - "Weights pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4 (added minimaxm3-fp4 MODEL_PATH branch to launch_b200-dgxc.sh); --block-size 128 (MSA), --language-model-only"
+    - "Sweeps tp 4/8 with and without EP and dp-attn at 1k1k and 8k1k, conc 1-1024"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1932
 
 - config-keys:
     - minimaxm3-fp8-gb300-dynamo-vllm
@@ -4280,6 +4295,13 @@
     - "Update the MiniMax-M3 MXFP8 MI355X vLLM EAGLE3 benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
     - "Benchmark configuration, EAGLE3 draft model, serving flags, and search space are unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1941
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Update the MiniMax-M3 MXFP8 MI355X vLLM image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e."
+    - "Benchmark serving flags and TP/EP/DP-attention search space are unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1942
 
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm
