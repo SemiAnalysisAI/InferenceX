@@ -12,12 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       backend:
-        description: EP library to sweep (deepep matrix is remapped onto the others, capability-filtered)
+        description: "EP library to sweep — 'all' = every backend in ONE combined matrix run (recommended)"
         type: choice
-        default: deepep
-        options: [deepep, uccl, flashinfer, deepep-hybrid, nccl-ep]
+        default: all
+        options: [all, deepep, uccl, flashinfer, deepep-hybrid, nccl-ep]
       deepep_v2:
-        description: DeepEP V2 from-source kernels (kernel_gen=v2; deepep backend only)
+        description: DeepEP V2 from-source kernels (kernel_gen=v2; only for a single-backend deepep run — 'all' already includes a deepep-v2 variant)
         type: boolean
         default: false
       suites:
@@ -56,12 +56,17 @@ jobs:
         working-directory: experimental/CollectiveX
         run: |
           set -euo pipefail
-          ov=""; [ "${{ inputs.backend }}" != "deepep" ] && ov="--backend ${{ inputs.backend }}"
+          # backend='all' or a comma-list -> ONE combined multi-backend matrix; else a single backend.
+          case "${{ inputs.backend }}" in
+            all|*,*) bk="--backends ${{ inputs.backend }}" ;;
+            deepep)  bk="" ;;
+            *)       bk="--backend ${{ inputs.backend }}" ;;
+          esac
           v2=""; [ "${{ inputs.deepep_v2 }}" = "true" ] && v2="--deepep-v2"
           os=""; [ -n "${{ inputs.only_sku }}" ] && os="--only-sku ${{ inputs.only_sku }}"
           mn=""; [ -n "${{ inputs.min_nodes }}" ] && mn="--min-nodes ${{ inputs.min_nodes }}"
           # full matrix (with cases) -> artifact for the cells; slim (no cases) -> the strategy output.
-          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $ov $v2 $os $mn --out matrix_full.json >/dev/null
+          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $bk $v2 $os $mn --out matrix_full.json >/dev/null
           SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='cases'} for x in m['include']]}))")
           echo "matrix=$SLIM" >> "$GITHUB_OUTPUT"
           echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")" >> "$GITHUB_OUTPUT"

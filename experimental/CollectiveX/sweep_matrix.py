@@ -54,7 +54,12 @@ def _ladder(suite_cfg, phase):
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX sweep matrix resolver")
     ap.add_argument("--suites", default="all", help="'all' or comma-list of suite names")
-    ap.add_argument("--backend", default="", help="remap deepep cases onto this EP lib (uccl/flashinfer/deepep-hybrid/nccl-ep)")
+    ap.add_argument("--backend", default="", help="remap deepep cases onto ONE EP lib (uccl/flashinfer/deepep-hybrid/nccl-ep)")
+    ap.add_argument("--backends", default="",
+                    help="combined multi-backend matrix in ONE run: 'all' or a comma-list "
+                         "(deepep,deepep-v2,uccl,flashinfer,deepep-hybrid,nccl-ep). Each deepep-origin "
+                         "case is emitted once per backend (capability-filtered); mori stays AMD-native. "
+                         "Supersedes per-backend dispatches. Overrides --backend/--deepep-v2 when set.")
     ap.add_argument("--deepep-v2", action="store_true")
     ap.add_argument("--only-sku", default="", help="restrict to one workflow sku value")
     ap.add_argument("--min-nodes", type=int, default=0,
@@ -74,6 +79,17 @@ def main() -> int:
     suites_cfg = yaml.safe_load(open(os.path.join(HERE, "configs", "suites.yaml")))["suites"]
     suite_names = list(suites_cfg) if a.suites == "all" else [s.strip() for s in a.suites.split(",")]
 
+    # Backend expansion targets for a deepep-origin case, as (backend, deepep_v2) pairs:
+    #  --backends "all"|comma-list -> COMBINED matrix (every backend in ONE run; supersedes the
+    #    per-backend dispatches). 'deepep-v2' is the from-source V2 kernel = deepep + v2 flag.
+    #  else -> the legacy single --backend (+ --deepep-v2) behavior.
+    NV_EP_ALL = ["deepep", "deepep-v2", "uccl", "flashinfer", "deepep-hybrid", "nccl-ep"]
+    if a.backends:
+        names = NV_EP_ALL if a.backends == "all" else [x.strip() for x in a.backends.split(",") if x.strip()]
+        targets = [("deepep", True) if n == "deepep-v2" else (n, False) for n in names]
+    else:
+        targets = [(a.backend or "deepep", a.deepep_v2)]
+
     # collect enriched cases, deduped globally (a config shared by several suites appears once)
     seen = set()
     shards: dict = {}
@@ -81,15 +97,8 @@ def main() -> int:
         scfg = suites_cfg[sname]
         for c in gm.generate(sname)["cases"]:
             plat = c["platform"]
-            beng = c["backend"]
-            if beng not in ("deepep", "mori"):
-                continue
-            if a.backend and beng == "deepep":
-                beng = a.backend
-            ok, _r = cap.resolve(plat, beng, mode=c["mode"], dtype=c["dtype"], contract=c["contract"],
-                                 routing=c["routing"], eplb=bool(c.get("eplb")),
-                                 activation_profile=c.get("activation_profile", "normal"))
-            if not ok:
+            beng0 = c["backend"]
+            if beng0 not in ("deepep", "mori"):
                 continue
             sku = SKU.get(plat, plat)
             if a.only_sku and sku != a.only_sku:
@@ -115,40 +124,50 @@ def main() -> int:
             # official cohort is a separate targeted run). run_in_container also re-stages per case if
             # canonical is ever re-enabled (the CX_WORKLOAD_DIR unset fix).
             canonical = False
-            case = {
-                "backend": beng, "mode": c["mode"], "dtype": c["dtype"], "contract": c["contract"],
-                "routing": c["routing"], "phase": phase, "eplb": bool(c.get("eplb")),
-                "resource_mode": rmode, "activation_profile": c.get("activation_profile", "normal"),
-                "placement": c.get("placement", "packed"), "routing_step": str(c.get("routing_step", 0)),
-                "uneven_tokens": c.get("uneven_tokens", "none"),
-                "hidden": "" if h in (None, 7168) else str(h),
-                "topk": "" if t in (None, 8) else str(t),
-                "experts": "" if e in (None, 256) else str(e),
-                "ladder": lad, "canonical": canonical, "nodes": nodes,
-            }
-            sig = (sku, beng, c["mode"], c["dtype"], c["contract"], c["routing"], phase,
-                   case["eplb"], rmode, case["activation_profile"], case["placement"],
-                   case["routing_step"], case["uneven_tokens"], case["hidden"], case["topk"],
-                   case["experts"], nodes)
-            if sig in seen:
-                continue
-            seen.add(sig)
-            # shard key: same allocation reuse -> (sku, backend, mode, resource, nodes)
-            key = (sku, beng, c["mode"], rmode, nodes)
-            shards.setdefault(key, []).append(case)
+            # mori cases stay AMD-native; deepep-origin cases expand across the requested backend set.
+            case_targets = [("mori", False)] if beng0 == "mori" else targets
+            for (beng, v2) in case_targets:
+                ok, _r = cap.resolve(plat, beng, mode=c["mode"], dtype=c["dtype"], contract=c["contract"],
+                                     routing=c["routing"], eplb=bool(c.get("eplb")),
+                                     activation_profile=c.get("activation_profile", "normal"))
+                if not ok:
+                    continue
+                case = {
+                    "backend": beng, "deepep_v2": v2, "mode": c["mode"], "dtype": c["dtype"],
+                    "contract": c["contract"], "routing": c["routing"], "phase": phase,
+                    "eplb": bool(c.get("eplb")), "resource_mode": rmode,
+                    "activation_profile": c.get("activation_profile", "normal"),
+                    "placement": c.get("placement", "packed"), "routing_step": str(c.get("routing_step", 0)),
+                    "uneven_tokens": c.get("uneven_tokens", "none"),
+                    "hidden": "" if h in (None, 7168) else str(h),
+                    "topk": "" if t in (None, 8) else str(t),
+                    "experts": "" if e in (None, 256) else str(e),
+                    "ladder": lad, "canonical": canonical, "nodes": nodes,
+                }
+                sig = (sku, beng, v2, c["mode"], c["dtype"], c["contract"], c["routing"], phase,
+                       case["eplb"], rmode, case["activation_profile"], case["placement"],
+                       case["routing_step"], case["uneven_tokens"], case["hidden"], case["topk"],
+                       case["experts"], nodes)
+                if sig in seen:
+                    continue
+                seen.add(sig)
+                # shard key: same allocation reuse -> (sku, backend, v2, mode, resource, nodes)
+                key = (sku, beng, v2, c["mode"], rmode, nodes)
+                shards.setdefault(key, []).append(case)
 
     # build matrix include, chunking oversized shards
     include = []
-    for (sku, beng, mode, rmode, nodes), cases in sorted(shards.items()):
+    for (sku, beng, v2, mode, rmode, nodes), cases in sorted(shards.items()):
         if a.min_nodes and max(1, int(nodes or 1)) < a.min_nodes:
             continue   # --min-nodes: skip single-tray (EP4) shards, keep only rack-scale (EP8+)
+        tag = beng + ("-v2" if v2 else "")   # distinct shard id/runner for the V2 kernel variant
         for ci in range(0, len(cases), a.max_cases):
             chunk = cases[ci:ci + a.max_cases]
             part = ci // a.max_cases
-            sid = f"{sku}-{beng}-{mode}-{rmode}" + (f"-n{nodes}" if nodes else "") + (f"-p{part}" if len(cases) > a.max_cases else "")
+            sid = f"{sku}-{tag}-{mode}-{rmode}" + (f"-n{nodes}" if nodes else "") + (f"-p{part}" if len(cases) > a.max_cases else "")
             include.append({
                 "id": sid, "sku": sku, "backend": beng, "mode": mode, "resource_mode": rmode,
-                "nodes": nodes, "deepep_v2": bool(a.deepep_v2 and beng == "deepep"),
+                "nodes": nodes, "deepep_v2": v2,
                 "n": len(chunk), "cases": chunk,
             })
 
@@ -177,7 +196,7 @@ def main() -> int:
         with open(a.out, "w") as fh:
             json.dump(matrix, fh)
     print(f"resolved {n_cells} shard-cells, {n_cases} cases "
-          f"(suites={len(suite_names)} backend-override={a.backend or 'deepep'} v2={a.deepep_v2})",
+          f"(suites={len(suite_names)} backends={a.backends or a.backend or 'deepep'} v2={a.deepep_v2})",
           file=sys.stderr)
     # stdout = the matrix JSON (for `$(...)` capture in the workflow)
     print(json.dumps(matrix))
