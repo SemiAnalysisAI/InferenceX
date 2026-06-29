@@ -28,6 +28,10 @@ on:
         description: Restrict to one SKU (h100-dgxc|h200|b300|b200-dgxc|gb200|gb300|mi355x); blank = all
         type: string
         default: ''
+      min_nodes:
+        description: Keep only shards with >= this tray count (2 = rack-scale EP8 only; blank = all)
+        type: string
+        default: ''
       max_cases:
         description: Max cases per shard cell (chunk larger shards)
         type: string
@@ -55,8 +59,9 @@ jobs:
           ov=""; [ "${{ inputs.backend }}" != "deepep" ] && ov="--backend ${{ inputs.backend }}"
           v2=""; [ "${{ inputs.deepep_v2 }}" = "true" ] && v2="--deepep-v2"
           os=""; [ -n "${{ inputs.only_sku }}" ] && os="--only-sku ${{ inputs.only_sku }}"
+          mn=""; [ -n "${{ inputs.min_nodes }}" ] && mn="--min-nodes ${{ inputs.min_nodes }}"
           # full matrix (with cases) -> artifact for the cells; slim (no cases) -> the strategy output.
-          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $ov $v2 $os --out matrix_full.json >/dev/null
+          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $ov $v2 $os $mn --out matrix_full.json >/dev/null
           SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='cases'} for x in m['include']]}))")
           echo "matrix=$SLIM" >> "$GITHUB_OUTPUT"
           echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")" >> "$GITHUB_OUTPUT"

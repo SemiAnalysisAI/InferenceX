@@ -98,28 +98,64 @@ COMMON_MOUNT=(--container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$M
 ENVJSON="$MOUNT_SRC/experimental/CollectiveX/results/env_${RUNNER_NAME}_${TS}.json"
 
 # EP backends (deepep/uccl/flashinfer): run run_ep.py across WORLD srun tasks over MNNVL, then exit
-# (the nccl-tests path below is nccl-only). Ported verbatim from launch_gb300-nv.sh's EP8 path.
+# (the nccl-tests path below is nccl-only). Mirrors launch_gb300-nv.sh's shard-aware EP8 path.
 if [ "$CX_BENCH" != "nccl" ]; then
   MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29553
   mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
-  phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
   WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
-  for ph in $phases; do
-    out="results/${RUNNER_NAME}_${CX_BENCH}_${ph}_${TS}.json"
-    cx_log "EP$WORLD $ph $CX_BENCH ${CX_DISPATCH_DTYPE:-bf16}/${CX_MODE:-normal} routing=${CX_ROUTING:-uniform}"
+
+  # SWEEP (CX_SHARD_FILE set): one TAB-line per shard case so the rack-scale EP path sweeps EVERY
+  # case (parity with single-node). MANUAL: one line per phase from the :-defaulted CX_* env.
+  cx_ep_cases() {
+    if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-}" ]; then
+      # '|'-separated (NOT tab: tab is IFS-whitespace, so `read` collapses consecutive tabs and
+      # swallows empty fields like a false eplb, shifting columns. No case field contains '|'.)
+      python3 - "$CX_SHARD_FILE" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+for c in d.get("cases", []):
+    g = lambda k, dv: (str(c[k]) if c.get(k) not in (None, "") else dv)
+    print("|".join([g("phase","decode"), g("dtype","bf16"), g("mode","normal"),
+        g("contract","layout-and-dispatch-v1"), g("routing","uniform"),
+        ("1" if c.get("eplb") else ""), g("resource_mode","tuned"),
+        g("activation_profile","normal"), g("placement","packed"), g("routing_step","0"),
+        g("uneven_tokens","none"), g("hidden","7168"), g("topk","8"), g("experts","256"),
+        g("ladder","")]))
+PY
+    else
+      local phases="${CX_PHASE:-decode}"; [ "$phases" = both ] && phases="decode prefill"
+      local ph
+      for ph in $phases; do
+        printf '%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s\n' \
+          "$ph" "${CX_DISPATCH_DTYPE:-bf16}" "${CX_MODE:-normal}" \
+          "${CX_MEASUREMENT_CONTRACT:-layout-and-dispatch-v1}" "${CX_ROUTING:-uniform}" \
+          "${CX_EPLB:+1}" "${CX_RESOURCE_MODE:-tuned}" "${CX_ACTIVATION_PROFILE:-normal}" \
+          "${CX_PLACEMENT:-packed}" "${CX_ROUTING_STEP:-0}" "${CX_UNEVEN_TOKENS:-none}" \
+          "${CX_HIDDEN:-7168}" "${CX_TOPK:-8}" "${CX_EXPERTS:-256}" "${CX_TOKENS_LADDER:-}"
+      done
+    fi
+  }
+
+  ci=0
+  while IFS='|' read -r ph dtype mode contract routing eplb rmode act placement rstep uneven hidden topk experts lad; do
+    [ -n "$ph" ] || continue
+    ci=$((ci+1))
+    out="results/${RUNNER_NAME}_${CX_BENCH}_${ph}_${TS}-c$(printf '%03d' "$ci")_${dtype}_${mode}.json"
+    cx_log "EP${WORLD}[$ci] $ph $CX_BENCH $dtype/$mode/$contract routing=$routing eplb=${eplb:-} rmode=$rmode act=$act plc=$placement"
     # shellcheck disable=SC2086
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$WORLD" \
       --ntasks-per-node="$GPUS_PER_NODE" "${COMMON_MOUNT[@]}" \
       --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP",NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1,MC_FORCE_MNNVL=1 \
-      bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --dispatch-dtype "${CX_DISPATCH_DTYPE:-bf16}" \
-        --mode "${CX_MODE:-normal}" --measurement-contract "${CX_MEASUREMENT_CONTRACT:-layout-and-dispatch-v1}" \
-        --routing "${CX_ROUTING:-uniform}" ${CX_EPLB:+--eplb} --resource-mode "${CX_RESOURCE_MODE:-tuned}" \
-        --tokens-ladder "${CX_TOKENS_LADDER:-}" --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" \
-        --experts "${CX_EXPERTS:-256}" --warmup "${CX_WARMUP:-32}" --iters "${CX_ITERS:-200}" \
+      bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --dispatch-dtype "$dtype" \
+        --mode "$mode" --measurement-contract "$contract" \
+        --routing "$routing" ${eplb:+--eplb} --resource-mode "$rmode" \
+        --activation-profile "$act" --placement "$placement" --routing-step "$rstep" --uneven-tokens "$uneven" \
+        --tokens-ladder "$lad" --hidden "$hidden" --topk "$topk" \
+        --experts "$experts" --warmup "${CX_WARMUP:-32}" --iters "${CX_ITERS:-200}" \
         --trials "${CX_TRIALS:-3}" --seed "${CX_SEED:-67}" --runner "$RUNNER_NAME" --topology-class "$CX_TOPO" \
         --transport "$CX_TRANSPORT" --out "$out" </dev/null 2>&1 | tail -8
-    cx_log "EP$WORLD $ph rc=${PIPESTATUS[0]}"
-  done
+    cx_log "EP${WORLD}[$ci] $ph rc=${PIPESTATUS[0]}"
+  done < <(cx_ep_cases)
   cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
   cx_log "done — EP artifacts under $CX_DIR/results/"
   exit 0

@@ -57,6 +57,9 @@ def main() -> int:
     ap.add_argument("--backend", default="", help="remap deepep cases onto this EP lib (uccl/flashinfer/deepep-hybrid/nccl-ep)")
     ap.add_argument("--deepep-v2", action="store_true")
     ap.add_argument("--only-sku", default="", help="restrict to one workflow sku value")
+    ap.add_argument("--min-nodes", type=int, default=0,
+                    help="keep only shards whose tray count (nodes, blank=1) is >= this; "
+                         "e.g. 2 = rack-scale EP8 only (skip the single-tray EP4 cells)")
     ap.add_argument("--max-cases", type=int, default=14, help="chunk shards larger than this into sub-cells")
     ap.add_argument("--out", default="")
     ap.add_argument("--slim", action="store_true",
@@ -137,6 +140,8 @@ def main() -> int:
     # build matrix include, chunking oversized shards
     include = []
     for (sku, beng, mode, rmode, nodes), cases in sorted(shards.items()):
+        if a.min_nodes and max(1, int(nodes or 1)) < a.min_nodes:
+            continue   # --min-nodes: skip single-tray (EP4) shards, keep only rack-scale (EP8+)
         for ci in range(0, len(cases), a.max_cases):
             chunk = cases[ci:ci + a.max_cases]
             part = ci // a.max_cases

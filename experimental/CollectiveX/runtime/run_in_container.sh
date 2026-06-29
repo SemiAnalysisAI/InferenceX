@@ -196,10 +196,10 @@ run_ep_suite() {
 
 # Build DeepEP V2 (NCCL Gin backend) from source, overriding the image's bundled V1 (1.2.1).
 # V2 needs NCCL>=2.30.4 (symmetric memory) STRICTLY matching the NCCL torch loads, and builds JIT
-# (no precompile). arch 9.0 for Hopper (H100/H200), 10.0 for Blackwell (B300/GB300). Best-effort:
+# (no precompile). arch 9.0 for Hopper (H100/H200), 10.0 for Blackwell (B300/B200/GB300). Best-effort:
 # on failure the deepep run still fails loudly (preserved failed-case), never a silent V1 fallback.
 cx_build_deepep_v2() {
-  local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*) arch="10.0";; esac
+  local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*|b200*) arch="10.0";; esac
   cx_log "DeepEP V2: building from source (TORCH_CUDA_ARCH_LIST=$arch) — overrides bundled V1"
   # PEP 668: newer images (H200/B300) ship an externally-managed Python that refuses `pip install`.
   # PIP_BREAK_SYSTEM_PACKAGES is honored by pip>=23.0.1 and silently ignored by older pip (H100),
