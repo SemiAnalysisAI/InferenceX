@@ -25,10 +25,10 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
     elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp8")
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5.1-fp8")
         # in our GLM-5 sglang recipes.
-        export MODEL_PATH="/mnt/lustre01/models/GLM-5-FP8"
-        export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-FP8"
+        export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
     else
         export MODEL_PATH=$MODEL
     fi

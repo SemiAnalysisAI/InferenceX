@@ -4306,7 +4306,7 @@
 - config-keys:
     - glm5-fp8-gb200-dynamo-sglang
   description:
-    - "Add GLM-5-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
+    - "Add GLM-5.1-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
     - "Image: lmsysorg/sglang:v0.5.12"
     - "14 topologies across 1k/1k and 8k/1k: prefill TP8 STP + decode wide-EP (DEP16/DEP32 high-throughput) and per-node TP8 low-latency, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1895

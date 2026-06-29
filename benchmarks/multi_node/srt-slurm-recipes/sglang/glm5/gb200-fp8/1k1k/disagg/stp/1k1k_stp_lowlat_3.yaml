@@ -7,7 +7,7 @@ name: gb200-fp8-glm5_1k1k_lowlat_3
 # base plus the topology-specific override for this concrete shape.
 
 model:
-  path: glm-5-fp8
+  path: glm-5.1-fp8
   container: "lmsysorg/sglang:v0.5.12"
   precision: fp8
 
@@ -58,7 +58,7 @@ backend:
 
   sglang_config:
     prefill:
-      served-model-name: GLM-5-FP8
+      served-model-name: GLM-5.1-FP8
       trust-remote-code: true
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
@@ -84,7 +84,7 @@ backend:
       disable-radix-cache: true
 
     decode:
-      served-model-name: GLM-5-FP8
+      served-model-name: GLM-5.1-FP8
       trust-remote-code: true
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
