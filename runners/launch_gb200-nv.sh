@@ -451,6 +451,60 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
     PREFLIGHT_ARGS=(--no-preflight)
 fi
 
+GB200_DSV4_STARTUP_LOCK_HELD=0
+acquire_gb200_dsv4_startup_lock() {
+    if [[ "${IS_AGENTIC:-}" != "1" || "${FRAMEWORK:-}" != "dynamo-vllm" || "${MODEL_PREFIX:-}" != "dsv4" || "${PRECISION:-}" != "fp4" ]]; then
+        return 0
+    fi
+    if ! command -v flock >/dev/null 2>&1; then
+        echo "WARNING: flock unavailable; GB200 DSV4 startup will not be serialized" >&2
+        return 0
+    fi
+
+    local lock_dir="/mnt/lustre01/users-public/sa-shared/locks"
+    local lock_file="${lock_dir}/gb200-dsv4-agentic-startup.lock"
+    mkdir -p "$lock_dir"
+    exec 200>"$lock_file"
+    echo "Waiting for GB200 DSV4 AgentX startup lock: $lock_file"
+    flock 200
+    GB200_DSV4_STARTUP_LOCK_HELD=1
+    echo "Acquired GB200 DSV4 AgentX startup lock"
+}
+
+release_gb200_dsv4_startup_lock() {
+    if [[ "${GB200_DSV4_STARTUP_LOCK_HELD:-0}" == "1" ]]; then
+        echo "Releasing GB200 DSV4 AgentX startup lock"
+        flock -u 200 || true
+        GB200_DSV4_STARTUP_LOCK_HELD=0
+    fi
+}
+trap release_gb200_dsv4_startup_lock EXIT
+
+wait_for_gb200_dsv4_benchmark_phase() {
+    if [[ "${GB200_DSV4_STARTUP_LOCK_HELD:-0}" != "1" ]]; then
+        return 0
+    fi
+
+    echo "Holding startup lock until srt-slurm reaches the AgentX benchmark phase..."
+    while true; do
+        if grep -qE "Running agentic concurrency|Skipping completed agentic concurrency" "$LOG_FILE" 2>/dev/null; then
+            echo "AgentX benchmark phase reached; startup serialization no longer needed"
+            release_gb200_dsv4_startup_lock
+            return 0
+        fi
+        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
+            echo "Job $JOB_ID ended before reaching AgentX benchmark phase"
+            release_gb200_dsv4_startup_lock
+            return 0
+        fi
+        echo "Waiting for AgentX benchmark phase before releasing startup lock..."
+        tail -n 20 "$LOG_FILE" 2>/dev/null || true
+        sleep 30
+    done
+}
+
+acquire_gb200_dsv4_startup_lock
+
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
     SRTCTL_OUTPUT=$(RUNNER_NAME="$SRTCTL_RUNNER_NAME" srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
@@ -484,6 +538,8 @@ while ! ls "$LOG_FILE" &>/dev/null; do
     echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
     sleep 5
 done
+
+wait_for_gb200_dsv4_benchmark_phase
 
 # Poll for job completion in background
 (
