@@ -116,7 +116,7 @@ wait_for_lmcache_ready() {
 
 case "$OFFLOADING" in
     none)
-        OFFLOAD_ARGS=(--enable-prefix-caching=False)
+        OFFLOAD_ARGS=(--no-enable-prefix-caching)
         ;;
     cpu)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
