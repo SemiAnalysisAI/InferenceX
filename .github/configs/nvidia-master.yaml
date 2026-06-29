@@ -12308,6 +12308,191 @@ qwen3.5-fp4-b200-trt:
       - { tp: 4, ep: 4, dp-attn: true, conc-list: [1024] }
       - { tp: 8, ep: 8, dp-attn: true, conc-list: [256, 512, 1024] }
 
+# MiniMax-M3 GB200 disagg sweep — adapted from NV B300 PR #1863.
+# All prefill DEP4 (TP1 DP4 EP, 4 GPU/worker). Decode: Marlin, TEP8, DEP8, TEP4.
+# 4 GPU/node (GB200 NVL72). FLASHINFER attention with FP8 KV cache.
+minimaxm3-fp8-gb200-dynamo-vllm:
+  image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: gb200
+  precision: fp8
+  framework: dynamo-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d DEP4+DEP8, 3n: conc 1024,4096
+      - conc-list: [1024, 4096]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p1d-dep4-dep8-1k1k.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 1p1d DEP4+TEP8, 3n: conc 128,256
+      - conc-list: [128, 256]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p1d-dep4-tep8-1k1k.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 1p2d DEP4+DEP8, 5n: conc 1024,4096
+      - conc-list: [1024, 4096]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p2d-dep4-dep8-1k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 1p2d DEP4+TEP8, 5n: conc 4,16,64
+      - conc-list: [4, 16, 64]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p2d-dep4-tep8-1k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 1p4d DEP4+TP4 Marlin, 5n: conc 32
+      - conc-list: [32]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p4d-dep4-tp4-marlin-1k1k.yaml"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p2d DEP4+DEP8, 5n: conc 512
+      - conc-list: [512]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-dep8-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 1p2d DEP4+TEP4, 3n: conc 4
+      - conc-list: [4]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-tep4-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: false
+
+      # 1p2d DEP4+TEP8, 5n: conc 4,16,32,64,128
+      - conc-list: [4, 16, 32, 64, 128]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-tep8-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: false
+
+      # 2p2d DEP4+DEP8, 6n: conc 512,1024
+      - conc-list: [512, 1024]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/2p2d-dep4-dep8-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 3p2d DEP4+DEP8, 7n: conc 4096
+      - conc-list: [4096]
+        prefill:
+          num-worker: 3
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/3p2d-dep4-dep8-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
+      # 5p2d DEP4+DEP8, 9n: conc 4096
+      - conc-list: [4096]
+        prefill:
+          num-worker: 5
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/5p2d-dep4-dep8-8k1k.yaml"
+        decode:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+
 qwen3.5-fp4-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
   model: nvidia/Qwen3.5-397B-A17B-NVFP4

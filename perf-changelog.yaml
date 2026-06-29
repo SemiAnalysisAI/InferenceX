@@ -4133,6 +4133,14 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1893
 
 - config-keys:
+    - minimaxm3-fp8-gb200-dynamo-vllm
+  description:
+    - "Initial addition of MiniMax-M3 FP8 GB200 disaggregated Dynamo-vLLM benchmark using vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
+    - "Allocate FlashInfer MNNVL workspace for one-shot all-reduce and materialize the MSA prefill top-k slice before CSR construction"
+    - "Preserve current Qwen3.5 and Kimi-K2.5 GB200 launcher paths while adding MiniMax-M3 shared-FS staging and atomic image import"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1938
+
+- config-keys:
     - minimaxm3-fp8-gb300-dynamo-vllm
   description:
     - "Update the GB300 MiniMax-M3 Dynamo-vLLM image to vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223"
