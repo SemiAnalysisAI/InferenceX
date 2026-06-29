@@ -4328,8 +4328,8 @@
     - minimaxm3-fp8-mi355x-vllm
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
-    - "Update the MiniMax-M3 MXFP8 MI355X vLLM benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e, which includes the gfx950 mxfp8 MoE/linear tuning for MiniMax-M3 (vllm-project/vllm#45725)."
-    - "Export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 in the standard and EAGLE3 (MTP) bench scripts to use INT6 quick all-reduce on CDNA4/gfx950, reducing TP all-reduce cost for the mxfp8 workload."
+    - "Update the MiniMax-M3 MXFP8 MI355X vLLM benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1, which includes the gfx950 mxfp8 MoE/linear tuning (vllm-project/vllm#45725), fused shared-experts MoE for the mxfp8 model (#46545), and the AITER flydsl MoE backend (#46184)."
+    - "Align the standard and EAGLE3 (MTP) bench scripts with vllm-project/recipes#581: export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1, and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 (AITER kernels + fused shared-experts MoE + INT6 quick all-reduce; no --moe-backend override, so AITER is the auto-selected MoE backend)."
     - "Retune the TP/EP search space to the best layout per concurrency band and drop redundant points (full TP8/EP8, TP2/EP2, DP-attention)."
     - "minimaxm3-fp8-mi355x-vllm: 1k1k sweeps TP8 (conc 1-32), TP4 (conc 4-32), TP4/EP4 (conc 64-512); 8k1k sweeps TP8 (conc 1-2), TP4 (conc 2-128)."
     - "minimaxm3-fp8-mi355x-vllm-mtp: 1k1k sweeps TP8 (conc 4-32), TP8/EP8 (conc 1-256), TP4 (conc 1-2 and 32-64), TP4/EP4 (conc 128-512); 8k1k sweeps TP8 (conc 1 and 4-16), TP4 (conc 16-128)."

@@ -31,6 +31,11 @@ fi
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# MI355X mxfp8 recipe (vllm-project/recipes#581): AITER kernels + fused
+# shared-experts MoE (needs vllm-project/vllm#46545) plus INT6 quick all-reduce.
+# No --moe-backend override here, so AITER is the auto-selected MoE backend.
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
 
 if [ "${EVAL_ONLY}" = "true" ]; then
