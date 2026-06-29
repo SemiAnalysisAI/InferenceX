@@ -142,6 +142,7 @@ case "$OFFLOADING" in
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
         MOONCAKE_VERSION=0.3.11.post1
+        apt-get update && apt-get install -y libcurl4 libibverbs1 rdma-core librdmacm1 libnuma1 liburing2
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-non-cuda==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
