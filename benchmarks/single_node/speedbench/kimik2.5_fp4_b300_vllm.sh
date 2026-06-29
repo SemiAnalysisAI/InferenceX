@@ -7,7 +7,7 @@
 # synthetic-acceptance framework: for each thinking mode (on/off) and each
 # EAGLE3 speculative-token count, measure the REAL AL on a single SPEED-Bench
 # category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml.
+# golden_al_distribution/kimik2.5_eagle3.yaml.
 #
 # Kimi-K2.5 uses the lightseekorg/kimi-k2.5-eagle3-mla draft head (MLA
 # variant, recommended by official docs). The draft model is downloaded

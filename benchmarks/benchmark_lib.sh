@@ -1223,6 +1223,22 @@ _speedbench_spec_gauge_avg() {
     _speedbench_metric_avg "$port" "$metric"
 }
 
+_speedbench_reference_yaml() {
+    if [[ -n "${SPEEDBENCH_REFERENCE_YAML:-}" ]]; then
+        echo "$SPEEDBENCH_REFERENCE_YAML"
+        return 0
+    fi
+
+    case "${MODEL_PREFIX:-}" in
+        dsv4)
+            echo "golden_al_distribution/dsv4_mtp.yaml"
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
 _speedbench_write_eval_result() {
     local output="$1"
     local mode="$2"
@@ -1235,12 +1251,14 @@ _speedbench_write_eval_result() {
     local metric_source="${9:-}"
     local error="${10:-}"
     local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
+    local reference
+    reference=$(_speedbench_reference_yaml 2>/dev/null || true)
 
     local record_cmd=(
         python3 "$(pwd)/utils/evals/speedbench_al.py"
         record
         --output "$output"
-        --reference-yaml "benchmarks/speedbench-reference-al.yaml"
+        --reference-yaml "$reference"
         --model "$speedbench_model"
         --model-prefix "${MODEL_PREFIX:-}"
         --thinking-mode "$mode"
@@ -1279,8 +1297,9 @@ _speedbench_write_eval_result() {
 _speedbench_reference_available() {
     local mode="$1"
     local mtp="$2"
-    local reference="benchmarks/speedbench-reference-al.yaml"
+    local reference
     local speedbench_model="${MODEL_NAME:-${MODEL:-}}"
+    reference=$(_speedbench_reference_yaml) || return 1
     [[ -f "$reference" ]] || return 1
     python3 "$(pwd)/utils/evals/speedbench_al.py" resolve \
         --reference-yaml "$reference" \

@@ -6,7 +6,7 @@
 # synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
 # level (num_speculative_tokens), measure the REAL AL on a single SPEED-Bench
 # category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml. This measures real MTP acceptance;
+# a model-specific YAML under golden_al_distribution/. This measures real MTP acceptance;
 # the synthetic value is injected downstream by the throughput recipe, not here.
 #
 # Filename *_fp4_* matches both the speedbench-al.yml path convention

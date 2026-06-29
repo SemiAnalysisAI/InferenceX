@@ -3,8 +3,8 @@ name: SpeedBench AL Collection
 # Push-button (workflow_dispatch) collection of a SPEED-Bench acceptance-length
 # (AL) matrix: thinking_on/off x MTP levels, for the given model (defaults to
 # DeepSeek-V4-Pro). Produces the golden reference consumed by the
-# synthetic-acceptance framework and (optionally) opens a PR updating
-# benchmarks/speedbench-reference-al.yaml.
+# synthetic-acceptance framework and can optionally open a PR updating the
+# model's YAML under golden_al_distribution/.
 
 on:
   workflow_dispatch:
@@ -60,7 +60,7 @@ on:
         type: string
         default: '480'
       open-pr:
-        description: "Open a PR updating benchmarks/speedbench-reference-al.yaml (default off: artifact-only, paste values in manually)"
+        description: "Open a PR updating the model's golden_al_distribution YAML (default off: artifact-only)"
         required: false
         type: boolean
         default: false
@@ -179,16 +179,23 @@ jobs:
           GH_TOKEN: ${{ secrets.REPO_PAT }}
         run: |
           set -euo pipefail
-          # NOTE: the reference yaml is keyed by model at the top level. This
-          # overwrites it with the current model's matrix; when more than one
-          # model is collected, replace this cp with a per-model-key YAML merge.
-          cp speedbench-reference-al.yaml benchmarks/speedbench-reference-al.yaml
+          case "${{ inputs.model-prefix }}" in
+            dsv4) GOLDEN_AL_PATH="golden_al_distribution/dsv4_mtp.yaml" ;;
+            qwen3.5) GOLDEN_AL_PATH="golden_al_distribution/qwen3.5_mtp.yaml" ;;
+            kimik2.5) GOLDEN_AL_PATH="golden_al_distribution/kimik2.5_eagle3.yaml" ;;
+            minimaxm3) GOLDEN_AL_PATH="golden_al_distribution/minimaxm3_eagle3.yaml" ;;
+            *)
+              echo "No committed golden AL path for model prefix: ${{ inputs.model-prefix }}" >&2
+              exit 1
+              ;;
+          esac
+          cp speedbench-reference-al.yaml "$GOLDEN_AL_PATH"
 
           BRANCH="speedbench-al/${{ inputs.model-prefix }}-auto-${{ github.run_id }}"
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
           git checkout -b "$BRANCH"
-          git add benchmarks/speedbench-reference-al.yaml
+          git add "$GOLDEN_AL_PATH"
           if git diff --cached --quiet; then
             echo "No change in reference yaml; skipping PR."
             exit 0

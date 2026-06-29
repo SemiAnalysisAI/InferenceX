@@ -6,7 +6,7 @@
 # synthetic-acceptance framework: for each thinking mode (on/off) and each MTP
 # level (num_speculative_tokens), measure the AL on a single SPEED-Bench
 # category (default: coding) and emit a YAML matrix identical in shape to
-# benchmarks/speedbench-reference-al.yaml.
+# golden_al_distribution/dsv4_mtp.yaml.
 #
 # This is the "AL distribution collection" script wired into the
 # speedbench-al.yml GitHub Action (workflow_dispatch / push-button).
@@ -46,7 +46,7 @@ SPEEDBENCH_OUTPUT_LEN="${SPEEDBENCH_OUTPUT_LEN:-4096}"
 CONCURRENCY="${CONCURRENCY:-1}"
 TEMPERATURE="${TEMPERATURE:-1.0}"
 # thinking-on chat_template_kwargs. MUST match the production/golden config:
-# the reference matrix (benchmarks/speedbench-reference-al.yaml) was measured
+# the reference matrix (golden_al_distribution/dsv4_mtp.yaml) was measured
 # with reasoning_effort=high.
 DEFAULT_CHAT_TEMPLATE_KWARGS_ON='{"thinking": true, "reasoning_effort": "high"}'
 CHAT_TEMPLATE_KWARGS_ON="${CHAT_TEMPLATE_KWARGS_ON:-$DEFAULT_CHAT_TEMPLATE_KWARGS_ON}"

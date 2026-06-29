@@ -38,6 +38,19 @@ if [[ -z "$model_name" ]]; then
     model_name="${SERVED_MODEL_NAME:-unknown}"
 fi
 
+reference_yaml="${SPEEDBENCH_REFERENCE_YAML:-}"
+if [[ -z "$reference_yaml" ]]; then
+    case "${MODEL_PREFIX:-}" in
+        dsv4)
+            reference_yaml="${workspace}/golden_al_distribution/dsv4_mtp.yaml"
+            ;;
+        *)
+            echo "Dynamo SpeedBench AL: no golden AL file for MODEL_PREFIX=${MODEL_PREFIX:-unknown}"
+            exit 0
+            ;;
+    esac
+fi
+
 output="${workspace}/results_speedbench_al_${mode}_mtp${mtp}.json"
 metric_source="dynamo-decode-log-counters"
 if [[ -n "${FRAMEWORK:-}" ]]; then
@@ -48,7 +61,7 @@ echo "Dynamo SpeedBench AL: parsing decode logs from $logs_dir"
 python3 "${workspace}/utils/evals/dynamo_speedbench_al_from_logs.py" \
     --logs-dir "$logs_dir" \
     --output "$output" \
-    --reference-yaml "${workspace}/benchmarks/speedbench-reference-al.yaml" \
+    --reference-yaml "$reference_yaml" \
     --model "$model_name" \
     --model-prefix "${MODEL_PREFIX:-}" \
     --thinking-mode "$mode" \

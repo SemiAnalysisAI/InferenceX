@@ -49,6 +49,21 @@ deepseek-v4-pro:
     assert value == 2.75
 
 
+def test_lookup_reference_uses_committed_dsv4_golden() -> None:
+    ref = Path(__file__).resolve().parents[2] / "golden_al_distribution/dsv4_mtp.yaml"
+
+    _, mode_key, value = lookup_reference(
+        load_reference(ref),
+        model="deepseek-ai/DeepSeek-V4-Pro",
+        model_prefix="dsv4",
+        thinking_mode="on",
+        num_speculative_tokens=3,
+    )
+
+    assert mode_key == "thinking_on"
+    assert value == 2.49
+
+
 def test_build_result_records_threshold_pass(tmp_path: Path) -> None:
     ref = tmp_path / "speedbench-reference-al.yaml"
     ref.write_text(
