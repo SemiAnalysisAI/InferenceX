@@ -54,6 +54,37 @@ cx_log "squash=$SQUASH_FILE  mount=$MOUNT_SRC -> $MOUNT_DIR"
 if [ "${CX_DRYRUN:-0}" = "1" ]; then cx_log "CX_DRYRUN=1 — not allocating"; exit 0; fi
 command -v salloc >/dev/null || cx_die "salloc not found — run on the Slurm login node"
 
+# ---- Cross-node H100 EP (goal 182): mirrors launch_h200.sh. Allocate N nodes, ONE container task per
+# node; run_in_container builds the backend per node then spawns NGPUS local ranks rendezvousing via a
+# FileStore on the shared mount (CX_RDZV_FILE) — deliberately AVOIDS torchrun (its elastic-agent TCPStore
+# at the management-subnet NodeAddr is unreachable from a peer's enroot container net namespace). nccl-ep
+# is the validated portable cross-node EP (all_to_all_single, host-stages); custom-RDMA backends hit the
+# GPUDirect-RDMA wall. /mnt/nfs is compute-visible so the FileStore is shared across nodes.
+if [ "${CX_NODES:-1}" -gt 1 ]; then
+  NODES="${CX_NODES}"
+  cx_log "H100 CROSS-NODE EP: nodes=$NODES world=$((NODES*NGPUS)) bench=$CX_BENCH (IB; FileStore rdzv)"
+  JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --exclude="$EXCLUDE_NODES" \
+            --nodes="$NODES" --gres=gpu:"$NGPUS" --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID (multi-node) from salloc"
+  trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
+  cx_log "JOB_ID=$JOB_ID nodes=[$(squeue -j "$JOB_ID" -h -o %N)]"
+  export CX_TOPO="h100-multinode-ib" CX_TRANSPORT="rdma"
+  # FileStore rendezvous file on the shared mount (same underlying file on every node); fresh per job.
+  RDZV="$MOUNT_DIR/experimental/CollectiveX/.rdzv_${JOB_ID}"
+  rm -f "$MOUNT_SRC/experimental/CollectiveX/.rdzv_${JOB_ID}" 2>/dev/null || true
+  srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 \
+    --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:$MOUNT_DIR" \
+    --no-container-mount-home --container-workdir="$MOUNT_DIR/experimental/CollectiveX" \
+    --no-container-entrypoint \
+    --export=ALL,CX_NNODES="$NODES",CX_RDZV_FILE="$RDZV" \
+    bash -c 'export CX_NODE_RANK=${SLURM_NODEID:-0}; exec bash "$0"' \
+      "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh" || cx_log "WARN: cross-node H100 EP rc=$?"
+  rm -f "$MOUNT_SRC/experimental/CollectiveX/.rdzv_${JOB_ID}" 2>/dev/null || true
+  cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"
+  cx_log "done — cross-node H100 EP artifacts under results/"
+  exit 0
+fi
+
 JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --exclude="$EXCLUDE_NODES" \
           --gres=gpu:"$NGPUS" --exclusive --time="$TIME_MIN" --job-name="$RUNNER_NAME")"
 [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
