@@ -4347,5 +4347,5 @@
 - config-keys:
     - minimaxm3-fp8-gb300-dynamo-vllm
   description:
-    - "Increase health_check max_attempts from 720 to 840 (7200s → 8400s) for the 1p1d-dep2-dep8-8k1k GB300 recipe to accommodate longer model load times."
+    - "Rename 1p1d-dep2-dep8-8k1k.yaml to 1p1d-dep2-dep8-8k1k-healthcheck.yaml and update the nvidia-master.yaml CONFIG_FILE pointer accordingly; increase health_check max_attempts from 720 to 840 (7200s → 8400s) to accommodate longer GB300 model load times."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1961
