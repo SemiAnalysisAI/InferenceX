@@ -4323,3 +4323,10 @@
     - "Enable AITER MoE on MiniMax-M3 MXFP4 MI355X single-node vLLM STP: export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1; pass --moe-backend aiter."
     - "Pin vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from nightly-3f5a1e1733200760169ff31ebe60a271072b199e) for AITER MoE and shared-expert fusion support (vllm-project/vllm#46419, vllm-project/vllm#46545)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1954
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm-disagg
+  description:
+    - "Bump image to vllm/vllm-openai-rocm:v0.24.0 (MoRI-IO fixes upstreamed in vllm#40344)"
+    - "Rename a2a backend mori to mori_low_latency; set read_mode via kv_connector_extra_config instead of VLLM_MORIIO_CONNECTOR_READ_MODE env var"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1585
