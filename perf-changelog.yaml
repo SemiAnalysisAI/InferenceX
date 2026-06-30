@@ -4320,6 +4320,7 @@
 - config-keys:
     - minimaxm3-fp8-mi300x-vllm
   description:
+    - "Update the MiniMax-M3 MXFP8 MI300X vLLM image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1."
     - "Enable AITER kernels for MiniMax-M3 MXFP8 on MI300X/gfx942 via the single master toggle VLLM_ROCM_USE_AITER=1: the stock image left it unset, so the hot decode GEMMs and fused MoE ran on the generic kernels. The per-component AITER flags (MoE, linear, RMSNorm, FP8 batched-GEMM) default to True and are gated behind the master flag, so they are left at their defaults. Keep attention on TRITON_ATTN (VLLM_ROCM_USE_AITER_MHA=0, which defaults to True) because the MXFP8 checkpoint lacks calibrated q/prob scales for ROCm FP8 attention."
     - "Add AMD-recommended, numerically-inert MI300X runtime knobs: TORCH_BLAS_PREFER_HIPBLASLT=1, NCCL_MIN_NCHANNELS=112 (raises RCCL channels above the ~32-64 default for TP8), GPU_MAX_HW_QUEUES=2 (caps HIP streams below the default of 4)."
     - "Stack two accuracy-safe scheduling levers: --async-scheduling (overlaps CPU input-prep with GPU decode) and --max-num-batched-tokens 16384 (amortizes the per-step BF16-emulated MoE weight read of ~95 GB/rank over more prompt tokens, halving prefill weight-reads vs the 8192 default). Both are token-for-token identical (scheduling only); GSM8K exact-match holds at 0.959."
