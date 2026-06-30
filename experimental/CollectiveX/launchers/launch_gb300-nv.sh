@@ -117,14 +117,14 @@ PY
   fi
 }
 
-# Per-rank env for the EP8 case sruns. DeepEP LL internode on NVL72: NVSHMEM's MNNVL auto-detect
-# (NVSHMEM_DISABLE_MNNVL defaults false) wires the cross-tray fabric as multi-node-NVLink, but DeepEP's
-# LL kernels are built around the RDMA topology team and write IBGDA WQEs from device code -> the live
-# transport no longer matches what the kernel expects -> cudaErrorIllegalAddress at csrc/legacy/buffer.hpp.
-# Force NVSHMEM off MNNVL so DeepEP uses the IBGDA path its LL device code assumes. flashinfer rides
-# NCCL's MNNVL transport (NCCL_MNNVL_ENABLE), so it is unaffected and stays on the working path.
+# Per-rank env for the EP8 case sruns. flashinfer-combine rides NCCL's MNNVL transport (validated:
+# cq=fp8/nvfp4 @ ws8). DeepEP V2's Buffer gates multi-tray NVLink behind allow_mnnvl, which defaults
+# False -> DeepEP then sets NVSHMEM_DISABLE_MNNVL=1 and the legacy buffer takes the intranode-only CUDA-IPC
+# peer path, faulting across NVL72 trays (cudaErrorIllegalAddress at csrc/legacy/buffer.hpp). CX_ALLOW_MNNVL=1
+# makes tests/ep_deepep.py pass allow_mnnvl=True so the NVL buffer spans both trays over the fabric API.
+# Bundled V1's Buffer predates the param (its NVL buffer already spans MNNVL) -> the harness drops the kwarg.
 EP8_EXPORTS="ALL,MASTER_ADDR=$MA,MASTER_PORT=$MP,NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1"
-[ "$CX_BENCH" = "deepep" ] && EP8_EXPORTS="$EP8_EXPORTS,NVSHMEM_DISABLE_MNNVL=1,NVSHMEM_IB_ENABLE_IBGDA=1"
+[ "$CX_BENCH" = "deepep" ] && EP8_EXPORTS="$EP8_EXPORTS,CX_ALLOW_MNNVL=1"
 
 ci=0
 while IFS='|' read -r ph dtype mode contract routing eplb rmode act placement rstep uneven hidden topk experts lad; do

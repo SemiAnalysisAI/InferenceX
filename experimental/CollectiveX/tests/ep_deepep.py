@@ -98,6 +98,28 @@ def _per_block_dequant_3d(x_fp8, scales):
     return (xv * scales.unsqueeze(-1)).view(E, S, H).to(torch.bfloat16)
 
 
+def _mnnvl_buffer_kwargs() -> dict:
+    """Cross-tray (NVL72/MNNVL) Buffer kwargs.
+
+    DeepEP V2's `Buffer` added `allow_mnnvl` (default False); when it is False DeepEP itself sets
+    `NVSHMEM_DISABLE_MNNVL=1` and the legacy buffer falls onto the intranode-only CUDA-IPC peer path,
+    which faults across NVL72 trays (cudaErrorIllegalAddress at csrc/legacy/buffer.hpp). On a real
+    multi-tray MNNVL allocation (the rack launcher exports CX_ALLOW_MNNVL=1) request allow_mnnvl=True
+    so the NVLink buffer spans trays over the fabric API. The bundled V1 `Buffer` predates the param
+    (its NVL buffer already spans MNNVL trays), so only pass it when the installed Buffer accepts it —
+    keeping x86 single-node and bundled-V1 rack paths byte-for-byte unchanged.
+    """
+    if os.environ.get("CX_ALLOW_MNNVL") != "1":
+        return {}
+    try:
+        import inspect
+        if "allow_mnnvl" in inspect.signature(Buffer.__init__).parameters:
+            return {"allow_mnnvl": True}
+    except (ValueError, TypeError):
+        pass
+    return {}
+
+
 class DeepEPBackend:
     name = "deepep"
     combine_needs_redispatch = False  # DeepEP combine reuses the handle (its own bench does too)
@@ -167,7 +189,8 @@ class DeepEPBackend:
         # (review: a phase-dependent 2/4 GiB made the shared T=128 point differ between
         # the decode and prefill sweeps). 4 GiB holds T up to 4096 (validated).
         num_nvl_bytes = int(os.environ.get("CX_DEEPEP_NVL_BYTES", str(4 * 1024 * 1024 * 1024)))
-        self.buffer = Buffer(self.group, num_nvl_bytes, 0)
+        mnnvl_kw = _mnnvl_buffer_kwargs()
+        self.buffer = Buffer(self.group, num_nvl_bytes, 0, **mnnvl_kw)
         rm = args.resource_mode
         tuned_src = None
         if rm == "normalized":
@@ -191,7 +214,7 @@ class DeepEPBackend:
             "deepep_commit": os.environ.get("DEEPEP_COMMIT") or f"pkg-{ver}",
             "mode": "normal", "resource_mode": rm, "num_sms": num_sms, "device_sms": dev_sms,
             "sm_fraction": (num_sms / dev_sms), "tuned_source": tuned_src or "n/a",
-            "num_nvl_bytes": num_nvl_bytes,
+            "num_nvl_bytes": num_nvl_bytes, "allow_mnnvl": bool(mnnvl_kw),
             "fp8_recipe": self.fp8_recipe if self.fp8 else "n/a",
             "scale_layout": self.scale_layout,
         }
@@ -211,9 +234,10 @@ class DeepEPBackend:
             self.num_max, args.hidden, self.world_size, args.experts)
         # one QP per local expert is the DeepEP convention for LL
         self.num_qps = max(1, args.experts // self.world_size)
+        mnnvl_kw = _mnnvl_buffer_kwargs()
         self.buffer = Buffer(self.group, 0, rdma_bytes, low_latency_mode=True,
                              num_qps_per_rank=self.num_qps,
-                             allow_nvlink_for_low_latency_mode=True)
+                             allow_nvlink_for_low_latency_mode=True, **mnnvl_kw)
         self.backend_provenance = {
             "deepep_version": ver,
             "deepep_commit": os.environ.get("DEEPEP_COMMIT") or f"pkg-{ver}",
@@ -221,7 +245,7 @@ class DeepEPBackend:
             "num_sms": None, "device_sms": dev_sms, "tuned_source": "ll-fixed-kernel",
             "num_max_dispatch_tokens_per_rank": self.num_max,
             "num_rdma_bytes": rdma_bytes, "num_qps_per_rank": self.num_qps,
-            "low_latency_mode": True, "use_fp8": self.fp8,
+            "low_latency_mode": True, "use_fp8": self.fp8, "allow_mnnvl": bool(mnnvl_kw),
         }
 
     def buffer_cap(self, args):
