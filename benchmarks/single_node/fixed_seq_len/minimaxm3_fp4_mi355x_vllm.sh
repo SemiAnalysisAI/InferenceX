@@ -3,7 +3,7 @@
 # MiniMax-M3 MXFP4 MI355X (gfx950) single-node vLLM recipe.
 # https://huggingface.co/amd/MiniMax-M3-MXFP4#reproduction
 # Block size 128 is mandatory for MSA. This fixed-sequence benchmark uses the
-# text-only language-model path and lets vLLM select the MoE backend.
+# text-only language-model path with AITER MoE (vllm-project/vllm#46419).
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -32,6 +32,9 @@ fi
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -59,6 +62,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
+    --moe-backend aiter \
     --tool-call-parser minimax_m3 \
     --enable-auto-tool-choice \
     --reasoning-parser minimax_m3 > "$SERVER_LOG" 2>&1 &
