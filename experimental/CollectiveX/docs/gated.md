@@ -145,7 +145,7 @@ GB300 EP8 (28319504164) + EP16 (28319809968); GB200 EP8 (28319793439, after port
 multi-srun path into launch_gb200-nv.sh — was nccl-only) + EP16 (28319971335) + EP64 (28319975631,
 ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrency-group collision
 (the group omitted inputs.nodes — fixed). Bounded only by NVL72 tray CAPACITY, not the method.
-- **Cross-node over InfiniBand (H100/H200, goal 182) — DONE via nccl-ep.** Two layers had to fall:
+- **Cross-node over InfiniBand (H200 DONE via nccl-ep; H100 cluster WALLED).** Two layers had to fall:
   (1) **Rendezvous:** torch's `env://` TCPStore *and* torchrun's elastic-agent store advertise the
   rank-0 management-subnet NodeAddr, which is NOT reachable from a peer rank's enroot container net
   namespace (900s connect timeout; runs 28325250919 / 28326334616). Solved with a shared-mount
@@ -157,9 +157,19 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   IB HCAs / container don't expose. The portable fix is a transport that host-stages gracefully:
   **nccl-ep** (`tests/ep_nccl.py`), the NCCL `all_to_all_single` token-shuffle EP baseline. H200
   nodes=2 / **world=16 over IB**, run 28327088942: **correct=True at every T(1→128)**, disp_p50
-  547–808µs, status=comparable-experimental (single-node world=8 validated first, run 28327013318). The
-  same nccl-ep path covers H100. (IBGDA/internode-DeepEP would be a faster one-sided path but needs the
-  driver capability — gated; nccl-ep is the validated, portable cross-node EP.)
+  547–808µs, status=comparable-experimental (single-node world=8 validated first, run 28327013318).
+  (IBGDA/internode-DeepEP would be a faster one-sided path but needs the driver capability — gated;
+  nccl-ep is the validated, portable cross-node EP.)
+  **H100 cross-node — WALLED (correcting an earlier "same path covers H100" overclaim).** The h100
+  launcher gained the same `CX_NODES>1` FileStore-rendezvous block (ported from h200; committed), and the
+  2-node allocation + per-node container DO come up (run 28446105759: nodes hpc-gpu-1-0/1). But the
+  nccl-ep run reproducibly HANGS to the 900s timeout on BOTH decode and prefill, with no captured evidence
+  (the `timeout -k` kill pre-empts stderr) — the gloo+NCCL FileStore bringup that auto-detects the right
+  interface on the h200 fabric does not converge on the hpc-gpu-1 cluster (different inter-node
+  networking; no SSH to introspect the correct `GLOO/NCCL_SOCKET_IFNAME`). Not a systematic-matrix data
+  point either: `sweep_matrix` places h100 at `nodes=''` (single-node) only — cross-node ws16 was a
+  separate goal-182 demo. So h100 single-node EP (all backends @ ws8) is complete; cross-node ws16 stays a
+  cluster-bringup wall pending interface-level access to that cluster.
 - **Cross-node MI355X (goal 183, "if available") — via nccl-ep on RCCL.** MoRI's RDMA registration also
   aborts cross-node (SIGABRT, run 28325251742, *after* the rendezvous master is correctly resolved) —
   the AMD analogue of UCCL's GPUDirect-RDMA wall. nccl-ep runs on RCCL (identical `all_to_all_single`
