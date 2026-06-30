@@ -56,14 +56,15 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         # from_config) intermittently failed with FileNotFoundError when a
         # job landed on a node that didn't have the weights. The shared
         # Lustre FS is visible from every node, so there's no placement
-        # lottery. Use the CamelCase NVFP4 checkpoint name from Ankur's
-        # staging sheet: the fp4 recipes run the fp4 MoE kernels
-        # (VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE / use_fp4_indexer_cache) and
-        # therefore need the NVFP4-quantized weights, not the BF16 base.
-        # Linux is case-sensitive, so the path must match the on-disk
-        # CamelCase exactly. SRT_SLURM_MODEL_PREFIX is the recipe's
-        # model.path alias key (not a path) and stays as-is.
-        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4"
+        # lottery. Use the CamelCase name from Ankur's staging sheet (Linux
+        # is case-sensitive). Use the base DeepSeek-V4-Pro checkpoint, not
+        # the -NVFP4 re-quant: the recipe's served-model identity is plain
+        # deepseek-ai/DeepSeek-V4-Pro and the pinned v0.20.1 container's
+        # deepseek_v4 loader doesn't define the NVFP4 export's extra quant
+        # params (e.g. ffn.experts.w13_input_scale), which KeyErrors at
+        # load. SRT_SLURM_MODEL_PREFIX is the recipe's model.path alias key
+        # (not a path) and stays as-is.
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
