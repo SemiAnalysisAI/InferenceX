@@ -117,6 +117,15 @@ PY
   fi
 }
 
+# Per-rank env for the EP8 case sruns. DeepEP LL internode on NVL72: NVSHMEM's MNNVL auto-detect
+# (NVSHMEM_DISABLE_MNNVL defaults false) wires the cross-tray fabric as multi-node-NVLink, but DeepEP's
+# LL kernels are built around the RDMA topology team and write IBGDA WQEs from device code -> the live
+# transport no longer matches what the kernel expects -> cudaErrorIllegalAddress at csrc/legacy/buffer.hpp.
+# Force NVSHMEM off MNNVL so DeepEP uses the IBGDA path its LL device code assumes. flashinfer rides
+# NCCL's MNNVL transport (NCCL_MNNVL_ENABLE), so it is unaffected and stays on the working path.
+EP8_EXPORTS="ALL,MASTER_ADDR=$MA,MASTER_PORT=$MP,NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1"
+[ "$CX_BENCH" = "deepep" ] && EP8_EXPORTS="$EP8_EXPORTS,NVSHMEM_DISABLE_MNNVL=1,NVSHMEM_IB_ENABLE_IBGDA=1"
+
 ci=0
 while IFS='|' read -r ph dtype mode contract routing eplb rmode act placement rstep uneven hidden topk experts lad; do
   [ -n "$ph" ] || continue
@@ -126,7 +135,7 @@ while IFS='|' read -r ph dtype mode contract routing eplb rmode act placement rs
   # shellcheck disable=SC2086
   timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$NGPUS" \
     --ntasks-per-node="$GPN" --container-name="$CNAME" "${CMOUNT[@]}" \
-    --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP",NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1 \
+    --export="$EP8_EXPORTS" \
     bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --dispatch-dtype "$dtype" \
       --mode "$mode" --measurement-contract "$contract" \
       --routing "$routing" ${eplb:+--eplb} --resource-mode "$rmode" \
