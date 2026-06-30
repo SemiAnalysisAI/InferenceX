@@ -49,10 +49,16 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        # Weights live on compute-node local NVMe (/mnt/numa1) — no Lustre
-        # contention, fast startup. SRT_SLURM_MODEL_PREFIX matches the
-        # model.path alias in our DSV4 recipes.
-        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro/"
+        # Lustre-resident weights staged on the GB200 cluster. The
+        # local-NVMe path (/mnt/numa1) was abandoned on main (6/23) because
+        # it isn't staged consistently across all compute nodes, so the
+        # in-job orchestrator's runtime model-path check (runtime.py
+        # from_config) intermittently failed with FileNotFoundError when a
+        # job landed on a node that didn't have the weights. The shared
+        # Lustre FS is visible from every node, so there's no placement
+        # lottery. SRT_SLURM_MODEL_PREFIX matches the model.path alias in
+        # our DSV4 recipes.
+        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
