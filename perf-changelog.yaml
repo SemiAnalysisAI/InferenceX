@@ -4353,4 +4353,4 @@
     - "Enable the MTP DP-attention path with local-control broadcast, DP LM head, prefill delayer, chunked prefill size 32768, scheduler recv interval 1, and schedule conservativeness 3.33."
     - "Use SGLANG_RADIX_FORCE_MISS=1, remove --disable-radix-cache and --enable-symm-mem, and explicitly pass --disable-piecewise-cuda-graph."
     - "Align MTP runtime settings with the non-MTP aggregate: cuda graph max batch size 256, max running requests 256, mem fraction static 0.85, stream interval 10, and no explicit max-prefill-tokens."
-  pr-link: XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1962
