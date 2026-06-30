@@ -505,6 +505,34 @@ wait_for_gb200_dsv4_benchmark_phase() {
     done
 }
 
+agentic_results_ready() {
+    if [[ "${BENCHMARK_TYPE:-}" != "agentic-coding" ]]; then
+        return 1
+    fi
+    if [[ -z "${RESULT_FILENAME:-}" || -z "${CONC_LIST:-}" ]]; then
+        return 1
+    fi
+
+    local expected_count
+    expected_count=$(wc -w <<<"$CONC_LIST" | tr -d ' ')
+    shopt -s nullglob
+    local agentic_results=("${RESULT_FILENAME}"_conc*.json)
+    shopt -u nullglob
+    if [[ "${#agentic_results[@]}" -ne "$expected_count" ]]; then
+        return 1
+    fi
+
+    local result_file
+    local ok
+    for result_file in "${agentic_results[@]}"; do
+        ok=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get('num_requests_successful'))))" "$result_file" 2>/dev/null || echo 0)
+        if [[ "$ok" != "1" ]]; then
+            return 1
+        fi
+    done
+    return 0
+}
+
 acquire_gb200_dsv4_startup_lock
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
@@ -546,6 +574,11 @@ wait_for_gb200_dsv4_benchmark_phase
 # Poll for job completion in background
 (
     while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
+        if agentic_results_ready; then
+            echo "Agentic results are available; cancelling Slurm job $JOB_ID to stop server workers"
+            scancel "$JOB_ID" 2>/dev/null || true
+            break
+        fi
         sleep 10
     done
 ) &
