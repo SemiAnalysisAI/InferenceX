@@ -110,10 +110,12 @@ def main() -> int:
             rmode = c["resource_mode"]
             lad = _ladder(scfg, phase)
             h, t, e = _dims(wl_cfg, c["workload"])
-            # MoRI envelope guard: decode-only, capped ladder, tuned.
+            # MoRI envelope guard: capped ladder (T=1..16) + tuned for BOTH phases. MoRI prefill IS
+            # supported (MORI-EP does intra+inter-node, both modes — ROCm/mori); prefill at the capped
+            # ladder is validated 5/5 (run 28461798511). It was an UNCAPPED ladder to T=128 that timed
+            # out, not prefill itself — so prefill is capped here, NOT skipped (correcting an earlier
+            # decode-only assumption).
             if sku == "mi355x":
-                if phase == "prefill":
-                    continue
                 lad, rmode = "1 2 4 8 16", "tuned"
             # rack-scale tray->nodes (gb200/gb300 = 4 GPU/tray): EP4 = 1 tray, EP8 = 2 trays. ALWAYS
             # set an EXPLICIT count: the gb300 launcher does NODES="${CX_NODES:-2}", so an EMPTY
