@@ -40,11 +40,18 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 
 # AITER MoE accelerates the dense (non-EP) MoE path but is incompatible with
-# expert parallelism, so disable it when EP is enabled (DP attention or EP > 1).
+# expert parallelism, so disable AITER *fused MoE* when EP is enabled (DP
+# attention or EP > 1). We still keep the general AITER backend enabled in that
+# case: it routes the MXFP4 weight dequant through AITER instead of the Quark
+# path (mxfp4_utils._dequant_mxfp4 -> `from quark.torch.kernel import mx`),
+# which is broken in the current nightly (ModuleNotFoundError:
+# torch.ao.quantization.pt2e). Fully disabling AITER here would fall back to
+# that broken Quark dequant and crash engine-core startup on every EP config.
 # https://github.com/SemiAnalysisAI/InferenceX/pull/1955#discussion_r3495386866
 MOE_ARGS=()
 if [ "${DP_ATTENTION}" = "true" ] || [ "$EP_SIZE" -gt 1 ]; then
-    export VLLM_ROCM_USE_AITER=0
+    export VLLM_ROCM_USE_AITER=1
+    export VLLM_ROCM_USE_AITER_MOE=0
 else
     export VLLM_ROCM_USE_AITER=1
     export VLLM_ROCM_USE_AITER_MOE=1
