@@ -1183,10 +1183,10 @@ build_replay_cmd() {
     # as benchmarkable data.
     REPLAY_CMD+=" --failed-request-threshold $AIPERF_FAILED_REQUEST_THRESHOLD"
     # Sample each trajectory's warmup start position uniformly from
-    # [0%, 100%] of the trace's turn count, clamped by AIPerf to leave at
+    # [25%, 75%] of the trace's turn count, clamped by AIPerf to leave at
     # least one profile turn after warmup.
-    REPLAY_CMD+=" --trajectory-start-min-ratio 0.0"
-    REPLAY_CMD+=" --trajectory-start-max-ratio 1.0"
+    REPLAY_CMD+=" --trajectory-start-min-ratio 0.25"
+    REPLAY_CMD+=" --trajectory-start-max-ratio 0.75"
     # Optional cache-pressure warmup for long agentic traces. AIPerf first
     # completes its normal t* snapshot warmup, then continues those exact
     # trajectories with one-token outputs and no idle delays for this many
