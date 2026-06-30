@@ -61,10 +61,12 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # Run with CUDA graphs (no --enforce-eager): VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # avoids the M3-decode breakable-cudagraph path that previously forced eager.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
-# MI355X mxfp8 recipe (vllm-project/recipes#581): AITER kernels + fused
-# shared-experts MoE (needs vllm-project/vllm#46545) plus INT6 quick all-reduce.
-# No --moe-backend override here, so AITER is the auto-selected MoE backend.
-export VLLM_ROCM_USE_AITER=1
+# MI355X mxfp8 recipe (vllm-project/recipes#581): INT6 quick all-reduce plus
+# the router-append shared-experts MoE fusion (vllm-project/vllm#46545). The
+# fusion checks this env directly and runs on both the aiter and native MXFP8
+# MoE paths (it is independent of the AITER master switch, and self-disables
+# under expert parallelism inside the model), so enable it unconditionally.
+# (The AITER master switch itself is set below, gated on expert parallelism.)
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
 
@@ -81,6 +83,17 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     )
 elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
+fi
+
+# Gate the AITER master switch on expert parallelism. With EP, the aiter fused
+# MoE path is the auto-selected backend (no --moe-backend override). With EP
+# disabled (TP-only) the AITER master switch produces degenerate MiniMax-M3
+# output, so leave it off and fall back to the native MXFP8 path (the
+# shared-experts fusion set above still applies — it is master-independent).
+if printf '%s\n' "${PARALLEL_ARGS[@]}" | grep -qxF -- '--enable-expert-parallel'; then
+    export VLLM_ROCM_USE_AITER=1
+else
+    export VLLM_ROCM_USE_AITER=0
 fi
 
 # use 3 speculative tokens for all configs for now
