@@ -178,17 +178,24 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   too — and `nccl-ep` had to be added to the MI355X launcher's AMD-bench allowlist, else it silently
   fell back to MoRI). **DONE:** MI355X nodes=2 / **world=16 over RoCE/IB**, run 28328718973,
   **correct=True** T=1→8, disp_p50 345–431µs, status=comparable-experimental.
-- **UCCL + DeepEP-hybrid on aarch64 GB200/GB300 — WALL (backend-specific, not the launcher).** The
-  combined `backend=all` sweep confirmed these two fail ENTIRELY on the Grace-Blackwell SKUs: 0 valid
-  docs at BOTH EP4 (single-tray) and EP8 (2-tray MNNVL) — uccl gb200 5/5 EP4 + 6/6 EP8 failed; deepep-
-  hybrid gb200/gb300 same. This is NOT the rack launcher (the positive control is decisive: on the SAME
-  gb200/gb300 clusters, **flashinfer lands 104/68 rack EP8 docs, nccl-ep 98/16, deepep (bundled V1) 175/174**),
-  and NOT cross-node (it's intra-NVL72). Both backends work on x86 single-node (uccl b300=126/b200=124
-  valid; deepep-hybrid h100=84/b300=36). Cause: their FROM-SOURCE in-container builds were probe-confirmed
-  on x86 B300 only — uccl's `ibv`/proxy RDMA bootstrap and deepep-hybrid's TMA+NVSHMEM build don't come up
-  on aarch64 Grace-Blackwell. deepep (bundled V1), flashinfer (bundled), and the nccl-ep
-  `all_to_all_single` baseline all run there, so rack-scale coverage is complete via those three
-  surfaces. Native upstream NCCL EP remains separate until a real `contrib/nccl_ep` adapter lands.
+- **UCCL (aarch64) + DeepEP-hybrid EP8 — WALL; but DeepEP-hybrid EP4 on gb300 WORKS (corrected).** A
+  fresh per-backend re-validation (not the old combined sweep) overturned part of the earlier blanket
+  "both fail at EP4 and EP8" claim:
+  - **DeepEP-hybrid gb300 EP4 (single-tray) — WORKS.** The gb300 EP4 sweep (run 28452161275) produced
+    30 valid `deepep-hybrid` docs, **169/169 correct**, `status=valid`, `max_rel_error=0.0`,
+    `transport=intranode-nvlink`, `branch=hybrid-ep` — so its from-source TMA+warp-pipeline build DOES come
+    up on aarch64 Grace-Blackwell. (The old "0 valid docs at EP4" was wrong — likely never actually run
+    per-backend at EP4 before.)
+  - **DeepEP-hybrid gb300 EP8 (2-tray) — WALL.** Run 28457026077: `AttributeError: module 'deep_ep' has
+    no attribute 'HybridEPBuffer'` in the multi-srun named container (the hybrid-ep build isn't exposed
+    there), and the buffer is intranode-NVLink by design (`csrc/hybrid_ep/buffer/intranode.o`,
+    `transport=intranode-nvlink`) — it does not span trays, so EP8 is unachievable regardless.
+  - **UCCL aarch64 (gb300) — WALL (confirmed fresh).** Run 28457032490: `ModuleNotFoundError: No module
+    named 'uccl.ep'` ("uccl.ep import failed — cu12 runtime on LD_LIBRARY_PATH?") — the uccl EP extension
+    does not import on aarch64 Grace-Blackwell. Both EP4 and EP8 walled.
+  Both backends work on x86 single-node (uccl b300=126/b200=124; deepep-hybrid h100=84/b300=36). deepep
+  (bundled V1), deepep-v2 (from-source), flashinfer, nccl-ep, AND deepep-hybrid@EP4 all run on gb300, so
+  the only unfillable gb300 cells are uccl (any EP) and deepep-hybrid EP8.
 - **DeepEP V2 (from-source `kernel_gen=v2`): DONE on x86 + aarch64, EP4 AND rack EP8.** Genuine V2
   (`deepep_version=2.0.0+af9a040`) builds on h100/h200/b300/b200 AND on aarch64 Grace-Blackwell — gb300
   EP4 (run 28429220764) produced `kernel_gen=v2`/`2.0.0`, log "built deep_ep 2.0.0 … V2 ready". So aarch64
