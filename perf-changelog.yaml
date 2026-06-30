@@ -4323,3 +4323,15 @@
     - "Enable AITER MoE on MiniMax-M3 MXFP4 MI355X single-node vLLM STP: export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1; pass --moe-backend aiter."
     - "Pin vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from nightly-3f5a1e1733200760169ff31ebe60a271072b199e) for AITER MoE and shared-expert fusion support (vllm-project/vllm#46419, vllm-project/vllm#46545)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1954
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Update the MiniMax-M3 MXFP8 MI355X vLLM benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1, which includes the gfx950 mxfp8 MoE/linear tuning (vllm-project/vllm#45725), fused shared-experts MoE for the mxfp8 model (#46545), and the AITER flydsl MoE backend (#46184)."
+    - "Align the standard and EAGLE3 (MTP) bench scripts with vllm-project/recipes#581: gate VLLM_ROCM_USE_AITER on expert parallelism (on for EP/DP-attention runs, where the AITER fused MoE is the auto-selected backend; off for TP-only runs, which fall back to the native MXFP8 path since the master switch otherwise yields degenerate MiniMax-M3 output), export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 unconditionally (the router-append shared-experts fusion is independent of the master switch and self-disables under EP), and export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 (INT6 quick all-reduce)."
+    - "Retune the TP/EP search space to the best layout per concurrency band and drop redundant points (full TP8/EP8, TP2/EP2, DP-attention)."
+    - "minimaxm3-fp8-mi355x-vllm: 1k1k sweeps TP8 (conc 1-32), TP4 (conc 4-32), TP4/EP4 (conc 64-512); 8k1k sweeps TP8 (conc 1-2), TP4 (conc 2-128)."
+    - "minimaxm3-fp8-mi355x-vllm-mtp: 1k1k sweeps TP8 (conc 4-32), TP8/EP8 (conc 1-256), TP4 (conc 1-2 and 32-64), TP4/EP4 (conc 128-256); 8k1k sweeps TP8 (conc 1 and 4-16), TP4 (conc 16-128)."
+    - "Serving flags are otherwise unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1946
