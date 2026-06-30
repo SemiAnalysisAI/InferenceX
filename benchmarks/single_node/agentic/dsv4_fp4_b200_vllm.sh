@@ -92,19 +92,6 @@ SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
-cleanup_agentic_services() {
-    local exit_code=$?
-    trap - EXIT INT TERM
-    set +e
-    stop_background_process_tree "$ROUTER_PID" "vLLM router"
-    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
-    exit "$exit_code"
-}
-trap cleanup_agentic_services EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
 OFFLOAD_ARGS=()
 
 case "$OFFLOADING" in
