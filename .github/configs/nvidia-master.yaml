@@ -12983,8 +12983,6 @@ minimaxm3-fp4-b200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
@@ -12992,8 +12990,6 @@ minimaxm3-fp4-b200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-b300-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
