@@ -860,7 +860,11 @@ const HEADLINE_DISTRIBUTION = "uniform";
 // empty on first paint while still defaulting to normalized whenever it is present.
 const ST  = {op:"roundtrip", phase:"decode", x:"t", y:"lat", xlog:true, ylog:true, pct:"p99",
              suite:"resource-constrained", dtype:"bf16", ep:"8", model:MODEL_DEFAULT,
-             routing:HEADLINE_DISTRIBUTION, pub:"official-headline"};
+             routing:HEADLINE_DISTRIBUTION, pub:"all"};
+// NOTE: pub defaults to "all" so the page opens showing the full sweep — the bulk of the data is
+// SEEDED-RUNTIME (comparable-experimental, wid=null), which the "official"/"publishable" filters
+// exclude by design (they require a canonical workload id). Toggle the publication filter to
+// "Official headline"/"Official"/"Publishable" for the publication-grade cohort only.
 // Count series visible under a candidate state (used only for graceful headline fallback). Model-
 // aware: the candidate carries o.model, and the official-headline branch matches that shape.
 function _visCount(o){ return DATA.filter(s=>s.phase===o.phase
@@ -1591,7 +1595,7 @@ function setupTabs(){
     '. dtype/mode/resource/contract vary PER LINE — read the label (dtypes shown: '+dtypes+'). '+
     'Contract(s): '+contracts+' (layout-and-dispatch times routing-layout INSIDE dispatch; cached-layout [cl] hoists it out). '+
     'Latency = percentile (selector; p99 default) over POOLED per-iteration cross-rank-MAX samples'+(samp?(' (~'+samp+'/point)'):'')+
-    '. ROUND TRIP is INDEPENDENTLY MEASURED (dispatch→sync→no-op expert→combine, raw per-iter samples); ISOLATED_SUM is Σ of isolated dispatch+combine percentiles, NOT a measured op (no throughput/SLO use). Publication filter defaults to publishable (diagnostic/invalid hidden); status is machine-derived from validity. The bandwidth axis is a LOGICAL routed-payload rate '+
+    '. ROUND TRIP is INDEPENDENTLY MEASURED (dispatch→sync→no-op expert→combine, raw per-iter samples); ISOLATED_SUM is Σ of isolated dispatch+combine percentiles, NOT a measured op (no throughput/SLO use). Publication filter defaults to ALL (the full sweep, incl. seeded-runtime comparable-experimental wid=null lines); switch to Official/Publishable for the canonical-wid cohort. Status is machine-derived from validity. The bandwidth axis is a LOGICAL routed-payload rate '+
     '(recv copies x hidden x dtype / latency; per-op bytes; excludes scales/idx/meta/padding) — NOT algBW/busBW/wire utilization. '+
     'Suites ('+suites+') are kept distinct (Suite selector): backend-default = best stack; resource-constrained = ~fixed SM/CU fraction — '+
     'do not read across suites as one contest. Correctness = round-trip reconstruction smoke check (NOT a full per-token routing proof).'+eplbNote+' '+
