@@ -179,16 +179,18 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   on aarch64 Grace-Blackwell. deepep (bundled V1), flashinfer (bundled), and the nccl-ep
   `all_to_all_single` baseline all run there, so rack-scale coverage is complete via those three
   surfaces. Native upstream NCCL EP remains separate until a real `contrib/nccl_ep` adapter lands.
-- **DeepEP V2 (from-source `kernel_gen=v2`) is x86-single-node only — gb200/gb300 excluded.** Genuine V2
-  (`deepep_version=2.0.0+af9a040`) is produced ONLY on h100/h200/b300/b200 (where the EP4/single-node path
-  runs `cx_build_deepep_v2` once in `run_in_container`). Two failure modes on aarch64 rack: (1) the V2
-  from-source build is unproven on aarch64 Grace-Blackwell (same wall class as uccl/hybrid above), and
-  (2) the rack **EP8** multi-srun launcher path runs `run_ep.py` directly and BYPASSES `cx_build_deepep_v2`
-  altogether, so `deepep_v2=true` there silently ran bundled V1 (1.1.0) while the artifact got the
-  "deepep-v2" name — a MISLABEL (the doc `kernel_gen` was honestly `v1`, but the artifact name implied V2).
-  Fixed by excluding v2 from gb200/gb300 in `sweep_matrix` (the v2 target is skipped on those SKUs) so no
-  mislabeled artifact is produced; deepep V1 still covers rack. Rack-scale DeepEP V2 = deferred (needs an
-  aarch64 V2 build + a single-build hook in the EP8 multi-srun path, not the per-rank build it would be now).
+- **DeepEP V2 (from-source `kernel_gen=v2`): DONE on x86 + aarch64 EP4; rack EP8 deferred.** Genuine V2
+  (`deepep_version=2.0.0+af9a040`) builds on h100/h200/b300/b200 AND on aarch64 Grace-Blackwell — gb300
+  EP4 (run 28429220764) produced `kernel_gen=v2`/`2.0.0`, log "built deep_ep 2.0.0 … V2 ready". So aarch64
+  V2 is NOT a wall (correcting an earlier claim here): wherever the EP4/single-node path runs (it calls
+  `cx_build_deepep_v2` once in `run_in_container`), V2 builds and runs. The ONE remaining gap is the rack
+  **EP8** path: gb200/gb300 default to 2 trays and the EP8 launcher runs `run_ep.py` over a multi-srun
+  (8 separate per-rank containers, no shared build), BYPASSING `cx_build_deepep_v2` — so `deepep_v2=true`
+  there silently ran bundled V1 and mislabeled the artifact (doc `kernel_gen` was honestly `v1`).
+  `sweep_matrix` now emits v2 on gb200/gb300 only at EP4 (nodes="") and excludes EP8 (nodes set), so no
+  mislabel is produced and aarch64 V2 is genuinely covered at EP4. Rack-scale (EP8) DeepEP V2 = deferred:
+  needs a build-once-per-container step in the multi-srun WRAP (each container self-builds V2+nccl-2.30.4
+  then loops the shard) — a launcher restructure, not a hardware wall.
 
 ## Other inference collectives (NVIDIA scope)
 
