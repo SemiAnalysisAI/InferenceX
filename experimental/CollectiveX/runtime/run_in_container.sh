@@ -239,20 +239,28 @@ cx_build_deepep_hybrid() {
   git clone --depth 1 --branch hybrid-ep https://github.com/deepseek-ai/DeepEP /tmp/DeepEP_hybrid >&2 2>&1 \
     || { cx_log "ERROR: hybrid-ep git clone failed"; return 1; }
   export DEEPEP_COMMIT="hybrid-$(git -C /tmp/DeepEP_hybrid rev-parse --short HEAD 2>/dev/null || echo hybrid-ep)"
-  ( cd /tmp/DeepEP_hybrid && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
-      python3 setup.py build_ext --inplace ) >&2 2>&1 \
-    || { cx_log "ERROR: hybrid-ep build failed (arch=$arch; cccl/nvshmem?)"; return 1; }
-  export PYTHONPATH="/tmp/DeepEP_hybrid:${PYTHONPATH:-}"
+  # Install into SITE-PACKAGES so the build persists across srun steps in the pyxis named container. The
+  # EP8 multi-srun runs the build-once and each case as SEPARATE srun steps; only the container rootfs
+  # (site-packages) persists — /tmp does NOT. The old `build_ext --inplace` under /tmp/DeepEP_hybrid +
+  # PYTHONPATH worked for the EP4 single-node path (build+run share one process) but was LOST at EP8,
+  # giving `module deep_ep has no attribute HybridEPBuffer`. pip install mirrors deepep-v2 (which persists
+  # correctly at EP8). Fall back to in-place build (EP4 single-node only) if this branch can't plain-install.
+  if ( cd /tmp/DeepEP_hybrid && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 \
+        pip install -q --no-build-isolation --force-reinstall . ) >&2 2>&1; then
+    cx_log "hybrid-ep installed into site-packages (persists across srun steps)"
+  else
+    cx_log "WARN: hybrid-ep pip install failed — falling back to build_ext --inplace (EP4 single-node only)"
+    ( cd /tmp/DeepEP_hybrid && TORCH_CUDA_ARCH_LIST="$arch" MAX_JOBS=16 python3 setup.py build_ext --inplace ) >&2 2>&1 \
+      || { cx_log "ERROR: hybrid-ep build failed (arch=$arch; cccl/nvshmem?)"; return 1; }
+    export PYTHONPATH="/tmp/DeepEP_hybrid:${PYTHONPATH:-}"
+  fi
   python3 -c "import deep_ep; assert hasattr(deep_ep,'HybridEPBuffer'); print('built hybrid-ep deep_ep', getattr(deep_ep,'__version__','?'))" >&2 \
     || { cx_log "ERROR: hybrid-ep import / HybridEPBuffer missing after build"; return 1; }
-  # The hybrid build is build_ext --inplace (NOT pip install), so its deep_ep lives under PYTHONPATH and
-  # its nvshmem runtime under LD_LIBRARY_PATH — both process-local. The EP4 single-node path runs in this
-  # same process so they persist; but the EP8 multi-srun runs the build-once and each case in SEPARATE
-  # srun steps that share only the pyxis --container-name filesystem. Persist the env to a file there so
-  # the case-srun's WRAP can source it (else `import deep_ep` resolves to the bundled mainline build and
-  # `HybridEPBuffer` is missing — the gb300 EP8 deepep-hybrid failure mode).
-  { printf 'export PYTHONPATH=%s${PYTHONPATH:+:$PYTHONPATH}\n' "/tmp/DeepEP_hybrid"
-    printf 'export LD_LIBRARY_PATH=%s/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n' "$NVSHMEM_DIR"
+  # nvshmem runtime libs are in site-packages (persistent); the env pointing at them is process-local, and
+  # a PYTHONPATH is needed only if the in-place fallback ran. Persist both to a file the EP8 case-srun WRAP
+  # sources (best-effort; with pip install the package itself is already on the default site-packages path).
+  { printf 'export LD_LIBRARY_PATH=%s/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n' "$NVSHMEM_DIR"
+    [ -n "${PYTHONPATH:-}" ] && printf 'export PYTHONPATH=%s\n' "$PYTHONPATH"
   } > /tmp/.cx_hybrid_env 2>/dev/null || cx_log "WARN: could not write /tmp/.cx_hybrid_env"
   cx_log "DeepEP hybrid-ep ready ($DEEPEP_COMMIT)"
 }
