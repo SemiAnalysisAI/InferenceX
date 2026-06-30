@@ -178,21 +178,24 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   too — and `nccl-ep` had to be added to the MI355X launcher's AMD-bench allowlist, else it silently
   fell back to MoRI). **DONE:** MI355X nodes=2 / **world=16 over RoCE/IB**, run 28328718973,
   **correct=True** T=1→8, disp_p50 345–431µs, status=comparable-experimental.
-- **UCCL (aarch64) + DeepEP-hybrid EP8 — WALL; but DeepEP-hybrid EP4 on gb300 WORKS (corrected).** A
-  fresh per-backend re-validation (not the old combined sweep) overturned part of the earlier blanket
-  "both fail at EP4 and EP8" claim:
-  - **DeepEP-hybrid gb300 EP4 (single-tray) — WORKS.** The gb300 EP4 sweep (run 28452161275) produced
-    30 valid `deepep-hybrid` docs, **169/169 correct**, `status=valid`, `max_rel_error=0.0`,
-    `transport=intranode-nvlink`, `branch=hybrid-ep` — so its from-source TMA+warp-pipeline build DOES come
-    up on aarch64 Grace-Blackwell. (The old "0 valid docs at EP4" was wrong — likely never actually run
-    per-backend at EP4 before.)
-  - **DeepEP-hybrid gb300 EP8 (2-tray) — WALL.** Run 28457026077: `AttributeError: module 'deep_ep' has
-    no attribute 'HybridEPBuffer'` in the multi-srun named container (the hybrid-ep build isn't exposed
-    there), and the buffer is intranode-NVLink by design (`csrc/hybrid_ep/buffer/intranode.o`,
-    `transport=intranode-nvlink`) — it does not span trays, so EP8 is unachievable regardless.
-  - **UCCL aarch64 (gb300) — WALL (confirmed fresh).** Run 28457032490: `ModuleNotFoundError: No module
-    named 'uccl.ep'` ("uccl.ep import failed — cu12 runtime on LD_LIBRARY_PATH?") — the uccl EP extension
-    does not import on aarch64 Grace-Blackwell. Both EP4 and EP8 walled.
+- **DeepEP-hybrid on gb300 WORKS at EP4 AND EP8 (corrected twice); only UCCL aarch64 remains a wall.**
+  Per-backend re-validation (informed by upstream docs: NVIDIA HybridEP = the Megatron
+  `moe_flex_dispatcher_backend="hybridep"`, TMA-NVLink + IBGDA, **built for NVL72 rack-scale GB200/GB300**)
+  overturned the earlier blanket "uccl + deepep-hybrid fail at EP4 and EP8 on Grace-Blackwell" claim:
+  - **DeepEP-hybrid gb300 EP4 (single-tray) — WORKS.** EP4 sweep (run 28452161275): 30 valid docs,
+    **169/169 correct**, `max_rel_error=0.0`, `branch=hybrid-ep`.
+  - **DeepEP-hybrid gb300 EP8 (2-tray, MNNVL) — WORKS.** Run 28480519588: decode **8/8** + prefill **6/6**,
+    `ws=8 nodes=2 transport=mnnvl`, full T-ladder 128→4096 all `correct=True` (RT p50 374µs@T128 →
+    1404µs@T4096). NOT intranode-only (an earlier wrong claim): the only blocker was build PERSISTENCE —
+    `cx_build_deepep_hybrid` did `build_ext --inplace` under `/tmp/DeepEP_hybrid` + PYTHONPATH, but `/tmp`
+    does NOT survive across the EP8 multi-srun's separate srun steps (only the pyxis container rootfs does),
+    so the case-srun saw the bundled mainline `deep_ep` → `no attribute HybridEPBuffer`. Fixed by installing
+    into site-packages (`pip install`, persists — mirrors deepep-v2), build_ext fallback for EP4.
+  - **UCCL aarch64 (gb300) — WALL (confirmed fresh, the one genuine aarch64 EP wall).** Run 28457032490:
+    `ModuleNotFoundError: No module named 'uccl.ep'` — the uccl EP extension does not import on aarch64
+    Grace-Blackwell (consistent with UCCL-EP docs: NVIDIA/AMD + EFA/IB/Broadcom, no aarch64/Grace). EP4+EP8.
+  LESSON: a failing run is not proof of a capability wall — both deepep-hybrid claims were wrong; the EP8
+  one was a build-env bug, not a hardware limit. Always check the library's actual support before walling.
   Both backends work on x86 single-node (uccl b300=126/b200=124; deepep-hybrid h100=84/b300=36). deepep
   (bundled V1), deepep-v2 (from-source), flashinfer, nccl-ep, AND deepep-hybrid@EP4 all run on gb300, so
   the only unfillable gb300 cells are uccl (any EP) and deepep-hybrid EP8.
