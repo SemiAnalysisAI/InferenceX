@@ -161,13 +161,22 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   combined `backend=all` sweep confirmed these two fail ENTIRELY on the Grace-Blackwell SKUs: 0 valid
   docs at BOTH EP4 (single-tray) and EP8 (2-tray MNNVL) — uccl gb200 5/5 EP4 + 6/6 EP8 failed; deepep-
   hybrid gb200/gb300 same. This is NOT the rack launcher (the positive control is decisive: on the SAME
-  gb200/gb300 clusters, **flashinfer lands 104/68 rack EP8 docs, nccl-ep 98/16, deepep 175/174** incl.
-  the from-source V2 build), and NOT cross-node (it's intra-NVL72). Both backends work on x86 single-node
-  (uccl b300=126/b200=124 valid; deepep-hybrid h100=84/b300=36). Cause: their FROM-SOURCE in-container
-  builds were probe-confirmed on x86 B300 only — uccl's `ibv`/proxy RDMA bootstrap and deepep-hybrid's
-  TMA+NVSHMEM build don't come up on aarch64 Grace-Blackwell. deepep (bundled + V2-from-source), flashinfer
-  (bundled), and nccl-ep (NCCL collectives, host-staged) all run there, so rack-scale coverage is complete
-  via those three. uccl/deepep-hybrid aarch64 = deferred (needs an aarch64 build of each; not retried).
+  gb200/gb300 clusters, **flashinfer lands 104/68 rack EP8 docs, nccl-ep 98/16, deepep (bundled V1) 175/174**),
+  and NOT cross-node (it's intra-NVL72). Both backends work on x86 single-node (uccl b300=126/b200=124
+  valid; deepep-hybrid h100=84/b300=36). Cause: their FROM-SOURCE in-container builds were probe-confirmed
+  on x86 B300 only — uccl's `ibv`/proxy RDMA bootstrap and deepep-hybrid's TMA+NVSHMEM build don't come up
+  on aarch64 Grace-Blackwell. deepep (bundled V1), flashinfer (bundled), and nccl-ep (NCCL collectives,
+  host-staged) all run there, so rack-scale coverage is complete via those three.
+- **DeepEP V2 (from-source `kernel_gen=v2`) is x86-single-node only — gb200/gb300 excluded.** Genuine V2
+  (`deepep_version=2.0.0+af9a040`) is produced ONLY on h100/h200/b300/b200 (where the EP4/single-node path
+  runs `cx_build_deepep_v2` once in `run_in_container`). Two failure modes on aarch64 rack: (1) the V2
+  from-source build is unproven on aarch64 Grace-Blackwell (same wall class as uccl/hybrid above), and
+  (2) the rack **EP8** multi-srun launcher path runs `run_ep.py` directly and BYPASSES `cx_build_deepep_v2`
+  altogether, so `deepep_v2=true` there silently ran bundled V1 (1.1.0) while the artifact got the
+  "deepep-v2" name — a MISLABEL (the doc `kernel_gen` was honestly `v1`, but the artifact name implied V2).
+  Fixed by excluding v2 from gb200/gb300 in `sweep_matrix` (the v2 target is skipped on those SKUs) so no
+  mislabeled artifact is produced; deepep V1 still covers rack. Rack-scale DeepEP V2 = deferred (needs an
+  aarch64 V2 build + a single-build hook in the EP8 multi-srun path, not the per-rank build it would be now).
 
 ## Other inference collectives (NVIDIA scope)
 

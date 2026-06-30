@@ -132,6 +132,13 @@ def main() -> int:
                                      activation_profile=c.get("activation_profile", "normal"))
                 if not ok:
                     continue
+                # DeepEP V2 (from-source kernel_gen=v2) is x86-single-node only. The aarch64 Grace-
+                # Blackwell (gb200/gb300) from-source build has never produced a genuine V2 (same class
+                # as the uccl/deepep-hybrid aarch64 walls), AND the rack EP8 multi-srun launcher path
+                # bypasses cx_build_deepep_v2 entirely — so emitting v2 there silently ran bundled V1
+                # and mislabeled the artifact "deepep-v2". Don't emit v2 cells on those SKUs.
+                if v2 and plat in ("gb200", "gb300"):
+                    continue
                 case = {
                     "backend": beng, "deepep_v2": v2, "mode": c["mode"], "dtype": c["dtype"],
                     "contract": c["contract"], "routing": c["routing"], "phase": phase,
