@@ -101,6 +101,26 @@ if [ "$CX_BENCH" != "nccl" ]; then
   mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
   WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
 
+  # Build from-source kernels (DeepEP V2 / flashinfer-quant-combine) ONCE PER NODE into a persistent
+  # named container, then every case-srun reuses it (build visible to all WORLD ranks). Mirrors the
+  # proven launch_gb300-nv.sh EP8 path: without this, the multi-srun ran ephemeral per-rank containers
+  # that bypassed the build hooks (deepep_v2 silently ran bundled V1, quant-combine ran cq=none).
+  CNAME="cxep_${JOB_ID}"
+  CMOUNT=(--container-mounts="$MOUNT_SRC:$MOUNT_DIR" --no-container-mount-home
+          --container-workdir="$MOUNT_DIR/experimental/CollectiveX" --no-container-entrypoint)
+  cx_log "EP setup: build into named container $CNAME per node (deepep_v2=${CX_DEEPEP_V2:-} combine=${CX_COMBINE_DTYPE:-bf16})"
+  srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --container-name="$CNAME" \
+    --container-image="$SQUASH_FILE" "${CMOUNT[@]}" --export=ALL,CX_BUILD_ONLY=1 \
+    bash "$MOUNT_DIR/experimental/CollectiveX/runtime/run_in_container.sh" </dev/null 2>&1 | tail -15 \
+    || cx_log "WARN: EP build-only step returned nonzero (see above)"
+
+  # Per-rank env. deepep V2 spans NVL72 trays only with allow_mnnvl=True (else DeepEP sets
+  # NVSHMEM_DISABLE_MNNVL=1 -> intranode-IPC path -> illegal address cross-tray); CX_ALLOW_MNNVL=1 makes
+  # tests/ep_deepep.py pass it (gated on the param existing, so bundled V1 is unchanged). flashinfer rides
+  # NCCL's MNNVL transport. (gb200 validation pending an allocation; identical to gb300 run 28434764062.)
+  EP_EXPORTS="ALL,MASTER_ADDR=$MA,MASTER_PORT=$MP,NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1,MC_FORCE_MNNVL=1"
+  [ "$CX_BENCH" = "deepep" ] && EP_EXPORTS="$EP_EXPORTS,CX_ALLOW_MNNVL=1"
+
   # SWEEP (CX_SHARD_FILE set): one TAB-line per shard case so the rack-scale EP path sweeps EVERY
   # case (parity with single-node). MANUAL: one line per phase from the :-defaulted CX_* env.
   cx_ep_cases() {
@@ -147,8 +167,8 @@ PY
     cx_log "EP${WORLD}[$ci] $ph $CX_BENCH $dtype/$mode/$contract routing=$routing eplb=${eplb:-} rmode=$rmode act=$act plc=$placement"
     # shellcheck disable=SC2086
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$WORLD" \
-      --ntasks-per-node="$GPUS_PER_NODE" "${COMMON_MOUNT[@]}" \
-      --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP",NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1,MC_FORCE_MNNVL=1 \
+      --ntasks-per-node="$GPUS_PER_NODE" --container-name="$CNAME" "${CMOUNT[@]}" \
+      --export="$EP_EXPORTS" \
       bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --dispatch-dtype "$dtype" \
         --mode "$mode" --measurement-contract "$contract" \
         --routing "$routing" ${eplb:+--eplb} --resource-mode "$rmode" \
@@ -156,7 +176,9 @@ PY
         --tokens-ladder "$lad" --hidden "$hidden" --topk "$topk" \
         --experts "$experts" --warmup "${CX_WARMUP:-32}" --iters "${CX_ITERS:-200}" \
         --trials "${CX_TRIALS:-3}" --seed "${CX_SEED:-67}" --runner "$RUNNER_NAME" --topology-class "$CX_TOPO" \
-        --transport "$CX_TRANSPORT" --out "$out" </dev/null 2>&1 | tail -8
+        --transport "$CX_TRANSPORT" \
+        ${CX_COMBINE_DTYPE:+--combine-dtype "$CX_COMBINE_DTYPE"} ${CX_COMBINE_QUANT_MODE:+--combine-quant-mode "$CX_COMBINE_QUANT_MODE"} \
+        --out "$out" </dev/null 2>&1 | tail -8
     cx_log "EP${WORLD}[$ci] $ph rc=${PIPESTATUS[0]}"
   done < <(cx_ep_cases)
   cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"

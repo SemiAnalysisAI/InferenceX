@@ -134,15 +134,11 @@ def main() -> int:
                                      activation_profile=c.get("activation_profile", "normal"))
                 if not ok:
                     continue
-                # DeepEP V2 (from-source kernel_gen=v2) DOES build on aarch64 gb200/gb300 via
-                # run_in_container — confirmed genuine kernel_gen=v2/2.0.0 at EP4 (single-tray, gb300
-                # run 28429220764). But the EP8 RACK path runs run_ep.py over a multi-srun and BYPASSES
-                # cx_build_deepep_v2 (separate per-rank containers, no per-container build), so v2 there
-                # silently ran bundled V1 and mislabeled the artifact. Allow v2 on gb200/gb300 at EP4
-                # (nodes="1" -> run_in_container builds it); exclude only the EP8 rack cells (nodes>=2)
-                # until the multi-srun path builds V2 per-container.
-                if v2 and plat in ("gb200", "gb300") and int(nodes or 1) > 1:
-                    continue
+                # DeepEP V2 (from-source kernel_gen=v2) is genuine on aarch64 gb200/gb300 at BOTH EP4
+                # (single-tray, gb300 run 28429220764) AND EP8 rack (2-tray MNNVL, gb300 run 28434764062
+                # -> kernel_gen=v2/ws8/correct). The EP8 rack path builds V2 once-per-node into a persistent
+                # container (CX_BUILD_ONLY) and the harness passes allow_mnnvl=True (CX_ALLOW_MNNVL) so the
+                # NVL buffer spans trays — so v2 is now allowed on gb200/gb300 at every EP degree.
                 case = {
                     "backend": beng, "deepep_v2": v2, "mode": c["mode"], "dtype": c["dtype"],
                     "contract": c["contract"], "routing": c["routing"], "phase": phase,
