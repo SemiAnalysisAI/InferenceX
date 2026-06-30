@@ -487,7 +487,9 @@ wait_for_gb200_dsv4_benchmark_phase() {
 
     echo "Holding startup lock until srt-slurm reaches the AgentX benchmark phase..."
     while true; do
-        if grep -qE "Running agentic concurrency|Skipping completed agentic concurrency" "$LOG_FILE" 2>/dev/null; then
+        local benchmark_log_file="${LOGS_DIR:-}/benchmark.out"
+        if grep -qE "Running Custom benchmark|Server is healthy - starting benchmark" "$LOG_FILE" 2>/dev/null ||
+            grep -qE "WARMUP execute|PROFILING execute|Running agentic concurrency|Skipping completed agentic concurrency" "$benchmark_log_file" 2>/dev/null; then
             echo "AgentX benchmark phase reached; startup serialization no longer needed"
             release_gb200_dsv4_startup_lock
             return 0
