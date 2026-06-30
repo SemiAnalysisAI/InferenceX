@@ -4332,6 +4332,6 @@
     - "Align the standard and EAGLE3 (MTP) bench scripts with vllm-project/recipes#581: gate VLLM_ROCM_USE_AITER on expert parallelism (on for EP/DP-attention runs, where the AITER fused MoE is the auto-selected backend; off for TP-only runs, which fall back to the native MXFP8 path since the master switch otherwise yields degenerate MiniMax-M3 output), export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 unconditionally (the router-append shared-experts fusion is independent of the master switch and self-disables under EP), and export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 (INT6 quick all-reduce)."
     - "Retune the TP/EP search space to the best layout per concurrency band and drop redundant points (full TP8/EP8, TP2/EP2, DP-attention)."
     - "minimaxm3-fp8-mi355x-vllm: 1k1k sweeps TP8 (conc 1-32), TP4 (conc 4-32), TP4/EP4 (conc 64-512); 8k1k sweeps TP8 (conc 1-2), TP4 (conc 2-128)."
-    - "minimaxm3-fp8-mi355x-vllm-mtp: 1k1k sweeps TP8 (conc 4-32), TP8/EP8 (conc 1-256), TP4 (conc 1-2 and 32-64), TP4/EP4 (conc 128-512); 8k1k sweeps TP8 (conc 1 and 4-16), TP4 (conc 16-128)."
+    - "minimaxm3-fp8-mi355x-vllm-mtp: 1k1k sweeps TP8 (conc 4-32), TP8/EP8 (conc 1-256), TP4 (conc 1-2 and 32-64), TP4/EP4 (conc 128-256); 8k1k sweeps TP8 (conc 1 and 4-16), TP4 (conc 16-128)."
     - "Serving flags are otherwise unchanged."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1946
