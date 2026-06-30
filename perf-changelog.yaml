@@ -4330,4 +4330,4 @@
     - "Enable AITER MoE on the MiniMax-M3 MI355X single-node vLLM EAGLE3 MTP MXFP4 benchmark for non-EP configs: export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1, and pass --moe-backend aiter."
     - "EP and DP-attention configs keep VLLM_ROCM_USE_AITER=0 since AITER MoE is incompatible with expert parallelism (vLLM #46419)."
     - "Pin vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from nightly-3f5a1e1733200760169ff31ebe60a271072b199e)."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/PENDING
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1958
