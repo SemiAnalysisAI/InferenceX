@@ -159,6 +159,11 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    mkdir -p recipes/sglang/deepseek-v4
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Same srt-slurm tooling as glm5: NVIDIA/srt-slurm @ sa-submission-q2-2026.
     # Overlay our version-controlled Qwen3.5 recipes on top (upstream has none).
@@ -258,9 +263,12 @@ default_mounts:
 # Model path aliases
 model_paths:
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
+  dsv4-pro: "${MODEL_PATH}"
 containers:
   dynamo-trtllm: ${SQUASH_FILE}
   dynamo-sglang: ${SQUASH_FILE}
+  dsv4-grace-blackwell: ${SQUASH_FILE}
+  dsv4-grace-blackwell-baizhou-revert: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
 use_segment_sbatch_directive: false

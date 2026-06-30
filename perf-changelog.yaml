@@ -4343,3 +4343,9 @@
     - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
     - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1931
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-1k1k-stp
+  description:
+    - "Add 7 DSV4 GB300 1k1k STP disagg configs with lmsysorg/sglang:nightly-dev-cu13-20260602-98a1b58c and megamoe backend"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1530
