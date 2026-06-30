@@ -106,7 +106,6 @@ export PROFILER_ARGS=$profiler_args
 # Engine-specific xP/yD semantics and TP exports
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300}
-    export VLLM_MORIIO_CONNECTOR_READ_MODE=${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
 fi
 # xP = prefill workers, yD = decode workers (may span multiple nodes)
 export xP=$PREFILL_WORKERS

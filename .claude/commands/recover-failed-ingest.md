@@ -1,6 +1,6 @@
 ---
 description: Recover a failed main-branch sweep ingest through the normal artifact-reuse path without rerunning GPU benchmarks
-argument-hint: <failed-run-or-job-url> [source-run-id]
+argument-hint: <failed-run-or-job-url | pr-number> [source-run-id]
 ---
 
 Recover the official database ingest for a failed or skipped InferenceX
@@ -9,9 +9,18 @@ artifacts from an earlier PR sweep. Do not add a one-off recovery workflow.
 
 Inputs from `$ARGUMENTS`:
 
-- `failed-run-or-job-url` is required.
-- `source-run-id` is optional and remains a candidate until every source,
-  ancestry, matrix, and artifact check passes.
+- Use the first argument as `FAILED_RUN_OR_JOB_URL`.
+- Use the optional second argument as `SOURCE_RUN_ID`; treat it as a candidate
+  until all source, ancestry, scope, and artifact checks pass.
+
+The most common invocation is a forgotten `/reuse-sweep-run` before merge, where
+you are handed the original PR number and/or its `pull_request` sweep run (the
+source) rather than a target URL. The failed target is then the push-to-main run
+on that PR's merge commit — derive it in step 1. `inspect-target` needs a
+run/job URL, not a bare ID.
+
+Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
+`python3`. Stop on any unexpected command failure.
 
 ## Safety rules
 
@@ -20,10 +29,14 @@ Inputs from `$ARGUMENTS`:
   `.github/workflows/run-sweep.yml` on `main` whose official ingest did not
   complete.
 - Reuse only a completed `pull_request` run of `run-sweep.yml`. Unpinned reuse
-  requires success. A specifically pinned failed run is allowed only when exact
-  artifact validation proves the recovery matrix is complete.
-- Stop if execution-relevant config, image, model, runner, launcher, benchmark,
-  or matrix files changed between the source SHA and the final source PR head.
+  requires success. A specifically pinned failed run is allowed only when
+  artifact validation proves its available result set is internally consistent;
+  only completed points are recovered.
+- The source run must belong to the original PR being recovered.
+- Stop if that PR changed the recovered configuration's execution semantics
+  after the source SHA: image, model, recipe, runner, launcher, benchmark
+  arguments, or config values. Unrelated edits and generator/eval-selection
+  policy drift are allowed because source coverage is authoritative.
 - Preserve all historical `perf-changelog.yaml` bytes. Append recovery entries
   only at the end.
 - Keep exactly one full-sweep label on the recovery PR and pin the source run
@@ -31,9 +44,10 @@ Inputs from `$ARGUMENTS`:
 - The final recovery branch head must have the recovery commit as its first
   parent, the source run SHA as its second parent, and the recovery commit's
   file tree unchanged.
-- Never rebase, squash, force-push, or otherwise rewrite the recovery branch
-  after attaching the source SHA. Those operations can remove the ancestry that
-  makes the source run reusable.
+- Never rebase, locally squash, force-push, or otherwise rewrite the recovery
+  branch after attaching the source SHA. Those operations can remove the
+  ancestry that makes the source run reusable. A GitHub squash merge after all
+  checks pass is allowed because it does not rewrite the PR branch.
 - Do not rely on `[skip-sweep]`. Reuse authorization suppresses PR benchmark
   work, and pushes to `main` ignore that marker.
 - Never bypass failing or pending checks. Use admin merge only when all checks
@@ -42,11 +56,14 @@ Inputs from `$ARGUMENTS`:
 
 ## 1. Inspect the target
 
-Install helper dependencies and inspect the target:
+Ensure `pydantic` and `pyyaml` are importable
+(`python3 -c 'import pydantic, yaml'`); they are usually already present. If not,
+install them — a plain `pip install` fails on PEP 668 managed Pythons, so use a
+venv or `--break-system-packages`. Then inspect the target:
 
 ```bash
-python -m pip install pydantic pyyaml
-python utils/recover_failed_ingest.py inspect-target \
+python3 -m pip install pydantic pyyaml  # only if the import check failed
+python3 utils/recover_failed_ingest.py inspect-target \
   "$FAILED_RUN_OR_JOB_URL" \
   --output /tmp/infx-recovery-target.json
 
@@ -75,9 +92,33 @@ ORIGINAL_PR=$(gh api \
   --jq 'if length == 1 then .[0].number else error("expected one PR") end')
 ```
 
-Require event `push`, status `completed`, workflow path
-`.github/workflows/run-sweep.yml`, branch `main`, and a failed or skipped state
-that explains the missing ingest. Record the original PR and root cause.
+If you were given the original PR number or the source sweep run instead of a
+target URL — the usual forgotten-`/reuse` case — derive the target push run from
+the PR's merge commit:
+
+```bash
+ORIGINAL_PR=<pr-number>
+ORIGINAL_MERGE_SHA=$(gh pr view "$ORIGINAL_PR" \
+  --repo SemiAnalysisAI/InferenceX \
+  --json mergeCommit --jq .mergeCommit.oid)
+gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow run-sweep.yml --event push \
+  --commit "$ORIGINAL_MERGE_SHA" --limit 5 \
+  --json databaseId,status,conclusion,createdAt
+TARGET_RUN_ID=<matching-run-id>
+```
+
+Require event `push`, workflow path `.github/workflows/run-sweep.yml`, and branch
+`main`; confirm the target is no longer running before recovering. The
+disqualifying state is broader than `failure`/`skipped`: when `/reuse-sweep-run`
+was forgotten before merge, `reuse-ingest-artifacts` is skipped, the GPU jobs run
+(often `cancelled` to save cost), and because `collect-results`/`collect-evals`
+are not skipped, `trigger-ingest` still fires `always()` and lands a *bogus*
+ingest under the target's own `run_id`. So a target showing
+`trigger-ingest=success` (and concluding `success` or `cancelled`) can still hold
+no valid benchmark data — recovery is required. That bogus row is keyed on the
+target `run_id` and is superseded by the recovery ingest under a new `run_id`;
+leave it alone. Record the original PR and root cause.
 
 Fetch history and inspect the exact original changelog delta:
 
@@ -85,7 +126,7 @@ Fetch history and inspect the exact original changelog delta:
 git fetch origin main
 git cat-file -e "${ORIGINAL_MERGE_SHA}^{commit}"
 ORIGINAL_BASE_SHA=$(git rev-parse "${ORIGINAL_MERGE_SHA}^")
-python utils/recover_failed_ingest.py audit-changelog \
+python3 utils/recover_failed_ingest.py audit-changelog \
   --ref "$ORIGINAL_MERGE_SHA"
 git diff "$ORIGINAL_BASE_SHA" "$ORIGINAL_MERGE_SHA" -- \
   perf-changelog.yaml
@@ -93,70 +134,74 @@ git diff "$ORIGINAL_BASE_SHA" "$ORIGINAL_MERGE_SHA" -- \
 
 ## 2. Select and validate the source run
 
-Resolve the candidate source run and record:
+Find candidates from the original PR branch when no run ID was supplied:
 
 ```bash
-SOURCE_RUN_ID=<validated-run-id>
+SOURCE_BRANCH=$(gh pr view "$ORIGINAL_PR" \
+  --repo SemiAnalysisAI/InferenceX \
+  --json headRefName --jq .headRefName)
+
+gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow run-sweep.yml --event pull_request \
+  --branch "$SOURCE_BRANCH" --status completed --limit 100 \
+  --json databaseId,attempt,conclusion,headSha,url
+```
+
+Skip no-op reuse-gate runs with no result artifacts. Resolve the selected
+candidate:
+
+```bash
+SOURCE_RUN_ID=<candidate-run-id>
 SOURCE_JSON=$(gh api \
   "repos/SemiAnalysisAI/InferenceX/actions/runs/$SOURCE_RUN_ID")
 SOURCE_HEAD_SHA=$(jq -r .head_sha <<<"$SOURCE_JSON")
 SOURCE_RUN_ATTEMPT=$(jq -r .run_attempt <<<"$SOURCE_JSON")
+SOURCE_CONCLUSION=$(jq -r .conclusion <<<"$SOURCE_JSON")
+jq -e '
+  .event == "pull_request" and
+  .status == "completed" and
+  .path == ".github/workflows/run-sweep.yml"
+' <<<"$SOURCE_JSON" >/dev/null
+SOURCE_ARTIFACTS=$(gh api \
+  "repos/SemiAnalysisAI/InferenceX/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100" \
+  --paginate --jq '.artifacts[]
+    | select(.expired == false)
+    | .name')
+grep -Eq '^(results_bmk|eval_results_all|bmk_agentic_)' \
+  <<<"$SOURCE_ARTIFACTS"
 ```
 
-Require:
+Require `SOURCE_CONCLUSION=success` unless this exact run ID was explicitly
+supplied; a pinned failure may recover only its completed points.
 
-- event `pull_request`, status `completed`, and path
-  `.github/workflows/run-sweep.yml`;
-- a successful conclusion unless this exact run ID was explicitly supplied;
-- an unexpired benchmark, eval, or agentic result artifact;
-- source-head membership in its original PR commit list.
-
-Find the source PR and fetch its history:
+Verify that membership and fetch the final PR head:
 
 ```bash
-SOURCE_PR=$(gh api \
-  "repos/SemiAnalysisAI/InferenceX/commits/$SOURCE_HEAD_SHA/pulls" \
-  --jq 'if length == 1 then .[0].number else error("expected one source PR") end')
-git fetch origin "pull/$SOURCE_PR/head:refs/remotes/origin/source-pr-$SOURCE_PR"
+gh api \
+  "repos/SemiAnalysisAI/InferenceX/pulls/$ORIGINAL_PR/commits" \
+  --paginate --jq '.[].sha' |
+  grep -Fx "$SOURCE_HEAD_SHA"
+
+SOURCE_PR=$ORIGINAL_PR
+git fetch origin \
+  "+pull/$SOURCE_PR/head:refs/remotes/origin/source-pr-$SOURCE_PR"
 git cat-file -e "${SOURCE_HEAD_SHA}^{commit}"
+SOURCE_PR_HEAD=$(git rev-parse "refs/remotes/origin/source-pr-$SOURCE_PR")
+git merge-base --is-ancestor "$SOURCE_HEAD_SHA" "$SOURCE_PR_HEAD"
+git diff --name-status "$SOURCE_HEAD_SHA" "$SOURCE_PR_HEAD"
 ```
 
-Compare `SOURCE_HEAD_SHA` through the final source PR head. Stop if any
-execution-relevant target configuration changed after the source run.
+Classify the changed paths, then compare the recovered master-config object at
+both refs plus any referenced recipe, runner, launcher, benchmark script, image,
+model, and environment values. Stop only if execution semantics changed.
 
-## 3. Reconstruct and validate the intended matrix
+## 3. Confirm the recovery scope
 
-Use a detached worktree at the original merge to reconstruct its intended
-changelog entries when historical formatting or links need repair:
-
-```bash
-WORKTREE=$(mktemp -d /tmp/infx-recovery-worktree.XXXXXX)
-rmdir "$WORKTREE"
-python utils/recover_failed_ingest.py create-worktree \
-  --ref "$ORIGINAL_MERGE_SHA" \
-  --directory "$WORKTREE"
-```
-
-Edit only `$WORKTREE/perf-changelog.yaml`. Preserve the original base bytes and
-append only the original PR's intended entries with canonical links. Then build
-the historical matrix:
-
-```bash
-python utils/recover_failed_ingest.py build-config \
-  --worktree "$WORKTREE" \
-  --base-ref "$ORIGINAL_BASE_SHA" \
-  --merge-ref "$ORIGINAL_MERGE_SHA" \
-  --pr-number "$ORIGINAL_PR" \
-  --config-output /tmp/original-full-config.json \
-  --metadata-output /tmp/original-changelog-metadata.json
-```
-
-Record the fixed-sequence, agentic, and eval counts. Remove the worktree when
-finished:
-
-```bash
-git worktree remove "$WORKTREE"
-```
+From the exact changelog diff in step 1, record each original `config-keys`,
+`evals-only`, and `scenario-type` value. If the merge touched historical bytes
+or is not a clean append, inspect the original PR diff to recover its intended
+entries. Stop if the intended scope is ambiguous; do not copy malformed
+historical changelog bytes into the recovery PR.
 
 ## 4. Bootstrap the recovery PR
 
@@ -193,12 +238,22 @@ Keep exactly one of `full-sweep-enabled`,
 `non-canary-full-sweep-enabled`, `full-sweep-fail-fast`, or
 `full-sweep-fail-fast-no-canary`.
 
-## 5. Append the recovery changelog and validate artifacts
+## 5. Append the recovery changelog and validate source artifacts
 
 Append recovery entries to the end of `perf-changelog.yaml`. Preserve the
-original entries' `config-keys`, `evals-only`, and `scenario-type` shape so the
-recovery PR generates the same logical matrix. Use the new recovery PR URL and
-state clearly that this is an artifact-only ingest recovery.
+original entries' `config-keys`, `description`, `evals-only`, and
+`scenario-type` values so the recovery targets the same scope and the
+`InferenceX-app` changelog UI shows the meaningful configuration change. Copy
+each original description verbatim; put source-run IDs and recovery/retrigger
+details in the recovery PR body and final audit comment instead. Use the new
+recovery PR URL. The current generator may produce a different matrix; that does
+not invalidate reuse.
+
+This is not a transient trigger: `InferenceX-app` persists and displays the
+entry, so it must remain in the append-only changelog. Changing a description
+after ingest does not update the UI: historical changelog entries are immutable,
+and app ingest leaves an existing `(workflow_run_id, base_ref, head_ref)` row
+unchanged. Existing UI text requires an explicit database correction.
 
 Commit without `[skip-sweep]`:
 
@@ -208,66 +263,72 @@ git commit -m "fix: recover PR $ORIGINAL_PR ingest"
 RECOVERY_COMMIT=$(git rev-parse HEAD)
 ```
 
-Generate the exact matrix that the merge-to-main run will validate:
+Validate the recovery changelog and inspect the matrix generated by current
+`main`:
 
 ```bash
-python utils/validate_perf_changelog.py \
+python3 utils/validate_perf_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref "$RECOVERY_COMMIT"
-python utils/process_changelog.py \
+python3 utils/process_changelog.py \
   --changelog-file perf-changelog.yaml \
   --base-ref origin/main \
   --head-ref "$RECOVERY_COMMIT" \
   > /tmp/recovery-full-config.json
 ```
 
-Download the source run to a fresh directory, remove its
-`changelog-metadata`, and retain only ingest-relevant artifact classes:
+Confirm the generated config contains only the intended recovery scope. Its row
+counts may differ from the source run.
+
+Download only the result artifacts needed for local validation. This avoids the
+large server-log artifacts retained in the official ingest bundle. Raw per-config
+`bmk_<model>_*` artifacts are intentionally not selected — they fall through the
+`case` below; the aggregate `results_bmk` is what the validator reads:
 
 ```bash
 rm -rf /tmp/source-artifacts
-gh run download "$SOURCE_RUN_ID" \
-  --repo SemiAnalysisAI/InferenceX \
-  -D /tmp/source-artifacts
-rm -rf /tmp/source-artifacts/changelog-metadata
-
-for artifact_dir in /tmp/source-artifacts/*; do
-  [ -e "$artifact_dir" ] || continue
-  name=$(basename "$artifact_dir")
+ARTIFACT_ARGS=()
+while IFS= read -r name; do
   case "$name" in
-    results_bmk|eval_results_all|run-stats|bmk_*|eval_*|agentic_*|server_logs_*|multinode_server_logs_*)
+    results_bmk|eval_results_all|run-stats|bmk_agentic_*|agentic_*)
+      ARTIFACT_ARGS+=(-n "$name")
       ;;
-    *)
-      rm -rf "$artifact_dir"
+    eval_server_logs_*|eval_gpu_metrics_*)
+      ;;
+    eval_*)
+      ARTIFACT_ARGS+=(-n "$name")
       ;;
   esac
-done
+done < <(
+  gh api \
+    "repos/SemiAnalysisAI/InferenceX/actions/runs/$SOURCE_RUN_ID/artifacts?per_page=100" \
+    --paginate --jq '.artifacts[] | select(.expired == false) | .name' |
+    sort -u
+)
+
+((${#ARTIFACT_ARGS[@]})) || {
+  echo "No unexpired result artifacts found" >&2
+  exit 1
+}
+gh run download "$SOURCE_RUN_ID" \
+  --repo SemiAnalysisAI/InferenceX \
+  -D /tmp/source-artifacts \
+  "${ARTIFACT_ARGS[@]}"
 ```
 
-The retained classes are:
-
-```text
-results_bmk
-eval_results_all
-run-stats
-bmk_*
-eval_*
-agentic_*
-server_logs_*
-multinode_server_logs_*
-```
-
-Validate exact equality against the recovery PR matrix:
+Validate the source artifacts:
 
 ```bash
-python utils/validate_reusable_sweep_artifacts.py \
-  --config-json /tmp/recovery-full-config.json \
+python3 utils/validate_reusable_sweep_artifacts.py \
   --artifacts-dir /tmp/source-artifacts
 ```
 
-Stop on any missing, unexpected, or duplicate fixed-sequence, agentic, or eval
-identity.
+The validator does not compare source coverage with
+`/tmp/recovery-full-config.json`. It rejects duplicate fixed rows, missing run
+stats, inconsistent agentic artifacts, malformed eval metadata, raw/aggregate
+eval mismatches, or an empty result set. For a pinned failed batched eval run,
+only `completed_eval_concs` are recovered.
 
 ## 6. Attach the source SHA without changing the tree
 
@@ -298,7 +359,7 @@ Push once the branch is based on the current `main`:
 git push origin "$BRANCH"
 ```
 
-Do not rebase, squash, amend, or force-push after this point.
+Do not rebase, locally squash, amend, or force-push after this point.
 
 ## 7. Verify the PR reuse gate
 
@@ -311,9 +372,9 @@ gh api \
   --paginate --jq '.[].sha' |
   grep -Fx "$SOURCE_HEAD_SHA"
 
-gh pr diff "$RECOVERY_PR" \
+test "$(gh pr diff "$RECOVERY_PR" \
   --repo SemiAnalysisAI/InferenceX \
-  --name-only
+  --name-only)" = "perf-changelog.yaml"
 ```
 
 Wait for `check-changelog` and `reuse-sweep-gate` to pass. `setup` and all GPU
@@ -325,55 +386,95 @@ gh pr checks "$RECOVERY_PR" \
   --watch --fail-fast
 ```
 
-Also invoke `validate_reusable_run` locally against the recovery PR so source
-ancestry, workflow path, conclusion, and artifacts are checked before merge.
+`reuse-sweep-gate` appears only once the `pull_request` `run-sweep.yml` run for
+the new head SHA registers; immediately after pushing, `gh pr checks` may list
+only CodeQL/`check-changelog`/`comment`. Confirm that run exists and carries
+`reuse-sweep-gate` before trusting a green result, or watch it directly:
 
 ```bash
-GH_TOKEN="$(gh auth token)" \
-SOURCE_RUN_ID="$SOURCE_RUN_ID" \
-RECOVERY_PR="$RECOVERY_PR" \
-python3 - <<'PY'
-import os
-
-from utils import find_reusable_sweep_run as reuse
-
-repo = "SemiAnalysisAI/InferenceX"
-token = os.environ["GH_TOKEN"]
-run_id = int(os.environ["SOURCE_RUN_ID"])
-pr_number = int(os.environ["RECOVERY_PR"])
-run = reuse.github_api(repo, f"/actions/runs/{run_id}", token)
-reuse.validate_reusable_run(
-    repo,
-    "run-sweep.yml",
-    pr_number,
-    run,
-    token,
-    allow_failed=True,
-)
-print(f"Validated reusable run {run_id} for PR #{pr_number}")
-PY
+gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow run-sweep.yml --event pull_request \
+  --branch "$BRANCH" --limit 5 \
+  --json databaseId,status,conclusion,headSha
 ```
+
+On the PR (`pull_request`) gate, `setup` is itself skipped and `reuse-sweep-gate`
+does the validation; `setup` only runs on the push-to-main run in step 8.
 
 ## 8. Merge and verify official ingest
 
-Merge the current branch head without rewriting its commits. If `main` advances
-or the PR conflicts, update from `main` first and recreate the final two-parent
-carrier commit before pushing again.
+Keep the verified carrier commit as the PR head through merge. This repository
+allows squash merges: squashing into `main` creates a new main commit but does
+not rewrite the PR branch or its recorded commit list, so source ancestry remains
+available to the push workflow. Confirm the head, then squash-merge:
+
+```bash
+test "$(gh pr view "$RECOVERY_PR" \
+  --repo SemiAnalysisAI/InferenceX \
+  --json headRefOid --jq .headRefOid)" = "$ATTACH_SHA"
+
+gh pr merge "$RECOVERY_PR" \
+  --repo SemiAnalysisAI/InferenceX \
+  --squash
+```
+
+If all checks passed and repository policy is the sole blocker, repeat the merge
+with `--admin`. If `main` advances or the PR conflicts, update from `main` first
+and recreate the final two-parent carrier commit before pushing again.
+
+Locate and watch the push run for the squash commit:
+
+```bash
+RECOVERY_MERGE_SHA=$(gh pr view "$RECOVERY_PR" \
+  --repo SemiAnalysisAI/InferenceX \
+  --json mergeCommit --jq .mergeCommit.oid)
+
+gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow run-sweep.yml --event push \
+  --commit "$RECOVERY_MERGE_SHA" --limit 5
+
+RECOVERY_RUN_ID=<matching-run-id>
+gh run watch "$RECOVERY_RUN_ID" \
+  --repo SemiAnalysisAI/InferenceX --exit-status
+```
 
 The push-to-main `Run Sweep` must:
 
 - run `setup` even if the merge message contains `[skip-sweep]`;
 - resolve the recovery PR and pinned source run;
 - set `reuse-enabled=true`;
-- pass `reuse-ingest-artifacts` exact validation;
+- pass `reuse-ingest-artifacts` consistency validation;
 - upload recovery changelog metadata;
 - run `trigger-ingest`.
 
 Then locate the resulting `repository_dispatch` run in
-`SemiAnalysisAI/InferenceX-app`. Require successful artifact download,
-flattening, database ingest, run overrides, database verification, cache
-invalidation, and unmapped-entity checks.
+`SemiAnalysisAI/InferenceX-app`. In the forgotten-`/reuse` case the target's
+bogus ingest is also a recent successful `ingest-results` run, so do not pick by
+recency — pick the run whose `Download artifacts from InferenceX run` step logs
+`RUN_ID: <RECOVERY_RUN_ID>`:
 
-Post a final recovery PR comment with the original failed run/job, source
-run/attempt/SHA, recovery merge run, downstream ingest run, exact matrix counts,
-and verification outcome.
+```bash
+gh run list --repo SemiAnalysisAI/InferenceX-app \
+  --workflow "Ingest Benchmark Results" \
+  --event repository_dispatch --limit 10 \
+  --json databaseId,status,conclusion,createdAt
+
+INGEST_RUN_ID=<candidate-run-id>
+gh run view "$INGEST_RUN_ID" --repo SemiAnalysisAI/InferenceX-app --log \
+  | grep -m1 "RUN_ID: $RECOVERY_RUN_ID"   # must match before you trust this run
+
+gh run watch "$INGEST_RUN_ID" \
+  --repo SemiAnalysisAI/InferenceX-app --exit-status
+```
+
+The ingest's first step is a `sleep 300` "wait for source run to finish", so the
+run idles ~5 minutes before doing work — that is normal, not a hang.
+
+Verify its logs identify `RECOVERY_RUN_ID` as the trigger and `SOURCE_RUN_ID`
+plus `SOURCE_RUN_ATTEMPT` as the reused source. Require successful artifact
+download, flattening, database ingest, run overrides, database verification,
+cache invalidation, and unmapped-entity checks.
+
+Post a final recovery PR comment with the original failed or skipped run/job,
+source run/attempt/SHA, recovery merge run, downstream ingest run, recovered
+artifact counts, and verification outcome.

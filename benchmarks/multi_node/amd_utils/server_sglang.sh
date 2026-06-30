@@ -445,6 +445,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
+        --log-level ${SGLANG_SERVER_LOG_LEVEL:-warning} \
         ${PREFILL_SERVER_CONFIG} "
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
@@ -677,6 +678,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
+        --log-level ${SGLANG_SERVER_LOG_LEVEL:-warning} \
         ${PREFILL_SERVER_CONFIG} "
 
     if [ "$PREFILL_NODES_PER_WORKER" -gt 1 ]; then
@@ -745,6 +747,7 @@ else
         --host 0.0.0.0 \
         --port 8000 \
         --trust-remote-code \
+        --log-level ${SGLANG_SERVER_LOG_LEVEL:-warning} \
         ${DECODE_SERVER_CONFIG} "
 
     if [ "$DECODE_NODES_PER_WORKER" -gt 1 ]; then

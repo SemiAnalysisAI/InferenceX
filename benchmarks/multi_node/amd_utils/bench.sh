@@ -79,13 +79,12 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     if [[ "$ENGINE" == "vllm-disagg" ]]; then
         extra_flags="--trust-remote-code --tokenizer $MODEL_PATH"
     else
-        # DeepSeek-V4-Pro ships no jinja chat_template, so --use-chat-template crashes;
-        # --dsv4 applies the DSv4 <bos><User>...<Assistant><think> framing instead
-        # (chat-formatted inputs are required for correct EAGLE/MTP acceptance too).
-        if [[ "$model_name" == "DeepSeek-V4-Pro" ]]; then
-            extra_flags="--dsv4"
-        elif [ "$IS_MTP" = "true" ]; then
-            extra_flags="--use-chat-template"
+        if [ "$IS_MTP" = "true" ]; then
+            if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+                extra_flags="--dsv4"
+            else
+                extra_flags="--use-chat-template"
+            fi
         fi
     fi
 

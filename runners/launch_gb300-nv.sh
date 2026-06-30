@@ -60,9 +60,14 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Kimi-K2.5-NVFP4
-    export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
+    export SRT_SLURM_MODEL_PREFIX="nvidia/Kimi-K2.5-NVFP4"
+elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
+    # SRT_SLURM_MODEL_PREFIX must match the model.path alias used in our
+    # Qwen3.5 sglang recipes (qwen3.5-fp4).
+    export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
+    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
     exit 1
 fi
 
@@ -106,6 +111,7 @@ export OSL="$OSL"
 echo "Cloning srt-slurm repository..."
 RUN_KEY=$(printf "%s" "${RESULT_FILENAME:-${RUNNER_NAME:-gb300-nv}}" | sha1sum | cut -c1-12)
 SRT_REPO_DIR="${GITHUB_WORKSPACE}/srt-slurm-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUN_KEY}"
+SRTCTL_SETUP_SCRIPT=""
 rm -rf "$SRT_REPO_DIR"
 
 if [[ "$IS_AGENTIC" == "1" ]]; then
@@ -153,6 +159,14 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
+    # Same srt-slurm tooling as glm5: NVIDIA/srt-slurm @ sa-submission-q2-2026.
+    # Overlay our version-controlled Qwen3.5 recipes on top (upstream has none).
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/qwen3.5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -168,9 +182,13 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECIS
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    git checkout main
+    git checkout sa-submission-q2-2026
     mkdir -p recipes/vllm/minimax-m3-gb300-fp8
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3-gb300-fp8" recipes/vllm/minimax-m3-gb300-fp8
+    SRTCTL_SETUP_SCRIPT="minimax-m3-gb300-vllm-fixes.sh"
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+        "configs/$SRTCTL_SETUP_SCRIPT"
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -274,12 +292,18 @@ sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
 # seq-len recipes still resolve model.path to an NFS-visible location
 # where the precheck is a useful sanity guard, so keep enforcement on
 # for them.
-PREFLIGHT_FLAG=""
+SRTCTL_APPLY_ARGS=(
+    -f "$CONFIG_FILE"
+    --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
+)
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    PREFLIGHT_FLAG="--no-preflight"
+    SRTCTL_APPLY_ARGS+=(--no-preflight)
+fi
+if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
+    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
 fi
 
-SRTCTL_OUTPUT=$(srtctl apply $PREFLIGHT_FLAG -f "$CONFIG_FILE" --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
 echo "$SRTCTL_OUTPUT"
 
 JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')

@@ -131,7 +131,7 @@ def test_batched_eval_requires_a_valid_manifest(tmp_path: Path) -> None:
     assert any("unavailable or invalid" in error for error in errors)
 
 
-def test_validate_scores_warns_when_batch_status_metadata_is_unreadable(
+def test_validate_scores_fails_when_expected_batch_metadata_is_unreadable(
     tmp_path: Path,
     monkeypatch,
     capsys,
@@ -157,18 +157,77 @@ def test_validate_scores_warns_when_batch_status_metadata_is_unreadable(
             str(meta_path),
             "--results-glob",
             str(result_path),
+            "--expected-concs",
+            "1 4 8",
         ],
     )
 
-    assert validate_scores_main() == 0
+    assert validate_scores_main() == 1
     captured = capsys.readouterr()
-    assert (
-        "WARN: could not inspect eval metadata for batched concurrency status"
-        in captured.err
+    assert "unavailable or invalid" in captured.err
+
+
+def test_workflow_concurrencies_are_independent_of_eval_metadata(
+    tmp_path: Path,
+) -> None:
+    meta_path = tmp_path / "meta_env.json"
+    meta_path.write_text(json.dumps({
+        "eval_concs": [8],
+        "completed_eval_concs": [8],
+        "failed_eval_concs": [],
+    }))
+    result_path = tmp_path / "results_test_conc8.json"
+    result_path.write_text('{"results": {}}')
+
+    errors = validate_batch_manifest(
+        str(meta_path),
+        [str(result_path)],
+        expected_concs=[1, 4, 8],
     )
 
+    assert "batched eval metadata does not match workflow concurrencies" in errors
+    assert any("missing completed concurrency: 1, 4" in error for error in errors)
+    assert any("missing result files for concurrency: 1, 4" in error for error in errors)
 
-def test_amd_multinode_container_inherits_eval_concurrency_list() -> None:
+
+def test_validate_scores_checks_threshold_for_every_concurrency(
+    tmp_path: Path,
+    monkeypatch,
+    capsys,
+) -> None:
+    (tmp_path / "meta_env.json").write_text(json.dumps({
+        "eval_concs": [1, 4],
+        "completed_eval_concs": [1, 4],
+        "failed_eval_concs": [],
+    }))
+    for conc, score in ((1, 0.9), (4, 0.8)):
+        (tmp_path / f"results_test_conc{conc}.json").write_text(json.dumps({
+            "results": {
+                "gsm8k": {
+                    "exact_match,strict-match": score,
+                },
+            },
+        }))
+    monkeypatch.setattr(sys, "argv", [
+        "validate_scores.py",
+        "--meta-env",
+        str(tmp_path / "meta_env.json"),
+        "--results-glob",
+        str(tmp_path / "results*.json"),
+        "--expected-concs",
+        "1 4",
+    ])
+
+    assert validate_scores_main() == 1
+
+    # Each score line is attributed to the concurrency that produced it, so a
+    # failing concurrency is identifiable from the log (conc 4 here).
+    captured = capsys.readouterr()
+    assert "PASS: [conc=1] gsm8k exact_match,strict-match" in captured.out
+    assert "FAIL: [conc=4] gsm8k exact_match,strict-match" in captured.err
+
+
+def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     job_slurm = (
         Path(__file__).resolve().parents[2]
         / "benchmarks"
@@ -178,5 +237,14 @@ def test_amd_multinode_container_inherits_eval_concurrency_list() -> None:
     )
     contents = job_slurm.read_text()
 
-    assert "-e EVAL_CONC\n" in contents
-    assert r"-e EVAL_CONC=\$EVAL_CONC" not in contents
+    assert r'-e \"EVAL_CONC=\$EVAL_CONC\"' in contents
+    assert "-e EVAL_CONC\n" not in contents
+
+    workflow = (
+        Path(__file__).resolve().parents[2]
+        / ".github"
+        / "workflows"
+        / "benchmark-multinode-tmpl.yml"
+    ).read_text()
+    assert 'expected_concs="${EVAL_CONC}"' in workflow
+    assert 'validate_scores.py --expected-concs "${expected_concs}"' in workflow
