@@ -60,7 +60,10 @@ JOB_ID="$(cx_salloc_jobid --partition="$PARTITION" --account="$ACCOUNT" --nodes=
 trap 'scancel "$JOB_ID" 2>/dev/null || true' EXIT
 MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29551
 mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
-WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
+# Source the hybrid-ep build env if the build-once wrote it (deepep-hybrid: build_ext --inplace +
+# PYTHONPATH/LD_LIBRARY_PATH are process-local and don't cross srun steps; the file persists in the
+# named container). No-op for other backends (file absent).
+WRAP='[ -f /tmp/.cx_hybrid_env ] && . /tmp/.cx_hybrid_env; export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
 
 # From-source kernels (DeepEP V2 / flashinfer quant-combine) cannot be built in the per-rank multi-srun
 # (8 separate ephemeral containers). Build them ONCE PER NODE into a PERSISTENT named container, then

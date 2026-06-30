@@ -245,6 +245,15 @@ cx_build_deepep_hybrid() {
   export PYTHONPATH="/tmp/DeepEP_hybrid:${PYTHONPATH:-}"
   python3 -c "import deep_ep; assert hasattr(deep_ep,'HybridEPBuffer'); print('built hybrid-ep deep_ep', getattr(deep_ep,'__version__','?'))" >&2 \
     || { cx_log "ERROR: hybrid-ep import / HybridEPBuffer missing after build"; return 1; }
+  # The hybrid build is build_ext --inplace (NOT pip install), so its deep_ep lives under PYTHONPATH and
+  # its nvshmem runtime under LD_LIBRARY_PATH — both process-local. The EP4 single-node path runs in this
+  # same process so they persist; but the EP8 multi-srun runs the build-once and each case in SEPARATE
+  # srun steps that share only the pyxis --container-name filesystem. Persist the env to a file there so
+  # the case-srun's WRAP can source it (else `import deep_ep` resolves to the bundled mainline build and
+  # `HybridEPBuffer` is missing — the gb300 EP8 deepep-hybrid failure mode).
+  { printf 'export PYTHONPATH=%s${PYTHONPATH:+:$PYTHONPATH}\n' "/tmp/DeepEP_hybrid"
+    printf 'export LD_LIBRARY_PATH=%s/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n' "$NVSHMEM_DIR"
+  } > /tmp/.cx_hybrid_env 2>/dev/null || cx_log "WARN: could not write /tmp/.cx_hybrid_env"
   cx_log "DeepEP hybrid-ep ready ($DEEPEP_COMMIT)"
 }
 

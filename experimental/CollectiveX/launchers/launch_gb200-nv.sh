@@ -99,7 +99,9 @@ ENVJSON="$MOUNT_SRC/experimental/CollectiveX/results/env_${RUNNER_NAME}_${TS}.js
 if [ "$CX_BENCH" != "nccl" ]; then
   MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=29553
   mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
-  WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
+  # Source the hybrid-ep build env if the build-once wrote it (build_ext --inplace PYTHONPATH/LD_LIBRARY_PATH
+  # are process-local and don't cross srun steps; the file persists in the named container). No-op otherwise.
+  WRAP='[ -f /tmp/.cx_hybrid_env ] && . /tmp/.cx_hybrid_env; export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
 
   # Build from-source kernels (DeepEP V2 / flashinfer-quant-combine) ONCE PER NODE into a persistent
   # named container, then every case-srun reuses it (build visible to all WORLD ranks). Mirrors the
