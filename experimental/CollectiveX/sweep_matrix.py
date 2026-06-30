@@ -112,12 +112,14 @@ def main() -> int:
                 if phase == "prefill":
                     continue
                 lad, rmode = "1 2 4 8 16", "tuned"
-            # rack-scale tray->nodes (gb200/gb300 = 4 GPU/tray): EP8 = 2 trays. Recorded for the cell.
+            # rack-scale tray->nodes (gb200/gb300 = 4 GPU/tray): EP4 = 1 tray, EP8 = 2 trays. ALWAYS
+            # set an EXPLICIT count: the gb300 launcher does NODES="${CX_NODES:-2}", so an EMPTY
+            # CX_NODES coerces to 2 (EP8) — an EP4 cell with nodes="" silently ran EP8 (the rack
+            # multi-srun, which bypasses cx_build_deepep_v2 / cx_build_flashinfer_latest). nodes="1"
+            # makes EP4 actually run EP4 (run_in_container, which builds V2/quant-combine).
             nodes = ""
             if plat in ("gb200", "gb300"):
-                nd = max(1, int(c.get("ep") or 8) // 4)
-                if nd > 1:
-                    nodes = str(nd)
+                nodes = str(max(1, int(c.get("ep") or 8) // 4))
             # The broad sweep runs SEEDED-runtime (comparable-experimental), NOT pre-staged canonical:
             # a fixed seed + identical params already yields the same cross-SKU trace for a fair
             # comparison, without the per-case canonical-manifest staging (overhead + a fragility — the
@@ -137,9 +139,9 @@ def main() -> int:
                 # run 28429220764). But the EP8 RACK path runs run_ep.py over a multi-srun and BYPASSES
                 # cx_build_deepep_v2 (separate per-rank containers, no per-container build), so v2 there
                 # silently ran bundled V1 and mislabeled the artifact. Allow v2 on gb200/gb300 at EP4
-                # (nodes=""); exclude only the EP8 (nodes set) rack cells until the multi-srun path
-                # builds V2 per-container.
-                if v2 and plat in ("gb200", "gb300") and nodes:
+                # (nodes="1" -> run_in_container builds it); exclude only the EP8 rack cells (nodes>=2)
+                # until the multi-srun path builds V2 per-container.
+                if v2 and plat in ("gb200", "gb300") and int(nodes or 1) > 1:
                     continue
                 case = {
                     "backend": beng, "deepep_v2": v2, "mode": c["mode"], "dtype": c["dtype"],
