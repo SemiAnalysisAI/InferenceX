@@ -32,6 +32,10 @@ on:
         description: Keep only shards with >= this tray count (2 = rack-scale EP8 only; blank = all)
         type: string
         default: ''
+      max_nodes:
+        description: Keep only shards with <= this tray count (1 = single-tray EP4 only; blank = all)
+        type: string
+        default: ''
       max_cases:
         description: Max cases per shard cell (chunk larger shards)
         type: string
@@ -65,8 +69,9 @@ jobs:
           v2=""; [ "${{ inputs.deepep_v2 }}" = "true" ] && v2="--deepep-v2"
           os=""; [ -n "${{ inputs.only_sku }}" ] && os="--only-sku ${{ inputs.only_sku }}"
           mn=""; [ -n "${{ inputs.min_nodes }}" ] && mn="--min-nodes ${{ inputs.min_nodes }}"
+          xn=""; [ -n "${{ inputs.max_nodes }}" ] && xn="--max-nodes ${{ inputs.max_nodes }}"
           # full matrix (with cases) -> artifact for the cells; slim (no cases) -> the strategy output.
-          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $bk $v2 $os $mn --out matrix_full.json >/dev/null
+          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $bk $v2 $os $mn $xn --out matrix_full.json >/dev/null
           SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='cases'} for x in m['include']]}))")
           echo "matrix=$SLIM" >> "$GITHUB_OUTPUT"
           echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")" >> "$GITHUB_OUTPUT"
@@ -162,3 +167,40 @@ jobs:
           name: cxsweep-aggregate-${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}-${{ github.run_id }}
           path: experimental/CollectiveX/results/aggregate/*.ndjson
           if-no-files-found: warn
+
+  update-frontend-snapshot:
+    name: Update InferenceX-app snapshot
+    needs: aggregate
+    if: always() && needs.aggregate.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger CollectiveX snapshot update
+        env:
+          FRONTEND_PAT: ${{ secrets.INFX_FRONTEND_PAT }}
+        run: |
+          set -euo pipefail
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          git clone --quiet --depth 1 --branch collectivex \
+            "https://x-access-token:${FRONTEND_PAT}@github.com/SemiAnalysisAI/InferenceX-app.git" \
+            "$tmp/app"
+          cd "$tmp/app"
+          git pull --rebase origin collectivex
+          mkdir -p .github
+          {
+            echo "source_run_id=${{ github.run_id }}"
+            echo "source_sha=${{ github.sha }}"
+            echo "source_workflow=${{ github.workflow }}"
+            echo "source_run_url=https://github.com/SemiAnalysisAI/InferenceX/actions/runs/${{ github.run_id }}"
+            echo "triggered_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > .github/collectivex-source-run.env
+
+          git config user.name "InferenceX Data Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/collectivex-source-run.env
+          if git diff --cached --quiet; then
+            echo "CollectiveX source-run marker is already current."
+            exit 0
+          fi
+          git commit -m "chore: trigger CollectiveX data update for ${{ github.run_id }}"
+          git push origin HEAD:collectivex

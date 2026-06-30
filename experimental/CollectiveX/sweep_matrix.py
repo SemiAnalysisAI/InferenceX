@@ -65,6 +65,9 @@ def main() -> int:
     ap.add_argument("--min-nodes", type=int, default=0,
                     help="keep only shards whose tray count (nodes, blank=1) is >= this; "
                          "e.g. 2 = rack-scale EP8 only (skip the single-tray EP4 cells)")
+    ap.add_argument("--max-nodes", type=int, default=0,
+                    help="keep only shards whose tray count (nodes, blank=1) is <= this; "
+                         "e.g. 1 = single-tray EP4 only (skip the rack-scale EP8 cells)")
     ap.add_argument("--max-cases", type=int, default=14, help="chunk shards larger than this into sub-cells")
     ap.add_argument("--out", default="")
     ap.add_argument("--slim", action="store_true",
@@ -167,6 +170,8 @@ def main() -> int:
     for (sku, beng, v2, mode, rmode, nodes), cases in sorted(shards.items()):
         if a.min_nodes and max(1, int(nodes or 1)) < a.min_nodes:
             continue   # --min-nodes: skip single-tray (EP4) shards, keep only rack-scale (EP8+)
+        if a.max_nodes and max(1, int(nodes or 1)) > a.max_nodes:
+            continue   # --max-nodes: skip rack-scale (EP8+) shards, keep only single-tray (EP4)
         tag = beng + ("-v2" if v2 else "")   # distinct shard id/runner for the V2 kernel variant
         for ci in range(0, len(cases), a.max_cases):
             chunk = cases[ci:ci + a.max_cases]
