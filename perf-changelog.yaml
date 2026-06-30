@@ -4325,12 +4325,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1954
 
 - config-keys:
-    - minimaxm3-fp8-gb300-dynamo-vllm
-  description:
-    - "Increase health_check max_attempts from 720 to 840 (7200s → 8400s) for the 1p1d-dep2-dep8-8k1k GB300 recipe to accommodate longer model load times."
-  pr-link: TODO
-
-- config-keys:
     - minimaxm3-fp8-mi355x-vllm
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
@@ -4349,3 +4343,9 @@
     - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
     - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1931
+
+- config-keys:
+    - minimaxm3-fp8-gb300-dynamo-vllm
+  description:
+    - "Increase health_check max_attempts from 720 to 840 (7200s → 8400s) for the 1p1d-dep2-dep8-8k1k GB300 recipe to accommodate longer model load times."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1961
