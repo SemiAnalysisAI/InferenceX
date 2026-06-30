@@ -10,17 +10,25 @@ by an in-container probe on the H200 cluster.
 
 ## EP backends
 
-### NVIDIA NCCL EP — DONE via DeepEP V2 (not a separate adapter)
-`NVIDIA/nccl` has **no `contrib/nccl_ep`** Python dispatch/combine. NCCL's expert-parallel capability
-*is* the GIN + Symmetric-Memory **device** API (host `ncclCommWindowRegister`/`ncclDevComm`/`ncclTeam_t`,
-device `ncclLsaBarrier`/`ncclGin*`; present since NCCL 2.28, and the container has 2.28.9). Realizing
-"NCCL EP" means writing a CUDA all-to-all kernel on those primitives — which is exactly what **DeepEP
-V2's "Gin" backend already does**. CollectiveX benchmarks DeepEP V2 on all NVIDIA SKUs (kernel_gen=v2,
-task #115), with NCCL 2.28.9 recorded in provenance. So the NCCL-EP comparison vs DeepEP normal/LL is
-the V2-vs-V1-vs-LL comparison already in the dataset. A hand-rolled NCCL-device-API adapter would
-duplicate DeepEP V2 with no new signal.
+### NVIDIA NCCL EP — NOT represented by DeepEP V2; needs its own adapter
+Upstream `NVIDIA/nccl` now has a real `contrib/nccl_ep` implementation. It is an NCCL API extension for
+MoE dispatch/combine built on NCCL Device API LSA/GIN, and should be treated as its own backend surface,
+not as a synonym for DeepEP V2.
 
-### UCCL EP — SCAFFOLDED, full run DEFERRED (heavier bootstrap than the probe implied)
+CollectiveX currently keeps these surfaces separate:
+- **DeepEP V2**: `backend=deepep`, `shape.kernel_gen=v2`, `deepep_version=2.0.0+...`; this is DeepEP's
+  ElasticBuffer/dispatch/combine implementation using the NCCL Gin backend.
+- **`nccl-ep` baseline in this harness**: a portable token-shuffle implementation using
+  `torch.distributed.all_to_all_single` over NCCL/RCCL. This is useful as a host-orchestrated baseline,
+  especially cross-node, but it is **not** upstream `contrib/nccl_ep`.
+- **Upstream NCCL EP**: still needs a dedicated adapter/provenance label before CollectiveX can claim
+  native NCCL EP results. When wired, it must not overwrite either DeepEP V2 or the current
+  all-to-all baseline identity.
+
+So the correct comparison is not "NCCL EP = DeepEP V2". DeepEP V2 remains a relevant NCCL-Gin-backed
+comparison point, but native NCCL EP needs its own line in the backend/version matrix.
+
+### UCCL EP — DONE via vendored deep_ep_wrapper (was deferred; the bootstrap is now wired)
 `pip install uccl` (prebuilt cp312 wheel) + a cu12 CUDA runtime on `LD_LIBRARY_PATH` (the wheel is
 cu12 on a cu13 image) **builds and imports** — the C++ runtime `uccl.ep` loads (pkg-0.1.1), confirmed
 on H100 via GHA. BUT the DeepEP-compatible surface is **not** the low-level `uccl.ep.Buffer`: that
@@ -31,11 +39,14 @@ function arguments`. The DeepEP-identical `Buffer(group, …)` lives in UCCL's s
 That wrapper's `__init__` runs a non-trivial bootstrap — `get_local_ipc_handle` / `get_local_device_id`
 exchanged via `dist.all_gather_object`, `runtime.sync(...)`, CPU `UcclProxy` setup
 (`get_cpu_proxies_meta`), and `connect_atomic_buffer` — entangled with UCCL's bench harness `init_dist`.
-The wrapper is cleanly vendorable (relative imports + only depends on `uccl.ep`), so the path forward
-is: vendor `deep_ep_wrapper` under a non-colliding name + replicate the proxy/IPC bootstrap, then
-`ep_uccl.py` becomes a true DeepEP clone against it. Deferred (needs GPU iteration to validate the
-proxy bootstrap; NOT a hard blocker). Adapter `tests/ep_uccl.py` + `cx_build_uccl` + capability/schema
-remain wired as scaffolding; `benchmark=uccl` currently fails loudly (preserved failed-case), not faked.
+The wrapper is cleanly vendorable (relative imports + only depends on `uccl.ep`), and that is now
+DONE: `cx_build_uccl` git-clones `uccl-project/uccl` at the wheel-matched tag and vendors
+`deep_ep_wrapper` under the non-colliding name `uccl_deepep`; `ep_uccl.py` imports its
+`Buffer(group, …)` and runs genuine UCCL dispatch/combine. **Validated: 507 valid docs, `correct=True`,
+`uccl_version=0.1.1`, intranode NVLink on h100/h200/b300/b200** (normal bf16+fp8 + LL). If the wrapper
+is ever absent the import falls back to the low-level `uccl.ep.Buffer`, which fails loudly (preserved
+failed-case) — never faked. Remaining gap: aarch64 GB200/GB300 (the from-source/proxy bootstrap doesn't
+come up there — see the aarch64 wall below); uccl is x86-single-node so far.
 
 ### NIXL — transfer DONE (container switch); device-EP blocked on UCX GPU Device API
 Two distinct things. **(1) NIXL host RDMA transfer** (`nixl_agent.register_memory / get_xfer_descs /
@@ -144,7 +155,7 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   corrupted unsorted chunks` → SIGSEGV (run 28326528672, *after* the rendezvous now forms), DeepEP
   normal-internode asserts out — because they need GPUDirect-RDMA peer-memory registration the cluster's
   IB HCAs / container don't expose. The portable fix is a transport that host-stages gracefully:
-  **nccl-ep** (`tests/ep_nccl.py`), the canonical NCCL `all_to_all_single` token-shuffle EP. H200
+  **nccl-ep** (`tests/ep_nccl.py`), the NCCL `all_to_all_single` token-shuffle EP baseline. H200
   nodes=2 / **world=16 over IB**, run 28327088942: **correct=True at every T(1→128)**, disp_p50
   547–808µs, status=comparable-experimental (single-node world=8 validated first, run 28327013318). The
   same nccl-ep path covers H100. (IBGDA/internode-DeepEP would be a faster one-sided path but needs the
@@ -165,8 +176,9 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   and NOT cross-node (it's intra-NVL72). Both backends work on x86 single-node (uccl b300=126/b200=124
   valid; deepep-hybrid h100=84/b300=36). Cause: their FROM-SOURCE in-container builds were probe-confirmed
   on x86 B300 only — uccl's `ibv`/proxy RDMA bootstrap and deepep-hybrid's TMA+NVSHMEM build don't come up
-  on aarch64 Grace-Blackwell. deepep (bundled V1), flashinfer (bundled), and nccl-ep (NCCL collectives,
-  host-staged) all run there, so rack-scale coverage is complete via those three.
+  on aarch64 Grace-Blackwell. deepep (bundled V1), flashinfer (bundled), and the nccl-ep
+  `all_to_all_single` baseline all run there, so rack-scale coverage is complete via those three
+  surfaces. Native upstream NCCL EP remains separate until a real `contrib/nccl_ep` adapter lands.
 - **DeepEP V2 (from-source `kernel_gen=v2`) is x86-single-node only — gb200/gb300 excluded.** Genuine V2
   (`deepep_version=2.0.0+af9a040`) is produced ONLY on h100/h200/b300/b200 (where the EP4/single-node path
   runs `cx_build_deepep_v2` once in `run_in_container`). Two failure modes on aarch64 rack: (1) the V2

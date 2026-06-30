@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""CollectiveX EP backend adapter — UCCL EP (NVIDIA), normal mode. SCAFFOLD — NOT yet
-producing results (see docs/gated.md "UCCL EP").
+"""CollectiveX EP backend adapter — UCCL EP (NVIDIA), normal + LL modes. PRODUCING RESULTS:
+cx_build_uccl vendors UCCL's deep_ep_wrapper as `uccl_deepep` (its Buffer takes a torch
+ProcessGroup), so this adapter runs GENUINE uccl.ep dispatch/combine (uccl_version 0.1.1,
+intranode NVLink) — validated on h100/h200/b300/b200. See docs/gated.md "UCCL EP".
 
 IMPORTANT (empirically established on H100 via GHA): the LOW-LEVEL `uccl.ep.Buffer` is
 NOT a drop-in DeepEP clone. Its constructor is
@@ -11,9 +13,10 @@ calls below raise `TypeError: incompatible function arguments`. The DeepEP-ident
 as `deep_ep`, colliding with the container's real DeepEP), whose __init__ runs a proxy +
 IPC-handle-exchange + runtime.sync + connect_atomic_buffer bootstrap. To finish UCCL:
 vendor `deep_ep_wrapper` under a non-colliding name (it uses relative imports + only needs
-`uccl.ep`) and import its Buffer here; then this file is a true ep_deepep.py clone. Until
-then `benchmark=uccl` fails loudly (preserved failed-case), never faked. The build hook
-cx_build_uccl + capability/schema wiring are in place as scaffolding.
+`uccl.ep`) and import its Buffer here; then this file is a true ep_deepep.py clone. This is
+DONE: cx_build_uccl vendors `deep_ep_wrapper` as `uccl_deepep` and the import below uses it; if
+that wrapper is ever absent the import falls back to the low-level `uccl.ep.Buffer`, which then
+fails loudly (preserved failed-case) — never faked. With the wrapper present, results are genuine.
 
 The harness contract (make_problem/dispatch/stage/combine/expected/buffer_cap/recv_tokens/
 finalize + backend_provenance + SUPPORTED_*) mirrors ep_deepep.py and is correct once the
