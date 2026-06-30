@@ -3,10 +3,14 @@
 
 The hybrid-ep branch (https://github.com/deepseek-ai/DeepEP/tree/hybrid-ep) is NVIDIA's TMA +
 warp-pipeline implementation of expert-parallel all-to-all, exposing `deep_ep.HybridEPBuffer`
-(distinct from the mainline `deep_ep.Buffer`). It supports intra-node NVLink AND inter-node
-RDMA/NIXL; this adapter exercises the INTRANODE path (single NVLink domain, <=8 ranks), which needs
-no multi-node/NVSHMEM bring-up. The container build is done by runtime/run_in_container.sh
-`cx_build_deepep_hybrid` (CUDA-13 cccl include + libnvshmem symlink fixes).
+(distinct from the mainline `deep_ep.Buffer`). HybridEP is NVIDIA's MoE backend built for NVL72
+rack-scale (Megatron `moe_flex_dispatcher_backend="hybridep"`). This adapter drives the single-
+NVLink-domain path (`num_of_hybrid_ep_ranks_per_nvlink_domain == world_size`, <=8 ranks). That domain
+is ONE node on x86 — but on a GB200/GB300 NVL72 the MNNVL fabric makes multiple trays a single NVLink
+domain, so the SAME path spans trays: gb300 EP8 (8 ranks / 2 trays) is validated `transport=mnnvl`,
+decode 8/8 + prefill 6/6 (run 28480519588). The container build is done by runtime/run_in_container.sh
+`cx_build_deepep_hybrid` (CUDA-13 cccl include + libnvshmem symlink fixes; pip-installed so it persists
+across the EP8 multi-srun's separate srun steps).
 
 API (pinned on B300, branch e0a5b1d):
   HybridEPBuffer(group, hidden_dim, max_num_of_tokens_per_rank, num_local_experts, use_fp8=False, ...)
@@ -18,9 +22,9 @@ reconstructed as x * (distinct ranks among its top_k experts) — verified: an 8
 round trip gives relerr(combined, x) = 4.28, matching E[distinct ranks] ~ 5.26 exactly. So this uses
 the SAME "ranks" factor as ep_flashinfer (per-rank-sum combine, no gate re-weight). bf16 tol 5e-2.
 
-STATUS: bf16 / normal / layout-and-dispatch-v1, intranode NVLink (<=8 ranks). fp8 + internode are
-further lift (use_fp8 path + a multi-node runner — the hybrid NVLink<->RDMA forwarding is the
-branch's headline but needs >1 node; docs/gated.md rack-scale).
+STATUS: bf16 / normal / layout-and-dispatch-v1. Single-NVLink-domain path (<=8 ranks) validated on x86
+single-node AND across GB300 NVL72 trays at EP8 via MNNVL (one NVLink domain, run 28480519588). fp8 and
+the cross-RACK (>1 NVL72, IBGDA/RDMA) path are further lift; docs/gated.md rack-scale.
 """
 from __future__ import annotations
 
@@ -79,8 +83,10 @@ class DeepEPHybridBackend:
         dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
         ver = _deepep_hybrid_version()
 
-        # Construct the HybridEPBuffer. Intranode: all ranks in one NVLink domain. We let it default
-        # num_of_hybrid_ep_ranks_per_nvlink_domain (== world_size intranode) and SM counts.
+        # Construct the HybridEPBuffer treating all ranks as ONE NVLink domain (default
+        # num_of_hybrid_ep_ranks_per_nvlink_domain == world_size). On x86 that domain is one node; on a
+        # GB200/GB300 NVL72 the MNNVL fabric makes 2 trays one NVLink domain, so EP8 (8 ranks) is covered
+        # by this same path (validated transport=mnnvl). SM counts default.
         try:
             self.buffer = HybridEPBuffer(
                 self.group, hidden_dim=self.hidden,
@@ -91,13 +97,13 @@ class DeepEPHybridBackend:
                 f"HybridEPBuffer construction failed (hidden={self.hidden} max_tokens={self.max_tokens} "
                 f"local_experts={self.local_experts} world={world_size}): {exc!r}") from exc
         if rank == 0:
-            print(f"[deepep-hybrid] HybridEPBuffer constructed (intranode NVLink, world={world_size}, "
+            print(f"[deepep-hybrid] HybridEPBuffer constructed (single NVLink domain, world={world_size}, "
                   f"local_experts={self.local_experts}, hidden={self.hidden})", file=sys.stderr)
 
         self.backend_provenance = {
             "deepep_commit": ver, "branch": "hybrid-ep",
             "impl": "deep_ep.HybridEPBuffer (NVIDIA TMA + warp-pipeline)",
-            "mode": "normal", "transport": "intranode-nvlink",
+            "mode": "normal", "transport": "nvlink-domain",  # one node (x86) or one NVL72 MNNVL domain (gb300 EP8)
             "resource_mode": args.resource_mode,
             "num_sms": None, "device_sms": dev_sms, "tuned_source": "fixed-kernel",
             "max_num_tokens": self.max_tokens, "top_k": self.top_k,
