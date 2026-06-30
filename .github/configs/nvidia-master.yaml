@@ -11536,7 +11536,7 @@ glm5-fp8-gb300-dynamo-sglang:
 
 glm5-fp8-gb300-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
-  model: zai-org/GLM-5-FP8
+  model: zai-org/GLM-5.1-FP8
   model-prefix: glm5
   runner: gb300-nv
   precision: fp8

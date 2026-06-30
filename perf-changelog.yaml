@@ -4194,7 +4194,7 @@
 - config-keys:
     - glm5-fp8-gb300-dynamo-sglang-mtp
   description:
-    - "Add GLM-5-FP8 GB300 multinode dynamo-sglang benchmark with EAGLE MTP speculative decoding"
+    - "Add GLM-5.1-FP8 GB300 multinode dynamo-sglang benchmark with EAGLE MTP speculative decoding"
     - "Image: lmsysorg/sglang:v0.5.11-cu130"
     - "14 topologies across 1k/1k and 8k/1k (prefill TP4 + decode wide-EP DEP16/24/32/40/48/56 high-throughput and per-node TP4 low-latency); MTP flags: speculative-algorithm EAGLE, num-steps 2, eagle-topk 1, num-draft-tokens 3"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1907
