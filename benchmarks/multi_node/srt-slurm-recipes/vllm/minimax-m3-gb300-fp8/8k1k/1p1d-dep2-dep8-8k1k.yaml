@@ -15,7 +15,7 @@ dynamo:
   version: 1.3.0.dev20260614
 
 health_check:
-  max_attempts: 720
+  max_attempts: 840
   interval_seconds: 10
 
 sbatch_directives:
