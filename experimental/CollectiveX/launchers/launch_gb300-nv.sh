@@ -62,6 +62,20 @@ MA="$(scontrol show hostnames "$(squeue -j "$JOB_ID" -h -o %N)" | head -1)"; MP=
 mkdir -p "$MOUNT_SRC/experimental/CollectiveX/results"
 WRAP='export RANK=$SLURM_PROCID WORLD_SIZE=$SLURM_NTASKS LOCAL_RANK=$SLURM_LOCALID; exec python3 tests/run_ep.py "$@"'
 
+# From-source kernels (DeepEP V2 / flashinfer quant-combine) cannot be built in the per-rank multi-srun
+# (8 separate ephemeral containers). Build them ONCE PER NODE into a PERSISTENT named container, then
+# every case-srun REUSES it (--container-name, no re-import) so the build is visible to all 8 ranks.
+# Brings the EP8 rack path to parity with EP4 (run_in_container builds once + reuses). Mounts re-apply
+# per srun-step (not persisted in the container fs), so each srun still passes "${CMOUNT[@]}".
+CNAME="cxep8_${JOB_ID}"
+CMOUNT=(--container-mounts="$MOUNT_SRC:/ix" --no-container-mount-home
+        --container-workdir=/ix/experimental/CollectiveX --no-container-entrypoint)
+cx_log "EP8 setup: build into named container $CNAME per node (deepep_v2=${CX_DEEPEP_V2:-} combine=${CX_COMBINE_DTYPE:-bf16})"
+srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 \
+  --container-name="$CNAME" --container-image="$SQUASH_FILE" "${CMOUNT[@]}" --export=ALL,CX_BUILD_ONLY=1 \
+  bash /ix/experimental/CollectiveX/runtime/run_in_container.sh </dev/null 2>&1 | tail -15 \
+  || cx_log "WARN: EP8 build-only step returned nonzero (see above)"
+
 # The EP8 case list as TAB-separated arg-lines. SWEEP (CX_SHARD_FILE set): one line per shard case,
 # so the rack-scale EP8 path sweeps EVERY case of its shard (parity with run_in_container's single-
 # node SHARD loop) instead of the old single CX_* config. MANUAL (no shard file): one line per phase
@@ -108,11 +122,10 @@ while IFS='|' read -r ph dtype mode contract routing eplb rmode act placement rs
   [ -n "$ph" ] || continue
   ci=$((ci+1))
   out="results/${RUNNER}_${CX_BENCH}_${ph}_${TS}-c$(printf '%03d' "$ci")_${dtype}_${mode}.json"
-  cx_log "EP8[$ci] $ph $CX_BENCH $dtype/$mode/$contract routing=$routing eplb=${eplb:-} rmode=$rmode act=$act plc=$placement"
+  cx_log "EP8[$ci] $ph $CX_BENCH $dtype/$mode/$contract rt=$routing eplb=${eplb:-} combine=${CX_COMBINE_DTYPE:-bf16}/${CX_COMBINE_QUANT_MODE:-none}"
   # shellcheck disable=SC2086
   timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks="$NGPUS" \
-    --ntasks-per-node="$GPN" --container-image="$SQUASH_FILE" --container-mounts="$MOUNT_SRC:/ix" \
-    --no-container-mount-home --container-workdir=/ix/experimental/CollectiveX --no-container-entrypoint \
+    --ntasks-per-node="$GPN" --container-name="$CNAME" "${CMOUNT[@]}" \
     --export=ALL,MASTER_ADDR="$MA",MASTER_PORT="$MP",NCCL_MNNVL_ENABLE=1,NCCL_CUMEM_ENABLE=1 \
     bash -c "$WRAP" _ --backend "$CX_BENCH" --phase "$ph" --dispatch-dtype "$dtype" \
       --mode "$mode" --measurement-contract "$contract" \
@@ -121,7 +134,9 @@ while IFS='|' read -r ph dtype mode contract routing eplb rmode act placement rs
       --tokens-ladder "$lad" --hidden "$hidden" --topk "$topk" \
       --experts "$experts" --warmup "${CX_WARMUP:-32}" --iters "${CX_ITERS:-200}" \
       --trials "${CX_TRIALS:-3}" --seed "${CX_SEED:-67}" --runner "$RUNNER" --topology-class "$CX_TOPO" \
-      --transport "$CX_TRANSPORT" --out "$out" </dev/null 2>&1 | tail -8
+      --transport "$CX_TRANSPORT" \
+      ${CX_COMBINE_DTYPE:+--combine-dtype "$CX_COMBINE_DTYPE"} ${CX_COMBINE_QUANT_MODE:+--combine-quant-mode "$CX_COMBINE_QUANT_MODE"} \
+      --out "$out" </dev/null 2>&1 | tail -8
   cx_log "EP8[$ci] $ph rc=${PIPESTATUS[0]}"
 done < <(cx_ep8_cases)
 cx_collect_results "$MOUNT_SRC" "$REPO_ROOT"

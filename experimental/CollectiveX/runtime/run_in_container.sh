@@ -608,6 +608,17 @@ dispatch_bench() {
 }
 
 rc=0
+# Build-only mode: the rack EP8 launcher runs this ONCE per node inside a PERSISTENT named container
+# to pre-build the from-source kernels (DeepEP V2 / flashinfer quant-combine) that the per-rank
+# multi-srun case loop cannot build itself (8 separate ephemeral containers). Build the requested
+# kernels into this (named, persisting) container's site-packages, then exit — no benchmark run.
+if [ -n "${CX_BUILD_ONLY:-}" ]; then
+  [ -n "${CX_DEEPEP_V2:-}" ] && { cx_build_deepep_v2 || rc=1; }
+  [ "${CX_BENCH:-}" = "deepep-hybrid" ] && { cx_build_deepep_hybrid || rc=1; }
+  [ -n "${CX_COMBINE_DTYPE:-}" ] && [ "${CX_COMBINE_DTYPE}" != "bf16" ] && { cx_build_flashinfer_latest || rc=1; }
+  cx_log "CX_BUILD_ONLY: build complete rc=$rc (deepep_v2=${CX_DEEPEP_V2:-} bench=${CX_BENCH:-} combine=${CX_COMBINE_DTYPE:-})"
+  exit "$rc"
+fi
 if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-/nonexistent}" ]; then
   # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
   # All cases share (sku, backend, mode, resource) so the backend build (cx_build_*) is paid once and
