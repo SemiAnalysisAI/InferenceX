@@ -128,6 +128,7 @@ PYTHONNOUSERSITE=1 sglang serve \
     --model-path $MODEL_PATH --served-model-name $MODEL \
     --host 0.0.0.0 \
     --port $PORT \
+    --enable-metrics \
     --trust-remote-code \
     --tp $TP \
     --ep-size $EP_SIZE \
