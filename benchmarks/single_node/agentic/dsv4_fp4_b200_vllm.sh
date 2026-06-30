@@ -90,41 +90,6 @@ SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
-stop_child_service() {
-    local pid="$1"
-    local name="$2"
-
-    if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
-        return
-    fi
-
-    echo "Stopping $name (PID=$pid)..."
-    kill "$pid" 2>/dev/null || true
-    for _ in {1..30}; do
-        if ! kill -0 "$pid" 2>/dev/null; then
-            wait "$pid" 2>/dev/null || true
-            return
-        fi
-        sleep 1
-    done
-
-    echo "$name did not exit after TERM; sending KILL (PID=$pid)..." >&2
-    kill -KILL "$pid" 2>/dev/null || true
-    wait "$pid" 2>/dev/null || true
-}
-
-cleanup_child_services() {
-    local exit_code=$?
-    trap - EXIT INT TERM
-    set +e
-    stop_child_service "$ROUTER_PID" "vLLM router"
-    stop_child_service "$SERVER_PID" "vLLM server"
-    stop_child_service "$MOONCAKE_MASTER_PID" "Mooncake master"
-    exit "$exit_code"
-}
-
-trap cleanup_child_services EXIT INT TERM
-
 OFFLOAD_ARGS=()
 
 if require_agentic_kv_offload_backend mooncake; then
