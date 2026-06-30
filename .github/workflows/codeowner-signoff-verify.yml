@@ -18,6 +18,8 @@ name: CODEOWNER Sign-off Verify
 #   3. The single-node recipe(s) are linked in the sign-off AND the linked
 #      recipe PR/commit contains all of the reproduction information that is in
 #      this InferenceX PR.
+#   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
+#      command on the PR (the reuse-merge path requires it).
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
@@ -365,8 +367,30 @@ jobs:
             - Note: a bare "recipes are already similar to the official ones" claim WITHOUT a
               link does not pass this workflow's standard — a link is required.
 
+            ## Check 4 — Reuse-sweep command explicitly posted
+            The supported merge path for an approved PR is reuse (`utils/merge_with_reuse.sh`),
+            which can only find a run to reuse if an authorized maintainer has explicitly posted
+            the `/reuse-sweep-run` command as a PR comment. A green sweep alone is NOT enough — the
+            reuse command must be on record so the merge actually consumes that sweep rather than
+            silently re-running it. Verify it directly from the PR's comments:
+            - List the PR's conversation comments and look for the reuse command at the start of a
+              comment line (it may be bare `/reuse-sweep-run` or pin a run id,
+              `/reuse-sweep-run <run_id>`):
+              ```bash
+              gh api repos/${{ github.repository }}/issues/${{ needs.gate.outputs.pr-number }}/comments \
+                --paginate --jq '.[] | {user: .user.login, association: .author_association, body: .body}'
+              ```
+            - PASS only if at least one such `/reuse-sweep-run` comment exists AND its author is
+              authorized — `author_association` is `OWNER`, `MEMBER`, or `COLLABORATOR` (the same
+              authorization the reuse path itself enforces). A `/reuse-sweep-run` from an
+              unauthorized author does not count.
+            - FAIL if no `/reuse-sweep-run` comment is present, or the only such comment is from an
+              unauthorized author. State the root issue plainly: "No authorized `/reuse-sweep-run`
+              command has been posted on this PR" and remind the reviewer that an authorized
+              maintainer must comment `/reuse-sweep-run` before this PR can be merged via reuse.
+
             ## Verdict and output
-            Decide PASS only if Checks 0, 1, 2, and 3 ALL pass. Post EXACTLY ONE summary comment on
+            Decide PASS only if Checks 0, 1, 2, 3, and 4 ALL pass. Post EXACTLY ONE summary comment on
             PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
             the hidden marker so reruns are identifiable:
             `<!-- codeowner-signoff-verify sha=${{ needs.gate.outputs.head-sha }} -->`
@@ -385,7 +409,7 @@ jobs:
               restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
               run/recipe instead of describing it.
 
-            - If everything is to standard: post the verdict line + the four one-line PASS rows
+            - If everything is to standard: post the verdict line + the five one-line PASS rows
               (with the green run URL). Do NOT @-mention anyone on a pass.
             - If anything is NOT to standard: the FIRST line (after the marker) must @-mention the
               sign-off author as `@${{ needs.gate.outputs.signoff-author }}` with the blocking
