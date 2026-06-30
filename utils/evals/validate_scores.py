@@ -36,8 +36,11 @@ import argparse
 import glob
 import json
 import os
+import re
 import sys
 from pathlib import Path
+
+CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
 
 
 def load_config(path: str) -> dict:
@@ -85,7 +88,122 @@ def resolve_threshold(config: dict, prefix: str | None, task: str, fallback: flo
     return fallback, "min-score"
 
 
+def validate_batch_manifest(
+    meta_env_path: str,
+    result_files: list[str],
+    expected_concs: list[int] | None = None,
+) -> list[str]:
+    """Validate that a batched eval produced every requested concurrency."""
+    try:
+        with open(meta_env_path) as f:
+            meta = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        if expected_concs is not None or any(
+            CONC_SUFFIX_RE.search(Path(result_file).name)
+            for result_file in result_files
+        ):
+            return [
+                "batched eval result files exist but "
+                f"{meta_env_path} is unavailable or invalid: {exc}"
+            ]
+        return []
+
+    if expected_concs is not None and "eval_concs" not in meta:
+        if len(expected_concs) > 1:
+            return ["workflow requested multiple concurrencies but batched eval metadata is missing"]
+        errors = []
+        if meta.get("conc") != expected_concs[0]:
+            errors.append("eval metadata concurrency does not match workflow request")
+        if len(result_files) != 1:
+            errors.append("eval must produce exactly one result file")
+        return errors
+    if "eval_concs" not in meta:
+        return []
+
+    metadata_expected = meta.get("eval_concs")
+    completed = meta.get("completed_eval_concs")
+    failed = meta.get("failed_eval_concs")
+    if not all(
+        isinstance(values, list)
+        for values in (metadata_expected, completed, failed)
+    ):
+        return ["batched eval metadata must contain list-valued concurrency fields"]
+    if not all(
+        isinstance(value, int) and value > 0
+        for values in (metadata_expected, completed, failed)
+        for value in values
+    ):
+        return ["batched eval metadata contains an invalid concurrency"]
+
+    errors = []
+    metadata_expected_set = set(metadata_expected)
+    expected_set = set(expected_concs or metadata_expected)
+    completed_set = set(completed)
+    failed_set = set(failed)
+    if len(metadata_expected_set) != len(metadata_expected):
+        errors.append("batched eval metadata contains duplicate expected concurrencies")
+    if len(completed_set) != len(completed):
+        errors.append("batched eval metadata contains duplicate completed concurrencies")
+    if expected_concs is not None and metadata_expected_set != expected_set:
+        errors.append("batched eval metadata does not match workflow concurrencies")
+    if failed_set:
+        errors.append(
+            "batched eval failed for concurrency: "
+            + ", ".join(str(value) for value in sorted(failed_set))
+        )
+    if completed_set != expected_set:
+        missing = sorted(expected_set - completed_set)
+        unexpected = sorted(completed_set - expected_set)
+        if missing:
+            errors.append(
+                "batched eval is missing completed concurrency: "
+                + ", ".join(str(value) for value in missing)
+            )
+        if unexpected:
+            errors.append(
+                "batched eval completed unexpected concurrency: "
+                + ", ".join(str(value) for value in unexpected)
+            )
+
+    actual_concs = set()
+    for result_file in result_files:
+        match = CONC_SUFFIX_RE.search(Path(result_file).name)
+        if match is None:
+            errors.append(
+                f"batched eval result lacks a concurrency suffix: {result_file}"
+            )
+            continue
+        actual_concs.add(int(match.group(1)))
+
+    missing_results = sorted(expected_set - actual_concs)
+    unexpected_results = sorted(actual_concs - expected_set)
+    if missing_results:
+        errors.append(
+            "batched eval is missing result files for concurrency: "
+            + ", ".join(str(value) for value in missing_results)
+        )
+    if unexpected_results:
+        errors.append(
+            "batched eval has unexpected result files for concurrency: "
+            + ", ".join(str(value) for value in unexpected_results)
+        )
+    return errors
+
+
 def main() -> int:
+    # CI merges this script's stdout and stderr into a single log.  When stdout
+    # is a pipe it is block-buffered by default and only flushes at exit, which
+    # pushes the informational header (e.g. "Loaded thresholds...") below the
+    # unbuffered stderr FAIL lines.  Force line buffering on both streams so
+    # every line reaches the log in emission order.
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            _stream.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError):
+            # Best-effort only: some wrapped streams (e.g. pytest's capture
+            # object) don't support reconfigure; leave their buffering as-is.
+            pass
+
     parser = argparse.ArgumentParser(description="Validate eval scores")
     parser.add_argument(
         "--min-score", type=float, default=0.85,
@@ -111,7 +229,26 @@ def main() -> int:
         "--results-glob", default="results*.json",
         help="Glob pattern for result files (default: 'results*.json')",
     )
+    parser.add_argument(
+        "--expected-concs",
+        default=None,
+        help="Space-separated concurrencies requested by the workflow",
+    )
     args = parser.parse_args()
+
+    expected_concs = None
+    if args.expected_concs is not None:
+        try:
+            expected_concs = [int(value) for value in args.expected_concs.split()]
+        except ValueError:
+            expected_concs = []
+        if (
+            not expected_concs
+            or any(value <= 0 for value in expected_concs)
+            or len(set(expected_concs)) != len(expected_concs)
+        ):
+            print("FAIL: expected concurrencies must be unique positive integers", file=sys.stderr)
+            return 1
 
     # Load thresholds config
     config = {"default": {}, "models": {}}
@@ -138,8 +275,31 @@ def main() -> int:
 
     failed = False
     checked = 0
+    result_files = sorted(glob.glob(args.results_glob))
 
-    for f in sorted(glob.glob(args.results_glob)):
+    manifest_errors = validate_batch_manifest(
+        args.meta_env,
+        result_files,
+        expected_concs,
+    )
+    for error in manifest_errors:
+        print(f"FAIL: {error}", file=sys.stderr)
+        failed = True
+    if not manifest_errors:
+        try:
+            with open(args.meta_env) as f:
+                if "eval_concs" in json.load(f):
+                    print("PASS: batched eval produced every requested concurrency")
+        except (json.JSONDecodeError, OSError) as exc:
+            print(
+                "WARN: could not inspect eval metadata for batched concurrency "
+                f"status: {exc}",
+                file=sys.stderr,
+            )
+
+    for f in result_files:
+        match = CONC_SUFFIX_RE.search(Path(f).name)
+        conc_label = f"[conc={match.group(1)}] " if match else ""
         with open(f) as fh:
             data = json.load(fh)
         for task, metrics in data.get("results", {}).items():
@@ -152,12 +312,14 @@ def main() -> int:
                 checked += 1
                 if val < min_score:
                     print(
-                        f"FAIL: {task} {name} = {val:.4f} (< {min_score} from {source})",
+                        f"FAIL: {conc_label}{task} {name} = {val:.4f} (< {min_score} from {source})",
                         file=sys.stderr,
                     )
                     failed = True
                 else:
-                    print(f"PASS: {task} {name} = {val:.4f} (>= {min_score} from {source})")
+                    print(
+                        f"PASS: {conc_label}{task} {name} = {val:.4f} (>= {min_score} from {source})"
+                    )
 
     if checked == 0:
         print("WARN: no metrics matched prefix '{}'".format(args.metric_prefix), file=sys.stderr)
