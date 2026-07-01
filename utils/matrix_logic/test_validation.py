@@ -14,6 +14,7 @@ from validation import (
     MultiNodeSeqLenConfig,
     SingleNodeMasterConfigEntry,
     MultiNodeMasterConfigEntry,
+    ChangelogEntry,
     validate_matrix_entry,
     validate_master_config,
     validate_runner_config,
@@ -474,6 +475,16 @@ class TestMultiNodeMatrixEntry:
         assert entry.decode.tp == 8
         assert entry.decode.dp_attn is True
 
+    def test_all_eval_concurrency_batch_marker(
+        self,
+        valid_multinode_matrix_entry,
+    ):
+        valid_multinode_matrix_entry["eval-all-concs"] = True
+
+        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+        assert entry.eval_all_concs is True
+
     def test_conc_must_be_list(self, valid_multinode_matrix_entry):
         """Conc must be a list for multinode."""
         valid_multinode_matrix_entry["conc"] = 2150  # Single int, not list
@@ -579,6 +590,20 @@ class TestSingleNodeSearchSpaceEntry:
                 "conc-end": 4,
             })
         assert "must be <=" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        ("conc_start", "conc_end"),
+        [(0, 4), (-1, 4), (1, 0)],
+    )
+    def test_conc_range_values_must_be_positive(self, conc_start, conc_end):
+        with pytest.raises(Exception) as exc_info:
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 4,
+                "conc-start": conc_start,
+                "conc-end": conc_end,
+            })
+
+        assert "must be greater than 0" in str(exc_info.value)
 
     def test_conc_list_values_must_be_positive(self):
         """conc-list values must be > 0."""
@@ -996,6 +1021,47 @@ class TestValidateRunnerConfig:
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
         assert "gpus-per-node" in str(exc_info.value)
+
+
+# =============================================================================
+# Test changelog entry validation
+# =============================================================================
+
+class TestChangelogEntry:
+    """Tests for changelog eval mode validation."""
+
+    def test_all_evals_is_supported(self):
+        entry = ChangelogEntry.model_validate({
+            "config-keys": ["test-config"],
+            "description": ["Run every eval config"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+            "all-evals": True,
+        })
+
+        assert entry.all_evals is True
+        assert entry.evals_only is False
+
+    def test_all_evals_can_extend_evals_only(self):
+        entry = ChangelogEntry.model_validate({
+            "config-keys": ["test-config"],
+            "description": ["Run the expanded eval-only matrix"],
+            "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+            "evals-only": True,
+            "all-evals": True,
+        })
+
+        assert entry.evals_only is True
+        assert entry.all_evals is True
+
+    @pytest.mark.parametrize("scenario_type", [[], ["unsupported"]])
+    def test_scenario_type_must_be_nonempty_and_supported(self, scenario_type):
+        with pytest.raises(ValueError):
+            ChangelogEntry.model_validate({
+                "config-keys": ["test-config"],
+                "description": ["Invalid scenario filter"],
+                "pr-link": "https://github.com/SemiAnalysisAI/InferenceX/pull/1",
+                "scenario-type": scenario_type,
+            })
 
 
 # =============================================================================

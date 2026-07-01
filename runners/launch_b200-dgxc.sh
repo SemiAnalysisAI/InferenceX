@@ -68,6 +68,10 @@ elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
     export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
     export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
+elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
+    # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
+    export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
+    export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
 else
     echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
     echo "Available models under /lustre/fsw/models:"

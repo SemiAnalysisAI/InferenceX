@@ -36,6 +36,7 @@ The `full-sweep` command generates benchmark configurations with optional filter
 usage: generate_sweep_configs.py full-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     [--model-prefix MODEL_PREFIX [MODEL_PREFIX ...]]
     [--precision PRECISION [PRECISION ...]]
     [--framework FRAMEWORK [FRAMEWORK ...]]
@@ -49,6 +50,10 @@ usage: generate_sweep_configs.py full-sweep
 ```
 
 If neither `--single-node` nor `--multi-node` is specified, both types are generated.
+
+By default, throughput runs for every generated config and eval-only jobs run for the selected 8k1k subset. `--no-evals` disables eval jobs, `--evals-only` emits only that selected subset, and adding `--all-evals` expands it to every fixed-sequence config. `--all-evals` alone is an equivalent eval-only shorthand; it cannot be combined with `--no-evals`.
+
+`--step-size` must be greater than 1 and applies to concurrency ranges. Explicit `conc-list` values are emitted directly and are filtered by `--min-conc` / `--max-conc` when provided; when both bounds are set, `--min-conc` must not exceed `--max-conc`.
 
 ### Examples
 
@@ -100,6 +105,7 @@ The `runner-model-sweep` command validates that all runner nodes of a specific t
 usage: generate_sweep_configs.py runner-model-sweep
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     --runner-type RUNNER_TYPE
     [--runner-node-filter RUNNER_NODE_FILTER]
     [--single-node] [--multi-node]
@@ -140,6 +146,7 @@ The `test-config` command generates the full sweep for one or more specific conf
 usage: generate_sweep_configs.py test-config
     --config-files CONFIG_FILES [CONFIG_FILES ...]
     [--runner-config RUNNER_CONFIG]
+    [--no-evals | --evals-only] [--all-evals]
     --config-keys CONFIG_KEYS [CONFIG_KEYS ...]
     [--conc CONC [CONC ...]]
 ```
@@ -183,54 +190,59 @@ test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/co
 test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
 ```
 
+**Run eval-only jobs for every generated fixed-sequence config:**
+```
+test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files .github/configs/nvidia-master.yaml
+```
+
+## PR Eval Modifiers
+
+Use `all-evals` and/or `evals-only` with one primary sweep label. `all-evals`
+covers every fixed-sequence config; each multi-node topology runs all
+`conc-list` values on one engine. `evals-only` suppresses throughput; together
+they run all evals only. The primary label still controls canary/fail-fast.
+`all-evals` full sweeps are reusable. Runs with `evals-only`, including runs
+with both modifiers, are not. Default full sweeps, including default evals,
+are also reusable.
+
 ## Reusing an Approved PR Full Sweep
 
-If a PR has already run the full untrimmed sweep (`full-sweep-enabled` with a
-sequential canary, `non-canary-full-sweep-enabled` without one, or a
-fail-fast variant — `full-sweep-fail-fast` / `full-sweep-fail-fast-no-canary`), a
-maintainer can avoid running the same sweep again after merge by leaving a PR
-comment before merging:
+`[skip-sweep]` skips PR benchmark setup only; changelog and reuse checks still
+run. Pushes to `main` ignore it.
+
+After an eligible full sweep (`full-sweep-enabled`,
+`non-canary-full-sweep-enabled`, or either fail-fast variant), an authorized
+maintainer can comment:
 
 ```
 /reuse-sweep-run
 ```
 
-That reuses the latest successful `run-sweep.yml` `pull_request` run whose
-commit is still part of the PR. To select a particular eligible successful
-or failed run, pin the source run explicitly:
+This selects the latest successful `run-sweep.yml` PR run whose commit remains
+in the PR. A run ID can pin an eligible successful or failed run:
 
 ```
 /reuse-sweep-run <run_id>
 ```
 
-Only an explicitly pinned run may have a `failure` conclusion. An unpinned
-command always selects the latest successful eligible run. Pinned failed runs
-must still contain complete artifacts for the merge run's expected matrix.
+Failed-run artifacts must still validate. The latest matching comment by an
+`OWNER`, `MEMBER`, or `COLLABORATOR` wins. Comments do not trigger or cancel
+sweeps; later commits skip a new sweep after changelog/matrix validation.
+Remove and re-add the sweep label to force one.
 
-The comment is the reuse authorization, so adding it does not trigger or cancel
-a PR sweep. Once the comment is present, later commits pushed to a PR with a
-full-sweep label do not start another benchmark sweep. GitHub still creates a
-lightweight `pull_request` workflow run so it can inspect the PR comments, but
-the sweep setup and benchmark jobs are skipped. Removing and re-adding a sweep
-label explicitly starts a new sweep.
+`utils/merge_with_reuse.sh <pr-number>` is the supported merge path for reuse.
+It merges `main`, preserves changelog bytes, fixes an appended `XXX` PR link,
+pushes a synchronization commit, waits for checks, then merges.
 
-On the push-to-main run, `run-sweep.yml` resolves the merged PR from the merge
-commit, verifies the source run is an eligible `pull_request` `run-sweep.yml`
-run for the same PR, downloads the ingest-relevant artifacts, validates that
-`results_bmk` covers the merge run's expected benchmark matrix, and uploads
-them as `reused-ingest-artifacts`. The normal database ingest then publishes
-those artifacts with the merge run's changelog metadata.
+The main run verifies the source, validates and uploads its ingest artifacts,
+then ingests them with merge-run changelog metadata. Source coverage is
+authoritative, so later matrix/eval policy changes do not invalidate reuse.
+Validation rejects duplicate fixed rows, missing run stats, inconsistent
+agentic artifacts, malformed eval metadata, and raw/aggregate eval mismatches.
+Batched evals use only `completed_eval_concs`.
 
-Only comments from `OWNER`, `MEMBER`, or `COLLABORATOR` users authorize reuse.
-The most recent matching comment wins, so a maintainer can supersede an earlier
-pin by leaving a new `/reuse-sweep-run [<run_id>]` comment.
-
-Reuse fails closed: if the comment is present but no full-sweep label
-(`full-sweep-enabled`, `non-canary-full-sweep-enabled`,
-`full-sweep-fail-fast`, or `full-sweep-fail-fast-no-canary`) is present, or if
-the source PR run or artifacts cannot be validated, the push-to-main workflow
-fails instead of falling back to a cluster sweep. Without the comment, the
-push-to-main workflow runs the normal full sweep.
+Reuse fails closed when authorized but ineligible or invalid; without
+authorization, `main` runs the normal full sweep.
 
 ## Validation Architecture
 
