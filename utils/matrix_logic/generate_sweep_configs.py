@@ -23,9 +23,11 @@ seq_len_stoi = {
 }
 
 MIN_EVAL_CONC = 16
+# Bound how many multinode agentic conc points share one server allocation.
 MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
+# 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
 MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 # Reverse mapping for exp-name generation
