@@ -14,7 +14,7 @@ set -x
 # NOTE: per-node /raid/models/* would be faster but is only populated on a
 # subset of dgxc nodes today, so we use Lustre for reliability.
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/DeepSeek-R1-0528-NVFP4"
+    export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
     export SRT_SLURM_MODEL_PREFIX="dsr1"
 elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
     export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
