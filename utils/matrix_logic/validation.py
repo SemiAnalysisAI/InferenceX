@@ -6,6 +6,7 @@ import pprint
 import yaml
 
 CLUSTER_LABEL_PREFIX = "cluster:"
+DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -170,7 +171,7 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
-    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
 
@@ -196,7 +197,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     decode: WorkerConfig
     conc: list[int]
     kv_offloading: Literal["none"] = Field(alias=Fields.KV_OFFLOADING.value)
-    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -394,7 +395,6 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     kv_offload_backend: Optional[str] = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
-    total_cpu_dram_gb: int = Field(default=0, alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
     conc_list: Optional[List[int]] = Field(default=None, alias=Fields.CONC_LIST.value)
@@ -433,17 +433,15 @@ class AgenticCodingConfig(BaseModel):
     dram_utilization: Optional[float] = Field(
         default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
     )
-    duration: int = Field(default=1800, alias=Fields.DURATION.value)
 
     @model_validator(mode='after')
     def validate_dram_offload_capacity(self):
         for entry in self.search_space:
             if entry.kv_offloading != "dram":
                 continue
-            if entry.total_cpu_dram_gb <= 0 and self.dram_utilization is None:
+            if self.dram_utilization is None:
                 raise ValueError(
                     f"{Fields.KV_OFFLOADING.value}='dram' requires "
-                    f"{Fields.TOTAL_CPU_DRAM_GB.value} or scenario-level "
                     f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
                 )
         return self

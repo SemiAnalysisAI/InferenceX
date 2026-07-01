@@ -340,7 +340,7 @@ class TestAgenticMatrixEntries:
             "kv-offloading": "dram",
             "kv-offload-backend": "future-backend",
             "total-cpu-dram-gb": 2949,
-            "duration": 1800,
+            "duration": 3600,
             "exp-name": "dsv4_tp8_conc1_kvdram-future-backend",
             "scenario-type": "agentic-coding",
         })
@@ -352,7 +352,6 @@ class TestAgenticMatrixEntries:
             "tp": 8,
             "kv-offloading": "dram",
             "kv-offload-backend": "future-backend",
-            "total-cpu-dram-gb": 1000,
             "conc-list": [1, 2],
         })
         assert entry.kv_offloading == "dram"
@@ -372,7 +371,6 @@ class TestAgenticMatrixEntries:
             AgenticCodingSearchSpaceEntry(**{
                 "tp": 8,
                 "kv-offloading": "dram",
-                "total-cpu-dram-gb": 1000,
                 "conc-list": [1, 2],
             })
 
@@ -383,8 +381,8 @@ class TestAgenticMatrixEntries:
                 "conc-list": [1, 2],
             })
 
-    def test_dram_kv_offload_requires_explicit_capacity(self):
-        with pytest.raises(Exception, match="total-cpu-dram-gb"):
+    def test_dram_kv_offload_requires_dram_utilization(self):
+        with pytest.raises(Exception, match="dram-utilization"):
             AgenticCodingConfig(**{
                 "search-space": [{
                     "tp": 4,
@@ -392,6 +390,16 @@ class TestAgenticMatrixEntries:
                     "kv-offload-backend": "native",
                     "conc-list": [16],
                 }],
+            })
+
+    def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
+        with pytest.raises(Exception, match="total-cpu-dram-gb"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "dram",
+                "kv-offload-backend": "native",
+                "total-cpu-dram-gb": 1000,
+                "conc-list": [1, 2],
             })
 
     def test_dram_kv_offload_accepts_scaled_capacity(self):
@@ -428,6 +436,17 @@ class TestAgenticMatrixEntries:
                     "tp": 4,
                     "kv-offloading": "dram",
                     "kv-offload-backend": "native",
+                    "conc-list": [16],
+                }],
+            })
+
+    def test_duration_is_not_a_master_config_field(self):
+        with pytest.raises(Exception, match="duration"):
+            AgenticCodingConfig(**{
+                "duration": 1800,
+                "search-space": [{
+                    "tp": 8,
+                    "kv-offloading": "none",
                     "conc-list": [16],
                 }],
             })
@@ -804,7 +823,6 @@ class TestMasterConfigEntries:
             "scenarios": {
                 "agentic-coding": [
                     {
-                        "duration": 1800,
                         "search-space": [
                             {"tp": 8, "conc-list": [1], "kv-offloading": "none"}
                         ],
@@ -833,7 +851,6 @@ class TestMasterConfigEntries:
             "scenarios": {
                 "agentic-coding": [
                     {
-                        "duration": 300,
                         "search-space": [
                             {
                                 "spec-decoding": "none",

@@ -56,6 +56,10 @@ The below list describes what each field is:
     - `trace-source`: Identifier for the trace dataset to use.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries.
 
+Agentic duration is not a master YAML field. Matrix generation defaults agentic
+jobs to 3600 seconds; reusable workflow callers may override the `duration`
+input.
+
 Notes:
 - No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
 - Setting the fields above, particularly `ep` and `dp-attn`, only guarantee that the respective values will be passed as environment variables to the benchmark scripts! Actually using those environment variables is an implementation detail at the level of the benchmark Bash script.

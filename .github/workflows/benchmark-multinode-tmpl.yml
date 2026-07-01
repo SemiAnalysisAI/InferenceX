@@ -106,7 +106,7 @@ on:
         description: "Agentic trace replay duration in seconds"
         type: string
         required: false
-        default: "1800"
+        default: "3600"
       kv-offloading:
         description: "KV offload mode for agentic scenarios (none/dram)"
         required: false

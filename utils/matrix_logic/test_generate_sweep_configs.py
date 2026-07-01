@@ -1641,19 +1641,18 @@ class TestGenerateTestConfigSweep:
                 "model-prefix": "qwen3.5",
                 "precision": "fp8",
                 "framework": "sglang",
-                "runner": "mi300x",
+                "runner": "cluster:b300-nv",
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [
                         {
-                            "duration": 1800,
+                            "dram-utilization": 0.80,
                             "search-space": [
                                 {
                                     "tp": 8,
                                     "ep": 1,
                                     "kv-offloading": "dram",
                                     "kv-offload-backend": "hicache",
-                                    "total-cpu-dram-gb": 1814,
                                     "conc-list": [64],
                                 }
                             ],
@@ -1667,15 +1666,16 @@ class TestGenerateTestConfigSweep:
             seq_lens=None,
             conc=None,
             scenario_type=["agentic-coding"],
-            runner_node_filter="mi300x-amd_1",
+            runner_node_filter="b300-nv_1",
         )
 
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
         assert len(result) == 1
-        assert result[0]["runner"] == "mi300x-amd_1"
+        assert result[0]["runner"] == "b300-nv_1"
         assert result[0]["scenario-type"] == "agentic-coding"
-        assert result[0]["total-cpu-dram-gb"] == 1814
+        assert result[0]["total-cpu-dram-gb"] == 2399
+        assert result[0]["duration"] == 3600
 
     def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
         config = {
@@ -1689,7 +1689,6 @@ class TestGenerateTestConfigSweep:
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [{
-                        "duration": 1800,
                         "dram-utilization": 0.80,
                         "search-space": [
                             {
@@ -1715,6 +1714,7 @@ class TestGenerateTestConfigSweep:
 
         budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
         assert budgets == {4: 1199}
+        assert result[0]["duration"] == 3600
 
     def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
         config = {
@@ -1728,7 +1728,6 @@ class TestGenerateTestConfigSweep:
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [{
-                        "duration": 1800,
                         "dram-utilization": 0.80,
                         "search-space": [
                             {
@@ -1770,7 +1769,6 @@ class TestGenerateTestConfigSweep:
                 "scenarios": {
                     "agentic-coding": [
                         {
-                            "duration": 1800,
                             "search-space": [
                                 {
                                     "conc-list": [16, 32, 64, 128, 256],

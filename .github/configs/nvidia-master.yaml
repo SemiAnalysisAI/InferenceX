@@ -11912,8 +11912,7 @@ dsv4-fp4-b200-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      dram-utilization: 0.80
+    - dram-utilization: 0.80
       search-space:
       # Pure TP is only competitive at very low concurrency.
       - { tp: 8, kv-offloading: none,  conc-list: [1, 2, 3, 4, 5] }
@@ -11934,8 +11933,7 @@ qwen3.5-fp8-b200-sglang-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
+    - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 kimik2.5-int4-b200-vllm-agentic:
@@ -11948,10 +11946,10 @@ kimik2.5-int4-b200-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, total-cpu-dram-gb: 2949, conc-list: [32, 64, 96, 128] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 64, 96, 128] }
 
 kimik2.5-int4-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
@@ -11963,10 +11961,10 @@ kimik2.5-int4-h200-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, total-cpu-dram-gb: 1149, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [6, 7, 8, 9, 10, 11, 12, 13, 14] }
 
 kimik2.5-fp4-b300-vllm-agentic:
   # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
@@ -11983,10 +11981,10 @@ kimik2.5-fp4-b300-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: native, total-cpu-dram-gb: 2315, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
 
 dsv4-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
@@ -11998,8 +11996,7 @@ dsv4-fp8-h200-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
+    - search-space:
       - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [1, 2, 4, 8, 16] }
 
 # MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
@@ -12016,8 +12013,7 @@ dsv4-fp4-b300-vllm-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      dram-utilization: 0.80
+    - dram-utilization: 0.80
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
       - { tp: 4, kv-offloading: none,  conc-list: [1, 4, 8, 16] }
@@ -12043,8 +12039,7 @@ minimaxm3-fp8-h100-vllm-agentic:
     # has a 269k-token service-time-weighted active request, placing the H100
     # 1.64M-token HBM cliff near conc 6. Sample every integer through the
     # cliff; Mooncake extends prefix retention, not active-request HBM.
-    - duration: 1800
-      dram-utilization: 0.80
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
@@ -12065,8 +12060,7 @@ minimaxm3-fp8-h200-vllm-agentic:
     # active tokens. Against the June-21 service-time-weighted 269k-token
     # request, the expected HBM cliff is near conc 10; sample densely from
     # 5-14 and retain post-cliff points through 20.
-    - duration: 1800
-      dram-utilization: 0.80
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
@@ -12084,10 +12078,10 @@ kimik2.5-int4-h100-vllm:
     # H100 has 80 GB HBM per GPU (smallest in this set); the KV cliff arrives
     # early. Sweep saturates conc=20 to keep total HBM headroom.
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 20] }
-      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, total-cpu-dram-gb: 1561, conc-list: [1, 2, 4, 8, 12, 16, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 12, 16, 20] }
 
 qwen3.5-fp8-b300-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
@@ -12099,10 +12093,10 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, total-cpu-dram-gb: 1157, conc-list: [16, 32, 48, 64] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
 
 kimik2.5-fp4-b200-vllm-agentic-lmcache:
   image: vllm/vllm-openai:v0.22.0
@@ -12114,12 +12108,12 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, total-cpu-dram-gb: 2949, conc-list: [16, 24, 32, 36] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 24, 32, 36] }
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, total-cpu-dram-gb: 1474, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
 
 dsv4-fp4-gb300-dynamo-vllm-agentic:
   image: vllm/vllm-openai:v0.21.0-ubuntu2404
@@ -12137,8 +12131,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   disagg: true
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
+    - search-space:
       # Low-latency: same 1p6d shape as the mid tier but at much lower conc
       # (32 vs 192). 32/6 ≈ 5 seqs per decode worker — well below saturation,
       # so each request gets ~6× the per-request decode compute it would get
@@ -12205,10 +12198,10 @@ qwen3.5-fp8-h100-sglang-agentic:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, ep: 8, kv-offloading: none,    conc-list: [1, 2, 4, 8, 12, 14, 16] }
-      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: hicache, total-cpu-dram-gb: 1612, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [12, 14, 16, 20, 24, 28, 32, 42] }
 
 
 dsv4-fp4-b200-sglang-agentic-hicache:
@@ -12221,8 +12214,7 @@ dsv4-fp4-b200-sglang-agentic-hicache:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      dram-utilization: 0.80
+    - dram-utilization: 0.80
       search-space:
       - { tp: 8, kv-offloading: none,     conc-list: [1, 2, 3, 4, 5] }
       - { tp: 8, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [8, 10, 16, 32, 40, 44] }
@@ -12242,8 +12234,7 @@ dsv4-fp4-b300-sglang-agentic-hicache:
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      dram-utilization: 0.80
+    - dram-utilization: 0.80
       search-space:
       - { tp: 4, kv-offloading: none, conc-list: [1, 4, 8, 16, 20, 24, 32] }
       - { tp: 8, kv-offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }
@@ -12266,8 +12257,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d-tep8-tp8:
   disagg: true
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
+    - search-space:
       # Ultra-high-interactivity probes below the historical c16 endpoint.
       - spec-decoding: none
         conc-list: [4, 8]
@@ -12327,8 +12317,7 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
   disagg: true
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
+    - search-space:
       - spec-decoding: none
         conc-list: [32, 48, 64, 80]
         prefill:

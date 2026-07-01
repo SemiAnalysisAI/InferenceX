@@ -18,12 +18,14 @@ Agentic scenarios use `kv-offloading` for the resource tier and
 currently either `none` or `dram`; when it is `dram`, the backend must be set:
 
 ```yaml
-- duration: 1800
-  dram-utilization: 0.80
+- dram-utilization: 0.80
   search-space:
   - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 32] }
   - { tp: 8, kv-offloading: none, conc-list: [16, 32] }
 ```
+
+Agentic matrix generation uses a 3600-second default duration. Reusable
+workflow callers can still override the `duration` input explicitly.
 
 Agentic master configs must use an exact `cluster:<name>` runner label so every
 search-space point lands on the same hardware fleet. Machine-level host memory
@@ -43,7 +45,6 @@ hardware metadata and emits the aggregate budget as
 The `2,861,022 MiB` cap is the 3 TB decimal DRAM limit. For example, TP4 in
 an eight-GPU B300 search at 80% utilization receives 1,199 GB while TP8
 receives 2,399 GB.
-Legacy scenarios may continue to specify `total-cpu-dram-gb` per entry.
 
 Benchmark scripts must consume `TOTAL_CPU_DRAM_GB`; they must not replace it
 with model-specific constants. Backends with per-rank or per-pool settings must

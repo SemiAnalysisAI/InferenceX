@@ -13,7 +13,8 @@ from validation import (
     validate_agentic_matrix_entry,
     load_config_files,
     load_runner_file,
-    Fields
+    Fields,
+    DEFAULT_AGENTIC_DURATION_SECONDS,
 )
 
 seq_len_stoi = {
@@ -85,10 +86,6 @@ def agentic_dram_offload_gb(
     kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
     if kv_offloading != "dram":
         return 0
-
-    explicit_total = benchmark.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
-    if explicit_total > 0:
-        return explicit_total
 
     available_mib = min(
         runner_available_cpu_dram_mib(runner, runner_data),
@@ -470,7 +467,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
         for agentic_config in agentic_configs:
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
-            duration = agentic_config.get(Fields.DURATION.value, 1800)
+            duration = DEFAULT_AGENTIC_DURATION_SECONDS
 
             for bmk in bmk_space:
                 if is_multinode:
@@ -906,7 +903,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         # ---- Agentic-coding scenarios ----
         agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
         for agentic_config in agentic_configs:
-            duration = agentic_config.get(Fields.DURATION.value, 1800)
+            duration = DEFAULT_AGENTIC_DURATION_SECONDS
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
 
             for bmk in bmk_space:
