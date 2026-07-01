@@ -2525,7 +2525,7 @@ dsv4-fp4-mi355x-atom-disagg:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2537,19 +2537,14 @@ minimaxm3-fp8-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 8, conc-start: 1, conc-end: 32 }
+      - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
-      - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
+      - { tp: 8, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 2, conc-end: 128 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi355x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
@@ -2562,7 +2557,7 @@ minimaxm3-fp8-mi355x-vllm:
 # acceptance dilutes in big batches, and the draft weights + draft KV shave
 # headroom — tp2-ep2 is dropped since its KV headroom was already thin.
 minimaxm3-fp8-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2574,18 +2569,17 @@ minimaxm3-fp8-mi355x-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 2, spec-decoding: mtp }
+      - { tp: 4, conc-start: 32, conc-end: 64, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 128, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, conc-start: 4, conc-end: 16, spec-decoding: mtp }
+      - { tp: 4, conc-start: 2, conc-end: 128, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 1, spec-decoding: mtp }
 
 # MiniMax-M3 MXFP4 MI355X vLLM disaggregated (prefill/decode) config.
 minimaxm3-fp4-mi355x-vllm-disagg:
@@ -2641,7 +2635,7 @@ minimaxm3-fp4-mi355x-vllm-disagg:
 # language-model path and mirror the MXFP8 MI355X search space for a direct
 # precision comparison.
 minimaxm3-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2701,7 +2695,7 @@ minimaxm3-fp4-mi355x-vllm-mtp:
 # https://github.com/ROCm/ATOM/blob/5d42d49f9e4292e5b61475917e92e7ec1b1dacb7/recipes/MiniMax-M3.md
 # block size 128 is mandatory for MSA. TP4 on a single gfx950 node, per the recipe.
 minimaxm3-fp4-mi355x-atom:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2720,7 +2714,7 @@ minimaxm3-fp4-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp4-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2739,7 +2733,7 @@ minimaxm3-fp4-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
 
 minimaxm3-fp8-mi355x-atom:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2758,7 +2752,7 @@ minimaxm3-fp8-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp8-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
