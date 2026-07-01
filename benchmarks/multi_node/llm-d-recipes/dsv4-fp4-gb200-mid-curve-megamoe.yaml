@@ -1,0 +1,229 @@
+# DeepSeek-V4-Pro (FP4) on GB200, MegaMOE mid-curve 1P+1D P/D disagg via
+# llm-d-vllm. Sibling of dsv4-fp4-gb200-1p1d-simple.yaml; same number of
+# nodes, different engine config.
+#
+# Mirrors topology #3 from dsv4-fp4-gb200-dynamo-vllm
+# (search-space conc-list [256, 512, 1024]) and the upstream NVIDIA
+# srt-slurm recipe at
+# benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/8k1k/disagg-gb200-mid-curve-megamoe.yaml.
+# Goal: apples-to-apples llm-d-vllm vs dynamo-vllm at the same
+# concurrency points on the same SKU + model + bench, with both sides
+# running DEP=8 on prefill AND decode (the "MegaMOE" mid-curve shape).
+#
+# Topology (GB200 = 4 GPUs/node):
+#   Prefill: 1 worker, 8 GPUs across 2 nodes (LWS_GROUP_SIZE=2),
+#            TP=1 DP=8 EP=8 (DP-attention, deep_gemm_mega_moe,
+#            EP weight filter).
+#   Decode:  1 worker, 8 GPUs across 2 nodes (LWS_GROUP_SIZE=2),
+#            TP=1 DP=8 EP=8 (DP-attention, deep_gemm_mega_moe,
+#            EP weight filter, FULL_DECODE_ONLY graphs).
+#   Total:   4 GB200 nodes / 16 GPUs (no infra/etcd node, llm-d does
+#            not need NATS/etcd; the dynamo-vllm sibling spends 5 nodes
+#            because its infra node is dedicated).
+#
+# Selected via additional-settings:
+#   CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml
+#   PREFILL_NODES=2 DECODE_NODES=2 GPUS_PER_NODE=4
+
+# ---- EPP scheduling config ----
+# Same plugins/profiles as dsv4-fp4-gb200-1p1d-simple.yaml. EPP routing
+# is engine-config-agnostic.
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: kv-cache-utilization-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: kv-cache-utilization-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags ----
+# Engine config mirrors the upstream srt-slurm mid-curve-megamoe recipe
+# byte-for-byte (less the dynamo-only frontend keys). The MegaMOE shape
+# differs from the low-latency 1P+1D in three ways:
+#   1. Decode is DEP=8 (TP=1, DP=8, EP) instead of pure TP=8. This is
+#      what the "MegaMOE" name refers to: every MoE rank runs experts
+#      locally with DP-attention to hide cross-rank latency, instead of
+#      sharding tensors.
+#   2. moe-backend = deep_gemm_mega_moe on both sides (the higher-perf
+#      path; the simple recipe doesn't override moe-backend).
+#   3. enable-ep-weight-filter on both sides keeps only the experts a
+#      rank actually serves resident on GPU; without it, DEP=8 OOMs
+#      because every rank tries to hold all experts.
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  # Upstream-parity strip (2026-06-23): on the upstream wide-ep-lws owner's
+  # advice, dropped the InferenceX-specific prefill customizations so the
+  # engine config matches the guide (which beats us ~3x on the same
+  # workload). Dropped:
+  #   - --max-model-len 9280            (use model default, as upstream)
+  #   - --max-num-seqs 16               (leave uncapped, as upstream)
+  #   - --max-num-batched-tokens 32768  (revert to default 8192, as upstream)
+  #   - --no-enable-flashinfer-autotune (leave autotune ON, as upstream)
+  # KEPT --no-enable-prefix-caching: the upstream vLLM `non-default args` dump
+  # (2026-06-23) shows enable_prefix_caching=False on BOTH prefill and decode,
+  # so upstream runs prefix caching OFF. An earlier note here wrongly claimed
+  # upstream left it ON; that was based on the since-disproven "cacheable
+  # prompts" hypothesis (HANDOFF_upstream_workload_confirmed.md). vLLM V1
+  # defaults prefix caching ON, so we must pass --no-enable-prefix-caching to
+  # match upstream and to keep this a true no-prefix-cache comparison.
+  # --enable-sleep-mode was already replaced by --enable-cumem-allocator,
+  # which is the v0.23 equivalent (KV in cumem, REQUIRED for cross-node MNNVL
+  # KV transfer on GB200) and which upstream ALSO sets - so it stays.
+  # Full upstream serve-line parity: gpu-mem 0.9, and max-model-len /
+  # max-num-batched-tokens / all2all-backend all left UNSET (upstream's
+  # non-default-args dump does not list any of them). The DeepEP + 32768 + 0.95
+  # speed bundle was reverted after it OOM'd twice (KV startup check at uncapped
+  # 1M max_seq_len, then a 4 GiB flashinfer-autotune transient with no headroom
+  # at 0.95). This config = v8 (validated 5864 tok/s/GPU) + decode fan-out
+  # (server.sh). UCX_TLS keeps rc: dropping it forced cross-node KV onto TCP
+  # (IB HCAs unused - upstream flagged this and our UCX logs confirmed it), so
+  # rc (IB verbs) stays for the cross-pod KV path. Uncapped max-model-len is
+  # safe here without the DeepEP/32k memory pressure, as v8 proved.
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --enforce-eager
+    --gpu-memory-utilization 0.9
+    --enable-cumem-allocator
+    --no-enable-prefix-caching
+    --no-async-scheduling
+    --block-size 256
+    --tokenizer-mode deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+    --numa-bind
+  env:
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: "NVL"
+    # dynamo-vllm parity (2026-06-27): GPUDirect-RDMA over the GB200
+    # Grace-Blackwell C2C link - lifts cross-node NCCL collective (DP8/EP8
+    # MoE all-to-all) bandwidth. Dynamo sets it; we did not.
+    NCCL_NET_GDR_C2C: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    # Added rc (IB verbs) so cross-node KV falls back to InfiniBand, not
+    # TCP, when MNNVL/cuda_ipc is unavailable. Prior value lacked rc, so
+    # the fallback was tcp (slow). Primary path is still MNNVL via
+    # cuda_ipc + cumem allocator.
+    UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    # dynamo-vllm parity (2026-06-27): no NVSHMEM remote transport (we don't
+    # use DeepEP), plus explicit NIC->PE mapping. server.sh defaults
+    # NVSHMEM_REMOTE_TRANSPORT to ibgda but honors this override and clears
+    # the image's NVSHMEM_HCA_LIST so this PE mapping takes effect.
+    NVSHMEM_REMOTE_TRANSPORT: "none"
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
+    NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    # Upstream-parity additions (2026-06-16):
+    VLLM_SKIP_P2P_CHECK: "1"
+    # 2026-06-24: 1 -> 0 to match dynamo-vllm mid-curve recipe (which leaves
+    # this commented out). Test whether randomized DP dummy inputs are wasting
+    # prefill bandwidth on idle-rank lockstep passes (vs dynamo's ~3x prefill).
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
+    VLLM_USE_DEEP_GEMM: "1"
+    NVIDIA_GDRCOPY: "enabled"
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+
+decode:
+  tp: 1
+  enable-expert-parallel: true
+  # Upstream-parity strip (2026-06-23): dropped --max-model-len 9280 to use
+  # the model default, as upstream does. (--no-enable-flashinfer-autotune and
+  # --enable-sleep-mode were already removed in earlier tuning.)
+  # --enable-cumem-allocator stays: required for MNNVL KV transfer on v0.23+
+  # and upstream sets it too. --gpu-memory-utilization 0.85 already matches
+  # upstream. --no-enable-prefix-caching matches upstream decode's
+  # enable_prefix_caching=False (see prefill note).
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --max-num-seqs 512
+    --max-num-batched-tokens 512
+    --max-cudagraph-capture-size 512
+    --gpu-memory-utilization 0.85
+    --enable-cumem-allocator
+    --no-enable-prefix-caching
+    --block-size 256
+    --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
+    --stream-interval 50
+    --tokenizer-mode deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+  env:
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: "NVL"
+    # dynamo-vllm parity (2026-06-27): GB200 Grace-Blackwell C2C GPUDirect-RDMA
+    # (see prefill note).
+    NCCL_NET_GDR_C2C: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    # rc added so KV falls back to InfiniBand, not TCP (see prefill note).
+    UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    # dynamo-vllm parity (2026-06-27): no NVSHMEM remote transport + explicit
+    # NIC->PE mapping (see prefill note).
+    NVSHMEM_REMOTE_TRANSPORT: "none"
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
+    NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    # Upstream-parity additions (2026-06-16):
+    VLLM_SKIP_P2P_CHECK: "1"
+    # 2026-06-24: 1 -> 0 to match dynamo-vllm mid-curve recipe (see prefill note).
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
+    VLLM_USE_DEEP_GEMM: "1"
+    NVIDIA_GDRCOPY: "enabled"
+
+# ---- SLURM resource directives ----
+slurm:
+  time_limit: "08:00:00"
