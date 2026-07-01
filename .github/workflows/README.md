@@ -52,9 +52,9 @@ If neither `--single-node` nor `--multi-node` is specified, both types are gener
 
 ### Examples
 
-**Generate all NVIDIA single-node and multi-node configurations (default):**
+**Generate all single-node and multi-node configurations (default):**
 ```
-full-sweep --config-files .github/configs/nvidia-master.yaml .github/configs/nvidia-agentic.yaml
+full-sweep --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
@@ -84,12 +84,12 @@ full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs
 
 **Test all multi-node configurations:**
 ```
-full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml .github/configs/nvidia-agentic.yaml
+full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
 ```
 
 **Test agentic configurations:**
 ```
-full-sweep --scenario-type agentic-coding --config-files .github/configs/nvidia-agentic.yaml .github/configs/amd-agentic.yaml
+full-sweep --scenario-type agentic-coding --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
 ```
 
 ## `runner-model-sweep` Command
@@ -250,7 +250,7 @@ This dual-validation approach ensures:
 
 ### Input Validation: Master Config Files
 
-Master config files (e.g., `nvidia-master.yaml`, `amd-master.yaml`, `nvidia-agentic.yaml`, `amd-agentic.yaml`) are validated against strict Pydantic schemas:
+Master config files (e.g., `nvidia-master.yaml`, `amd-master.yaml`) are validated against strict Pydantic schemas:
 
 - **`SingleNodeMasterConfigEntry`**: Validates single-node configurations
 - **`MultiNodeMasterConfigEntry`**: Validates multi-node configurations

@@ -5,9 +5,7 @@ on:
     types: [opened, reopened, ready_for_review, review_requested]
     paths:
       - '.github/configs/amd-master.yaml'
-      - '.github/configs/amd-agentic.yaml'
       - '.github/configs/nvidia-master.yaml'
-      - '.github/configs/nvidia-agentic.yaml'
       - 'benchmarks/**'
       - 'perf-changelog.yaml'
 

@@ -105,7 +105,7 @@ Artifacts: see "Fetching GitHub Actions Benchmark Results" below.
 
 ### Adding a benchmark configuration
 
-Add fixed-sequence entries to `.github/configs/nvidia-master.yaml` or `amd-master.yaml`; add agentic-coding entries to `.github/configs/nvidia-agentic.yaml` or `amd-agentic.yaml`. Append to `perf-changelog.yaml`, then validate with `generate_sweep_configs.py full-sweep`.
+Add entries to `.github/configs/nvidia-master.yaml` or `amd-master.yaml` (agentic-coding entries live in the Agentic benchmark configurations section at the bottom), append to `perf-changelog.yaml`, then validate with `generate_sweep_configs.py full-sweep`.
 
 ### Adding a runner
 
@@ -113,9 +113,9 @@ Add to `.github/configs/runners.yaml`, create launcher in `runners/`, add the ru
 
 ### Registering recipes from srtslurm
 
-For `dynamo-sglang` / `dynamo-trt` disaggregated multi-node configs, see `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` for the full mapping from srtslurm recipe YAML to `nvidia-master.yaml` / `nvidia-agentic.yaml` entries.
+For `dynamo-sglang` / `dynamo-trt` disaggregated multi-node configs, see `benchmarks/multi_node/srt-slurm-recipes/RECIPES.md` for the full mapping from srtslurm recipe YAML to `nvidia-master.yaml` entries.
 
-Multi-node srt-slurm changes must edit the recipe yaml AND the relevant NVIDIA config YAML together. `srtctl` reads only the recipe (`model.container`, resources, prefill/decode workers); the sweep generator (`utils/matrix_logic/generate_sweep_configs.py`) reads `nvidia-master.yaml` / `nvidia-agentic.yaml` for frontend labels - its prefill/decode numbers never reach `srtctl`. Recipe-only edits mislabel results, config-only edits don't take effect. For image bumps, `model.container` must equal `image:`, since the launcher uses the latter as the container-alias key.
+Multi-node srt-slurm changes must edit the recipe yaml AND `nvidia-master.yaml` together. `srtctl` reads only the recipe (`model.container`, resources, prefill/decode workers); the sweep generator (`utils/matrix_logic/generate_sweep_configs.py`) reads `nvidia-master.yaml` for frontend labels - its prefill/decode numbers never reach `srtctl`. Recipe-only edits mislabel results, master-only edits don't take effect. For image bumps, `model.container` must equal `image:`, since the launcher uses the latter as the container-alias key.
 
 ### Updating Docker images
 
@@ -138,7 +138,7 @@ Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generat
 
 ## Key Files
 
-`utils/matrix_logic/validation.py` (config schemas), `generate_sweep_configs.py` (config generation), `utils/bench_serving/benchmark_serving.py` (benchmark client), `.github/configs/nvidia-master.yaml` / `.github/configs/amd-master.yaml` (fixed-sequence benchmark definitions), `.github/configs/nvidia-agentic.yaml` / `.github/configs/amd-agentic.yaml` (agentic benchmark definitions), `.github/workflows/run-sweep.yml` (main CI/CD), `.github/workflows/collect-evals.yml` (eval collection), `benchmarks/benchmark_lib.sh` (shared utilities), `utils/evals/` (eval task definitions), `utils/collect_eval_results.py` (aggregator).
+`utils/matrix_logic/validation.py` (config schemas), `generate_sweep_configs.py` (config generation), `utils/bench_serving/benchmark_serving.py` (benchmark client), `.github/configs/nvidia-master.yaml` / `.github/configs/amd-master.yaml` (benchmark definitions, with agentic sections at the bottom), `.github/workflows/run-sweep.yml` (main CI/CD), `.github/workflows/collect-evals.yml` (eval collection), `benchmarks/benchmark_lib.sh` (shared utilities), `utils/evals/` (eval task definitions), `utils/collect_eval_results.py` (aggregator).
 
 ## Important Notes
 
