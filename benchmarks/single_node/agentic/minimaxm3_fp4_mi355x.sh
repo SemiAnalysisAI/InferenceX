@@ -56,6 +56,8 @@ fi
 resolve_trace_source
 install_agentic_deps
 
+# export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=1200
+
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
