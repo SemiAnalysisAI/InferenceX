@@ -262,11 +262,9 @@ jobs:
         with:
           name: ${{ inputs.eval-only && 'eval_server_logs_' || 'server_logs_' }}${{ env.RESULT_FILENAME }}
           path: |
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/server.log' || 'server.log' }}
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/router.log' || '' }}
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/lmcache_server.log' || '' }}
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/mooncake_master.log' || '' }}
-            ${{ inputs.scenario-type == 'agentic-coding' && 'results/mooncake_config.json' || '' }}
+            server.log
+            results/*.log
+            results/*_config.json
           if-no-files-found: ignore
 
       - name: Upload GPU metrics
