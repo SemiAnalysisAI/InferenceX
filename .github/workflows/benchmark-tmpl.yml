@@ -59,6 +59,16 @@ on:
         type: boolean
         required: false
         default: false
+      eval-framework:
+        description: "Eval framework (lm-eval | swebench). Empty = lm-eval."
+        type: string
+        required: false
+        default: ""
+      eval-task:
+        description: "Eval task YAML path. Empty = framework default."
+        type: string
+        required: false
+        default: ""
       random-range-ratio:
         required: false
         type: string
@@ -108,6 +118,8 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  EVAL_FRAMEWORK: ${{ inputs.eval-framework }}
+  EVAL_TASKS_DIR: ${{ inputs.eval-task }}
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}

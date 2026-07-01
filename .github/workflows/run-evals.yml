@@ -1,0 +1,202 @@
+name: Slash Command Run Evals
+run-name: "/run-evals PR #${{ github.event.issue.number }}"
+
+# Comment-triggered, eval-only run of ONE eval on ONE recipe (no perf sweep).
+# Usage in a PR comment:
+#   /run-evals <eval> <config-key> [conc] [master-config]
+# where <eval> is one of: gsm8k | gpqa[_diamond] | swebench[_lite].
+# Example: /run-evals swebench_lite dsr1-fp4-b200-sglang 16
+# Mirrors pr-comment-sweep.yml; differs only in parsing + the eval mapping it
+# forwards to e2e-tests.yml (eval-framework / eval-task).
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  get-jobs:
+    # Only run for PR comments that start with /run-evals
+    if: ${{ github.event.issue.pull_request && startsWith(github.event.comment.body, '/run-evals') }}
+    runs-on: ubuntu-latest
+    outputs:
+      pr-number: ${{ steps.parse.outputs.pr-number }}
+      generator-args: ${{ steps.parse.outputs.generator-args }}
+      eval-framework: ${{ steps.parse.outputs.eval-framework }}
+      eval-task: ${{ steps.parse.outputs.eval-task }}
+      author-can-bypass: ${{ steps.auth.outputs.can-bypass }}
+      # Immutable ref (commit SHA) to prevent TOCTOU on refs/pull/<n>/head
+      ref: ${{ steps.ref_comment.outputs.ref }}
+    steps:
+      - name: Parse PR comment (/run-evals <eval> <config-key> [conc] [master])
+        id: parse
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/run-evals') }}
+        shell: bash
+        env:
+          BODY: ${{ github.event.comment.body }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          set -euo pipefail
+          # Require /run-evals at the start of a line.
+          cmd_line=$(printf "%s" "$BODY" | awk '/^\/run-evals/{print; exit}')
+          if [[ -z "$cmd_line" ]]; then
+            echo "No /run-evals command found at comment start" >&2
+            exit 1
+          fi
+          # Positional args after the command.
+          read -ra parts <<< "${cmd_line#/run-evals}"
+          eval_name="${parts[0]:-}"
+          config_key="${parts[1]:-}"
+          conc="${parts[2]:-}"
+          master_override="${parts[3]:-}"
+          if [[ -z "$eval_name" || -z "$config_key" ]]; then
+            echo "usage: /run-evals <eval> <config-key> [conc] [master-config]" >&2
+            echo "valid evals: gsm8k | gpqa[_diamond] | swebench[_lite]" >&2
+            exit 1
+          fi
+
+          # Map <eval> -> (framework, task YAML).
+          case "$eval_name" in
+            gsm8k)                  framework="lm-eval";  task="utils/evals/gsm8k.yaml" ;;
+            gpqa|gpqa_diamond)      framework="lm-eval";  task="utils/evals/gpqa_diamond.yaml" ;;
+            swebench|swebench_lite) framework="swebench"; task="utils/evals/swebench_lite.yaml" ;;
+            *)
+              echo "unknown eval '$eval_name' (valid: gsm8k, gpqa[_diamond], swebench[_lite])" >&2
+              exit 1
+              ;;
+          esac
+
+          if [[ -n "$conc" && ! "$conc" =~ ^[1-9][0-9]*$ ]]; then
+            echo "conc must be a positive integer, got '$conc'" >&2
+            exit 1
+          fi
+
+          # Pick the platform master config from the config-key's hardware token,
+          # unless an explicit 4th arg overrides it.
+          if [[ -n "$master_override" ]]; then
+            master="$master_override"
+          elif [[ "$config_key" =~ (b200|b300|h100|h200|gb200|gb300) ]]; then
+            master=".github/configs/nvidia-master.yaml"
+          elif [[ "$config_key" =~ (mi300x|mi325x|mi355x) ]]; then
+            master=".github/configs/amd-master.yaml"
+          else
+            echo "cannot infer platform from config-key '$config_key'; pass the master config path as a 4th arg" >&2
+            exit 1
+          fi
+
+          gen="test-config --config-files ${master} --config-keys ${config_key} --evals-only"
+          if [[ -n "$conc" ]]; then
+            gen="${gen} --conc ${conc}"
+          fi
+
+          {
+            echo "generator-args=${gen}"
+            echo "eval-framework=${framework}"
+            echo "eval-task=${task}"
+            echo "pr-number=${PR_NUMBER}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check author permissions
+        id: auth
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const username = context.payload.comment?.user?.login;
+            let permission = 'none';
+            try {
+              const res = await github.rest.repos.getCollaboratorPermissionLevel({ owner, repo, username });
+              permission = res.data?.permission || 'none';
+            } catch (e) {
+              permission = 'none';
+            }
+            const canBypass = ['admin','maintain','write'].includes(permission);
+            core.info(`Author ${username} permission: ${permission}; bypass=${canBypass}`);
+            core.setOutput('can-bypass', canBypass ? 'true' : 'false');
+
+      # ---- PR SHA pinning ----
+      - name: Resolve immutable PR ref (pin to head SHA)
+        id: ref_comment
+        if: ${{ github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/run-evals') }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const pr = context.issue.number;
+            const res = await github.rest.pulls.get({ owner, repo, pull_number: pr });
+            const sha = res.data.head.sha;
+            core.info(`Resolved PR #${pr} head SHA: ${sha}`);
+            core.setOutput('ref', sha);
+
+      - name: Reply with run link
+        # always() so a parse failure (bad eval name / missing config-key /
+        # unrecognized HW token) still gets a reply explaining why, instead of
+        # silently doing nothing and forcing the user into the Actions logs.
+        if: ${{ always() && github.event_name == 'issue_comment' && startsWith(github.event.comment.body, '/run-evals') && github.repository_owner == 'SemiAnalysisAI' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        continue-on-error: true
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          AUTHOR: ${{ github.event.comment.user.login }}
+          GEN_CMD: ${{ steps.parse.outputs.generator-args }}
+          EVAL_FRAMEWORK: ${{ steps.parse.outputs.eval-framework }}
+          CAN_BYPASS: ${{ steps.auth.outputs.can-bypass }}
+          PINNED_REF: ${{ steps.ref_comment.outputs.ref }}
+          PARSE_OUTCOME: ${{ steps.parse.outcome }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = context.issue.number;
+            const runUrl = process.env.RUN_URL;
+            const author = process.env.AUTHOR;
+            let body;
+            if ((process.env.PARSE_OUTCOME || '') !== 'success') {
+              // Parsing failed (or was skipped) — point the user at the error.
+              body = `@${author} \`/run-evals\` couldn't parse that command — see ${runUrl} for the exact error.\n\nUsage: \`/run-evals <eval> <config-key> [conc] [master-config]\`\nValid evals: \`gsm8k\` | \`gpqa[_diamond]\` | \`swebench[_lite]\``;
+            } else {
+              const genCmd = process.env.GEN_CMD || '';
+              const framework = process.env.EVAL_FRAMEWORK || '';
+              const canBypass = (process.env.CAN_BYPASS || '').toLowerCase() === 'true';
+              const pinned = process.env.PINNED_REF || '';
+              const shortSha = pinned ? pinned.slice(0, 7) : '';
+              const approvalMsg = canBypass ? 'Approval: not required (trusted collaborator).' : "Approval: required in environment 'Outside Collaborator E2E Test'.";
+              body = `@${author} Kicking off an eval-only run (framework: \`${framework}\`).\n\nRun: ${runUrl}\nCommand: \`${genCmd}\`\nPinned ref: \`${shortSha}\`\n${approvalMsg}`;
+            }
+            await github.rest.issues.createComment({ owner, repo, issue_number, body });
+
+  approval:
+    needs: get-jobs
+    if: ${{ github.event_name == 'issue_comment' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && needs.get-jobs.outputs.author-can-bypass != 'true' }}
+    runs-on: ubuntu-latest
+    name: approval
+    environment: Outside Collaborator E2E Test
+    steps:
+      - run: echo "approved"
+
+  validate:
+    needs: [get-jobs, approval]
+    # always() is required to evaluate this condition when 'approval' is skipped (trusted author)
+    if: ${{ always() && needs.get-jobs.result == 'success' && needs.get-jobs.outputs.pr-number != '' && needs.get-jobs.outputs.generator-args != '' && (needs.get-jobs.outputs.author-can-bypass == 'true' || needs.approval.result == 'success') }}
+    # Concurrency at job level so non-/run-evals comments don't cancel active runs
+    concurrency:
+      group: "run-evals-PR#${{ needs.get-jobs.outputs.pr-number }}"
+      cancel-in-progress: true
+    uses: ./.github/workflows/e2e-tests.yml
+    name: validate
+    secrets: inherit
+    with:
+      generate-cli-command: ${{ needs.get-jobs.outputs.generator-args }}
+      eval-framework: ${{ needs.get-jobs.outputs.eval-framework }}
+      eval-task: ${{ needs.get-jobs.outputs.eval-task }}
+      test-name: PR #${{ needs.get-jobs.outputs.pr-number }} /run-evals
+      # Use pinned SHA to prevent TOCTOU on refs/pull/<n>/head
+      ref: ${{ needs.get-jobs.outputs.ref }}
