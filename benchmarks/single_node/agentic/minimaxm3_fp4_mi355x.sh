@@ -151,8 +151,8 @@ case "$OFFLOADING" in
         # Apply PR #3779: per-engine-group KV format detection for MiniMax-M3.
         # Fixes IndexError in get_num_heads() when heterogeneous KV tensor ranks
         # (rank-5 K+V main cache + rank-3 MLA index cache) are present.
-        git fetch origin pull/3779/head:pr-3779
-        git merge --no-edit pr-3779
+        # git fetch origin pull/3779/head:pr-3779
+        # git merge --no-edit pr-3779
         pip install -r requirements/build.txt
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
