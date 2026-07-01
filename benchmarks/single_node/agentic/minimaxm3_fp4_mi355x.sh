@@ -233,7 +233,9 @@ export PYTHONNOUSERSITE=1
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
-# export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
 VLLM_CMD=(
     vllm serve "$MODEL"
@@ -246,6 +248,7 @@ VLLM_CMD=(
     --trust-remote-code
     --language-model-only
     --attention-backend TRITON_ATTN
+    --moe-backend aiter
     --tool-call-parser minimax_m3
     --reasoning-parser minimax_m3
     --enable-auto-tool-choice
