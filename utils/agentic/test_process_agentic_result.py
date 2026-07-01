@@ -200,7 +200,6 @@ def _run_processor(result_dir: Path, output_dir: Path) -> dict:
             "DP_ATTENTION": "false",
             "CONC": "8",
             "KV_OFFLOADING": "none",
-            "KV_OFFLOAD_BACKEND": "none",
             "RUNNER_TYPE": "b200-x4",
             "IMAGE": "test/image:0.1",
             "SPEC_DECODING": "none",
@@ -508,6 +507,7 @@ def test_processor_loads_traces_jsonl_for_theoretical_cache(tmp_path: Path):
             "MODEL": "test-model",
             "TP": "4",
             "CONC": "8",
+            "KV_OFFLOADING": "none",
             "RUNNER_TYPE": "h100-x4",
             "HF_HUB_CACHE": str(hf_cache),
         }

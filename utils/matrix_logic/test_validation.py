@@ -376,6 +376,13 @@ class TestAgenticMatrixEntries:
                 "conc-list": [1, 2],
             })
 
+    def test_single_node_agentic_requires_explicit_kv_offloading(self):
+        with pytest.raises(Exception, match="kv-offloading"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "conc-list": [1, 2],
+            })
+
     def test_dram_kv_offload_requires_explicit_capacity(self):
         with pytest.raises(Exception, match="total-cpu-dram-gb"):
             AgenticCodingConfig(**{

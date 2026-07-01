@@ -82,7 +82,7 @@ def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
 ) -> int:
     """Return the aggregate DRAM offload budget for a single-node entry."""
-    kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
+    kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
     if kv_offloading != "dram":
         return 0
 
@@ -477,12 +477,14 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     prefill = bmk[Fields.PREFILL.value]
                     decode = bmk[Fields.DECODE.value]
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    kv_offloading = "none"
+                    kv_offload_backend = None
                 else:
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
-                kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
+                    kv_offloading = bmk[Fields.KV_OFFLOADING.value]
+                    kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -530,6 +532,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
+                                Fields.KV_OFFLOADING.value: "none",
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
@@ -911,12 +914,14 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     prefill = bmk[Fields.PREFILL.value]
                     decode = bmk[Fields.DECODE.value]
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    kv_offloading = "none"
+                    kv_offload_backend = None
                 else:
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
-                kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
+                    kv_offloading = bmk[Fields.KV_OFFLOADING.value]
+                    kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -958,6 +963,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
+                                Fields.KV_OFFLOADING.value: "none",
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"

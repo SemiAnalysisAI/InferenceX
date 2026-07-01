@@ -67,7 +67,7 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
-      # Agentic-coding inputs. Fixed-seq-len jobs use these defaults.
+      # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         required: false
@@ -77,12 +77,10 @@ on:
         description: "KV offload mode for agentic scenarios (none/dram)"
         required: false
         type: string
-        default: 'none'
       kv-offload-backend:
         description: "KV offload backend for agentic scenarios when kv-offloading is not none"
         required: false
         type: string
-        default: 'none'
       total-cpu-dram-gb:
         description: "Configured CPU DRAM capacity in GB for KV offloading"
         required: false
@@ -114,7 +112,7 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
-  # Agentic-coding env. Fixed-seq-len jobs use these defaults.
+  # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}

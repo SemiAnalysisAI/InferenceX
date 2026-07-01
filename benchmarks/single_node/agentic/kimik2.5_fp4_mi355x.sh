@@ -5,14 +5,14 @@ set -x
 # Agentic trace replay benchmark for Kimi-K2.5 FP4 on MI355X using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
 # KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native.
 
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"

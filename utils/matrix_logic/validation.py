@@ -195,6 +195,7 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     prefill: WorkerConfig
     decode: WorkerConfig
     conc: list[int]
+    kv_offloading: Literal["none"] = Field(alias=Fields.KV_OFFLOADING.value)
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
@@ -292,6 +293,13 @@ def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
 
 def _validate_kv_offload_fields(self):
     backend = getattr(self, "kv_offload_backend", None)
+    if self.kv_offloading is None:
+        if backend not in (None, ""):
+            raise ValueError(
+                f"{Fields.KV_OFFLOAD_BACKEND.value} requires "
+                f"{Fields.KV_OFFLOADING.value}"
+            )
+        return self
     if self.kv_offloading == "none":
         if backend not in (None, ""):
             raise ValueError(
@@ -380,8 +388,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
-    kv_offloading: Literal["none", "dram"] = Field(
-        default="none", alias=Fields.KV_OFFLOADING.value
+    kv_offloading: Optional[Literal["none", "dram"]] = Field(
+        default=None, alias=Fields.KV_OFFLOADING.value
     )
     kv_offload_backend: Optional[str] = Field(
         default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
@@ -410,6 +418,11 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
             valid = has_complete_multinode
         if not valid:
             raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
+        if has_single_node and self.kv_offloading is None:
+            raise ValueError(
+                f"Single-node agentic search-space entries must specify "
+                f"{Fields.KV_OFFLOADING.value}"
+            )
         return self
 
 class AgenticCodingConfig(BaseModel):

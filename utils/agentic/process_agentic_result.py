@@ -61,6 +61,13 @@ def env_int(name: str, default: int = 0) -> int:
     return int(value)
 
 
+def required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if value in (None, ""):
+        raise SystemExit(f"Missing required environment variable: {name}")
+    return value
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value in (None, ""):
@@ -627,6 +634,23 @@ def build_agg(
             else "false"
         )
 
+    kv_offloading = required_env("KV_OFFLOADING")
+    kv_offload_backend = os.environ.get("KV_OFFLOAD_BACKEND", "")
+    if kv_offloading == "none":
+        if kv_offload_backend:
+            raise SystemExit(
+                "KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none"
+            )
+    elif kv_offloading == "dram":
+        if not kv_offload_backend or kv_offload_backend == "none":
+            raise SystemExit(
+                "KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram"
+            )
+    else:
+        raise SystemExit(
+            f"Unsupported KV_OFFLOADING value {kv_offloading!r}; expected 'none' or 'dram'"
+        )
+
     conc = int(os.environ.get("CONC", "0"))
     agg: dict = {
         "hw": os.environ.get("RUNNER_TYPE", ""),
@@ -643,8 +667,8 @@ def build_agg(
         "tp": tp,
         "ep": ep,
         "dp_attention": dp_attention,
-        "kv_offloading": os.environ.get("KV_OFFLOADING", "none"),
-        "kv_offload_backend": os.environ.get("KV_OFFLOAD_BACKEND", "none"),
+        "kv_offloading": kv_offloading,
+        "kv_offload_backend": kv_offload_backend,
         "num_requests_total": len(records),
         "num_requests_successful": len(records),
     }

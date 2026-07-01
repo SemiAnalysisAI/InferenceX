@@ -17,26 +17,34 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 export PORT="${PORT:-8888}"
 
 agentic_kv_offload_enabled() {
-    [[ "${KV_OFFLOADING:-none}" != "none" ]]
+    if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
+        echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
+        exit 1
+    fi
+    [[ "$KV_OFFLOADING" != "none" ]]
 }
 
 require_agentic_kv_offload_none() {
     if agentic_kv_offload_enabled; then
-        echo "Error: expected KV_OFFLOADING=none, got '${KV_OFFLOADING:-}'" >&2
+        echo "Error: expected KV_OFFLOADING=none, got '$KV_OFFLOADING'" >&2
         exit 1
     fi
-    if [[ -n "${KV_OFFLOAD_BACKEND:-}" && "${KV_OFFLOAD_BACKEND:-none}" != "none" ]]; then
-        echo "Error: KV_OFFLOAD_BACKEND requires KV_OFFLOADING != none" >&2
+    if [[ -n "${KV_OFFLOAD_BACKEND:-}" ]]; then
+        echo "Error: KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none" >&2
         exit 1
     fi
 }
 
 require_agentic_kv_offload_backend() {
     local expected_backend="$1"
-    case "${KV_OFFLOADING:-none}" in
+    if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
+        echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
+        exit 1
+    fi
+    case "$KV_OFFLOADING" in
         none)
-            if [[ -n "${KV_OFFLOAD_BACKEND:-}" && "${KV_OFFLOAD_BACKEND:-none}" != "none" ]]; then
-                echo "Error: KV_OFFLOAD_BACKEND requires KV_OFFLOADING != none" >&2
+            if [[ -n "${KV_OFFLOAD_BACKEND:-}" ]]; then
+                echo "Error: KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none" >&2
                 exit 1
             fi
             return 1
@@ -53,7 +61,7 @@ require_agentic_kv_offload_backend() {
             return 0
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOADING value '${KV_OFFLOADING:-}' (expected one of: none, dram)" >&2
+            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram)" >&2
             exit 1
             ;;
     esac
@@ -67,15 +75,19 @@ if [[ "$_benchmark_caller" == */agentic/* ||
       "${IS_AGENTIC:-0}" == "1" ||
       "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     unset MAX_MODEL_LEN
-    case "${KV_OFFLOADING:-none}" in
+    if [[ -z "${KV_OFFLOADING+x}" || -z "$KV_OFFLOADING" ]]; then
+        echo "Error: KV_OFFLOADING must be set for agentic benchmarks" >&2
+        exit 1
+    fi
+    case "$KV_OFFLOADING" in
         none)
-            if [[ -n "${KV_OFFLOAD_BACKEND:-}" && "${KV_OFFLOAD_BACKEND:-none}" != "none" ]]; then
-                echo "Error: KV_OFFLOAD_BACKEND requires KV_OFFLOADING != none" >&2
+            if [[ -n "${KV_OFFLOAD_BACKEND:-}" ]]; then
+                echo "Error: KV_OFFLOAD_BACKEND must be empty when KV_OFFLOADING=none" >&2
                 exit 1
             fi
             ;;
         dram)
-            if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-none}" == "none" ]]; then
+            if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-}" == "none" ]]; then
                 echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram" >&2
                 exit 1
             fi
@@ -85,7 +97,7 @@ if [[ "$_benchmark_caller" == */agentic/* ||
             fi
             ;;
         *)
-            echo "Error: unsupported KV_OFFLOADING value '${KV_OFFLOADING:-}' (expected one of: none, dram)" >&2
+            echo "Error: unsupported KV_OFFLOADING value '$KV_OFFLOADING' (expected one of: none, dram)" >&2
             exit 1
             ;;
     esac
