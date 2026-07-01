@@ -5,6 +5,8 @@ from enum import Enum
 import pprint
 import yaml
 
+CLUSTER_LABEL_PREFIX = "cluster:"
+
 """
     The below class defines the field names expected to be present in the JSON entries
     for both single-node and multi-node configurations.
@@ -272,6 +274,14 @@ def _validate_conc_fields(self):
     return self
 
 
+def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
+    if scenarios.agentic_coding and not runner.startswith(CLUSTER_LABEL_PREFIX):
+        raise ValueError(
+            f"Agentic master configs must use a '{CLUSTER_LABEL_PREFIX}<name>' runner "
+            "so every point runs on one exact hardware fleet."
+        )
+
+
 class SingleNodeSearchSpaceEntry(BaseModel):
     """Single node search space configuration."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -440,6 +450,11 @@ class SingleNodeMasterConfigEntry(BaseModel):
     disagg: bool = Field(default=False)
     scenarios: SingleNodeScenarios
 
+    @model_validator(mode='after')
+    def validate_agentic_runner(self):
+        _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
+        return self
+
 
 class MultiNodeMasterConfigEntry(BaseModel):
     """Top-level multinode master configuration entry."""
@@ -454,6 +469,11 @@ class MultiNodeMasterConfigEntry(BaseModel):
     multinode: Literal[True]
     disagg: bool = Field(default=False)
     scenarios: MultiNodeScenarios
+
+    @model_validator(mode='after')
+    def validate_agentic_runner(self):
+        _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
+        return self
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:

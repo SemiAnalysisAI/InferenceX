@@ -780,6 +780,78 @@ class TestMasterConfigEntries:
         config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
         assert config.disagg is False
 
+    def test_single_node_agentic_master_config_requires_cluster_runner(self):
+        """Single-node agentic configs must pin an exact cluster label."""
+        config = {
+            "image": "vllm/vllm-openai:test",
+            "model": "deepseek-ai/DeepSeek-V4-Pro",
+            "model-prefix": "dsv4",
+            "precision": "fp4",
+            "framework": "vllm",
+            "runner": "b200",
+            "multinode": False,
+            "scenarios": {
+                "agentic-coding": [
+                    {
+                        "duration": 1800,
+                        "search-space": [
+                            {"tp": 8, "conc-list": [1], "offloading": "none"}
+                        ],
+                    }
+                ]
+            },
+        }
+
+        with pytest.raises(Exception, match="Agentic master configs must use"):
+            SingleNodeMasterConfigEntry(**config)
+
+        config["runner"] = "cluster:b200-dgxc"
+        assert SingleNodeMasterConfigEntry(**config).runner == "cluster:b200-dgxc"
+
+    def test_multinode_agentic_master_config_requires_cluster_runner(self):
+        """Multinode agentic configs must also pin an exact cluster label."""
+        config = {
+            "image": "nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:test",
+            "model": "deepseek-r1-fp4",
+            "model-prefix": "dsr1",
+            "precision": "fp4",
+            "framework": "dynamo-trt",
+            "runner": "b200-multinode",
+            "multinode": True,
+            "disagg": True,
+            "scenarios": {
+                "agentic-coding": [
+                    {
+                        "duration": 300,
+                        "search-space": [
+                            {
+                                "spec-decoding": "none",
+                                "conc-list": [1],
+                                "prefill": {
+                                    "num-worker": 1,
+                                    "tp": 4,
+                                    "ep": 4,
+                                    "dp-attn": True,
+                                },
+                                "decode": {
+                                    "num-worker": 1,
+                                    "tp": 8,
+                                    "ep": 8,
+                                    "dp-attn": False,
+                                },
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+
+        with pytest.raises(Exception, match="Agentic master configs must use"):
+            MultiNodeMasterConfigEntry(**config)
+
+        config["runner"] = "cluster:b200-dgxc"
+        assert MultiNodeMasterConfigEntry(**config).runner == "cluster:b200-dgxc"
+
 
 # =============================================================================
 # Test validate_master_config function

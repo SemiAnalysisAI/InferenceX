@@ -36,6 +36,9 @@ The below list describes what each field is:
 - `model`: The model to server, e.g., `openai/gpt-oss-120b`
 - `model-prefix`: The canonical InferenceMAX model prefix reference, i.e., `dsr1` for Deepseek, `gptoss` for gptoss-120b, etc. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
 - `runner`: This is the runner label on which to run the benchmark. This must be a valid key under `labels` in `runners.yaml`.
+  Agentic configs must use an exact `cluster:<name>` runner label, not a broad
+  SKU or capacity label, so every search-space point runs on the same hardware
+  fleet.
 - `precision`: The precision to run the benchmark. Again, this is used to find which script to run in `benchmarks/`.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
@@ -79,7 +82,8 @@ can satisfy that label. `hardware` maps hardware or fleet keys to host resource
 facts. Matrix generation reads the `hardware` entry whose key matches the
 master config's `runner` label when a benchmark needs derived hardware facts.
 Use `cluster:<name>` labels for hardware metadata that depends on an exact
-cluster/fleet rather than a broad SKU label.
+cluster/fleet rather than a broad SKU label. Agentic master configs must use a
+`cluster:<name>` runner label.
 `available-cpu-dram-mib` is the host CPU DRAM available to benchmark jobs, in
 MiB. Agentic CPU-offload matrices combine it with `gpus-per-node` and the
 master config's `cpu-offload-utilization` to emit `total-cpu-dram-gb` for

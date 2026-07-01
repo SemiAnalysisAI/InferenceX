@@ -24,8 +24,10 @@ declare the usable offload fraction in the master config:
   - { tp: 8, offloading: none, conc-list: [16, 32] }
 ```
 
-Machine-level host memory is declared once in the `.github/configs/runners.yaml`
-`hardware` entry matching the master config's `runner` label:
+Agentic master configs must use an exact `cluster:<name>` runner label so every
+search-space point lands on the same hardware fleet. Machine-level host memory
+is declared once in the `.github/configs/runners.yaml` `hardware` entry matching
+that runner label:
 
 ```yaml
 hardware:
