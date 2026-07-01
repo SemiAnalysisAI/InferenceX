@@ -47,7 +47,7 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5-FP8
+    export MODEL_PATH=/scratch/models/GLM-5.1-FP8
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
