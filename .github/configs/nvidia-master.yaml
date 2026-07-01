@@ -12173,7 +12173,9 @@ minimaxm3-fp8-h100-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
 # ============================================================================
-# NVIDIA agentic benchmark configurations
+# From here onwards: AgentX configurations. Warning: these are all currently
+# best effort and are not officially tuned! They should be treated only as a
+# starting point for additional tuning. These may contain slop.
 # ============================================================================
 
 dsv4-fp4-b200-vllm-agentic:

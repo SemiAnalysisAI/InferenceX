@@ -2756,7 +2756,9 @@ minimaxm3-fp8-mi325x-vllm-mtp:
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
 
 # ============================================================================
-# AMD agentic benchmark configurations
+# From here onwards: AgentX configurations. Warning: these are all currently
+# best effort and are not officially tuned! They should be treated only as a
+# starting point for additional tuning. These may contain slop.
 # ============================================================================
 
 # Diverged from qwen3.5-fp8-mi355x-sglang (agentic-coding sibling). Metadata is
