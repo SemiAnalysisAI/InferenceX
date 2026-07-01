@@ -13,8 +13,6 @@ check_env_vars MODEL MODEL_PREFIX FRAMEWORK PRECISION CONC RESULT_FILENAME DURAT
 
 BASE_RESULT_DIR="${RESULT_DIR:-/logs/agentic}"
 BASE_RESULT_FILENAME="$RESULT_FILENAME"
-AGENTIC_RESULTS_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}"
-AGENTIC_CHECKPOINT_DIR="${AGENTIC_CHECKPOINT_DIR:-$INFMAX_CONTAINER_WORKSPACE/agentic_checkpoints}"
 read -r -a CONCURRENCIES <<< "${CONC_LIST:-$CONC}"
 
 if [ "${#CONCURRENCIES[@]}" -eq 0 ]; then
@@ -27,7 +25,6 @@ for concurrency in "${CONCURRENCIES[@]}"; do
         exit 1
     fi
 done
-mkdir -p "$AGENTIC_CHECKPOINT_DIR"
 
 resolve_trace_source
 install_agentic_deps
@@ -112,25 +109,11 @@ for index in "${!CONCURRENCIES[@]}"; do
     export RESULT_FILENAME="${BASE_RESULT_FILENAME}_conc${concurrency}"
     RESULT_DIR="${BASE_RESULT_DIR}/conc_${concurrency}"
 
-    if "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic_checkpoint.py" restore \
-        --checkpoint-dir "$AGENTIC_CHECKPOINT_DIR" \
-        --output-dir "$AGENTIC_RESULTS_OUTPUT_DIR" \
-        --base-result-filename "$BASE_RESULT_FILENAME" \
-        --concurrency "$concurrency"; then
-        echo "Skipping completed agentic concurrency $concurrency from checkpoint"
-        continue
-    fi
-
     mkdir -p "$RESULT_DIR"
 
     echo "Running agentic concurrency $concurrency of: ${CONCURRENCIES[*]}"
     build_replay_cmd "$RESULT_DIR"
     run_agentic_replay_and_write_outputs "$RESULT_DIR"
-    "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic_checkpoint.py" stage \
-        --result-file "$AGENTIC_RESULTS_OUTPUT_DIR/$RESULT_FILENAME.json" \
-        --checkpoint-dir "$AGENTIC_CHECKPOINT_DIR" \
-        --base-result-filename "$BASE_RESULT_FILENAME" \
-        --concurrency "$concurrency"
 
     if [ "$index" -lt "$(( ${#CONCURRENCIES[@]} - 1 ))" ]; then
         wait_for_agentic_servers_idle
