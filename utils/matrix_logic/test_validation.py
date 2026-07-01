@@ -972,11 +972,12 @@ class TestValidateRunnerConfig:
         assert "mi300x" in result["labels"]
         assert "gb200" in result["labels"]
 
-    def test_legacy_flat_runner_config_still_validates(self):
+    def test_flat_runner_config_is_rejected(self):
         config = {
             "h100": ["h100-cr_0", "h100-cw_0"],
         }
-        assert validate_runner_config(config) == config
+        with pytest.raises(ValueError, match="labels mapping"):
+            validate_runner_config(config)
 
     def test_hardware_available_dram_must_be_positive(self):
         config = {

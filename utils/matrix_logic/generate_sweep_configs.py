@@ -44,8 +44,8 @@ def seq_len_to_str(isl: int, osl: int) -> str:
 
 
 def runner_labels(runner_data: dict) -> dict:
-    """Return runner scheduling labels, supporting the legacy flat shape."""
-    return runner_data.get("labels", runner_data)
+    """Return runner scheduling labels."""
+    return runner_data["labels"]
 
 
 def runner_hardware(runner_data: dict) -> dict:

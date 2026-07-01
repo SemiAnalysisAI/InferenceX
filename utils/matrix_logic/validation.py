@@ -574,18 +574,14 @@ class RunnerConfig(BaseModel):
 
 def validate_runner_config(runner_configs: dict) -> dict:
     """Validate runner labels and hardware metadata."""
-    if "labels" in runner_configs or "hardware" in runner_configs:
-        labels = runner_configs.get("labels")
-        if not isinstance(labels, dict):
-            raise ValueError("Runner config must define a labels mapping")
-        _validate_runner_labels(labels)
-        try:
-            RunnerConfig(**runner_configs)
-        except ValidationError as e:
-            raise ValueError(f"Runner config failed validation:\n{e}")
-        return runner_configs
-
-    _validate_runner_labels(runner_configs)
+    labels = runner_configs.get("labels")
+    if not isinstance(labels, dict):
+        raise ValueError("Runner config must define a labels mapping")
+    _validate_runner_labels(labels)
+    try:
+        RunnerConfig(**runner_configs)
+    except ValidationError as e:
+        raise ValueError(f"Runner config failed validation:\n{e}")
     return runner_configs
 
 
