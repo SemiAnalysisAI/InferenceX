@@ -177,7 +177,8 @@ def main() -> int:
     # back-to-back cases — so chunk it small: bounded, PARALLEL jobs, fewer successive setups per
     # allocation. (uccl is NOT chunked: it fit a 74-case allocation cleanly; its only misses were a few
     # ll-mode per-case timeouts that chunking wouldn't change.)
-    SLOW_MAX_CASES = {"flashinfer": 16}
+    SLOW_MAX_CASES = {"flashinfer": 12}   # 12 (not 16): flashinfer cases retry up to 3x for the intermittent
+                                          # MNNVL-barrier deadlock, so smaller chunks keep a chunk within --time.
     include = []
     for (sku, beng, v2, nodes), cases in sorted(shards.items()):
         if a.min_nodes and max(1, int(nodes or 1)) < a.min_nodes:

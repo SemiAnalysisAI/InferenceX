@@ -692,13 +692,25 @@ PY
     # (FileNotFoundError .cx_workloads/<wid>.manifest.json). Unset so every case re-stages its own.
     unset CX_WORKLOAD_DIR 2>/dev/null || true
     cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_PHASE $CX_DISPATCH_DTYPE/$CX_MODE/${CX_MEASUREMENT_CONTRACT/-v1/} rt=$CX_ROUTING eplb=${CX_EPLB:-0}"
-    dispatch_bench || rc=1
-    # NOTE: flashinfer h100 intermittently hits `CUDA error: unspecified launch failure` in MoeAlltoAll
-    # (~half of cases, scattered across T/routing, same config both crashes AND passes). It is NOT a
-    # per-case IPC/shm reclaim race — a between-case shm-drop + settle was TESTED (run 28522872429) and
-    # made it WORSE (dropping /dev/shm corrupted in-flight IPC: 21->27 failed cases). Left as-is: each
-    # case is a fresh torchrun process, so a crash does not cascade to the next. Root cause is a genuine
-    # flashinfer MoE-kernel flakiness on Hopper — needs compute-sanitizer on a live run (docs/gated.md).
+    # flashinfer's MoeAlltoAll MNNVL barrier INTERMITTENTLY deadlocks on h100 ('Rank N timed out waiting
+    # for completion flag' -> CUDA unspecified launch failure): ~half of cases, scattered across T/routing,
+    # the SAME config both crashes AND passes (a transient, not config/pidfd). Upgrade to flashinfer 0.6.14
+    # + a between-case shm-drop settle were both TESTED and did NOT fix it (the settle made it worse). Since
+    # it's intermittent, RETRY: each fresh torchrun is another independent ~50% shot, so a few retries
+    # recover almost all cases. On a retry success, drop this case's intermediate failed-case record so it
+    # doesn't pollute the shard. Non-flashinfer backends run ONCE — their failures are deterministic
+    # (h200 flashinfer pidfd, aarch64 uccl, deepep-hybrid ll) so retrying only wastes the allocation.
+    attempts=1; [ "$CX_BENCH" = "flashinfer" ] && attempts=$(( ${CX_FLASHINFER_RETRIES:-3} + 1 ))
+    a=1
+    while :; do
+      if dispatch_bench; then
+        [ "$a" -gt 1 ] && rm -f results/failed_*"${CX_TS}"*.json 2>/dev/null || true
+        break
+      fi
+      [ "$a" -ge "$attempts" ] && { rc=1; break; }
+      cx_log "  [$((ci+1))/$ncases] $CX_BENCH attempt $a/$attempts failed — retry (intermittent MNNVL barrier)"
+      a=$((a+1))
+    done
     ci=$((ci + 1))
   done
 else
