@@ -193,13 +193,6 @@ jobs:
           clean: true
           submodules: true
 
-      - name: Cleanup stale eval outputs (pre-run)
-        if: ${{ inputs.run-eval || inputs.eval-only }}
-        run: |
-          rm -f meta_env.json || true
-          rm -f results*.json || true
-          rm -f sample*.jsonl || true
-
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}

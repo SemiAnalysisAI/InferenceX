@@ -171,14 +171,6 @@ jobs:
           clean: true
           submodules: true
 
-      - name: Cleanup stale outputs (pre-run)
-        run: |
-          rm -f meta_env.json || true
-          rm -f results*.json || true
-          rm -f sample*.jsonl || true
-          rm -f server.log || true
-          rm -f gpu_metrics.csv || true
-
       - name: Launch job script
         env:
           RUNNER_NAME: ${{ runner.name }}
