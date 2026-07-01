@@ -4318,6 +4318,82 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1952
 
 - config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Enable AITER MoE on MiniMax-M3 MXFP4 MI355X single-node vLLM STP: export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1; pass --moe-backend aiter."
+    - "Pin vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from nightly-3f5a1e1733200760169ff31ebe60a271072b199e) for AITER MoE and shared-expert fusion support (vllm-project/vllm#46419, vllm-project/vllm#46545)."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1954
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Update the MiniMax-M3 MXFP8 MI355X vLLM benchmark image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1, which includes the gfx950 mxfp8 MoE/linear tuning (vllm-project/vllm#45725), fused shared-experts MoE for the mxfp8 model (#46545), and the AITER flydsl MoE backend (#46184)."
+    - "Align the standard and EAGLE3 (MTP) bench scripts with vllm-project/recipes#581: gate VLLM_ROCM_USE_AITER on expert parallelism (on for EP/DP-attention runs, where the AITER fused MoE is the auto-selected backend; off for TP-only runs, which fall back to the native MXFP8 path since the master switch otherwise yields degenerate MiniMax-M3 output), export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 unconditionally (the router-append shared-experts fusion is independent of the master switch and self-disables under EP), and export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6 (INT6 quick all-reduce)."
+    - "Retune the TP/EP search space to the best layout per concurrency band and drop redundant points (full TP8/EP8, TP2/EP2, DP-attention)."
+    - "minimaxm3-fp8-mi355x-vllm: 1k1k sweeps TP8 (conc 1-32), TP4 (conc 4-32), TP4/EP4 (conc 64-512); 8k1k sweeps TP8 (conc 1-2), TP4 (conc 2-128)."
+    - "minimaxm3-fp8-mi355x-vllm-mtp: 1k1k sweeps TP8 (conc 4-32), TP8/EP8 (conc 1-256), TP4 (conc 1-2 and 32-64), TP4/EP4 (conc 128-256); 8k1k sweeps TP8 (conc 1 and 4-16), TP4 (conc 16-128)."
+    - "Serving flags are otherwise unchanged."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1946
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP (no MTP)"
+    - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
+    - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1931
+
+- config-keys:
+    - minimaxm3-fp4-b300-dynamo-vllm
+  description:
+    - "Add MiniMax-M3 NVFP4 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP (no MTP)"
+    - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
+    - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1966
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+    - minimaxm3-fp4-mi355x-atom-mtp
+  description:
+    - "Bump image to rocm/atom-dev:MiniMax-M3-20260630 for both fp4 atom entries"
+    - "Add OPT_ARGS: pass --online_quant_config '{\"global_quant_config\": \"ptpc_fp8\", \"exclude_layer\": [\"lm_head\", \"model.embed_tokens\", \"vision_tower\", \"multi_modal_projector\", \"patch_merge_mlp\", \"*block_sparse_moe\"]}' and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' to both scripts"
+    - "Replace AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1967
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-atom
+    - minimaxm3-fp8-mi355x-atom-mtp
+  description:
+    - "Bump image to rocm/atom-dev:MiniMax-M3-20260630 for both fp8 atom entries"
+    - "Add OPT_ARGS: pass --online_quant_config '{\"global_quant_config\": \"ptpc_fp8\", \"exclude_layer\": [\"lm_head\", \"model.embed_tokens\", \"vision_tower\", \"multi_modal_projector\", \"patch_merge_mlp\", \"*block_sparse_moe\"]}' and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' to both scripts"
+    - "Replace AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1968
+
+- config-keys:
+    - dsv4-fp4-b200-dynamo-vllm
+  description:
+    - "Add point-specific DeepSeek-V4-Pro FP4 B200 Dynamo-vLLM disaggregated recipes for the 8k/1k concurrency points c=1, 32, 64, 128, 256, 512."
+    - "Wire those rows in nvidia-master.yaml; c=16, 1024, 8192, and 12345 are not part of this update."
+    - "Recipes use vllm/vllm-openai:v0.23.0, DSV4 revision 0366e4e064385807ea86b088a5c6c878ff23343b, max-model-len 9280, with per-point P1/D1 (1 prefill node DEP=8 / 1 decode node) serving knobs."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1963
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-mtp
+  description:
+    - "Add MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node aggregated vLLM benchmark with EAGLE3 speculative decoding (spec-decoding: mtp, 3 draft tokens via Inferact/MiniMax-M3-EAGLE3), runner b200-dgxc"
+    - "Image vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41 (bakes in MiniMax-M3 modelopt NVFP4 support, vllm-project/vllm PR #46380; no runtime patch needed); prompts routed through the chat template"
+    - "Target weights pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4 (added minimaxm3-fp4 MODEL_PATH branch to launch_b200-dgxc.sh); EAGLE3 draft fetched next to the target weights; --block-size 128 (MSA), --language-model-only"
+    - "Sweeps tp 4/8 with and without EP at 1k1k and 8k1k, conc 1-256"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1933
+
+- config-keys:
+    - dsv4-fp4-b200-sglang
+  description:
+    - "Bump SGLang image from lmsysorg/sglang:deepseek-v4-blackwell (digest sha256:df18bfc4...) to mainline nightly lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1923
+
+- config-keys:
     - glm5-fp8-gb200-dynamo-sglang
   description:
     - "Add GLM-5.1-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
