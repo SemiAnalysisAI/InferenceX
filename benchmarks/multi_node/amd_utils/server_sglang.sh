@@ -511,7 +511,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     if [[ "$DRY_RUN" -eq 1 ]]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
-        ROUTER_LOG_FILE="/tmp/slurm_job-${SLURM_JOB_ID}_proxy_${host_name}.log"
+        ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/proxy_${host_name}.log"
         set -x
         if [[ "${SGLANG_ROUTER_STDOUT_LOGS:-0}" == "1" ]]; then
             eval "$ROUTER_CMD" 2>&1 | tee "$ROUTER_LOG_FILE" &
