@@ -314,6 +314,36 @@ setup_vllm_env() {
     echo "[vLLM] VLLM_HOST_IP=${VLLM_HOST_IP}"
 }
 
+build_vllm_metrics_urls() {
+    local urls=()
+    local ip
+    for ip in "${IP_ARRAY[@]}"; do
+        [[ -n "$ip" ]] || continue
+        urls+=("http://${ip}:${SERVER_PORT}/metrics")
+    done
+    (IFS=,; echo "${urls[*]}")
+}
+
+capture_vllm_cache_metrics() {
+    local label="${1:-snapshot}"
+    local out="/run_logs/slurm_job-${SLURM_JOB_ID}/vllm_cache_metrics_${label}.txt"
+    local urls="${AIPERF_SERVER_METRICS_URLS:-$(build_vllm_metrics_urls)}"
+    local url
+    mkdir -p "$(dirname "$out")"
+    {
+        echo "=== vLLM cache metrics snapshot: ${label} $(date --iso-8601=seconds) ==="
+        echo "AIPERF_SERVER_METRICS_URLS=${urls}"
+        IFS=',' read -r -a _metric_urls <<< "$urls"
+        for url in "${_metric_urls[@]}"; do
+            [[ -n "$url" ]] || continue
+            echo "--- ${url} ---"
+            curl -fsS --max-time 5 "$url" 2>/dev/null \
+                | grep -Ei 'external|prefix_cache|prompt_tokens_by_source|kv_cache|gpu_cache|cpu_kv|kv_offload|cache_hit|lmcache' \
+                || true
+        done
+    } | tee -a "$out"
+}
+
 start_lmcache_mp_if_needed() {
     if [[ "$ROLE_KV_CONNECTOR" != *"-lmcachemp" ]]; then
         return 0
@@ -393,7 +423,7 @@ PY
     lmcache server \
         --host "${LMCACHE_HOST:-127.0.0.1}" --port "${LMCACHE_PORT:-5555}" \
         --http-host "${LMCACHE_HOST:-127.0.0.1}" --http-port "${LMCACHE_HTTP_PORT:-8080}" \
-        --l1-size-gb "${LMCACHE_L1_SIZE_GB:-1200}" \
+        --l1-size-gb "${LMCACHE_L1_SIZE_GB:-3000}" \
         --l1-init-size-gb "${LMCACHE_L1_INIT_SIZE_GB:-20}" \
         --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-7200}" \
         --chunk-size "${LMCACHE_CHUNK_SIZE:-256}" \
@@ -518,10 +548,14 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $WS_PATH
 
     export ROUTER_PORT=$ROUTER_PORT
+    export AIPERF_SERVER_METRICS_URLS="${AIPERF_SERVER_METRICS_URLS:-$(build_vllm_metrics_urls)}"
+    echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
     BENCH_CMD="bash $WS_PATH/bench.sh ${xP} ${yD} $((GPUS_PER_NODE*xP)) $((GPUS_PER_NODE*yD)) \
         $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
+
+    capture_vllm_cache_metrics "before_benchmark"
 
     if [[ "${EVAL_ONLY:-false}" == "true" ]]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
@@ -532,6 +566,8 @@ if [ "$NODE_RANK" -eq 0 ]; then
         eval "$BENCH_CMD"
         set +x
     fi
+
+    capture_vllm_cache_metrics "after_benchmark"
 
     # Run evaluation if requested (before killing router)
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
@@ -604,6 +640,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
             popd
         fi
+        capture_vllm_cache_metrics "after_eval"
     fi
 
     # Stage workspace-level artifacts such as aggregated benchmark JSON and

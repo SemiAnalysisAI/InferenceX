@@ -13,7 +13,7 @@ kimik2.5-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
       search-space:
       - spec-decoding: "none"
         offloading: lmcache-mp
-        total-cpu-dram-gb: 1200
+        total-cpu-dram-gb: 3000
         conc-list: [ 16, 32, 48, 64 ]
         prefill:
           num-worker: 1
