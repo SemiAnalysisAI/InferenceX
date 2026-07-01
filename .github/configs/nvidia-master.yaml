@@ -1670,14 +1670,6 @@ dsr1-fp4-b200-sglang:
       search-space:
       - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
-    # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
-    # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
-    # `bmk_agentic_*`). Re-enable once that workflow is aligned.
-    # agentic-coding:
-    # - duration: 1800
-    #   search-space:
-    #   - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 24, 32, 48, 64, 128, 256] }
-    #   - { tp: 8, ep: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
 
 dsr1-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130

@@ -18,14 +18,6 @@ dsr1-fp4-mi355x-sglang:
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
-    # Agentic-coding sweep commented out for this image-bump PR — the
-    # 10-conc agentic matrix amplifies sweep cost and the bump validation
-    # only needs the fixed-seq-len throughput shape. Re-enable once the
-    # bump merges; the next agentic cron PR will pick it up.
-    # agentic-coding:
-    # - duration: 1800
-    #   search-space:
-    #   - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
 dsr1-fp4-mi355x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
