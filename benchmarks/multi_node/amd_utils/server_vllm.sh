@@ -423,7 +423,7 @@ PY
     lmcache server \
         --host "${LMCACHE_HOST:-127.0.0.1}" --port "${LMCACHE_PORT:-5555}" \
         --http-host "${LMCACHE_HOST:-127.0.0.1}" --http-port "${LMCACHE_HTTP_PORT:-8080}" \
-        --l1-size-gb "${LMCACHE_L1_SIZE_GB:-3000}" \
+        --l1-size-gb "${LMCACHE_L1_SIZE_GB:-1200}" \
         --l1-init-size-gb "${LMCACHE_L1_INIT_SIZE_GB:-20}" \
         --l1-read-ttl-seconds "${LMCACHE_L1_READ_TTL_SECONDS:-7200}" \
         --chunk-size "${LMCACHE_CHUNK_SIZE:-256}" \
