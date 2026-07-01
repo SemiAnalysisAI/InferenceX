@@ -4351,3 +4351,12 @@
     - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
     - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1966
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm-disagg
+  description:
+    - "Update the MiniMax-M3 MXFP4 MI355X vLLM disagg image to vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from rocm/vllm-dev:vllm-0.23.1-rocm723-mi35x-mori-0625) for AITER MoE and shared-expert fusion support."
+    - "Export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1 for MiniMax-M3-MXFP4 (both prefill and decode)."
+    - "Enable prefill-only INT4 quick-reduce: set VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4 and VLLM_ROCM_QUICK_REDUCE_MAX_SIZE_BYTES_MB=2048 on the prefill workers via a new prefill_env channel (mirrors the existing decode_env path in server_vllm.sh)."
+    - "Cap the 1P1D TP4 concurrency sweep at 256 (was 512); 2P1D TP4 unchanged at 128/256/512."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1943
