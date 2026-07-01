@@ -14,11 +14,13 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
-PORT=8787
-
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+
+if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
+    MAX_MODEL_LEN=1000000
+fi
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -45,20 +47,18 @@ amd-smi || true
 
 # ---- Resolve traces and install deps ----------------------------------------
 # https://huggingface.co/datasets/semianalysisai/cc-traces-weka-with-subagents-060826
- export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060826
+export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060826
 
 # ---- Resolve traces and install deps ----------------------------------------
 resolve_trace_source
 install_agentic_deps
 
-# ---- Server config ----------------------------------------------------------
-SERVER_LOG="$RESULT_DIR/server.log"
-mkdir -p "$RESULT_DIR"
-
-# ---- Hicache config ----------------------------------------------------------
 # Reject anything other than none: this launcher has no SGLang CPU-offload
 # wiring (different surface than vLLM's SimpleCPUOffloadConnector).
-
+CACHE_ARGS=()
+WARMUP_ARGS=()
+CUDA_GRAPH_MAX_BS="$CONC"
+[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
 case "$OFFLOADING" in
     none)
         # Leave SGLang's default RadixAttention prefix cache on — agentic
@@ -72,7 +72,7 @@ case "$OFFLOADING" in
         # node budget. Lower TP configs use higher ratios to maintain adequate
         # host token capacity without exceeding DRAM limits.
         if [ "$TP" -ge 8 ]; then
-            DEFAULT_HICACHE_RATIO=2
+            DEFAULT_HICACHE_RATIO=8
         else
             DEFAULT_HICACHE_RATIO=16
         fi
@@ -96,40 +96,63 @@ case "$OFFLOADING" in
         ;;
 esac
 
-# ---- LLM server config ----------------------------------------------------------
+# Transformers in the container doesn't recognize the `deepseek_v4` model_type.
+# PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
+# by writing a patched config to /tmp, but in practice isn't catching the error
+# in this image. Patch the cached config.json directly instead: set model_type
+# to `deepseek_v3` so AutoConfig.from_pretrained succeeds, and keep
+# architectures=['DeepseekV4ForCausalLM'] so SGLang dispatches to its native
+# DSv4 model class (python/sglang/srt/models/deepseek_v4.py).
+python3 << PYEOF
+import json
+from huggingface_hub import hf_hub_download
+path = hf_hub_download(repo_id="$MODEL", filename="config.json")
+with open(path) as f:
+    config = json.load(f)
+if config.get("model_type") == "deepseek_v4":
+    config["model_type"] = "deepseek_v3"
+    with open(path, "w") as f:
+        json.dump(config, f, indent=2)
+    print(f"Patched {path}: model_type deepseek_v4 -> deepseek_v3")
+else:
+    print(f"No patch needed: model_type is {config.get('model_type')!r}")
+PYEOF
 
-WARMUP_ARGS=()
-CUDA_GRAPH_MAX_BS="$CONC"
-[ "$CUDA_GRAPH_MAX_BS" -gt 64 ] && CUDA_GRAPH_MAX_BS=64
-
-export SGLANG_DEFAULT_THINKING=1
-export SGLANG_DSV4_REASONING_EFFORT=max
-export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
-export SGLANG_USE_AITER=1
-export SGLANG_USE_ROCM700A=0
+# DSv4 FP4-experts path. Mirrors the env block in the fixed-seq-len sibling
+# (benchmarks/single_node/dsv4_fp4_mi355x_sglang.sh), which tracks the active
+# block in python/run_dsv4.sh on the amd/deepseek_v4 branch:
+#   SGLANG_DSV4_FP4_EXPERTS=True   -> route experts through FP4 kernels
+#   SGLANG_FORCE_TRITON_MOE_FP8=0  -> dispatch MoE through aiter and apply
+#                                    the swiglu_limit clamp in the triton
+#                                    MoE fallback path.
+export SGLANG_REASONING_EFFORT=max
 export SGLANG_OPT_USE_FUSED_COMPRESS=true
-#export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
-export SGLANG_OPT_FP8_WO_A_GEMM=false
-export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
-export SGLANG_OPT_USE_TOPK_V2=false
-export SGLANG_OPT_USE_AITER_INDEXER=true
-export SGLANG_OPT_USE_TILELANG_INDEXER=false
+export SGLANG_OPT_USE_OLD_COMPRESSOR=true
+export SGLANG_OPT_USE_TILELANG_SWA_PREPARE=false
+export SGLANG_OPT_USE_JIT_KERNEL_FUSED_TOPK=false
+export SGLANG_OPT_USE_FUSED_HASH_TOPK=false
+export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
 export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
 export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+export SGLANG_OPT_USE_AITER_MHC_PRE=true
+export SGLANG_OPT_USE_AITER_MHC_POST=true
+export SGLANG_ENABLE_THINKING=1
+export SGLANG_USE_AITER=1
+export SGLANG_USE_ROCM700A=1
+export SGLANG_TOPK_TRANSFORM_512_TORCH=0
 export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
-export AITER_BF16_FP8_MOE_BOUND=0
-export SGLANG_EAGER_INPUT_NO_COPY=true
+export SGLANG_DSV4_FP4_EXPERTS=True
+export SGLANG_OPT_DPSK_V4_RADIX=0
+export SGLANG_OPT_USE_OVERLAP_STORE_CACHE=false
+export SGLANG_OPT_USE_FUSED_STORE_CACHE=false
+export SGLANG_FORCE_TRITON_MOE_FP8=0
+export SGLANG_HACK_FLASHMLA_BACKEND=tilelang
+export SGLANG_OPT_USE_TILELANG_INDEXER=true
+export SGLANG_OPT_USE_TRITON_SWA_PREPARE=true
 
-# multi-stream
-export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
-export SGLANG_ROCM_USE_MULTI_STREAM=false
-
-# relax timeout 
-export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
-
-# tree modification
-export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
+# ---- Server config ----------------------------------------------------------
+SERVER_LOG="$RESULT_DIR/server.log"
+mkdir -p "$RESULT_DIR"
 
 # Parallelism: pure TP, TP+EP, or DEP (DP-attn + EP). Matches the dsv4 b200
 # vllm agentic launcher so the agentic sweep can probe both interactivity and
@@ -157,25 +180,18 @@ else
     PER_ENGINE_MAX_RUNNING=$CONC
 fi
 
-set -x
 echo "Starting sglang server..."
-
-#image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260610
-#    --page-size 256 \
-#image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm700-mi35x-20260616 
-#    --page-size 1 \
-sglang serve \
-    --model-path $MODEL \
+python3 -m sglang.launch_server \
+    --model-path "$MODEL_PATH" --served-model-name "$MODEL" \
     --host=0.0.0.0 \
-    --port $PORT \
+    --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --trust-remote-code \
-    --attention-backend dsv4 \
-    --max-running-requests ${CONC} \
-    --mem-fraction-static 0.90 \
-    --swa-full-tokens-ratio 0.15 \
+    --attention-backend compressed \
+    --max-running-requests "$PER_ENGINE_MAX_RUNNING" \
+    --cuda-graph-max-bs "$CUDA_GRAPH_MAX_BS" \
     --page-size 256 \
-    --context-length $MAX_MODEL_LEN \
+    --context-length "$MAX_MODEL_LEN" \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \

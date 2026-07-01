@@ -46,15 +46,17 @@ else
 fi
 
 # ---- Resolve traces and install deps ----------------------------------------
-# MiniMax-M2.5 servers run at max_model_len ~256k; the unfiltered 061526
+# MiniMax-M2.5 servers run at max_model_len ~256k; the unfiltered 052726
 # corpus has requests up to ~1M proxy tokens that would be rejected.
 # Switch to the 256k-capped variant (470 traces, max in+out <= 256k).
 #export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_256k
 #060226
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
+# export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_with_subagents_060226_256k
 
 resolve_trace_source
 install_agentic_deps
+
+# export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=1200
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
@@ -62,7 +64,6 @@ LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-PREFIX_CACHE_ARGS=()
 
 # ---- Lmcache config ----------------------------------------------------------
 LMCACHE_PID=""
@@ -116,13 +117,15 @@ wait_for_lmcache_ready() {
 }
 
 case "$OFFLOADING" in
-    none) ;;
+    none)
+        OFFLOAD_ARGS=(--no-enable-prefix-caching)
+        ;;
     cpu)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
         # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
         # worker RSS / page cache / slurm cgroup).
-        TOTAL_CPU_DRAM_GB=3000
+        TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
         TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
@@ -141,22 +144,26 @@ case "$OFFLOADING" in
         )
         ;;
     lmcache)
-        { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
+        # Apply PR #3779: per-engine-group KV format detection for MiniMax-M3.
+        # Fixes IndexError in get_num_heads() when heterogeneous KV tensor ranks
+        # (rank-5 K+V main cache + rank-3 MLA index cache) are present.
+        # git fetch origin pull/3779/head:pr-3779
+        # git merge --no-edit pr-3779
         pip install -r requirements/build.txt
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
 
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
-        # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
-        # pool, but let the external MP server own that pool so vLLM does not
+        # Let the external MP server own the full CPU KV pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
         # LMCache backend.
-        TOTAL_CPU_DRAM_GB=3000
+        TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
+        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -164,10 +171,7 @@ case "$OFFLOADING" in
         # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
         # ZMQ-style host string.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        #LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
-        # (srok)TODO: intentionally increased DRAM size
-        TOTAL_CPU_DRAM_GB=2000
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_GB))}"
+        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$((TOTAL_CPU_DRAM_PARTITION_GB))}"
         LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
         # LMCache read locks are leases on chunks that lookup has promised
         # vLLM can retrieve. The default 300s TTL is too short for this
@@ -177,13 +181,12 @@ case "$OFFLOADING" in
         # size unchanged and only extend the lookup-to-retrieve lease.
         LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
         # (srok) check 256 vs 32
-        #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
-        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
+        #LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
+        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$((TP * 2))}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
-        export LMCACHE_BLOCKING_TIMEOUT_SECS=120
+        export LMCACHE_BLOCKING_TIMEOUT_SECS=60
 
-        set -x
         echo "Starting LMCache MP server..."
         LMCACHE_CMD=(
             lmcache server
@@ -205,7 +208,6 @@ case "$OFFLOADING" in
         echo "LMCache server PID: $LMCACHE_PID"
         wait_for_lmcache_ready
 
-        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
         # This gives extra cache hit than disabling hybrid kv cache manager
         OFFLOAD_ARGS=(
@@ -217,62 +219,42 @@ case "$OFFLOADING" in
 esac
 
 # ---- LLM server config ----------------------------------------------------------
-EP_ARGS=()
-if [ "$EP_SIZE" -gt 1 ]; then
-    EP_ARGS=(--enable-expert-parallel)
+PARALLEL_ARGS=(--tensor-parallel-size "$TP")
+if [ "${DP_ATTENTION}" = "true" ]; then
+    PARALLEL_ARGS=(
+        --tensor-parallel-size 1
+        --data-parallel-size "$TP"
+        --enable-expert-parallel
+    )
+elif [ "$EP_SIZE" -gt 1 ]; then
+    PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
 
-# Install amd-quark for MXFP4 (manual install due to ROCm vLLM bug)
-pip install -q amd-quark
-
-# Workaround for MEC FW <177 RCCL memory reclaim issue
-version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
-if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
-    export HSA_NO_SCRATCH_RECLAIM=1
-fi
-
+export VLLM_ENGINE_READY_TIMEOUT_S=3600
+export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=0
-VLLM_BLOCK_SIZE=32
-ASYNC_SCHEDULING_ARGS=""
+export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
-if [[ "$TP" == "8" && "$EP_SIZE" == "8" ]]; then
-    export VLLM_ROCM_USE_AITER_MOE=0
-    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    echo "TP8/EP8: using block size 32, shuffle disabled, AITER MoE disabled, async scheduling disabled."
-elif (( CONC < 64 )); then
-    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    echo "c${CONC}: using block size 32, shuffle disabled, async scheduling disabled."
-elif (( CONC == 64 )); then
-    ASYNC_SCHEDULING_ARGS="--no-async-scheduling"
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-    VLLM_BLOCK_SIZE=16
-    echo "c64: using block size 16, shuffle enabled, async scheduling disabled."
-else
-    export VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1
-    VLLM_BLOCK_SIZE=16
-    echo "c${CONC}: using block size 16, shuffle enabled, async scheduling enabled."
-fi
-
-{ set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
-    --tensor-parallel-size="$TP"
-    "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.95
+    "${PARALLEL_ARGS[@]}"
+    --block-size 128
+    --gpu-memory-utilization 0.85
     --kv-cache-dtype fp8
-    --block-size=$VLLM_BLOCK_SIZE
     --trust-remote-code
-    --attention-backend "ROCM_AITER_FA"
+    --language-model-only
+    --attention-backend TRITON_ATTN
+    --moe-backend aiter
+    --tool-call-parser minimax_m3
+    --reasoning-parser minimax_m3
+    --enable-auto-tool-choice
     --max-num-seqs "$CONC"
-    $ASYNC_SCHEDULING_ARGS
-    "${PREFIX_CACHE_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"

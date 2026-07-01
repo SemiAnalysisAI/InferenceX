@@ -12,6 +12,17 @@ set -x
 ENGINE="${ENGINE:-sglang-disagg}"
 export PYTHONDONTWRITEBYTECODE=1
 
+# HiCache / Mooncake settings are delivered via a bind-mounted config file (see
+# job.slurm) instead of individual docker -e flags. Source it with auto-export so
+# the values land in the environment before the "${VAR:-default}" fallbacks below
+# apply. Guarded so non-container / single-node runs without the mount still work.
+if [[ -f /config/hicache_mc.env ]]; then
+    set -a
+    source /config/hicache_mc.env
+    set +a
+    echo "[INFO] Loaded HiCache/Mooncake config from /config/hicache_mc.env"
+fi
+
 # =============================================================================
 # Shared: IBDEVICES detection
 # =============================================================================
@@ -85,7 +96,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         ND_PRIO=$(nicctl show qos 2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
         ND_DSCP=$(nicctl show qos 2>/dev/null | awk -v p="$ND_PRIO" '
 $1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
+    gsub(/[^0-9]/, "", $3); print $3; exit
 }')
         if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
             export UCX_IB_TRAFFIC_CLASS=$(( 4 * ND_DSCP ))
@@ -125,22 +136,31 @@ else
 
     export SGLANG_USE_AITER=1
     export AITER_LOG_LEVEL=ERROR
+    # Align with mori-scheduler/scripts/multi_node reference: persist the AITER MLA
+    # workspace (MLA prefill path) and enable the MXFP4 MoE scale-factor for this
+    # MXFP4 model. Overridable.
+    # export SGLANG_AITER_MLA_PERSIST="${SGLANG_AITER_MLA_PERSIST:-1}"
+    # export AITER_MXFP4_MOE_SF="${AITER_MXFP4_MOE_SF:-1}"
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
     export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
     export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
-    export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
+    # Keep these as overridable defaults (not hard assignments), otherwise
+    # later tuning blocks cannot raise them for high-concurrency runs.
+    export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
 
-    export MORI_IO_QP_MAX_SEND_WR=16384
+    export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
     export MORI_IO_QP_MAX_CQE=32768
-    export MORI_IO_QP_MAX_SGE=4
+    export MORI_IO_QP_MAX_SGE=1
 
     export MORI_IO_TC_DISABLE=0
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
+
+    export SGLANG_HEALTH_CHECK_TIMEOUT=600
 
     # GLM-5: uses NSA (not MLA), needs fused-decode-MLA disabled + fast loading
     if [[ "$MODEL_NAME" == "GLM-5-FP8" ]]; then
@@ -151,6 +171,8 @@ else
 
     # Disable allocating memory in one pass
     export MORI_SHMEM_MODE=ISOLATION
+    # mori shmem heap size (matches mori-scheduler reference). Overridable.
+    # export MORI_SHMEM_HEAP_SIZE="${MORI_SHMEM_HEAP_SIZE:-1G}"
 
     # Enable spec v2
     export SGLANG_ENABLE_SPEC_V2=1
@@ -177,6 +199,17 @@ else
     # 1 mirrors router logs to stdout via tee (useful for live debugging).
     export SGLANG_ROUTER_STDOUT_LOGS="${SGLANG_ROUTER_STDOUT_LOGS:-0}"
 
+    # MoRIIO SQ tuning defaults (can be overridden by caller env).
+    # Keep explicit exports here so tuned values are guaranteed to reach the
+    # sglang.launch_server process even if upstream env threading regresses.
+    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-}"
+
+    # Mooncake transfer-engine throughput metrics logging (transfer_engine.cpp:523).
+    # Default off to keep the 5s "[Metrics] Transfer Engine Throughput" lines out of
+    # prefill/decode stdout. Set MC_TE_METRIC=1 (or true) to re-enable for debugging.
+    export MC_TE_METRIC="${MC_TE_METRIC:-0}"
+
     # QoS/DSCP configuration
     # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
     if [[ -n "$MORI_RDMA_TC" ]]; then
@@ -185,7 +218,7 @@ else
         ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
         ND_DSCP=$(nicctl show qos 2>/dev/null| awk -v p="$ND_PRIO" '
 $1 == "DSCP" && $2 == ":" && $NF == p {
-    print $3; exit
+    gsub(/[^0-9]/, "", $3); print $3; exit
 }')
 
         if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
@@ -226,6 +259,61 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
             echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
             echo "       This is normal for clusters without QoS or outside Docker containers."
         fi
+    fi
+
+    # =========================================================================
+    # DeepSeek-V4-Pro PD recipe overrides
+    # Placed at the end of the SGLang env block so it wins over the global
+    # MoRI/SGLang defaults set above. Mirrors the validated DSv4 manual PD
+    # commands (see dsv4_mi355x_sglang_disagg_plan.md §2). Only the SGLang/MoRI
+    # env knobs are pinned here; CLI flags live in models.yaml and the cluster
+    # NIC/socket vars (NCCL_IB_HCA, *_SOCKET_IFNAME, IBDEVICES) stay runner-derived.
+    # =========================================================================
+    if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+        # MoRI dispatch/combine dtypes: auto for both roles (not the fp8 split default)
+        export SGLANG_MORI_DISPATCH_DTYPE=auto
+        export MORI_COMBINE_DTYPE_PREFILL=auto
+        export MORI_COMBINE_DTYPE_DECODE=auto
+
+        # Per-role MoRI dispatch sizing (used by the harness chunked/MoE math)
+        export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
+        export MORI_MAX_DISPATCH_TOKENS_DECODE=64
+        unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
+        unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
+
+        # PER_RANK dispatch tokens are pinned independently of the sizing above
+        # (16384 prefill / 128 decode in the reference recipe). server_sglang.sh
+        # prefers these over the MORI_MAX_DISPATCH_TOKENS_* coupling when set.
+        export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL=16384
+        export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE=128
+
+        # Fixed inter-kernel switch threshold (not derived). NOTE: the DP+EP path in
+        # server_sglang.sh recomputes this dynamically for the DEP topology.
+        export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=4096
+
+        # Overlap plan stream on for DSv4 (global default is 0)
+        export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
+
+        # DSv4 model kernel routing (mirrors the single-node / manual PD recipe)
+        export SGLANG_DEFAULT_THINKING=1
+        export SGLANG_DSV4_REASONING_EFFORT=max
+        export SGLANG_USE_ROCM700A=0
+        export SGLANG_HACK_FLASHMLA_BACKEND=triton
+        export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+        export SGLANG_OPT_USE_FUSED_COMPRESS=true
+        export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
+        export SGLANG_OPT_FP8_WO_A_GEMM=false
+        export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
+        export SGLANG_OPT_USE_TOPK_V2=false
+        export SGLANG_OPT_USE_AITER_INDEXER=true
+        export SGLANG_OPT_USE_TILELANG_INDEXER=false
+        export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
+        export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+        export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
+        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+        export SGLANG_ROCM_USE_MULTI_STREAM=false
+        export AITER_BF16_FP8_MOE_BOUND=0
+        export SGLANG_EAGER_INPUT_NO_COPY=true
     fi
 
     # FIXME: WA for latest upstream 0305 image

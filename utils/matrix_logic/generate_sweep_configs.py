@@ -22,7 +22,11 @@ seq_len_stoi = {
 }
 
 MIN_EVAL_CONC = 16
-MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
+# One concurrency per multi-node agentic allocation so each conc becomes its
+# own job and produces its own per-conc artifacts (matching the gb200/dynamo
+# path). Raise this to batch multiple concurrencies into a single server
+# allocation again (trades per-conc artifacts for fewer allocations).
+MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 1
 CPU_MEMORY_OFFLOAD_MODES = {"cpu", "lmcache", "lmcache-mp", "hicache"}
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
@@ -474,6 +478,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
+                                Fields.OFFLOADING.value: offloading,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
@@ -893,6 +898,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
                                 Fields.CONC.value: conc_batch,
+                                Fields.OFFLOADING.value: offloading,
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"

@@ -57,12 +57,15 @@ fi
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
 
-PARALLEL_ARGS=(
-    --tensor-parallel-size "$TP"
-)
 CHUNKED_PREFILL_SIZE=8192
 if [ "${DP_ATTENTION}" = "true" ]; then
     CHUNKED_PREFILL_SIZE=$((8192 * TP))
+fi
+
+PARALLEL_ARGS=(
+    --tensor-parallel-size "$TP"
+)
+if [ "${DP_ATTENTION}" = "true" ]; then
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention

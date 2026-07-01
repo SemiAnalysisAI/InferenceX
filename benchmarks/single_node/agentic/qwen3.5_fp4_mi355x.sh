@@ -122,15 +122,16 @@ echo "Starting SGLang server..."
 export PYTHONNOUSERSITE=1
 
 python3 -m sglang.launch_server \
-    --attention-backend triton \
+    --attention-backend aiter \
     --model-path $MODEL \
     --host=0.0.0.0 \
     --port $PORT \
     --tensor-parallel-size $TP \
     --ep-size $EP_SIZE \
     --trust-remote-code \
+    --model-loader-extra-config '{"enable_multithread_load": true}' \
+    --watchdog-timeout 1200  \
     --tokenizer-worker-num 6 \
-    --enable-aiter-allreduce-fusion \
     --cuda-graph-max-bs $CONC \
     --max-running-requests $CONC \
     --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \

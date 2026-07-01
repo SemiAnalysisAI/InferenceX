@@ -739,7 +739,7 @@ glm5.1-fp4-mi355x-atom:
       - { tp: 4, conc-start: 4, conc-end: 256 }
 
 kimik2.5-int4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi355x
@@ -758,7 +758,7 @@ kimik2.5-int4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi325x
@@ -777,7 +777,7 @@ kimik2.5-int4-mi325x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
 kimik2.5-int4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi300x
@@ -972,7 +972,7 @@ minimaxm2.5-fp4-mi355x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
 minimaxm2.5-fp8-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.21.0
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi300x
@@ -1051,7 +1051,7 @@ minimaxm2.5-fp8-mi325x-vllm-agentic:
       - { tp: 4, offloading: cpu, total-cpu-dram-gb: 1207, conc-list: [16, 20, 24, 28, 32] }
 
 gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:v0.17.0
   model: openai/gpt-oss-120b
   model-prefix: gptoss
   runner: mi300x
@@ -1492,7 +1492,7 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
           - "DECODE_MTP_SIZE=2"
 
 kimik2.5-fp4-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-bf610c2f56764e1b30bc6065f4ceace3d6e59036
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x-disagg
@@ -1546,7 +1546,7 @@ kimik2.5-fp4-mi355x-vllm-disagg:
           - "DECODE_NODES=2"
 
 minimaxm2.5-fp8-mi355x-vllm-disagg:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-a6682d1d259cca69a9ae737ea5608fbbe7520031
   model: MiniMaxAI/MiniMax-M2.5
   model-prefix: minimaxm2.5
   runner: mi355x-disagg
@@ -2109,6 +2109,70 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           - "DECODE_MTP_SIZE=1"
 
 
+# DSv4 PD-disaggregation on MI355X via SGLang + MoRI. Structure mirrors
+# dsr1-fp4-mi355x-sglang-disagg but only the isl 8192 / osl 1024 scenario, with two
+# topology families captured from the validated manual recipe (see
+# dsv4_mi355x_sglang_disagg_plan.md):
+#   - pure-TP 1P1D (TP8, mori KV transfer)
+#   - DEP 2P1D     (TP8/EP8/DP8, mori KV transfer + mori MoE a2a, dp-attention)
+# DSv4-specific serving knobs (attention-backend dsv4, page-size 256, unified_kv_triton,
+# AITER indexer, deepseekv4 parsers) live in amd_utils/{models.yaml,env.sh}; the bench
+# client uses --dsv4 framing (amd_utils/bench.sh). STP only for now (reference recipe has
+# no spec decoding); MTP is a follow-up.
+dsv4-fp4-mi355x-sglang-disagg:
+  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260615
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # non-MTP configurations
+      # 1P1D pure TP8  (mori KV transfer)
+      - spec-decoding: "none"
+        conc-list: [ 1, 2, 4, 8, 16, 32, 64, 128, 256 ]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+      # 1P1D dp-attention + TP-MoE  (mori KV transfer; ep=1 -> MoE tensor-parallel,
+      # no MoE a2a / deepep / ep-dispatch — see amd_utils ep_flags decoupling)
+      - spec-decoding: "none"
+        conc-list: [ 512, 768, 1024 ]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
 dsv4-fp4-mi355x-sglang:
   image: lmsysorg/sglang-rocm:v0.5.13-rocm720-mi35x-20260612
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2394,8 +2458,10 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, offloading: hicache, total-cpu-dram-gb: 2418, conc-list: [16, 32, 48, 64] }
 
+# target
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  #image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
@@ -2405,10 +2471,18 @@ dsv4-fp4-mi355x-vllm-agentic:
   scenarios:
     agentic-coding:
     - duration: 1800
+    #- duration: 3600
+    #- duration: 10800
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 24, 32, 40, 48] }
+      #- { tp: 8, ep: 1, dp-attn: false, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [16, 32, 40, 48, 56] }
+      - { tp: 8, ep: 1, dp-attn: false, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [42] }
+
+      #- { tp: 8, ep: 1, dp-attn: false, offloading: none, conc-list: [8, 16, 32, 64, 72] }
+      #- { tp: 8, ep: 1, dp-attn: false, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [8, 16, 32, 64, 72] }
+      #- { tp: 8, ep: 1, dp-attn: true, offloading: none, conc-list: [8, 16, 32, 64, 72] }
+      #- { tp: 8, ep: 1, dp-attn: true, offloading: lmcache, total-cpu-dram-gb: 1500, conc-list: [8, 16, 32, 64, 72] }
+      # debug
+      #- { tp: 8, ep: 1, dp-attn: false, offloading: cpu, total-cpu-dram-gb: 1500, conc-list: [16] }
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
@@ -2644,6 +2718,12 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 
+# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
+# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
+# image tag, so bumping sglang is just an image tag bump here. Sweeps
+# DP-attention on/off and EP=8.
+
+
 # Diverged from dsv4-fp4-mi355x-sglang (agentic-coding sibling). Reasons below;
 # the original dsv4-fp4-mi355x-sglang entry is left identical to origin/main so
 # its fixed-seq-len sweep is unaffected.
@@ -2667,6 +2747,26 @@ dsv4-fp4-mi355x-sglang-agentic:
       - { tp: 8, offloading: none, conc-list: [16, 32, 64] }
       - { tp: 8, dp-attn: true, offloading: none, conc-list: [64, 128, 256] }
 
+# target
+dsv4-fp4-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260610
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+        #DPA, conc>=64
+      #- { tp: 8, dp-attn: false, offloading: none, conc-list: [4, 8, 16, 32, 48, 64, 128, 196, 256]  }
+      #- { tp: 8, dp-attn: false, offloading: hicache, conc-list: [4, 8, 16, 32, 48, 64, 128, 196, 256]  }
+      #- { tp: 8, dp-attn: false, offloading: none, conc-list: [64]  }
+      - { tp: 8, dp-attn: false, offloading: hicache, total-cpu-dram-gb: 2418, conc-list: [64]  }
+
+
 # DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
 # nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
 # on 2026-05-05, so any nightly built after that includes the
@@ -2687,6 +2787,74 @@ dsv4-fp4-mi355x-sglang-agentic:
 # gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
 # probe to validate the ROCm DP+EP path.
 
+# target
+dsv4-fp4-mi355x-sglang-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260610
+  #image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm700-mi35x-20260616 
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x
+  precision: fp4
+  framework: sglang
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+        #DPA, conc>=64
+      - { tp: 8, dp-attn: false, offloading: none, conc-list: [4, 8, 16, 32, 40]  }
+      - { tp: 8, dp-attn: false, offloading: hicache, total-cpu-dram-gb: 2418, conc-list: [4, 8, 16, 32, 40]  }
+
+dsr1-fp4-mi355x-sglang-disagg-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260609
+  model: amd/DeepSeek-R1-0528-MXFP4-v2
+  model-prefix: dsr1
+  runner: mi355x
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 1 ]
+        offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+      # - spec-decoding: "none"
+      #   conc-list: [ 1 ]
+      #   offloading: hicache
+      #   prefill:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: false
+      #     additional-settings:
+      #     - "PREFILL_NODES=1"
+      #   decode:
+      #     num-worker: 1
+      #     tp: 8
+      #     ep: 1
+      #     dp-attn: false
+      #     additional-settings:
+      #     - "DECODE_NODES=1"
+      #     - "DECODE_MTP_SIZE=0"
+
 dsv4-fp4-mi355x-atom-disagg:
   image: rocm/atom-dev:nightly_202606101403
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2702,7 +2870,7 @@ dsv4-fp4-mi355x-atom-disagg:
     - isl: 8192
       osl: 1024
       search-space:
-      # 2P1D DPA+TP8 
+      # 2P1D DPA+TP8
       - conc-list: [ 256, 512, 768, 1024, 2048 ]
         prefill:
           num-worker: 2
@@ -2718,7 +2886,7 @@ dsv4-fp4-mi355x-atom-disagg:
           dp-attn: true
           additional-settings:
           - "DECODE_NODES=1"
-      # 1P1D TP8 
+      # 1P1D TP8
       - conc-list: [ 4, 8, 16, 32, 64, 128 ]
         prefill:
           num-worker: 1
@@ -2992,3 +3160,89 @@ minimaxm3-fp8-mi325x-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
+
+dsv4-fp4-mi355x-sglang-disagg-agentic-hicache:
+  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260618
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: mi355x-disagg
+  precision: fp4
+  framework: sglang-disagg
+  multinode: true
+  disagg: true
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [ 4,8,16,32,40 ]
+        offloading: none
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+      - spec-decoding: "none"
+        conc-list: [ 4,8,16,32,40 ]
+        offloading: hicache
+        total-cpu-dram-gb: 2418 # just a placeholder, not used
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "PREFILL_NODES=1"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: false
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "DECODE_MTP_SIZE=0"
+
+minimaxm3-fp8-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:minimax-m3
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: mi355x
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 4, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 8, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+      - { tp: 8, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96, 128 ] }
+
+minimaxm3-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  model: amd/MiniMax-M3-MXFP4
+  model-prefix: minimaxm3
+  runner: mi355x
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - duration: 1800
+      search-space:
+      - { tp: 4, ep: 1, offloading: none, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: cpu, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
+      - { tp: 4, ep: 1, offloading: lmcache, total-cpu-dram-gb: 2418, conc-list: [1, 4, 8, 16, 24, 32, 48, 56, 64, 96, 128 ] }
