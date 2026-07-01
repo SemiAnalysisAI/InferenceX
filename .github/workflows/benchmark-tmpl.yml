@@ -254,12 +254,6 @@ jobs:
             results/**
             !results/aiperf_artifacts/inputs.json
             !results/aiperf_artifacts/profile_export_raw.jsonl
-          # Excluded by design (multi-GB debug artifacts, not consumed by
-          # post-processing): results/aiperf_artifacts/inputs.json (pre-formatted
-          # request bodies — the mmap'd binary equivalent is rebuilt from
-          # --public-dataset + --random-seed) and
-          # results/aiperf_artifacts/profile_export_raw.jsonl (full HTTP bodies
-          # per request — recoverable by re-running the same trace).
           if-no-files-found: ignore
 
       - name: Upload server logs
