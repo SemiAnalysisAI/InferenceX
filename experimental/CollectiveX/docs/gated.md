@@ -210,12 +210,24 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
     does NOT survive across the EP8 multi-srun's separate srun steps (only the pyxis container rootfs does),
     so the case-srun saw the bundled mainline `deep_ep` → `no attribute HybridEPBuffer`. Fixed by installing
     into site-packages (`pip install`, persists — mirrors deepep-v2), build_ext fallback for EP4.
+  - **DeepEP-hybrid h100 + h200 (Hopper, EP8 single-node) — WORKS, 212/212 correct each** (runs
+    28535221873 / 28535231056, post idempotent-build fix): 43/44 cases valid across the `none` +
+    `linear` uneven-token distributions, decode+prefill ladders T=8→4096, all `correct=True`. The ONE
+    failing case (c043) is the `empty-rank` diagnostic (`ep-uneven-tokens-v1`, `required_publication:
+    diagnostic` — one rank gets ZERO tokens): HybridEP's `set_intra_node_buffers` → `hybrid_ep.cu:81
+    cudaDeviceSynchronize` raises `cudaErrorIllegalAddress` on Hopper (identical index c043 on BOTH
+    SKUs = deterministic-by-config, NOT the flashinfer intermittent nor accumulation). **Mainline DeepEP
+    handles the same empty-rank case on Hopper** (h100 deepep shard = success), so this is a HybridEP
+    kernel-robustness gap on the zero-token-rank edge, not a harness bug — recorded as a failed-case
+    record. Untested on Blackwell (b300/gb300 hybrid suites are `uneven_tokens=none` only). Not
+    retried/chunked: deterministic kernel limit, and the backend already has 212 correct points/SKU.
   - **UCCL aarch64 (gb300) — WALL (confirmed fresh, the one genuine aarch64 EP wall).** Run 28457032490:
     `ModuleNotFoundError: No module named 'uccl.ep'` — the uccl EP extension does not import on aarch64
     Grace-Blackwell (consistent with UCCL-EP docs: NVIDIA/AMD + EFA/IB/Broadcom, no aarch64/Grace). EP4+EP8.
   LESSON: a failing run is not proof of a capability wall — both deepep-hybrid claims were wrong; the EP8
   one was a build-env bug, not a hardware limit. Always check the library's actual support before walling.
-  Both backends work on x86 single-node (uccl b300=126/b200=124; deepep-hybrid h100=84/b300=36). deepep
+  Both backends work on x86 single-node (uccl b300=126/b200=124; deepep-hybrid h100=212/h200=212/b300=36,
+  43/44 cases on Hopper — only the empty-rank diagnostic crashes, see above). deepep
   (bundled V1), deepep-v2 (from-source), flashinfer, nccl-ep, AND deepep-hybrid@EP4 all run on gb300, so
   the only unfillable gb300 cells are uccl (any EP) and deepep-hybrid EP8.
 - **DeepEP V2 (from-source `kernel_gen=v2`): DONE on x86 + aarch64, EP4 AND rack EP8.** Genuine V2
