@@ -4,6 +4,185 @@
 
 set -x
 
+# ----------------------------------------------------------------------
+# llm-d-vllm: InferenceX-owned multi-node path (no srt-slurm).
+# Mirrors the H200 launcher branch in launch_h200-dgxc-slurm.sh - wrapper
+# script -> benchmarks/multi_node/llm-d/submit.sh -> sbatch -> JOB_ID,
+# then tail the slurm log and bundle server logs on exit.
+# Kept as the first FRAMEWORK gate so it doesn't fall through into the
+# srt-slurm path used by dynamo-{sglang,trt,vllm} below.
+# ----------------------------------------------------------------------
+if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
+    if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
+        # Switched from per-node NVMe (/mnt/numa1/models/deepseek-v4-pro/)
+        # to shared Lustre (/mnt/lustre01/models/deepseek-v4-pro) on
+        # 2026-06-16 after the per-node NVMe stage went missing on every
+        # GB200 node. The DeepSeek-V4-Pro-NVFP4 lustre checkpoint we
+        # tried in between did not work; this is the path that does.
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
+        # Candidate model dirs, probed per-node in job.slurm (AMD-style
+        # SEARCH_PATHS): per-node NVMe FIRST (local, fast - the path the dynamo
+        # block below uses), then shared Lustre as fallback. Self-heals when one
+        # is unmounted/missing on the GB200 nodes (the failure mode that killed
+        # runs 28287278282 / 28287379549). First path present on ALL allocated
+        # nodes wins; MODEL_PATH above is the default/fallback if none match.
+        export MODEL_PATH_CANDIDATES="/mnt/numa1/models/deepseek-v4-pro /mnt/lustre01/models/DeepSeek-V4-Pro"
+        export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
+    else
+        echo "Unsupported MODEL_PREFIX/PRECISION for llm-d-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
+        exit 1
+    fi
+
+    # SLURM partition + account: same values the rest of this launcher
+    # uses for the dynamo-* paths below. Setting them here because our
+    # llm-d-vllm branch exits before reaching the file-level export
+    # block, and submit.sh requires both to be present.
+    export SLURM_PARTITION="${SLURM_PARTITION:-batch}"
+    export SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
+
+    # Container engine: GB200 SLURM users do not have access to the
+    # docker daemon socket, so the H200's `docker run` path fails with
+    # "permission denied while trying to connect to the docker API at
+    # unix:///var/run/docker.sock". Use pyxis srun --container-image=
+    # against an enroot-imported squash file, mirroring how the dynamo
+    # paths below run their containers.
+    SQUASH_DIR=""
+    for cand in \
+        /mnt/lustre01/users-public/sa-shared \
+        /mnt/lustre01/users/slurm-shared/squash \
+        /home/slurm-shared/gharunners/squash \
+        ; do
+        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
+            rm -f "$cand/.write-probe.$$" 2>/dev/null
+            SQUASH_DIR="$cand"
+            break
+        fi
+    done
+    if [[ -z "$SQUASH_DIR" ]]; then
+        echo "Error: no writable squash dir candidate found on this cluster" >&2
+        exit 1
+    fi
+    SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+
+    # enroot's docker:// URL uses '#' to separate registry from repo, not
+    # '/' (e.g., 'docker://ghcr.io#ezrasilvera/llm-d-nokube-vllm:v0.7.0').
+    # Without the '#', enroot treats the whole string as a Docker Hub
+    # repo name and the auth handshake hits registry-1.docker.io -> 401.
+    # nvidia-master.yaml stores image: in plain Docker form (works
+    # natively for docker run on the H200 path); we translate here.
+    case "$IMAGE" in
+        */*)
+            _registry="${IMAGE%%/*}"
+            _rest="${IMAGE#*/}"
+            if [[ "$_registry" == *.* || "$_registry" == *:* ]]; then
+                ENROOT_URL="docker://${_registry}#${_rest}"
+            else
+                ENROOT_URL="docker://${IMAGE}"  # bare hub repo
+            fi
+            ;;
+        *)  ENROOT_URL="docker://${IMAGE}" ;;
+    esac
+    echo "ENROOT_URL=$ENROOT_URL"
+
+    # enroot import is idempotent against an existing squash file - it
+    # writes a fresh sqsh, but skips when -o file is non-empty (we gate
+    # on -s so we re-import a 0-byte sqsh from a cancelled run).
+    if [[ ! -s "$SQUASH_FILE" ]]; then
+        echo "enroot import -> $SQUASH_FILE"
+        enroot import -o "$SQUASH_FILE" "$ENROOT_URL" || {
+            echo "Error: enroot import failed for $ENROOT_URL" >&2
+            exit 1
+        }
+    else
+        echo "Reusing existing squash: $SQUASH_FILE"
+    fi
+
+    export LLMD_CONTAINER_ENGINE=pyxis
+    export LLMD_SQUASH_FILE="$SQUASH_FILE"
+
+    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible); mirrors H200 path.
+    export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
+    mkdir -p "$BENCHMARK_LOGS_DIR"
+
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llm-d-vllm.sh"
+    BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
+    if [[ ! -f "$BENCH_SCRIPT" ]]; then
+        echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
+        exit 1
+    fi
+
+    JOB_ID=$(bash "$BENCH_SCRIPT")
+    if [[ -z "$JOB_ID" ]]; then
+        echo "Error: failed to submit llm-d job" >&2
+        exit 1
+    fi
+    echo "Submitted llm-d job: $JOB_ID"
+
+    # Make sure the server-log tarball ships even when this step is
+    # killed mid-flight (workflow cancel): without the trap the body of
+    # this branch is interrupted before tar+cp below run, the
+    # `Upload server logs` step finds no file, and the user sees nothing
+    # about what happened inside the container.
+    bundle_server_logs() {
+        if [[ -d "$BENCHMARK_LOGS_DIR" ]] && compgen -G "$BENCHMARK_LOGS_DIR/*" >/dev/null 2>&1; then
+            tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
+                -C "$BENCHMARK_LOGS_DIR" . 2>/dev/null || \
+                echo "WARNING: failed to bundle multinode_server_logs.tar.gz" >&2
+        fi
+    }
+    trap 'bundle_server_logs; scancel "$JOB_ID" 2>/dev/null || true' EXIT INT TERM HUP
+
+    LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
+
+    # Wait for log file (also catch early failures).
+    while ! ls "$LOG_FILE" &>/dev/null; do
+        if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
+            echo "ERROR: job $JOB_ID failed before creating log file"
+            scontrol show job "$JOB_ID" || true
+            exit 1
+        fi
+        sleep 5
+    done
+
+    # Background poll, foreground tail.
+    (
+        while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
+            sleep 10
+        done
+    ) &
+    POLL_PID=$!
+
+    tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
+    wait $POLL_PID
+
+    # Result collection: same shape as H200 path. The server-log tarball
+    # is produced by the EXIT trap above (so it ships even when this
+    # step is cancelled mid-flight).
+    for result_file in $(find "${BENCHMARK_LOGS_DIR}" -name "${RESULT_FILENAME}*.json" 2>/dev/null); do
+        file_name=$(basename "$result_file")
+        cp "$result_file" "$GITHUB_WORKSPACE/${file_name}"
+        echo "Copied result: $file_name"
+    done
+
+    if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        EVAL_DIR=$(find "$BENCHMARK_LOGS_DIR" -type d -name eval_results 2>/dev/null | head -1)
+        if [[ -n "$EVAL_DIR" && -d "$EVAL_DIR" ]]; then
+            shopt -s nullglob
+            for eval_file in "$EVAL_DIR"/*; do
+                [ -f "$eval_file" ] || continue
+                cp "$eval_file" "$GITHUB_WORKSPACE/"
+                echo "Copied eval artifact: $(basename "$eval_file")"
+            done
+            shopt -u nullglob
+        else
+            echo "WARNING: RUN_EVAL=true but no eval_results found under $BENCHMARK_LOGS_DIR"
+        fi
+    fi
+
+    scancel "$JOB_ID" 2>/dev/null || true
+    exit 0
+fi
+
 # MODEL_PATH: Override with pre-downloaded paths on GB200 runner
 # The yaml files specify HuggingFace model IDs for portability, but we use
 # local paths to avoid repeated downloading on the shared GB200 cluster.
