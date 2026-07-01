@@ -21,6 +21,15 @@ on:
                 required: false
                 type: string
                 default: ""
+            m3-aiter-ar-rms-mode:
+                description: "MiniMax M3 MI300X AITER AR+RMS experiment mode"
+                required: false
+                type: choice
+                options:
+                    - "off"
+                    - control
+                    - fused
+                default: "off"
     workflow_call:
         inputs:
             generate-cli-command:
@@ -40,6 +49,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            m3-aiter-ar-rms-mode:
+                description: "MiniMax M3 MI300X AITER AR+RMS experiment mode"
+                required: false
+                type: string
+                default: "off"
 
 jobs:
     get-jobs:
@@ -65,10 +79,32 @@ jobs:
                 ref: ${{ github.sha }}
 
             - id: get-jobs
+              env:
+                  M3_AITER_AR_RMS_MODE: ${{ inputs.m3-aiter-ar-rms-mode }}
               run: |
                   pip install pydantic
                   CONFIG_JSON=$(python3 ${GITHUB_WORKSPACE}/utils/matrix_logic/generate_sweep_configs.py \
                     ${{ inputs.generate-cli-command || github.event.inputs.generate-cli-command }})
+                  if [ "$M3_AITER_AR_RMS_MODE" != "off" ]; then
+                    python3 -c '
+                  import json
+                  import sys
+
+                  data = json.load(sys.stdin)
+                  invalid = [
+                      item
+                      for item in data
+                      if item.get("runner") != "mi300x"
+                      or item.get("model-prefix") != "minimaxm3"
+                      or item.get("framework") != "vllm"
+                  ]
+                  if invalid:
+                      raise SystemExit(
+                          "M3 AITER AR+RMS mode only supports MiniMax M3 "
+                          "vLLM jobs on MI300X"
+                      )
+                  ' <<< "$CONFIG_JSON"
+                  fi
                   AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' not in x]))")
                   MULTI_AGENTIC=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if x.get('scenario-type') == 'agentic-coding' and 'prefill' in x]))")
                   SINGLE=$(echo "$CONFIG_JSON" | python3 -c "import sys,json; d=json.load(sys.stdin); print(json.dumps([x for x in d if 'prefill' not in x and x.get('scenario-type') != 'agentic-coding' and not x.get('eval-only', False)]))")
@@ -263,6 +299,7 @@ jobs:
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             run-eval: false
+            m3-aiter-ar-rms-mode: ${{ inputs.m3-aiter-ar-rms-mode }}
             ref: ${{ inputs.ref }}
 
     test-sweep-evals:
@@ -294,6 +331,7 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
+            m3-aiter-ar-rms-mode: ${{ inputs.m3-aiter-ar-rms-mode }}
             ref: ${{ inputs.ref }}
 
     collect-results:
