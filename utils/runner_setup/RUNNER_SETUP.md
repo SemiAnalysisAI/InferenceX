@@ -114,7 +114,10 @@ key off that name:
 
 - `slurm` — the runner submits work through Slurm.
 - The SKU name (`b200`, `b300`, `h200`, `gb300`, …) — coarse hardware targeting.
-- `cluster:<name>`, e.g. `cluster:b200-dgxc` — exact hardware/fleet targeting.
+- Exactly one `cluster:<name>` label, e.g. `cluster:b200-dgxc` — required exact
+  hardware/fleet identity for success-rate reporting and hardware-specific config.
+  Every runner in the same physical cluster with identical hardware should use the same
+  cluster label.
 - Optional capacity tags, e.g. `b200-dsv4`, `b300-p1` — used to carve out dedicated
   benchmark subsets.
 
