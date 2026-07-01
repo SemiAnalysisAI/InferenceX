@@ -48,7 +48,13 @@ from transformers import PreTrainedTokenizerBase
 try:
     from backend_request_func import get_tokenizer
 except ImportError:
-    from vllm.transformers_utils.tokenizer import get_tokenizer
+    # vLLM moved get_tokenizer from vllm.transformers_utils.tokenizer to
+    # vllm.tokenizers; the old path was a deprecation alias in v0.20 and
+    # was removed by v0.23. Try the new location first, fall back to old.
+    try:
+        from vllm.tokenizers import get_tokenizer
+    except ImportError:
+        from vllm.transformers_utils.tokenizer import get_tokenizer
 
 try:
     from vllm.utils import FlexibleArgumentParser
@@ -103,6 +109,26 @@ def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
     transformers). Prefer backend_request_func.get_tokenizer on fallback so
     client tokenization stays aligned with the sglang server (#1381, #1428).
     """
+    if tokenizer_mode == "deepseek_v4":
+        # backend_request_func.get_tokenizer falls through to stock HF
+        # AutoTokenizer for non-mistral modes, which crashes on transformers
+        # wheels that don't register deepseek_v4 (e.g. the one bundled in
+        # vllm/vllm-openai:v0.20.0-ubuntu2404). Use vLLM's tokenizer wrapper
+        # directly - it ships DSV4-aware code, same path the engine uses
+        # when serving with --tokenizer-mode deepseek_v4.
+        # New path (vllm.tokenizers) since v0.21/v0.23; old path
+        # (vllm.transformers_utils.tokenizer) for v0.20.
+        try:
+            from vllm.tokenizers import get_tokenizer as _vllm_get_tokenizer
+        except ImportError:
+            from vllm.transformers_utils.tokenizer import (
+                get_tokenizer as _vllm_get_tokenizer,
+            )
+        return _vllm_get_tokenizer(
+            tokenizer_id,
+            tokenizer_mode=tokenizer_mode,
+            trust_remote_code=trust_remote_code,
+        )
     try:
         return get_tokenizer(
             tokenizer_id,
@@ -938,7 +964,13 @@ def main(args: argparse.Namespace):
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
 
-    max_failure_rate = 0.05
+    # Allow MAX_FAILURE_RATE env override so a high-concurrency sweep can
+    # tolerate transient 5xx spikes and still record per-level numbers.
+    # Default 0.05 keeps prior behavior for callers that do not set it.
+    try:
+        max_failure_rate = float(os.environ.get("MAX_FAILURE_RATE", "0.05"))
+    except ValueError:
+        max_failure_rate = 0.05
     completed = benchmark_result["completed"]
     failure_rate = 1 - completed / args.num_prompts
     if failure_rate > max_failure_rate:
@@ -1249,7 +1281,7 @@ if __name__ == "__main__":
         '--tokenizer-mode',
         type=str,
         default="auto",
-        choices=['auto', 'slow', 'mistral', 'custom'],
+        choices=['auto', 'slow', 'mistral', 'custom', 'deepseek_v4'],
         help='The tokenizer mode.\n\n* "auto" will use the '
         'fast tokenizer if available.\n* "slow" will '
         'always use the slow tokenizer. \n* '
