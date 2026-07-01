@@ -228,7 +228,7 @@ jobs:
               echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
               exit 1
             fi
-            # Existence is not enough: utils/agentic/process_agentic_result.py writes the
+            # Existence is not enough: the agentic aggregation step writes the
             # aggregate even when aiperf recorded zero valid requests. Require
             # successful requests in every concurrency result.
             for result_file in "${agentic_results[@]}"; do

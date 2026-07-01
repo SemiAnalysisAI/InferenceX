@@ -204,7 +204,7 @@ jobs:
             fi
 
             if [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
-              python3 utils/agentic/validate_agentic_result.py \
+              python3 -m utils.agentic.validation.validate_agentic_result \
                 results/aiperf_artifacts \
                 --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
             fi

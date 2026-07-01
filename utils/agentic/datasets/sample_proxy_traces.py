@@ -20,7 +20,7 @@ Dependency: pip install 'psycopg[binary]'
 Example
 -------
     AGENTIC_PROXY_DB_URL=postgresql://... \\
-        python utils/agentic/sample_proxy_traces.py \\
+        python utils/agentic/datasets/sample_proxy_traces.py \\
             --out ./proxy_traces \\
             --min-requests 100 --max-requests 800 \\
             --max-span-hours 4 \\

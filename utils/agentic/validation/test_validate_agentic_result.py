@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from validate_agentic_result import validate_result
+from utils.agentic.validation.validate_agentic_result import validate_result
 
 
 def _write_aggregate(tmp_path: Path, aggregate: dict, *, per_run: bool = False) -> Path:
@@ -79,8 +79,8 @@ def test_fails_when_aggregate_is_missing(tmp_path: Path):
 
 def test_workflow_runs_agentic_validity_gate():
     workflow = (
-        Path(__file__).parents[2] / ".github/workflows/benchmark-tmpl.yml"
+        Path(__file__).parents[3] / ".github/workflows/benchmark-tmpl.yml"
     ).read_text()
 
-    assert "python3 utils/agentic/validate_agentic_result.py" in workflow
+    assert "python3 -m utils.agentic.validation.validate_agentic_result" in workflow
     assert '--failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"' in workflow

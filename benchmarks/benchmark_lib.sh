@@ -1527,8 +1527,11 @@ write_agentic_result_json() {
     # this file exists; run_agentic_replay_and_write_outputs separately rejects
     # aggregates whose request error rate exceeds the configured limit.
     local result_dir="$1"
-    RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
-        "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/process_agentic_result.py"
+    (
+        cd "$INFMAX_CONTAINER_WORKSPACE"
+        RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
+            "$AIPERF_PYTHON" -m utils.agentic.aggregation.process_agentic_result
+    )
 
     # Generate metrics_plots.png from the same aiperf artifacts. Best-effort:
     # don't fail the launcher if plot generation has trouble (e.g. matplotlib
@@ -1556,9 +1559,12 @@ run_agentic_replay_and_write_outputs() {
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
 
     set +e
-    "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/validate_agentic_result.py" \
-        "$result_dir/aiperf_artifacts" \
-        --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
+    (
+        cd "$INFMAX_CONTAINER_WORKSPACE"
+        "$AIPERF_PYTHON" -m utils.agentic.validation.validate_agentic_result \
+            "$result_dir/aiperf_artifacts" \
+            --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
+    )
     validation_rc=$?
     set -e
 
