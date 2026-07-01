@@ -163,13 +163,17 @@ def main() -> int:
                 if sig in seen:
                     continue
                 seen.add(sig)
-                # shard key: same allocation reuse -> (sku, backend, v2, mode, resource, nodes)
-                key = (sku, beng, v2, c["mode"], rmode, nodes)
+                # shard key = the CONTAINER/allocation-determining fields only: (sku, backend, v2, nodes).
+                # mode + resource_mode are per-case runtime knobs (run_in_container reads CX_MODE/
+                # CX_RESOURCE_MODE per case), so they do NOT split shards — all modes/rmodes of one
+                # (sku,backend,v2,nodes) run consecutively in ONE allocation, paying the enroot import +
+                # from-source build ONCE (not once per mode).
+                key = (sku, beng, v2, nodes)
                 shards.setdefault(key, []).append(case)
 
     # build matrix include, chunking oversized shards
     include = []
-    for (sku, beng, v2, mode, rmode, nodes), cases in sorted(shards.items()):
+    for (sku, beng, v2, nodes), cases in sorted(shards.items()):
         if a.min_nodes and max(1, int(nodes or 1)) < a.min_nodes:
             continue   # --min-nodes: skip single-tray (EP4) shards, keep only rack-scale (EP8+)
         if a.max_nodes and max(1, int(nodes or 1)) > a.max_nodes:
@@ -178,9 +182,9 @@ def main() -> int:
         for ci in range(0, len(cases), a.max_cases):
             chunk = cases[ci:ci + a.max_cases]
             part = ci // a.max_cases
-            sid = f"{sku}-{tag}-{mode}-{rmode}" + (f"-n{nodes}" if nodes else "") + (f"-p{part}" if len(cases) > a.max_cases else "")
+            sid = f"{sku}-{tag}" + (f"-n{nodes}" if nodes else "") + (f"-p{part}" if len(cases) > a.max_cases else "")
             include.append({
-                "id": sid, "sku": sku, "backend": beng, "mode": mode, "resource_mode": rmode,
+                "id": sid, "sku": sku, "backend": beng,
                 "nodes": nodes, "deepep_v2": v2,
                 "n": len(chunk), "cases": chunk,
             })

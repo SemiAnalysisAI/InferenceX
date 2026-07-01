@@ -638,9 +638,10 @@ if [ -n "${CX_BUILD_ONLY:-}" ]; then
 fi
 if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-/nonexistent}" ]; then
   # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
-  # All cases share (sku, backend, mode, resource) so the backend build (cx_build_*) is paid once and
-  # cached for the rest. Each case overrides its own dtype/contract/routing/phase/eplb/workload, then
-  # reuses the same per-config path (dispatch_bench). Collapses ~20 dispatches into one allocation.
+  # All cases share (sku, backend, v2, nodes) so the backend build (cx_build_*) is paid once and cached
+  # for the rest. Each case overrides its own mode/resource_mode/dtype/contract/routing/phase/eplb/
+  # workload, then reuses the same per-config path (dispatch_bench). Collapses a whole build-group's
+  # cases (all modes/resource_modes) into one allocation — the sweep shard key is now (sku,backend,v2,nodes).
   ncases="$(python3 -c "import json;print(len(json.load(open('$CX_SHARD_FILE')).get('cases',[])))" 2>/dev/null || echo 0)"
   cx_log "SHARD mode: $ncases case(s) in one allocation (shard=$CX_SHARD_FILE)"
   _cx_ts_base="$CX_TS"   # per-case CX_TS suffix below keeps each case's result file UNIQUE (else
