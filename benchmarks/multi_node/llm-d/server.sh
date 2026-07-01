@@ -410,20 +410,106 @@ PY
     done
     echo "Envoy admin ready; listener should be on $ENVOY_PORT"
 
-    # ---- Gate on the prefill leader's vLLM /health (cross-node) ----
+    # ---- Gate on ALL prefill vLLM /health endpoints (cross-node) ----
     # Prefill ranks wait on their own local /health; wait_for_server_ready only
-    # probes localhost, so the decode leader polls the prefill leader here.
-    echo "Waiting for prefill vLLM at $PREFILL_LEADER_IP:$VLLM_PORT/health"
+    # probes localhost, so the decode leader polls the prefill nodes here.
+    # endpoints.yaml lists one prefill endpoint per node, so with PREFILL_WORKERS>1
+    # (multiple independent DP engines) EVERY prefill node must be probed, not just
+    # IPS[0]. curl gets an explicit connect/max timeout so a blackholed endpoint
+    # trips the deadline instead of hanging the whole run (a single timeout-less
+    # curl once wedged a 2P run for 7h before it was cancelled).
+    _prefill_ips=( "${_ALL_IPS[@]:0:${PREFILL_NODES}}" )
+    [[ ${#_prefill_ips[@]} -gt 0 ]] || _prefill_ips=( "$PREFILL_LEADER_IP" )
+
+    # On failure, dump enough to tell a server-not-ready problem (TCP connects but
+    # /health is slow) apart from a network/subnet problem (TCP connect refused or
+    # times out, host unreachable). Uses only bash builtins + coreutils: the arm64
+    # serving image has no iproute2 / nc.
+    _diag_prefill_endpoint() {
+        local ip="$1" port="$2"
+        {
+            echo "=== NET DIAG: decode -> prefill ${ip}:${port} ==="
+            echo "[diag] decode node: $(hostname -f 2>/dev/null || hostname) local-ips: $(hostname -I 2>/dev/null)"
+            echo "[diag] ifaces: DEFAULT_IFACE=${DEFAULT_IFACE:-} NCCL_SOCKET_IFNAME=${NCCL_SOCKET_IFNAME:-} GLOO_SOCKET_IFNAME=${GLOO_SOCKET_IFNAME:-}"
+            # Local source address the kernel would pick to reach ip: reveals which
+            # subnet/interface the route uses, without needing iproute2.
+            python3 - "$ip" <<'PY' 2>&1 || true
+import socket, struct, sys
+ip = sys.argv[1]
+# Source address the kernel picks to reach ip (which local iface/subnet).
+try:
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect((ip, 80))
+    print(f"[diag] local source IP toward {ip}: {s.getsockname()[0]}")
+    s.close()
+except Exception as e:
+    print(f"[diag] no route to {ip}: {e}")
+# Subnet check via /proc/net/route (no iproute2 needed). Fields are little-endian
+# hex. On-link route (gateway 0.0.0.0) == same subnet; a non-zero gateway means the
+# target is reached across a router == DIFFERENT subnet.
+def _ntoa(v):  # little-endian int -> dotted quad
+    return socket.inet_ntoa(struct.pack('<L', v))
+try:
+    tgt = struct.unpack('<L', socket.inet_aton(ip))[0]
+    best = None
+    with open('/proc/net/route') as f:
+        next(f)
+        for line in f:
+            p = line.split()
+            if len(p) < 8:
+                continue
+            iface, dest, gw, mask = p[0], int(p[1], 16), int(p[2], 16), int(p[7], 16)
+            if (tgt & mask) == (dest & mask):
+                plen = bin(mask).count('1')
+                if best is None or plen > best[0]:
+                    best = (plen, iface, gw, dest)
+    if best is None:
+        print(f"[diag] {ip}: NO matching route -> unreachable")
+    else:
+        plen, iface, gw, dest = best
+        if gw == 0:
+            print(f"[diag] {ip}: ON-LINK via {iface}, subnet {_ntoa(dest)}/{plen} -> SAME subnet (no router hop)")
+        else:
+            print(f"[diag] {ip}: via GATEWAY {_ntoa(gw)} on {iface}, subnet {_ntoa(dest)}/{plen} -> DIFFERENT subnet (crosses a router)")
+except Exception as e:
+    print(f"[diag] subnet classification failed: {e}")
+PY
+            # L4: raw TCP connect (bash /dev/tcp, 5s cap) - port reachable-but-slow
+            # vs unreachable/filtered.
+            if timeout 5 bash -c "exec 3<>/dev/tcp/${ip}/${port}" 2>/dev/null; then
+                echo "[diag] TCP connect ${ip}:${port} OK -> port open; server up but /health slow/not-ready (NOT a network issue)"
+            else
+                echo "[diag] TCP connect ${ip}:${port} FAILED/timed out -> closed, filtered, or unreachable (LIKELY network/subnet/firewall issue)"
+            fi
+            # L3: ICMP reachability, if ping is present.
+            if command -v ping >/dev/null 2>&1; then
+                ping -c 2 -W 2 "$ip" 2>&1 || echo "[diag] ping ${ip} failed (ICMP blocked or host down)"
+            fi
+            # Verbose HTTP connect detail (DNS/connect/TLS timing, HTTP status).
+            curl -v --connect-timeout 5 --max-time 8 "http://${ip}:${port}/health" 2>&1 || true
+            echo "=== END NET DIAG ${ip}:${port} ==="
+        } >&2
+    }
+
+    # Always log the decode->prefill subnet layout up front so a subnet/interface
+    # mismatch is visible even on a run that eventually succeeds.
+    echo "[diag] decode-leader $(hostname 2>/dev/null) local-ips: $(hostname -I 2>/dev/null); prefill targets: ${_prefill_ips[*]} (port $VLLM_PORT)"
+    echo "Waiting for prefill vLLM /health on ${#_prefill_ips[@]} node(s): ${_prefill_ips[*]}"
     PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 300 ))
-    until curl --output /dev/null --silent --fail \
-            "http://$PREFILL_LEADER_IP:$VLLM_PORT/health"; do
-        if [[ "$(date +%s)" -ge "$PREFILL_WAIT_DEADLINE" ]]; then
-            echo "ERROR: prefill vLLM did not become ready within 5 min" >&2
-            exit 1
-        fi
-        sleep 5
+    for _pip in "${_prefill_ips[@]}"; do
+        until curl --output /dev/null --silent --fail \
+                --connect-timeout 5 --max-time 10 \
+                "http://$_pip:$VLLM_PORT/health"; do
+            if [[ "$(date +%s)" -ge "$PREFILL_WAIT_DEADLINE" ]]; then
+                echo "ERROR: prefill vLLM at $_pip:$VLLM_PORT not ready within 5 min" >&2
+                _diag_prefill_endpoint "$_pip" "$VLLM_PORT"
+                exit 1
+            fi
+            sleep 5
+        done
+        echo "Prefill vLLM at $_pip:$VLLM_PORT is ready"
     done
-    echo "Prefill vLLM at $PREFILL_LEADER_IP:$VLLM_PORT is ready"
+    echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
 
     # ---- Scrape engine /metrics (KV-transfer + cache telemetry) ----
     # benchmark_serving only reports client-side TTFT/TPOT; scrape the full
