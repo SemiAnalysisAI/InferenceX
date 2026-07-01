@@ -1,8 +1,4 @@
-name: "svf-vllm-disagg-gb200-2p1d-dep8-dep8-bt16k-agentic"
-
-# High-throughput topology: two DEP8 prefill workers and one DEP8 decode
-# worker, with larger prefill batches to probe whether the c192+ latency knee
-# is due to over-fragmented long-prompt prefill.
+name: "svf-vllm-disagg-gb200-2p1d-dep8-dep8-bt8k-agentic"
 
 model:
   path: "deepseek-v4-pro"
@@ -101,7 +97,7 @@ backend:
       enable-expert-parallel: true
       enable-ep-weight-filter: true
       attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
-      max-num-batched-tokens: 16384
+      max-num-batched-tokens: 8192
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
       block-size: 256
