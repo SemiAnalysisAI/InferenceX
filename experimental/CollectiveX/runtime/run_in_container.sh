@@ -689,15 +689,12 @@ PY
     unset CX_WORKLOAD_DIR 2>/dev/null || true
     cx_log "  [$((ci+1))/$ncases] $CX_BENCH $CX_PHASE $CX_DISPATCH_DTYPE/$CX_MODE/${CX_MEASUREMENT_CONTRACT/-v1/} rt=$CX_ROUTING eplb=${CX_EPLB:-0}"
     dispatch_bench || rc=1
-    # flashinfer's MnnvlMemory symmetric workspace (CUDA-IPC + /dev/shm) can outlive the case's torchrun
-    # process momentarily; rapid back-to-back cases then race the driver/IPC reclaim -> intermittent
-    # `CUDA error: unspecified launch failure` (h100 flashinfer: ~half the cases, scattered across T/routing,
-    # same config both crashes AND passes -> a transient, not a config bug). Between flashinfer cases, drop
-    # stale IPC shm and settle so the next case starts from clean GPU/IPC state. Cheap; flashinfer-only.
-    if [ "$CX_BENCH" = "flashinfer" ]; then
-      rm -f /dev/shm/*mnnvl* /dev/shm/*flashinfer* /dev/shm/*moe_a2a* 2>/dev/null || true
-      sleep "${CX_FLASHINFER_SETTLE:-8}"
-    fi
+    # NOTE: flashinfer h100 intermittently hits `CUDA error: unspecified launch failure` in MoeAlltoAll
+    # (~half of cases, scattered across T/routing, same config both crashes AND passes). It is NOT a
+    # per-case IPC/shm reclaim race — a between-case shm-drop + settle was TESTED (run 28522872429) and
+    # made it WORSE (dropping /dev/shm corrupted in-flight IPC: 21->27 failed cases). Left as-is: each
+    # case is a fresh torchrun process, so a crash does not cascade to the next. Root cause is a genuine
+    # flashinfer MoE-kernel flakiness on Hopper — needs compute-sanitizer on a live run (docs/gated.md).
     ci=$((ci + 1))
   done
 else
