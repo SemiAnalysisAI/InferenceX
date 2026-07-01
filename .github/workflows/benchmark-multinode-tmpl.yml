@@ -247,12 +247,48 @@ jobs:
             fi
             # Existence is not enough: process_agentic_result.py writes the
             # aggregate even when aiperf recorded zero valid requests. Require
-            # successful requests in every concurrency result.
+            # successful requests and the success marker staged only after
+            # replay/result validation in every concurrency result.
             for result_file in "${agentic_results[@]}"; do
               echo "Found agentic result file: $result_file"
-              ok=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get('num_requests_successful'))))" "$result_file" 2>/dev/null || echo 0)
+              conc=$(sed -n 's/.*_conc\([0-9][0-9]*\)\.json$/\1/p' <<< "$result_file")
+              marker_file="agentic_checkpoints/${RESULT_FILENAME}_conc${conc}.success.json"
+              checkpoint_file="agentic_checkpoints/${RESULT_FILENAME}_conc${conc}.json"
+              if [ -z "$conc" ] || [ ! -f "$marker_file" ] || [ ! -f "$checkpoint_file" ]; then
+                echo "Run failed: $result_file is missing validated AgentX checkpoint marker $marker_file." >&2
+                exit 1
+              fi
+              ok=$(python3 - "$result_file" "$checkpoint_file" "$marker_file" "$RESULT_FILENAME" "$conc" <<'PY' 2>/dev/null || echo 0
+import json
+import sys
+
+result_file, checkpoint_file, marker_file, base_result_filename, concurrency_raw = sys.argv[1:]
+concurrency = int(concurrency_raw)
+with open(result_file) as handle:
+    result = json.load(handle)
+with open(checkpoint_file) as handle:
+    checkpoint = json.load(handle)
+with open(marker_file) as handle:
+    marker = json.load(handle)
+expected_marker = {
+    "schema_version": 1,
+    "base_result_filename": base_result_filename,
+    "result_filename": f"{base_result_filename}_conc{concurrency}.json",
+    "concurrency": concurrency,
+}
+print(
+    int(
+        marker == expected_marker
+        and int(result.get("conc", -1)) == concurrency
+        and int(checkpoint.get("conc", -1)) == concurrency
+        and int(result.get("num_requests_successful", 0)) > 0
+        and int(checkpoint.get("num_requests_successful", 0)) > 0
+    )
+)
+PY
+)
               if [ "$ok" != "1" ]; then
-                echo "Run failed: $result_file has zero successful requests." >&2
+                echo "Run failed: $result_file does not match a validated AgentX checkpoint." >&2
                 exit 1
               fi
             done

@@ -513,19 +513,49 @@ agentic_results_ready() {
         return 1
     fi
 
-    local expected_count
-    expected_count=$(wc -w <<<"$CONC_LIST" | tr -d ' ')
-    shopt -s nullglob
-    local agentic_results=("${RESULT_FILENAME}"_conc*.json)
-    shopt -u nullglob
-    if [[ "${#agentic_results[@]}" -ne "$expected_count" ]]; then
-        return 1
-    fi
-
+    local checkpoint_dir="${AGENTIC_CHECKPOINT_DIR:-${GITHUB_WORKSPACE:-$PWD}/agentic_checkpoints}"
+    local concurrency
     local result_file
-    local ok
-    for result_file in "${agentic_results[@]}"; do
-        ok=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get('num_requests_successful'))))" "$result_file" 2>/dev/null || echo 0)
+    local checkpoint_result
+    local marker_file
+
+    for concurrency in $CONC_LIST; do
+        result_file="${RESULT_FILENAME}_conc${concurrency}.json"
+        checkpoint_result="${checkpoint_dir}/${RESULT_FILENAME}_conc${concurrency}.json"
+        marker_file="${checkpoint_dir}/${RESULT_FILENAME}_conc${concurrency}.success.json"
+        if [[ ! -f "$result_file" || ! -f "$checkpoint_result" || ! -f "$marker_file" ]]; then
+            return 1
+        fi
+        local ok
+        ok=$(python3 - "$result_file" "$checkpoint_result" "$marker_file" "$RESULT_FILENAME" "$concurrency" <<'PY' 2>/dev/null || echo 0
+import json
+import sys
+
+result_file, checkpoint_result, marker_file, base_result_filename, concurrency_raw = sys.argv[1:]
+concurrency = int(concurrency_raw)
+with open(result_file) as handle:
+    result = json.load(handle)
+with open(checkpoint_result) as handle:
+    checkpoint = json.load(handle)
+with open(marker_file) as handle:
+    marker = json.load(handle)
+expected_marker = {
+    "schema_version": 1,
+    "base_result_filename": base_result_filename,
+    "result_filename": f"{base_result_filename}_conc{concurrency}.json",
+    "concurrency": concurrency,
+}
+print(
+    int(
+        marker == expected_marker
+        and int(result.get("conc", -1)) == concurrency
+        and int(checkpoint.get("conc", -1)) == concurrency
+        and int(result.get("num_requests_successful", 0)) > 0
+        and int(checkpoint.get("num_requests_successful", 0)) > 0
+    )
+)
+PY
+)
         if [[ "$ok" != "1" ]]; then
             return 1
         fi
@@ -592,6 +622,13 @@ tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 wait $POLL_PID
 
 set -x
+
+if [[ "${BENCHMARK_TYPE:-}" == "agentic-coding" ]]; then
+    if ! agentic_results_ready; then
+        echo "ERROR: AgentX run finished without validated success markers for every concurrency in CONC_LIST=$CONC_LIST" >&2
+        exit 1
+    fi
+fi
 
 echo "Job $JOB_ID completed!"
 echo "Collecting results..."
