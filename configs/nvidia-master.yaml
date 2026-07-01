@@ -9061,6 +9061,104 @@ dsv4-fp4-gb200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
+# llm-d-vllm sibling of dsv4-fp4-gb200-dynamo-vllm topology #3
+# (mid-curve-megamoe, conc-list [256, 512, 1024]). 1 prefill (DEP=8) +
+# 1 decode (DEP=8) on 4 GB200 nodes / 16 GPUs - same shape as the
+# upstream srt-slurm recipe disagg-gb200-mid-curve-megamoe.yaml, served
+# via the InferenceX llm-d-vllm path (no NATS/etcd infra node).
+#
+# Engine config differs from the conc=1 low-latency entry above:
+#   * Decode flips from pure TP=8 to DEP=8 (TP=1 DP=8 EP).
+#   * moe-backend=deep_gemm_mega_moe, enable-ep-weight-filter on both
+#     sides (the mid-curve points only fit on HBM with weight-filter).
+#   * max-model-len=9280, decode max-num-seqs=512.
+# PR follow-up (merge-blocking): the `image:` on both llm-d-vllm keys below
+# (mid-curve + high-tpt) is a personal build. Republish it to the org registry
+# (ghcr.io/semianalysisai/...) and update these `image:` lines before merge.
+# Build source: benchmarks/llm-d/Dockerfile.
+dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: llm-d-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [256, 512, 1024]
+        prefill:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "GPUS_PER_NODE=4"
+          - "RANDOM_RANGE_RATIO=1.0"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+          - "BENCH_NUM_PROMPTS_MULTIPLIER=10"
+          - "MAX_FAILURE_RATE=0.5"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
+# V11 (2026-06-27): high-throughput 2P+1D, Option B (true multi-engine). Reuses
+# the mid-curve recipe BYTE-FOR-BYTE (same engine/env: rc, decode fan-out,
+# NCCL_NET_GDR_C2C, NVSHMEM none + NIC-PE-map, gpu-mem 0.9/0.85, no DeepEP). 4
+# prefill nodes + 2 decode nodes (6 nodes / 24 GPUs), conc 4096. PREFILL_WORKERS=2
+# splits the 4 prefill nodes into TWO INDEPENDENT DEP8 engines (2 nodes each) -
+# matching upstream oci-high-tpt ("2 prefill : 1 decode, DEP8 each"), Dynamo
+# (prefill_workers:2), and AMD (PREFILL_WORKERS). server.sh does the per-engine
+# DP grouping; ep:8 is therefore PER ENGINE (not 16).
+dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: llm-d-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [4096]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=4"
+          - "PREFILL_WORKERS=2"
+          - "GPUS_PER_NODE=4"
+          - "RANDOM_RANGE_RATIO=1.0"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+          - "BENCH_NUM_PROMPTS_MULTIPLIER=3"
+          - "MAX_FAILURE_RATE=0.5"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
