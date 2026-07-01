@@ -171,7 +171,13 @@ def main() -> int:
                 key = (sku, beng, v2, nodes)
                 shards.setdefault(key, []).append(case)
 
-    # build matrix include, chunking oversized shards
+    # PER-BACKEND chunk size. Fast backends (deepep*/nccl-ep/mori/deepep-hybrid) run a whole build-group
+    # in ONE allocation (max_cases, ~no chunking). flashinfer is SLOW (~3.2 min/case, heavy per-case MNNVL
+    # workspace setup) and intermittently hits `CUDA error: unspecified launch failure` under rapid
+    # back-to-back cases — so chunk it small: bounded, PARALLEL jobs, fewer successive setups per
+    # allocation. (uccl is NOT chunked: it fit a 74-case allocation cleanly; its only misses were a few
+    # ll-mode per-case timeouts that chunking wouldn't change.)
+    SLOW_MAX_CASES = {"flashinfer": 16}
     include = []
     for (sku, beng, v2, nodes), cases in sorted(shards.items()):
         if a.min_nodes and max(1, int(nodes or 1)) < a.min_nodes:
@@ -179,10 +185,11 @@ def main() -> int:
         if a.max_nodes and max(1, int(nodes or 1)) > a.max_nodes:
             continue   # --max-nodes: skip rack-scale (EP8+) shards, keep only single-tray (EP4)
         tag = beng + ("-v2" if v2 else "")   # distinct shard id/runner for the V2 kernel variant
-        for ci in range(0, len(cases), a.max_cases):
-            chunk = cases[ci:ci + a.max_cases]
-            part = ci // a.max_cases
-            sid = f"{sku}-{tag}" + (f"-n{nodes}" if nodes else "") + (f"-p{part}" if len(cases) > a.max_cases else "")
+        mc = min(a.max_cases, SLOW_MAX_CASES.get(beng, a.max_cases))
+        for ci in range(0, len(cases), mc):
+            chunk = cases[ci:ci + mc]
+            part = ci // mc
+            sid = f"{sku}-{tag}" + (f"-n{nodes}" if nodes else "") + (f"-p{part}" if len(cases) > mc else "")
             include.append({
                 "id": sid, "sku": sku, "backend": beng,
                 "nodes": nodes, "deepep_v2": v2,
