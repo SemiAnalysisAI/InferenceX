@@ -1719,7 +1719,7 @@ dsr1-fp4-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang:
-  image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
+  image: lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: b200-dsv4
@@ -1754,7 +1754,7 @@ dsv4-fp4-b200-sglang:
       # DP-attention (DP_ATTENTION=true) — balanced CONC range
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 128 }
       # DP-attention (DP_ATTENTION=true) — max-throughput CONC range
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
 
 dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
