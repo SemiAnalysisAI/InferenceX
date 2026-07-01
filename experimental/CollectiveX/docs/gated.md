@@ -80,6 +80,15 @@ kernels) builds its MNNVL symmetric workspace over the torch.distributed NCCL gr
   FlashInfer EP runs and is **official** (bf16 + the quant dispatch matrix below), decode + prefill.
   This is the TRT-LLM NVLink one-sided AllToAll EP — the existing FlashInfer EP results ARE that path
   (provenance `backend_lineage = flashinfer.comm.trtllm_moe_alltoall.MoeAlltoAll`).
+  - **H100 intermittent crash (open):** the MoeAlltoAll **construction** succeeds (cap granted), but
+    ~half of h100 flashinfer cases hit `torch.AcceleratorError: CUDA error: unspecified launch failure`
+    during dispatch/combine execution (run 28500524185: 21/38 cases; scattered across T/routing, the SAME
+    config both crashes AND passes → a genuine intermittent, NOT config/pidfd). NOT a per-case IPC reclaim
+    race either: a between-case `/dev/shm` drop + settle was tested (run 28522872429) and made it WORSE
+    (in-flight IPC corruption, 21→27 fails). So it's flashinfer MoE-kernel flakiness on Hopper — needs
+    compute-sanitizer on a live run to root-cause. Mitigation shipped: flashinfer is sweep-chunked
+    (`SLOW_MAX_CASES=16`) so it runs bounded + PARALLEL and a crash can't take a large shard down with it;
+    the ~50% that pass are correct. B300 flashinfer did not show this at 36 cases (Blackwell).
 - **H200 (`h200-dgxc`) runner:** its container **denies** CAP_SYS_PTRACE, so `pidfd_getfd` fails and the
   symmetric buffer can't be established (`pidfd_getfd ... operation not permitted`). This is a
   per-runner environment limitation, NOT a code/hardware gap — the identical adapter is official on
