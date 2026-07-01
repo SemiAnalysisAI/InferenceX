@@ -1,4 +1,3 @@
-
 dsr1-fp4-b200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-r1-fp4
@@ -1249,7 +1248,6 @@ dsr1-fp4-b300-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
-
 dsr1-fp8-b300-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1653,8 +1651,6 @@ dsr1-fp8-b300-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
-
-
 dsr1-fp4-b200-sglang:
   image: lmsysorg/sglang:v0.5.12.post1
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -1696,7 +1692,6 @@ dsr1-fp4-b200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
 
-
 dsv4-fp4-b200-sglang:
   image: lmsysorg/sglang:deepseek-v4-blackwell@sha256:df18bfc4aa9ecf59451002b49ba00cae58042de9e2a96378bbd21b404dd62c7b
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1735,7 +1730,6 @@ dsv4-fp4-b200-sglang:
       # DP-attention (DP_ATTENTION=true) — max-throughput CONC range
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
 
-
 dsv4-fp4-b200-vllm:
   image: vllm/vllm-openai:nightly-3f0a91bb96f8d72e0498b95c166e817deae14d62
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1758,7 +1752,6 @@ dsv4-fp4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 1024 }
-
 
 dsv4-fp4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.23.0
@@ -1803,9 +1796,6 @@ dsv4-fp4-b200-trt:
       - { tp: 8, conc-start: 1, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 512 }
 
-
-# MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
-# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp4-b200-trt-mtp:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1827,10 +1817,8 @@ dsv4-fp4-b200-trt-mtp:
       - { tp: 8, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 32, conc-end: 256, spec-decoding: mtp }
 
-
-# NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
-# does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
-# B200 SGLang recipe as-is until B300-specific tuning is available.
+# MTP variant of dsv4-fp4-b200-vllm. Mirrors the base search space and adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp4-b200-vllm-mtp:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -1855,7 +1843,9 @@ dsv4-fp4-b200-vllm-mtp:
       - { tp: 8, conc-start: 1, conc-end: 16, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
-
+# NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
+# does not have a B300-specific recipe, so this config reuses the existing DSR1 FP4
+# B200 SGLang recipe as-is until B300-specific tuning is available.
 dsr1-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/DeepSeek-R1-0528-FP4-V2
@@ -1876,7 +1866,6 @@ dsr1-fp4-b300-sglang:
       search-space:
       - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 16 }
-
 
 dsr1-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1910,7 +1899,6 @@ dsr1-fp4-b200-trt:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 256 }
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
-
 
 dsr1-fp4-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -1967,10 +1955,6 @@ dsr1-fp8-b200-sglang:
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/DeepSeek/DeepSeek-R1
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
   # B200 SGLang recipe as-is until B300-specific tuning is available.
-
-
-# DeepSeek-V4-Pro on B300 with sglang (non-MTP).
-# Uses nightly image with megamoe backend for high-concurrency profiles.
 dsr1-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -1991,6 +1975,8 @@ dsr1-fp8-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
 
+# DeepSeek-V4-Pro on B300 with sglang (non-MTP).
+# Uses nightly image with megamoe backend for high-concurrency profiles.
 dsv4-fp4-b300-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2031,8 +2017,6 @@ dsv4-fp4-b300-sglang:
   #                     + EAGLE (3,1,4) + mem-fraction 0.90
   #   dp-attn: true  -> DP-attn  + flashinfer_mxfp4 + chunked-prefill 32768
   #                     + EAGLE (1,1,2) + mem-fraction 0.92 + max-running 256
-
-
 dsv4-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260610-f332e526
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2058,7 +2042,6 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 8, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
-
 qwen3.5-bf16-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
@@ -2078,7 +2061,6 @@ qwen3.5-bf16-b200-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
-
 qwen3.5-bf16-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
@@ -2097,7 +2079,6 @@ qwen3.5-bf16-b200-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-
 
 qwen3.5-fp8-b200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2119,7 +2100,6 @@ qwen3.5-fp8-b200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-
 
 qwen3.5-fp8-b200-sglang-agentic:
   image: lmsysorg/sglang:nightly-dev-20260422-de962f32
@@ -2156,7 +2136,6 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
-
 qwen3.5-fp4-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -2177,7 +2156,6 @@ qwen3.5-fp4-b200-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-
 
 glm5-fp8-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260605-7dc73766
@@ -2221,7 +2199,6 @@ glm5-fp8-b200-sglang-mtp:
   # does not have a B300-specific recipe, so this config reuses the existing GLM5 FP8
   # B200 SGLang recipe as-is until B300-specific tuning is available.
 
-
 glm5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
@@ -2241,7 +2218,6 @@ glm5-fp8-b300-sglang:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256 }
 
-
 glm5-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
@@ -2260,7 +2236,6 @@ glm5-fp8-b300-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
 
 glm5-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260605-7dc73766
@@ -2307,8 +2282,6 @@ glm5-fp4-b200-sglang-mtp:
   # NOTE: At the time of submission, https://cookbook.sglang.io/autoregressive/GLM/GLM-5
   # does not have a B300-specific recipe, so this config reuses the existing
   # GLM-5 FP4 B200 SGLang recipe as-is until B300-specific tuning is available.
-
-
 glm5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
@@ -2330,7 +2303,6 @@ glm5-fp4-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
-
 glm5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: nvidia/GLM-5-NVFP4
@@ -2351,7 +2323,6 @@ glm5-fp4-b300-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 4, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-
 
 glm5-fp4-gb300-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -2653,7 +2624,6 @@ glm5-fp4-gb300-dynamo-trt:
           ep: 16
           dp-attn: true
 
-
 qwen3.5-fp8-b200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2695,7 +2665,6 @@ qwen3.5-fp8-b300-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
-
 qwen3.5-fp8-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -2714,7 +2683,6 @@ qwen3.5-fp8-b300-sglang:
       osl: 1024
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
-
 
 qwen3.5-fp4-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2737,7 +2705,6 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128 }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
-
 qwen3.5-fp4-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -2758,7 +2725,6 @@ qwen3.5-fp4-b300-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 128, spec-decoding: mtp }
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128, spec-decoding: mtp }
-
 
 qwen3.5-bf16-b300-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
@@ -2781,7 +2747,6 @@ qwen3.5-bf16-b300-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
-
 qwen3.5-bf16-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B
@@ -2803,11 +2768,6 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
-
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
-
 kimik2.5-int4-b200-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
@@ -2827,6 +2787,9 @@ kimik2.5-int4-b200-vllm:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this config reuses the existing
+# Kimi-K2.5 INT4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 kimik2.5-int4-b200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
@@ -2865,7 +2828,6 @@ kimik2.5-int4-b300-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64 }
 
-
 kimik2.5-int4-h200-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: moonshotai/Kimi-K2.5
@@ -2884,7 +2846,6 @@ kimik2.5-int4-h200-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
-
 
 kimik2.5-int4-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
@@ -2927,6 +2888,9 @@ kimik2.5-fp4-b200-vllm:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 128 }
 
+# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
+# does not have a B300-specific recipe, so this config reuses the existing
+# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
 
 kimik2.5-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.22.0
@@ -2972,8 +2936,6 @@ dsr1-fp8-b200-sglang-mtp:
   # does not have a B300-specific recipe, so this config reuses the existing DSR1 FP8
   # B200 SGLang MTP recipe as-is until B300-specific tuning is available. Image bumped
   # to v0.5.10.post1-cu130 to match the standard B300 SGLang image used by other B300 configs.
-
-
 dsr1-fp8-b300-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -2992,7 +2954,6 @@ dsr1-fp8-b300-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
-
 
 kimik2.5-fp4-b300-vllm-agentic:
   # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
@@ -3038,7 +2999,6 @@ dsr1-fp8-b200-trt:
       - { tp: 4, ep: 1, conc-start: 8, conc-end: 32 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 8 }
 
-
 dsr1-fp8-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
@@ -3063,7 +3023,6 @@ dsr1-fp8-b200-trt-mtp:
       # TP8 for all points
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
-
 dsr1-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -3083,10 +3042,6 @@ dsr1-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
-
-# DeepSeek-V4-Pro H200 recipe from https://vllm.ai/blog/deepseek-v4
-# Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
-# flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsr1-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -3106,10 +3061,9 @@ dsr1-fp8-h200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
-
-# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
-# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
-# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+# DeepSeek-V4-Pro H200 recipe from https://vllm.ai/blog/deepseek-v4
+# Uses the cu129 image. H200 has no FP4 path, so the FP4 indexer cache
+# flag is omitted. Max-model-len is pinned at 800k per the recipe.
 dsv4-fp8-h200-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3131,11 +3085,9 @@ dsv4-fp8-h200-vllm:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256 }
 
-
-# DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
-# Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
-# image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.
-
+# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
+# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
+# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
 dsv4-fp8-h200-vllm-mtp:
   image: vllm/vllm-openai:v0.21.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3157,10 +3109,9 @@ dsv4-fp8-h200-vllm-mtp:
       - { tp: 8, ep: 1, dp-attn: false, conc-start: 1, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 1, conc-end: 256, spec-decoding: mtp }
 
-
-# MTP variant of dsv4-fp8-h200-vllm. Uses the canonical v0.20.1 image
-# (the non-MTP entry above is still on the deepseekv4-cu129 tag) and adds
-# --speculative-config '{"method":"mtp","num_speculative_tokens":2}'.
+# DeepSeek-V4-Pro H200 single-node with SGLang (Marlin FP8, TP-only).
+# Pinned to the h200-dgxc-slurm runner pool because the deepseek-v4-hopper
+# image needs the /ix mount layout that only launch_h200-dgxc-slurm.sh sets up.
 
 dsv4-fp8-h200-vllm-agentic:
   image: vllm/vllm-openai:v0.22.0
@@ -3200,6 +3151,9 @@ dsv4-fp8-h200-sglang:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 1 }
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
+# MTP variant of dsv4-fp8-h200-sglang. Mirrors the non-MTP recipe (same image,
+# runner pool, search space) and adds EAGLE speculative decoding via
+# --speculative-algorithm EAGLE with the (3,1,4) chain matching dsv4-fp4-b300-sglang-mtp.
 dsv4-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:deepseek-v4-hopper@sha256:7f19c6dc092e47a10fac2e41f47eab78970280d06648b8e50d312a82f0ae722f
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3225,8 +3179,6 @@ dsv4-fp8-h200-sglang-mtp:
   # pareto sweep. The single-node schema has no explicit data-parallel-size
   # field, so dp-attn=true is used as the existing vLLM script switch for DP4
   # layouts on 4 allocated GPUs.
-
-
 dsv4-fp4-b300-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3252,7 +3204,6 @@ dsv4-fp4-b300-vllm:
       - { tp: 8, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 2048, conc-end: 2048 }
-
 
 dsv4-fp4-b300-vllm-agentic:
   image: vllm/vllm-openai:v0.23.0
@@ -3299,7 +3250,6 @@ dsv4-fp4-b300-trt:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
 
-
 dsv4-fp4-b300-trt-mtp:
   image: ghcr.io#semianalysisai/trtllm-deepseek-v4:feat-deepseek_v4-c185066
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -3322,7 +3272,6 @@ dsv4-fp4-b300-trt-mtp:
       - { tp: 4, conc-start: 1, conc-end: 32, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 64, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
-
 
 dsv4-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:v0.21.0
@@ -3348,7 +3297,6 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
-
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -3367,7 +3315,6 @@ qwen3.5-fp8-h200-sglang:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
-
 
 qwen3.5-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12
@@ -3388,7 +3335,6 @@ qwen3.5-fp8-h200-sglang-mtp:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 128, spec-decoding: mtp }
 
-
 glm5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
@@ -3408,7 +3354,6 @@ glm5-fp8-h200-sglang:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64 }
 
-
 glm5-fp8-h200-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: zai-org/GLM-5-FP8
@@ -3427,7 +3372,6 @@ glm5-fp8-h200-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 64, spec-decoding: mtp }
-
 
 dsr1-fp8-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
@@ -3452,7 +3396,6 @@ dsr1-fp8-h200-trt:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 64 }
 
-
 dsr1-fp8-h200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: deepseek-ai/DeepSeek-R1-0528
@@ -3476,7 +3419,6 @@ dsr1-fp8-h200-trt-mtp:
       # If CONC >= 64, then DP_ATTN=true, MTP=1
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-
 
 dsr1-fp8-h200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post1
@@ -4022,7 +3964,6 @@ dsr1-fp8-h200-dynamo-trt:
           ep: 8
           dp-attn: true
 
-
 dsr1-fp8-h100-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post3
   model: deepseek-ai/DeepSeek-R1-0528
@@ -4468,7 +4409,6 @@ dsr1-fp8-h100-dynamo-trt:
           ep: 16
           dp-attn: true
 
-
 gptoss-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: openai/gpt-oss-120b
@@ -4498,7 +4438,6 @@ gptoss-fp4-b200-trt:
       - { tp: 4, conc-start:   4, conc-end:  32}
       - { tp: 8, conc-start:   4, conc-end:   4}
 
-
 gptoss-fp4-b200-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: openai/gpt-oss-120b
@@ -4524,15 +4463,6 @@ gptoss-fp4-b200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 4 }
 
-
-# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# M3 support has not shipped in a stable vLLM release; the dedicated
-# vllm/vllm-openai:minimax-m3 image is the supported path. MXFP8 variant
-# (NVIDIA-quantized, ~427 GB weights) is the lowest precision available —
-# BF16 (~854 GB) does not fit 8x H100 (640 GB) at all, so H100 is TP8-only:
-# weights alone take ~56 GB of each 80 GB GPU, leaving no room below TP8.
-# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode
-# (vLLM --data-parallel-size 8 --enable-expert-parallel).
 gptoss-fp4-h100-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: openai/gpt-oss-120b
@@ -4556,7 +4486,14 @@ gptoss-fp4-h100-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
-
+# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# M3 support has not shipped in a stable vLLM release; the dedicated
+# vllm/vllm-openai:minimax-m3 image is the supported path. MXFP8 variant
+# (NVIDIA-quantized, ~427 GB weights) is the lowest precision available —
+# BF16 (~854 GB) does not fit 8x H100 (640 GB) at all, so H100 is TP8-only:
+# weights alone take ~56 GB of each 80 GB GPU, leaving no room below TP8.
+# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode
+# (vLLM --data-parallel-size 8 --enable-expert-parallel).
 minimaxm3-fp8-h100-vllm:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -4582,7 +4519,6 @@ minimaxm3-fp8-h100-vllm:
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 64 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
-
 
 dsr1-fp8-h100-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8-cu130
@@ -4718,7 +4654,6 @@ dsr1-fp8-h100-dynamo-sglang:
           ep: 16
           dp-attn: true
 
-
 gptoss-fp4-h200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc14
   model: openai/gpt-oss-120b
@@ -4745,13 +4680,6 @@ gptoss-fp4-h200-trt:
       - { tp: 4, ep: 4, dp-attn: false, conc-start: 4, conc-end: 64 }
       - { tp: 8, ep: 8, dp-attn: false, conc-start: 4, conc-end: 8 }
 
-
-# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# Dedicated vllm/vllm-openai:minimax-m3 image (no stable release has M3 yet).
-# MXFP8 variant (~427 GB weights) is the lowest precision available; on
-# 8x H200 (1128 GB) it leaves ample KV headroom where BF16 is a tight fit.
-# TP4 (~112 GB weights/GPU) is memory-tight — swept only at low/mid conc.
-# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode.
 gptoss-fp4-h200-vllm:
   image: vllm/vllm-openai:v0.22.0
   model: openai/gpt-oss-120b
@@ -4777,7 +4705,12 @@ gptoss-fp4-h200-vllm:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 32 }
 
-
+# Day-zero MiniMax-M3 recipe (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# Dedicated vllm/vllm-openai:minimax-m3 image (no stable release has M3 yet).
+# MXFP8 variant (~427 GB weights) is the lowest precision available; on
+# 8x H200 (1128 GB) it leaves ample KV headroom where BF16 is a tight fit.
+# TP4 (~112 GB weights/GPU) is memory-tight — swept only at low/mid conc.
+# dp-attn: true maps to the recipe's "DP8 + Expert Parallel" serve mode.
 minimaxm3-fp8-h200-vllm:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -4804,7 +4737,6 @@ minimaxm3-fp8-h200-vllm:
       - { tp: 8, conc-start: 1, conc-end: 128 }
       - { tp: 8, ep: 8, conc-start: 1, conc-end: 256 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512 }
-
 
 dsr1-fp4-gb200-dynamo-trt:
   image: nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
@@ -5162,7 +5094,6 @@ dsr1-fp4-gb200-dynamo-trt:
           tp: 16
           ep: 16
           dp-attn: true
-
 
 dsr1-fp8-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.8.1.post2
@@ -5592,7 +5523,6 @@ dsr1-fp8-gb200-dynamo-trt:
           ep: 8
           dp-attn: false
 
-
 dsr1-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -5722,7 +5652,6 @@ dsr1-fp8-gb200-dynamo-sglang:
           ep: 24
           dp-attn: true
 
-
 dsr1-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130
   model: deepseek-ai/DeepSeek-R1-0528
@@ -5835,7 +5764,6 @@ dsr1-fp8-gb300-dynamo-sglang:
           tp: 24
           ep: 24
           dp-attn: true
-
 
 dsr1-fp4-gb200-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8-cu130"
@@ -6379,8 +6307,6 @@ dsr1-fp4-gb300-dynamo-trt:
           tp: 16
           ep: 16
           dp-attn: true
-
-
 dsr1-fp4-gb300-dynamo-sglang:
   image: "lmsysorg/sglang:v0.5.8.post1-cu130-runtime"
   model: nvidia/DeepSeek-R1-0528-NVFP4-v2
@@ -6908,8 +6834,6 @@ dsr1-fp8-gb300-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
-
-
 gptoss-fp4-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:0.7.0.post2
   model: openai/gpt-oss-120b
@@ -7438,7 +7362,6 @@ dsr1-fp8-h200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
-
 dsr1-fp4-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-runtime
   model: deepseek-r1-fp4
@@ -7575,8 +7498,6 @@ dsr1-fp4-b200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
-
-
 dsr1-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
   model: deepseek-ai/DeepSeek-R1-0528
@@ -7747,7 +7668,6 @@ dsr1-fp8-b200-dynamo-sglang:
           tp: 8
           ep: 8
           dp-attn: true
-
 
 dsr1-fp8-b200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:v0.5.8.post1-cu130-amd64
@@ -7949,7 +7869,6 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
           ep: 8
           dp-attn: true
 
-
 dsr1-fp4-b200-dynamo-sglang-mtp:
   image: "lmsysorg/sglang:v0.5.12.post1"
   model: deepseek-r1-fp4
@@ -8114,7 +8033,6 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
-
 
 kimik2.5-fp4-gb200-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
@@ -8487,7 +8405,6 @@ kimik2.5-fp4-gb200-dynamo-trt:
           ep: 16
           dp-attn: true
 
-
 kimik2.5-fp4-gb300-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-dev.1-cuda13
   model: nvidia/Kimi-K2.5-NVFP4
@@ -8831,7 +8748,6 @@ kimik2.5-fp4-gb300-dynamo-trt:
           ep: 32
           dp-attn: true
 
-
 kimik2.5-fp4-gb200-dynamo-vllm:
   image: vllm/vllm-openai:v0.21.0
   model: nvidia/Kimi-K2.5-NVFP4
@@ -8954,7 +8870,6 @@ kimik2.5-fp4-gb200-dynamo-vllm:
           ep: 16
           dp-attn: true
 
-
 dsv4-fp4-b200-dynamo-vllm:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9037,9 +8952,6 @@ dsv4-fp4-b200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-
-# MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
-# and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9138,7 +9050,8 @@ dsv4-fp4-gb200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-
+# MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
+# and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
   image: vllm/vllm-openai:v0.20.1-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9218,7 +9131,6 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
           tp: 8
           ep: 8
           dp-attn: true
-
 
 dsv4-fp4-gb200-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85
@@ -9347,9 +9259,6 @@ dsv4-fp4-gb200-dynamo-sglang:
           ep: 12
           dp-attn: true
 
-
-
-# MTP variant of dsv4-fp4-gb200-dynamo-sglang.
 qwen3.5-fp8-gb200-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260608-303757cc
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -9458,6 +9367,8 @@ qwen3.5-fp8-gb200-dynamo-sglang:
           ep: 16
           dp-attn: true
 
+
+# MTP variant of dsv4-fp4-gb200-dynamo-sglang.
 dsv4-fp4-gb200-dynamo-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-cu13-20260528-0abe6a85
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9593,8 +9504,6 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
           tp: 16
           ep: 16
           dp-attn: true
-
-
 dsv4-fp4-b300-dynamo-vllm:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -9650,7 +9559,6 @@ dsv4-fp4-b300-dynamo-vllm:
           tp: 8
           ep: 8
           dp-attn: true
-
 
 dsv4-fp4-gb300-dynamo-vllm:
   image: vllm/vllm-openai:v0.20.0-ubuntu2404
@@ -9744,7 +9652,6 @@ dsv4-fp4-gb300-dynamo-vllm:
           tp: 16
           ep: 16
           dp-attn: true
-
 
 dsv4-fp4-gb300-dynamo-trt:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
@@ -10141,7 +10048,6 @@ dsv4-fp4-gb300-dynamo-trt:
           tp: 8
           ep: 8
           dp-attn: true
-
 
 dsv4-fp4-gb300-dynamo-trt-mtp:
   image: nvcr.io#nvidia/ai-dynamo/tensorrtllm-runtime:1.3.0-deepseek-v4-dev.1
@@ -10566,7 +10472,6 @@ dsv4-fp4-gb300-dynamo-trt-mtp:
           ep: 8
           dp-attn: true
 
-
 dsv4-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -10681,8 +10586,6 @@ dsv4-fp4-gb300-dynamo-sglang:
           ep: 40
           dp-attn: true
 
-
-# MTP variant of dsv4-fp4-gb300-dynamo-sglang.
 glm5-fp8-b200-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
@@ -10896,8 +10799,7 @@ glm5-fp8-b200-dynamo-sglang:
           ep: 1
           dp-attn: false
 
-
-
+# MTP variant of dsv4-fp4-gb300-dynamo-sglang.
 dsv4-fp4-gb300-dynamo-sglang-mtp:
   image: lmsysorg/sglang:nightly-dev-20260527-14f81a67
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -11074,7 +10976,6 @@ qwen3.5-fp8-h100-sglang:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 8 }
       - { tp: 8, ep: 8, conc-start: 16, conc-end: 256 }
 
-
 qwen3.5-fp8-h100-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -11093,7 +10994,6 @@ qwen3.5-fp8-h100-sglang-mtp:
       osl: 1024
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-
 
 qwen3.5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
@@ -11174,7 +11074,6 @@ qwen3.5-fp4-gb300-dynamo-sglang:
           tp: 16
           ep: 16
           dp-attn: true
-
 
 glm5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
@@ -11386,14 +11285,6 @@ glm5-fp4-gb300-dynamo-sglang:
           ep: 1
           dp-attn: false
 
-
-# ============================================================================
-# Net-new agentic recipes from chore/agentx-v0.3 (no overlap with main entries).
-# Recipes that ALREADY existed on main were intentionally left at main's version
-# to preserve main behavior; PR-branch modifications to those recipes are NOT
-# brought in here.
-# ============================================================================
-
 glm5-fp8-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
   model: zai-org/GLM-5-FP8
@@ -11604,6 +11495,12 @@ glm5-fp8-gb300-dynamo-sglang:
           ep: 1
           dp-attn: false
 
+# ============================================================================
+# Net-new agentic recipes from chore/agentx-v0.3 (no overlap with main entries).
+# Recipes that ALREADY existed on main were intentionally left at main's version
+# to preserve main behavior; PR-branch modifications to those recipes are NOT
+# brought in here.
+# ============================================================================
 
 qwen3.5-fp8-b300-sglang-agentic-hicache:
   image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
@@ -11946,10 +11843,9 @@ minimaxm3-fp8-b300-dynamo-vllm:
           ep: 8
           dp-attn: false
 
-
-# MiniMax-M3 GB300 disagg sweep — refreshed recipe set (no Marlin variants).
-# All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: DEP4, TEP8, DEP8, TEP4.
-# 4 GPU/node (GB300 NVL72). kv-cache-dtype=fp8. srun_options mem=0 required.
+# MiniMax-M3 NVFP4 disagg sweep on the same B300 topology matrix as the MXFP8
+# baseline above. The image includes vLLM PR #46380, so no runtime patch is
+# needed.
 minimaxm3-fp4-b300-dynamo-vllm:
   image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
@@ -12163,7 +12059,9 @@ minimaxm3-fp4-b300-dynamo-vllm:
           ep: 8
           dp-attn: false
 
-
+# MiniMax-M3 GB300 disagg sweep — refreshed recipe set (no Marlin variants).
+# All prefill DEP2 (TP1 DP2 EP, 2 GPU/worker). Decode: DEP4, TEP8, DEP8, TEP4.
+# 4 GPU/node (GB300 NVL72). kv-cache-dtype=fp8. srun_options mem=0 required.
 minimaxm3-fp8-gb300-dynamo-vllm:
   image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12406,10 +12304,6 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-
-# MiniMax-M3 GB200 disagg sweep — adapted from NV B300 PR #1863.
-# All prefill DEP4 (TP1 DP4 EP, 4 GPU/worker). Decode: Marlin, TEP8, DEP8, TEP4.
-# 4 GPU/node (GB200 NVL72). FLASHINFER attention with FP8 KV cache.
 qwen3.5-fp4-b200-trt:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -12438,7 +12332,9 @@ qwen3.5-fp4-b200-trt:
       - { tp: 4, ep: 4, dp-attn: true, conc-list: [1024] }
       - { tp: 8, ep: 8, dp-attn: true, conc-list: [256, 512, 1024] }
 
-
+# MiniMax-M3 GB200 disagg sweep — adapted from NV B300 PR #1863.
+# All prefill DEP4 (TP1 DP4 EP, 4 GPU/worker). Decode: Marlin, TEP8, DEP8, TEP4.
+# 4 GPU/node (GB200 NVL72). FLASHINFER attention with FP8 KV cache.
 minimaxm3-fp8-gb200-dynamo-vllm:
   image: vllm/vllm-openai:minimax-m3-perf-arm64-13.0.1-7a67223
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12621,15 +12517,6 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           ep: 8
           dp-attn: true
 
-
-# MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
-# (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
-# cores on Blackwell. M3 support has not shipped in a stable vLLM release;
-# the dedicated vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image is built
-# from the m3_release branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
-# sparse/index cache alignment). Weights are NOT SRE-staged; b300 falls back
-# to writable /data/models (see launch_b300-nv.sh MODEL_PATH split).
 qwen3.5-fp4-b200-trt-mtp:
   image: nvcr.io#nvidia/tensorrt-llm/release:1.3.0rc18
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -12656,13 +12543,14 @@ qwen3.5-fp4-b200-trt-mtp:
       - { tp: 8, ep: 8, spec-decoding: "mtp", conc-list: [4] }
       - { tp: 8, ep: 8, dp-attn: true, spec-decoding: "mtp", conc-list: [128, 256, 1024] }
 
-
-# MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM — FP4 variant
-# of minimaxm3-fp8-b300-vllm. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm
-# PR #46380) is baked into the perf container image, so no runtime patch is
-# needed. --block-size 128 is mandatory (MSA sparse/index cache);
-# weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
-# the STAGED_MODELS allow-list in launch_b300-nv.sh).
+# MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
+# (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
+# cores on Blackwell. M3 support has not shipped in a stable vLLM release;
+# the dedicated vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image is built
+# from the m3_release branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
+# sparse/index cache alignment). Weights are NOT SRE-staged; b300 falls back
+# to writable /data/models (see launch_b300-nv.sh MODEL_PATH split).
 minimaxm3-fp8-b300-vllm:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12695,15 +12583,12 @@ minimaxm3-fp8-b300-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 512 }
 
-
-# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of MiniMax-M3 NVFP4
-# (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM, pairing the target with the
-# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). MiniMax-M3
-# modelopt NVFP4 support (vllm-project/vllm PR #46380) is baked into the perf
-# container image, so no runtime patch is needed; prompts are routed through the
-# chat template. Target weights are pre-staged read-only at
-# /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
-# launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
+# MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM — FP4 variant
+# of minimaxm3-fp8-b300-vllm. MiniMax-M3 modelopt NVFP4 support (vllm-project/vllm
+# PR #46380) is baked into the perf container image, so no runtime patch is
+# needed. --block-size 128 is mandatory (MSA sparse/index cache);
+# weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
+# the STAGED_MODELS allow-list in launch_b300-nv.sh).
 minimaxm3-fp4-b300-vllm:
   image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
@@ -12734,16 +12619,14 @@ minimaxm3-fp4-b300-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
-
-# MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
-# 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
-# (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
-# cores on Blackwell. M3 support has not shipped in a stable vLLM release;
-# the dedicated vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image is built
-# from the m3_release branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
-# sparse/index cache alignment). Weights are NOT SRE-staged: b200-dgxc reads
-# /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8 (pre-downloaded, see
-# launch_b200-dgxc.sh).
+# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of MiniMax-M3 NVFP4
+# (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM, pairing the target with the
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens). MiniMax-M3
+# modelopt NVFP4 support (vllm-project/vllm PR #46380) is baked into the perf
+# container image, so no runtime patch is needed; prompts are routed through the
+# chat template. Target weights are pre-staged read-only at
+# /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
+# launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
   image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
@@ -12773,13 +12656,15 @@ minimaxm3-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
-
-# MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node vLLM — FP4 variant
-# of minimaxm3-fp8-b200-vllm, running on the b200-dgxc cluster. MiniMax-M3
-# modelopt NVFP4 support (vllm-project/vllm PR #46380) is baked into the perf
-# container image, so no runtime patch is needed. --block-size 128 is mandatory
-# (MSA sparse/index cache); weights are pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4
-# (launch_b200-dgxc.sh resolves MODEL_PATH for minimaxm3-fp4).
+# MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
+# 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
+# (MiniMaxAI/MiniMax-M3-MXFP8, ~444 GB) quantized by NVIDIA — native MX tensor
+# cores on Blackwell. M3 support has not shipped in a stable vLLM release;
+# the dedicated vllm/vllm-openai:minimax-m3-0618-x86_64-cu130 image is built
+# from the m3_release branch (vllm-project/vllm#45381). --block-size 128 is mandatory (MSA
+# sparse/index cache alignment). Weights are NOT SRE-staged: b200-dgxc reads
+# /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8 (pre-downloaded, see
+# launch_b200-dgxc.sh).
 minimaxm3-fp8-b200-vllm:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12809,14 +12694,12 @@ minimaxm3-fp8-b200-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
-
-# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
-# minimaxm3-fp8-b200-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
-# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, drafter pinned
-# to TRITON_ATTN). Search space mirrors the non-MTP entry trimmed at the
-# extreme-concurrency end, identical to the minimaxm3-fp8-b300-vllm-mtp
-# precedent: spec decode pays off at low/mid concurrency while acceptance
-# dilutes in big batches, and the draft weights + draft KV shave headroom.
+# MiniMax-M3 NVFP4 (nvidia/MiniMax-M3-NVFP4) B200 single-node vLLM — FP4 variant
+# of minimaxm3-fp8-b200-vllm, running on the b200-dgxc cluster. MiniMax-M3
+# modelopt NVFP4 support (vllm-project/vllm PR #46380) is baked into the perf
+# container image, so no runtime patch is needed. --block-size 128 is mandatory
+# (MSA sparse/index cache); weights are pre-staged at /scratch/fsw/models/MiniMax-M3-NVFP4
+# (launch_b200-dgxc.sh resolves MODEL_PATH for minimaxm3-fp4).
 minimaxm3-fp4-b200-vllm:
   image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
   model: nvidia/MiniMax-M3-NVFP4
@@ -12846,15 +12729,13 @@ minimaxm3-fp4-b200-vllm:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
 
-
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
-# minimaxm3-fp8-b300-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
-# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens).
-# Search space mirrors the non-MTP entry trimmed at
-# the extreme-concurrency end, per the dsv4-fp4-b300-vllm-mtp precedent:
-# spec decode pays off at low/mid concurrency while acceptance dilutes in
-# big batches, and the draft weights + draft KV shave headroom — tp2-ep2 is
-# dropped entirely since its KV headroom was already thin without a draft.
+# minimaxm3-fp8-b200-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, drafter pinned
+# to TRITON_ATTN). Search space mirrors the non-MTP entry trimmed at the
+# extreme-concurrency end, identical to the minimaxm3-fp8-b300-vllm-mtp
+# precedent: spec decode pays off at low/mid concurrency while acceptance
+# dilutes in big batches, and the draft weights + draft KV shave headroom.
 minimaxm3-fp8-b200-vllm-mtp:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12884,15 +12765,14 @@ minimaxm3-fp8-b200-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
-
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
-# minimaxm3-fp8-h200-vllm (PR #1731), pairing MiniMaxAI/MiniMax-M3-MXFP8 with
-# the Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, drafter
-# pinned to FLASH_ATTN since the head is MHA and FlashInfer needs GQA/MQA at
-# page size 128). Search space mirrors the non-MTP entry trimmed at the
-# extreme-concurrency end, per the dsv4-fp4-b300-vllm-mtp / minimaxm3 b300-mtp
-# precedent: spec decode pays off at low/mid concurrency while acceptance
-# dilutes in big batches, and the draft weights + draft KV shave headroom.
+# minimaxm3-fp8-b300-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens).
+# Search space mirrors the non-MTP entry trimmed at
+# the extreme-concurrency end, per the dsv4-fp4-b300-vllm-mtp precedent:
+# spec decode pays off at low/mid concurrency while acceptance dilutes in
+# big batches, and the draft weights + draft KV shave headroom — tp2-ep2 is
+# dropped entirely since its KV headroom was already thin without a draft.
 minimaxm3-fp8-b300-vllm-mtp:
   image: vllm/vllm-openai:minimax-m3-0618-x86_64-cu130
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12922,13 +12802,14 @@ minimaxm3-fp8-b300-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
 
-
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
-# minimaxm3-fp8-h100-vllm (PR #1731). Same TP8-only layout (H100 80 GB has no
-# room below TP8 once ~56 GB of weights land per GPU) plus the
-# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, FLASH_ATTN
-# drafter). DEP stays omitted as on the non-MTP entry — KV-cache init already
-# failed at high conc, and the draft head + draft KV only tighten it further.
+# minimaxm3-fp8-h200-vllm (PR #1731), pairing MiniMaxAI/MiniMax-M3-MXFP8 with
+# the Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, drafter
+# pinned to FLASH_ATTN since the head is MHA and FlashInfer needs GQA/MQA at
+# page size 128). Search space mirrors the non-MTP entry trimmed at the
+# extreme-concurrency end, per the dsv4-fp4-b300-vllm-mtp / minimaxm3 b300-mtp
+# precedent: spec decode pays off at low/mid concurrency while acceptance
+# dilutes in big batches, and the draft weights + draft KV shave headroom.
 minimaxm3-fp8-h200-vllm-mtp:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -12955,7 +12836,12 @@ minimaxm3-fp8-h200-vllm-mtp:
       - { tp: 8, ep: 8, conc-start: 256, conc-end: 256, spec-decoding: mtp }
       - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 256, spec-decoding: mtp }
 
-
+# EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
+# minimaxm3-fp8-h100-vllm (PR #1731). Same TP8-only layout (H100 80 GB has no
+# room below TP8 once ~56 GB of weights land per GPU) plus the
+# Inferact/MiniMax-M3-EAGLE3 draft head (3 speculative tokens, FLASH_ATTN
+# drafter). DEP stays omitted as on the non-MTP entry — KV-cache init already
+# failed at high conc, and the draft head + draft KV only tighten it further.
 minimaxm3-fp8-h100-vllm-mtp:
   image: vllm/vllm-openai:minimax-m3
   model: MiniMaxAI/MiniMax-M3-MXFP8
@@ -13137,8 +13023,6 @@ kimik2.5-fp4-gb300-dynamo-vllm:
           tp: 1
           ep: 24
           dp-attn: true
-
-
 minimaxm3-fp8-h100-vllm-agentic:
   image: vllm/vllm-openai:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
   model: MiniMaxAI/MiniMax-M3-MXFP8
