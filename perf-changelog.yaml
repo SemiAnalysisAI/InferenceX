@@ -4589,3 +4589,10 @@
     - "Image: lmsysorg/sglang:v0.5.12"
     - "14 topologies across 1k/1k and 8k/1k: prefill TP8 STP + decode wide-EP (DEP16/DEP32 high-throughput) and per-node TP8 low-latency, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp8/"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1895
+
+- config-keys:
+    - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm mid-curve disaggregated multinode benchmarks"
+    - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
