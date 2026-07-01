@@ -157,12 +157,6 @@ jobs:
             done
           fi
 
-          # Cleanup results/ from a prior job on this runner. Agentic jobs
-          # write to fixed subpaths (aiperf_artifacts/, metrics_*, etc.), so stale
-          # data from a previous job would otherwise be picked up as this
-          # job's output when replay fails early.
-          rm -rf "${{ github.workspace }}/results" 2>/dev/null || true
-
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           token: ${{ secrets.REPO_PAT }}
