@@ -1,188 +1,280 @@
-h100:
-- 'h100-cw_00'
-- 'h100-cw_01'
-- 'h100-dgxc-slurm_00'
-- 'h100-dgxc-slurm_01'
-- 'h100-dgxc-slurm_02'
-- 'h100-dgxc-slurm_03'
-- 'h100-dgxc-slurm_04'
-- 'h100-dgxc-slurm_05'
-- 'h100-dgxc-slurm_06'
-- 'h100-dgxc-slurm_07'
-- 'h100-dgxc-slurm_08'
-- 'h100-dgxc-slurm_09'
-- 'h100-dgxc-slurm_10'
-- 'h100-dgxc-slurm_11'
-- 'h100-dgxc-slurm_12'
-- 'h100-dgxc-slurm_13'
-- 'h100-dgxc-slurm_14'
-- 'h100-dgxc-slurm_15'
-- 'h100-dgxc-slurm_16'
-- 'h100-dgxc-slurm_17'
-- 'h100-dgxc-slurm_18'
-- 'h100-dgxc-slurm_19'
-h100-dgxc:
-- 'h100-dgxc-slurm_00'
-- 'h100-dgxc-slurm_01'
-- 'h100-dgxc-slurm_02'
-- 'h100-dgxc-slurm_03'
-- 'h100-dgxc-slurm_04'
-- 'h100-dgxc-slurm_05'
-- 'h100-dgxc-slurm_06'
-- 'h100-dgxc-slurm_07'
-- 'h100-dgxc-slurm_08'
-- 'h100-dgxc-slurm_09'
-- 'h100-dgxc-slurm_10'
-- 'h100-dgxc-slurm_11'
-- 'h100-dgxc-slurm_12'
-- 'h100-dgxc-slurm_13'
-- 'h100-dgxc-slurm_14'
-- 'h100-dgxc-slurm_15'
-- 'h100-dgxc-slurm_16'
-- 'h100-dgxc-slurm_17'
-- 'h100-dgxc-slurm_18'
-- 'h100-dgxc-slurm_19'
-h100-multinode:
-- 'h100-dgxc-slurm_16'
-- 'h100-dgxc-slurm_17'
-- 'h100-dgxc-slurm_18'
-- 'h100-dgxc-slurm_19'
-h200:
-- 'h200-cw_00'
-- 'h200-cw_01'
-- 'h200-nb_0'
-- 'h200-nb_1'
-- 'h200-dgxc-slurm_0'
-- 'h200-dgxc-slurm_1'
-- 'h200-dgxc-slurm_2'
-- 'h200-dgxc-slurm_3'
-- 'h200-dgxc-slurm_4'
-- 'h200-dgxc-slurm_5'
-- 'h200-dgxc-slurm_6'
-- 'h200-dgxc-slurm_7'
-- 'h200-dgxc-slurm_8'
-- 'h200-dgxc-slurm_9'
-- 'h200-dgxc-slurm_10'
-- 'h200-dgxc-slurm_11'
-- 'h200-dgxc-slurm_12'
-- 'h200-dgxc-slurm_13'
-h200-multinode:
-- 'h200-dgxc-slurm_11'
-- 'h200-dgxc-slurm_12'
-- 'h200-dgxc-slurm_13'
-h200-dgxc:
-- 'h200-dgxc-slurm_0'
-- 'h200-dgxc-slurm_1'
-- 'h200-dgxc-slurm_2'
-- 'h200-dgxc-slurm_3'
-- 'h200-dgxc-slurm_4'
-- 'h200-dgxc-slurm_5'
-- 'h200-dgxc-slurm_6'
-- 'h200-dgxc-slurm_7'
-- 'h200-dgxc-slurm_8'
-- 'h200-dgxc-slurm_9'
-- 'h200-dgxc-slurm_10'
-- 'h200-dgxc-slurm_11'
-- 'h200-dgxc-slurm_12'
-- 'h200-dgxc-slurm_13'
-b200:
-- 'b200-cw_00'
-- 'b200-cw_01'
-- 'b200-nb_0'
-- 'b200-nb_1'
-- 'b200-dgxc_00'
-- 'b200-dgxc_01'
-- 'b200-dgxc_02'
-- 'b200-dgxc_03'
-- 'b200-dgxc_04'
-- 'b200-dgxc_05'
-- 'b200-dgxc_06'
-- 'b200-dgxc_07'
-- 'b200-dgxc_08'
-- 'b200-dgxc_09'
-b200-dgxc:
-- 'b200-dgxc_00'
-- 'b200-dgxc_01'
-- 'b200-dgxc_02'
-- 'b200-dgxc_03'
-- 'b200-dgxc_04'
-- 'b200-dgxc_05'
-- 'b200-dgxc_06'
-- 'b200-dgxc_07'
-- 'b200-dgxc_08'
-- 'b200-dgxc_09'
-b200-multinode:
-- 'b200-dgxc-slurm_7'
-- 'b200-dgxc-slurm_8'
-- 'b200-dgxc-slurm_9'
-mi300x:
-- 'mi300x-amds_00'
-- 'mi300x-amds_01'
-- 'mi300x-amds_02'
-- 'mi300x-amds_03'
-- 'mi300x-amds_04'
-- 'mi300x-amds_05'
-- 'mi300x-amds_06'
-- 'mi300x-amds_07'
-- 'mi300x-amds_08'
-mi300x-disagg:
-- 'mi300x-amds_06'
-- 'mi300x-amds_07'
-- 'mi300x-amds_08'
-mi325x:
-- 'mi325x-amds_00'
-- 'mi325x-amds_01'
-- 'mi325x-amds_02'
-- 'mi325x-amds_03'
-- 'mi325x-amds_04'
-- 'mi325x-amds_05'
-- 'mi325x-amds_06'
-- 'mi325x-amds_07'
-- 'mi325x-amds_08'
-mi325x-disagg:
-- 'mi325x-amds_00'
-- 'mi325x-amds_01'
-- 'mi325x-amds_02'
-- 'mi325x-amds_03'
-- 'mi325x-amds_06'
-- 'mi325x-amds_07'
-- 'mi325x-amds_08'
-mi355x:
-- 'mi355x-amds_00'
-- 'mi355x-amds_01'
-- 'mi355x-amds_02'
-- 'mi355x-amds_03'
-- 'mi355x-amds_04'
-- 'mi355x-amds_05'
-- 'mi355x-amds_06'
-- 'mi355x-amds_07'
-- 'mi355x-amds_08'
-mi355x-disagg:
-- 'mi355x-amds_06'
-- 'mi355x-amds_07'
-- 'mi355x-amds_08'
-gb200:
-- gb200-nv_0
-- gb200-nv_1
-- gb200-nv_2
-b300:
-- 'b300-nv_0'
-- 'b300-nv_1'
-- 'b300-nv_2'
-- 'b300-nv_3'
-- 'b300-nv_4'
-- 'b300-nv_5'
-- 'b300-nv_6'
-- 'b300-nv_7'
-- 'b300-nv_8'
-b300-p1:
-- 'b300-p1'
-gb300:
-- 'gb300-nv_0'
-- 'gb300-nv_1'
-- 'gb300-nv_2'
-gb300-cw:
-- 'gb300-cw_0'
-- 'gb300-cw_1'
-- 'gb300-cw_2'
-- 'gb300-cw_3'
+labels:
+  h100:
+    - h100-cw_00
+    - h100-cw_01
+    - h100-dgxc-slurm_00
+    - h100-dgxc-slurm_01
+    - h100-dgxc-slurm_02
+    - h100-dgxc-slurm_03
+    - h100-dgxc-slurm_04
+    - h100-dgxc-slurm_05
+    - h100-dgxc-slurm_06
+    - h100-dgxc-slurm_07
+    - h100-dgxc-slurm_08
+    - h100-dgxc-slurm_09
+    - h100-dgxc-slurm_10
+    - h100-dgxc-slurm_11
+    - h100-dgxc-slurm_12
+    - h100-dgxc-slurm_13
+    - h100-dgxc-slurm_14
+    - h100-dgxc-slurm_15
+    - h100-dgxc-slurm_16
+    - h100-dgxc-slurm_17
+    - h100-dgxc-slurm_18
+    - h100-dgxc-slurm_19
+  h100-dgxc:
+    - h100-dgxc-slurm_00
+    - h100-dgxc-slurm_01
+    - h100-dgxc-slurm_02
+    - h100-dgxc-slurm_03
+    - h100-dgxc-slurm_04
+    - h100-dgxc-slurm_05
+    - h100-dgxc-slurm_06
+    - h100-dgxc-slurm_07
+    - h100-dgxc-slurm_08
+    - h100-dgxc-slurm_09
+    - h100-dgxc-slurm_10
+    - h100-dgxc-slurm_11
+    - h100-dgxc-slurm_12
+    - h100-dgxc-slurm_13
+    - h100-dgxc-slurm_14
+    - h100-dgxc-slurm_15
+    - h100-dgxc-slurm_16
+    - h100-dgxc-slurm_17
+    - h100-dgxc-slurm_18
+    - h100-dgxc-slurm_19
+  h100-multinode:
+    - h100-dgxc-slurm_16
+    - h100-dgxc-slurm_17
+    - h100-dgxc-slurm_18
+    - h100-dgxc-slurm_19
+  h200:
+    - h200-cw_00
+    - h200-cw_01
+    - h200-nb_0
+    - h200-nb_1
+    - h200-dgxc-slurm_0
+    - h200-dgxc-slurm_1
+    - h200-dgxc-slurm_2
+    - h200-dgxc-slurm_3
+    - h200-dgxc-slurm_4
+    - h200-dgxc-slurm_5
+    - h200-dgxc-slurm_6
+    - h200-dgxc-slurm_7
+    - h200-dgxc-slurm_8
+    - h200-dgxc-slurm_9
+    - h200-dgxc-slurm_10
+    - h200-dgxc-slurm_11
+    - h200-dgxc-slurm_12
+    - h200-dgxc-slurm_13
+  h200-multinode:
+    - h200-dgxc-slurm_11
+    - h200-dgxc-slurm_12
+    - h200-dgxc-slurm_13
+  h200-dgxc:
+    - h200-dgxc-slurm_0
+    - h200-dgxc-slurm_1
+    - h200-dgxc-slurm_2
+    - h200-dgxc-slurm_3
+    - h200-dgxc-slurm_4
+    - h200-dgxc-slurm_5
+    - h200-dgxc-slurm_6
+    - h200-dgxc-slurm_7
+    - h200-dgxc-slurm_8
+    - h200-dgxc-slurm_9
+    - h200-dgxc-slurm_10
+    - h200-dgxc-slurm_11
+    - h200-dgxc-slurm_12
+    - h200-dgxc-slurm_13
+  b200:
+    - b200-cw_00
+    - b200-cw_01
+    - b200-nb_0
+    - b200-nb_1
+    - b200-dgxc_00
+    - b200-dgxc_01
+    - b200-dgxc_02
+    - b200-dgxc_03
+    - b200-dgxc_04
+    - b200-dgxc_05
+    - b200-dgxc_06
+    - b200-dgxc_07
+    - b200-dgxc_08
+    - b200-dgxc_09
+  b200-dgxc:
+    - b200-dgxc_00
+    - b200-dgxc_01
+    - b200-dgxc_02
+    - b200-dgxc_03
+    - b200-dgxc_04
+    - b200-dgxc_05
+    - b200-dgxc_06
+    - b200-dgxc_07
+    - b200-dgxc_08
+    - b200-dgxc_09
+  b200-dsv4:
+    - b200-dgxc_00
+    - b200-dgxc_01
+    - b200-dgxc_02
+    - b200-dgxc_03
+    - b200-dgxc_04
+    - b200-dgxc_05
+    - b200-dgxc_06
+    - b200-dgxc_07
+    - b200-dgxc_08
+    - b200-dgxc_09
+  b200-multinode:
+    - b200-dgxc-slurm_7
+    - b200-dgxc-slurm_8
+    - b200-dgxc-slurm_9
+  mi300x:
+    - mi300x-amds_00
+    - mi300x-amds_01
+    - mi300x-amds_02
+    - mi300x-amds_03
+    - mi300x-amds_04
+    - mi300x-amds_05
+    - mi300x-amds_06
+    - mi300x-amds_07
+    - mi300x-amds_08
+  mi300x-disagg:
+    - mi300x-amds_06
+    - mi300x-amds_07
+    - mi300x-amds_08
+  mi325x:
+    - mi325x-amds_00
+    - mi325x-amds_01
+    - mi325x-amds_02
+    - mi325x-amds_03
+    - mi325x-amds_04
+    - mi325x-amds_05
+    - mi325x-amds_06
+    - mi325x-amds_07
+    - mi325x-amds_08
+  mi325x-disagg:
+    - mi325x-amds_00
+    - mi325x-amds_01
+    - mi325x-amds_02
+    - mi325x-amds_03
+    - mi325x-amds_06
+    - mi325x-amds_07
+    - mi325x-amds_08
+  mi355x:
+    - mi355x-amds_00
+    - mi355x-amds_01
+    - mi355x-amds_02
+    - mi355x-amds_03
+    - mi355x-amds_04
+    - mi355x-amds_05
+    - mi355x-amds_06
+    - mi355x-amds_07
+    - mi355x-amds_08
+  mi355x-disagg:
+    - mi355x-amds_06
+    - mi355x-amds_07
+    - mi355x-amds_08
+  gb200:
+    - gb200-nv_0
+    - gb200-nv_1
+    - gb200-nv_2
+  b300:
+    - b300-nv_0
+    - b300-nv_1
+    - b300-nv_2
+    - b300-nv_3
+    - b300-nv_4
+    - b300-nv_5
+    - b300-nv_6
+    - b300-nv_7
+    - b300-nv_8
+  b300-p1:
+    - b300-p1
+  gb300:
+    - gb300-nv_0
+    - gb300-nv_1
+    - gb300-nv_2
+  gb300-nv:
+    - gb300-nv_0
+    - gb300-nv_1
+    - gb300-nv_2
+  gb300-cw:
+    - gb300-cw_0
+    - gb300-cw_1
+    - gb300-cw_2
+    - gb300-cw_3
+hardware:
+  h100:
+    available-cpu-dram-mib: 2063837
+    gpus-per-node: 8
+  h100-dgxc:
+    available-cpu-dram-mib: 2063837
+    gpus-per-node: 8
+  h100-multinode:
+    available-cpu-dram-mib: 2063837
+    gpus-per-node: 8
+  h100-cw:
+    available-cpu-dram-mib: 1998848
+    gpus-per-node: 8
+  h200:
+    available-cpu-dram-mib: 1471356
+    gpus-per-node: 8
+  h200-dgxc:
+    available-cpu-dram-mib: 1471356
+    gpus-per-node: 8
+  h200-multinode:
+    available-cpu-dram-mib: 1471356
+    gpus-per-node: 8
+  h200-cw:
+    available-cpu-dram-mib: 1998848
+    gpus-per-node: 8
+  h200-nb:
+    available-cpu-dram-mib: 1472512
+    gpus-per-node: 8
+  b200:
+    available-cpu-dram-mib: 3774874
+    gpus-per-node: 8
+  b200-dgxc:
+    available-cpu-dram-mib: 3774874
+    gpus-per-node: 8
+  b200-dsv4:
+    available-cpu-dram-mib: 3774874
+    gpus-per-node: 8
+  b200-multinode:
+    available-cpu-dram-mib: 3774874
+    gpus-per-node: 8
+  b300:
+    available-cpu-dram-mib: 2964436
+    gpus-per-node: 8
+  b300-p1:
+    available-cpu-dram-mib: 2964436
+    gpus-per-node: 8
+  gb200:
+    available-cpu-dram-mib: 860160
+    gpus-per-node: 4
+  gb300-cw:
+    available-cpu-dram-mib: 888832
+    gpus-per-node: 4
+  mi300x:
+    available-cpu-dram-mib: 2321924
+    gpus-per-node: 8
+  mi300x-disagg:
+    available-cpu-dram-mib: 2321924
+    gpus-per-node: 8
+  mi300x-tw:
+    available-cpu-dram-mib: 2322328
+    gpus-per-node: 8
+  mi325x:
+    available-cpu-dram-mib: 3091589
+    gpus-per-node: 8
+  mi325x-disagg:
+    available-cpu-dram-mib: 3091589
+    gpus-per-node: 8
+  mi325x-tw:
+    available-cpu-dram-mib: 3095792
+    gpus-per-node: 8
+  mi355x:
+    available-cpu-dram-mib: 3095781
+    gpus-per-node: 8
+  mi355x-disagg:
+    available-cpu-dram-mib: 3095781
+    gpus-per-node: 8

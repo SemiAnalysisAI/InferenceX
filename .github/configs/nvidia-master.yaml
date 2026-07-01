@@ -12189,9 +12189,7 @@ dsv4-fp4-b200-vllm-agentic:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 3_774_874
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       # Pure TP is only competitive at very low concurrency.
       - { tp: 8, offloading: none,  conc-list: [1, 2, 3, 4, 5] }
@@ -12352,9 +12350,7 @@ dsv4-fp4-b300-vllm-agentic:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 2_964_436
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       # Compare native GPU-cache and MooncakeStore CPU-offload cliffs.
       - { tp: 4, offloading: none,  conc-list: [1, 4, 8, 16] }
@@ -12477,9 +12473,7 @@ minimaxm3-fp8-h100-vllm-agentic:
     # 1.64M-token HBM cliff near conc 6. Sample every integer through the
     # cliff; Mooncake extends prefix retention, not active-request HBM.
     - duration: 1800
-      available-cpu-dram-mib: 2_063_837
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
@@ -12518,9 +12512,7 @@ minimaxm3-fp8-h200-vllm-agentic:
     # request, the expected HBM cliff is near conc 10; sample densely from
     # 5-14 and retain post-cliff points through 20.
     - duration: 1800
-      available-cpu-dram-mib: 1_471_356
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
@@ -12783,9 +12775,7 @@ dsv4-fp4-b200-sglang-agentic-hicache:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 3_774_874
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       - { tp: 8, offloading: none,     conc-list: [1, 2, 3, 4, 5] }
       - { tp: 8, offloading: hicache, conc-list: [8, 10, 16, 32, 40, 44] }
@@ -12806,9 +12796,7 @@ dsv4-fp4-b300-sglang-agentic-hicache:
   scenarios:
     agentic-coding:
     - duration: 1800
-      available-cpu-dram-mib: 2_964_436
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 4, 8, 16, 20, 24, 32] }
       - { tp: 8, offloading: none, conc-list: [1, 4, 8, 16, 32, 40, 48, 52, 56, 60, 64, 72] }

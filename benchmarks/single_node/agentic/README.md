@@ -14,19 +14,28 @@ particular is not yet first-class.
 ## CPU offload memory policy
 
 Agentic scenarios using `cpu`, `lmcache`, `lmcache-mp`, or `hicache` should
-declare the node's available host memory and the usable offload fraction:
+declare the usable offload fraction in the master config:
 
 ```yaml
 - duration: 1800
-  available-cpu-dram-mib: 2964436
   cpu-offload-utilization: 0.80
-  gpus-per-node: 8
   search-space:
   - { tp: 4, offloading: cpu, conc-list: [16, 32] }
   - { tp: 8, offloading: none, conc-list: [16, 32] }
 ```
 
-The matrix generator emits the aggregate budget as
+Machine-level host memory is declared once in the `.github/configs/runners.yaml`
+`hardware` entry matching the master config's `runner` label:
+
+```yaml
+hardware:
+  b300:
+    available-cpu-dram-mib: 2964436
+    gpus-per-node: 8
+```
+
+The matrix generator combines the master config utilization with runner
+hardware metadata and emits the aggregate budget as
 `floor(available MiB * 1,048,576 * utilization * tp / gpus-per-node / 1,000,000,000)`.
 For example, TP4 in an eight-GPU B300 search receives 1,243 GB while TP8
 receives 2,486 GB.

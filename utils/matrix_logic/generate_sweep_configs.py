@@ -40,7 +40,47 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
 
 
-def agentic_cpu_offload_gb(agentic_config: dict, benchmark: dict) -> int:
+def runner_labels(runner_data: dict) -> dict:
+    """Return runner scheduling labels, supporting the legacy flat shape."""
+    return runner_data.get("labels", runner_data)
+
+
+def runner_hardware(runner_data: dict) -> dict:
+    """Return runner hardware metadata, if present."""
+    return runner_data.get("hardware", {})
+
+
+def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
+    """Return concrete runner names for a scheduling label."""
+    return runner_labels(runner_data).get(runner, [])
+
+
+def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
+    """Return an integer hardware field for a runner label."""
+    hardware = runner_hardware(runner_data).get(runner, {})
+    value = hardware.get(field)
+    if value is None:
+        available = ", ".join(sorted(runner_hardware(runner_data).keys()))
+        raise ValueError(
+            f"Runner '{runner}' requires '{field}' "
+            f"in runner hardware metadata. Available hardware keys: {available}"
+        )
+    return value
+
+
+def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
+    """Return available CPU DRAM for a runner label."""
+    return runner_hardware_int(runner, runner_data, Fields.AVAILABLE_CPU_DRAM_MIB.value)
+
+
+def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
+    """Return GPUs per node for a runner label."""
+    return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
+
+
+def agentic_cpu_offload_gb(
+    agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
+) -> int:
     """Return the aggregate CPU offload budget for a single-node entry."""
     offloading = benchmark.get(Fields.OFFLOADING.value, "none")
     if offloading not in CPU_MEMORY_OFFLOAD_MODES:
@@ -50,10 +90,15 @@ def agentic_cpu_offload_gb(agentic_config: dict, benchmark: dict) -> int:
     if explicit_total > 0:
         return explicit_total
 
-    available_mib = agentic_config[Fields.AVAILABLE_CPU_DRAM_MIB.value]
+    available_mib = runner_available_cpu_dram_mib(runner, runner_data)
     utilization = Decimal(str(agentic_config[Fields.CPU_OFFLOAD_UTILIZATION.value]))
-    gpus_per_node = agentic_config[Fields.GPUS_PER_NODE.value]
+    gpus_per_node = runner_gpus_per_node(runner, runner_data)
     tp = benchmark[Fields.TP.value]
+    if tp > gpus_per_node:
+        raise ValueError(
+            f"tp={tp} exceeds {Fields.GPUS_PER_NODE.value}={gpus_per_node} "
+            f"for runner '{runner}'"
+        )
     proportional_bytes = (
         Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / gpus_per_node
     )
@@ -177,7 +222,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
     """
     # Validate runner types if specified
     if args.runner_type:
-        valid_runner_types = set(runner_data.keys())
+        valid_runner_types = set(runner_labels(runner_data).keys())
         invalid_runners = set(args.runner_type) - valid_runner_types
         if invalid_runners:
             raise ValueError(
@@ -229,7 +274,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
         # Compute filtered runner nodes for this config if filter is specified
         runner_nodes_to_use = None
         if args.runner_node_filter:
-            runner_nodes = runner_data.get(runner, [])
+            runner_nodes = runner_nodes_for_label(runner, runner_data)
             runner_nodes_to_use = [
                 node for node in runner_nodes if args.runner_node_filter in node]
             if not runner_nodes_to_use:
@@ -430,7 +475,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
-                    else agentic_cpu_offload_gb(agentic_config, bmk)
+                    else agentic_cpu_offload_gb(agentic_config, bmk, runner, runner_data)
                 )
 
                 # Get concurrency values
@@ -517,11 +562,14 @@ def generate_runner_model_sweep_config(args, all_config_data, runner_data):
     Assumes all_config_data has been validated by validate_config_structure().
     Supports both single-node and multinode configurations.
     """
-    runner_nodes = runner_data.get(args.runner_type)
+    runner_nodes = runner_nodes_for_label(args.runner_type, runner_data)
 
     if not runner_nodes:
         raise ValueError(
-            f"Runner '{args.runner_type}' does not exist in runner config '{args.runner_config}'. Must choose from existing runner types: '{', '.join(runner_data.keys())}'.")
+            f"Runner '{args.runner_type}' does not exist in runner config "
+            f"'{args.runner_config}'. Must choose from existing runner types: "
+            f"'{', '.join(runner_labels(runner_data).keys())}'."
+        )
 
     # Filter runner nodes if filter is specified
     if args.runner_node_filter:
@@ -676,7 +724,7 @@ def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter
     if not runner_node_filter:
         return [runner]
 
-    candidates = runner_data.get(runner, [])
+    candidates = runner_nodes_for_label(runner, runner_data)
     if runner_node_filter in runner:
         candidates = [runner, *candidates]
 
@@ -855,7 +903,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
-                    else agentic_cpu_offload_gb(agentic_config, bmk)
+                    else agentic_cpu_offload_gb(agentic_config, bmk, runner, runner_data)
                 )
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)

@@ -99,8 +99,8 @@ key off that name:
    For a brand-new cluster, add a `runners/launch_<BASE_RUNNER_NAME>.sh` first.
    Corollary: `BASE_RUNNER_NAME` itself must not contain `_` (use hyphens).
 
-2. **Sweep scheduling looks runners up by exact name.** Jobs are distributed across the
-   runner names listed per SKU in
+2. **Sweep scheduling looks runner nodes up by label.** Jobs are distributed across the
+   runner names listed under each `labels` entry in
    [`.github/configs/runners.yaml`](../../.github/configs/runners.yaml). New runners do
    **not** receive sweep jobs until they are added there, and the entries must match the
    registered names exactly — including zero-padding. (Some older fleets predate the
@@ -177,4 +177,4 @@ the new `runners/launch_<cluster>.sh`.
   `SESSION_NAME` argument.
 - **Removing runners:** from the runner directory, stop the process and run
   `./config.sh remove --token <removal-token>` (token from the runners settings page).
-  Remember to also delete the name from `.github/configs/runners.yaml`.
+  Remember to also delete the name from the matching `labels` entry in `.github/configs/runners.yaml`.

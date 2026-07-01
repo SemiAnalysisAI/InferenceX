@@ -1,6 +1,7 @@
 """Comprehensive tests for generate_sweep_configs.py"""
 import pytest
 import argparse
+import copy
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
     seq_len_stoi,
@@ -109,11 +110,22 @@ def sample_multinode_config():
 def sample_runner_config():
     """Runner config based on .github/configs/runners.yaml."""
     return {
-        "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-        "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
-        "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
-        "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
-        "gb200": ["gb200-nv_0"],
+        "labels": {
+            "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
+            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "b300": ["b300-nv_0", "b300-nv_1"],
+            "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
+            "gb200": ["gb200-nv_0"],
+        },
+        "hardware": {
+            "h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
+            "h200": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
+            "b200": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "b300": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
+            "mi300x": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "gb200": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        },
     }
 
 
@@ -1676,9 +1688,7 @@ class TestGenerateTestConfigSweep:
                 "scenarios": {
                     "agentic-coding": [{
                         "duration": 1800,
-                        "available-cpu-dram-mib": 2964436,
                         "cpu-offload-utilization": 0.80,
-                        "gpus-per-node": 8,
                         "search-space": [
                             {"tp": 4, "offloading": "cpu", "conc-list": [32]},
                         ],
@@ -1698,6 +1708,40 @@ class TestGenerateTestConfigSweep:
 
         budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
         assert budgets == {4: 1243}
+
+    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "b300",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "duration": 1800,
+                        "cpu-offload-utilization": 0.80,
+                        "search-space": [
+                            {"tp": 4, "offloading": "cpu", "conc-list": [32]},
+                        ],
+                    }],
+                },
+            },
+        }
+        runner_config = copy.deepcopy(sample_runner_config)
+        runner_config["hardware"]["b300"]["gpus-per-node"] = 2
+        args = argparse.Namespace(
+            config_keys=["dsv4-b300-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        with pytest.raises(ValueError, match="exceeds gpus-per-node"):
+            generate_test_config_sweep(args, config, runner_config)
 
     def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
         """One server allocation should run the selected concurrency batch."""

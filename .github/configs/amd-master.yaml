@@ -2961,9 +2961,7 @@ minimaxm3-fp8-mi300x-vllm-agentic:
     # the June-21 service-time-weighted request is 269k tokens, so sample every
     # integer around the expected conc-10 cliff rather than geometric jumps.
     - duration: 1800
-      available-cpu-dram-mib: 2_321_924
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       - { tp: 8, offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
       - { tp: 8, ep: 8, offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
@@ -2986,9 +2984,7 @@ minimaxm3-fp8-mi325x-vllm-agentic:
     # bands around each cliff; Mooncake rows overlap those bands because host
     # storage improves prefix retention but does not hold active decode KV.
     - duration: 1800
-      available-cpu-dram-mib: 3_091_589
       cpu-offload-utilization: 0.80
-      gpus-per-node: 8
       search-space:
       - { tp: 4, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
       - { tp: 4, ep: 4, offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }

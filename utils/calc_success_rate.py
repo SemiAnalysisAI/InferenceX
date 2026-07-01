@@ -10,18 +10,19 @@ from github import Auth, Github
 
 
 def load_gpu_skus():
-    """Load GPU SKUs from runners.yaml, extracting the part before the first hyphen from each key."""
+    """Load GPU SKUs from runners.yaml label keys."""
     runners_path = Path(__file__).parent.parent / ".github" / "configs" / "runners.yaml"
     with open(runners_path) as f:
         runners = yaml.safe_load(f)
 
+    labels = runners.get("labels", runners)
     skus = set()
-    for key in runners.keys():
+    for key in labels.keys():
         # Extract part before first hyphen, or whole key if no hyphen
         sku = key.split("-")[0]
         skus.add(sku)
 
-    return list(skus)
+    return sorted(skus)
 
 
 GPU_SKUS = load_gpu_skus()

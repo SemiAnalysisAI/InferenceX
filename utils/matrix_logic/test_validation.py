@@ -172,11 +172,20 @@ def valid_multinode_master_config():
 def valid_runner_config():
     """Valid runner config based on .github/configs/runners.yaml."""
     return {
-        "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-        "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
-        "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
-        "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
-        "gb200": ["gb200-nv_0"],
+        "labels": {
+            "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
+            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
+            "gb200": ["gb200-nv_0"],
+        },
+        "hardware": {
+            "h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
+            "h200": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
+            "b200": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "mi300x": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "gb200": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        },
     }
 
 
@@ -376,40 +385,36 @@ class TestAgenticMatrixEntries:
                 }],
             })
 
-    def test_cpu_offloading_accepts_node_capacity(self):
+    def test_cpu_offloading_accepts_scaled_capacity(self):
         config = AgenticCodingConfig(**{
-            "available-cpu-dram-mib": 2964436,
             "cpu-offload-utilization": 0.80,
-            "gpus-per-node": 8,
             "search-space": [{
                 "tp": 4,
                 "offloading": "cpu",
                 "conc-list": [16],
             }],
         })
-        assert config.available_cpu_dram_mib == 2964436
         assert config.cpu_offload_utilization == 0.80
-        assert config.gpus_per_node == 8
 
-    def test_node_capacity_fields_must_be_paired(self):
-        with pytest.raises(Exception, match="must be set together"):
+    def test_gpus_per_node_is_not_a_master_config_field(self):
+        with pytest.raises(Exception, match="gpus-per-node"):
             AgenticCodingConfig(**{
-                "available-cpu-dram-mib": 2964436,
+                "cpu-offload-utilization": 0.80,
+                "gpus-per-node": 8,
                 "search-space": [{
                     "tp": 4,
-                    "offloading": "none",
+                    "offloading": "cpu",
                     "conc-list": [16],
                 }],
             })
 
-    def test_tp_cannot_exceed_gpus_per_node(self):
-        with pytest.raises(Exception, match="exceeds gpus-per-node"):
+    def test_available_cpu_dram_is_not_a_master_config_field(self):
+        with pytest.raises(Exception, match="available-cpu-dram-mib"):
             AgenticCodingConfig(**{
                 "available-cpu-dram-mib": 2964436,
                 "cpu-offload-utilization": 0.80,
-                "gpus-per-node": 4,
                 "search-space": [{
-                    "tp": 8,
+                    "tp": 4,
                     "offloading": "cpu",
                     "conc-list": [16],
                 }],
@@ -828,7 +833,9 @@ class TestValidateRunnerConfig:
     def test_value_must_be_list(self):
         """Runner config values must be lists."""
         config = {
-            "h100": "h100-cr_0",  # Not a list
+            "labels": {
+                "h100": "h100-cr_0",  # Not a list
+            },
         }
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
@@ -837,7 +844,9 @@ class TestValidateRunnerConfig:
     def test_list_must_contain_strings(self):
         """Runner config lists must contain only strings."""
         config = {
-            "h100": ["h100-cr_0", 123],  # Contains non-string
+            "labels": {
+                "h100": ["h100-cr_0", 123],  # Contains non-string
+            },
         }
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
@@ -846,7 +855,9 @@ class TestValidateRunnerConfig:
     def test_list_cannot_be_empty(self):
         """Runner config lists cannot be empty."""
         config = {
-            "mi355x": [],
+            "labels": {
+                "mi355x": [],
+            },
         }
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
@@ -855,10 +866,34 @@ class TestValidateRunnerConfig:
     def test_multiple_runner_types(self, valid_runner_config):
         """Multiple runner types should work."""
         result = validate_runner_config(valid_runner_config)
-        assert "h100" in result
-        assert "h200" in result
-        assert "mi300x" in result
-        assert "gb200" in result
+        assert "h100" in result["labels"]
+        assert "h200" in result["labels"]
+        assert "mi300x" in result["labels"]
+        assert "gb200" in result["labels"]
+
+    def test_legacy_flat_runner_config_still_validates(self):
+        config = {
+            "h100": ["h100-cr_0", "h100-cw_0"],
+        }
+        assert validate_runner_config(config) == config
+
+    def test_hardware_available_dram_must_be_positive(self):
+        config = {
+            "labels": {"h100": ["h100-cr_0"]},
+            "hardware": {"h100": {"available-cpu-dram-mib": 0, "gpus-per-node": 8}},
+        }
+        with pytest.raises(ValueError) as exc_info:
+            validate_runner_config(config)
+        assert "available-cpu-dram-mib" in str(exc_info.value)
+
+    def test_hardware_gpus_per_node_must_be_positive(self):
+        config = {
+            "labels": {"h100": ["h100-cr_0"]},
+            "hardware": {"h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 0}},
+        }
+        with pytest.raises(ValueError) as exc_info:
+            validate_runner_config(config)
+        assert "gpus-per-node" in str(exc_info.value)
 
 
 # =============================================================================
@@ -951,25 +986,31 @@ class TestLoadRunnerFile:
         """Should load and validate runner config file."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
-h100:
-- h100-node-0
-- h100-node-1
+labels:
+  h100:
+  - h100-node-0
+  - h100-node-1
+hardware:
+  h100:
+    available-cpu-dram-mib: 2063837
+    gpus-per-node: 8
 """)
         result = load_runner_file(str(runner_file))
-        assert "h100" in result
-        assert len(result["h100"]) == 2
+        assert "h100" in result["labels"]
+        assert len(result["labels"]["h100"]) == 2
 
     def test_load_runner_file_without_validation(self, tmp_path):
         """Should load runner config file without validation when validate=False."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
-h100:
-- h100-node-0
-- h100-node-1
+labels:
+  h100:
+  - h100-node-0
+  - h100-node-1
 """)
         result = load_runner_file(str(runner_file), validate=False)
-        assert "h100" in result
-        assert len(result["h100"]) == 2
+        assert "h100" in result["labels"]
+        assert len(result["labels"]["h100"]) == 2
 
     def test_nonexistent_runner_file(self):
         """Nonexistent runner file should raise error."""
@@ -981,7 +1022,8 @@ h100:
         """Validation should run by default and catch invalid configs."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
-h100: not-a-list
+labels:
+  h100: not-a-list
 """)
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))

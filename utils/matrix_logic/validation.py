@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, model_validator
-from typing import List, Optional, Union, Literal
+from typing import List, Optional, Union, Literal, Dict
 from enum import Enum
 
 import pprint
@@ -375,57 +375,21 @@ class AgenticCodingConfig(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
-    available_cpu_dram_mib: Optional[int] = Field(
-        default=None, alias=Fields.AVAILABLE_CPU_DRAM_MIB.value, gt=0
-    )
     cpu_offload_utilization: Optional[float] = Field(
         default=None, alias=Fields.CPU_OFFLOAD_UTILIZATION.value, gt=0, le=1
-    )
-    gpus_per_node: Optional[int] = Field(
-        default=None, alias=Fields.GPUS_PER_NODE.value, gt=0
     )
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
 
     @model_validator(mode='after')
     def validate_cpu_offload_capacity(self):
         cpu_backends = {"cpu", "lmcache", "lmcache-mp", "hicache"}
-        has_node_capacity = (
-            self.available_cpu_dram_mib is not None
-            and self.cpu_offload_utilization is not None
-            and self.gpus_per_node is not None
-        )
-        has_partial_node_capacity = (
-            self.available_cpu_dram_mib is not None
-            or self.cpu_offload_utilization is not None
-            or self.gpus_per_node is not None
-        )
-        if has_partial_node_capacity and not has_node_capacity:
-            raise ValueError(
-                "available-cpu-dram-mib, cpu-offload-utilization, and "
-                "gpus-per-node must be set together"
-            )
         for entry in self.search_space:
-            if (
-                self.gpus_per_node is not None
-                and entry.tp is not None
-                and entry.tp > self.gpus_per_node
-            ):
-                raise ValueError(
-                    f"tp={entry.tp} exceeds gpus-per-node={self.gpus_per_node}"
-                )
             if entry.offloading not in cpu_backends:
                 continue
-            if entry.total_cpu_dram_gb > 0 and has_node_capacity:
-                raise ValueError(
-                    "CPU offload capacity must use either total-cpu-dram-gb or "
-                    "scenario-level available-cpu-dram-mib, cpu-offload-utilization, "
-                    "and gpus-per-node"
-                )
-            if entry.total_cpu_dram_gb <= 0 and not has_node_capacity:
+            if entry.total_cpu_dram_gb <= 0 and self.cpu_offload_utilization is None:
                 raise ValueError(
                     f"offloading={entry.offloading!r} requires total-cpu-dram-gb or "
-                    "scenario-level available-cpu-dram-mib, cpu-offload-utilization, "
-                    "and gpus-per-node"
+                    "scenario-level cpu-offload-utilization with runner hardware metadata"
                 )
         return self
 
@@ -510,9 +474,8 @@ def validate_master_config(master_configs: dict) -> List[dict]:
 # Runner Config Validation
 
 
-def validate_runner_config(runner_configs: dict) -> List[dict]:
-    """Validate input master configuration structure."""
-    for key, value in runner_configs.items():
+def _validate_runner_labels(labels: dict) -> None:
+    for key, value in labels.items():
         if not isinstance(value, list):
             raise ValueError(
                 f"Runner config entry '{key}' must be a list, got {type(value).__name__}")
@@ -525,6 +488,41 @@ def validate_runner_config(runner_configs: dict) -> List[dict]:
             raise ValueError(
                 f"Runner config entry '{key}' cannot be an empty list")
 
+
+class RunnerHardwareConfig(BaseModel):
+    """Per-hardware runner facts used when generating benchmark matrices."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    available_cpu_dram_mib: int = Field(
+        alias=Fields.AVAILABLE_CPU_DRAM_MIB.value, gt=0
+    )
+    gpus_per_node: int = Field(
+        alias=Fields.GPUS_PER_NODE.value, gt=0
+    )
+
+
+class RunnerConfig(BaseModel):
+    """Top-level runner configuration file."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    labels: Dict[str, List[str]]
+    hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
+
+
+def validate_runner_config(runner_configs: dict) -> dict:
+    """Validate runner labels and hardware metadata."""
+    if "labels" in runner_configs or "hardware" in runner_configs:
+        labels = runner_configs.get("labels")
+        if not isinstance(labels, dict):
+            raise ValueError("Runner config must define a labels mapping")
+        _validate_runner_labels(labels)
+        try:
+            RunnerConfig(**runner_configs)
+        except ValidationError as e:
+            raise ValueError(f"Runner config failed validation:\n{e}")
+        return runner_configs
+
+    _validate_runner_labels(runner_configs)
     return runner_configs
 
 
