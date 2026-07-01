@@ -40,6 +40,10 @@ on:
         description: Max cases per shard cell before chunking into another GHA job (128 = no chunking for current suites)
         type: string
         default: '128'
+      flashinfer_upgrade:
+        description: Upgrade FlashInfer to the newer (MNNVL-fixed) wheel for plain flashinfer runs too (fixes h100 completion-flag deadlock)
+        type: boolean
+        default: false
 
 concurrency:
   group: cx-sweep-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.deepep_v2 }}-${{ inputs.only_sku }}
@@ -103,6 +107,7 @@ jobs:
       # slurm allocation, so the launcher's default 45-min --time is too short. 120 min gives headroom;
       # the allocation releases early when the shard finishes, so short shards don't waste it.
       CX_TIME: '120'
+      CX_FLASHINFER_UPGRADE: ${{ inputs.flashinfer_upgrade && '1' || '' }}
       CX_NODELIST: ${{ matrix.sku == 'mi355x' && 'mia1-p01-g10,mia1-p01-g15' || '' }}
       CX_STAGE_DIR: ${{ matrix.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
     steps:

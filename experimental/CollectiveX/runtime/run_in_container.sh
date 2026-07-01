@@ -597,8 +597,12 @@ run_flashinfer_suite() {
   # FlashInfer EP (flashinfer.comm.MoeAlltoAll) — pre-installed in the sglang image. When a
   # combine-quant run is requested (CX_COMBINE_DTYPE != bf16), first upgrade FlashInfer to a wheel
   # that has the quantized-combine OUTPUT path; otherwise run on the bundled version (dispatch path).
-  if [ -n "${CX_COMBINE_DTYPE:-}" ] && [ "${CX_COMBINE_DTYPE}" != "bf16" ]; then
-    cx_build_flashinfer_latest || { cx_log "WARN: flashinfer combine-quant setup failed"; return 1; }
+  # Upgrade FlashInfer to the newer wheel when: (a) a combine-quant run needs the output_dtype path, OR
+  # (b) CX_FLASHINFER_UPGRADE=1 — the bundled 0.6.8 MoeAlltoAll MNNVL barrier intermittently deadlocks on
+  # h100 ('Rank N timed out waiting for completion flag' -> CUDA unspecified launch failure); newer
+  # flashinfer carries MNNVL fixes (e.g. socket-collision #36674). Otherwise run on the bundled version.
+  if { [ -n "${CX_COMBINE_DTYPE:-}" ] && [ "${CX_COMBINE_DTYPE}" != "bf16" ]; } || [ "${CX_FLASHINFER_UPGRADE:-}" = "1" ]; then
+    cx_build_flashinfer_latest || { cx_log "WARN: flashinfer upgrade setup failed"; return 1; }
   fi
   if ! python3 -c "import flashinfer.comm" 2>/dev/null; then
     cx_log "WARN: flashinfer.comm not importable — cannot run flashinfer EP"; return 1
