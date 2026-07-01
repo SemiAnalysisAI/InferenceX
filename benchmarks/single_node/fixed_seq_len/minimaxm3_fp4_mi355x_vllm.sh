@@ -5,17 +5,15 @@
 # Block size 128 is mandatory for MSA. This fixed-sequence benchmark uses the
 # text-only language-model path with AITER MoE (vllm-project/vllm#46419).
 #
-# High-concurrency parity with the ATOM recipe comes from four levers:
-#   * INT4 quantized all-reduce (env knobs below) -- the decode all-reduce is
-#     the biggest decode kernel; INT4 makes it ~4x cheaper (~-12% to -17% TPOT
-#     at conc 64/128/256). Works on any nightly.
+# High-concurrency parity with the ATOM recipe comes from three levers:
+#   * INT4 quantized all-reduce (env knobs below) -- reduces the all-reduce
+#     cost (the biggest decode kernel); measured ~-12% to -17% TPOT at conc
+#     64/128/256. Works on any nightly.
 #   * fp8 KV cache (--kv-cache-dtype fp8).
 #   * cross-layer indexer top-k sharing (--hf-overrides index_topk_freq=4) --
-#     requires vllm-project/vllm#47269.
-#   * input-side all-reduce + RMSNorm fusion -- requires vllm-project/vllm#47270
-#     (automatic once merged; no flag).
-# Bump the image pin (.github/configs/amd-master.yaml) to a nightly containing
-# #47269 and #47270 before sweeping for the full curve.
+#     requires vllm-project/vllm#47269 (merged).
+# Pin the image (.github/configs/amd-master.yaml) to a nightly containing
+# #47269 before sweeping for the full curve.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
