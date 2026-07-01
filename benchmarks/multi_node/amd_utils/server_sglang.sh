@@ -512,11 +512,15 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $ROUTER_CMD"
     else
         ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/proxy_${host_name}.log"
+        # sgl-router (Rust/tracing) emits ANSI color codes. NO_COLOR asks it to
+        # skip them at the source; the sed strip guarantees a clean file even if
+        # it doesn't honor NO_COLOR. Default branch uses process substitution so
+        # $! stays the router pid (needed by the kill below), not sed's pid.
         set -x
         if [[ "${SGLANG_ROUTER_STDOUT_LOGS:-0}" == "1" ]]; then
-            eval "$ROUTER_CMD" 2>&1 | tee "$ROUTER_LOG_FILE" &
+            eval "NO_COLOR=1 $ROUTER_CMD" 2>&1 | sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "$ROUTER_LOG_FILE" &
         else
-            eval "$ROUTER_CMD" >"$ROUTER_LOG_FILE" 2>&1 &
+            eval "NO_COLOR=1 $ROUTER_CMD" > >(sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' >"$ROUTER_LOG_FILE") 2>&1 &
         fi
         set +x
         proxy_pid=$!
