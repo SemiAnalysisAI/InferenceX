@@ -95,7 +95,7 @@ jobs:
             )
             ```
 
-            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Usage: `generate_sweep_configs.py` `[-h]` `{full-sweep,runner-model-sweep,test-config}`
+            The `generate-cli-command` input accepts arguments for `generate_sweep_configs.py`. Usage: `generate_sweep_configs.py` `[-h]` `{full-sweep,test-config}`
 
             **Subcommand reference:**
             - `full-sweep`: Use this subcommand with filter flags like `--model-prefix`, `--framework`, `--precision`, `--runner-type`, `--min-conc`, `--max-conc`, `--seq-lens`. This is the primary subcommand for running benchmarks.
