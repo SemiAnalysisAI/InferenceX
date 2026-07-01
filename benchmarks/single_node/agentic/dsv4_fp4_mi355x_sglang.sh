@@ -7,16 +7,14 @@ set -x
 # sibling) with the agentic harness (build_replay_cmd / write_agentic_result_json
 # / analyze_benchmark_distributions) swapped in for run_benchmark_serving.
 #
-# This launcher does NOT support CPU offload. SGLang's KV offload paths are
-# different from vLLM's SimpleCPUOffloadConnector, and the matching agentic
-# config (dsv4-fp4-mi355x-sglang-agentic) only sweeps offloading=none.
+# This launcher only supports on-device KV cache.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -45,15 +43,7 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-# Reject anything other than none: this launcher has no SGLang CPU-offload
-# wiring (different surface than vLLM's SimpleCPUOffloadConnector).
-case "$OFFLOADING" in
-    none) ;;
-    *)
-        echo "Error: dsv4_fp4_mi355x_sglang.sh only supports OFFLOADING=none (got '$OFFLOADING')" >&2
-        exit 1
-        ;;
-esac
+require_agentic_kv_offload_none
 
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this

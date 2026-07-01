@@ -437,7 +437,8 @@ jobs:
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
-            offloading: ${{ matrix.config.offloading }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend || 'none' }}
             total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ matrix.config.duration }}
             isl: '0'

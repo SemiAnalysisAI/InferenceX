@@ -91,6 +91,7 @@ on:
         type: string
         required: false
         default: ""
+      # Agentic-coding inputs. Fixed-seq-len jobs use these defaults.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         type: string
@@ -106,8 +107,13 @@ on:
         type: string
         required: false
         default: "1800"
-      offloading:
-        description: "KV offload backend for agentic scenarios (none/cpu/ssd)"
+      kv-offloading:
+        description: "KV offload mode for agentic scenarios (none/dram)"
+        required: false
+        type: string
+        default: 'none'
+      kv-offload-backend:
+        description: "KV offload backend for agentic scenarios when kv-offloading is not none"
         required: false
         type: string
         default: 'none'
@@ -138,12 +144,14 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
+  # Agentic-coding env. Fixed-seq-len jobs use these defaults.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
-  OFFLOADING: ${{ inputs.offloading }}
+  KV_OFFLOADING: ${{ inputs.kv-offloading }}
+  KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
@@ -224,7 +232,7 @@ jobs:
               echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
               exit 1
             fi
-            # Existence is not enough: process_agentic_result.py writes the
+            # Existence is not enough: utils/agentic/process_agentic_result.py writes the
             # aggregate even when aiperf recorded zero valid requests. Require
             # successful requests in every concurrency result.
             for result_file in "${agentic_results[@]}"; do

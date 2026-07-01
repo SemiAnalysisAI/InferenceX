@@ -23,9 +23,9 @@ seq_len_stoi = {
 
 MIN_EVAL_CONC = 16
 MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
-CPU_MEMORY_OFFLOAD_MODES = {"cpu", "lmcache", "lmcache-mp", "hicache"}
 BYTES_PER_MIB = 1024 * 1024
 BYTES_PER_GB = 1_000_000_000
+MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -78,20 +78,23 @@ def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
 
 
-def agentic_cpu_offload_gb(
+def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
 ) -> int:
-    """Return the aggregate CPU offload budget for a single-node entry."""
-    offloading = benchmark.get(Fields.OFFLOADING.value, "none")
-    if offloading not in CPU_MEMORY_OFFLOAD_MODES:
+    """Return the aggregate DRAM offload budget for a single-node entry."""
+    kv_offloading = benchmark.get(Fields.KV_OFFLOADING.value, "none")
+    if kv_offloading != "dram":
         return 0
 
     explicit_total = benchmark.get(Fields.TOTAL_CPU_DRAM_GB.value, 0)
     if explicit_total > 0:
         return explicit_total
 
-    available_mib = runner_available_cpu_dram_mib(runner, runner_data)
-    utilization = Decimal(str(agentic_config[Fields.CPU_OFFLOAD_UTILIZATION.value]))
+    available_mib = min(
+        runner_available_cpu_dram_mib(runner, runner_data),
+        MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB,
+    )
+    utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
     tp = benchmark[Fields.TP.value]
     if tp > gpus_per_node:
@@ -103,6 +106,13 @@ def agentic_cpu_offload_gb(
         Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / gpus_per_node
     )
     return int(proportional_bytes / BYTES_PER_GB)
+
+
+def agentic_kv_offload_suffix(kv_offloading: str, kv_offload_backend: str | None) -> str:
+    """Return a compact exp-name suffix for agentic KV offload settings."""
+    if kv_offloading == "none":
+        return "kvnone"
+    return f"kv{kv_offloading}-{kv_offload_backend}"
 
 
 def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
@@ -471,11 +481,12 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
+                kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
-                    else agentic_cpu_offload_gb(agentic_config, bmk, runner, runner_data)
+                    else agentic_dram_offload_gb(agentic_config, bmk, runner, runner_data)
                 )
 
                 # Get concurrency values
@@ -544,12 +555,17 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
-                                Fields.OFFLOADING.value: offloading,
+                                Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_"
+                                    f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
+                            if kv_offload_backend is not None:
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
                             validate_agentic_matrix_entry(entry)
                             matrix_values.append(entry)
 
@@ -899,11 +915,12 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                kv_offloading = bmk.get(Fields.KV_OFFLOADING.value, "none")
+                kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
-                    else agentic_cpu_offload_gb(agentic_config, bmk, runner, runner_data)
+                    else agentic_dram_offload_gb(agentic_config, bmk, runner, runner_data)
                 )
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -965,12 +982,17 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
-                                Fields.OFFLOADING.value: offloading,
+                                Fields.KV_OFFLOADING.value: kv_offloading,
                                 Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_"
+                                    f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
+                            if kv_offload_backend is not None:
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
                             matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values

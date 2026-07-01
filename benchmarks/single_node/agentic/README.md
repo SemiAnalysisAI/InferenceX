@@ -11,17 +11,18 @@ plumbing (env vars, scenario routing, result paths) should work. Specific
 models and configs may be broken at any given time — multi-node in
 particular is not yet first-class.
 
-## CPU offload memory policy
+## DRAM KV offload memory policy
 
-Agentic scenarios using `cpu`, `lmcache`, `lmcache-mp`, or `hicache` should
-declare the usable offload fraction in the master config:
+Agentic scenarios use `kv-offloading` for the resource tier and
+`kv-offload-backend` for the backend implementation. `kv-offloading` is
+currently either `none` or `dram`; when it is `dram`, the backend must be set:
 
 ```yaml
 - duration: 1800
-  cpu-offload-utilization: 0.80
+  dram-utilization: 0.80
   search-space:
-  - { tp: 4, offloading: cpu, conc-list: [16, 32] }
-  - { tp: 8, offloading: none, conc-list: [16, 32] }
+  - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 32] }
+  - { tp: 8, kv-offloading: none, conc-list: [16, 32] }
 ```
 
 Agentic master configs must use an exact `cluster:<name>` runner label so every
@@ -38,9 +39,10 @@ hardware:
 
 The matrix generator combines the master config utilization with runner
 hardware metadata and emits the aggregate budget as
-`floor(available MiB * 1,048,576 * utilization * tp / gpus-per-node / 1,000,000,000)`.
-For example, TP4 in an eight-GPU B300 search receives 1,243 GB while TP8
-receives 2,486 GB.
+`floor(min(available MiB, 2,861,022) * 1,048,576 * utilization * tp / gpus-per-node / 1,000,000,000)`.
+The `2,861,022 MiB` cap is the 3 TB decimal DRAM limit. For example, TP4 in
+an eight-GPU B300 search at 80% utilization receives 1,199 GB while TP8
+receives 2,399 GB.
 Legacy scenarios may continue to specify `total-cpu-dram-gb` per entry.
 
 Benchmark scripts must consume `TOTAL_CPU_DRAM_GB`; they must not replace it

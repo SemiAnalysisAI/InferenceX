@@ -5,15 +5,13 @@ set -x
 # Agentic trace replay benchmark for Qwen3.5 FP8 on B300 using SGLang.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# OFFLOADING values:
-#   none    - SGLang GPU KV only with radix cache disabled.
-#   hicache - SGLang HiCache with local CPU hierarchical cache.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE
 
 SCHEDULER_RECV_INTERVAL=${SCHEDULER_RECV_INTERVAL:-10}
 
@@ -43,52 +41,41 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
-case "$OFFLOADING" in
-    none)
-        # Leave SGLang's default RadixAttention prefix cache on — agentic
-        # replay needs it; --disable-radix-cache would zero the hit rate.
-        ;;
-    hicache)
-        # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
-        # Qwen3.5's hybrid GDN/Mamba path allocates two HiCache host pools per
-        # TP rank: one for
-        # hierarchical KV cache and one for hierarchical Mamba cache.
-        REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
-        if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-            echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
-            exit 1
-        fi
-        TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
-        HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
-        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
-        # SGLang --hicache-size is per rank per host pool, while the workflow
-        # input is a node-total DRAM budget. Divide by TP and the number of
-        # host pools unless HICACHE_SIZE_GB is set directly for one-off tuning.
-        MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
-        HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
-        if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
-            echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-pool limit $MAX_HICACHE_SIZE_GB" >&2
-            exit 1
-        fi
-        if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
-            echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB, TP=$TP, HICACHE_HOST_POOL_COUNT=$HICACHE_HOST_POOL_COUNT" >&2
-            exit 1
-        fi
-        echo "HiCache CPU pool: ${HICACHE_SIZE_GB} GB per rank per host pool across TP=${TP}, host_pool_count=${HICACHE_HOST_POOL_COUNT}"
-        CACHE_ARGS=(
-            --page-size 64
-            --enable-hierarchical-cache
-            --hicache-size "$HICACHE_SIZE_GB"
-            --hicache-io-backend kernel
-            --hicache-mem-layout page_first
-            --hicache-write-policy "$HICACHE_WRITE_POLICY"
-        )
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, hicache)" >&2
+if require_agentic_kv_offload_backend hicache; then
+    # HiCache extends RadixAttention, so do not pass --disable-radix-cache.
+    # Qwen3.5's hybrid GDN/Mamba path allocates two HiCache host pools per TP
+    # rank: one for hierarchical KV cache and one for hierarchical Mamba cache.
+    REQUESTED_HICACHE_TOTAL_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-$TOTAL_CPU_DRAM_GB}"
+    if [ "$REQUESTED_HICACHE_TOTAL_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
+        echo "Error: requested HiCache pool ${REQUESTED_HICACHE_TOTAL_GB} GB exceeds configured capacity ${TOTAL_CPU_DRAM_GB} GB" >&2
         exit 1
-        ;;
-esac
+    fi
+    TOTAL_CPU_DRAM_GB="$REQUESTED_HICACHE_TOTAL_GB"
+    HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-2}"
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through_selective}"
+    # SGLang --hicache-size is per rank per host pool, while the workflow
+    # input is a node-total DRAM budget. Divide by TP and the number of
+    # host pools unless HICACHE_SIZE_GB is set directly for one-off tuning.
+    MAX_HICACHE_SIZE_GB=$((TOTAL_CPU_DRAM_GB / TP / HICACHE_HOST_POOL_COUNT))
+    HICACHE_SIZE_GB="${HICACHE_SIZE_GB:-$MAX_HICACHE_SIZE_GB}"
+    if [ "$HICACHE_SIZE_GB" -gt "$MAX_HICACHE_SIZE_GB" ]; then
+        echo "Error: HICACHE_SIZE_GB=$HICACHE_SIZE_GB exceeds configured per-pool limit $MAX_HICACHE_SIZE_GB" >&2
+        exit 1
+    fi
+    if [ "$HICACHE_SIZE_GB" -lt 1 ]; then
+        echo "Error: computed HICACHE_SIZE_GB=$HICACHE_SIZE_GB from TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB, TP=$TP, HICACHE_HOST_POOL_COUNT=$HICACHE_HOST_POOL_COUNT" >&2
+        exit 1
+    fi
+    echo "HiCache CPU pool: ${HICACHE_SIZE_GB} GB per rank per host pool across TP=${TP}, host_pool_count=${HICACHE_HOST_POOL_COUNT}"
+    CACHE_ARGS=(
+        --page-size 64
+        --enable-hierarchical-cache
+        --hicache-size "$HICACHE_SIZE_GB"
+        --hicache-io-backend kernel
+        --hicache-mem-layout page_first
+        --hicache-write-policy "$HICACHE_WRITE_POLICY"
+    )
+fi
 
 echo "Starting SGLang server..."
 export TORCH_CUDA_ARCH_LIST="10.0"

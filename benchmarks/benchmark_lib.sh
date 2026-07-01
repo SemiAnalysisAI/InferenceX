@@ -16,6 +16,49 @@ mkdir -p "$PYTHONPYCACHEPREFIX" 2>/dev/null || true
 # nothing upstream set it.
 export PORT="${PORT:-8888}"
 
+agentic_kv_offload_enabled() {
+    [[ "${KV_OFFLOADING:-none}" != "none" ]]
+}
+
+require_agentic_kv_offload_none() {
+    if agentic_kv_offload_enabled; then
+        echo "Error: expected KV_OFFLOADING=none, got '${KV_OFFLOADING:-}'" >&2
+        exit 1
+    fi
+    if [[ -n "${KV_OFFLOAD_BACKEND:-}" && "${KV_OFFLOAD_BACKEND:-none}" != "none" ]]; then
+        echo "Error: KV_OFFLOAD_BACKEND requires KV_OFFLOADING != none" >&2
+        exit 1
+    fi
+}
+
+require_agentic_kv_offload_backend() {
+    local expected_backend="$1"
+    case "${KV_OFFLOADING:-none}" in
+        none)
+            if [[ -n "${KV_OFFLOAD_BACKEND:-}" && "${KV_OFFLOAD_BACKEND:-none}" != "none" ]]; then
+                echo "Error: KV_OFFLOAD_BACKEND requires KV_OFFLOADING != none" >&2
+                exit 1
+            fi
+            return 1
+            ;;
+        dram)
+            if [[ "${KV_OFFLOAD_BACKEND:-}" != "$expected_backend" ]]; then
+                echo "Error: expected KV_OFFLOAD_BACKEND=$expected_backend when KV_OFFLOADING=dram, got '${KV_OFFLOAD_BACKEND:-}'" >&2
+                exit 1
+            fi
+            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: DRAM KV offloading requires a positive TOTAL_CPU_DRAM_GB capacity" >&2
+                exit 1
+            fi
+            return 0
+            ;;
+        *)
+            echo "Error: unsupported KV_OFFLOADING value '${KV_OFFLOADING:-}' (expected one of: none, dram)" >&2
+            exit 1
+            ;;
+    esac
+}
+
 # Agentic replays must use the model's native context limit. Ignore inherited
 # workflow or shell overrides so neither the server nor AIPerf applies a cap.
 _benchmark_caller="${BASH_SOURCE[1]:-}"
@@ -24,12 +67,26 @@ if [[ "$_benchmark_caller" == */agentic/* ||
       "${IS_AGENTIC:-0}" == "1" ||
       "${SCENARIO_TYPE:-}" == "agentic-coding" ]]; then
     unset MAX_MODEL_LEN
-    case "${OFFLOADING:-none}" in
-        cpu|lmcache|lmcache-mp|hicache)
-            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
-                echo "Error: CPU KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
+    case "${KV_OFFLOADING:-none}" in
+        none)
+            if [[ -n "${KV_OFFLOAD_BACKEND:-}" && "${KV_OFFLOAD_BACKEND:-none}" != "none" ]]; then
+                echo "Error: KV_OFFLOAD_BACKEND requires KV_OFFLOADING != none" >&2
                 exit 1
             fi
+            ;;
+        dram)
+            if [[ -z "${KV_OFFLOAD_BACKEND:-}" || "${KV_OFFLOAD_BACKEND:-none}" == "none" ]]; then
+                echo "Error: KV_OFFLOAD_BACKEND is required when KV_OFFLOADING=dram" >&2
+                exit 1
+            fi
+            if [[ ! "${TOTAL_CPU_DRAM_GB:-}" =~ ^[1-9][0-9]*$ ]]; then
+                echo "Error: DRAM KV offloading requires a positive configured TOTAL_CPU_DRAM_GB capacity" >&2
+                exit 1
+            fi
+            ;;
+        *)
+            echo "Error: unsupported KV_OFFLOADING value '${KV_OFFLOADING:-}' (expected one of: none, dram)" >&2
+            exit 1
             ;;
     esac
 fi
@@ -1285,7 +1342,7 @@ write_agentic_result_json() {
     # aggregates whose request error rate exceeds the configured limit.
     local result_dir="$1"
     RESULT_DIR="$result_dir" AGENTIC_OUTPUT_DIR="${AGENTIC_OUTPUT_DIR:-$INFMAX_CONTAINER_WORKSPACE}" \
-        "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/process_agentic_result.py"
+        "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/process_agentic_result.py"
 
     # Generate metrics_plots.png from the same aiperf artifacts. Best-effort:
     # don't fail the launcher if plot generation has trouble (e.g. matplotlib

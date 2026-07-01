@@ -67,13 +67,19 @@ on:
         description: "Git ref (branch/sha) to checkout"
         required: false
         type: string
+      # Agentic-coding inputs. Fixed-seq-len jobs use these defaults.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         required: false
         type: string
         default: 'fixed-seq-len'
-      offloading:
-        description: "KV offload backend for agentic scenarios (none/cpu/ssd/lmcache/lmcache-mp/hicache)"
+      kv-offloading:
+        description: "KV offload mode for agentic scenarios (none/dram)"
+        required: false
+        type: string
+        default: 'none'
+      kv-offload-backend:
+        description: "KV offload backend for agentic scenarios when kv-offloading is not none"
         required: false
         type: string
         default: 'none'
@@ -108,10 +114,12 @@ env:
   DISAGG: ${{ inputs.disagg }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
+  # Agentic-coding env. Fixed-seq-len jobs use these defaults.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
-  OFFLOADING: ${{ inputs.offloading }}
+  KV_OFFLOADING: ${{ inputs.kv-offloading }}
+  KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'

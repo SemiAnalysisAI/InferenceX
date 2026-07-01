@@ -22,7 +22,7 @@ same trace.
 Required env vars:
     RESULT_FILENAME   - base name for output file
     MODEL, MODEL_PREFIX, FRAMEWORK, PRECISION, TP, EP_SIZE, DP_ATTENTION,
-    CONC, OFFLOADING, RUNNER_TYPE
+    CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND, RUNNER_TYPE
 """
 
 from __future__ import annotations
@@ -643,7 +643,8 @@ def build_agg(
         "tp": tp,
         "ep": ep,
         "dp_attention": dp_attention,
-        "offloading": os.environ.get("OFFLOADING", "none"),
+        "kv_offloading": os.environ.get("KV_OFFLOADING", "none"),
+        "kv_offload_backend": os.environ.get("KV_OFFLOAD_BACKEND", "none"),
         "num_requests_total": len(records),
         "num_requests_successful": len(records),
     }

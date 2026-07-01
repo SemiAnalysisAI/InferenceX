@@ -4,7 +4,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -36,9 +36,7 @@ OFFLOAD_ARGS=()
 MODEL_CPU_OFFLOAD_GB=26
 MODEL_CHECKPOINT_PAGE_CACHE_GIB=414
 MOONCAKE_LOCAL_BUFFER_GIB=4
-case "$OFFLOADING" in
-    none) ;;
-    cpu)
+if require_agentic_kv_offload_backend mooncake; then
         TOTAL_CPU_DRAM_GIB=$((TOTAL_CPU_DRAM_GB * 1000000000 / 1073741824))
         PER_RANK_GIB=$(((TOTAL_CPU_DRAM_GIB - MODEL_CHECKPOINT_PAGE_CACHE_GIB) / TP - MODEL_CPU_OFFLOAD_GB - MOONCAKE_LOCAL_BUFFER_GIB))
         if (( PER_RANK_GIB <= 0 )); then
@@ -75,12 +73,7 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2
-        exit 1
-        ;;
-esac
+fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [[ "$DP_ATTENTION" == "true" ]]; then

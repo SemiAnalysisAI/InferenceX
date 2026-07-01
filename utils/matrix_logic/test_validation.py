@@ -325,86 +325,89 @@ class TestSingleNodeMatrixEntry:
 class TestAgenticMatrixEntries:
     """Tests for agentic coding validation models."""
 
-    def test_lmcache_mp_offloading_is_valid_for_single_node_agentic_entry(self):
-        """LMCache MP is a valid agentic offloading backend."""
+    def test_arbitrary_backend_is_valid_for_single_node_agentic_entry(self):
         entry = SingleNodeAgenticMatrixEntry(**{
             "image": "cquil/vllm-openai:v0.21.0-8813c92",
             "model": "deepseek-ai/DeepSeek-V4-Pro",
             "model-prefix": "dsv4",
             "precision": "fp4",
             "framework": "vllm",
-            "runner": "b200-dgxc",
+            "runner": "cluster:b200-dgxc",
             "tp": 8,
             "ep": 1,
             "dp-attn": False,
             "conc": 1,
-            "offloading": "lmcache-mp",
+            "kv-offloading": "dram",
+            "kv-offload-backend": "future-backend",
             "total-cpu-dram-gb": 2949,
             "duration": 1800,
-            "exp-name": "dsv4_tp8_conc1_offloadlmcache-mp",
+            "exp-name": "dsv4_tp8_conc1_kvdram-future-backend",
             "scenario-type": "agentic-coding",
         })
-        assert entry.offloading == "lmcache-mp"
+        assert entry.kv_offloading == "dram"
+        assert entry.kv_offload_backend == "future-backend"
 
-    def test_lmcache_mp_offloading_is_valid_for_agentic_search_space(self):
-        """Agentic search-space entries can request LMCache MP offloading."""
+    def test_arbitrary_backend_is_valid_for_agentic_search_space(self):
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
-            "offloading": "lmcache-mp",
+            "kv-offloading": "dram",
+            "kv-offload-backend": "future-backend",
             "total-cpu-dram-gb": 1000,
             "conc-list": [1, 2],
         })
-        assert entry.offloading == "lmcache-mp"
+        assert entry.kv_offloading == "dram"
+        assert entry.kv_offload_backend == "future-backend"
 
-    def test_lmcache_offloading_is_valid_for_agentic_search_space(self):
-        """Agentic search-space entries can request in-process LMCache."""
-        entry = AgenticCodingSearchSpaceEntry(**{
-            "tp": 8,
-            "offloading": "lmcache",
-            "total-cpu-dram-gb": 1000,
-            "conc-list": [1, 2],
-        })
-        assert entry.offloading == "lmcache"
+    def test_kv_offload_backend_requires_dram_mode(self):
+        with pytest.raises(Exception, match="kv-offload-backend"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "none",
+                "kv-offload-backend": "lmcache",
+                "conc-list": [1, 2],
+            })
 
-    def test_hicache_offloading_is_valid_for_agentic_search_space(self):
-        """Agentic search-space entries can request SGLang HiCache."""
-        entry = AgenticCodingSearchSpaceEntry(**{
-            "tp": 8,
-            "offloading": "hicache",
-            "total-cpu-dram-gb": 1000,
-            "conc-list": [1, 2],
-        })
-        assert entry.offloading == "hicache"
+    def test_dram_kv_offload_requires_backend(self):
+        with pytest.raises(Exception, match="kv-offload-backend"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "dram",
+                "total-cpu-dram-gb": 1000,
+                "conc-list": [1, 2],
+            })
 
-    def test_cpu_offloading_requires_explicit_capacity(self):
+    def test_dram_kv_offload_requires_explicit_capacity(self):
         with pytest.raises(Exception, match="total-cpu-dram-gb"):
             AgenticCodingConfig(**{
                 "search-space": [{
                     "tp": 4,
-                    "offloading": "cpu",
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": "native",
                     "conc-list": [16],
                 }],
             })
 
-    def test_cpu_offloading_accepts_scaled_capacity(self):
+    def test_dram_kv_offload_accepts_scaled_capacity(self):
         config = AgenticCodingConfig(**{
-            "cpu-offload-utilization": 0.80,
+            "dram-utilization": 0.80,
             "search-space": [{
                 "tp": 4,
-                "offloading": "cpu",
+                "kv-offloading": "dram",
+                "kv-offload-backend": "native",
                 "conc-list": [16],
             }],
         })
-        assert config.cpu_offload_utilization == 0.80
+        assert config.dram_utilization == 0.80
 
     def test_gpus_per_node_is_not_a_master_config_field(self):
         with pytest.raises(Exception, match="gpus-per-node"):
             AgenticCodingConfig(**{
-                "cpu-offload-utilization": 0.80,
+                "dram-utilization": 0.80,
                 "gpus-per-node": 8,
                 "search-space": [{
                     "tp": 4,
-                    "offloading": "cpu",
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": "native",
                     "conc-list": [16],
                 }],
             })
@@ -413,10 +416,11 @@ class TestAgenticMatrixEntries:
         with pytest.raises(Exception, match="available-cpu-dram-mib"):
             AgenticCodingConfig(**{
                 "available-cpu-dram-mib": 2964436,
-                "cpu-offload-utilization": 0.80,
+                "dram-utilization": 0.80,
                 "search-space": [{
                     "tp": 4,
-                    "offloading": "cpu",
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": "native",
                     "conc-list": [16],
                 }],
             })
@@ -795,7 +799,7 @@ class TestMasterConfigEntries:
                     {
                         "duration": 1800,
                         "search-space": [
-                            {"tp": 8, "conc-list": [1], "offloading": "none"}
+                            {"tp": 8, "conc-list": [1], "kv-offloading": "none"}
                         ],
                     }
                 ]

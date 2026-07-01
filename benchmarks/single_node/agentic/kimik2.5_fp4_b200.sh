@@ -5,16 +5,13 @@ set -x
 # Agentic trace replay benchmark for Kimi-K2.5 NVFP4 on B200 using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, KV_OFFLOAD_BACKEND, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# OFFLOADING values:
-#   none    - vLLM GPU KV only.
-#   cpu     - vLLM native simple CPU offload.
-#   lmcache - LMCache MP server + vLLM LMCacheMPConnector.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=lmcache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
@@ -95,18 +92,7 @@ wait_for_lmcache_ready() {
     exit 1
 }
 
-case "$OFFLOADING" in
-    none)
-        ;;
-    cpu)
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS=(
-            --kv_offloading_backend native
-            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
-            --disable-hybrid-kv-cache-manager
-        )
-        ;;
-    lmcache)
+if require_agentic_kv_offload_backend lmcache; then
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
@@ -164,12 +150,7 @@ case "$OFFLOADING" in
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
             --disable-hybrid-kv-cache-manager
         )
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu, lmcache)" >&2
-        exit 1
-        ;;
-esac
+fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"

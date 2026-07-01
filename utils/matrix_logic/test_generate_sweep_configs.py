@@ -1651,7 +1651,8 @@ class TestGenerateTestConfigSweep:
                                 {
                                     "tp": 8,
                                     "ep": 1,
-                                    "offloading": "hicache",
+                                    "kv-offloading": "dram",
+                                    "kv-offload-backend": "hicache",
                                     "total-cpu-dram-gb": 1814,
                                     "conc-list": [64],
                                 }
@@ -1689,9 +1690,14 @@ class TestGenerateTestConfigSweep:
                 "scenarios": {
                     "agentic-coding": [{
                         "duration": 1800,
-                        "cpu-offload-utilization": 0.80,
+                        "dram-utilization": 0.80,
                         "search-space": [
-                            {"tp": 4, "offloading": "cpu", "conc-list": [32]},
+                            {
+                                "tp": 4,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
                         ],
                     }],
                 },
@@ -1708,7 +1714,7 @@ class TestGenerateTestConfigSweep:
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
         budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
-        assert budgets == {4: 1243}
+        assert budgets == {4: 1199}
 
     def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
         config = {
@@ -1723,9 +1729,14 @@ class TestGenerateTestConfigSweep:
                 "scenarios": {
                     "agentic-coding": [{
                         "duration": 1800,
-                        "cpu-offload-utilization": 0.80,
+                        "dram-utilization": 0.80,
                         "search-space": [
-                            {"tp": 4, "offloading": "cpu", "conc-list": [32]},
+                            {
+                                "tp": 4,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
                         ],
                     }],
                 },

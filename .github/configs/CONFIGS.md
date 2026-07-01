@@ -85,6 +85,6 @@ Use `cluster:<name>` labels for hardware metadata that depends on an exact
 cluster/fleet rather than a broad SKU label. Agentic master configs must use a
 `cluster:<name>` runner label.
 `available-cpu-dram-mib` is the host CPU DRAM available to benchmark jobs, in
-MiB. Agentic CPU-offload matrices combine it with `gpus-per-node` and the
-master config's `cpu-offload-utilization` to emit `total-cpu-dram-gb` for
-benchmark templates.
+MiB. Agentic DRAM KV-offload matrices combine it with `gpus-per-node` and the
+master config's `dram-utilization` to emit `total-cpu-dram-gb` for benchmark
+templates.

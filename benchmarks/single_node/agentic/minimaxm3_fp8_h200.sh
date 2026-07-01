@@ -4,7 +4,7 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -85,9 +85,7 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=()
-case "$OFFLOADING" in
-    none) ;;
-    cpu)
+if require_agentic_kv_offload_backend mooncake; then
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
@@ -119,12 +117,7 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2
-        exit 1
-        ;;
-esac
+fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [[ "$DP_ATTENTION" == "true" ]]; then

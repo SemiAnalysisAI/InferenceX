@@ -4,9 +4,7 @@ set -x
 
 # Agentic trace replay benchmark for DeepSeek-V4-Pro FP4 on B200 using SGLang.
 #
-# OFFLOADING values:
-#   none    - SGLang GPU KV cache with RadixAttention prefix caching.
-#   hicache - SGLang HiCache local CPU tier with DSv4 UnifiedRadixCache.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=hicache.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFERENCEX_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -25,7 +23,7 @@ fi
 
 source "$INFERENCEX_ROOT/benchmarks/benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -59,39 +57,31 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 CACHE_ARGS=()
-case "$OFFLOADING" in
-    none)
-        ;;
-    hicache)
-        # DeepSeek V4 HiCache currently rejects --hicache-size and supports
-        # capacity control only through a host/device token-capacity ratio.
-        # DSv4 exposes capacity as a host/device token ratio rather than bytes.
-        # B200 ratio=8 stays below the configured host-memory capacity for the
-        # currently supported TP8 shape.
-        DEFAULT_HICACHE_RATIO=8
-        HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
-        if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
-            echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
-            exit 1
-        fi
-        HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
-        HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
-        HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
-        export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
-        CACHE_ARGS=(
-            --enable-hierarchical-cache
-            --hicache-ratio "$HICACHE_RATIO"
-            --hicache-write-policy "$HICACHE_WRITE_POLICY"
-            --hicache-io-backend "$HICACHE_IO_BACKEND"
-            --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
-        )
-        echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, hicache)" >&2
+if require_agentic_kv_offload_backend hicache; then
+    # DeepSeek V4 HiCache currently rejects --hicache-size and supports
+    # capacity control only through a host/device token-capacity ratio.
+    # DSv4 exposes capacity as a host/device token ratio rather than bytes.
+    # B200 ratio=8 stays below the configured host-memory capacity for the
+    # currently supported TP8 shape.
+    DEFAULT_HICACHE_RATIO=8
+    HICACHE_RATIO="${HICACHE_RATIO:-$DEFAULT_HICACHE_RATIO}"
+    if [ "$HICACHE_RATIO" -gt "$DEFAULT_HICACHE_RATIO" ]; then
+        echo "Error: HICACHE_RATIO=$HICACHE_RATIO exceeds configured limit $DEFAULT_HICACHE_RATIO" >&2
         exit 1
-        ;;
-esac
+    fi
+    HICACHE_WRITE_POLICY="${HICACHE_WRITE_POLICY:-write_through}"
+    HICACHE_IO_BACKEND="${HICACHE_IO_BACKEND:-direct}"
+    HICACHE_MEM_LAYOUT="${HICACHE_MEM_LAYOUT:-page_first_direct}"
+    export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+    CACHE_ARGS=(
+        --enable-hierarchical-cache
+        --hicache-ratio "$HICACHE_RATIO"
+        --hicache-write-policy "$HICACHE_WRITE_POLICY"
+        --hicache-io-backend "$HICACHE_IO_BACKEND"
+        --hicache-mem-layout "$HICACHE_MEM_LAYOUT"
+    )
+    echo "HiCache DSv4 CPU tier: ratio=$HICACHE_RATIO, capacity=${TOTAL_CPU_DRAM_GB} GB, write_policy=$HICACHE_WRITE_POLICY, io_backend=$HICACHE_IO_BACKEND, mem_layout=$HICACHE_MEM_LAYOUT"
+fi
 
 USE_SGLANG_ROUTER=false
 SGLANG_BACKEND_PORT="$PORT"

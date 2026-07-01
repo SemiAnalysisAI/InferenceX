@@ -245,11 +245,6 @@ labels:
     - gb300-nv_0
     - gb300-nv_1
     - gb300-nv_2
-  cluster:gb300-cw:
-    - gb300-cw_0
-    - gb300-cw_1
-    - gb300-cw_2
-    - gb300-cw_3
   cluster:mi300x-amds:
     - mi300x-amds_00
     - mi300x-amds_01
@@ -291,44 +286,41 @@ labels:
     - mi355x-amds_08
 hardware:
   cluster:h100-dgxc:
-    available-cpu-dram-mib: 2063837
+    available-cpu-dram-mib: 2_063_837
     gpus-per-node: 8
   cluster:h100-cw:
-    available-cpu-dram-mib: 1998848
+    available-cpu-dram-mib: 1_998_848
     gpus-per-node: 8
   cluster:h200-dgxc:
-    available-cpu-dram-mib: 1471356
+    available-cpu-dram-mib: 1_471_356
     gpus-per-node: 8
   cluster:h200-cw:
-    available-cpu-dram-mib: 1998848
+    available-cpu-dram-mib: 1_998_848
     gpus-per-node: 8
   cluster:h200-nb:
-    available-cpu-dram-mib: 1472512
+    available-cpu-dram-mib: 1_472_512
     gpus-per-node: 8
   cluster:b200-dgxc:
-    available-cpu-dram-mib: 3774874
+    available-cpu-dram-mib: 3_774_874
     gpus-per-node: 8
   cluster:b300-nv:
-    available-cpu-dram-mib: 2964436
+    available-cpu-dram-mib: 2_964_436
     gpus-per-node: 8
   cluster:gb200-nv:
-    available-cpu-dram-mib: 860160
-    gpus-per-node: 4
-  cluster:gb300-cw:
-    available-cpu-dram-mib: 888832
+    available-cpu-dram-mib: 860_160
     gpus-per-node: 4
   cluster:mi300x-amds:
-    available-cpu-dram-mib: 2321924
+    available-cpu-dram-mib: 2_321_924
     gpus-per-node: 8
   cluster:mi300x-tw:
-    available-cpu-dram-mib: 2322328
+    available-cpu-dram-mib: 2_322_328
     gpus-per-node: 8
   cluster:mi325x-amds:
-    available-cpu-dram-mib: 3091589
+    available-cpu-dram-mib: 3_091_589
     gpus-per-node: 8
   cluster:mi325x-tw:
-    available-cpu-dram-mib: 3095792
+    available-cpu-dram-mib: 3_095_792
     gpus-per-node: 8
   cluster:mi355x-amds:
-    available-cpu-dram-mib: 3095781
+    available-cpu-dram-mib: 3_095_781
     gpus-per-node: 8

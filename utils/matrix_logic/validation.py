@@ -52,10 +52,11 @@ class Fields(Enum):
     ADDITIONAL_SETTINGS = 'additional-settings'
 
     # Agentic coding fields
-    OFFLOADING = 'offloading'
+    KV_OFFLOADING = 'kv-offloading'
+    KV_OFFLOAD_BACKEND = 'kv-offload-backend'
     TOTAL_CPU_DRAM_GB = 'total-cpu-dram-gb'
     AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
-    CPU_OFFLOAD_UTILIZATION = 'cpu-offload-utilization'
+    DRAM_UTILIZATION = 'dram-utilization'
     GPUS_PER_NODE = 'gpus-per-node'
     DURATION = 'duration'
 
@@ -162,13 +163,20 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     conc: int
-    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
-        alias=Fields.OFFLOADING.value
+    kv_offloading: Literal["none", "dram"] = Field(
+        alias=Fields.KV_OFFLOADING.value
+    )
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
@@ -282,6 +290,23 @@ def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
         )
 
 
+def _validate_kv_offload_fields(self):
+    backend = getattr(self, "kv_offload_backend", None)
+    if self.kv_offloading == "none":
+        if backend not in (None, ""):
+            raise ValueError(
+                f"{Fields.KV_OFFLOAD_BACKEND.value} can only be set when "
+                f"{Fields.KV_OFFLOADING.value} is not 'none'"
+            )
+        return self
+    if backend is None or not backend.strip():
+        raise ValueError(
+            f"{Fields.KV_OFFLOAD_BACKEND.value} is required when "
+            f"{Fields.KV_OFFLOADING.value} is '{self.kv_offloading}'"
+        )
+    return self
+
+
 class SingleNodeSearchSpaceEntry(BaseModel):
     """Single node search space configuration."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
@@ -355,8 +380,11 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
-    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
-        default="none", alias=Fields.OFFLOADING.value
+    kv_offloading: Literal["none", "dram"] = Field(
+        default="none", alias=Fields.KV_OFFLOADING.value
+    )
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     total_cpu_dram_gb: int = Field(default=0, alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
@@ -366,6 +394,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     @model_validator(mode='after')
     def validate_conc_fields(self):
         return _validate_conc_fields(self)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
     @model_validator(mode='after')
     def validate_topology_fields(self):
@@ -385,21 +417,21 @@ class AgenticCodingConfig(BaseModel):
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
-    cpu_offload_utilization: Optional[float] = Field(
-        default=None, alias=Fields.CPU_OFFLOAD_UTILIZATION.value, gt=0, le=1
+    dram_utilization: Optional[float] = Field(
+        default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
     )
     duration: int = Field(default=1800, alias=Fields.DURATION.value)
 
     @model_validator(mode='after')
-    def validate_cpu_offload_capacity(self):
-        cpu_backends = {"cpu", "lmcache", "lmcache-mp", "hicache"}
+    def validate_dram_offload_capacity(self):
         for entry in self.search_space:
-            if entry.offloading not in cpu_backends:
+            if entry.kv_offloading != "dram":
                 continue
-            if entry.total_cpu_dram_gb <= 0 and self.cpu_offload_utilization is None:
+            if entry.total_cpu_dram_gb <= 0 and self.dram_utilization is None:
                 raise ValueError(
-                    f"offloading={entry.offloading!r} requires total-cpu-dram-gb or "
-                    "scenario-level cpu-offload-utilization with runner hardware metadata"
+                    f"{Fields.KV_OFFLOADING.value}='dram' requires "
+                    f"{Fields.TOTAL_CPU_DRAM_GB.value} or scenario-level "
+                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
                 )
         return self
 

@@ -5,11 +5,11 @@ set -x
 # Agentic trace replay benchmark for Kimi-K2.5 INT4 on H200 using vLLM.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
+check_env_vars MODEL TP CONC KV_OFFLOADING KV_OFFLOAD_BACKEND TOTAL_CPU_DRAM_GB RESULT_DIR DURATION
 
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
@@ -38,25 +38,18 @@ SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
 OFFLOAD_ARGS=""
-case "$OFFLOADING" in
-    none) ;;
-    cpu)
-        # Kimi K2.5 is pure TP (no DP-attn): single engine, world_size=TP.
-        # SimpleCPUOffloadConnector internally divides cpu_bytes_to_use by
-        # world_size, so pass the full TOTAL_CPU_DRAM_GB; TP-shared mmap
-        # keeps the aggregate at TOTAL.
-        PER_ENGINE_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
-        # JSON form (rather than --kv_offloading_backend native shortcut) so
-        # we can pass lazy_offload=true. Eager mode (the shortcut default)
-        # hits a popleft_n AssertionError in
-        # vllm/v1/core/kv_cache_utils.py at low/mid CONC on DSv4 + SimpleCPUOffloadConnector;
-        # lazy defers the store path and clears low/mid CONC reliably. See
-        # SimpleCPUOffloadConnector PR #37160.
-        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-        OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
-        ;;
-    *) echo "Error: unsupported OFFLOADING value '$OFFLOADING'" >&2; exit 1 ;;
-esac
+if require_agentic_kv_offload_backend native; then
+    # Kimi K2.5 is pure TP (no DP-attn): single engine, world_size=TP.
+    # SimpleCPUOffloadConnector internally divides cpu_bytes_to_use by
+    # world_size, so pass the full TOTAL_CPU_DRAM_GB; TP-shared mmap
+    # keeps the aggregate at TOTAL.
+    PER_ENGINE_BYTES=$((TOTAL_CPU_DRAM_GB * 1024 * 1024 * 1024))
+    # JSON form (rather than --kv_offloading_backend native shortcut) so we can
+    # pass lazy_offload=true. Eager mode hits a popleft_n AssertionError at
+    # low/mid CONC on DSv4 + SimpleCPUOffloadConnector.
+    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+    OFFLOAD_ARGS="--kv-transfer-config {\"kv_connector\":\"SimpleCPUOffloadConnector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"cpu_bytes_to_use\":$PER_ENGINE_BYTES,\"lazy_offload\":true}}"
+fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
