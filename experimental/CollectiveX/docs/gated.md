@@ -42,11 +42,18 @@ exchanged via `dist.all_gather_object`, `runtime.sync(...)`, CPU `UcclProxy` set
 The wrapper is cleanly vendorable (relative imports + only depends on `uccl.ep`), and that is now
 DONE: `cx_build_uccl` git-clones `uccl-project/uccl` at the wheel-matched tag and vendors
 `deep_ep_wrapper` under the non-colliding name `uccl_deepep`; `ep_uccl.py` imports its
-`Buffer(group, …)` and runs genuine UCCL dispatch/combine. **Validated: 507 valid docs, `correct=True`,
+`Buffer(group, …)` and runs genuine UCCL dispatch/combine. **Validated: `correct=True`,
 `uccl_version=0.1.1`, intranode NVLink on h100/h200/b300/b200** (normal bf16+fp8 + LL). If the wrapper
 is ever absent the import falls back to the low-level `uccl.ep.Buffer`, which fails loudly (preserved
-failed-case) — never faked. Remaining gap: aarch64 GB200/GB300 (the from-source/proxy bootstrap doesn't
-come up there — see the aarch64 wall below); uccl is x86-single-node so far.
+failed-case) — never faked. Fresh full-sweep re-validation (post idempotent-build fix, which cured the
+old per-case-rebuild SIGABRT/timeout): **h200 = 426/426 correct incl LL-mode 32/32** (run 28535235520);
+**h100 = 394/394 correct in NORMAL mode** (run 28535226475) **but all 4 LL-mode cases HANG (rc=124, 900s
+timeout — 0/32)**. Since the identical UCCL LL code is 32/32 on h200 (same Hopper arch, same wheel), the
+h100 LL hang is an **h100-dgxc cluster limitation** (LL uses IBGDA-style low-latency proxies; the
+h100-dgxc fabric deadlocks them — consistent with the documented h100-dgxc cross-node IB wall below),
+NOT an arch or UCCL-code wall. Both SKUs also fail ONLY the `empty-rank` diagnostic (see empty-rank note
+below). Remaining gap: aarch64 GB200/GB300 (the from-source/proxy bootstrap doesn't come up — see the
+aarch64 wall below); uccl is x86-single-node so far.
 
 ### NIXL — transfer DONE (container switch); device-EP blocked on UCX GPU Device API
 Two distinct things. **(1) NIXL host RDMA transfer** (`nixl_agent.register_memory / get_xfer_descs /
@@ -87,14 +94,19 @@ kernels) builds its MNNVL symmetric workspace over the torch.distributed NCCL gr
     race either: a between-case `/dev/shm` drop + settle was tested (run 28522872429) and made it WORSE
     (in-flight IPC corruption, 21→27 fails). So it's flashinfer MoE-kernel flakiness on Hopper — needs
     compute-sanitizer on a live run to root-cause. Mitigations shipped: (1) each flashinfer case is
-    RETRIED up to `CX_FLASHINFER_RETRIES` (default 3) times in the shard loop — since the failure is
-    intermittent (~50%/attempt, independent per fresh torchrun), 4 attempts recover ~1−0.5⁴ ≈ 94% of
-    cases, and a retry-success drops the intermediate failed-case record so the shard isn't polluted;
-    (2) flashinfer is sweep-chunked (`SLOW_MAX_CASES=12`, smaller than others so the retry budget stays
-    within `--time`) so it runs bounded + PARALLEL and a crash can't take a large shard down with it.
-    The passing cases are correct. B300 flashinfer did not show this at 36 cases (Blackwell). Upgrade to
-    0.6.14 was also tested (run 28530579787) and did NOT fix the deadlock (it was a vLLM-side fix, not
-    flashinfer-internal), so the bundled wheel + retry is the shipped path.
+    RETRIED up to `CX_FLASHINFER_RETRIES` (default 3) times in the shard loop, dropping the intermediate
+    failed-case record on a retry-success so the shard isn't polluted; (2) flashinfer is sweep-chunked
+    (`SLOW_MAX_CASES=12`, smaller than others so the retry budget stays within `--time`), bounded +
+    PARALLEL so a crash can't take a large shard down. **Retry MEASURED (run 28534841204, retry engaged
+    — 17 retries in the p3 shard alone): coverage 30/46 configs, 173/173 correct — up from the ~19-24
+    baseline but NOT the ~94% a clean-independent-50% model predicts.** The deadlock is severe (1470
+    completion-flag-timeout events that run) and, crucially, CORRELATED within a container: once the
+    MNNVL barrier state degrades, retries in the same allocation keep timing out, so retry has
+    diminishing returns (one whole chunk, p1, passed cleanly while p0/p2/p3 degraded). Fuller coverage
+    would need a fresh container per retry (re-import cost) or much smaller chunks (more GHA jobs) — both
+    rejected for marginal gain; the real fix is live compute-sanitizer root-cause. Upgrade to 0.6.14 was
+    also tested (run 28530579787) and did NOT fix it (it was a vLLM-side fix), so bundled wheel + retry
+    is the shipped path. B300 + GB300 flashinfer are 100% clean (Blackwell), confirming Hopper-kernel.
 - **H200 (`h200-dgxc`) runner:** its container **denies** CAP_SYS_PTRACE, so `pidfd_getfd` fails at
   MoeAlltoAll **construction** on every rank (`pidfd_getfd(...) errno 1: Operation not permitted`,
   deterministic — NOT the h100 intermittent, so retry cannot help). This is a per-runner environment
@@ -216,11 +228,17 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
     failing case (c043) is the `empty-rank` diagnostic (`ep-uneven-tokens-v1`, `required_publication:
     diagnostic` — one rank gets ZERO tokens): HybridEP's `set_intra_node_buffers` → `hybrid_ep.cu:81
     cudaDeviceSynchronize` raises `cudaErrorIllegalAddress` on Hopper (identical index c043 on BOTH
-    SKUs = deterministic-by-config, NOT the flashinfer intermittent nor accumulation). **Mainline DeepEP
-    handles the same empty-rank case on Hopper** (h100 deepep shard = success), so this is a HybridEP
-    kernel-robustness gap on the zero-token-rank edge, not a harness bug — recorded as a failed-case
-    record. Untested on Blackwell (b300/gb300 hybrid suites are `uneven_tokens=none` only). Not
+    SKUs = deterministic-by-config, NOT the flashinfer intermittent nor accumulation). Not
     retried/chunked: deterministic kernel limit, and the backend already has 212 correct points/SKU.
+  - **`empty-rank` is a CROSS-BACKEND Hopper diagnostic differentiator (not HybridEP-only).** The same
+    zero-token-rank case ALSO crashes **UCCL** on Hopper (h100 c073 rc=1, h200 c073) — so of the Hopper
+    EP backends, deepep-hybrid + uccl fail it while **mainline DeepEP HANDLES it** (verified control:
+    h100 mainline deepep empty-rank case c073 = valid doc, **3/3 correct**, zero failed records in the
+    shard). So the empty-rank diagnostic cleanly separates zero-token-rank-robust (mainline DeepEP) from
+    non-robust (HybridEP, UCCL) EP kernels. It's `required_publication: diagnostic`, one case per
+    backend, and flips those backends' GHA jobs to "failure" despite full data — judge by the failed-case
+    record + the 200+ correct points, not the job conclusion. Untested on Blackwell (b300/gb300 hybrid +
+    uccl suites are `uneven_tokens=none` only, so no Blackwell control exists for empty-rank).
   - **UCCL aarch64 (gb300) — WALL (confirmed fresh, the one genuine aarch64 EP wall).** Run 28457032490:
     `ModuleNotFoundError: No module named 'uccl.ep'` — the uccl EP extension does not import on aarch64
     Grace-Blackwell (consistent with UCCL-EP docs: NVIDIA/AMD + EFA/IB/Broadcom, no aarch64/Grace). EP4+EP8.
