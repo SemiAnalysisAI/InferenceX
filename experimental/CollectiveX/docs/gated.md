@@ -86,13 +86,23 @@ kernels) builds its MNNVL symmetric workspace over the torch.distributed NCCL gr
     config both crashes AND passes → a genuine intermittent, NOT config/pidfd). NOT a per-case IPC reclaim
     race either: a between-case `/dev/shm` drop + settle was tested (run 28522872429) and made it WORSE
     (in-flight IPC corruption, 21→27 fails). So it's flashinfer MoE-kernel flakiness on Hopper — needs
-    compute-sanitizer on a live run to root-cause. Mitigation shipped: flashinfer is sweep-chunked
-    (`SLOW_MAX_CASES=16`) so it runs bounded + PARALLEL and a crash can't take a large shard down with it;
-    the ~50% that pass are correct. B300 flashinfer did not show this at 36 cases (Blackwell).
-- **H200 (`h200-dgxc`) runner:** its container **denies** CAP_SYS_PTRACE, so `pidfd_getfd` fails and the
-  symmetric buffer can't be established (`pidfd_getfd ... operation not permitted`). This is a
-  per-runner environment limitation, NOT a code/hardware gap — the identical adapter is official on
-  H100+B300. Documented rather than forcing a security-sensitive `--cap-add SYS_PTRACE` on that runner.
+    compute-sanitizer on a live run to root-cause. Mitigations shipped: (1) each flashinfer case is
+    RETRIED up to `CX_FLASHINFER_RETRIES` (default 3) times in the shard loop — since the failure is
+    intermittent (~50%/attempt, independent per fresh torchrun), 4 attempts recover ~1−0.5⁴ ≈ 94% of
+    cases, and a retry-success drops the intermediate failed-case record so the shard isn't polluted;
+    (2) flashinfer is sweep-chunked (`SLOW_MAX_CASES=12`, smaller than others so the retry budget stays
+    within `--time`) so it runs bounded + PARALLEL and a crash can't take a large shard down with it.
+    The passing cases are correct. B300 flashinfer did not show this at 36 cases (Blackwell). Upgrade to
+    0.6.14 was also tested (run 28530579787) and did NOT fix the deadlock (it was a vLLM-side fix, not
+    flashinfer-internal), so the bundled wheel + retry is the shipped path.
+- **H200 (`h200-dgxc`) runner:** its container **denies** CAP_SYS_PTRACE, so `pidfd_getfd` fails at
+  MoeAlltoAll **construction** on every rank (`pidfd_getfd(...) errno 1: Operation not permitted`,
+  deterministic — NOT the h100 intermittent, so retry cannot help). This is a per-runner environment
+  limitation, NOT a code/hardware gap — the identical adapter is official on H100+B300. Not
+  harness-fixable: our launchers pass no `--container-cap-add`/cap flags (caps are the cluster's enroot
+  default — h100-dgxc grants it, h200-dgxc doesn't), enroot runs unprivileged so the cap isn't grantable
+  per-job, and `MoeAlltoAll` has **no non-MNNVL transport** to route around it (it IS the MNNVL one-sided
+  A2A). Documented rather than forcing a security-sensitive `--cap-add SYS_PTRACE` on that shared runner.
 - **aarch64 (GB200/GB300):** would use `CU_MEM_HANDLE_TYPE_FABRIC` (no pidfd); GB300 capacity-limited.
 
 ## Precision matrix
