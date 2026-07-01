@@ -88,6 +88,10 @@ ROUTER_LOG="$RESULT_DIR/router.log"
 MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
+SERVER_PID=""
+ROUTER_PID=""
+MOONCAKE_MASTER_PID=""
+
 OFFLOAD_ARGS=()
 case "$OFFLOADING" in
     none) ;;

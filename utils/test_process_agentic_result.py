@@ -282,6 +282,52 @@ def test_processor_handles_missing_server_metrics(tmp_path: Path):
     assert agg["total_requests_completed"] == 5
 
 
+def test_processor_excludes_warmup_phase_records(tmp_path: Path):
+    result_dir = tmp_path / "results"
+    artifact = result_dir / "aiperf_artifacts"
+    artifact.mkdir(parents=True)
+
+    warmup = _make_record(
+        conv_id="trace-A",
+        turn_index=0,
+        isl=10_000,
+        osl=5_000,
+        ttft_ms=9_000.0,
+        e2e_ms=30_000.0,
+        itl_ms=900.0,
+        start_ns=1_000_000_000,
+        end_ns=2_000_000_000,
+    )
+    warmup["metadata"]["benchmark_phase"] = "warmup"
+
+    profiling = _make_record(
+        conv_id="trace-A",
+        turn_index=1,
+        isl=100,
+        osl=50,
+        ttft_ms=30.0,
+        e2e_ms=1_000.0,
+        itl_ms=10.0,
+        start_ns=3_000_000_000,
+        end_ns=4_000_000_000,
+    )
+
+    with open(artifact / "profile_export.jsonl", "w") as f:
+        f.write(json.dumps(warmup) + "\n")
+        f.write(json.dumps(profiling) + "\n")
+    with open(artifact / "profile_export_aiperf.json", "w") as f:
+        json.dump({"request_count": 1}, f)
+
+    agg = _run_processor(result_dir, tmp_path / "out")
+
+    assert agg["num_requests_total"] == 1
+    assert agg["num_requests_successful"] == 1
+    assert agg["total_requests_completed"] == 1
+    assert agg["total_prompt_tokens"] == 100
+    assert agg["total_generation_tokens"] == 50
+    assert agg["mean_ttft"] == pytest.approx(0.03)
+
+
 def test_processor_response_cache_hit_rate_populated_when_cached_tokens_present(
     tmp_path: Path,
 ):

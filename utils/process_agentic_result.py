@@ -90,7 +90,14 @@ def load_aggregate(path: Path) -> dict:
 
 
 def load_records(path: Path) -> list[dict]:
-    """Load profile_export.jsonl as a list of (metadata, metrics) dicts."""
+    """Load profiling records from profile_export.jsonl.
+
+    Newer aiperf exports include ``metadata.benchmark_phase`` on every
+    per-request JSONL row. Warmup requests are useful raw diagnostics but must
+    not contribute to InferenceX benchmark aggregates. Older artifacts did not
+    have the phase field, so missing phase is treated as profiling for backward
+    compatibility.
+    """
     records: list[dict] = []
     with open(path) as f:
         for line in f:
@@ -99,6 +106,9 @@ def load_records(path: Path) -> list[dict]:
                 continue
             obj = json.loads(line)
             if obj.get("error"):
+                continue
+            phase = obj.get("metadata", {}).get("benchmark_phase")
+            if phase is not None and phase != "profiling":
                 continue
             records.append(obj)
     return records
