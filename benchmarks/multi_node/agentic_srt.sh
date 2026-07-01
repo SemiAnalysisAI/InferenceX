@@ -45,6 +45,7 @@ wait_for_agentic_servers_idle() {
 import sys
 import time
 import urllib.request
+import os
 
 timeout_seconds = int(sys.argv[1])
 poll_seconds = int(sys.argv[2])
@@ -52,6 +53,9 @@ frontend_url = sys.argv[3]
 worker_urls = [url for url in sys.argv[4].split(",") if url]
 deadline = time.monotonic() + timeout_seconds
 idle_polls = 0
+stale_frontend_polls = int(os.environ.get("AIPERF_DRAIN_STALE_FRONTEND_POLLS", "12"))
+stale_frontend_idle_polls = 0
+last_frontend_active = None
 
 
 def fetch_metrics(url: str) -> str:
@@ -80,12 +84,34 @@ while time.monotonic() < deadline:
             worker_metrics = fetch_metrics(worker_url)
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_running")
             worker_active += metric_sum(worker_metrics, "vllm:num_requests_waiting")
+        if worker_active == 0 and frontend_active > 0:
+            if last_frontend_active == frontend_active:
+                stale_frontend_idle_polls += 1
+            else:
+                stale_frontend_idle_polls = 1
+                last_frontend_active = frontend_active
+        else:
+            stale_frontend_idle_polls = 0
+            last_frontend_active = frontend_active
+        frontend_effectively_idle = frontend_active == 0
+        if (
+            worker_active == 0
+            and frontend_active > 0
+            and stale_frontend_idle_polls >= stale_frontend_polls
+        ):
+            print(
+                "Agentic drain treating stable frontend_active="
+                f"{frontend_active:g} as stale after "
+                f"{stale_frontend_idle_polls} worker-idle polls",
+                flush=True,
+            )
+            frontend_effectively_idle = True
         print(
             f"Agentic drain status: frontend_active={frontend_active:g} "
             f"worker_running_or_waiting={worker_active:g}",
             flush=True,
         )
-        if frontend_active == 0 and worker_active == 0:
+        if frontend_effectively_idle and worker_active == 0:
             idle_polls += 1
             if idle_polls >= 3:
                 print("Agentic servers remained idle for three polls", flush=True)
