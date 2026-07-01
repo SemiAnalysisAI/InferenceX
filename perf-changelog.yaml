@@ -4222,6 +4222,14 @@
     - "server_atom.sh: fix _MAX_CONC assignment before cudagraph size check; gate ATOM_MOE_GU_ITLV/AITER_BF16_FP8_MOE_BOUND on DeepSeek-V4-Pro only"
     - "Search space: ISL=8192 and ISL=1024, 1P1D TP4, conc 1-512"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1927
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-atom-disagg
+  description:
+    - "Refactor server_atom.sh: eliminate all hardcoded model-name checks; drive all model-specific config (env vars, parallel flags, MTP flags, KV cache flags, HF overrides) from models_atom.yaml"
+    - "models_atom.yaml: add MiniMax-M3-MXFP4 and MiniMax-M3-MXFP8 entries with EAGLE3 MTP flags; add DeepSeek-V4-Pro with TBO/cpu-affinity TP+DPA env and MTP flags; add tp_dp_flags, ep_dp_flags, tp_dp_env, ep_dp_env, kv_cache_flags, mtp_flags, hf_overrides fields"
+    - "Image bump for minimaxm3-fp8-mi355x-atom-disagg: rocm/atom-dev:MiniMax-M3-20260622 -> rocm/atom-dev:MiniMax-M3-20260623"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1930
   
 - config-keys:
     - dsv4-fp4-b200-dynamo-vllm
