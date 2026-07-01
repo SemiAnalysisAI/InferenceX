@@ -99,6 +99,10 @@ jobs:
       CX_NODES: ${{ matrix.nodes }}
       CX_SHARD_FILE: results/.shard_${{ matrix.id }}.json
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      # Consolidated shards run a whole build-group (up to ~74 cases) + one from-source build in ONE
+      # slurm allocation, so the launcher's default 45-min --time is too short. 120 min gives headroom;
+      # the allocation releases early when the shard finishes, so short shards don't waste it.
+      CX_TIME: '120'
       CX_NODELIST: ${{ matrix.sku == 'mi355x' && 'mia1-p01-g10,mia1-p01-g15' || '' }}
       CX_STAGE_DIR: ${{ matrix.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
     steps:
