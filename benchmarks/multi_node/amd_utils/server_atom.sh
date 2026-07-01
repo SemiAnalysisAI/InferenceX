@@ -47,7 +47,6 @@ HANDSHAKE_PORT="${HANDSHAKE_PORT:-6301}"
 
 # ATOM server tuning (from reference script defaults)
 MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.85}"
-KV_CACHE_DTYPE="${KV_CACHE_DTYPE:-fp8}"
 BLOCK_SIZE="${BLOCK_SIZE:-16}"
 MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
 MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
@@ -77,6 +76,30 @@ if [[ -z "$host_ip" ]]; then
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
 fi
 host_name=$(hostname)
+
+# =============================================================================
+# Model-Specific Configuration from YAML
+# =============================================================================
+# Load model-specific config from YAML (single parse for all fields)
+_yaml_tmp=$(mktemp)
+python3 << PYEOF > "$_yaml_tmp"
+import yaml
+with open('${ATOM_WS_PATH}/models_atom.yaml') as f:
+    m = yaml.safe_load(f).get('${MODEL_NAME}', {})
+def sh(v): return v.replace("'", "'\\''")
+print(f"MODEL_ENVS='{sh(m.get('env', ''))}'")
+print(f"MODEL_TP_DP_FLAGS='{sh(m.get('tp_dp_flags', ''))}'")
+print(f"MODEL_EP_DP_FLAGS='{sh(m.get('ep_dp_flags', ''))}'")
+print(f"MODEL_TP_DP_ENV='{sh(m.get('tp_dp_env', ''))}'")
+print(f"MODEL_EP_DP_ENV='{sh(m.get('ep_dp_env', ''))}'")
+print(f"MODEL_MTP_FLAGS='{sh(m.get('mtp_flags', ''))}'")
+print(f"MODEL_KV_ARG='{sh(m.get('kv_cache_flags', ''))}'")
+print(f"_HF_OVERRIDES='{sh(m.get('hf_overrides', ''))}'")
+PYEOF
+# shellcheck source=/dev/null
+source "$_yaml_tmp"
+rm -f "$_yaml_tmp"
+unset _yaml_tmp
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -114,52 +137,47 @@ DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 # Parallel args
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
 if [ "$PREFILL_ENABLE_DP" = "true" ]; then
-    if [ "$PREFILL_ENABLE_EP" -gt 1 ]; then #DPA+EP
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #TP+DPA+TBO
-        if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
-            PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention --enable-tbo )
-            export GPU_MAX_HW_QUEUES=5
-            export ATOM_CPU_AFFINITY=1
-        else #TP+DPA 
-            PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" --enable-dp-attention )
-        fi
+    if [ "$PREFILL_ENABLE_EP" = "true" ]; then #EP+DPA
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${MODEL_EP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
+    else #TP+DPA
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${MODEL_TP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
     fi
-fi 
-
-# (srok), split DPA & TBO cases
-DECODE_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
-if [ "$DECODE_ENABLE_DP" = "true" ]; then
-    if [ "$DECODE_ENABLE_EP" -gt 1 ]; then #DPA+EP
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-expert-parallel --enable-dp-attention )
-    else #TP+DPA+TBO
-        if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
-            DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention --enable-tbo )
-            export GPU_MAX_HW_QUEUES=5
-            export ATOM_CPU_AFFINITY=1
-        else #TP+DPA 
-            DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" --enable-dp-attention )
-        fi
-    fi
-fi 
-
-# MTP args
-SPEC_ARGS=() #TP
-if [ "$SPEC_DECODING" = "mtp" ]; then
-    SPEC_ARGS=(--method mtp --num-speculative-tokens "$DECODE_MTP_SIZE")
 fi
+
+DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE") #TP
+if [ "$DECODE_ENABLE_DP" = "true" ]; then
+    if [ "$DECODE_ENABLE_EP" = "true" ]; then #EP+DPA
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${MODEL_EP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
+    else #TP+DPA
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${MODEL_TP_DP_FLAGS})
+        for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
+    fi
+fi
+unset _dp_env_pair
 
 # HF overrides (single-quoted JSON preserved through eval)
 HF_OVERRIDES_ARG=""
-if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
-    HF_OVERRIDES_ARG="--hf-overrides '{\"use_index_cache\":true,\"index_topk_freq\":4}'"
+if [[ -n "$_HF_OVERRIDES" ]]; then
+    HF_OVERRIDES_ARG="--hf-overrides '${_HF_OVERRIDES}'"
+fi
+unset _HF_OVERRIDES
+
+for _env_pair in ${MODEL_ENVS}; do
+    export "$_env_pair"
+done
+unset _env_pair
+
+# MTP args
+SPEC_ARGS=()
+if [[ "$SPEC_DECODING" != "none" && "$SPEC_DECODING" != "" && -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+    SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
 fi
 
-# KV cache dtype (skip if unset or 'auto')
-KV_CACHE_ARG=""
-if [[ -n "$KV_CACHE_DTYPE" && "$KV_CACHE_DTYPE" != "auto" ]]; then
-    KV_CACHE_ARG="--kv_cache_dtype ${KV_CACHE_DTYPE}"
-fi
+# KV cache arg - full flag string from YAML
+KV_CACHE_ARG="${MODEL_KV_ARG}"
 
 # Optional model length / batched-token cap
 MODEL_LEN_ARGS=""
@@ -170,9 +188,6 @@ if [[ -n "$MAX_NUM_BATCHED_TOKENS" ]]; then
     MODEL_LEN_ARGS="${MODEL_LEN_ARGS} --max-num-batched-tokens ${MAX_NUM_BATCHED_TOKENS}"
 fi
 
-if [[ "$MODEL_NAME" != "DeepSeek-V4-Pro" ]]; then
-      export AITER_QUICK_REDUCE_QUANTIZATION=INT4
-fi
 
 cat <<INFO
 === Configuration ===
@@ -183,7 +198,7 @@ MODEL    : ${MODEL_NAME}
 BACKEND  : atom (PD mooncake KV transfer)
 MTP      : method=mtp num_speculative_tokens=${DECODE_MTP_SIZE}
 xP/yD    : ${xP} / ${yD}
-KV cache : dtype=${KV_CACHE_DTYPE:-auto} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_STATIC}
+KV cache : ${KV_CACHE_ARG:-none} block_size=${BLOCK_SIZE} mem_frac=${MEM_FRAC_STATIC}
 Model len: max_model_len=${MAX_MODEL_LEN:-unset} max_num_batched_tokens=${MAX_NUM_BATCHED_TOKENS:-unset}
 Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
 Decode  args : ${DECODE_PARALLEL_ARGS[*]}
@@ -191,6 +206,11 @@ Spec    args : ${SPEC_ARGS[*]}
 Opt     args : ${HF_OVERRIDES_ARG}
 =====================
 INFO
+
+set -x
+echo "::group::Environment Variables"
+env
+echo "::endgroup::"
 
 # =============================================================================
 # Node Role Assignment

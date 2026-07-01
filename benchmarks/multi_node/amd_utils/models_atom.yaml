@@ -1,4 +1,4 @@
-# Model-specific SGLang server configurations for disaggregated inference.
+# Model-specific ATOM server configurations for disaggregated inference.
 #
 # Each top-level key is a MODEL_NAME value (must match the directory name under MODEL_DIR).
 #
@@ -7,50 +7,34 @@
 #
 # Schema:
 #   <model-name>:
-#     base_flags: str          # Common flags for both prefill and decode
-#     mtp_flags: str           # Appended to decode when DECODE_MTP_SIZE > 0
-#     dp_flags: str            # Appended when DP is enabled (prefill or decode)
-#     prefill:
-#       mem_fraction_static: float
-#       disable_radix_cache: bool
-#       dp:                              # Config when data-parallel attention is enabled
-#         max_running_requests: int
-#         chunked_prefill_size: str      # Can be integer or bash arithmetic expression
-#         cuda_graph_bs: str             # Space-separated values
-#       no_dp:                           # Config when data-parallel attention is disabled
-#         max_running_requests: int
-#         chunked_prefill_size: int
-#         cuda_graph_bs_range: str       # "start-end" expanded via seq
-#     decode:
-#       mem_fraction_static: float
-#       prefill_round_robin_balance: bool
-#       dp:
-#         max_running_requests: int
-#         chunked_prefill_size: str
-#         cuda_graph_bs_range: str
-#       ep_only:                         # Config when EP is enabled but DP is disabled
-#         max_running_requests: int
-#         chunked_prefill_size: int
-#         cuda_graph_bs_range: str
-#       no_dp:
-#         max_running_requests: int
-#         chunked_prefill_size: int
-#         cuda_graph_bs_range: str
+#     env:          str  # Space-separated KEY=VALUE pairs exported unconditionally
+#     hf_overrides: str  # JSON string passed to --hf-overrides
+#     tp_dp_flags:  str  # Parallel flags for TP+DPA case (must include --enable-dp-attention)
+#     tp_dp_env:    str  # Space-separated KEY=VALUE pairs exported only in TP+DPA mode
+#     ep_dp_flags:  str  # Parallel flags for EP+DPA case (must include --enable-expert-parallel --enable-dp-attention)
+#     ep_dp_env:    str  # Space-separated KEY=VALUE pairs exported only in EP+DPA mode
+#     mtp_flags:    str  # Flags passed to SPEC_ARGS before $DECODE_MTP_SIZE (e.g. "--method mtp --num-speculative-tokens")
+#     kv_cache_flags: str  # Full --kv_cache_dtype flag string (e.g. "--kv_cache_dtype fp8", or "" for none)
 
 DeepSeek-V4-Pro:
-  # ATOM engine (atom-disagg): server_atom.sh uses MEM_FRACTION/KV_CACHE_DTYPE/BLOCK_SIZE/MAX_NUM_SEQS
-  # directly from env vars (defaulting to 0.85/fp8/16/256). base_flags/dp_flags are not used by
-  # server_atom.sh; they are kept here for documentation and potential future use.
-  base_flags: ""
-  mtp_flags: ""
-  dp_flags: ""
+  env: "ATOM_MOE_GU_ITLV=1 AITER_BF16_FP8_MOE_BOUND=0"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  tp_dp_flags: "--enable-dp-attention --enable-tbo"
+  tp_dp_env: "GPU_MAX_HW_QUEUES=5 ATOM_CPU_AFFINITY=1"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  mtp_flags: "--method mtp --num-speculative-tokens"
+  hf_overrides: '{"use_index_cache":true,"index_topk_freq":4}'
 
 MiniMax-M3-MXFP4:
-  base_flags: ""
-  mtp_flags: ""
-  dp_flags: ""
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_M3_SPARSE_USE_ASM_PA=1 AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  tp_dp_flags: "--enable-dp-attention"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  mtp_flags: "--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens"
 
 MiniMax-M3-MXFP8:
-  base_flags: ""
-  mtp_flags: ""
-  dp_flags: ""
+  env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_M3_SPARSE_USE_ASM_PA=1 AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0"
+  kv_cache_flags: "--kv_cache_dtype fp8"
+  tp_dp_flags: "--enable-dp-attention"
+  ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
+  mtp_flags: "--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens"
