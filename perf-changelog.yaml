@@ -4351,7 +4351,25 @@
     - "Use nvidia/MiniMax-M3-NVFP4 from /scratch/models/MiniMax-M3-NVFP4 with vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41, which includes vllm-project/vllm PR #46380; no runtime patch needed"
     - "Reuse the existing MXFP8 B300 topology and concurrency matrix across 15 srt-slurm recipes, while dropping the FP8-only Marlin override from TP4 decode"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1966
-  
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+    - minimaxm3-fp4-mi355x-atom-mtp
+  description:
+    - "Bump image to rocm/atom-dev:MiniMax-M3-20260630 for both fp4 atom entries"
+    - "Add OPT_ARGS: pass --online_quant_config '{\"global_quant_config\": \"ptpc_fp8\", \"exclude_layer\": [\"lm_head\", \"model.embed_tokens\", \"vision_tower\", \"multi_modal_projector\", \"patch_merge_mlp\", \"*block_sparse_moe\"]}' and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' to both scripts"
+    - "Replace AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1967
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-atom
+    - minimaxm3-fp8-mi355x-atom-mtp
+  description:
+    - "Bump image to rocm/atom-dev:MiniMax-M3-20260630 for both fp8 atom entries"
+    - "Add OPT_ARGS: pass --online_quant_config '{\"global_quant_config\": \"ptpc_fp8\", \"exclude_layer\": [\"lm_head\", \"model.embed_tokens\", \"vision_tower\", \"multi_modal_projector\", \"patch_merge_mlp\", \"*block_sparse_moe\"]}' and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' to both scripts"
+    - "Replace AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1968
+
 - config-keys:
     - dsr1-fp4-b200-sglang-mtp
   description:
