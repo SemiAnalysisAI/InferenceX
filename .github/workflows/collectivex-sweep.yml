@@ -37,9 +37,9 @@ on:
         type: string
         default: ''
       max_cases:
-        description: Max cases per shard cell (chunk larger shards)
+        description: Max cases per shard cell before chunking into another GHA job (128 = no chunking for current suites)
         type: string
-        default: '14'
+        default: '128'
 
 concurrency:
   group: cx-sweep-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.deepep_v2 }}-${{ inputs.only_sku }}

@@ -68,7 +68,7 @@ def main() -> int:
     ap.add_argument("--max-nodes", type=int, default=0,
                     help="keep only shards whose tray count (nodes, blank=1) is <= this; "
                          "e.g. 1 = single-tray EP4 only (skip the rack-scale EP8 cells)")
-    ap.add_argument("--max-cases", type=int, default=14, help="chunk shards larger than this into sub-cells")
+    ap.add_argument("--max-cases", type=int, default=128, help="chunk shards larger than this into sub-cells (128 = effectively no chunking for current suites; each shard's cases run consecutively in ONE allocation, amortizing runner/enroot/build startup)")
     ap.add_argument("--out", default="")
     ap.add_argument("--slim", action="store_true",
                     help="emit matrix WITHOUT the per-cell cases list (fits the GHA output size cap); "
