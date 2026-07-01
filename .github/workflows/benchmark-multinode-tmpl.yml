@@ -171,17 +171,10 @@ jobs:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            # Clean both the bare runner name and the "ifx-" prefixed form.
-            # launch_gb200-nv.sh names jobs ifx-<runner> to dodge a foreign
-            # runner fleet on watchtower that scancels by the bare name
-            # across users (see the comment there). squeue is filtered to
-            # our user so the wait loop can't hang on a same-named foreign
-            # job we have no permission to cancel.
-            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }}, ifx-${{ runner.name }} ..."
+            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
             scancel --name="${{ runner.name }}" || true
-            scancel --name="ifx-${{ runner.name }}" || true
-            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }},ifx-${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --user="$USER" --name="${{ runner.name }},ifx-${{ runner.name }}"
+            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --user="$USER" --name="${{ runner.name }}"
               sleep 5
             done
           fi

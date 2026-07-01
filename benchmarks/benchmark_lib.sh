@@ -1313,7 +1313,7 @@ run_agentic_replay_and_write_outputs() {
         "$result_dir/aiperf_artifacts" -o "$result_dir" 2>&1 || true
 
     set +e
-    "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/validate_agentic_result.py" \
+    "$AIPERF_PYTHON" "$INFMAX_CONTAINER_WORKSPACE/utils/agentic/validate_agentic_result.py" \
         "$result_dir/aiperf_artifacts" \
         --failed-request-threshold "$AIPERF_FAILED_REQUEST_THRESHOLD"
     validation_rc=$?

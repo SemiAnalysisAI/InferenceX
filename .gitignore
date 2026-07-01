@@ -1,4 +1,3 @@
 **/__pycache__/**
 **/.coverage
-/agentic_checkpoints/
 experimental/multiturn/vllm_benchmark/results/

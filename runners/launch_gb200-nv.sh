@@ -419,20 +419,8 @@ if [[ ! -f "$CONFIG_PATH" ]]; then
     exit 1
 fi
 
-# Override the job name with the runner name, prefixed "ifx-": another
-# runner fleet on watchtower (user slurm-shared, uid 1010, with Slurm
-# operator rights) names ITS jobs after the same runner names (gb200-nv_N)
-# and its pre-job cleanup scancels by job name across users — it killed our
-# jobs 18593 and 18599 mid-startup (CANCELLED by 1010). The distinct prefix
-# keeps their --name match away from our jobs; the workflow's own pre-run
-# cleanup scancels both the bare and ifx- prefixed names.
-#
-# NOTE the sed alone is not enough: srtctl's get_job_name() (cli/submit.py)
-# prefers the RUNNER_NAME env var over the recipe name, so the prefixed
-# RUNNER_NAME must be passed to `srtctl apply` itself (R4 job 18599 proved
-# the recipe-name route gets ignored on CI runners).
-sed -i "s/^name:.*/name: \"ifx-${RUNNER_NAME}\"/" "$CONFIG_PATH"
-SRTCTL_RUNNER_NAME="ifx-${RUNNER_NAME}"
+# Keep the Slurm job name aligned with the GitHub runner name.
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
@@ -452,9 +440,9 @@ if [[ "$IS_AGENTIC" == "1" ]]; then
 fi
 
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
-    SRTCTL_OUTPUT=$(RUNNER_NAME="$SRTCTL_RUNNER_NAME" srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" --setup-script install-torchao.sh 2>&1)
 else
-    SRTCTL_OUTPUT=$(RUNNER_NAME="$SRTCTL_RUNNER_NAME" srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
+    SRTCTL_OUTPUT=$(srtctl apply "${PREFLIGHT_ARGS[@]}" -f "$CONFIG_PATH" --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)" 2>&1)
 fi
 echo "$SRTCTL_OUTPUT"
 
