@@ -2695,7 +2695,7 @@ minimaxm3-fp4-mi355x-vllm-mtp:
 # https://github.com/ROCm/ATOM/blob/5d42d49f9e4292e5b61475917e92e7ec1b1dacb7/recipes/MiniMax-M3.md
 # block size 128 is mandatory for MSA. TP4 on a single gfx950 node, per the recipe.
 minimaxm3-fp4-mi355x-atom:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2714,7 +2714,7 @@ minimaxm3-fp4-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp4-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
