@@ -199,6 +199,10 @@ run_ep_suite() {
 # (no precompile). arch 9.0 for Hopper (H100/H200), 10.0 for Blackwell (B300/B200/GB300). Best-effort:
 # on failure the deepep run still fails loudly (preserved failed-case), never a silent V1 fallback.
 cx_build_deepep_v2() {
+  # IDEMPOTENT: SHARD mode calls dispatch_bench (hence this) once PER CASE. Build once per allocation,
+  # then skip — else a 60-case shard re-runs the from-source build 60x (force-reinstall) and blows the
+  # slurm --time. Sentinel lives in the container fs (persists across the x86 in-container case loop).
+  [ -f /tmp/.cx_built_deepep_v2 ] && { cx_log "DeepEP V2 already built this allocation — skip rebuild"; return 0; }
   local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*|b200*) arch="10.0";; esac
   cx_log "DeepEP V2: building from source (TORCH_CUDA_ARCH_LIST=$arch) — overrides bundled V1"
   # PEP 668: newer images (H200/B300) ship an externally-managed Python that refuses `pip install`.
@@ -215,6 +219,7 @@ cx_build_deepep_v2() {
     || { cx_log "ERROR: DeepEP V2 build/install failed (arch=$arch; NCCL/toolchain?)"; return 1; }
   python3 -c "import deep_ep; print('built deep_ep', getattr(deep_ep,'__version__','?'))" >&2 \
     || { cx_log "ERROR: DeepEP V2 import failed after build (NCCL version mismatch?)"; return 1; }
+  : > /tmp/.cx_built_deepep_v2   # sentinel: skip rebuild on subsequent cases in this allocation
   cx_log "DeepEP V2 ready ($DEEPEP_COMMIT)"
 }
 
@@ -227,6 +232,7 @@ cx_build_deepep_v2() {
 #   3. NVSHMEM_DIR set to the bundled nvshmem enables build; unset => intranode-only (internode/LL off).
 # Intranode HybridEPBuffer (single NVLink domain, <=8 ranks) needs no multi-node/NVSHMEM bring-up.
 cx_build_deepep_hybrid() {
+  [ -f /tmp/.cx_built_deepep_hybrid ] && { cx_log "hybrid-ep already built this allocation — skip rebuild"; return 0; }
   local arch="9.0"; case "$CX_RUNNER" in b300*|gb300*|b200*) arch="10.0";; esac
   cx_log "DeepEP hybrid-ep: building NVIDIA TMA branch from source (TORCH_CUDA_ARCH_LIST=$arch)"
   export PIP_BREAK_SYSTEM_PACKAGES=1
@@ -262,6 +268,7 @@ cx_build_deepep_hybrid() {
   { printf 'export LD_LIBRARY_PATH=%s/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}\n' "$NVSHMEM_DIR"
     [ -n "${PYTHONPATH:-}" ] && printf 'export PYTHONPATH=%s\n' "$PYTHONPATH"
   } > /tmp/.cx_hybrid_env 2>/dev/null || cx_log "WARN: could not write /tmp/.cx_hybrid_env"
+  : > /tmp/.cx_built_deepep_hybrid   # sentinel: skip rebuild on subsequent cases in this allocation
   cx_log "DeepEP hybrid-ep ready ($DEEPEP_COMMIT)"
 }
 
@@ -408,6 +415,7 @@ run_allreduce_fw() {
 # (bf16/fp8/mxfp8/nvfp4) is unaffected and stays on whatever is installed. Best-effort: a failed
 # upgrade leaves the run on the bundled version (the combine-quant adapter then rejects loudly).
 cx_build_flashinfer_latest() {
+  [ -f /tmp/.cx_built_flashinfer ] && { cx_log "FlashInfer quant-combine build already done this allocation — skip"; return 0; }
   cx_log "FlashInfer: upgrading to latest wheel for quantized-combine output (moe_a2a_combine output_dtype)"
   export PIP_BREAK_SYSTEM_PACKAGES=1
   # moe_a2a_combine output_dtype is on flashinfer MAIN but NOT in the latest PyPI release (0.6.13) —
@@ -462,6 +470,7 @@ PY
   cx_log "FlashInfer stack: $CX_FLASHINFER_STACK"
   python3 -c "import inspect, flashinfer.comm as c; assert 'output_dtype' in str(inspect.signature(c.MoeAlltoAll.combine)), 'combine still has no output_dtype'; print('combine output_dtype: present')" >&2 \
     || { cx_log "ERROR: upgraded FlashInfer combine still lacks output_dtype — cannot quant-combine"; return 1; }
+  : > /tmp/.cx_built_flashinfer   # sentinel: skip rebuild on subsequent cases in this allocation
 }
 
 # NIXL device-EP build-probe — the gated EP item (goal "NIXL EP"). The OLD sglang image blocked the
