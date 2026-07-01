@@ -64,12 +64,12 @@ hardware facts in the repository. It has two top-level sections:
 
 ```yaml
 labels:
-  b300:
-    - b300-nv_0
-    - b300-nv_1
+  cluster:b300-nv:
+    - b300-nv_01
+    - b300-nv_02
 
 hardware:
-  b300:
+  cluster:b300-nv:
     available-cpu-dram-mib: 2964436
     gpus-per-node: 8
 ```
@@ -78,6 +78,8 @@ hardware:
 can satisfy that label. `hardware` maps hardware or fleet keys to host resource
 facts. Matrix generation reads the `hardware` entry whose key matches the
 master config's `runner` label when a benchmark needs derived hardware facts.
+Use `cluster:<name>` labels for hardware metadata that depends on an exact
+cluster/fleet rather than a broad SKU label.
 `available-cpu-dram-mib` is the host CPU DRAM available to benchmark jobs, in
 MiB. Agentic CPU-offload matrices combine it with `gpus-per-node` and the
 master config's `cpu-offload-utilization` to emit `total-cpu-dram-gb` for

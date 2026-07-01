@@ -29,7 +29,7 @@ Machine-level host memory is declared once in the `.github/configs/runners.yaml`
 
 ```yaml
 hardware:
-  b300:
+  cluster:b300-nv:
     available-cpu-dram-mib: 2964436
     gpus-per-node: 8
 ```

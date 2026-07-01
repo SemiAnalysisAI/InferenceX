@@ -114,15 +114,16 @@ key off that name:
 
 - `slurm` — the runner submits work through Slurm.
 - The SKU name (`b200`, `b300`, `h200`, `gb300`, …) — coarse hardware targeting.
-- Optional sub-fleet tags, e.g. `b200-dgxc`, `b200-dsv4` — used to carve out dedicated
-  capacity.
+- `cluster:<name>`, e.g. `cluster:b200-dgxc` — exact hardware/fleet targeting.
+- Optional capacity tags, e.g. `b200-dsv4`, `b300-p1` — used to carve out dedicated
+  benchmark subsets.
 
 The per-runner name label (`b300-nv_07`) is what `runs-on` resolves for sweep jobs, so
 always keep it (the script appends it automatically). A typical registered runner ends
 up with labels like:
 
 ```
-self-hosted, Linux, X64, slurm, b200, b200-dsv4, b200-dgxc, b200-dgxc_00
+self-hosted, Linux, X64, slurm, b200, b200-dsv4, cluster:b200-dgxc, b200-dgxc_00
 ```
 
 Labels can be edited later on the runners settings page without re-registering.

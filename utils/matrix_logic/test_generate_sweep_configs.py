@@ -115,16 +115,17 @@ def sample_runner_config():
             "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
             "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
             "b300": ["b300-nv_0", "b300-nv_1"],
+            "cluster:b300-nv": ["b300-nv_0", "b300-nv_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
             "gb200": ["gb200-nv_0"],
         },
         "hardware": {
-            "h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "h200": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "b200": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "b300": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
-            "mi300x": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
-            "gb200": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
+            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
+            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
+            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
     }
 
@@ -1683,7 +1684,7 @@ class TestGenerateTestConfigSweep:
                 "model-prefix": "dsv4",
                 "precision": "fp4",
                 "framework": "vllm",
-                "runner": "b300",
+                "runner": "cluster:b300-nv",
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [{
@@ -1717,7 +1718,7 @@ class TestGenerateTestConfigSweep:
                 "model-prefix": "dsv4",
                 "precision": "fp4",
                 "framework": "vllm",
-                "runner": "b300",
+                "runner": "cluster:b300-nv",
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [{
@@ -1731,7 +1732,7 @@ class TestGenerateTestConfigSweep:
             },
         }
         runner_config = copy.deepcopy(sample_runner_config)
-        runner_config["hardware"]["b300"]["gpus-per-node"] = 2
+        runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
         args = argparse.Namespace(
             config_keys=["dsv4-b300-agentic"],
             seq_lens=None,

@@ -176,15 +176,16 @@ def valid_runner_config():
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
             "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
             "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "cluster:b200-dgxc": ["b200-dgxc_1"],
             "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
             "gb200": ["gb200-nv_0"],
         },
         "hardware": {
-            "h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
-            "h200": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
-            "b200": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
-            "mi300x": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
-            "gb200": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
+            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
+            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
         },
     }
 
