@@ -271,3 +271,13 @@ The directive's container-switch + AMD-lift asks. All run via GHA on the MI355X 
   RDMA wall) — same class as UCCL on NVIDIA — so cross-node MI355X EP runs via **nccl-ep on RCCL**
   (NCCL/RCCL `all_to_all_single`, host-staged over IB) with the shared-mount FileStore rendezvous. See
   the rack-scale section above; single-node MI355X EP is covered by the MoRI sweep.
+
+## Operational note — do not delete ALL runs of a non-`main` workflow
+`collectivex-experimental.yml` lives ONLY on the `collectivex` branch (unlike `collectivex-sweep.yml`,
+which is also on `main`). GitHub keeps a workflow in the Actions registry only if it is on the default
+branch OR has at least one run. Deleting EVERY run of `collectivex-experimental.yml` therefore
+DE-REGISTERS it — `gh workflow run collectivex-experimental.yml --ref collectivex` then fails with
+"workflow not found on the default branch," and `gh` even reports the failed dispatch as success if the
+caller greps stdout for `github.com` (the 404 URL matches). Re-register by pushing any change under
+`experimental/CollectiveX/**` (the `on: push` trigger creates a run). Robust fix: also add the workflow
+to `main` (as the sweep already is), so run-deletion can never de-register it.
