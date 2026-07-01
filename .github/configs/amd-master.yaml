@@ -2733,7 +2733,7 @@ minimaxm3-fp4-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
 
 minimaxm3-fp8-mi355x-atom:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2752,7 +2752,7 @@ minimaxm3-fp8-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp8-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
