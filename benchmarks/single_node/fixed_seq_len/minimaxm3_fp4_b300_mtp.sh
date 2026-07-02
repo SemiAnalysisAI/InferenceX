@@ -76,7 +76,6 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $POR
 $PARALLEL_ARGS \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
---kv-cache-dtype fp8 \
 --block-size 128 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
