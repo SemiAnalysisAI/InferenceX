@@ -1,6 +1,6 @@
 # How to Test Workflows
 
-In order to test configurations described in `.github/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
 
 ```
 usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
@@ -52,42 +52,42 @@ By default, throughput runs for every generated config and eval-only jobs run fo
 
 **Generate all single-node and multi-node configurations (default):**
 ```
-full-sweep --config-files .github/configs/nvidia-master.yaml
+full-sweep --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
 ```
-full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 **Test all single-node TRT configs on H200 runners:**
 ```
-full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files configs/nvidia-master.yaml
 ```
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
 ```
-full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --max-conc 64 --max-tp 4 --config-files configs/nvidia-master.yaml
 ```
 
 **Test all multi-node configurations:**
 ```
-full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
+full-sweep --multi-node --config-files configs/nvidia-master.yaml
 ```
 
 **Test agentic configurations:**
 ```
-full-sweep --scenario-type agentic-coding --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 ## `test-config` Command
@@ -109,42 +109,42 @@ Config keys support **wildcard patterns** using `*` (matches any characters) and
 
 **Test a single config by exact name:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang --config-files configs/nvidia-master.yaml
 ```
 
 **Test multiple exact configs:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files configs/nvidia-master.yaml
 ```
 
 **Use wildcard to test all B200 configs:**
 ```
-test-config --config-keys *-b200-* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys *-b200-* --config-files configs/nvidia-master.yaml
 ```
 
 **Use wildcard to test all sglang configs:**
 ```
-test-config --config-keys *-sglang --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+test-config --config-keys *-sglang --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 **Use wildcard to test all dsr1 model configs:**
 ```
-test-config --config-keys dsr1* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1* --config-files configs/nvidia-master.yaml
 ```
 
 **Mix exact keys and patterns:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files configs/nvidia-master.yaml
 ```
 
 **Override concurrency for targeted testing:**
 ```
-test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys *-b200-* --conc 4 8 --config-files configs/nvidia-master.yaml
 ```
 
 **Run eval-only jobs for every generated fixed-sequence config:**
 ```
-test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files configs/nvidia-master.yaml
 ```
 
 ## PR Eval Modifiers
@@ -204,7 +204,7 @@ The benchmarking system uses a strict validation methodology to ensure correctne
 
 The system validates **both ends** of the configuration pipeline:
 
-1. **Input Validation (Master Configs)**: Validates the structure of `.github/configs/*.yaml` files before any processing occurs
+1. **Input Validation (Master Configs)**: Validates the structure of `configs/*.yaml` files before any processing occurs
 2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
 
 This dual-validation approach ensures:
@@ -260,7 +260,7 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
 ### Validation Flow
 
 ```
-.github/configs/*.yaml
+configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐

@@ -1003,8 +1003,8 @@ def main():
     )
     parent_parser.add_argument(
         '--runner-config',
-        default='.github/configs/runners.yaml',
-        help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+        default='configs/runners.yaml',
+        help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
     )
     eval_group = parent_parser.add_mutually_exclusive_group()
     eval_group.add_argument(

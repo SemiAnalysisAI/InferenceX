@@ -11555,11 +11555,6 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   image: vllm/vllm-openai:v0.21.0-ubuntu2404
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  # cluster:gb300-nv (not generic gb300) — the generic label is shared by both
-  # NV and CW runner pools, so runs-on: gb300 lets CW runners pick up shards.
-  # The cluster label is on NV runners only (per .github/configs/runners.yaml
-  # + actual runner label listings), pinning agentic to the NVIDIA cluster.
-  # for initial validation. Drop -nv suffix to widen later.
   runner: cluster:gb300-nv
   precision: fp4
   framework: dynamo-vllm

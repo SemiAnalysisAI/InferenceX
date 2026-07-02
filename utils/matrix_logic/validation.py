@@ -242,7 +242,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
 
 """
     Below is the validation logic for the INPUT to utils/matrix_logic/generate_sweep_configs.py, i.e., 
-    the master configuration files found in .github/configs. The validation enforces a strict set of 
+    the master configuration files found in configs. The validation enforces a strict set of
     rules on the structure of the master configuration files to ensure correctness before proceeding 
     with matrix generation.
 """

@@ -108,7 +108,7 @@ def sample_multinode_config():
 
 @pytest.fixture
 def sample_runner_config():
-    """Runner config based on .github/configs/runners.yaml."""
+    """Runner config based on configs/runners.yaml."""
     return {
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
@@ -1530,7 +1530,7 @@ class TestArgumentDefaults:
     """Tests for command-line argument parsing and default values."""
 
     def test_runner_config_default_value(self):
-        """Verify --runner-config defaults to .github/configs/runners.yaml."""
+        """Verify --runner-config defaults to configs/runners.yaml."""
         import sys
         from generate_sweep_configs import main
 
@@ -1561,8 +1561,8 @@ class TestArgumentDefaults:
             )
             parent_parser.add_argument(
                 '--runner-config',
-                default='.github/configs/runners.yaml',
-                help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+                default='configs/runners.yaml',
+                help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
             )
 
             # Create main parser
@@ -1591,7 +1591,7 @@ class TestArgumentDefaults:
             args = parser.parse_args(['full-sweep', '--config-files', 'dummy.yaml', '--single-node'])
 
             # Verify the default value
-            assert args.runner_config == '.github/configs/runners.yaml'
+            assert args.runner_config == 'configs/runners.yaml'
 
         finally:
             # Restore original sys.argv
@@ -1611,8 +1611,8 @@ class TestArgumentDefaults:
         )
         parent_parser.add_argument(
             '--runner-config',
-            default='.github/configs/runners.yaml',
-            help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+            default='configs/runners.yaml',
+            help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
         )
 
         # Create main parser

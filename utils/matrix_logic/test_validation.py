@@ -171,7 +171,7 @@ def valid_multinode_master_config():
 
 @pytest.fixture
 def valid_runner_config():
-    """Valid runner config based on .github/configs/runners.yaml."""
+    """Valid runner config based on configs/runners.yaml."""
     return {
         "labels": {
             "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],

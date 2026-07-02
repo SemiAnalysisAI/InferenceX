@@ -20,7 +20,7 @@ def normalize_hardware_label(label: str) -> str:
 
 def load_hardware_labels():
     """Load distinct cluster hardware labels from runners.yaml."""
-    runners_path = Path(__file__).parent.parent / ".github" / "configs" / "runners.yaml"
+    runners_path = Path(__file__).parent.parent / "configs" / "runners.yaml"
     with open(runners_path) as f:
         runners = yaml.safe_load(f)
 
