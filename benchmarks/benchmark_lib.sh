@@ -967,19 +967,122 @@ META
 }
 
 # ------------------------------
+# SWE-bench eval helpers
+# ------------------------------
+
+# Run the SWE-bench Lite eval: generate patches with lm-eval, then score them
+# with the official swebench Docker harness. lm-eval cannot score SWE-bench
+# itself (no repo-level test executor), so we reuse it only for generation and
+# emit an lm-eval-shaped results JSON from swebench_score.py so the rest of the
+# pipeline (append_lm_eval_summary / collect / validate) is unchanged.
+#
+# Env knobs:
+#   SWEBENCH_TASK_NAME     (default swebench_lite) selects utils/evals/<name>.yaml
+#   SWEBENCH_DATASET       optional; must equal the YAML's dataset_path (the
+#                          scoring dataset is derived from the YAML so generation
+#                          and scoring never diverge) -- mismatch fails fast
+#   SWEBENCH_MAX_WORKERS   (default 4) harness Docker workers
+#   SWEBENCH_NAMESPACE     pass "" on arm/Mac to build images locally
+#   SWEBENCH_SKIP_SCORE    "true" => generate + stage predictions only, no Docker
+#                          (for runners without Docker; score elsewhere)
+run_swebench_eval() {
+    local out_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
+    local task_name="${SWEBENCH_TASK_NAME:-swebench_lite}"
+    local gen_dir
+    gen_dir=$(mktemp -d /tmp/swebench_gen-XXXXXX)
+
+    # Keep the scoring dataset in lockstep with the generation YAML: the harness
+    # must score against the same instance set lm-eval generated patches for, or
+    # the instance IDs won't match. Derive it from the task YAML; if
+    # SWEBENCH_DATASET is set it must agree (fail-fast rather than mis-score).
+    local yaml_path="${EVAL_TASKS_DIR:-utils/evals/${task_name}.yaml}"
+    local dataset
+    dataset=$(awk '/^dataset_path:[[:space:]]/{print $2; exit}' "$yaml_path" 2>/dev/null)
+    if [ -z "$dataset" ]; then
+        echo "ERROR: could not read dataset_path from ${yaml_path}" >&2
+        rm -rf "$gen_dir" 2>/dev/null || true
+        return 1
+    fi
+    if [ -n "${SWEBENCH_DATASET:-}" ] && [ "${SWEBENCH_DATASET}" != "$dataset" ]; then
+        echo "ERROR: SWEBENCH_DATASET='${SWEBENCH_DATASET}' disagrees with ${yaml_path} dataset_path='${dataset}'." >&2
+        echo "       Generation and scoring must use the same dataset; edit the YAML or unset SWEBENCH_DATASET." >&2
+        rm -rf "$gen_dir" 2>/dev/null || true
+        return 1
+    fi
+
+    # 1. Generation via lm-eval (reuses endpoint wiring, _patch_lm_eval, etc.).
+    #    run_lm_eval already passes --log_samples, which is what we consume.
+    local prev_tasks_dir="${EVAL_TASKS_DIR:-}"
+    export EVAL_TASKS_DIR="$yaml_path"
+    local gen_rc=0
+    run_lm_eval "$@" --results-dir "$gen_dir" || gen_rc=$?
+    export EVAL_TASKS_DIR="$prev_tasks_dir"
+    if [ "$gen_rc" -ne 0 ]; then
+        echo "ERROR: swebench generation (lm-eval) failed with $gen_rc" >&2
+        rm -rf "$gen_dir" 2>/dev/null || true
+        return "$gen_rc"
+    fi
+
+    # Preserve generations as artifacts alongside the scored results.
+    mkdir -p "$out_dir"
+    find "$gen_dir" -name 'samples_*.jsonl' -exec cp -f {} "$out_dir"/ \; 2>/dev/null || true
+    export EVAL_RESULT_DIR="$out_dir"
+
+    local lm_eval_version
+    lm_eval_version=$(python3 -c 'import lm_eval; print(lm_eval.__version__)' 2>/dev/null || echo unknown)
+
+    if [ "${SWEBENCH_SKIP_SCORE:-false}" = "true" ]; then
+        # Generation-only mode: emit predictions, defer Docker scoring elsewhere.
+        # TODO(alec): wire the separate scoring job (Modal / sb-cli / CPU runner).
+        local skip_rc=0
+        python3 utils/evals/swebench_score.py \
+            --samples-dir "$gen_dir" --out-dir "$out_dir" \
+            --model-name "${MODEL_NAME:-$MODEL}" --task-name "$task_name" \
+            --predictions-only || skip_rc=$?
+        echo "SWEBENCH_SKIP_SCORE=true: staged predictions only (no resolved-rate)." >&2
+        rm -rf "$gen_dir" 2>/dev/null || true
+        return "$skip_rc"
+    fi
+
+    # 2. Score with the official swebench harness (requires Docker) and emit the
+    #    lm-eval-shaped results JSON into EVAL_RESULT_DIR.
+    local score_rc=0
+    python3 utils/evals/swebench_score.py \
+        --samples-dir "$gen_dir" \
+        --out-dir "$out_dir" \
+        --model-name "${MODEL_NAME:-$MODEL}" \
+        --task-name "$task_name" \
+        --dataset-name "$dataset" \
+        --max-workers "${SWEBENCH_MAX_WORKERS:-4}" \
+        --lm-eval-version "$lm_eval_version" \
+        ${SWEBENCH_NAMESPACE+--namespace "$SWEBENCH_NAMESPACE"} \
+        || score_rc=$?
+    rm -rf "$gen_dir" 2>/dev/null || true
+    if [ "$score_rc" -ne 0 ]; then
+        echo "ERROR: swebench scoring failed with $score_rc" >&2
+        return "$score_rc"
+    fi
+}
+
+# ------------------------------
 # Unified eval entrypoint
 # ------------------------------
 
 run_eval() {
-    local framework="${EVAL_FRAMEWORK:-lm-eval}"
+    # EVAL_FRAMEWORK (env) wins over the --framework arg so an eval-only run
+    # (e.g. the /run-evals command) can override the recipe scripts' hardcoded
+    # `--framework lm-eval`. With the env unset, the CLI arg (else lm-eval) is
+    # used exactly as before.
+    local cli_framework=""
     local forwarded=()
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --framework) framework="$2"; shift 2 ;;
+            --framework) cli_framework="$2"; shift 2 ;;
             *)           forwarded+=("$1"); shift ;;
         esac
     done
+    local framework="${EVAL_FRAMEWORK:-${cli_framework:-lm-eval}}"
 
     # Compute EVAL_MAX_MODEL_LEN if not already set by the calling script
     if [ -z "${EVAL_MAX_MODEL_LEN:-}" ]; then
@@ -1052,6 +1155,7 @@ run_eval() {
     local eval_rc=0
     case "$framework" in
         lm-eval|lm_eval) run_lm_eval "${forwarded[@]}" || eval_rc=$? ;;
+        swebench)        run_swebench_eval "${forwarded[@]}" || eval_rc=$? ;;
         *)               echo "Unknown framework '${framework}'"; eval_rc=1 ;;
     esac
 

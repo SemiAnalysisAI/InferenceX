@@ -21,6 +21,16 @@ on:
                 required: false
                 type: string
                 default: ""
+            eval-framework:
+                description: "Eval framework (lm-eval | swebench). Overrides the recipe default."
+                required: false
+                type: string
+                default: "lm-eval"
+            eval-task:
+                description: "Eval task YAML path (e.g. utils/evals/gsm8k.yaml). Empty = framework default."
+                required: false
+                type: string
+                default: ""
     workflow_call:
         inputs:
             generate-cli-command:
@@ -37,6 +47,16 @@ on:
                 type: string
             duration-override:
                 description: "Override matrix.config.duration (seconds). Empty = use matrix value."
+                required: false
+                type: string
+                default: ""
+            eval-framework:
+                description: "Eval framework (lm-eval | swebench). Overrides the recipe default."
+                required: false
+                type: string
+                default: "lm-eval"
+            eval-task:
+                description: "Eval task YAML path (e.g. utils/evals/gsm8k.yaml). Empty = framework default."
                 required: false
                 type: string
                 default: ""
@@ -160,6 +180,8 @@ jobs:
             run-eval: true
             eval-only: true
             eval-conc: ${{ matrix.config['eval-all-concs'] && join(matrix.config.conc, ' ') || matrix.config['eval-conc'] }}
+            eval-framework: ${{ inputs.eval-framework }}
+            eval-task: ${{ inputs.eval-task }}
             ref: ${{ inputs.ref }}
 
     test-sweep-agentic:
@@ -294,6 +316,8 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
+            eval-framework: ${{ inputs.eval-framework }}
+            eval-task: ${{ inputs.eval-task }}
             ref: ${{ inputs.ref }}
 
     collect-results:
