@@ -235,8 +235,27 @@ COMMON_ARGS=(
 # A single frontend (HTTP + tokenize + DP load-balance) is CPU-bound and caps
 # throughput, so run several. Incompatible with --headless, so it is the one
 # flag the headless-worker branch below drops. Overridable via LLMD_API_SERVER_COUNT.
+# LB mode (recipe env, default hybrid):
+#   hybrid     = --data-parallel-hybrid-lb; one api-server per node internally
+#                load-balances its local DP ranks -> ONE serving port per node.
+#   multi-port = --data-parallel-multi-port-external-lb; each DP rank serves on
+#                its own port (VLLM_PORT + rank) and the EPP balances across every
+#                rank port (endpoints.yaml lists them all). Matches the upstream
+#                generic wide-ep-lws guide. Per-node, ranks bind VLLM_PORT+global
+#                rank, so a worker node (START_RANK>0) binds VLLM_PORT+START_RANK..
+export LLMD_LB_MODE="${LLMD_LB_MODE:-hybrid}"
+DP_SUPERVISOR_PORT=$(( VLLM_PORT + DP_SIZE ))
+# The node-local rank-0 serving port: VLLM_PORT on the engine leader, and
+# VLLM_PORT+START_RANK on a worker in multi-port mode. Used for the /health wait.
+HEALTH_PORT="$VLLM_PORT"
+if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
+    HEALTH_PORT=$(( VLLM_PORT + START_RANK ))
+fi
+# api-server-count is a hybrid-lb concept (several frontends sharing one port);
+# multi-port runs one server per rank instead, so it is skipped there.
 API_SERVER_COUNT="${LLMD_API_SERVER_COUNT:-4}"
-if [[ "$ROLE_ENABLE_EP" == "true" ]] || [[ "$LWS_GROUP_SIZE" -le 1 ]] || [[ "$LWS_WORKER_INDEX" -eq 0 ]]; then
+if [[ "$LLMD_LB_MODE" != "multi-port" ]] \
+   && { [[ "$ROLE_ENABLE_EP" == "true" ]] || [[ "$LWS_GROUP_SIZE" -le 1 ]] || [[ "$LWS_WORKER_INDEX" -eq 0 ]]; }; then
     COMMON_ARGS+=(--api-server-count "$API_SERVER_COUNT")
 fi
 # --moe-backend is model-specific (DSR1-FP8 wants deep_gemm, gpt-oss-MXFP4
@@ -250,8 +269,13 @@ if [[ "$ROLE_ENABLE_EP" == "true" ]]; then
         --data-parallel-size "$DP_SIZE"
     )
     if [[ "$LWS_GROUP_SIZE" -gt 1 ]]; then
+        if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
+            COMMON_ARGS+=(--data-parallel-multi-port-external-lb
+                          --data-parallel-supervisor-port "$DP_SUPERVISOR_PORT")
+        else
+            COMMON_ARGS+=(--data-parallel-hybrid-lb)
+        fi
         COMMON_ARGS+=(
-            --data-parallel-hybrid-lb
             --data-parallel-size-local "$DP_SIZE_LOCAL"
             --data-parallel-address "$DP_ADDR"
             --data-parallel-rpc-port 5555
@@ -280,8 +304,8 @@ VLLM_PID=$!
 
 # Each rank waits for its own engine /health before continuing (for wide-EP this
 # blocks the bench until worker DP shards are up; a no-op for single-node).
-wait_for_server_ready --port "$VLLM_PORT" --server-log "$VLLM_LOG" --server-pid "$VLLM_PID"
-echo "vLLM ready on rank $NODE_RANK ($ROLE worker_index=$LWS_WORKER_INDEX)"
+wait_for_server_ready --port "$HEALTH_PORT" --server-log "$VLLM_LOG" --server-pid "$VLLM_PID"
+echo "vLLM ready on rank $NODE_RANK ($ROLE worker_index=$LWS_WORKER_INDEX, health port $HEALTH_PORT)"
 
 # ----------------------------------------------------------------
 # Bring up pd-sidecar (every decode node)
@@ -296,11 +320,20 @@ if [[ "$ROLE" == "decode" ]]; then
     SIDECAR_FLAGS=(--port="$SIDECAR_PORT" --vllm-port="$VLLM_PORT"
                    --kv-connector="$SIDECAR_CONNECTOR" --secure-proxy=false
                    --enable-prefiller-sampling)
+    SIDECAR_HEALTH_PORT="$SIDECAR_PORT"
+    # multi-port: the sidecar exposes one port per decode rank
+    # (SIDECAR_PORT+rank -> vLLM VLLM_PORT+rank) so the EPP targets each decode
+    # rank directly (matches the upstream generic decode sidecar). Its local
+    # rank-0 port is SIDECAR_PORT+START_RANK on a worker node.
+    if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
+        SIDECAR_FLAGS+=(--data-parallel-size="$DP_SIZE")
+        SIDECAR_HEALTH_PORT=$(( SIDECAR_PORT + START_RANK ))
+    fi
     echo "Starting pd-sidecar (decode node_rank=$NODE_RANK worker_index=$LWS_WORKER_INDEX): ${SIDECAR_FLAGS[*]}"
     pd-sidecar "${SIDECAR_FLAGS[@]}" > "$SIDECAR_LOG" 2>&1 &
     SIDECAR_PID=$!
-    wait_for_server_ready --port "$SIDECAR_PORT" --server-log "$SIDECAR_LOG" --server-pid "$SIDECAR_PID"
-    echo "pd-sidecar ready on $HOST_IP:$SIDECAR_PORT"
+    wait_for_server_ready --port "$SIDECAR_HEALTH_PORT" --server-log "$SIDECAR_LOG" --server-pid "$SIDECAR_PID"
+    echo "pd-sidecar ready on $HOST_IP:$SIDECAR_HEALTH_PORT"
 fi
 
 # ================================================================
@@ -327,23 +360,44 @@ NS = 'inferencex'
 all_ips = [x for x in os.environ.get('ALL_IPS', '').split(',') if x]
 pn = int(os.environ.get('PREFILL_NODES', '1'))
 dn = int(os.environ.get('DECODE_NODES', '1'))
+pw = int(os.environ.get('PREFILL_WORKERS', '1'))
+dw = int(os.environ.get('DECODE_WORKERS', '1'))
+gpn = int(os.environ.get('GPUS_PER_NODE', '4'))
+lb = os.environ.get('LLMD_LB_MODE', 'hybrid')
+VLLM_PORT = int('$VLLM_PORT')
+SIDECAR_PORT = int('$SIDECAR_PORT')
 # ALL_IPS is rank-ordered: ranks [0:pn] are prefill nodes, [pn:pn+dn] decode.
 prefill_ips = all_ips[:pn] or [os.environ['PREFILL_LEADER_IP']]
 decode_ips = all_ips[pn:pn + dn] or [os.environ['DECODE_LEADER_IP']]
 endpoints = []
-# One prefill endpoint per prefill node (its vLLM, VLLM_PORT). Each node's API
-# server load-balances only its local DP ranks, so listing every node lets EPP
-# fan requests across all prefill engines.
-for i, ip in enumerate(prefill_ips):
-    endpoints.append({'name': f'prefill-{i}', 'namespace': NS, 'address': ip,
-                      'port': '$VLLM_PORT', 'labels': {'llm-d.ai/role': 'prefill'}})
-# One decode endpoint per decode node (its pd-sidecar, SIDECAR_PORT), so EPP
-# fans out across all decode ranks.
-for i, ip in enumerate(decode_ips):
-    endpoints.append({'name': f'decode-{i}', 'namespace': NS, 'address': ip,
-                      'port': '$SIDECAR_PORT', 'labels': {'llm-d.ai/role': 'decode'}})
+
+def add_role(role, ips, base_port, workers):
+    # For each node, emit endpoint(s) the EPP should route this role's traffic to.
+    #  hybrid    -> ONE endpoint per node at base_port (the node's api-server /
+    #               sidecar internally load-balances its local DP ranks).
+    #  multi-port-> ONE endpoint PER DP RANK: each node serves its local ranks at
+    #               base_port + (rank within its engine). A node that is worker j
+    #               of its engine owns ranks [j*gpn, j*gpn+gpn); the EPP then
+    #               balances across every rank instead of node-granular.
+    nodes_per_engine = max(1, len(ips) // max(1, workers))
+    for i, ip in enumerate(ips):
+        if lb == 'multi-port':
+            start_rank = (i % nodes_per_engine) * gpn
+            for k in range(gpn):
+                port = base_port + start_rank + k
+                endpoints.append({'name': f'{role}-{i}-p{port}', 'namespace': NS,
+                                  'address': ip, 'port': str(port),
+                                  'labels': {'llm-d.ai/role': role}})
+        else:
+            endpoints.append({'name': f'{role}-{i}', 'namespace': NS, 'address': ip,
+                              'port': str(base_port), 'labels': {'llm-d.ai/role': role}})
+
+# Prefill: EPP hits the vLLM directly (VLLM_PORT). Decode: EPP hits the
+# pd-sidecar (SIDECAR_PORT), which forwards to the local decode vLLM and pulls KV.
+add_role('prefill', prefill_ips, VLLM_PORT, pw)
+add_role('decode', decode_ips, SIDECAR_PORT, dw)
 yaml.safe_dump({'endpoints': endpoints}, open('/tmp/endpoints.yaml', 'w'))
-print('endpoints.yaml:')
+print(f'endpoints.yaml (lb={lb}, {len(endpoints)} endpoints):')
 print(open('/tmp/endpoints.yaml').read())
 PY
 
@@ -503,21 +557,33 @@ PY
 
     # Always log the decode->prefill subnet layout up front so a subnet/interface
     # mismatch is visible even on a run that eventually succeeds.
-    echo "[diag] decode-leader $(hostname 2>/dev/null) local-ips: $(hostname -I 2>/dev/null); prefill targets: ${_prefill_ips[*]} (port $VLLM_PORT)"
+    # In multi-port mode each prefill node's vLLM serves its LOCAL rank-0 at
+    # VLLM_PORT + (node's start_rank), so probe that port per node (not VLLM_PORT
+    # on every node - a worker node has no listener there). In hybrid every node
+    # serves on VLLM_PORT.
+    _npe_prefill=$(( PREFILL_NODES / PREFILL_WORKERS ))
+    [[ "$_npe_prefill" -ge 1 ]] || _npe_prefill=1
+    echo "[diag] decode-leader $(hostname 2>/dev/null) local-ips: $(hostname -I 2>/dev/null); prefill targets: ${_prefill_ips[*]} (lb=$LLMD_LB_MODE)"
     echo "Waiting for prefill vLLM /health on ${#_prefill_ips[@]} node(s): ${_prefill_ips[*]}"
     PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 300 ))
-    for _pip in "${_prefill_ips[@]}"; do
+    for _pidx in "${!_prefill_ips[@]}"; do
+        _pip="${_prefill_ips[$_pidx]}"
+        if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
+            _pport=$(( VLLM_PORT + (_pidx % _npe_prefill) * GPUS_PER_NODE ))
+        else
+            _pport="$VLLM_PORT"
+        fi
         until curl --output /dev/null --silent --fail \
                 --connect-timeout 5 --max-time 10 \
-                "http://$_pip:$VLLM_PORT/health"; do
+                "http://$_pip:$_pport/health"; do
             if [[ "$(date +%s)" -ge "$PREFILL_WAIT_DEADLINE" ]]; then
-                echo "ERROR: prefill vLLM at $_pip:$VLLM_PORT not ready within 5 min" >&2
-                _diag_prefill_endpoint "$_pip" "$VLLM_PORT"
+                echo "ERROR: prefill vLLM at $_pip:$_pport not ready within 5 min" >&2
+                _diag_prefill_endpoint "$_pip" "$_pport"
                 exit 1
             fi
             sleep 5
         done
-        echo "Prefill vLLM at $_pip:$VLLM_PORT is ready"
+        echo "Prefill vLLM at $_pip:$_pport is ready"
     done
     echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
 
@@ -530,7 +596,7 @@ PY
     # its targets from ALL_IPS + PREFILL_NODES/DECODE_NODES. The per-rank
     # vllm_rank*.log files carry the same Running/Waiting stats as a backup.
     export METRICS_SCRAPE_INTERVAL_S="${METRICS_SCRAPE_INTERVAL_S:-2}"
-    export VLLM_PORT EPP_METRICS_PORT
+    export VLLM_PORT EPP_METRICS_PORT PREFILL_WORKERS DECODE_WORKERS GPUS_PER_NODE LLMD_LB_MODE
     export EPP_METRICS_HOST="127.0.0.1"
     export SCRAPE_OUT_CSV="$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_metrics_engines.csv"
     export SCRAPE_EPP_OUT="$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_metrics_epp.prom"

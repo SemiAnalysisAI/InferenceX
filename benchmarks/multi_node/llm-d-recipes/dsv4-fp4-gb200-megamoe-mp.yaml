@@ -1,0 +1,157 @@
+# DeepSeek-V4-Pro (FP4) GB200 MegaMOE - MULTI-PORT (data-parallel per-rank LB)
+# variant of dsv4-fp4-gb200-mid-curve-megamoe.yaml. Used by the -mp config keys
+# (smoke-2p1d-mp, high-tpt-megamoe-mp).
+#
+# Two deltas vs the mid-curve recipe, to mirror the upstream GENERIC wide-ep-lws
+# guide (modelserver/gpu/vllm, DeepSeek-R1) which uses per-rank ports for P/D:
+#
+#  1. LLMD_LB_MODE=multi-port (env, both roles): server.sh swaps
+#     --data-parallel-hybrid-lb for --data-parallel-multi-port-external-lb +
+#     --data-parallel-supervisor-port and drops --api-server-count. Each DP rank
+#     serves on VLLM_PORT+rank; the decode pd-sidecar is given
+#     --data-parallel-size so it exposes SIDECAR_PORT+rank -> vLLM VLLM_PORT+rank
+#     (data_parallel.go). endpoints.yaml then lists one entry PER RANK, so the
+#     EPP balances across every DP rank instead of node-granular. This is a DP
+#     concern (one HTTP server per data-parallel rank); EP sharding is unchanged.
+#
+#  2. EPP scorers matched to the upstream guide's router config
+#     (router/wide-ep-lws.values.yaml): dropped kv-cache-utilization-scorer;
+#     prefill profile = prefix-cache(3) + queue(2) + active-request(2); decode
+#     profile = active-request only. (max-score-picker kept as the picker -
+#     upstream omits an explicit picker and defaults to max-score, so this is
+#     functionally identical.) The mid-curve recipe added kv-cache-util + a
+#     decode prefix-cache scorer that upstream does not use.
+#
+# Everything else (vLLM engine args + transport env) is byte-identical to
+# dsv4-fp4-gb200-mid-curve-megamoe.yaml so the hybrid-vs-multi-port comparison
+# isolates the LB mode + EPP scorer set.
+
+# ---- EPP scheduling config (matched to upstream generic wide-ep-lws) ----
+apiVersion: llm-d.ai/v1alpha1
+kind: EndpointPickerConfig
+
+plugins:
+  - name: file-disc
+    type: file-discovery
+    parameters:
+      path: /tmp/endpoints.yaml
+      watchFile: false
+
+  - type: disagg-headers-handler
+  - type: always-disagg-pd-decider
+  - type: disagg-profile-handler
+    parameters:
+      deciderPluginName: always-disagg-pd-decider
+  - type: prefill-filter
+  - type: decode-filter
+  - type: prefix-cache-scorer
+  - type: queue-scorer
+  - type: active-request-scorer
+  - type: max-score-picker
+
+schedulingProfiles:
+  - name: prefill
+    plugins:
+      - pluginRef: prefill-filter
+      - pluginRef: prefix-cache-scorer
+        weight: 3
+      - pluginRef: queue-scorer
+        weight: 2
+      - pluginRef: active-request-scorer
+        weight: 2
+      - pluginRef: max-score-picker
+  - name: decode
+    plugins:
+      - pluginRef: decode-filter
+      - pluginRef: active-request-scorer
+      - pluginRef: max-score-picker
+
+dataLayer:
+  discovery:
+    pluginRef: file-disc
+
+# ---- Per-role vLLM flags (identical to mid-curve, + LLMD_LB_MODE) ----
+prefill:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --enforce-eager
+    --gpu-memory-utilization 0.9
+    --enable-cumem-allocator
+    --no-enable-prefix-caching
+    --no-async-scheduling
+    --block-size 256
+    --tokenizer-mode deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+    --numa-bind
+  env:
+    LLMD_LB_MODE: "multi-port"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: "NVL"
+    NCCL_NET_GDR_C2C: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NVSHMEM_REMOTE_TRANSPORT: "none"
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
+    NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_SKIP_P2P_CHECK: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
+    VLLM_USE_DEEP_GEMM: "1"
+    NVIDIA_GDRCOPY: "enabled"
+    VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+
+decode:
+  tp: 1
+  enable-expert-parallel: true
+  extra-args: >-
+    --kv-cache-dtype fp8
+    --max-num-seqs 512
+    --max-num-batched-tokens 512
+    --max-cudagraph-capture-size 512
+    --gpu-memory-utilization 0.85
+    --enable-cumem-allocator
+    --no-enable-prefix-caching
+    --block-size 256
+    --compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}
+    --stream-interval 50
+    --tokenizer-mode deepseek_v4
+    --moe-backend deep_gemm_mega_moe
+    --enable-ep-weight-filter
+    --no-disable-hybrid-kv-cache-manager
+  env:
+    LLMD_LB_MODE: "multi-port"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    NCCL_P2P_LEVEL: "NVL"
+    NCCL_NET_GDR_C2C: "1"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_TLS: "cuda_copy,cuda_ipc,rc,tcp"
+    UCX_CUDA_IPC_ENABLE_MNNVL: "y"
+    NVSHMEM_REMOTE_TRANSPORT: "none"
+    NVSHMEM_ENABLE_NIC_PE_MAPPING: "1"
+    NVSHMEM_HCA_PE_MAPPING: "mlx5_0:1:1,mlx5_1:1:1,mlx5_3:1:1,mlx5_4:1:1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_SKIP_P2P_CHECK: "1"
+    VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
+    VLLM_USE_DEEP_GEMM: "1"
+    NVIDIA_GDRCOPY: "enabled"
+
+# ---- SLURM resource directives ----
+slurm:
+  time_limit: "08:00:00"
