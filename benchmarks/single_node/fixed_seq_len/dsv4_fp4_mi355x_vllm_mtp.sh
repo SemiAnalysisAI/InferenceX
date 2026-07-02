@@ -12,7 +12,7 @@ set -eo pipefail
 # prompts silently regresses the acceptance rate.
 #
 # All other serving flags mirror the non-MTP MI355X recipe (TP=8,
-# VLLM_ROCM_USE_AITER=1, triton_unfused MoE, FP8 KV cache, mp executor, async
+# VLLM_ROCM_USE_AITER=1, AITER MoE, FP8 KV cache, mp executor, async
 # scheduling, mode=3 FULL_AND_PIECEWISE compilation). See
 # dsv4_fp4_mi355x_vllm.sh for per-flag rationale.
 
@@ -40,6 +40,7 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
 
 SERVER_LOG=/workspace/server.log
 PORT=${PORT:-8888}
@@ -74,7 +75,7 @@ vllm serve $MODEL --port $PORT \
     --gpu-memory-utilization 0.8 \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --moe-backend triton_unfused \
+    --moe-backend aiter \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --speculative-config "{\"method\": \"mtp\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
