@@ -10311,21 +10311,10 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
-
-dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260615-c127ba64
-  model: deepseek-ai/DeepSeek-V4-Pro
-  model-prefix: dsv4
-  runner: gb300-nv
-  precision: fp4
-  framework: dynamo-sglang
-  multinode: true
-  disagg: true
-  scenarios:
-    fixed-seq-len:
     - isl: 1024
       osl: 1024
       search-space:
+      # High-throughput: 1p1d-dep8-conc8192. 3 nodes.
       - spec-decoding: "mtp"
         conc-list: [8192]
         prefill:
@@ -10340,6 +10329,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k:
           tp: 8
           ep: 8
           dp-attn: true
+      # High-throughput: 1p1d-dep16-conc8192. 5 nodes.
       - spec-decoding: "mtp"
         conc-list: [8192]
         prefill:
@@ -10354,6 +10344,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k:
           tp: 16
           ep: 16
           dp-attn: true
+      # High-throughput: 2p1d-dep16-conc8192. 6 nodes.
       - spec-decoding: "mtp"
         conc-list: [8192]
         prefill:
@@ -10368,6 +10359,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k:
           tp: 16
           ep: 16
           dp-attn: true
+      # Low-latency dep4 splits: 1P (DEP=4) + N TP=4 decode workers.
       - spec-decoding: "mtp"
         conc-list: [64]
         prefill:
@@ -10424,6 +10416,7 @@ dsv4-fp4-gb300-dynamo-sglang-mtp-1k1k:
           tp: 4
           ep: 1
           dp-attn: false
+      # Low-latency tp4 splits: 1P (TP=4) + N TP=4 decode workers.
       - spec-decoding: "mtp"
         conc-list: [2]
         prefill:
