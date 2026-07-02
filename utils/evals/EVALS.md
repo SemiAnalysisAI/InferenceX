@@ -188,9 +188,12 @@ append_lm_eval_summary
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
 - Knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
-  `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only). The
-  scoring dataset is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
-  `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
+  `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only),
+  `SWEBENCH_USE_MODAL=true` (score on Modal remote sandboxes instead of local Docker). Modal
+  credentials: set `MODAL_TOKEN_ID`/`MODAL_TOKEN_SECRET` (e.g. from a GitHub secret) or provide
+  `~/.modal.toml`; if the file is absent the env vars are bootstrapped into it automatically.
+  The scoring dataset is derived from the YAML's `dataset_path` so generation and scoring can't
+  diverge; `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
 - **Requires Docker + ~120 GB disk on the scoring host.** This is an MVP; the single-shot prompt and
   diff extraction still need tuning to reach published resolved-rates, and the `thresholds.json` entry
   needs calibration from a baseline run.

@@ -204,8 +204,9 @@ def run_harness(
     ]
     if modal:
         # Modal remote sandboxes instead of local Docker (no Docker on the node).
-        # --parallelism replaces --max_workers; --namespace is local-Docker only.
-        cmd += ["--modal", "true", "--parallelism", str(max_workers)]
+        # swebench 4.1.0 uses --max_workers in both modal and Docker modes;
+        # --namespace is local-Docker only and is still omitted for modal.
+        cmd += ["--modal", "true", "--max_workers", str(max_workers)]
     else:
         cmd += ["--max_workers", str(max_workers)]
         if namespace is not None:

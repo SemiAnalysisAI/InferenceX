@@ -136,11 +136,12 @@ def _captured_harness_cmd(monkeypatch, tmp_path, *, modal, namespace):
     return captured["cmd"]
 
 
-def test_run_harness_modal_uses_modal_and_parallelism(monkeypatch, tmp_path):
+def test_run_harness_modal_uses_modal_flag(monkeypatch, tmp_path):
     cmd = _captured_harness_cmd(monkeypatch, tmp_path, modal=True, namespace="")
-    assert "--modal" in cmd and "--parallelism" in cmd
+    assert "--modal" in cmd
+    assert "--max_workers" in cmd
+    assert "--parallelism" not in cmd
     assert "--namespace" not in cmd  # Docker-only
-    assert "--max_workers" not in cmd
 
 
 def test_run_harness_docker_uses_max_workers_and_namespace(monkeypatch, tmp_path):

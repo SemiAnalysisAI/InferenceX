@@ -984,7 +984,10 @@ META
 #   SWEBENCH_MAX_WORKERS   (default 4) harness workers / Modal parallelism
 #   SWEBENCH_USE_MODAL     "true" => score on Modal remote sandboxes instead of
 #                          local Docker (no Docker needed on the node; requires a
-#                          Modal account + ~/.modal.toml or MODAL_TOKEN_* creds)
+#                          Modal account — credentials from ~/.modal.toml or from
+#                          MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env vars, e.g. a
+#                          GitHub secret; the env vars are bootstrapped into
+#                          ~/.modal.toml automatically if the file is absent)
 #   SWEBENCH_NAMESPACE     local-Docker only: pass "" on arm/Mac to build locally
 #   SWEBENCH_SKIP_SCORE    "true" => generate + stage predictions only, no scoring
 #                          (score elsewhere)
@@ -993,6 +996,23 @@ _install_swebench_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages swebench || true
     if [ "${SWEBENCH_USE_MODAL:-false}" = "true" ]; then
         python3 -m pip install -q --no-cache-dir --break-system-packages modal || true
+    fi
+}
+
+# swebench's validate_modal_credentials() only checks that ~/.modal.toml
+# exists; the modal package itself prefers MODAL_TOKEN_ID/MODAL_TOKEN_SECRET
+# env vars (how CI passes the GitHub secret). Bootstrap a minimal file from
+# the env so the harness's check passes. Never overwrite an existing file.
+_ensure_modal_credentials() {
+    if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
+    if [ -f "$HOME/.modal.toml" ]; then return 0; fi
+    if [ -n "${MODAL_TOKEN_ID:-}" ] && [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
+        printf '[default]\ntoken_id = "%s"\ntoken_secret = "%s"\nactive = true\n' \
+            "$MODAL_TOKEN_ID" "$MODAL_TOKEN_SECRET" > "$HOME/.modal.toml"
+        chmod 600 "$HOME/.modal.toml"
+        echo "[swebench] wrote ~/.modal.toml from MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env"
+    else
+        echo "WARN: SWEBENCH_USE_MODAL=true but no ~/.modal.toml and no MODAL_TOKEN_ID/MODAL_TOKEN_SECRET env; Modal scoring will fail credential validation" >&2
     fi
 }
 
@@ -1072,6 +1092,7 @@ run_swebench_eval() {
         _install_swebench_deps
         export INFERENCEX_SWEBENCH_RUNTIME_READY=true
     fi
+    _ensure_modal_credentials
     local score_rc=0
     python3 utils/evals/swebench_score.py \
         --samples-dir "$gen_dir" \
