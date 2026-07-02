@@ -117,6 +117,11 @@ env:
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
+  # SWE-bench scoring runs on Modal (GPU runners have no Docker); creds are
+  # bootstrapped into ~/.modal.toml by benchmark_lib.sh:_ensure_modal_credentials.
+  SWEBENCH_USE_MODAL: 'true'
+  MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+  MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
 
 permissions:
   contents: read
