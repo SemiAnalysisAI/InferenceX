@@ -3,7 +3,7 @@
 # MiniMax-M3 NVFP4 B300 single-node vLLM recipe with EAGLE3 speculative
 # decoding — same shape as minimaxm3_fp8_b300_mtp.sh but uses the
 # nvidia/MiniMax-M3-NVFP4 checkpoint. MiniMax-M3 modelopt NVFP4 support
-# (vllm-project/vllm PR #46380) is baked into the perf container image, so no
+# (vllm-project/vllm PR #46380) is baked into the nightly container image, so no
 # runtime patch is needed.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
@@ -52,7 +52,6 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
-export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"

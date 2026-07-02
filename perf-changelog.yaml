@@ -4430,6 +4430,7 @@
 - config-keys:
     - minimaxm3-fp4-b300-vllm-mtp
   description:
-    - "Update Minimax M3 b300 vllm mtp image tag"
-    - "Update search space to cover more configs"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/codex/minimax-m3-b300-fp4-vllm-mtp-update
+    - "Switch the MiniMax-M3 B300 vLLM MTP recipe from the custom perf image to a pinned mainline nightly."
+    - "Refocus both 1k/1k and 8k/1k search spaces on TP2 c4-c256 and TP2/EP2 DP-attention c512, while retaining TP8 and TP4 c1-c2."
+    - "Drop the TP8/EP8 and TP4/EP4 lanes."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1991
