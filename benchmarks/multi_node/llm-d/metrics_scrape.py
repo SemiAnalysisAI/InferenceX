@@ -68,12 +68,29 @@ def build_targets():
     ips = [x for x in os.environ.get("ALL_IPS", "").split(",") if x]
     pn = int(os.environ.get("PREFILL_NODES", "1"))
     dn = int(os.environ.get("DECODE_NODES", "1"))
-    port = os.environ.get("VLLM_PORT", "8200")
+    pw = int(os.environ.get("PREFILL_WORKERS", "1"))
+    dw = int(os.environ.get("DECODE_WORKERS", "1"))
+    gpn = int(os.environ.get("GPUS_PER_NODE", "4"))
+    port = int(os.environ.get("VLLM_PORT", "8200"))
+    lb = os.environ.get("LLMD_LB_MODE", "hybrid")
     targets = []
-    for i, ip in enumerate(ips[:pn]):
-        targets.append(("prefill", f"prefill-{i}", f"{ip}:{port}"))
-    for i, ip in enumerate(ips[pn:pn + dn]):
-        targets.append(("decode", f"decode-{i}", f"{ip}:{port}"))
+
+    def add(role, node_ips, workers):
+        # hybrid: one target per node at VLLM_PORT (the node's api-server exposes
+        # all its local ranks there). multi-port: the vLLM ranks each serve on
+        # VLLM_PORT + (rank within engine), so scrape every local rank port.
+        # Always the vLLM port, never the decode sidecar.
+        nodes_per_engine = max(1, len(node_ips) // max(1, workers))
+        for i, ip in enumerate(node_ips):
+            if lb == "multi-port":
+                start = (i % nodes_per_engine) * gpn
+                for k in range(gpn):
+                    targets.append((role, f"{role}-{i}-r{start + k}", f"{ip}:{port + start + k}"))
+            else:
+                targets.append((role, f"{role}-{i}", f"{ip}:{port}"))
+
+    add("prefill", ips[:pn], pw)
+    add("decode", ips[pn:pn + dn], dw)
     return targets
 
 
