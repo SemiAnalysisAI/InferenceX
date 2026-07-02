@@ -80,6 +80,7 @@ Key knobs: `CX_BENCH`, `CX_PHASE` (decode|prefill|both), `CX_TOKENS_LADDER`,
 | `tests/routing.py`, `tests/workload.py`, `tests/eplb.py` | routing distributions + canonical workload manifests (`workload_id`, trace signatures) |
 | `validate_results.py` | strict v4-schema + comparison-contract validation of every artifact |
 | `aggregate_results.py`, `summarize.py`, `regression.py`, `cohort.py`, `repeated_runs.py`, `prune_results.py` | aggregate/report/regress/prune tooling (workflow-invoked) |
+| `make_bundle.py` | publication bundle: validates every aggregate doc (fail-loud), then emits manifest + dataset + report.html + SUMMARY.md + SHA256SUMS (sweep workflow uploads as `cxsweep-bundle-*`) |
 | `plot_ep.py` (+ `plot.py`, `analyze_ep.py`) | the 8-tab HTML report (EP, KV-cache, all-reduce, all-gather, RL-mesh, copy-engine, …) with comparison guards |
 | `runtime/common.sh`, `runtime/run_in_container.sh`, `runtime/_xnode_net.sh` | image resolve/squash, in-container dispatcher (per-case loop, idempotent from-source builds, flashinfer retry), cross-node net helpers |
 | `run_nccl.py` | nccl-/rccl-tests runner + text-table parser |

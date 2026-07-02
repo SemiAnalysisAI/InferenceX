@@ -43,7 +43,11 @@ import hashlib
 import json
 import os
 
-SCHEMA_VERSION = 3  # v3: explicit contracts, pooled trials p50/p90/p99, routing-identity proof, separated logical bytes
+# v4 = the ep-result-v4 contract (multi-dimensional validity, machine-derived publication_status,
+# measured roundtrip, dual byte contracts, workload identity). The harness has emitted every
+# v4-required field since that contract landed but kept stamping 3; the stamp now matches the
+# schema file. v3-stamped historical docs remain valid (schema minimum is 3).
+SCHEMA_VERSION = 4
 
 # Phase-default sweeps — token-size regimes, NOT distinct kernels (both run normal
 # mode; "decode"/"prefill" name the small/large-token regime). Powers of two for a

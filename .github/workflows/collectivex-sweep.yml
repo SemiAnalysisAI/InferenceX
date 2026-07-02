@@ -158,24 +158,43 @@ jobs:
           pattern: cxshard-*-${{ github.run_id }}
           path: _shards
           merge-multiple: true
-      - name: Aggregate shards -> one ndjson
+      # Aggregate + publication bundle. The bundle IS the artifact-validation stage:
+      # make_bundle.py validates every doc (ep-result-v4 schema + semantic gates) before
+      # writing manifest/report/checksums; any validation error fails this job.
+      - name: Aggregate shards -> ndjson + publication bundle
         working-directory: experimental/CollectiveX
         run: |
           set -euo pipefail
           tag="${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}"
           python3 aggregate_results.py --in-dir ../../_shards --out "results/aggregate/collectivex_${tag}_${{ github.run_id }}.ndjson"
+          python3 make_bundle.py \
+            --aggregate "results/aggregate/collectivex_${tag}_${{ github.run_id }}.ndjson" \
+            --out-dir results/bundle \
+            --source-run-id "${{ github.run_id }}" \
+            --source-sha "${{ github.sha }}" \
+            --source-workflow "${{ github.workflow }}" \
+            --source-run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
             echo "## CollectiveX sweep aggregate (${tag})"
             echo '```'
             wc -l results/aggregate/*.ndjson 2>/dev/null || echo "no ndjson"
+            python3 -c "import json; m=json.load(open('results/bundle/manifest.json')); print('bundle:', m['docs'], 'docs,', m['validation']['by_publication_status'])"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload aggregate
+        if: always()   # the raw aggregate is preserved even when bundle validation fails the step
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxsweep-aggregate-${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}-${{ github.run_id }}
           path: experimental/CollectiveX/results/aggregate/*.ndjson
           if-no-files-found: warn
+      - name: Upload publication bundle
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxsweep-bundle-${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}-${{ github.run_id }}
+          path: experimental/CollectiveX/results/bundle
+          if-no-files-found: ignore
 
   update-frontend-snapshot:
     name: Update InferenceX-app snapshot

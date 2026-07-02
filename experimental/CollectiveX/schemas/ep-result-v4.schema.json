@@ -2,17 +2,41 @@
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://semianalysis/collectivex/schemas/ep-result-v4.schema.json",
   "title": "CollectiveX EP dispatch/combine result (v4)",
-  "description": "One (backend, phase, dtype, mode, contract, routing) sweep. v4 adds multi-dimensional validity + machine-derived publication_status, measured roundtrip, dual byte contracts, per-rank diagnostics, raw-sample histograms, and workload identity. v3 docs load via compatibility (publication_status absent => treated as legacy/experimental).",
+  "description": "One (backend, phase, dtype, mode, contract, routing) sweep. v4 adds multi-dimensional validity + machine-derived publication_status, measured roundtrip, dual byte contracts, per-rank diagnostics, raw-sample histograms, and workload identity. v3 docs load via compatibility (publication_status absent => treated as legacy/experimental). record_type=failed-case marks an intentionally preserved failure skeleton (judge-by-data doctrine): empty rows + a failure block, exempt from the full-sweep requirements.",
   "type": "object",
-  "required": ["schema_version", "family", "runner", "backend", "mode", "phase",
-               "ep_size", "measurement_contract", "shape", "rows",
-               "validity", "publication_status", "workload", "reproduction",
-               "backend_provenance", "comparison_key"],
+  "required": ["schema_version", "family", "runner", "backend", "publication_status", "rows"],
+  "if": {"properties": {"record_type": {"const": "failed-case"}}, "required": ["record_type"]},
+  "then": {
+    "required": ["failure"],
+    "properties": {
+      "publication_status": {"const": "failed"},
+      "rows": {"maxItems": 0}
+    }
+  },
+  "else": {
+    "required": ["mode", "phase", "ep_size", "measurement_contract", "shape",
+                 "validity", "workload", "reproduction",
+                 "backend_provenance", "comparison_key"],
+    "properties": {
+      "rows": {"minItems": 1}
+    }
+  },
   "properties": {
     "schema_version": {"type": "integer", "minimum": 3},
     "family": {"const": "moe"},
     "runner": {"type": "string"},
-    "backend": {"type": "string", "enum": ["deepep", "deepep-hybrid", "mori", "aiter", "uccl", "flashinfer"]},
+    "record_type": {"type": "string", "enum": ["failed-case"]},
+    "failure": {
+      "type": "object",
+      "required": ["failure_mode", "return_code", "case"],
+      "properties": {
+        "failure_mode": {"type": "string"},
+        "return_code": {"type": "integer"},
+        "case": {"type": "object"},
+        "evidence": {"type": "string"}
+      }
+    },
+    "backend": {"type": "string", "enum": ["deepep", "deepep-hybrid", "mori", "aiter", "uccl", "flashinfer", "nccl-ep"]},
     "mode": {"type": "string", "enum": ["normal", "ll"]},
     "phase": {"type": "string", "enum": ["decode", "prefill"]},
     "ep_size": {"type": "integer", "minimum": 1},
@@ -132,7 +156,7 @@
       }
     },
     "rows": {
-      "type": "array", "minItems": 1,
+      "type": "array",
       "items": {
         "type": "object",
         "required": ["tokens_per_rank", "global_tokens", "dispatch", "combine", "roundtrip",

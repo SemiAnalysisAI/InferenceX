@@ -23,7 +23,10 @@ import os
 import sys
 
 MIN_SAMPLES_OFFICIAL = 100
-KNOWN_CONTRACTS = {"layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1"}
+# Must stay in sync with the measurement_contract enum in schemas/ep-result-v4.schema.json
+# (mori-quant-combine-v1 is reserved for the MoRI PR311 quant-combine axis; no emitter yet).
+KNOWN_CONTRACTS = {"layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1",
+                   "mori-quant-combine-v1"}
 PUB_STATES = {"official", "comparable-experimental", "diagnostic", "invalid", "failed"}
 
 
@@ -81,6 +84,17 @@ def validate_doc(doc, schema, path):
     if legacy:
         warns.append("legacy (v3, no publication_status) — loads as experimental, not comparable as official")
         return errs, warns, "legacy-experimental"
+    if doc.get("record_type") == "failed-case":
+        # Intentionally preserved failure skeleton (judge-by-data doctrine): validate the
+        # skeleton contract only — the full-sweep gates below do not apply.
+        if doc.get("publication_status") != "failed":
+            errs.append(f"failed-case record with publication_status '{doc.get('publication_status')}' (must be 'failed')")
+        if doc.get("rows"):
+            errs.append("failed-case record must have empty rows")
+        fail = doc.get("failure") or {}
+        if not fail.get("failure_mode") or "return_code" not in fail:
+            errs.append("failed-case record missing failure evidence (failure_mode/return_code)")
+        return errs, warns, "failed"
     errs += _schema_check(doc, schema) if schema else []
     v = doc.get("validity", {})
     recorded = doc.get("publication_status")
