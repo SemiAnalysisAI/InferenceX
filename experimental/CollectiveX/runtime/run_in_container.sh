@@ -714,7 +714,21 @@ PY
     ci=$((ci + 1))
   done
 else
-  dispatch_bench || rc=1
+  # Single-bench (workflow_dispatch) path gets the SAME flashinfer retry as SHARD mode — the
+  # combine-quant runs (flashinfer-combine-* -> CX_BENCH=flashinfer) come through here and are
+  # subject to the same intermittent h100 MNNVL-barrier deadlock; one attempt dies ~50% of the
+  # time. Non-flashinfer benches run once (their failures are deterministic — retry wastes time).
+  attempts=1; [ "$CX_BENCH" = "flashinfer" ] && attempts=$(( ${CX_FLASHINFER_RETRIES:-3} + 1 ))
+  a=1
+  while :; do
+    if dispatch_bench; then
+      [ "$a" -gt 1 ] && rm -f results/failed_*"${CX_TS}"*.json 2>/dev/null || true
+      break
+    fi
+    [ "$a" -ge "$attempts" ] && { rc=1; break; }
+    cx_log "$CX_BENCH attempt $a/$attempts failed — retry (intermittent MNNVL barrier)"
+    a=$((a+1))
+  done
 fi
 
 # Summary table for the log; also fails the job if no valid results were produced.

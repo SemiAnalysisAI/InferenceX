@@ -210,6 +210,13 @@ def resolve(sku, backend, mode="normal", dtype="bf16",
         return False, "cached-layout-comm-only-v1 is meaningless for LL (layout is in-kernel)"
     if combine_dtype not in cap.get("combine_dtypes", ["bf16"]):
         return False, f"{backend} combine_dtypes={cap.get('combine_dtypes', ['bf16'])} (got '{combine_dtype}')"
+    # FP4 is Blackwell-native on the COMBINE OUTPUT too (same non-round-trip on Hopper as dispatch) —
+    # gate combine_dtype by arch exactly like the dispatch dtype, so an h100 nvfp4-combine dispatch
+    # is rejected at validate instead of failing on hardware.
+    need_arch = ARCH_ONLY_DTYPES.get(combine_dtype)
+    if need_arch and _sku_arch(sku) != need_arch:
+        return False, (f"{combine_dtype} combine output requires {need_arch}; "
+                       f"SKU '{sku}' is {_sku_arch(sku)}")
     if combine_quant_mode not in cap.get("quant_modes", ["none"]):
         return False, (f"{backend} quant_modes={cap.get('quant_modes', ['none'])} "
                        f"(got '{combine_quant_mode}') — quant combine not wired yet")
