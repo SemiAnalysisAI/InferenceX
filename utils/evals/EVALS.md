@@ -169,7 +169,34 @@ The codebase patches lm-eval compatibility via `_patch_lm_eval`:
 1. Reasoning token handling: extracts `reasoning_content` when `message.content` is empty.
 2. TRT compatibility: avoids injecting `{"type": "text"}` for non-HF tokenizers.
 
+### SWE-bench Lite (`--framework swebench`)
+
+SWE-bench is **not** a `generate_until` QA task — it requires applying the model's
+patch to a repo and running tests in Docker, which lm-eval cannot do. So it runs
+through a dedicated framework that reuses lm-eval for *generation* only, then scores
+with the official `swebench` harness and emits an lm-eval-shaped results JSON
+(metric `exact_match,resolved` = resolved-rate) so collect/validate work unchanged.
+
+```bash
+run_eval --framework swebench --port "$PORT"   # generation (lm-eval) -> scoring (swebench)
+append_lm_eval_summary
+```
+
+- Task: `utils/evals/swebench_lite.yaml` (generation) — SWE-bench Lite, the ~300-instance curated
+  quick-eval subset (no difficulty filter needed; Lite is already the lightweight set).
+- Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
+  `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
+  `--report` mode skips Docker for testing.
+- Knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
+  `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only). The
+  scoring dataset is derived from the YAML's `dataset_path` so generation and scoring can't diverge;
+  `SWEBENCH_DATASET`, if set, must match it (mismatch fails fast).
+- **Requires Docker + ~120 GB disk on the scoring host.** This is an MVP; the single-shot prompt and
+  diff extraction still need tuning to reach published resolved-rates, and the `thresholds.json` entry
+  needs calibration from a baseline run.
+
 ## Task files
 The following files are task definitions from lm-eval; more information on changes lives within the files:
 - `utils/evals/gsm8k.yaml`
 - `utils/evals/gpqa_diamond.yaml`
+- `utils/evals/swebench_lite.yaml` (generation only; scored by `swebench_score.py`)
