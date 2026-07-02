@@ -11699,7 +11699,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   model-prefix: dsv4
   # gb300-nv (not generic gb300) — the generic label is shared by both NV
   # and CW runner pools, so runs-on: gb300 lets CW runners pick up shards.
-  # The gb300-nv label is on NV runners only (per .github/configs/runners.yaml
+  # The gb300-nv label is on NV runners only (per configs/runners.yaml
   # + actual runner label listings). Pins agentic to the NVIDIA cluster
   # for initial validation. Drop -nv suffix to widen later.
   runner: gb300-nv
