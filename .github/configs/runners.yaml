@@ -118,6 +118,7 @@ mi325x:
 - 'mi325x-amds_06'
 - 'mi325x-amds_07'
 - 'mi325x-amds_08'
+- 'mi325x-amds_09'
 mi325x-disagg:
 - 'mi325x-amds_00'
 - 'mi325x-amds_01'

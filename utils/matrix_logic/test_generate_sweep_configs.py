@@ -7,9 +7,9 @@ from generate_sweep_configs import (
     seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
-    generate_runner_model_sweep_config,
     generate_test_config_sweep,
     mark_eval_entries,
+    mark_all_eval_entries,
     apply_node_type_defaults,
     expand_config_keys,
 )
@@ -288,8 +288,8 @@ class TestMarkEvalEntries:
         assert result[0]["run-eval"] is False
         assert "eval-conc" not in result[0]
 
-    def test_multi_node_eval_conc_uses_only_conc_values_at_or_above_min_conc(self):
-        """Multinode eval-conc should be chosen from conc values >= MIN_EVAL_CONC."""
+    def test_multi_node_marks_each_parallelism_at_highest_eligible_conc(self):
+        """Each multinode parallelism should eval at its highest eligible concurrency."""
         matrix_values = [
             {
                 "model": "deepseek-ai/DeepSeek-R1-0528",
@@ -322,18 +322,18 @@ class TestMarkEvalEntries:
                 "osl": 1024,
                 "spec-decoding": "none",
                 "prefill": {
-                    "num-worker": 1,
-                    "tp": 8,
+                    "num-worker": 2,
+                    "tp": 4,
                     "ep": 1,
                     "dp-attn": True,
                 },
                 "decode": {
-                    "num-worker": 4,
-                    "tp": 8,
+                    "num-worker": 2,
+                    "tp": 4,
                     "ep": 1,
                     "dp-attn": False,
                 },
-                "conc": [8],
+                "conc": [8, 16, 64],
             },
         ]
 
@@ -341,7 +341,84 @@ class TestMarkEvalEntries:
 
         assert result[0]["run-eval"] is True
         assert result[0]["eval-conc"] == 32
-        assert result[1]["run-eval"] is False
+        assert result[1]["run-eval"] is True
+        assert result[1]["eval-conc"] == 64
+
+    def test_multi_node_worker_counts_define_parallelism(self):
+        """Prefill and decode worker counts should each define a distinct eval target."""
+        def entry(prefill_workers, decode_workers, conc):
+            return {
+                "model": "deepseek-ai/DeepSeek-R1-0528",
+                "runner": "mi355x-disagg",
+                "framework": "vllm-disagg",
+                "precision": "fp8",
+                "isl": 8192,
+                "osl": 1024,
+                "spec-decoding": "none",
+                "prefill": {
+                    "num-worker": prefill_workers,
+                    "tp": 4,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "decode": {
+                    "num-worker": decode_workers,
+                    "tp": 8,
+                    "ep": 1,
+                    "dp-attn": False,
+                },
+                "conc": [16, conc],
+            }
+
+        result = mark_eval_entries([
+            entry(prefill_workers=1, decode_workers=1, conc=32),
+            entry(prefill_workers=2, decode_workers=1, conc=64),
+            entry(prefill_workers=1, decode_workers=2, conc=128),
+        ])
+
+        assert [(e["run-eval"], e["eval-conc"]) for e in result] == [
+            (True, 32),
+            (True, 64),
+            (True, 128),
+        ]
+
+    def test_multi_node_split_parallelism_uses_only_highest_concurrency_entry(self):
+        """Split concurrency rows for one parallelism should produce one eval job."""
+        base_entry = {
+            "model": "deepseek-ai/DeepSeek-R1-0528",
+            "runner": "mi355x-disagg",
+            "framework": "sglang-disagg",
+            "precision": "fp4",
+            "isl": 8192,
+            "osl": 1024,
+            "spec-decoding": "none",
+            "prefill": {
+                "num-worker": 1,
+                "tp": 8,
+                "ep": 1,
+                "dp-attn": False,
+                "additional-settings": ["PREFILL_NODES=1"],
+            },
+            "decode": {
+                "num-worker": 2,
+                "tp": 8,
+                "ep": 1,
+                "dp-attn": False,
+                "additional-settings": ["DECODE_NODES=2"],
+            },
+            "run-eval": False,
+        }
+        matrix_values = [
+            {**base_entry, "conc": [2, 4, 8, 16, 32]},
+            {**base_entry, "conc": [64, 128, 256]},
+        ]
+
+        result = mark_eval_entries(matrix_values)
+
+        assert result[0]["run-eval"] is False
+        assert "eval-conc" not in result[0]
+        assert result[1]["run-eval"] is True
+        assert result[1]["eval-conc"] == 256
 
     def test_marks_highest_and_median_conc(self):
         """Should mark highest and median concurrency for 8k1k entries."""
@@ -390,6 +467,159 @@ class TestMarkEvalEntries:
         non_prefill = [x for x in result if 'prefill' not in x]
         assert not all(x['run-eval'] for x in non_prefill), \
             "mark_eval_entries must not mark all entries — would break e2e splitting"
+
+
+class TestMarkAllEvalEntries:
+    """Tests for the all-evals selection policy."""
+
+    def test_marks_only_8k1k_entries_and_passes_other_seq_lens_through(self):
+        entries = [
+            {  # 1k1k is not eligible for evals -> left unmarked
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'tp': 2, 'conc': 1,
+                'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
+            },
+            {  # 8k1k is eligible -> marked for eval
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'tp': 2, 'conc': 8,
+                'spec-decoding': 'none', 'dp-attn': False, 'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        by_isl = {entry['isl']: entry for entry in result}
+        assert by_isl[1024]['run-eval'] is False
+        assert by_isl[8192]['run-eval'] is True
+
+    def test_batches_every_multinode_concurrency_per_engine_topology(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [1, 4, 8, 16],
+                'run-eval': False,
+            },
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': True},
+                'decode': {'dp-attn': False},
+                'conc': [32],
+                'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert len(result) == 2
+        assert all(entry['run-eval'] for entry in result)
+        assert [entry['conc'] for entry in result] == [
+            [1, 4, 8, 16], [32],
+        ]
+        assert all(entry['eval-all-concs'] is True for entry in result)
+        assert all('eval-conc' not in entry for entry in result)
+
+    def test_default_eval_selection_does_not_collapse_all_evals_expansion(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [1, 4, 8, 16, 32],
+                'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(mark_eval_entries(entries))
+
+        assert len(result) == 1
+        assert result[0]['conc'] == [1, 4, 8, 16, 32]
+        assert result[0]['eval-all-concs'] is True
+        assert 'eval-conc' not in result[0]
+        assert result[0]['run-eval'] is True
+
+    def test_deduplicates_overlapping_concurrency_rows_for_same_parallelism(self):
+        entries = [
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [4, 8, 16],
+                'run-eval': False,
+                'eval-conc': None,
+            },
+            {
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [16, 32],
+                'run-eval': True,
+                'eval-conc': 32,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert len(result) == 1
+        assert result[0]['conc'] == [4, 8, 16, 32]
+        assert result[0]['eval-all-concs'] is True
+        assert 'eval-conc' not in result[0]
+
+    def test_excludes_1k1k_multinode_entries_from_expansion(self):
+        entries = [
+            {  # 1k1k multinode: left untouched, never batched or eval-marked
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 1024, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [4, 8, 16],
+                'run-eval': False,
+            },
+            {  # 8k1k multinode: expanded into a batched eval row
+                'model': 'm', 'runner': 'r', 'framework': 'f', 'precision': 'fp8',
+                'isl': 8192, 'osl': 1024, 'spec-decoding': 'none',
+                'prefill': {'dp-attn': False},
+                'decode': {'dp-attn': False},
+                'conc': [8, 32],
+                'run-eval': False,
+            },
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert len(result) == 2
+        one_k = next(e for e in result if e['isl'] == 1024)
+        eight_k = next(e for e in result if e['isl'] == 8192)
+        # 1k1k untouched: not eval-marked, not batched, concurrency unchanged
+        assert one_k['run-eval'] is False
+        assert 'eval-all-concs' not in one_k
+        assert one_k['conc'] == [4, 8, 16]
+        # 8k1k expanded into a batched eval row
+        assert eight_k['run-eval'] is True
+        assert eight_k['eval-all-concs'] is True
+        assert eight_k['conc'] == [8, 32]
+
+    def test_skips_agentic_entries(self):
+        entries = [
+            {
+                'scenario-type': 'agentic-coding',
+                'model': 'm',
+                'runner': 'r',
+                'conc': 64,
+            }
+        ]
+
+        result = mark_all_eval_entries(entries)
+
+        assert 'run-eval' not in result[0]
+        assert 'eval-conc' not in result[0]
+        assert 'eval-all-concs' not in result[0]
 
 
 # =============================================================================
@@ -815,212 +1045,6 @@ class TestGenerateFullSweepMultiNode:
 
 
 # =============================================================================
-# Test generate_runner_model_sweep_config
-# =============================================================================
-
-class TestGenerateRunnerModelSweepConfig:
-    """Tests for generate_runner_model_sweep_config function."""
-
-    @pytest.fixture
-    def runner_sweep_args(self):
-        """Args for runner-model-sweep command (single-node)."""
-        args = argparse.Namespace()
-        args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = False
-        return args
-
-    def test_basic_runner_sweep(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Basic runner sweep should generate entries for each node."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # 3 mi300x nodes
-        assert len(result) == 3
-
-    def test_runner_sweep_entry_structure(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Runner sweep entries should use 1k1k config."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        for entry in result:
-            assert entry["isl"] == 1024
-            assert entry["osl"] == 1024
-            assert entry["max-model-len"] == 2048
-            assert "_test" in entry["exp-name"]
-
-    def test_each_node_gets_entry(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Each runner node should get its own entry."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        runners = [entry["runner"] for entry in result]
-        assert "mi300x-amd_0" in runners
-        assert "mi300x-amd_1" in runners
-        assert "mi300x-cr_0" in runners
-
-    def test_invalid_runner_type(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Invalid runner type should raise error."""
-        runner_sweep_args.runner_type = "nonexistent"
-        with pytest.raises(ValueError) as exc_info:
-            generate_runner_model_sweep_config(
-                runner_sweep_args,
-                sample_single_node_config,
-                sample_runner_config
-            )
-        assert "does not exist" in str(exc_info.value)
-
-    def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Runner node filter should limit nodes."""
-        runner_sweep_args.runner_node_filter = "amd"
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Only mi300x-amd_0 and mi300x-amd_1 match
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
-    def test_runner_node_filter_no_match(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Runner node filter with no matches should raise error."""
-        runner_sweep_args.runner_node_filter = "nonexistent"
-        with pytest.raises(ValueError) as exc_info:
-            generate_runner_model_sweep_config(
-                runner_sweep_args,
-                sample_single_node_config,
-                sample_runner_config
-            )
-        assert "No runner nodes found" in str(exc_info.value)
-
-    def test_uses_highest_tp(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Should use highest TP from search space."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has tp=8
-        assert all(entry["tp"] == 8 for entry in result)
-
-    def test_uses_lowest_conc(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Should use lowest concurrency from search space."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has conc-start=4
-        assert all(entry["conc"] == 4 for entry in result)
-
-    def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Model prefix filter should limit configs."""
-        runner_sweep_args.model_prefix = ["dsr1"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config key starts with "dsr1", so should match
-        assert len(result) == 3  # 3 mi300x nodes
-
-        # Non-matching prefix should return empty
-        runner_sweep_args.model_prefix = ["nonexistent"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
-
-    def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Precision filter should limit configs."""
-        runner_sweep_args.precision = ["fp8"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has precision=fp8, so should match
-        assert len(result) == 3
-
-        # Non-matching precision should return empty
-        runner_sweep_args.precision = ["fp4"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
-
-    def test_filter_by_framework(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Framework filter should limit configs."""
-        runner_sweep_args.framework = ["sglang"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has framework=sglang, so should match
-        assert len(result) == 3
-
-        # Non-matching framework should return empty
-        runner_sweep_args.framework = ["vllm"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
-
-    def test_combined_filters(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Multiple filters should all apply."""
-        runner_sweep_args.model_prefix = ["dsr1"]
-        runner_sweep_args.precision = ["fp8"]
-        runner_sweep_args.framework = ["sglang"]
-        runner_sweep_args.runner_node_filter = "amd"
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # All filters match, but only 2 amd nodes
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
-    def test_conc_override(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """--conc should override concurrency for all runs."""
-        # Without override, uses lowest conc from config (conc-start=4)
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["conc"] == 4 for entry in result)
-
-        # With override, uses specified value
-        runner_sweep_args.conc = 16
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["conc"] == 16 for entry in result)
-
-
-# =============================================================================
 # Test edge cases and special configurations
 # =============================================================================
 
@@ -1112,7 +1136,7 @@ class TestEdgeCases:
                             "isl": 1024,
                             "osl": 1024,
                             "search-space": [
-                                {"tp": 8, "conc-start": 4, "conc-end": 16}
+                                {"tp": 8, "conc-list": [4, 16, 64]}
                             ]
                         }
                     ]
@@ -1125,9 +1149,76 @@ class TestEdgeCases:
             sample_runner_config
         )
         conc_values = [entry["conc"] for entry in result]
-        assert 4 in conc_values
-        assert 8 in conc_values
-        assert 16 in conc_values
+        assert conc_values == [4, 16, 64]
+
+    def test_conc_list_in_single_node_honors_filters(
+        self,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        config = {
+            "test-config": {
+                "image": "test-image",
+                "model": "test-model",
+                "model-prefix": "test",
+                "precision": "fp8",
+                "framework": "sglang",
+                "runner": "mi300x",
+                "multinode": False,
+                "scenarios": {
+                    "fixed-seq-len": [
+                        {
+                            "isl": 1024,
+                            "osl": 1024,
+                            "search-space": [
+                                {"tp": 8, "conc-list": [4, 16, 64]}
+                            ],
+                        }
+                    ]
+                },
+            }
+        }
+        full_sweep_args_single_node.min_conc = 8
+        full_sweep_args_single_node.max_conc = 32
+
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            config,
+            sample_runner_config,
+        )
+
+        assert [entry["conc"] for entry in result] == [16]
+
+    def test_step_size_must_advance(
+        self,
+        sample_single_node_config,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        full_sweep_args_single_node.step_size = 1
+
+        with pytest.raises(ValueError, match="greater than 1"):
+            generate_full_sweep(
+                full_sweep_args_single_node,
+                sample_single_node_config,
+                sample_runner_config,
+            )
+
+    def test_min_conc_cannot_exceed_max_conc(
+        self,
+        sample_single_node_config,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        full_sweep_args_single_node.min_conc = 16
+        full_sweep_args_single_node.max_conc = 8
+
+        with pytest.raises(ValueError, match="less than or equal"):
+            generate_full_sweep(
+                full_sweep_args_single_node,
+                sample_single_node_config,
+                sample_runner_config,
+            )
 
     def test_disagg_defaults_to_false(self, sample_runner_config, full_sweep_args_single_node):
         """disagg should default to False when not specified."""
@@ -1543,6 +1634,147 @@ class TestArgumentDefaults:
         # Verify the explicit value
         assert args.runner_config == 'custom/path/runners.yaml'
 
+    def test_all_evals_cli_marks_every_fixed_sequence_entry(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        """--all-evals bypasses the default min-conc/highest-median policy but
+        still only evaluates 8k1k (1k1k entries are excluded)."""
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--all-evals',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        # Every 8k1k concurrency is marked (5 conc values), and the 1k1k
+        # entries are dropped rather than evaluated.
+        assert len(result) == 5
+        assert {(entry['isl'], entry['osl']) for entry in result} == {
+            (8192, 1024),
+        }
+        assert min(entry['conc'] for entry in result) == 4
+        assert all(entry['run-eval'] is True for entry in result)
+        assert all(entry['eval-only'] is True for entry in result)
+
+    def test_all_evals_composes_with_evals_only(
+        self,
+        monkeypatch,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: sample_single_node_config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp8-mi300x-sglang',
+            '--evals-only',
+            '--all-evals',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 5
+        assert {(entry['isl'], entry['osl']) for entry in result} == {
+            (8192, 1024),
+        }
+        assert all(entry['run-eval'] is True for entry in result)
+        assert all(entry['eval-only'] is True for entry in result)
+
+    def test_all_evals_batches_each_multinode_concurrency(
+        self,
+        monkeypatch,
+        sample_multinode_config,
+        sample_runner_config,
+    ):
+        import sys
+        import generate_sweep_configs
+
+        config = sample_multinode_config
+        seq_entry = (
+            config['dsr1-fp4-gb200-dynamo-trt']['scenarios']
+            ['fixed-seq-len'][0]
+        )
+        # all-evals only evaluates 8k1k, so target that sequence length.
+        seq_entry['isl'] = 8192
+        seq_entry['osl'] = 1024
+        search_space = seq_entry['search-space']
+        search_space[0]['conc-list'] = [4, 16, 64]
+
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_config_files',
+            lambda _: config,
+        )
+        monkeypatch.setattr(
+            generate_sweep_configs,
+            'load_runner_file',
+            lambda _: sample_runner_config,
+        )
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dsr1-fp4-gb200-dynamo-trt',
+            '--all-evals',
+        ])
+
+        result = generate_sweep_configs.main()
+
+        assert len(result) == 1
+        assert result[0]['conc'] == [4, 16, 64]
+        assert result[0]['eval-all-concs'] is True
+        assert 'eval-conc' not in result[0]
+        assert all(entry['run-eval'] is True for entry in result)
+        assert all(entry['eval-only'] is True for entry in result)
+
+    def test_all_evals_cannot_combine_with_no_evals(self, monkeypatch):
+        import sys
+        import generate_sweep_configs
+
+        monkeypatch.setattr(sys, 'argv', [
+            'generate_sweep_configs.py',
+            'test-config',
+            '--config-files', 'dummy.yaml',
+            '--config-keys', 'dummy',
+            '--no-evals',
+            '--all-evals',
+        ])
+
+        with pytest.raises(SystemExit):
+            generate_sweep_configs.main()
+
 
 # =============================================================================
 # Mixed-mode fixtures
@@ -1747,100 +1979,6 @@ class TestGenerateFullSweepMixed:
 
 
 # =============================================================================
-# Test runner-model-sweep with both flags (regression for filtering bug)
-# =============================================================================
-
-class TestRunnerModelSweepMixed:
-    """Tests for runner-model-sweep with both node types enabled."""
-
-    @pytest.fixture
-    def runner_sweep_args_both(self):
-        """Args for runner-model-sweep with both single_node and multi_node True."""
-        args = argparse.Namespace()
-        args.runner_type = "gb200"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = True
-        return args
-
-    def test_both_flags_with_mixed_config(self, sample_mixed_config, sample_runner_config, runner_sweep_args_both):
-        """Both flags should produce multinode entries for gb200 runner."""
-        # gb200 runner has multinode config (dsr1-fp4-gb200-dynamo-trt)
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args_both,
-            sample_mixed_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
-        assert all("prefill" in entry for entry in result), "gb200 configs are multinode"
-
-    def test_both_flags_single_node_runner(self, sample_mixed_config, sample_runner_config):
-        """Both flags with mi300x runner should produce single-node entries."""
-        args = argparse.Namespace()
-        args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = True
-        result = generate_runner_model_sweep_config(
-            args,
-            sample_mixed_config,
-            sample_runner_config
-        )
-        assert len(result) > 0
-        assert all("tp" in entry and "prefill" not in entry for entry in result), "mi300x configs are single-node"
-
-    def test_single_only_skips_multinode(self, sample_mixed_config, sample_runner_config):
-        """--single-node only should skip multinode configs in runner-model-sweep."""
-        args = argparse.Namespace()
-        args.runner_type = "gb200"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = False
-        result = generate_runner_model_sweep_config(
-            args,
-            sample_mixed_config,
-            sample_runner_config
-        )
-        # gb200 only has multinode configs, so single-node filter should produce empty
-        assert len(result) == 0
-
-    def test_multi_only_skips_singlenode(self, sample_mixed_config, sample_runner_config):
-        """--multi-node only should skip single-node configs in runner-model-sweep."""
-        args = argparse.Namespace()
-        args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = False
-        args.multi_node = True
-        result = generate_runner_model_sweep_config(
-            args,
-            sample_mixed_config,
-            sample_runner_config
-        )
-        # mi300x only has single-node configs, so multi-node filter should produce empty
-        assert len(result) == 0
-
-
-# =============================================================================
 # Test expand_config_keys
 # =============================================================================
 
@@ -1934,7 +2072,8 @@ def _split_e2e_configs(data):
 
 class TestE2EConfigSplitting:
     """Verify the e2e-tests.yml config splitting logic handles all flag
-    combinations correctly: default, --no-evals, and --evals-only."""
+    combinations correctly: default, --no-evals, --evals-only, and
+    --all-evals."""
 
     @pytest.fixture
     def mixed_entries(self):
@@ -1987,6 +2126,20 @@ class TestE2EConfigSplitting:
         single, multi, evals = _split_e2e_configs(data)
         assert len(single) == 0, "evals-only should not trigger benchmarks"
         assert len(evals) == 2
+
+    def test_all_evals_routes_every_fixed_sequence_entry_to_evals(self):
+        data = [
+            {'exp-name': 'a', 'isl': 1024, 'conc': 4, 'tp': 2,
+             'run-eval': True, 'eval-only': True},
+            {'exp-name': 'b', 'isl': 8192, 'conc': 8, 'tp': 2,
+             'run-eval': True, 'eval-only': True},
+        ]
+
+        single, multi, evals = _split_e2e_configs(data)
+
+        assert single == []
+        assert multi == []
+        assert evals == data
 
     def test_empty_config(self):
         """Empty input produces empty outputs."""

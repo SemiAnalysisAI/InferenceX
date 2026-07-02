@@ -6,6 +6,8 @@
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+DP_ATTENTION="${DP_ATTENTION:-false}"
+
 check_env_vars \
     MODEL \
     TP \
@@ -14,7 +16,13 @@ check_env_vars \
     OSL \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME \
-    EP_SIZE
+    EP_SIZE \
+    DP_ATTENTION
+
+if [[ "$DP_ATTENTION" != "true" && "$DP_ATTENTION" != "false" ]]; then
+    echo "DP_ATTENTION must be true or false; got '$DP_ATTENTION'" >&2
+    exit 1
+fi
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -24,12 +32,6 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 nvidia-smi
 
-# MTP only supports TP=8 for now (matching dsr1_fp8_b200_mtp.sh)
-if [[ $TP -ne 8 ]]; then
-  echo "MTP only supports TP=8, got TP=$TP!"
-  exit 1
-fi
-
 SERVER_LOG=/workspace/server.log
 
 if [[ $CONC -ge 16 ]]; then
@@ -37,7 +39,32 @@ if [[ $CONC -ge 16 ]]; then
 else
   SCHEDULER_RECV_INTERVAL=10
 fi
-echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+
+CHUNKED_PREFILL_SIZE=16384
+SGLANG_PARALLEL_ARGS=(
+    --tensor-parallel-size="$TP"
+    --data-parallel-size=1
+)
+SGLANG_DPA_ARGS=()
+
+if [[ "$DP_ATTENTION" == "true" ]]; then
+    SCHEDULER_RECV_INTERVAL=1
+    CHUNKED_PREFILL_SIZE=32768
+    SGLANG_PARALLEL_ARGS=(
+        --tensor-parallel-size="$TP"
+        --data-parallel-size="$TP"
+        --enable-dp-attention
+        --enable-dp-attention-local-control-broadcast
+        --enable-dp-lm-head
+    )
+    SGLANG_DPA_ARGS=(
+        --schedule-conservativeness 3.33
+        --enable-prefill-delayer
+    )
+fi
+
+echo "TP: $TP, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
+echo "SCHEDULER_RECV_INTERVAL: $SCHEDULER_RECV_INTERVAL, CHUNKED_PREFILL_SIZE: $CHUNKED_PREFILL_SIZE"
 
 # MTP (Multi-Token Prediction) Config - EAGLE speculative decoding
 SPECULATIVE_NUM_STEPS=2
@@ -54,17 +81,17 @@ fi
 start_gpu_monitor
 
 set -x
-PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
---tensor-parallel-size=$TP --data-parallel-size=1 \
---cuda-graph-max-bs 512 --max-running-requests 512 --mem-fraction-static 0.82 --kv-cache-dtype fp8_e4m3 \
---chunked-prefill-size 16384 --max-prefill-tokens 16384 \
+SGLANG_RADIX_FORCE_MISS=1 PYTHONNOUSERSITE=1 python3 -m sglang.launch_server --model-path $MODEL --host 0.0.0.0 --port $PORT --trust-remote-code \
+"${SGLANG_PARALLEL_ARGS[@]}" \
+--cuda-graph-max-bs 256 --max-running-requests 256 --mem-fraction-static 0.85 --kv-cache-dtype fp8_e4m3 \
+--chunked-prefill-size "$CHUNKED_PREFILL_SIZE" \
 --ep-size $EP_SIZE --quantization modelopt_fp4 --enable-flashinfer-allreduce-fusion --scheduler-recv-interval $SCHEDULER_RECV_INTERVAL \
---enable-symm-mem --disable-radix-cache --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 30 \
+--disable-piecewise-cuda-graph --attention-backend trtllm_mla --moe-runner-backend flashinfer_trtllm --stream-interval 10 \
 --speculative-algorithm EAGLE \
 --speculative-num-steps $SPECULATIVE_NUM_STEPS \
 --speculative-num-draft-tokens $SPECULATIVE_DRAFT_TOKENS \
 --speculative-eagle-topk $SPECULATIVE_EAGLE_TOPK \
-$EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
+"${SGLANG_DPA_ARGS[@]}" $EVAL_CONTEXT_ARGS > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 

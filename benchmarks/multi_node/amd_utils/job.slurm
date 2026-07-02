@@ -80,7 +80,6 @@ if [[ "${MORI_CONN_PATCH:-auto}" != "skip" ]] \
     export EXTRA_DOCKER_MOUNTS
     echo "[job.slurm] auto-applied MoRI conn.py overlay: ${_MORI_PATCH_FILE}"
 fi
-
 xP="${xP:-1}"
 yD="${yD:-1}"
 
@@ -315,8 +314,10 @@ export IS_MULTINODE="${IS_MULTINODE:-false}"
 SANITIZED_USER=$(echo "$USER_NAME" | tr -c 'a-zA-Z0-9_.-' '_')
 export DOCKER_CONT_NAME="container_${ENGINE}_${SANITIZED_USER}_${MODEL_NAME}_${SLURM_JOB_ID}"
 
-# vLLM external router container
-VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260511-e667ebb}"
+# vLLM external router container.
+# NOTE: vllm/vllm-router only retains ~16 recent nightlies on Docker Hub; older
+# dated tags are garbage-collected (manifest unknown)
+VLLM_ROUTER_IMAGE="${VLLM_ROUTER_IMAGE:-vllm/vllm-router:nightly-20260617-e667ebb}"
 ROUTER_CONT_NAME="router_vllm_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 
@@ -363,6 +364,7 @@ DOCKER_ENV_COMMON=(
     -e BENCH_RANDOM_RANGE_RATIO=\$BENCH_RANDOM_RANGE_RATIO
     -e BENCH_NUM_PROMPTS_MULTIPLIER=\$BENCH_NUM_PROMPTS_MULTIPLIER
     -e BENCH_MAX_CONCURRENCY=\$BENCH_MAX_CONCURRENCY
+    -e BENCH_REQUEST_RATE=\$BENCH_REQUEST_RATE
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
     -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
@@ -370,7 +372,7 @@ DOCKER_ENV_COMMON=(
     -e WS_PATH=${WS_PATH}
     -e RUN_EVAL=\$RUN_EVAL
     -e EVAL_ONLY=\$EVAL_ONLY
-    -e EVAL_CONC=\$EVAL_CONC
+    -e \"EVAL_CONC=\$EVAL_CONC\"
     -e FRAMEWORK=\$FRAMEWORK
     -e PRECISION=\$PRECISION
     -e MODEL_PREFIX=\$MODEL_PREFIX
@@ -401,7 +403,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
         -e UCX_LOG_LEVEL=warn
         -e HSA_ENABLE_SDMA=1
         -e PROXY_STREAM_IDLE_TIMEOUT=\${PROXY_STREAM_IDLE_TIMEOUT:-300}
-        -e VLLM_MORIIO_CONNECTOR_READ_MODE=\${VLLM_MORIIO_CONNECTOR_READ_MODE:-1}
         -e PYTHONPYCACHEPREFIX=/tmp/pycache
     )
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
@@ -411,10 +412,12 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e DECODE_PORT=${DECODE_PORT:-8020}
         -e ROUTER_PORT=${ROUTER_PORT:-30000}
         -e HANDSHAKE_PORT=${HANDSHAKE_PORT:-6301}
-        -e MEM_FRACTION=${MEM_FRACTION:-0.85}
+        -e MEM_FRAC_STATIC=${MEM_FRAC_STATIC:-0.85}
         -e KV_CACHE_DTYPE=${KV_CACHE_DTYPE:-fp8}
         -e BLOCK_SIZE=${BLOCK_SIZE:-16}
         -e MAX_NUM_SEQS=${MAX_NUM_SEQS:-256}
+        -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
+        -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
         -e IBDEVICES=${IBDEVICES:-}
     )
