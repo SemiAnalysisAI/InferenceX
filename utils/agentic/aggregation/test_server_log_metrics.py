@@ -2,24 +2,28 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from utils.agentic.aggregation.backends.dynamo_vllm import DynamoVllmBackend
+from utils.agentic.aggregation.backends.sglang import SglangBackend
+from utils.agentic.aggregation.backends.vllm import VllmBackend
 from utils.agentic.aggregation.server_log_metrics import (
     find_server_log_paths,
-    kv_cache_pool_tokens_from_server_log,
-    kv_cache_pool_tokens_from_server_logs,
     load_server_log_head,
 )
 
 
 def test_kv_cache_pool_tokens_from_server_log_missing() -> None:
-    assert kv_cache_pool_tokens_from_server_log(None) is None
-    assert kv_cache_pool_tokens_from_server_log("") is None
-    assert kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log(None) is None
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log("") is None
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
+    assert SglangBackend.kv_cache_pool_tokens_from_server_log(None) is None
+    assert SglangBackend.kv_cache_pool_tokens_from_server_log("") is None
+    assert SglangBackend.kv_cache_pool_tokens_from_server_log("INFO no kv cache line") is None
 
 
 def test_kv_cache_pool_tokens_from_single_engine_server_log() -> None:
     log = "INFO (EngineCore pid=123) GPU KV cache size: 11,294,463 tokens"
 
-    assert kv_cache_pool_tokens_from_server_log(log) == 11_294_463
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 11_294_463
 
 
 def test_kv_cache_pool_tokens_from_data_parallel_server_log() -> None:
@@ -31,7 +35,7 @@ def test_kv_cache_pool_tokens_from_data_parallel_server_log() -> None:
         ]
     )
 
-    assert kv_cache_pool_tokens_from_server_log(log) == 34_731_999
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 34_731_999
 
 
 def test_kv_cache_pool_tokens_dedupes_engine_tags() -> None:
@@ -43,7 +47,7 @@ def test_kv_cache_pool_tokens_dedupes_engine_tags() -> None:
         ]
     )
 
-    assert kv_cache_pool_tokens_from_server_log(log) == 16_577_333
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 16_577_333
 
 
 def test_kv_cache_pool_tokens_sums_bare_lines() -> None:
@@ -54,7 +58,7 @@ def test_kv_cache_pool_tokens_sums_bare_lines() -> None:
         ]
     )
 
-    assert kv_cache_pool_tokens_from_server_log(log) == 3_234_567
+    assert VllmBackend.kv_cache_pool_tokens_from_server_log(log) == 3_234_567
 
 
 def test_kv_cache_pool_tokens_from_sglang_server_log() -> None:
@@ -66,7 +70,7 @@ def test_kv_cache_pool_tokens_from_sglang_server_log() -> None:
         ]
     )
 
-    assert kv_cache_pool_tokens_from_server_log(log) == 9_377_792
+    assert SglangBackend.kv_cache_pool_tokens_from_server_log(log) == 9_377_792
 
 
 def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
@@ -78,7 +82,7 @@ def test_kv_cache_pool_tokens_from_sglang_per_rank_lines() -> None:
         ]
     )
 
-    assert kv_cache_pool_tokens_from_server_log(log) == 2200
+    assert SglangBackend.kv_cache_pool_tokens_from_server_log(log) == 2200
 
 
 def test_kv_cache_pool_tokens_sums_multiple_log_files(tmp_path: Path) -> None:
@@ -96,7 +100,21 @@ def test_kv_cache_pool_tokens_sums_multiple_log_files(tmp_path: Path) -> None:
         "INFO (EngineCore_DP0 pid=200) GPU KV cache size: 7,000,000 tokens"
     )
 
-    assert kv_cache_pool_tokens_from_server_logs([first, second]) == 18_500_000
+    assert VllmBackend().gpu_kv_capacity_tokens({}, [first, second]) == 18_500_000
+
+
+def test_dynamo_vllm_uses_vllm_server_log_capacity_parser(tmp_path: Path) -> None:
+    worker_log = tmp_path / "watchtower-worker.out"
+    worker_log.write_text(
+        "\n".join(
+            [
+                "INFO (EngineCore_DP0 pid=100) GPU KV cache size: 5,000,000 tokens",
+                "INFO (EngineCore_DP1 pid=101) GPU KV cache size: 6,500,000 tokens",
+            ]
+        )
+    )
+
+    assert DynamoVllmBackend().gpu_kv_capacity_tokens({}, [worker_log]) == 11_500_000
 
 
 def test_find_server_log_paths_includes_multinode_watchtower_logs(tmp_path: Path) -> None:

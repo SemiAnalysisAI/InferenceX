@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -14,12 +15,14 @@ from ..aggregation_common import (
     sum_by_label,
     sum_stat,
 )
-from ..server_log_metrics import vllm_kv_cache_pool_tokens_from_server_logs
+from ..server_log_metrics import sum_server_log_capacities
 from .base import ServerMetricsBackend, counter_int
 
 
 class VllmBackend(ServerMetricsBackend):
     name = "vllm"
+    _ENGINE_TAG_RE = re.compile(r"\((?P<tag>EngineCore(?:_DP\d+)?)\s+pid=\d+\)")
+    _GPU_KV_SIZE_RE = re.compile(r"GPU KV cache size:\s*(?P<tokens>[\d,]+)\s*tokens")
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
@@ -167,7 +170,45 @@ class VllmBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],
         server_log_paths: list[Path],
     ) -> int | None:
-        return vllm_kv_cache_pool_tokens_from_server_logs(server_log_paths)
+        return sum_server_log_capacities(
+            server_log_paths,
+            self.kv_cache_pool_tokens_from_server_log,
+        )
+
+    @classmethod
+    def kv_cache_pool_tokens_from_server_log(cls, server_log: str | None) -> int | None:
+        if not server_log:
+            return None
+
+        per_engine: dict[str, int] = {}
+        bare_total = 0
+        bare_found = False
+
+        for line in server_log.splitlines():
+            if "GPU KV cache size" not in line:
+                continue
+
+            size_match = cls._GPU_KV_SIZE_RE.search(line)
+            if not size_match:
+                continue
+
+            try:
+                tokens = int(size_match.group("tokens").replace(",", ""))
+            except ValueError:
+                continue
+            if tokens <= 0:
+                continue
+
+            tag_match = cls._ENGINE_TAG_RE.search(line)
+            if tag_match:
+                per_engine[tag_match.group("tag")] = tokens
+            else:
+                bare_total += tokens
+                bare_found = True
+
+        if per_engine:
+            return sum(per_engine.values())
+        return bare_total if bare_found else None
 
 
 def first_counter_total(

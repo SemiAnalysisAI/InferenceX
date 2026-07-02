@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -13,12 +14,15 @@ from ..aggregation_common import (
     sum_by_label,
     sum_stat,
 )
-from ..server_log_metrics import sglang_kv_cache_pool_tokens_from_server_logs
+from ..server_log_metrics import sum_server_log_capacities
 from .base import ServerMetricsBackend, counter_int
 
 
 class SglangBackend(ServerMetricsBackend):
     name = "sglang"
+    _RANK_RE = re.compile(r"\b(?P<tag>DP\d+\s+TP\d+\s+EP\d+)\b")
+    _MAX_TOKENS_RE = re.compile(r"\bmax_total_num_tokens=(?P<tokens>\d+)\b")
+    _DP_SIZE_RE = re.compile(r"\bdp_size=(?P<dp_size>\d+)\b")
 
     def matches(self, metrics: dict[str, dict[str, Any]], framework: str) -> bool:
         metric_names = set(metrics)
@@ -140,4 +144,49 @@ class SglangBackend(ServerMetricsBackend):
         metrics: dict[str, dict[str, Any]],
         server_log_paths: list[Path],
     ) -> int | None:
-        return sglang_kv_cache_pool_tokens_from_server_logs(server_log_paths)
+        return sum_server_log_capacities(
+            server_log_paths,
+            self.kv_cache_pool_tokens_from_server_log,
+        )
+
+    @classmethod
+    def kv_cache_pool_tokens_from_server_log(cls, server_log: str | None) -> int | None:
+        if not server_log:
+            return None
+
+        per_rank: dict[str, int] = {}
+        bare_total = 0
+        bare_count = 0
+        dp_size = cls._dp_size(server_log)
+
+        for line in server_log.splitlines():
+            if "max_total_num_tokens" not in line:
+                continue
+            size_match = cls._MAX_TOKENS_RE.search(line)
+            if not size_match:
+                continue
+            tokens = int(size_match.group("tokens"))
+            if tokens <= 0:
+                continue
+            tag_match = cls._RANK_RE.search(line)
+            if tag_match:
+                per_rank[tag_match.group("tag")] = tokens
+            else:
+                bare_total += tokens
+                bare_count += 1
+
+        if per_rank:
+            if dp_size is not None and len(per_rank) == 1 and dp_size > 1:
+                return next(iter(per_rank.values())) * dp_size
+            return sum(per_rank.values())
+        if bare_count == 1 and dp_size is not None and dp_size > 1:
+            return bare_total * dp_size
+        return bare_total if bare_count else None
+
+    @classmethod
+    def _dp_size(cls, server_log: str) -> int | None:
+        match = cls._DP_SIZE_RE.search(server_log)
+        if not match:
+            return None
+        dp_size = int(match.group("dp_size"))
+        return dp_size if dp_size > 0 else None
