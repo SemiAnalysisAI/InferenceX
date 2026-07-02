@@ -4432,4 +4432,4 @@
   description:
     - "Update Minimax M3 b300 vllm image tag"
     - "Update search space to cover more configs"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/tree/codex/minimax-m3-b300-fp4-vllm-update
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1990
