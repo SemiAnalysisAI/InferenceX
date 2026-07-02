@@ -4351,6 +4351,8 @@
     - "Fixes the ~8h engine-core startup hang on EP configs: with moe_backend=auto, EP fell back to Mxfp4MoeBackend.EMULATION, which deadlocked all expert-parallel workers building the Quark hw-emulation C++ kernel into a shared torch_extensions dir. Forcing --moe-backend aiter selects AITER_MXFP4_MXFP4 (no emulation build)."
     - "Pin vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from nightly-3f5a1e1733200760169ff31ebe60a271072b199e), matching the STP recipe."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1964
+
+- config-keys:
     - minimaxm3-fp4-b300-dynamo-vllm
   description:
     - "Add MiniMax-M3 NVFP4 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP (no MTP)"
