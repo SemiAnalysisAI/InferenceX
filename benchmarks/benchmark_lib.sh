@@ -563,11 +563,22 @@ run_benchmark_serving() {
         benchmark_cmd+=(--tokenizer-mode "$tokenizer_mode")
     fi
 
+    # Optional hard wall-clock bound on the benchmark client. A hung client
+    # (e.g. asyncio shutdown stuck on thousands of failed in-flight requests at
+    # very high concurrency) would otherwise never return, wedging a multi-node
+    # SLURM allocation until TIME_LIMIT. Gated on BENCH_TIMEOUT_S so callers that
+    # do not set it keep prior behavior. timeout returns 124 on expiry (SIGTERM,
+    # then SIGKILL after --kill-after) which the caller treats as a failed run.
+    local _bench_timeout=()
+    if [[ -n "${BENCH_TIMEOUT_S:-}" ]]; then
+        _bench_timeout=(timeout --kill-after=120 "${BENCH_TIMEOUT_S}")
+    fi
+
     # Run benchmark with optional server monitoring
     set -x
     if [[ -n "$server_pid" ]]; then
         # Run benchmark in background and monitor server health
-        "${benchmark_cmd[@]}" &
+        "${_bench_timeout[@]}" "${benchmark_cmd[@]}" &
         local benchmark_pid=$!
 
         # Monitor loop: check both benchmark and server status
@@ -587,7 +598,7 @@ run_benchmark_serving() {
         local benchmark_exit_code=$?
     else
         # No server monitoring, run benchmark directly
-        "${benchmark_cmd[@]}"
+        "${_bench_timeout[@]}" "${benchmark_cmd[@]}"
         local benchmark_exit_code=$?
     fi
     set +x
