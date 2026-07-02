@@ -4405,6 +4405,6 @@
     - dsv4-fp4-mi355x-vllm
   description:
     - "Bump DeepSeek-V4-Pro FP4 MI355X single-node vLLM STP image from vllm/vllm-openai-rocm:v0.22.0 to the latest nightly vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa."
-    - "The nightly enables two-stage attention kernels (split-KV decode), reducing decode attention latency at high concurrency."
+    - "The nightly enables two-stage attention kernels (split-KV decode), which reduce decode attention latency across all concurrency levels."
     - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1980
