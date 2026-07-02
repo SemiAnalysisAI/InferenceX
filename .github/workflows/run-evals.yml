@@ -47,6 +47,11 @@ jobs:
             echo "No /run-evals command found at comment start" >&2
             exit 1
           fi
+          # Strip a trailing CR so GitHub's CRLF line endings (delivered for
+          # multi-line web comments) don't contaminate the last token, e.g.
+          # conc="16\r" failing the integer check or a config-key with a
+          # trailing \r that the generator can't resolve.
+          cmd_line="${cmd_line%$'\r'}"
           # Positional args after the command.
           read -ra parts <<< "${cmd_line#/run-evals}"
           eval_name="${parts[0]:-}"
