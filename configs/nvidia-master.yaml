@@ -9159,6 +9159,54 @@ dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
+# SMOKE: cheap multi-engine bring-up + telemetry check for the Option B path.
+# Two INDEPENDENT 1-node DEP4 prefill engines (PREFILL_NODES=2 PREFILL_WORKERS=2)
+# + 1 DEP4 decode = 3 nodes / 12 GPUs (half the high-tpt footprint, fast to
+# schedule). Small ISL/OSL + a single low conc so it runs in a few minutes. Its
+# ONLY jobs are: (1) prove the per-engine metrics scraper works, and (2) confirm
+# EPP fans out across BOTH prefill engines. RANDOM_RANGE_RATIO=1.0 gives distinct
+# prompt prefixes so the prefix-cache scorer does not pin everything to one
+# engine; conc 128 (>> the point where EPP would serialize onto one endpoint)
+# with ~512 prompts forces the load-balancer to spread. NOT a perf number - the
+# validated topology is dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe.
+dsv4-fp4-gb200-llm-d-vllm-smoke-2p1d:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: llm-d-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 128
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [128]
+        prefill:
+          num-worker: 2
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=2"
+          - "PREFILL_WORKERS=2"
+          - "GPUS_PER_NODE=4"
+          - "RANDOM_RANGE_RATIO=1.0"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+          - "BENCH_NUM_PROMPTS_MULTIPLIER=4"
+          - "MAX_FAILURE_RATE=0.9"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=1"
+          - "GPUS_PER_NODE=4"
+
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
