@@ -1875,7 +1875,7 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
 
 
 dsv4-fp4-mi355x-sglang-disagg:
-  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260615
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260701
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x-disagg
