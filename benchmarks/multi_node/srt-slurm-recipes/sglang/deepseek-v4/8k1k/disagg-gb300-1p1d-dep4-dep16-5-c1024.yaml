@@ -33,7 +33,7 @@ name: "disagg-gb300-1p1d-dep4-dep16-5-c1024"
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:v0.5.13.post1-cu130"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd"
   precision: "fp4"
 
 dynamo:
