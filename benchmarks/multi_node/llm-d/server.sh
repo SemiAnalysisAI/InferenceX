@@ -308,6 +308,16 @@ fi
 # ================================================================
 if [[ "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ]]; then
 
+    # ---- Always release the allocation on coordinator exit ----
+    # job.slurm's watcher scancels the whole job when this marker appears; the
+    # workers otherwise `wait` on their vLLM until TIME_LIMIT. Writing it from an
+    # EXIT trap (not just at the end of a clean run) guarantees release on ANY
+    # coordinator exit - a failed/aborted benchmark, an EPP/Envoy bring-up error,
+    # or a `set -e` abort. Without this a failed bench once wedged a run for 8h
+    # until GitHub killed it at the max-execution limit (losing the log tarball).
+    BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.${SLURM_JOB_ID:-0}"
+    trap 'touch "$BENCH_DONE_MARKER" 2>/dev/null || true' EXIT
+
     # ---- Write endpoints.yaml (file-discovery) ----
     # namespace must match EPP's --pool-namespace (file-discovery filters by it;
     # the schema default 'default' would drop every entry). See README.md.
@@ -511,28 +521,24 @@ PY
     done
     echo "All ${#_prefill_ips[@]} prefill vLLM endpoint(s) ready"
 
-    # ---- Scrape engine /metrics (KV-transfer + cache telemetry) ----
-    # benchmark_serving only reports client-side TTFT/TPOT; scrape the full
-    # /metrics from the prefill leader + local decode across the bench window
-    # (timestamped, per-conc markers) into BENCHMARK_LOGS_DIR for the tarball.
-    METRICS_SCRAPE_INTERVAL_S="${METRICS_SCRAPE_INTERVAL_S:-5}"
-    PREFILL_METRICS_FILE="$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_metrics_prefill.prom"
-    DECODE_METRICS_FILE="$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_metrics_decode.prom"
-    _scrape_metrics() {
-        local url="$1" out="$2"
-        while true; do
-            { echo "# scrape_ts=$(date +%s)"
-              curl --silent --fail --max-time 4 "$url" 2>/dev/null \
-                  || echo "# scrape_failed ts=$(date +%s)"
-            } >> "$out"
-            sleep "$METRICS_SCRAPE_INTERVAL_S"
-        done
-    }
-    _scrape_metrics "http://$PREFILL_LEADER_IP:$VLLM_PORT/metrics" "$PREFILL_METRICS_FILE" &
-    PREFILL_SCRAPE_PID=$!
-    _scrape_metrics "http://127.0.0.1:$VLLM_PORT/metrics" "$DECODE_METRICS_FILE" &
-    DECODE_SCRAPE_PID=$!
-    echo "[metrics] scraping prefill($PREFILL_LEADER_IP) + decode(local) /metrics every ${METRICS_SCRAPE_INTERVAL_S}s -> $BENCHMARK_LOGS_DIR"
+    # ---- Scrape engine /metrics from ALL prefill + decode engines ----
+    # benchmark_serving only reports aggregate client-side TTFT/TPOT. To see
+    # per-engine load - crucially, whether EPP fans out across BOTH prefill
+    # engines (Option B) rather than choking one - scrape every prefill and
+    # every decode vLLM (on VLLM_PORT, NOT the sidecar) into one correlated CSV,
+    # plus EPP's own /metrics (per-endpoint routing). metrics_scrape.py derives
+    # its targets from ALL_IPS + PREFILL_NODES/DECODE_NODES. The per-rank
+    # vllm_rank*.log files carry the same Running/Waiting stats as a backup.
+    export METRICS_SCRAPE_INTERVAL_S="${METRICS_SCRAPE_INTERVAL_S:-2}"
+    export VLLM_PORT EPP_METRICS_PORT
+    export EPP_METRICS_HOST="127.0.0.1"
+    export SCRAPE_OUT_CSV="$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_metrics_engines.csv"
+    export SCRAPE_EPP_OUT="$BENCHMARK_LOGS_DIR/${RESULT_FILENAME}_metrics_epp.prom"
+    export SCRAPE_CONC_FILE="$BENCHMARK_LOGS_DIR/.scrape_conc.${SLURM_JOB_ID:-0}"
+    : > "$SCRAPE_CONC_FILE"
+    python3 /workspace/benchmarks/multi_node/llm-d/metrics_scrape.py &
+    METRICS_SCRAPE_PID=$!
+    echo "[metrics] scraping ${PREFILL_NODES} prefill + ${DECODE_NODES} decode vLLM (:$VLLM_PORT) + EPP (:$EPP_METRICS_PORT) every ${METRICS_SCRAPE_INTERVAL_S}s -> $SCRAPE_OUT_CSV"
 
     # ---- Benchmark sweep (one run per concurrency level) ----
     # BENCH_MAX_CONCURRENCY is an 'x'-delimited list from submit.sh (e.g. "1024x512").
@@ -545,13 +551,17 @@ PY
     _bench_prefill_gpus=$(( PREFILL_NODES * GPUS_PER_NODE ))
     _bench_decode_gpus=$(( DECODE_NODES * GPUS_PER_NODE ))
     _bench_total_gpus=$(( _bench_prefill_gpus + _bench_decode_gpus ))
+    # Hard per-conc wall-clock bound for the bench client (read by
+    # run_benchmark_serving). A benchmark that fails or hangs (e.g. asyncio
+    # shutdown wedged on thousands of failed in-flight requests at very high
+    # concurrency) is killed after this instead of pinning the whole allocation
+    # to TIME_LIMIT. Overridable via recipe env / additional-settings.
+    export BENCH_TIMEOUT_S="${BENCH_TIMEOUT_S:-2400}"
     for max_concurrency in "${CONCURRENCIES[@]}"; do
         num_prompts=$(( max_concurrency * BENCH_NUM_PROMPTS_MULTIPLIER ))
         [[ "$num_prompts" -lt 16 ]] && num_prompts=16
-        # Tag the scraped metrics lines with this conc level.
-        for _mf in "$PREFILL_METRICS_FILE" "$DECODE_METRICS_FILE"; do
-            echo "# ==== conc=$max_concurrency num_prompts=$num_prompts start_ts=$(date +%s) ====" >> "$_mf"
-        done
+        # Tag scraped rows with the current conc (the scraper reads this file).
+        echo "$max_concurrency" > "$SCRAPE_CONC_FILE"
         # Bench against Envoy (EPP routes to decode; the sidecar pulls from
         # prefill via NIXL). --bench-serving-dir = the /workspace repo bind-mount;
         # --tokenizer = /models (served-model-name is not a valid HF repo id).
@@ -568,6 +578,10 @@ PY
             )
         fi
 
+        # Non-fatal: a failed or timed-out conc point must not abort the sweep
+        # or (under set -e) skip the scraper stop + allocation release below.
+        # The EXIT trap releases the allocation regardless, but continuing here
+        # lets a multi-conc sweep record every point it can.
         run_benchmark_serving \
             --bench-serving-dir /workspace \
             --tokenizer /models \
@@ -581,12 +595,13 @@ PY
             --max-concurrency "$max_concurrency" \
             --result-filename "${RESULT_FILENAME}_c${max_concurrency}_gpus_${_bench_total_gpus}_ctx_${_bench_prefill_gpus}_gen_${_bench_decode_gpus}" \
             --result-dir "$BENCHMARK_LOGS_DIR/" \
-            "${bench_extra_args[@]}"
+            "${bench_extra_args[@]}" \
+            || echo "WARNING: benchmark conc=$max_concurrency failed/timed out (rc=$?)"
     done
 
-    # ---- Stop scrapers (don't scrape during eval) ----
-    kill "$PREFILL_SCRAPE_PID" "$DECODE_SCRAPE_PID" 2>/dev/null || true
-    echo "[metrics] stopped scrapers; captured ${RESULT_FILENAME}_metrics_{prefill,decode}.prom"
+    # ---- Stop scraper (don't scrape during eval) ----
+    kill "$METRICS_SCRAPE_PID" 2>/dev/null || true
+    echo "[metrics] stopped scraper; captured ${RESULT_FILENAME}_metrics_engines.csv + _metrics_epp.prom"
 
     # ---- Eval (optional) ----
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
