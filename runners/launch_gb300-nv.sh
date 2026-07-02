@@ -17,11 +17,6 @@ export ENROOT_ROOTFS_WRITABLE=1
 # write to it.
 export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
 
-# Persistent HF hub cache for the agentic trace datasets — mounted into
-# worker containers at /hf_hub_cache; the agentic recipes set
-# HF_HUB_CACHE=/hf_hub_cache in benchmark.env. Without it the workflow-level
-# HF_HUB_CACHE (/mnt/hf_hub_cache) doesn't exist on these nodes and every
-# run re-downloads the corpus into the ephemeral container overlay.
 export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
 mkdir -p "$HF_HUB_CACHE_HOST_PATH"
 
