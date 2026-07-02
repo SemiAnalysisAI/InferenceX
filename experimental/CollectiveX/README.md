@@ -86,7 +86,7 @@ Key knobs: `CX_BENCH`, `CX_PHASE` (decode|prefill|both), `CX_TOKENS_LADDER`,
 | `run_nccl.py` | nccl-/rccl-tests runner + text-table parser |
 | `env_capture.py` | Layer-0 environment + topology fingerprint on every result |
 | `schemas/` | `ep-result-v4` + `workload-v1` JSON schemas |
-| `docs/` | `methodology.md` (timing/correctness/publication contracts), `gated.md` (evidenced walls + open items), `upstream_precision.md` (PR311/3376/3643 review), `references.md` (paper notes) |
+| `docs/` | `methodology.md` (timing/correctness/publication contracts), `gated.md` (evidenced walls + open items), `upstream_precision.md` (PR311/3376/3643 review), `references.md` (paper notes), `e2e_correlation.md` (designed: does EP microbench p99 predict serving tok/s?) |
 | `CONTAINERS.md` | pinned containers + audited library versions |
 
 ## Container
