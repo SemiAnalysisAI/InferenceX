@@ -41,6 +41,14 @@ def _dims(wl_cfg, name):
     return None, None, None
 
 
+def _union_ladder(a, b):
+    """Union two token-point ladders; '' means the harness phase-default FULL ladder (a superset
+    of every suite's token_points), so union with '' is ''."""
+    if a == "" or b == "":
+        return ""
+    return " ".join(map(str, sorted({int(x) for x in (a.split() + b.split())})))
+
+
 def _ladder(suite_cfg, phase):
     if phase == "decode" and suite_cfg.get("token_points_decode"):
         return " ".join(map(str, suite_cfg["token_points_decode"]))
@@ -94,7 +102,7 @@ def main() -> int:
         targets = [(a.backend or "deepep", a.deepep_v2)]
 
     # collect enriched cases, deduped globally (a config shared by several suites appears once)
-    seen = set()
+    seen = {}
     shards: dict = {}
     for sname in suite_names:
         scfg = suites_cfg[sname]
@@ -110,13 +118,29 @@ def main() -> int:
             rmode = c["resource_mode"]
             lad = _ladder(scfg, phase)
             h, t, e = _dims(wl_cfg, c["workload"])
-            # MoRI envelope guard: capped ladder (T=1..16) + tuned for BOTH phases. MoRI prefill IS
-            # supported (MORI-EP does intra+inter-node, both modes — ROCm/mori); prefill at the capped
-            # ladder is validated 5/5 (run 28461798511). It was an UNCAPPED ladder to T=128 that timed
-            # out, not prefill itself — so prefill is capped here, NOT skipped (correcting an earlier
-            # decode-only assumption).
+            # MoRI envelope: two REAL constraints, neither of which justifies ending the curve at
+            # T=16 (the old blanket cap left decode stopping at 16 and prefill entirely below the
+            # 128-token prefill display floor — an empty prefill panel):
+            #   1. Sustained collectives wedge the node (unkillable D-state) at T>=32 under the
+            #      DEFAULT timing (200 iters x 3 trials x 32 warmup). The validated workaround is
+            #      the minimal-timing probe envelope 8:1:4 (the workflow's documented MoRI large-T
+            #      setting), which moves LESS total traffic at T=128 than the default timing does
+            #      at T=16 — so large-T points run light instead of being dropped.
+            #   2. The ionic NICs cap the symmetric-heap RDMA MR at ~2 GiB ->
+            #      max_num_inp_token_per_rank = 512 at the decode shape. T>512 is physically out of
+            #      reach on this fabric, so the ladder is clamped there (not at 16).
+            lad_specs = [(lad, "")]
             if sku == "mi355x":
-                lad, rmode = "1 2 4 8 16", "tuned"
+                rmode = "tuned"
+                default_pts = [1, 2, 4, 8, 16, 32, 64, 128] if phase == "decode" else [128, 256, 512]
+                pts = [int(x) for x in lad.split()] if lad else default_pts
+                small = [p for p in pts if p <= 16]
+                large = [p for p in pts if 16 < p <= 512]
+                lad_specs = []
+                if small:
+                    lad_specs.append((" ".join(map(str, small)), ""))
+                if large:
+                    lad_specs.append((" ".join(map(str, large)), "8:1:4"))
             # rack-scale tray->nodes (gb200/gb300 = 4 GPU/tray): EP4 = 1 tray, EP8 = 2 trays. ALWAYS
             # set an EXPLICIT count: the gb300 launcher does NODES="${CX_NODES:-2}", so an EMPTY
             # CX_NODES coerces to 2 (EP8) — an EP4 cell with nodes="" silently ran EP8 (the rack
@@ -133,43 +157,51 @@ def main() -> int:
             canonical = False
             # mori cases stay AMD-native; deepep-origin cases expand across the requested backend set.
             case_targets = [("mori", False)] if beng0 == "mori" else targets
-            for (beng, v2) in case_targets:
-                ok, _r = cap.resolve(plat, beng, mode=c["mode"], dtype=c["dtype"], contract=c["contract"],
-                                     routing=c["routing"], eplb=bool(c.get("eplb")),
-                                     activation_profile=c.get("activation_profile", "normal"))
-                if not ok:
-                    continue
-                # DeepEP V2 (from-source kernel_gen=v2) is genuine on aarch64 gb200/gb300 at BOTH EP4
-                # (single-tray, gb300 run 28429220764) AND EP8 rack (2-tray MNNVL, gb300 run 28434764062
-                # -> kernel_gen=v2/ws8/correct). The EP8 rack path builds V2 once-per-node into a persistent
-                # container (CX_BUILD_ONLY) and the harness passes allow_mnnvl=True (CX_ALLOW_MNNVL) so the
-                # NVL buffer spans trays — so v2 is now allowed on gb200/gb300 at every EP degree.
-                case = {
-                    "backend": beng, "deepep_v2": v2, "mode": c["mode"], "dtype": c["dtype"],
-                    "contract": c["contract"], "routing": c["routing"], "phase": phase,
-                    "eplb": bool(c.get("eplb")), "resource_mode": rmode,
-                    "activation_profile": c.get("activation_profile", "normal"),
-                    "placement": c.get("placement", "packed"), "routing_step": str(c.get("routing_step", 0)),
-                    "uneven_tokens": c.get("uneven_tokens", "none"),
-                    "hidden": "" if h in (None, 7168) else str(h),
-                    "topk": "" if t in (None, 8) else str(t),
-                    "experts": "" if e in (None, 256) else str(e),
-                    "ladder": lad, "canonical": canonical, "nodes": nodes,
-                }
-                sig = (sku, beng, v2, c["mode"], c["dtype"], c["contract"], c["routing"], phase,
-                       case["eplb"], rmode, case["activation_profile"], case["placement"],
-                       case["routing_step"], case["uneven_tokens"], case["hidden"], case["topk"],
-                       case["experts"], nodes)
-                if sig in seen:
-                    continue
-                seen.add(sig)
-                # shard key = the CONTAINER/allocation-determining fields only: (sku, backend, v2, nodes).
-                # mode + resource_mode are per-case runtime knobs (run_in_container reads CX_MODE/
-                # CX_RESOURCE_MODE per case), so they do NOT split shards — all modes/rmodes of one
-                # (sku,backend,v2,nodes) run consecutively in ONE allocation, paying the enroot import +
-                # from-source build ONCE (not once per mode).
-                key = (sku, beng, v2, nodes)
-                shards.setdefault(key, []).append(case)
+            for (lad_i, timing) in lad_specs:
+              for (beng, v2) in case_targets:
+                  ok, _r = cap.resolve(plat, beng, mode=c["mode"], dtype=c["dtype"], contract=c["contract"],
+                                       routing=c["routing"], eplb=bool(c.get("eplb")),
+                                       activation_profile=c.get("activation_profile", "normal"))
+                  if not ok:
+                      continue
+                  # DeepEP V2 (from-source kernel_gen=v2) is genuine on aarch64 gb200/gb300 at BOTH EP4
+                  # (single-tray, gb300 run 28429220764) AND EP8 rack (2-tray MNNVL, gb300 run 28434764062
+                  # -> kernel_gen=v2/ws8/correct). The EP8 rack path builds V2 once-per-node into a persistent
+                  # container (CX_BUILD_ONLY) and the harness passes allow_mnnvl=True (CX_ALLOW_MNNVL) so the
+                  # NVL buffer spans trays — so v2 is now allowed on gb200/gb300 at every EP degree.
+                  case = {
+                      "backend": beng, "deepep_v2": v2, "mode": c["mode"], "dtype": c["dtype"],
+                      "contract": c["contract"], "routing": c["routing"], "phase": phase,
+                      "eplb": bool(c.get("eplb")), "resource_mode": rmode,
+                      "activation_profile": c.get("activation_profile", "normal"),
+                      "placement": c.get("placement", "packed"), "routing_step": str(c.get("routing_step", 0)),
+                      "uneven_tokens": c.get("uneven_tokens", "none"),
+                      "hidden": "" if h in (None, 7168) else str(h),
+                      "topk": "" if t in (None, 8) else str(t),
+                      "experts": "" if e in (None, 256) else str(e),
+                      "ladder": lad_i, "timing": timing, "canonical": canonical, "nodes": nodes,
+                  }
+                  sig = (sku, beng, v2, c["mode"], c["dtype"], c["contract"], c["routing"], phase,
+                         case["eplb"], rmode, case["activation_profile"], case["placement"],
+                         case["routing_step"], case["uneven_tokens"], case["hidden"], case["topk"],
+                         case["experts"], nodes, timing)
+                  if sig in seen:
+                      # SAME config requested by another suite with a DIFFERENT token ladder: UNION
+                      # the points into the one existing case instead of (a) dropping them (a narrow
+                      # suite ladder winning left holes in the curve) or (b) emitting a duplicate
+                      # case (same config measured twice -> two same-config docs on the frontend).
+                      # "" = the harness phase-default FULL ladder, a superset of every suite's
+                      # token_points — union with it stays "".
+                      seen[sig]["ladder"] = _union_ladder(seen[sig]["ladder"], lad_i)
+                      continue
+                  seen[sig] = case
+                  # shard key = the CONTAINER/allocation-determining fields only: (sku, backend, v2, nodes).
+                  # mode + resource_mode are per-case runtime knobs (run_in_container reads CX_MODE/
+                  # CX_RESOURCE_MODE per case), so they do NOT split shards — all modes/rmodes of one
+                  # (sku,backend,v2,nodes) run consecutively in ONE allocation, paying the enroot import +
+                  # from-source build ONCE (not once per mode).
+                  key = (sku, beng, v2, nodes)
+                  shards.setdefault(key, []).append(case)
 
     # PER-BACKEND chunk size. Fast backends (deepep*/nccl-ep/mori/deepep-hybrid) run a whole build-group
     # in ONE allocation (max_cases, ~no chunking). flashinfer is SLOW (~3.2 min/case, heavy per-case MNNVL

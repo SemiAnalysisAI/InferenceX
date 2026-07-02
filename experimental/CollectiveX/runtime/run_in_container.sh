@@ -682,7 +682,20 @@ env = {
   "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
   "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
 }
-print("\n".join(f"export {k}={shlex.quote(v)}" for k, v in env.items()))
+lines = [f"export {k}={shlex.quote(v)}" for k, v in env.items()]
+# per-case timing override "iters:trials:warmup" (e.g. the MoRI large-T minimal envelope 8:1:4);
+# cases without one must fall back to the harness defaults, so UNSET rather than export-empty
+# (an empty CX_ITERS would defeat the 200-iter default and break the run_ep argparse; NOTE no
+# apostrophes in this heredoc — bash command-substitution scanning chokes on unbalanced quotes).
+timing = g("timing")
+if timing:
+    parts = (timing.split(":") + ["", "", ""])[:3]
+    for k, v in zip(("CX_ITERS", "CX_TRIALS", "CX_WARMUP"), parts):
+        if v:
+            lines.append(f"export {k}={shlex.quote(v)}")
+else:
+    lines.append("unset CX_ITERS CX_TRIALS CX_WARMUP 2>/dev/null || true")
+print("\n".join(lines))
 PY
 )"
     eval "$_exports"
