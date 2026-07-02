@@ -35,7 +35,10 @@ The below list describes what each field is:
 - `image`: The image used to serve the benchmark, e.g., `vllm/vllm-openai:v0.10.2`
 - `model`: The model to server, e.g., `openai/gpt-oss-120b`
 - `model-prefix`: The canonical InferenceMAX model prefix reference, i.e., `dsr1` for Deepseek, `gptoss` for gptoss-120b, etc. This value is used to decipher which script in `benchmarks/` should be used in order to launch the benchmark.
-- `runner`: This is the runner on which to run the benchmark. This must be a valid runner (key or value) from `runners.yaml`.
+- `runner`: This is the runner label on which to run the benchmark. This must be a valid key under `labels` in `runners.yaml`.
+  Agentic configs must use an exact `cluster:<name>` runner label, not a broad
+  SKU or capacity label, so every search-space point runs on the same hardware
+  fleet.
 - `precision`: The precision to run the benchmark. Again, this is used to find which script to run in `benchmarks/`.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
@@ -53,10 +56,39 @@ The below list describes what each field is:
     - `trace-source`: Identifier for the trace dataset to use.
     - `search-space`: Same structure as `fixed-seq-len` search-space entries.
 
+Agentic duration is not a master YAML field. Matrix generation defaults agentic
+jobs to 3600 seconds; reusable workflow callers may override the `duration`
+input.
+
 Notes:
 - No extra fields besides the ones listed may be specified, or else the benchmarks will fail to run.
 - Setting the fields above, particularly `ep` and `dp-attn`, only guarantee that the respective values will be passed as environment variables to the benchmark scripts! Actually using those environment variables is an implementation detail at the level of the benchmark Bash script.
 
 ## Runners
 
-The `runners.yaml` config represents the available runners in the repository. The keys are the runner *types* (i.e., the GPUs as well as some specific combinations like `b200-trt`) whereas the value is a list of *runner nodes*. This config is used to verify the master configs.
+The `runners.yaml` config represents available runner labels and reusable
+hardware facts in the repository. It has two top-level sections:
+
+```yaml
+labels:
+  cluster:b300-nv:
+    - b300-nv_01
+    - b300-nv_02
+
+hardware:
+  cluster:b300-nv:
+    available-cpu-dram-mib: 2964436
+    gpus-per-node: 8
+```
+
+`labels` maps a schedulable runner label to the concrete runner node names that
+can satisfy that label. `hardware` maps hardware or fleet keys to host resource
+facts. Matrix generation reads the `hardware` entry whose key matches the
+master config's `runner` label when a benchmark needs derived hardware facts.
+Use `cluster:<name>` labels for hardware metadata that depends on an exact
+cluster/fleet rather than a broad SKU label. Agentic master configs must use a
+`cluster:<name>` runner label.
+`available-cpu-dram-mib` is the host CPU DRAM available to benchmark jobs, in
+MiB. Agentic DRAM KV-offload matrices combine it with `gpus-per-node` and the
+master config's `dram-utilization` to emit `total-cpu-dram-gb` for benchmark
+templates.

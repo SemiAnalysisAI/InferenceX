@@ -18,14 +18,6 @@ dsr1-fp4-mi355x-sglang:
       search-space:
       - { tp: 4, conc-start: 4, conc-end: 64 }
       - { tp: 8, conc-start: 4, conc-end: 64 }
-    # Agentic-coding sweep commented out for this image-bump PR — the
-    # 10-conc agentic matrix amplifies sweep cost and the bump validation
-    # only needs the fixed-seq-len throughput shape. Re-enable once the
-    # bump merges; the next agentic cron PR will pick it up.
-    # agentic-coding:
-    # - duration: 1800
-    #   search-space:
-    #   - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256] }
 
 dsr1-fp4-mi355x-sglang-mtp:
   image: lmsysorg/sglang:v0.5.12-rocm700-mi35x
@@ -299,24 +291,19 @@ qwen3.5-fp8-mi355x-sglang-mtp:
       search-space:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256, spec-decoding: mtp }
 
-# Diverged from qwen3.5-fp8-mi355x-sglang (agentic-coding sibling). Metadata is
-# identical to origin/main's qwen3.5-fp8-mi355x-sglang; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original qwen3.5-fp8-mi355x-sglang entry stays byte-identical to origin/main.
 qwen3.5-fp8-mi355x-sglang-agentic:
   image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260414
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: sglang
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+    - search-space:
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+
 
 qwen3.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
@@ -679,7 +666,7 @@ glm5-fp8-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 256 }
 
 glm5.1-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260622
+  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x
@@ -698,26 +685,6 @@ glm5.1-fp4-mi355x-sglang:
       search-space:
       - { tp: 2, conc-start: 4, conc-end: 256 }
       - { tp: 4, conc-start: 4, conc-end: 16 }
-
-# Diverged from glm5.1-fp4-mi355x-sglang (agentic-coding sibling). Metadata is
-# identical to origin/main's glm5.1-fp4-mi355x-sglang; the split exists because this
-# PR adds an agentic-coding scenarios block that differs from main
-# (either main had none or had a different conc/offload sweep).
-# The original glm5.1-fp4-mi355x-sglang entry stays byte-identical to origin/main.
-glm5.1-fp4-mi355x-sglang-agentic:
-  image: lmsysorg/sglang-rocm:v0.5.10rc0-rocm720-mi35x-20260415
-  model: amd/GLM-5.1-MXFP4
-  model-prefix: glm5.1
-  runner: mi355x
-  precision: fp4
-  framework: sglang
-  multinode: false
-  scenarios:
-    agentic-coding:
-    - duration: 1800
-      search-space:
-      # sglang manages KV eviction; mi355x glm5.1 caps at tp=4 conc=16 in fixed-seq, so cap conservatively
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
 glm5.1-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
@@ -818,37 +785,30 @@ kimik2.5-fp4-mi355x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 64 }
       - { tp: 4, conc-start: 4, conc-end: 64 }
 
-# Diverged from kimik2.5-fp4-mi355x-vllm (agentic-coding sibling). Reasons below;
-# the original kimik2.5-fp4-mi355x-vllm entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - image: 'vllm/vllm-openai-rocm:v0.18.0' -> 'vllm/vllm-openai-rocm:v0.21.0'
 kimik2.5-fp4-mi355x-vllm-agentic:
-  # v0.21.0 (released 2026-05-14) supersedes the prior nightly pin
-  # (51f22dcf...) which was carrying the SimpleCPUOffloadConnector ROCm
-  # cpu_offload_blocks > 0 fix. v0.21.0 is much newer than that fix and
-  # includes all subsequent ROCm offload work.
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: vllm
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
-      # CPU offload only above the KV cliff. Lower concurrencies fit
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48] }
+      # DRAM offload only above the KV cliff. Lower concurrencies fit
       # entirely on-GPU, so paying the offload-path overhead there would
       # just slow them down without measuring anything new.
-      - { tp: 8, offloading: cpu,  conc-list: [32, 40, 48, 56] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 40, 48, 56] }
       # TP=4 probe: half-node layout doubles per-GPU weight footprint
       # (~62 GB on MI355X's 288 GB HBM, plenty of headroom). Restrict to
       # cliff-region concurrencies on both offload modes so we can directly
       # compare TP=4 vs TP=8 at the same conc points.
-      - { tp: 4, offloading: none, conc-list: [16, 24, 32, 40] }
-      - { tp: 4, offloading: cpu,  conc-list: [16, 24, 32, 40] }
+      - { tp: 4, kv-offloading: none, conc-list: [16, 24, 32, 40] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 24, 32, 40] }
+
 
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
@@ -1703,7 +1663,7 @@ dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
-  
+
 
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
@@ -2150,32 +2110,47 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260521
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp8
   framework: sglang
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
+    - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
-      - { tp: 8, ep: 1, offloading: hicache, conc-list: [16, 32, 48, 64] }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
 
+
+
+# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
+# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
+# image tag, so bumping sglang is just an image tag bump here. Sweeps
+# DP-attention on/off and EP=8.
+
+# CONC ranges mirror dsv4-fp4-b200-vllm-agentic for cross-hardware
+# comparability. Offload sweep is none-only (SGLang has no equivalent of
+# vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.22.0
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: vllm
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, offloading: none, conc-list: [1, 2, 4] }
-      - { tp: 4, offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
-      - { tp: 4, ep: 4, dp-attn: true, offloading: none, conc-list: [16, 24, 32, 40, 48] }
+    - search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
+      - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 32, 40, 48] }
+
+
+# DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
+# amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
+# image tag, so bumping sglang is just an image tag bump here. Sweeps
+# DP-attention on/off and EP=8.
 
 dsr1-fp4-mi355x-sglang-disagg-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12-rocm720-mi35x-20260519
@@ -2404,56 +2379,31 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           additional-settings:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
-      
+
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
 # DP-attention on/off and EP=8.
 
-# Diverged from dsv4-fp4-mi355x-sglang (agentic-coding sibling). Reasons below;
-# the original dsv4-fp4-mi355x-sglang entry is left identical to origin/main so
-# its fixed-seq-len sweep is unaffected.
-#   - scenarios: replaced fixed-seq-len with agentic-coding.
-# Image is identical to the base entry (rocm/sgl-dev DSv4 build).
-# CONC ranges mirror dsv4-fp4-b200-vllm-agentic for cross-hardware
-# comparability. Offload sweep is none-only (SGLang has no equivalent of
-# vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
 dsv4-fp4-mi355x-sglang-agentic:
   image: rocm/sgl-dev:rocm720-mi35x-0363e6c-20260509-DSv4
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: sglang
   multinode: false
   scenarios:
     agentic-coding:
-    - duration: 1800
-      search-space:
-      - { tp: 8, offloading: none, conc-list: [16, 32, 64] }
-      - { tp: 8, dp-attn: true, offloading: none, conc-list: [64, 128, 256] }
+    - search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [16, 32, 64] }
+      - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [64, 128, 256] }
 
-# DSv4 on MI355X via vLLM, using the official vllm/vllm-openai-rocm
-# nightly image. DSv4 base ROCm support (vllm-project/vllm#40871) merged
-# on 2026-05-05, so any nightly built after that includes the
-# DeepseekV4ForCausalLM model class.
-#
-# IMPORTANT: pin to a digest-suffixed nightly tag rather than the
-# floating `:nightly`. launch_mi355x-amds.sh caches enroot squashfs
-# files keyed on the image string and short-circuits re-import if the
-# file already exists, so the floating tag silently keeps a stale build
-# even after Docker Hub updates `:nightly`.
-#
-# DeepSeek-V4-Pro is FP4+FP8 mixed (FP4 MoE expert weights, FP8 for the
-# rest); InferenceX classifies this as fp4 — same as the sister sglang
-# and atom DSv4 mi355x entries below. Image and serving flags follow the
-# validated recipe from vllm-project/recipes#433: AITER+AITER_LINEAR, mp
-# executor, triton_unfused MoE (required for the FP4 expert format),
-# async scheduling, max-num-seqs=128, max-num-batched-tokens=8192,
-# gpu-mem-util=0.6. TP8 sweeps conc 4-64; DEP8 has a single conc=64
-# probe to validate the ROCm DP+EP path.
 
+# MiniMax-M3 MXFP8 MI355X recipe:
+# https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
+# MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 dsv4-fp4-mi355x-atom-disagg:
   image: rocm/atom-dev:nightly_202606101403
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -2666,7 +2616,7 @@ minimaxm3-fp4-mi355x-vllm:
 # tokens. Search space mirrors the MI355X MXFP8 MTP entry, trimming the base
 # FP4 sweep at extreme concurrency where speculative decoding loses value.
 minimaxm3-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -3156,3 +3106,49 @@ minimaxm3-fp8-mi355x-vllm-disagg:
           dp-attn: false
           additional-settings:
           - "DECODE_NODES=1"
+minimaxm3-fp8-mi300x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: cluster:mi300x-amds
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # FP8 KV cache is 29,952 bytes/token/GPU for TP/TEP. Projecting the
+    # measured BF16 cache budget gives about 2.76M active tokens on MI300X;
+    # the June-21 service-time-weighted request is 269k tokens, so sample every
+    # integer around the expected conc-10 cliff rather than geometric jumps.
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 18, 20] }
+
+minimaxm3-fp8-mi325x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:nightly-04c2a8deac44fdb1ca3e2b5ec3e6bf16f3f6a914
+  model: MiniMaxAI/MiniMax-M3-MXFP8
+  model-prefix: minimaxm3
+  runner: cluster:mi325x-amds
+  precision: fp8
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    # Measured FP8 capacities: TP4 1.66M tokens, TP8 4.93M tokens, and DEP8
+    # 12.69M aggregate tokens. With the June-21 service-time-weighted 269k
+    # active request, their expected cliffs are conc 6, 18, and 47. Use dense
+    # bands around each cliff; Mooncake rows overlap those bands because host
+    # storage improves prefix retention but does not hold active decode KV.
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 4, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 4, ep: 4, kv-offloading: none, conc-list: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
+      - { tp: 8, ep: 8, kv-offloading: none, conc-list: [2, 4, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80] }
+      - { tp: 4, ep: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16] }
+      - { tp: 8, ep: 8, kv-offloading: dram, kv-offload-backend: native, conc-list: [10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 32] }
+      - { tp: 8, ep: 8, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 36, 40, 44, 48, 52, 56, 60, 64, 72, 80, 96] }
