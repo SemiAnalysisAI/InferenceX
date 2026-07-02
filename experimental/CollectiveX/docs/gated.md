@@ -44,17 +44,19 @@ The wrapper is cleanly vendorable (relative imports + only depends on `uccl.ep`)
 DONE: `cx_build_uccl` git-clones `uccl-project/uccl` at the wheel-matched tag and vendors
 `deep_ep_wrapper` under the non-colliding name `uccl_deepep`; `ep_uccl.py` imports its
 `Buffer(group, …)` and runs genuine UCCL dispatch/combine. **Validated: `correct=True`,
-`uccl_version=0.1.1`, intranode NVLink on h100/h200/b300/b200** (normal bf16+fp8 + LL — but on h100
-LL is superseded by the full-sweep hang finding below). If the wrapper
+`uccl_version=0.1.1`, intranode NVLink on h100/h200/b300/b200** (normal bf16+fp8 + LL; h100 LL is
+intermittently flaky — see below). If the wrapper
 is ever absent the import falls back to the low-level `uccl.ep.Buffer`, which fails loudly (preserved
 failed-case) — never faked. Fresh full-sweep re-validation (post idempotent-build fix, which cured the
 old per-case-rebuild SIGABRT/timeout): **h200 = 426/426 correct incl LL-mode 32/32** (run 28535235520);
-**h100 = 394/394 correct in NORMAL mode** (run 28535226475) **but all 4 LL-mode cases HANG (rc=124, 900s
-timeout — 0/32)**. Since the identical UCCL LL code is 32/32 on h200 (same Hopper arch, same wheel), the
-h100 LL hang is an **h100-dgxc cluster limitation** (LL uses IBGDA-style low-latency proxies; the
-h100-dgxc fabric deadlocks them — consistent with the documented h100-dgxc cross-node IB wall below),
-NOT an arch or UCCL-code wall. Both SKUs also fail ONLY the `empty-rank` diagnostic (see empty-rank note
-below). Remaining gap: aarch64 GB200/GB300 (the from-source/proxy bootstrap doesn't come up — see the
+**h100 = 426/426 correct incl LL-mode 32/32** (run 28564328373, current-HEAD full sweep). NOTE the h100
+LL history: the PREVIOUS full sweep (run 28535226475) had all 4 LL cases HANG (rc=124, 900s — 0/32)
+with identical uccl code, which was then mislabeled a deterministic "h100-dgxc fabric wall". The
+next run passing 32/32 falsifies the *deterministic* claim: the h100 LL hang is **INTERMITTENT /
+allocation-dependent** (LL uses IBGDA-style low-latency proxies; some h100-dgxc allocations deadlock
+them, others run clean — possibly node- or fabric-state-dependent). Treat h100 LL as flaky-environment:
+judge each run's LL cases by their own records; a hang wastes 900s/case but is not a capability limit.
+Both SKUs also fail ONLY the `empty-rank` diagnostic (see empty-rank note below). Remaining gap: aarch64 GB200/GB300 (the from-source/proxy bootstrap doesn't come up — see the
 aarch64 wall below); uccl is x86-single-node so far.
 
 ### NIXL — transfer DONE (container switch); device-EP blocked on UCX GPU Device API
@@ -106,7 +108,11 @@ kernels) builds its MNNVL symmetric workspace over the torch.distributed NCCL gr
     MNNVL barrier state degrades, retries in the same allocation keep timing out, so retry has
     diminishing returns (one whole chunk, p1, passed cleanly while p0/p2/p3 degraded). Fuller coverage
     would need a fresh container per retry (re-import cost) or much smaller chunks (more GHA jobs) — both
-    rejected for marginal gain; the real fix is live compute-sanitizer root-cause. Upgrade to 0.6.14 was
+    rejected for marginal gain; the real fix is live compute-sanitizer root-cause. Coverage varies
+    strongly per allocation (consistent with the correlated model): the next full sweep (run
+    28564328373) reached **42/46 configs, 203/206 rows correct** with the same retry+chunk setup (2
+    failed-case records + 2 cases lost silently to the timeout kill) — some allocations barely
+    deadlock, others degrade a whole chunk. Judge each run by its own records. Upgrade to 0.6.14 was
     also tested (run 28530579787) and did NOT fix it (it was a vLLM-side fix), so bundled wheel + retry
     is the shipped path. B300 + GB300 flashinfer are 100% clean (Blackwell), confirming Hopper-kernel.
 - **H200 (`h200-dgxc`) runner:** its container **denies** CAP_SYS_PTRACE, so `pidfd_getfd` fails at
