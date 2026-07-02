@@ -10,8 +10,12 @@ comparison is truly same-image. Set in `runtime/common.sh` (`cx_default_image`).
 - **Multi-arch manifest list:** linux/amd64 + linux/arm64; `enroot import` on each host pulls the matching arch.
 - **Import by TAG, not digest.** enroot builds its anonymous Docker Hub token scope from the *tag* and succeeds (no creds needed — same as the serving launchers). A bare `repo@sha256:` ref makes enroot prompt for a password and **hang** in non-interactive CI; a combined `tag@sha256:` ref 400s. `cx_ensure_squash` therefore imports by tag with `</dev/null` (a missing token fails fast instead of hanging). First import is multi-GB (~minutes); subsequent runs reuse the staged squash.
 - **Why v0.5.11-cu130 (chosen):** it's the newest cu130 release **pre-staged on BOTH clusters** — B200 `/home/sa-shared/containers/` (amd64 squash) and GB200 `/mnt/lustre01/users-public/sa-shared/` (arm64 squash), same filename — so neither side imports at all. (Shared cu130 multi-arch squashes across both clusters: v0.5.8.post1, v0.5.9, v0.5.11 — v0.5.11 is newest.) `v0.5.12-cu130` is staged on B200 but **not** GB200: its 62 layers overflow enroot's overlay-based squash creation on the GB200 kernel (`enroot-mksquashovlfs: failed to mount overlay … Invalid argument`), so it can't be the shared default.
-- **DeepEP: NOT bundled** here → `run_in_container.sh` builds it via `rebuild-deepep` at job setup (CX_BENCH=deepep). The NCCL path needs no DeepEP.
-- **nccl-tests build:** in-container (login nodes have no `nvcc`), `CX_NCCL_HOME=/usr` (system `nccl.h` in `/usr/include`), `CX_CUDA_HOME=/usr/local/cuda`. cu130 lineage ⇒ CUDA 13; confirm exact NCCL/torch on first run and append below.
+- **DeepEP: bundled** (CORRECTED by the in-container probe on H200 — the earlier "NOT bundled" note was
+  wrong for this image): `v0.5.11-cu130` pre-installs **deep_ep 1.2.1** (plus flashinfer 0.6.8,
+  nixl 1.0.1, nvshmem 3.4.5; NCCL 2.28.9, torch 2.11 — see `docs/gated.md`). That bundled build IS the
+  `backend=deepep` "V1" line in all results. `deepep-v2` / `deepep-hybrid` are built from source
+  in-container (`cx_build_deepep_v2` / `cx_build_deepep_hybrid`, idempotent per allocation).
+- **nccl-tests build:** in-container (login nodes have no `nvcc`), `CX_NCCL_HOME=/usr` (system `nccl.h` in `/usr/include`), `CX_CUDA_HOME=/usr/local/cuda`.
 
 ## Audited reference (cu130 lineage)
 
@@ -23,7 +27,7 @@ Live audit of the sibling DeepSeek-V4 image `lmsysorg/sglang:deepseek-v4-grace-b
 | CUDA (`nvcc`) | 13.0 (V13.0.88) |
 | NCCL (system `/usr/include/nccl.h`) | 2.28.3; torch-bundled 2.27.7 |
 | PyTorch | 2.9.1+cu130 |
-| DeepEP | bundled in *that* image; **not** in the multi-arch default |
+| DeepEP | bundled in *that* image (the multi-arch default also bundles deep_ep 1.2.1 — see above) |
 | NVSHMEM | `libnvshmem_host.so.3` present |
 | OpenMPI / gcc / make | 4.1.6 / 13.3.0 / 4.3 |
 | GPU / driver | GB200, 580.126.20 |

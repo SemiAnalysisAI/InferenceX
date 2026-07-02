@@ -2,7 +2,8 @@
 
 This records goal.md items that are **not** completable as real GHA results on the available
 NVIDIA fleet today, with the *specific* blocker for each (empirically established, not assumed),
-plus what WAS done toward each. Scope: NVIDIA chips (H100, H200, B300; GB300 capacity-limited).
+plus what WAS done toward each. Scope: NVIDIA chips (H100, H200, B300, GB300 — all with full
+sweeps as of 2026-07-02; B200/GB200 spot-validated).
 
 The container all NVIDIA results run in is `lmsysorg/sglang:v0.5.11-cu130` (CUDA 13.0, NCCL 2.28.9,
 torch 2.11; pre-installed: deep_ep 1.2.1, flashinfer 0.6.8, nixl 1.0.1, nvshmem 3.4.5). Established
@@ -43,7 +44,8 @@ The wrapper is cleanly vendorable (relative imports + only depends on `uccl.ep`)
 DONE: `cx_build_uccl` git-clones `uccl-project/uccl` at the wheel-matched tag and vendors
 `deep_ep_wrapper` under the non-colliding name `uccl_deepep`; `ep_uccl.py` imports its
 `Buffer(group, …)` and runs genuine UCCL dispatch/combine. **Validated: `correct=True`,
-`uccl_version=0.1.1`, intranode NVLink on h100/h200/b300/b200** (normal bf16+fp8 + LL). If the wrapper
+`uccl_version=0.1.1`, intranode NVLink on h100/h200/b300/b200** (normal bf16+fp8 + LL — but on h100
+LL is superseded by the full-sweep hang finding below). If the wrapper
 is ever absent the import falls back to the low-level `uccl.ep.Buffer`, which fails loudly (preserved
 failed-case) — never faked. Fresh full-sweep re-validation (post idempotent-build fix, which cured the
 old per-case-rebuild SIGABRT/timeout): **h200 = 426/426 correct incl LL-mode 32/32** (run 28535235520);
@@ -115,7 +117,10 @@ kernels) builds its MNNVL symmetric workspace over the torch.distributed NCCL gr
   default — h100-dgxc grants it, h200-dgxc doesn't), enroot runs unprivileged so the cap isn't grantable
   per-job, and `MoeAlltoAll` has **no non-MNNVL transport** to route around it (it IS the MNNVL one-sided
   A2A). Documented rather than forcing a security-sensitive `--cap-add SYS_PTRACE` on that shared runner.
-- **aarch64 (GB200/GB300):** would use `CU_MEM_HANDLE_TYPE_FABRIC` (no pidfd); GB300 capacity-limited.
+- **aarch64 (GB200/GB300):** uses `CU_MEM_HANDLE_TYPE_FABRIC` (no pidfd, no cap needed) — validated
+  clean: GB300 full flashinfer sweep **852/852 correct at EP4+EP8** (run 28531976125; rack EP16/32/64
+  validated earlier). Both Hopper issues (the h200 pidfd cap wall AND the h100 intermittent MNNVL
+  deadlock) are absent on the fabric-handle path.
 
 ## Precision matrix
 
@@ -140,9 +145,11 @@ Coverage by arch (all `correct=True` end-to-end):
 
 ### Quantized combine OUTPUT (MXFP8 / NVFP4 combine) — DONE on B300 via flashinfer-main (container switch)
 Distinct from quantized *dispatch*: a quantized **combine** emits a non-bf16 reduced output. The bundled
-`flashinfer 0.6.8.post1` `moe_a2a_combine` had **no `output_dtype`**, and neither did 0.6.13 (latest
-PyPI) nor the cu130 nightly wheel (0.6.13.dev20260612) — `output_dtype`/`output_scales` landed on
-flashinfer **main** after those. So `cx_build_flashinfer_latest` BUILDS flashinfer main from source
+`flashinfer 0.6.8.post1` `moe_a2a_combine` had **no `output_dtype`**, and at investigation time neither
+did 0.6.13 (then-latest PyPI) nor the cu130 nightly wheel (0.6.13.dev20260612) — `output_dtype`/
+`output_scales` landed on flashinfer **main** after those. (LATER nightlies carry it — see the
+direct-cast bullet below; `cx_build_flashinfer_latest` probes the installed wheel's combine signature
+and only source-builds if it still lacks it.) So `cx_build_flashinfer_latest` BUILDS flashinfer main from source
 in-container (after a 7-layer version-coupling peel: cubin↔python↔jit-cache version checks, then
 `nvidia-cutlass-dsl` 4.5.2 for the CuTe `OperandMajorMode`, then **uninstalling** the stale precompiled
 cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fresh from main's csrc).
@@ -154,8 +161,10 @@ cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fr
   output_scalar_scale`; dequant via `e2m1_and_ufp8sf_scale_to_float` (the e4m3 scales viewed as uint8
   ufp8). Valid, `correct=True` ×8 (Blackwell-native fp4, like nvfp4 dispatch).
 - **H100 combine — build-time-limited (NOT arch):** the ~70-min in-container flashinfer-main source
-  build exceeds the H100 runner's job budget (SIGTERM). B300's longer budget lets it land. A pre-staged
-  flashinfer-main wheel (one-time build) would remove the per-run rebuild; deferred.
+  build exceeds the H100 runner's job budget (SIGTERM). B300's longer budget lets it land. NOTE the
+  original blocker no longer applies: since the nightly wheel gained `output_dtype` (direct-cast bullet
+  below), an H100 mxfp8-combine re-run would skip the source build entirely — attainable, just not yet
+  re-run (and it would still be subject to the h100 intermittent MNNVL deadlock above).
 - **Direct-cast FP8 combine — kernel limit (evidenced, B300 run 28315037266):** ATTEMPTED via
   `CX_QC_SCALE=scalar` (`output_dtype=float8_e4m3fn` + `output_scalar_scale`, NO per-block
   `output_scales`). The kernel ASSERTS `Check failed: (output.dtype()==payload.dtype()) is false:
@@ -246,8 +255,9 @@ ep_size=64/world=64). EP32 (both SKUs) re-dispatched after a workflow concurrenc
   one was a build-env bug, not a hardware limit. Always check the library's actual support before walling.
   Both backends work on x86 single-node (uccl b300=126/b200=124; deepep-hybrid h100=212/h200=212/b300=36,
   43/44 cases on Hopper — only the empty-rank diagnostic crashes, see above). deepep
-  (bundled V1), deepep-v2 (from-source), flashinfer, nccl-ep, AND deepep-hybrid@EP4 all run on gb300, so
-  the only unfillable gb300 cells are uccl (any EP) and deepep-hybrid EP8.
+  (bundled V1), deepep-v2 (from-source), flashinfer, nccl-ep, AND deepep-hybrid (EP4 **and** EP8 — the
+  EP8 build-persistence fix above; latest full sweep 788/788 correct, run 28531976125) all run on gb300,
+  so the only unfillable gb300 cell is uccl (the aarch64 wall).
 - **DeepEP V2 (from-source `kernel_gen=v2`): DONE on x86 + aarch64, EP4 AND rack EP8.** Genuine V2
   (`deepep_version=2.0.0+af9a040`) builds on h100/h200/b300/b200 AND on aarch64 Grace-Blackwell — gb300
   EP4 (run 28429220764) produced `kernel_gen=v2`/`2.0.0`, log "built deep_ep 2.0.0 … V2 ready". So aarch64

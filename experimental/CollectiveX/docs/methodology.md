@@ -349,7 +349,8 @@ The non-EP collective families map to specific inference-serving communication p
 
 ### All-reduce (`family=nccl` op=all_reduce + `family=allreduce-fw`)
 TP all-reduce of activations — the per-layer reduction across a tensor-parallel group after the
-attention/MLP matmuls. Two tiers measured in the SAME All-reduce tab so they are directly comparable:
+attention/MLP matmuls. Two tiers are shown in the same All-reduce tab, but rank them only at matched
+message size, topology, transport, dtype, and timing contract:
 - **NCCL ring** (`run_nccl.py`, nccl-tests): the bandwidth-optimal baseline; wins at large messages.
 - **Framework custom AR** (`allreduce_fw_bench.py`): FlashInfer one-shot + two-shot via
   `trtllm_allreduce_fusion` (pattern `kAllReduce`). One-shot is a single NVLink round that beats the

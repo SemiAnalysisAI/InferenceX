@@ -3,9 +3,9 @@
 Reviews the three precision PRs named in goal.md and maps each onto CollectiveX's precision axes
 (`shape.dispatch_dtype`, `shape.quant.combine_input_dtype/combine_quant_mode`, the
 `combine_quant_in_timing` reproduction flag, and the `capability.py` / `backends.yaml` `combine_dtypes`
-+ `quant_modes` sets). All three are MERGED upstream. CollectiveX already carries the *scaffold* for
-them (the combine-path axes default to bf16/none and are validated by `capability.resolve`), so each PR
-maps to a concrete, reserved mode id that slots in when the kernel is wired + hardware-available.
++ `quant_modes` sets). All three are MERGED upstream. CollectiveX now has real runs for the supported
+FlashInfer MXFP8/NVFP4 paths and keeps MXFP4 as a reserved-but-gated mode until its scale-factor layout
+can be represented honestly in the current A2A payload contract.
 
 ## MoRI PR 311 — `feat(EP): FP8 blockwise quantization for IntraNode combine` (ROCm/mori, MERGED)
 - **What:** adds `QuantType::Fp8BlockwiseQuant` (Python `fp8_blockwise`) — a quant-aware FP8 combine for
@@ -33,22 +33,30 @@ maps to a concrete, reserved mode id that slots in when the kernel is wired + ha
   the goal's "NVFP4 combine" / "MXFP8 combine" precision-matrix rows, and (via the dispatch side of the
   same kernel family) the "NVFP4/MXFP4/MXFP8 dispatch" rows.
 
-## Why these are not yet RUN on NVIDIA (see docs/gated.md)
-The FlashInfer combine quant (3376/3643) lives in `flashinfer.comm.moe_a2a_*` — the same MoE all-to-all
-that needs a **symmetric multi-process MNNVL workspace**. On x86_64 (H100/H200/B200) that needs
-`CAP_SYS_PTRACE`/pidfd (not granted in the enroot/pyxis container); on aarch64 (GB200/GB300) it uses
-CUDA FABRIC handles (would work; GB300 capacity-limited). So MXFP8/MXFP4/NVFP4 *combine* (and the fp4
-*dispatch* in the same family) are reachable on NVIDIA only once that container-capability/hardware
-blocker is resolved — they are not silently faked. DeepEP's own dispatch remains e4m3-fp8-only.
+## Current NVIDIA run status (see docs/gated.md)
+This note was originally written before the FlashInfer adapter landed. The current status is now:
+- **FlashInfer dispatch:** BF16, e4m3 FP8 variants, MXFP8, and NVFP4 dispatch have valid runs where
+  the backend and architecture support them. NVFP4 is Blackwell-only.
+- **FlashInfer quantized combine:** MXFP8 and NVFP4 combine have valid B300 runs through the
+  `moe_a2a_combine` output-quant path. H100 was build-budget-limited for the source-build path, not
+  architecturally ruled out — and since the nightly wheel gained `output_dtype` the source build is no
+  longer needed, so an H100 mxfp8-combine re-run is attainable (subject to the h100 intermittent MNNVL
+  deadlock; see docs/gated.md).
+- **MXFP4 dispatch/combine:** still gated because the FlashInfer MXFP4 scale-factor layout is
+  tile-padded/swizzled rather than a simple per-token tensor that can be moved through the current A2A
+  payload list.
+
+DeepEP's own dispatch remains e4m3-fp8-only; the wider MXFP8/NVFP4/MXFP4 matrix belongs to the
+FlashInfer MoE all-to-all path.
 
 ## What CollectiveX did with this review
-- **Capability table:** the reserved mode ids are now named in `capability.py` / `backends.yaml`
-  comments (`fp8_blockwise` for mori; `mxfp8`/`mxfp4`/`nvfp4` for the flashinfer combine path) so a
-  future wiring is a one-line capability widening, not a redesign. They remain **rejected** by
-  `capability.resolve` today (not runnable → not claimed).
+- **Capability table:** the mode ids are now named in `capability.py` / `backends.yaml`
+  comments (`fp8_blockwise` for mori; `mxfp8`/`mxfp4`/`nvfp4` for the flashinfer combine path). MXFP8
+  and NVFP4 are runnable where the backend/architecture supports them; MXFP4 remains rejected by
+  `capability.resolve` until the scale-factor layout is movable through the payload list.
 - **Schema/labels:** `shape.quant.{combine_input_dtype,combine_quant_mode,combine_output_dtype,
   scale_layout}` + `reproduction.combine_quant_in_timing` already exist (v4 schema), so a quantized-
   combine result is a distinct, correctly-labelled comparison point the moment one is produced.
-- **Correctness tests:** deferred with the kernels — when a quant-combine path is wired, the
-  `reference_ep.py` oracle gains a tolerance class per `combine_quant_mode` (looser e4m3/fp4 bound),
-  mirroring the existing fp8-dispatch tolerance (1.25e-1 vs bf16 5e-3).
+- **Correctness tests:** the runnable MXFP8/NVFP4 dispatch and B300 quant-combine paths are covered by
+  the `reference_ep.py` oracle with explicit tolerance classes. MXFP4 correctness remains deferred
+  because no valid MXFP4 payload representation is currently emitted.

@@ -10,6 +10,9 @@ results/*.json
 results/plots/
 results/raw_*.txt
 results/raw_*.txt.stderr
+# sweep aggregate bundles (collectivex-sweep.yml aggregate job -> results/aggregate/*.ndjson)
+# downloaded locally — 100MB-class, same hostname/UUID sensitivity as results/*.json
+results/aggregate/
 # superseded SSH-provenance result JSONs moved aside so plot_ep's recursive glob
 # won't double-load them; same hostname/UUID sensitivity as results/.
 _ssh_v4_archive/
