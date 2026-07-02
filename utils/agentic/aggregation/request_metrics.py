@@ -18,25 +18,64 @@ def load_aggregate(path: Path) -> dict[str, Any]:
 
 
 def load_records(path: Path) -> list[dict[str, Any]]:
+    records, _ = load_records_with_accounting(path)
+    return records
+
+
+def load_records_with_accounting(path: Path) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Load profiling records from profile_export.jsonl.
 
     Warmup rows are diagnostics only. Older artifacts did not have
     metadata.benchmark_phase, so missing phase is treated as profiling.
     """
     records: list[dict[str, Any]] = []
+    accounting: dict[str, Any] = {
+        "records_total": 0,
+        "records_profiled": 0,
+        "records_dropped_total": 0,
+        "records_warmup_dropped": 0,
+        "records_error_dropped": 0,
+        "error_categories": {},
+    }
     with open(path) as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             obj = json.loads(line)
-            if obj.get("error"):
-                continue
+            accounting["records_total"] += 1
             phase = obj.get("metadata", {}).get("benchmark_phase")
-            if phase is not None and phase != "profiling":
+            is_warmup = phase is not None and phase != "profiling"
+            error = obj.get("error")
+            if is_warmup:
+                accounting["records_warmup_dropped"] += 1
+            if error:
+                accounting["records_error_dropped"] += 1
+                category = _error_category(error)
+                categories = accounting["error_categories"]
+                categories[category] = categories.get(category, 0) + 1
+            if error or is_warmup:
                 continue
             records.append(obj)
-    return records
+    accounting["records_profiled"] = len(records)
+    accounting["records_dropped_total"] = accounting["records_total"] - len(records)
+    return records, accounting
+
+
+def _error_category(error: Any) -> str:
+    if isinstance(error, dict):
+        for key in ("type", "error_type", "code", "class", "status"):
+            value = error.get(key)
+            if value not in (None, ""):
+                return str(value)
+        message = error.get("message") or error.get("error")
+    else:
+        message = error
+
+    if not message:
+        return "unknown"
+    first_line = str(message).strip().splitlines()[0]
+    return (first_line.split(":", 1)[0] or "unknown")[:120]
 
 
 def _metric_value(record: dict[str, Any], key: str) -> Any:

@@ -123,6 +123,15 @@ class VllmBackend(ServerMetricsBackend):
                 preferred_keys=("total", "sum", "max", "avg"),
             )
 
+        flat["kv_offload_bandwidth_gpu_to_cpu_bytes_per_second"] = rate(
+            flat["kv_offload_bytes_gpu_to_cpu"],
+            flat["kv_offload_time_gpu_to_cpu"],
+        )
+        flat["kv_offload_bandwidth_cpu_to_gpu_bytes_per_second"] = rate(
+            flat["kv_offload_bytes_cpu_to_gpu"],
+            flat["kv_offload_time_cpu_to_gpu"],
+        )
+
         nested["cache"].update(
             {
                 "gpu_cache_hit_rate": flat["server_gpu_cache_hit_rate"],
@@ -139,6 +148,20 @@ class VllmBackend(ServerMetricsBackend):
             {
                 "gpu_usage_pct": flat["gpu_kv_cache_usage_pct"],
                 "cpu_usage_pct": flat["cpu_kv_cache_usage_pct"],
+            }
+        )
+        nested["kv_offload"].update(
+            {
+                "bytes_gpu_to_cpu": flat["kv_offload_bytes_gpu_to_cpu"],
+                "bytes_cpu_to_gpu": flat["kv_offload_bytes_cpu_to_gpu"],
+                "time_gpu_to_cpu": flat["kv_offload_time_gpu_to_cpu"],
+                "time_cpu_to_gpu": flat["kv_offload_time_cpu_to_gpu"],
+                "bandwidth_gpu_to_cpu_bytes_per_second": flat[
+                    "kv_offload_bandwidth_gpu_to_cpu_bytes_per_second"
+                ],
+                "bandwidth_cpu_to_gpu_bytes_per_second": flat[
+                    "kv_offload_bandwidth_cpu_to_gpu_bytes_per_second"
+                ],
             }
         )
         nested["tokens"].update(

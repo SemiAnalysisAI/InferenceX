@@ -17,6 +17,8 @@ SERVER_CACHE_FLAT_FIELDS = {
     "kv_offload_bytes_cpu_to_gpu": None,
     "kv_offload_time_gpu_to_cpu": None,
     "kv_offload_time_cpu_to_gpu": None,
+    "kv_offload_bandwidth_gpu_to_cpu_bytes_per_second": None,
+    "kv_offload_bandwidth_cpu_to_gpu_bytes_per_second": None,
     "total_prompt_tokens": None,
     "total_generation_tokens": None,
     "total_requests_completed": None,
@@ -72,6 +74,14 @@ def empty_server_metrics(present: bool, metric_count: int) -> dict[str, Any]:
             "cpu_usage_pct": None,
             "cpu_used_tokens": None,
             "cpu_total_tokens": None,
+        },
+        "kv_offload": {
+            "bytes_gpu_to_cpu": None,
+            "bytes_cpu_to_gpu": None,
+            "time_gpu_to_cpu": None,
+            "time_cpu_to_gpu": None,
+            "bandwidth_gpu_to_cpu_bytes_per_second": None,
+            "bandwidth_cpu_to_gpu_bytes_per_second": None,
         },
         "tokens": {
             "prompt_total": None,

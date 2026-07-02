@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .aggregation_common import round_floats
-from .request_metrics import compute_request_metrics, load_aggregate, load_records
+from .request_metrics import compute_request_metrics, load_aggregate, load_records_with_accounting
 from .server_log_metrics import find_server_log_paths
 from .server_metrics import compute_server_metrics, load_server_metrics
 
@@ -99,12 +99,21 @@ def build_agg(
     aggregate: dict[str, Any],
     server_metrics: dict[str, Any],
     *,
+    request_accounting: dict[str, Any] | None = None,
     server_log_paths: list[Path] | None = None,
 ) -> dict[str, Any]:
     """Compose the agg_*.json body from the three aiperf inputs."""
     kv_offloading, kv_offload_backend = _validate_kv_offload_env()
     multinode_fields, num_gpus, tp, ep, dp_attention = _gpu_shape()
     framework = os.environ.get("FRAMEWORK", "")
+    request_accounting = request_accounting or {
+        "records_total": len(records),
+        "records_profiled": len(records),
+        "records_dropped_total": 0,
+        "records_warmup_dropped": 0,
+        "records_error_dropped": 0,
+        "error_categories": {},
+    }
 
     agg: dict[str, Any] = {
         "hw": os.environ.get("RUNNER_TYPE", ""),
@@ -123,8 +132,10 @@ def build_agg(
         "dp_attention": dp_attention,
         "kv_offloading": kv_offloading,
         "kv_offload_backend": kv_offload_backend,
-        "num_requests_total": len(records),
+        "allocated_cpu_dram_gb": env_int("TOTAL_CPU_DRAM_GB"),
+        "num_requests_total": request_accounting["records_total"],
         "num_requests_successful": len(records),
+        "request_accounting": request_accounting,
     }
     agg.update(multinode_fields)
 
@@ -186,7 +197,7 @@ def main() -> int:
         print(f"ERROR: {jsonl_path} not found", file=sys.stderr)
         return 1
 
-    records = load_records(jsonl_path)
+    records, request_accounting = load_records_with_accounting(jsonl_path)
     aggregate = load_aggregate(aggregate_path) if aggregate_path.exists() else {}
     server_metrics = load_server_metrics(server_metrics_path)
     server_log_paths = find_server_log_paths(result_dir)
@@ -195,6 +206,7 @@ def main() -> int:
             records,
             aggregate,
             server_metrics,
+            request_accounting=request_accounting,
             server_log_paths=server_log_paths,
         )
     )
@@ -205,7 +217,12 @@ def main() -> int:
         json.dump(agg, f, indent=2)
 
     print(f"Saved aggregated agentic result to {output_path}")
-    print(f"  Requests: {len(records)} successful (aiperf drops error records)")
+    print(
+        f"  Requests: {len(records)} successful / "
+        f"{request_accounting['records_total']} total "
+        f"({request_accounting['records_warmup_dropped']} warmup, "
+        f"{request_accounting['records_error_dropped']} error dropped)"
+    )
     request_metrics = agg.get("request_metrics", {})
     qps_metrics = request_metrics.get("qps", {})
     if "mean" in qps_metrics:

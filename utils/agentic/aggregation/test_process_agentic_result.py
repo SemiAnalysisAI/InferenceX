@@ -48,10 +48,20 @@ AGG_TOP_LEVEL_KEYS = {
     "dp_attention",
     "kv_offloading",
     "kv_offload_backend",
+    "allocated_cpu_dram_gb",
     "num_requests_total",
     "num_requests_successful",
+    "request_accounting",
     "request_metrics",
     "server_metrics",
+}
+REQUEST_ACCOUNTING_KEYS = {
+    "records_total",
+    "records_profiled",
+    "records_dropped_total",
+    "records_warmup_dropped",
+    "records_error_dropped",
+    "error_categories",
 }
 
 SERVER_METRICS_KEYS = {
@@ -60,6 +70,7 @@ SERVER_METRICS_KEYS = {
     "metric_count",
     "cache",
     "kv_cache",
+    "kv_offload",
     "tokens",
     "sources",
 }
@@ -85,6 +96,14 @@ SERVER_KV_CACHE_KEYS = {
     "cpu_usage_pct",
     "cpu_used_tokens",
     "cpu_total_tokens",
+}
+SERVER_KV_OFFLOAD_KEYS = {
+    "bytes_gpu_to_cpu",
+    "bytes_cpu_to_gpu",
+    "time_gpu_to_cpu",
+    "time_cpu_to_gpu",
+    "bandwidth_gpu_to_cpu_bytes_per_second",
+    "bandwidth_cpu_to_gpu_bytes_per_second",
 }
 SERVER_TOKEN_KEYS = {
     "prompt_total",
@@ -116,12 +135,14 @@ def _assert_stable_server_metrics_schema(agg: dict) -> None:
     assert set(server_metrics) == SERVER_METRICS_KEYS
     assert set(server_metrics["cache"]) == SERVER_CACHE_KEYS
     assert set(server_metrics["kv_cache"]) == SERVER_KV_CACHE_KEYS
+    assert set(server_metrics["kv_offload"]) == SERVER_KV_OFFLOAD_KEYS
     assert set(server_metrics["tokens"]) == SERVER_TOKEN_KEYS
     assert set(server_metrics["tokens"]["prompt_by_source"]) == SERVER_PROMPT_SOURCE_KEYS
 
 
 def _assert_stable_request_metrics_schema(agg: dict) -> None:
     request_metrics = agg["request_metrics"]
+    assert set(agg["request_accounting"]) == REQUEST_ACCOUNTING_KEYS
     assert set(request_metrics) == REQUEST_METRICS_KEYS
     assert set(request_metrics["latency"]) == REQUEST_LATENCY_KEYS
     assert set(request_metrics["tokens"]) == REQUEST_TOKEN_KEYS
@@ -420,6 +441,80 @@ def test_processor_throughput_per_gpu(tmp_path: Path):
     assert "output_tput_per_gpu" not in agg
 
 
+def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={"TOTAL_CPU_DRAM_GB": "2400"},
+    )
+
+    assert agg["allocated_cpu_dram_gb"] == 2400
+
+
+def test_processor_surfaces_request_accounting(tmp_path: Path):
+    result_dir = tmp_path / "results"
+    artifact = result_dir / "aiperf_artifacts"
+    artifact.mkdir(parents=True)
+
+    profiling = _make_record(
+        conv_id="trace-A",
+        turn_index=0,
+        isl=100,
+        osl=50,
+        ttft_ms=30.0,
+        e2e_ms=1_000.0,
+        itl_ms=10.0,
+        start_ns=1_000_000_000,
+        end_ns=2_000_000_000,
+    )
+    warmup = _make_record(
+        conv_id="trace-A",
+        turn_index=1,
+        isl=100,
+        osl=50,
+        ttft_ms=30.0,
+        e2e_ms=1_000.0,
+        itl_ms=10.0,
+        start_ns=2_000_000_000,
+        end_ns=3_000_000_000,
+    )
+    warmup["metadata"]["benchmark_phase"] = "warmup"
+    errored = _make_record(
+        conv_id="trace-A",
+        turn_index=2,
+        isl=100,
+        osl=50,
+        ttft_ms=30.0,
+        e2e_ms=1_000.0,
+        itl_ms=10.0,
+        start_ns=3_000_000_000,
+        end_ns=4_000_000_000,
+    )
+    errored["error"] = {"type": "HTTPStatusError", "message": "500 server error"}
+
+    with open(artifact / "profile_export.jsonl", "w") as f:
+        for record in (profiling, warmup, errored):
+            f.write(json.dumps(record) + "\n")
+    with open(artifact / "profile_export_aiperf.json", "w") as f:
+        json.dump({"request_count": 1, "error_request_count": 1}, f)
+
+    agg = _run_processor(result_dir, tmp_path / "out")
+
+    assert agg["num_requests_total"] == 3
+    assert agg["num_requests_successful"] == 1
+    assert agg["request_accounting"] == {
+        "records_total": 3,
+        "records_profiled": 1,
+        "records_dropped_total": 2,
+        "records_warmup_dropped": 1,
+        "records_error_dropped": 1,
+        "error_categories": {"HTTPStatusError": 1},
+    }
+    assert agg["server_metrics"]["tokens"]["requests_completed"] == 1
+
+
 def test_processor_handles_missing_server_metrics(tmp_path: Path):
     """No server_metrics_export.json -> server cache fields are None, not error."""
     result_dir = _write_fixture(tmp_path)
@@ -564,8 +659,13 @@ def test_processor_excludes_warmup_phase_records(tmp_path: Path):
 
     agg = _run_processor(result_dir, tmp_path / "out")
 
-    assert agg["num_requests_total"] == 1
+    assert agg["num_requests_total"] == 2
     assert agg["num_requests_successful"] == 1
+    assert agg["request_accounting"]["records_total"] == 2
+    assert agg["request_accounting"]["records_profiled"] == 1
+    assert agg["request_accounting"]["records_dropped_total"] == 1
+    assert agg["request_accounting"]["records_warmup_dropped"] == 1
+    assert agg["request_accounting"]["records_error_dropped"] == 0
     assert agg["server_metrics"]["tokens"]["requests_completed"] == 1
     assert agg["server_metrics"]["tokens"]["prompt_total"] == 100
     assert agg["server_metrics"]["tokens"]["generation_total"] == 50
@@ -706,6 +806,43 @@ def test_processor_aggregates_across_multiple_series(tmp_path: Path):
     output_dir = tmp_path / "out"
     agg = _run_processor(result_dir, output_dir)
     assert agg["server_metrics"]["cache"]["gpu_cache_hit_rate"] == pytest.approx(0.3)
+
+
+def test_processor_surfaces_vllm_kv_offload_transfer_stats(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    artifact = result_dir / "aiperf_artifacts"
+    server_metrics = {
+        "metrics": {
+            "vllm:kv_offload_bytes_gpu_to_cpu": {
+                "type": "counter",
+                "series": [{"stats": {"total": 10_000_000.0}}],
+            },
+            "vllm:kv_offload_bytes_cpu_to_gpu": {
+                "type": "counter",
+                "series": [{"stats": {"total": 5_000_000.0}}],
+            },
+            "vllm:kv_offload_time_gpu_to_cpu": {
+                "type": "counter",
+                "series": [{"stats": {"total": 2.0}}],
+            },
+            "vllm:kv_offload_time_cpu_to_gpu": {
+                "type": "counter",
+                "series": [{"stats": {"total": 0.5}}],
+            },
+        }
+    }
+    with open(artifact / "server_metrics_export.json", "w") as f:
+        json.dump(server_metrics, f)
+
+    agg = _run_processor(result_dir, tmp_path / "out")
+    kv_offload = agg["server_metrics"]["kv_offload"]
+
+    assert kv_offload["bytes_gpu_to_cpu"] == 10_000_000
+    assert kv_offload["bytes_cpu_to_gpu"] == 5_000_000
+    assert kv_offload["time_gpu_to_cpu"] == 2
+    assert kv_offload["time_cpu_to_gpu"] == 0.5
+    assert kv_offload["bandwidth_gpu_to_cpu_bytes_per_second"] == 5_000_000
+    assert kv_offload["bandwidth_cpu_to_gpu_bytes_per_second"] == 10_000_000
 
 
 def test_processor_ignores_server_warmup_metrics_for_headline_stats(
