@@ -679,7 +679,7 @@ glm5-fp8-mi355x-atom:
       - { tp: 8, conc-start: 4, conc-end: 256 }
 
 glm5.1-fp4-mi355x-sglang:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
+  image: lmsysorg/sglang-rocm:v0.5.13.post1-rocm720-mi35x-20260622
   model: amd/GLM-5.1-MXFP4
   model-prefix: glm5.1
   runner: mi355x
@@ -2666,7 +2666,7 @@ minimaxm3-fp4-mi355x-vllm:
 # tokens. Search space mirrors the MI355X MXFP8 MTP entry, trimming the base
 # FP4 sweep at extreme concurrency where speculative decoding loses value.
 minimaxm3-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x

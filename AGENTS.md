@@ -18,7 +18,7 @@ Run `ls` for details. Key paths:
 - `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
 - `utils/bench_serving/` - `benchmark_serving.py` and backends.
 - `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `summarize.py`, `collect_*.py`, `compare_results.py`.
+- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `collect_*.py`, `compare_results.py`.
 - `experimental/` - non-core experiments.
 
 ## Terminology
@@ -40,7 +40,7 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   [--runner-type b200|h100|h200|gb200|...]
 ```
 
-Process results: `python utils/process_result.py && python utils/summarize.py`.
+Process results: `python utils/process_result.py`.
 
 ## Supported Configuration Values
 

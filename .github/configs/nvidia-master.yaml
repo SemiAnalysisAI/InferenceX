@@ -1699,7 +1699,7 @@ dsr1-fp4-b200-sglang:
     #   - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
 
 dsr1-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.12.post1
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -1711,11 +1711,13 @@ dsr1-fp4-b200-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc
