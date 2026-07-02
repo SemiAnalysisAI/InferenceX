@@ -127,7 +127,7 @@ jobs:
     timeout-minutes: 500
     name: >-
       ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }}
-      TP${{ inputs.tp }}EP${{ inputs.ep }}${{ inputs.dp-attn && ' DPA' || '' }}
+      TP${{ inputs.tp }}/EP${{ inputs.ep }}${{ inputs.dp-attn && '/DPA' || '' }}
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       conc=${{ inputs.conc }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
     steps:
