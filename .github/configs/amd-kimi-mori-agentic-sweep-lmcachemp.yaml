@@ -13,7 +13,7 @@ kimik2.5-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
       search-space:
       - spec-decoding: "none"
         offloading: lmcache-mp
-        total-cpu-dram-gb: 1200
+        total-cpu-dram-gb: 2400
         conc-list: [ 16, 32, 48, 64 ]
         prefill:
           num-worker: 1
@@ -23,6 +23,7 @@ kimik2.5-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
           additional-settings:
           - "PREFILL_NODES=1"
           - "PREFILL_KV_CONNECTOR=moriio-lmcachemp"
+          - "LMCACHE_L1_SIZE_GB=2400"
         decode:
           num-worker: 1
           tp: 8
