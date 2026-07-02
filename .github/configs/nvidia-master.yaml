@@ -12860,16 +12860,16 @@ minimaxm3-fp4-b300-vllm-mtp:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 2, spec-decoding: mtp }
-      - { tp: 4, conc-start: 2, conc-end: 2, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 2, spec-decoding: mtp }
       - { tp: 2, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 1024, spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 2, spec-decoding: mtp }
-      - { tp: 4, conc-start: 2, conc-end: 2, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 2, spec-decoding: mtp }
       - { tp: 2, conc-start: 4, conc-end: 256, spec-decoding: mtp }
-      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 1024, spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512, spec-decoding: mtp }
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
