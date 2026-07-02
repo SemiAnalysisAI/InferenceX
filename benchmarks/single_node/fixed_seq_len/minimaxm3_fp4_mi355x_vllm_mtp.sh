@@ -5,6 +5,16 @@
 # minimaxm3_fp4_mi355x_vllm.sh and uses three speculative tokens from
 # Inferact/MiniMax-M3-EAGLE3. The pinned nightly includes upstream AMD
 # MiniMax-M3 SupportsEagle3 support, so no runtime model patch is needed.
+#
+# Mirrors the three high-concurrency levers from minimaxm3_fp4_mi355x_vllm.sh:
+#   * INT4 quantized all-reduce (env knobs below) -- reduces the all-reduce
+#     cost (the biggest decode kernel); measured ~-12% to -17% TPOT at conc
+#     64/128/256. Works on any nightly.
+#   * fp8 KV cache (--kv-cache-dtype fp8).
+#   * cross-layer indexer top-k sharing (--hf-overrides index_topk_freq=4) --
+#     requires vllm-project/vllm#47269 (merged).
+# Pin the image (.github/configs/amd-master.yaml) to a nightly containing
+# #47269 before sweeping for the full curve.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -48,6 +58,13 @@ export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_MOE=1
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
+# INT4 quantized all-reduce for the (~1.5 MB) decode all-reduces, which are the
+# single biggest decode kernel at high concurrency. The MIN_SIZE_KB override is
+# required: vLLM's default INT4 quick-reduce size gate for (bf16, TP4) is 16 MB,
+# so it never fires for decode-sized tensors without it.
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -78,6 +95,8 @@ vllm serve "$MODEL" --port "$PORT" \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
     --moe-backend aiter \
+    --kv-cache-dtype fp8 \
+    --hf-overrides '{"text_config": {"use_index_cache": true, "index_topk_freq": 4}}' \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
     --enable-auto-tool-choice \
