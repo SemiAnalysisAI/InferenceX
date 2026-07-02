@@ -67,6 +67,31 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
             echo "=== Slurm job stderr ==="
             tail -100 "$err_file"
             echo "========================"
+            # Surface the real failure class in the Actions UI. Without this, a
+            # launch failure shows only the generic "No benchmark result files
+            # found" from benchmark-multinode-tmpl.yml. Order matters: check the
+            # deterministic recipe error (model-not-found, #1581) before the
+            # transport-flake patterns (#1584 MoRI/readiness) so a config bug is
+            # never mislabeled as a flake.
+            if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+                local sig=""
+                if   grep -qiE "Model '.*' not found|FATAL: Model|model .* not found" "$err_file"; then
+                    sig="recipe-error: model not found (deterministic - check MODEL/MODEL_PATH, not MoRI)"
+                elif grep -qiE "ReadTimeout|readiness.*timeout|warmup.*time(d)? ?out|health.*timeout" "$err_file"; then
+                    sig="transport-flake: readiness/warmup timeout (MoRI pd-disagg)"
+                elif grep -qiE "Fp8BlockwiseQuant.*IntraNode|dispatch_combine|combine.*IntraNode" "$err_file"; then
+                    sig="config-error: MoRI fp8_blockwise combine needs IntraNode (disable TBO/SDMA on FP4 prefill, #1584)"
+                elif grep -qiE "MoRI|mori_conn|pd[- ]?disagg" "$err_file"; then
+                    sig="transport-flake: MoRI KV-transport error"
+                elif grep -qiE "segfault|Segmentation fault|signal 11|core dumped|gpucore" "$err_file"; then
+                    sig="transport-flake: server segfault / core dump"
+                fi
+                if [[ -n "$sig" ]]; then
+                    echo "::error title=AMD disagg job ${JOB_ID:-unknown} failed::${sig} (see slurm .err artifact)"
+                else
+                    echo "::error title=AMD disagg job ${JOB_ID:-unknown} failed::Unclassified failure - see last 100 lines of slurm .err above"
+                fi
+            fi
         fi
         sudo rm -rf "$BENCHMARK_LOGS_DIR" 2>/dev/null || true
     }
