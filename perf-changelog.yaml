@@ -4400,3 +4400,15 @@
   description:
     - "Bump SGLang image from lmsysorg/sglang:deepseek-v4-blackwell (digest sha256:df18bfc4...) to mainline nightly lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1923
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Apply vLLM PRs #47269 (cross-layer lightning-indexer top-k sharing), #47287 (AITER page-16 sparse paged-attention), and #46117 (MXFP8 dense-linear + grouped-MoE Triton tile optimizations) to the MiniMax-M3 MXFP8 MI355X single-node vLLM recipe"
+    - "Bump image to hongxiayang01/community:mm-07012026 (stock ROCm nightly + the three PRs baked in; #47287 ships a recompiled _C kernel, so it cannot be applied as a runtime overlay)"
+    - "Enable the AITER sparse-PA fast path: VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, VLLM_ROCM_SHUFFLE_KV_CACHE_LAYOUT=1, --moe-backend aiter, and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' (toggle via MM3_AITER_SPARSE_PA, default on)"
+    - "Add quick all-reduce tuning knobs from the PR #47287 recipe: VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256"
+    - "Set --max-num-batched-tokens 32768 (env MAX_NUM_BATCHED_TOKENS) to enlarge the per-step prefill budget, improving TP4 throughput at high concurrency (~+2-4% at 8k1k conc 256/512)"
+    - "Set the 8k1k search space to a single TP4 conc 1-512 sweep (TP8 dropped for poor throughput/GPU; plain TP4 beats TP4/EP4 at high conc on this native-MXFP8 config and fits KV without a gpu-memory-utilization change)"
+    - "Validated locally on MI355X: GSM8K 0.9591 flex / 0.9598 strict; 1k1k throughput and 8k1k conc 1-512 runs finish cleanly"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
