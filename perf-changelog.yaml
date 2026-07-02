@@ -4059,6 +4059,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1869
 
 - config-keys:
+    - glm5.1-fp4-mi355x-sglang
+  description:
+    - "Bump SGLang ROCm image from v0.5.12.post1-rocm720-mi35x-20260529 to v0.5.13.post1-rocm720-mi35x-20260622"
+    - "Enable aiter allreduce fusion via --enable-aiter-allreduce-fusion in benchmarks/single_node/fixed_seq_len/glm5.1_fp4_mi355x.sh"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1905
+
+- config-keys:
     - minimaxm3-fp8-b300-dynamo-vllm
   description:
     - "Add MiniMax-M3 MXFP8 B300 disaggregated vLLM benchmarks via Dynamo for 1k1k and 8k1k STP."
