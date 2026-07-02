@@ -324,16 +324,3 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
   benchmark-tmpl.yml or
   benchmark-multinode-tmpl.yml
 ```
-
-## Utility Scripts
-
-### `utils/summarize.py`
-
-Aggregates benchmark results from a directory of JSON files and outputs a markdown summary table. Used after `collect-results.yml` downloads all artifacts.
-
-Usage:
-```bash
-python utils/summarize.py <results_directory>
-```
-
-Outputs GitHub-flavored markdown tables with metrics including TTFT, TPOT, interactivity, E2EL, and throughput per GPU for both single-node and multi-node results.

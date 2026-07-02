@@ -5,7 +5,7 @@ profile_export.jsonl, profile_export_aiperf.json, and
 (optionally) server_metrics_export.json. It writes one
 $RESULT_FILENAME.json under $AGENTIC_OUTPUT_DIR. We build a minimal
 fixture, run the processor, and assert the agg JSON has every key
-utils/summarize.py reads.
+downstream aggregation expects.
 
 These tests run entirely in tmpdir; no aiperf install or HF cache
 required.
@@ -24,9 +24,9 @@ import pytest
 
 PROCESSOR = Path(__file__).resolve().parent / "process_agentic_result.py"
 
-# Keys consumed by utils/summarize.py:78-195 for agentic results. The
-# processor must emit every one of these for downstream aggregation.
-SUMMARIZE_KEYS = {
+# Keys expected from agentic aggregate rows. The processor must emit every one
+# of these for downstream aggregation.
+AGGREGATE_KEYS = {
     "infmax_model_prefix",
     "hw",
     "framework",
@@ -217,12 +217,12 @@ def _run_processor(result_dir: Path, output_dir: Path) -> dict:
     return json.loads(out.read_text())
 
 
-def test_processor_emits_required_summarize_keys(tmp_path: Path):
+def test_processor_emits_required_aggregate_keys(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
     agg = _run_processor(result_dir, output_dir)
-    missing = SUMMARIZE_KEYS - set(agg.keys())
-    assert not missing, f"agg JSON missing summarize keys: {sorted(missing)}"
+    missing = AGGREGATE_KEYS - set(agg.keys())
+    assert not missing, f"agg JSON missing aggregate keys: {sorted(missing)}"
 
 
 def test_processor_latency_units_are_seconds(tmp_path: Path):
