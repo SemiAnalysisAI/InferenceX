@@ -350,13 +350,11 @@ jobs:
             [
                 test-sweep-agentic,
                 test-sweep-multi-node-agentic,
-                collect-agentic-results,
                 calc-success-rate,
             ]
         if: >-
             always() &&
             github.event_name == 'workflow_dispatch' &&
-            needs.collect-agentic-results.result == 'success' &&
             needs.calc-success-rate.result == 'success' &&
             (
               needs.test-sweep-agentic.result == 'success' ||
