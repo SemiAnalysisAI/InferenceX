@@ -4361,12 +4361,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1966
 
 - config-keys:
-    - minimaxm3-fp4-mi355x-vllm
-  description:
-    - "Close the high-concurrency gap vs the ATOM recipe on MiniMax-M3 MXFP4 MI355X single-node vLLM STP. Add INT4 quantized all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0, VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256), fp8 KV cache (--kv-cache-dtype fp8), and cross-layer indexer top-k sharing (--hf-overrides index_topk_freq=4)."
-    - "INT4 quick-reduce reduces the all-reduce cost (the biggest decode kernel); the MIN_SIZE_KB override lowers the quantization codec threshold. Local (ATOM's benchmark): conc32 17.21ms / conc64 25.13ms vs ATOM ref 16.74 / 25.00 (matched); GSM8K limit100=0.95."
-    - "index_topk_freq needs vllm-project/vllm#47269 (merged) in the served image; pin the image to a nightly containing it before sweeping."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1969
     - minimaxm3-fp4-mi355x-atom
     - minimaxm3-fp4-mi355x-atom-mtp
   description:
@@ -4406,3 +4400,11 @@
   description:
     - "Bump SGLang image from lmsysorg/sglang:deepseek-v4-blackwell (digest sha256:df18bfc4...) to mainline nightly lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1923
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-vllm
+  description:
+    - "Close the high-concurrency gap vs the ATOM recipe on MiniMax-M3 MXFP4 MI355X single-node vLLM STP. Add INT4 quantized all-reduce (VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4, VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0, VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256), fp8 KV cache (--kv-cache-dtype fp8), and cross-layer indexer top-k sharing (--hf-overrides index_topk_freq=4)."
+    - "INT4 quick-reduce reduces the all-reduce cost (the biggest decode kernel); the MIN_SIZE_KB override lowers the quantization codec threshold. Local (ATOM's benchmark): conc32 17.21ms / conc64 25.13ms vs ATOM ref 16.74 / 25.00 (matched); GSM8K limit100=0.95."
+    - "index_topk_freq needs vllm-project/vllm#47269 (merged) in the served image; pin the image to a nightly containing it before sweeping."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1969
