@@ -128,24 +128,15 @@ suites:
     trials: 3
     required_publication: comparable-experimental
 
-  ep-activation-sensitivity-v1:
-    description: "activation-VALUE sensitivity: same trace under each value profile. Under bf16
-      combine the ratio is ~1.0 (value-independent) — the EXPECTED null result that also baselines
-      the rig for when a quantized (value-sensitive) combine lands. Diagnostic, never headline."
-    workloads: [ds-like-ref]
-    platforms: [h100, h200, b300, b200, mi355x]
-    backends: [deepep, mori]
-    modes: [normal]
-    dtypes: [bf16]
-    contracts: [layout-and-dispatch-v1]
-    routings: [uniform]
-    # the activation value distributions (routing.ACTIVATION_PROFILES). normal = headline.
-    activation_profiles: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
-    resource_modes: [tuned]
-    phases: [decode]
-    token_points: [1, 8, 32, 128]
-    trials: 3
-    required_publication: diagnostic
+  # ep-activation-sensitivity-v1 — RETIRED from the sweep (2026-07-02). The null result it predicted
+  # was MEASURED and confirmed on h100 (run 28564328373, all 6 backends × 5 profiles × T=1..128) and
+  # mi355x mori (run 28568752337): p99 ratios vs normal scatter symmetrically around 1.0 with no
+  # profile systematically faster/slower (outliers hit all profiles at once = allocation noise). Under
+  # bf16 combine the payload VALUES cannot affect comm latency, so sweeping them only multiplied
+  # cases. The single profile everywhere is `normal` (every other suite's implicit default; the
+  # realistic unit-normal distribution). The axis machinery (--activation-profile, shape field,
+  # capability gate, comparison_key fold) is KEPT — it becomes meaningful again only under a
+  # quantized value-sensitive combine (Blackwell-only flashinfer, or MoRI PR311 when wired).
 
   ep-quant-combine-sensitivity-v1:
     description: "BLOCKED ON PR311 — quantized-combine distribution sensitivity (none/fp8/mxfp8).
