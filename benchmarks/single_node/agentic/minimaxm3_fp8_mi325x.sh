@@ -117,8 +117,6 @@ if require_agentic_kv_offload_backend mooncake; then
             install_mooncake_rocm
         fi
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=4
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF

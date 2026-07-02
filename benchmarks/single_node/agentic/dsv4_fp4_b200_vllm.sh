@@ -136,8 +136,6 @@ if require_agentic_kv_offload_backend mooncake; then
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
         python3 -c "from mooncake.store import MooncakeDistributedStore" >/dev/null
-        export INFERENCEX_MOONCAKE_MAX_TRANSFER_BATCH_KEYS=32
-        python3 "$(dirname "$0")/patch_vllm_mooncake_transfer_batches.py"
 
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
