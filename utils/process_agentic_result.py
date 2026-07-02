@@ -3,8 +3,8 @@
 
 Reads aiperf's three artifact files from $RESULT_DIR/aiperf_artifacts/ and emits
 $AGENTIC_OUTPUT_DIR/$RESULT_FILENAME.json with the same key schema fixed-seq-len
-and the legacy kv-cache-tester pipeline produce, so utils/summarize.py and
-sibling aggregators keep working without changes.
+and the legacy kv-cache-tester pipeline produce, so sibling aggregators keep
+working without changes.
 
 Inputs:
 - profile_export_aiperf.json  -- per-metric aggregate stats (avg/p75/p90/...)
