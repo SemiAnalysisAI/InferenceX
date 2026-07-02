@@ -42,6 +42,22 @@ def _sku_arch(sku: str) -> str:
 # Hopper. Gated here so a Hopper nvfp4 dispatch is cleanly REJECTED, not run-and-marked-invalid.
 ARCH_ONLY_DTYPES = {"nvfp4": "blackwell", "mxfp4": "blackwell"}
 
+# aarch64 (Grace) SKUs. UCCL-EP has NO aarch64 build: `import uccl.ep` ModuleNotFound on gb300
+# (run 28457032490, confirmed fresh), and upstream UCCL targets x86 NVIDIA/AMD + EFA/IB/Broadcom
+# only. Gated here so the sweep never dispatches a shard that deterministically fails every case.
+AARCH64_SKUS = {"gb200", "gb300"}
+
+# MEASURED, DETERMINISTIC per-runner ENVIRONMENT walls (not arch or code — the identical adapter is
+# official on other runners). These flip whole shards red for a limitation the harness cannot route
+# around, so they are rejected at validate/matrix time instead of run-and-fail. docs/gated.md.
+#  - h200 + flashinfer: the h200-dgxc enroot container denies CAP_SYS_PTRACE -> MnnvlMemory's
+#    pidfd_getfd fails errno 1 at MoeAlltoAll CONSTRUCTION on every rank, every run; MoeAlltoAll
+#    has no non-MNNVL transport. (h100-dgxc/b300 grant the cap; GB-series use FABRIC handles.)
+RUNNER_WALLS = {
+    ("h200", "flashinfer"): "h200-dgxc enroot denies CAP_SYS_PTRACE (pidfd_getfd errno 1 at "
+                            "MoeAlltoAll construction, deterministic every rank) — docs/gated.md",
+}
+
 # Backend capability table — MIRRORS the adapter SUPPORTED_* sets (the runtime source of
 # truth). Keep in sync with ep_deepep.py / ep_mori.py. LL is decode-only; cached-layout is
 # normal-only; MoRI is bf16/normal/layout-and-dispatch only.
@@ -201,6 +217,12 @@ def resolve(sku, backend, mode="normal", dtype="bf16",
         return False, f"unknown backend '{backend}'"
     if vendor not in cap["vendors"]:
         return False, f"{backend} runs on {cap['vendors']}, not {vendor} SKU '{sku}'"
+    wall = RUNNER_WALLS.get((sku, backend))
+    if wall:
+        return False, f"runner environment wall: {wall}"
+    if backend == "uccl" and sku in AARCH64_SKUS:
+        return False, ("uccl EP has no aarch64/Grace build (uccl.ep ModuleNotFound on gb300, "
+                       "run 28457032490) — docs/gated.md")
     if mode not in cap["modes"]:
         return False, f"{backend} modes={cap['modes']} (got '{mode}')"
     if dtype not in cap["dtypes"]:

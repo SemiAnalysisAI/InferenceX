@@ -341,6 +341,16 @@ The directive's container-switch + AMD-lift asks. All run via GHA on the MI355X 
   (NCCL/RCCL `all_to_all_single`, host-staged over IB) with the shared-mount FileStore rendezvous. See
   the rack-scale section above; single-node MI355X EP is covered by the MoRI sweep.
 
+## Operational note — job conclusions now MATCH the judge-by-data doctrine
+Historically a sweep job flipped to GHA "failure" whenever ANY case failed — so the empty-rank
+diagnostic (one case) or a flashinfer intermittent straggler turned 200+-correct-point jobs red, and
+every red X needed manual artifact-level exoneration. As of 2026-07-02: (1) measured DETERMINISTIC
+walls never dispatch — `capability.RUNNER_WALLS` (h200+flashinfer pidfd cap) and the uccl aarch64
+gate reject at validate/matrix time; (2) a failed CASE preserves its failed-case record and the
+shard CONTINUES with exit 0 — the job fails only when the harness is unhealthy (zero valid results,
+build/launch failure). Coverage losses live in the summary table + failed_*.json + the aggregate,
+where they always were. GREEN = harness healthy; the data remains the arbiter of coverage.
+
 ## Operational note — do not delete ALL runs of a non-`main` workflow
 `collectivex-experimental.yml` lives ONLY on the `collectivex` branch (unlike `collectivex-sweep.yml`,
 which is also on `main`). GitHub keeps a workflow in the Actions registry only if it is on the default

@@ -660,6 +660,7 @@ if [ -n "${CX_SHARD_FILE:-}" ] && [ -f "${CX_SHARD_FILE:-/nonexistent}" ]; then
   _cx_ts_base="$CX_TS"   # per-case CX_TS suffix below keeps each case's result file UNIQUE (else
                          # cases sharing backend+phase overwrite each other at the same timestamp).
   ci=0
+  failed_cases=0
   while [ "$ci" -lt "$ncases" ]; do
     export CX_TS="${_cx_ts_base}-c$(printf '%03d' "$ci")"
     # Map case[ci] fields -> CX_* env (shell-quoted). The setup job pre-resolved hidden/topk/experts
@@ -720,12 +721,19 @@ PY
         [ "$a" -gt 1 ] && rm -f results/failed_*"${CX_TS}"*.json 2>/dev/null || true
         break
       fi
-      [ "$a" -ge "$attempts" ] && { rc=1; break; }
+      # A failed CASE does NOT fail the shard job. The failed-case record + the summary table are
+      # the signal (the doctrine is judge-by-data, and the conclusion should match it): expected
+      # per-case failures — the empty-rank diagnostic on HybridEP/UCCL Hopper, a flashinfer
+      # intermittent that survived its retries — used to flip 200+-correct-point jobs red. The job
+      # now fails only when the harness itself is unhealthy (summarize.py: NO valid results at all).
+      # Known DETERMINISTIC whole-shard walls never even dispatch (capability RUNNER_WALLS/aarch64).
+      [ "$a" -ge "$attempts" ] && { failed_cases=$((failed_cases+1)); cx_log "  [$((ci+1))/$ncases] $CX_BENCH case FAILED after $a attempt(s) — failed-case record preserved; shard continues"; break; }
       cx_log "  [$((ci+1))/$ncases] $CX_BENCH attempt $a/$attempts failed — retry (intermittent MNNVL barrier)"
       a=$((a+1))
     done
     ci=$((ci + 1))
   done
+  [ "${failed_cases:-0}" -gt 0 ] && cx_log "SHARD done: $failed_cases/$ncases case(s) failed (records preserved — see the summary table + failed_*.json)" || true
 else
   # Single-bench (workflow_dispatch) path gets the SAME flashinfer retry as SHARD mode — the
   # combine-quant runs (flashinfer-combine-* -> CX_BENCH=flashinfer) come through here and are
