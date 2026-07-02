@@ -51,8 +51,9 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
 $PARALLEL_ARGS \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
+--kv-cache-dtype fp8 \
 --block-size 128 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
