@@ -174,7 +174,8 @@ jobs:
       ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }}
       ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}EP${{ inputs.prefill-ep }}${{ inputs.prefill-dp-attn == 'true' && ' DPA' || '' }})
       x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}EP${{ inputs.decode-ep }}${{ inputs.decode-dp-attn == 'true' && ' DPA' || '' }})
-      ${{ inputs.spec-decoding != 'none' && format('{0} ', inputs.spec-decoding) || '' }}conc=${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+      ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
+      conc=${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
       - name: Slurm cleanup (pre-run)
