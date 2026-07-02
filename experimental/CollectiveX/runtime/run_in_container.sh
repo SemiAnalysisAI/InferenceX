@@ -113,7 +113,7 @@ import sys, json, os
 sys.path.insert(0, "tests")
 import failure_taxonomy as ft
 backend, phase, rc, runner, topo, out = sys.argv[1:7]
-rec = {"family": "moe", "record_type": "failed-case", "schema_version": 3,
+rec = {"family": "moe", "record_type": "failed-case", "schema_version": 4,
        "generated_by": "run_in_container.sh", "runner": runner, "backend": backend,
        "phase": phase, "topology_class": topo, "status": "failed",
        "publication_status": "failed", "rows": [],
@@ -734,6 +734,13 @@ PY
     ci=$((ci + 1))
   done
   [ "${failed_cases:-0}" -gt 0 ] && cx_log "SHARD done: $failed_cases/$ncases case(s) failed (records preserved — see the summary table + failed_*.json)" || true
+  # RESTORE the base timestamp: the loop re-exported CX_TS per case (…-cNNN), so leaving the LAST
+  # case's ts in place made the final summarize below filter to that ONE case — and when the last
+  # case happened to be a failing diagnostic (empty-rank sorts last), summarize saw "no result
+  # files" and flipped an otherwise-complete shard red (h200 run 28577792572: 39/40 good cases,
+  # conclusion failure). The base ts is a substring of every per-case filename, so summarize then
+  # gates on the WHOLE shard's results, as intended.
+  export CX_TS="$_cx_ts_base"
 else
   # Single-bench (workflow_dispatch) path gets the SAME flashinfer retry as SHARD mode — the
   # combine-quant runs (flashinfer-combine-* -> CX_BENCH=flashinfer) come through here and are
