@@ -2,6 +2,7 @@ import fnmatch
 import json
 import argparse
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 # Ensure sibling modules are importable regardless of how script is invoked
@@ -12,7 +13,8 @@ from validation import (
     validate_agentic_matrix_entry,
     load_config_files,
     load_runner_file,
-    Fields
+    Fields,
+    DEFAULT_AGENTIC_DURATION_SECONDS,
 )
 
 seq_len_stoi = {
@@ -21,6 +23,12 @@ seq_len_stoi = {
 }
 
 MIN_EVAL_CONC = 16
+# Bound how many multinode agentic conc points share one server allocation.
+MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION = 4
+BYTES_PER_MIB = 1024 * 1024
+BYTES_PER_GB = 1_000_000_000
+# 3 TB decimal DRAM cap, expressed in MiB, before utilization scaling.
+MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB = 2_861_022
 
 # Reverse mapping for exp-name generation
 seq_len_itos = {v: k for k, v in seq_len_stoi.items()}
@@ -33,6 +41,83 @@ def seq_len_to_str(isl: int, osl: int) -> str:
     otherwise returns 'isl_osl' format.
     """
     return seq_len_itos.get((isl, osl), f"{isl}_{osl}")
+
+
+def runner_labels(runner_data: dict) -> dict:
+    """Return runner scheduling labels."""
+    return runner_data["labels"]
+
+
+def runner_hardware(runner_data: dict) -> dict:
+    """Return runner hardware metadata, if present."""
+    return runner_data.get("hardware", {})
+
+
+def runner_nodes_for_label(runner: str, runner_data: dict) -> list[str]:
+    """Return concrete runner names for a scheduling label."""
+    return runner_labels(runner_data).get(runner, [])
+
+
+def runner_hardware_int(runner: str, runner_data: dict, field: str) -> int:
+    """Return an integer hardware field for a runner label."""
+    hardware = runner_hardware(runner_data).get(runner, {})
+    value = hardware.get(field)
+    if value is None:
+        available = ", ".join(sorted(runner_hardware(runner_data).keys()))
+        raise ValueError(
+            f"Runner '{runner}' requires '{field}' "
+            f"in runner hardware metadata. Available hardware keys: {available}"
+        )
+    return value
+
+
+def runner_available_cpu_dram_mib(runner: str, runner_data: dict) -> int:
+    """Return available CPU DRAM for a runner label."""
+    return runner_hardware_int(runner, runner_data, Fields.AVAILABLE_CPU_DRAM_MIB.value)
+
+
+def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
+    """Return GPUs per node for a runner label."""
+    return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
+
+
+def agentic_dram_offload_gb(
+    agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
+) -> int:
+    """Return the aggregate DRAM offload budget for a single-node entry."""
+    kv_offloading = benchmark[Fields.KV_OFFLOADING.value]
+    if kv_offloading != "dram":
+        return 0
+
+    available_mib = min(
+        runner_available_cpu_dram_mib(runner, runner_data),
+        MAX_AGENTIC_AVAILABLE_CPU_DRAM_MIB,
+    )
+    utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
+    gpus_per_node = runner_gpus_per_node(runner, runner_data)
+    tp = benchmark[Fields.TP.value]
+    if tp > gpus_per_node:
+        raise ValueError(
+            f"tp={tp} exceeds {Fields.GPUS_PER_NODE.value}={gpus_per_node} "
+            f"for runner '{runner}'"
+        )
+    proportional_bytes = (
+        Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / gpus_per_node
+    )
+    return int(proportional_bytes / BYTES_PER_GB)
+
+
+def agentic_kv_offload_suffix(kv_offloading: str, kv_offload_backend: str | None) -> str:
+    """Return a compact exp-name suffix for agentic KV offload settings."""
+    if kv_offloading == "none":
+        return "kvnone"
+    return f"kv{kv_offloading}-{kv_offload_backend}"
+
+
+def chunk_multinode_agentic_concurrencies(conc_values: list[int]) -> list[list[int]]:
+    """Bound sequential agentic profiles sharing one server allocation."""
+    size = MAX_MULTINODE_AGENTIC_CONCURRENCIES_PER_ALLOCATION
+    return [conc_values[index:index + size] for index in range(0, len(conc_values), size)]
 
 
 def _freeze_matrix_value(value):
@@ -226,7 +311,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
     # Validate runner types if specified
     if args.runner_type:
-        valid_runner_types = set(runner_data.keys())
+        valid_runner_types = set(runner_labels(runner_data).keys())
         invalid_runners = set(args.runner_type) - valid_runner_types
         if invalid_runners:
             raise ValueError(
@@ -278,7 +363,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
         # Compute filtered runner nodes for this config if filter is specified
         runner_nodes_to_use = None
         if args.runner_node_filter:
-            runner_nodes = runner_data.get(runner, [])
+            runner_nodes = runner_nodes_for_label(runner, runner_data)
             runner_nodes_to_use = [
                 node for node in runner_nodes if args.runner_node_filter in node]
             if not runner_nodes_to_use:
@@ -490,21 +575,33 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
         # ---- Agentic-coding scenarios ----
         agentic_configs = scenarios.get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
+        if is_multinode and not args.multi_node:
+            continue
+        if not is_multinode and not args.single_node:
+            continue
 
         for agentic_config in agentic_configs:
             bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
-            duration = agentic_config.get(Fields.DURATION.value, 1800)
+            duration = DEFAULT_AGENTIC_DURATION_SECONDS
 
             for bmk in bmk_space:
                 if is_multinode:
                     prefill = bmk[Fields.PREFILL.value]
                     decode = bmk[Fields.DECODE.value]
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    kv_offloading = "none"
+                    kv_offload_backend = None
                 else:
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                    kv_offloading = bmk[Fields.KV_OFFLOADING.value]
+                    kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
+                total_cpu_dram_gb = (
+                    0
+                    if is_multinode
+                    else agentic_dram_offload_gb(agentic_config, bmk, runner, runner_data)
+                )
 
                 # Get concurrency values
                 conc_list = bmk.get(Fields.CONC_LIST.value)
@@ -533,9 +630,9 @@ def generate_full_sweep(args, all_config_data, runner_data):
 
                 runners_for_entry = runner_nodes_to_use if runner_nodes_to_use else [runner]
 
-                for conc in conc_values:
+                if is_multinode:
                     for runner_value in runners_for_entry:
-                        if is_multinode:
+                        for conc_batch in chunk_multinode_agentic_concurrencies(conc_values):
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -546,16 +643,22 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
-                                Fields.CONC.value: conc,
+                                Fields.CONC.value: conc_batch,
+                                Fields.KV_OFFLOADING.value: "none",
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_conc{conc}"
+                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
+                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-                        else:
+                            validate_agentic_matrix_entry(entry)
+                            matrix_values.append(entry)
+                else:
+                    for conc in conc_values:
+                        for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -567,14 +670,19 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
-                                Fields.OFFLOADING.value: offloading,
+                                Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_"
+                                    f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-
-                        validate_agentic_matrix_entry(entry)
-                        matrix_values.append(entry)
+                            if kv_offload_backend is not None:
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                            validate_agentic_matrix_entry(entry)
+                            matrix_values.append(entry)
 
     return matrix_values
 
@@ -583,7 +691,7 @@ def _runner_values_for_filter(runner: str, runner_data: dict, runner_node_filter
     if not runner_node_filter:
         return [runner]
 
-    candidates = runner_data.get(runner, [])
+    candidates = runner_nodes_for_label(runner, runner_data)
     if runner_node_filter in runner:
         candidates = [runner, *candidates]
 
@@ -746,18 +854,27 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         # ---- Agentic-coding scenarios ----
         agentic_configs = val[Fields.SCENARIOS.value].get(Fields.AGENTIC_CODING.value, []) if (scenario_filter is None or 'agentic-coding' in scenario_filter) else []
         for agentic_config in agentic_configs:
-            duration = agentic_config.get(Fields.DURATION.value, 1800)
+            duration = DEFAULT_AGENTIC_DURATION_SECONDS
+            bmk_space = agentic_config[Fields.SEARCH_SPACE.value]
 
-            for bmk in agentic_config[Fields.SEARCH_SPACE.value]:
+            for bmk in bmk_space:
                 if is_multinode:
                     prefill = bmk[Fields.PREFILL.value]
                     decode = bmk[Fields.DECODE.value]
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
+                    kv_offloading = "none"
+                    kv_offload_backend = None
                 else:
                     tp = bmk[Fields.TP.value]
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
-                offloading = bmk.get(Fields.OFFLOADING.value, "none")
+                    kv_offloading = bmk[Fields.KV_OFFLOADING.value]
+                    kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
+                total_cpu_dram_gb = (
+                    0
+                    if is_multinode
+                    else agentic_dram_offload_gb(agentic_config, bmk, runner, runner_data)
+                )
 
                 conc_list = bmk.get(Fields.CONC_LIST.value)
                 if conc_list:
@@ -780,9 +897,9 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 if not conc_values:
                     continue
 
-                for conc in conc_values:
+                if is_multinode:
                     for runner_value in runners_for_entry:
-                        if is_multinode:
+                        for conc_batch in chunk_multinode_agentic_concurrencies(conc_values):
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -793,16 +910,21 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.SPEC_DECODING.value: spec_decoding,
                                 Fields.PREFILL.value: prefill,
                                 Fields.DECODE.value: decode,
-                                Fields.CONC.value: conc,
+                                Fields.CONC.value: conc_batch,
+                                Fields.KV_OFFLOADING.value: "none",
                                 Fields.DURATION.value: duration,
                                 Fields.EXP_NAME.value: (
                                     f"{model_code}_p{prefill[Fields.NUM_WORKER.value]}x{prefill[Fields.TP.value]}"
-                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}_conc{conc}"
+                                    f"_d{decode[Fields.NUM_WORKER.value]}x{decode[Fields.TP.value]}"
+                                    f"_conc{'x'.join(str(c) for c in conc_batch)}"
                                 ),
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-                        else:
+                            matrix_values.append(validate_agentic_matrix_entry(entry))
+                else:
+                    for conc in conc_values:
+                        for runner_value in runners_for_entry:
                             entry = {
                                 Fields.IMAGE.value: image,
                                 Fields.MODEL.value: model,
@@ -814,12 +936,18 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
-                                Fields.OFFLOADING.value: offloading,
+                                Fields.KV_OFFLOADING.value: kv_offloading,
+                                Fields.TOTAL_CPU_DRAM_GB.value: total_cpu_dram_gb,
                                 Fields.DURATION.value: duration,
-                                Fields.EXP_NAME.value: f"{model_code}_tp{tp}_conc{conc}_offload{offloading}",
+                                Fields.EXP_NAME.value: (
+                                    f"{model_code}_tp{tp}_conc{conc}_"
+                                    f"{agentic_kv_offload_suffix(kv_offloading, kv_offload_backend)}"
+                                ),
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
-                        matrix_values.append(validate_agentic_matrix_entry(entry))
+                            if kv_offload_backend is not None:
+                                entry[Fields.KV_OFFLOAD_BACKEND.value] = kv_offload_backend
+                            matrix_values.append(validate_agentic_matrix_entry(entry))
 
     return matrix_values
 
