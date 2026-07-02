@@ -18,7 +18,7 @@ Arguments (`$ARGUMENTS`): `<engine> <target-tag> [filter]`
 
 | engine | NVIDIA image | AMD/ROCm image | master config |
 |--------|--------------|----------------|---------------|
-| vllm   | `vllm/vllm-openai` | `vllm/vllm-openai-rocm` | `.github/configs/nvidia-master.yaml` / `amd-master.yaml` |
+| vllm   | `vllm/vllm-openai` | `vllm/vllm-openai-rocm` | `configs/nvidia-master.yaml` / `amd-master.yaml` |
 | sglang | `lmsysorg/sglang`  | `lmsysorg/sglang` (rocm-suffixed tag) | same two files |
 
 ## Grouping rules (NON-NEGOTIABLE)
