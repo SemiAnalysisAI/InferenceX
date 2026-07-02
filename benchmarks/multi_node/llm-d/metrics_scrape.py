@@ -80,12 +80,11 @@ def build_targets():
         # all its local ranks there). multi-port: the vLLM ranks each serve on
         # VLLM_PORT + (rank within engine), so scrape every local rank port.
         # Always the vLLM port, never the decode sidecar.
-        nodes_per_engine = max(1, len(node_ips) // max(1, workers))
         for i, ip in enumerate(node_ips):
             if lb == "multi-port":
-                start = (i % nodes_per_engine) * gpn
+                # every node exposes its local ranks at port + local_index
                 for k in range(gpn):
-                    targets.append((role, f"{role}-{i}-r{start + k}", f"{ip}:{port + start + k}"))
+                    targets.append((role, f"{role}-{i}-r{k}", f"{ip}:{port + k}"))
             else:
                 targets.append((role, f"{role}-{i}", f"{ip}:{port}"))
 
