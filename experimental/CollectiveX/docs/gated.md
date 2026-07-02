@@ -160,11 +160,15 @@ cubin/jit-cache so `get_moe_alltoall_module()` JIT-compiles the 14-arg kernel fr
 - **NVFP4 combine — DONE on B300:** `output_dtype=uint8 (packed e2m1) + e4m3 vec-16 scales +
   output_scalar_scale`; dequant via `e2m1_and_ufp8sf_scale_to_float` (the e4m3 scales viewed as uint8
   ufp8). Valid, `correct=True` ×8 (Blackwell-native fp4, like nvfp4 dispatch).
-- **H100 combine — build-time-limited (NOT arch):** the ~70-min in-container flashinfer-main source
-  build exceeds the H100 runner's job budget (SIGTERM). B300's longer budget lets it land. NOTE the
-  original blocker no longer applies: since the nightly wheel gained `output_dtype` (direct-cast bullet
-  below), an H100 mxfp8-combine re-run would skip the source build entirely — attainable, just not yet
-  re-run (and it would still be subject to the h100 intermittent MNNVL deadlock above).
+- **H100 combine — ARCH WALL (MEASURED, run 28564329381; supersedes the earlier "build-time-limited,
+  attainable" note):** the build blocker is indeed gone — the upgrade path installed flashinfer 0.6.14
+  in ~2 min (`combine output_dtype: present`, no 70-min source build) — but the quantized
+  `moe_a2a_combine` KERNEL itself asserts `sm_version >= 100`: **"Quantized moe_a2a_combine requires
+  SM>=100 (Blackwell), but got SM90"**, deterministic on all 8 ranks, decode AND prefill, all 4 retry
+  attempts identical. So quantized combine OUTPUT (mxfp8/nvfp4) is Blackwell-only BY UPSTREAM KERNEL
+  GATE, not by our environment. `capability.resolve` now rejects quantized combine on non-Blackwell
+  (`quant_combine_arch`), so the h100 combo fails fast at validate instead of on hardware. B300 remains
+  the quant-combine platform (valid mxfp8+nvfp4 runs above).
 - **Direct-cast FP8 combine — kernel limit (evidenced, B300 run 28315037266):** ATTEMPTED via
   `CX_QC_SCALE=scalar` (`output_dtype=float8_e4m3fn` + `output_scalar_scale`, NO per-block
   `output_scales`). The kernel ASSERTS `Check failed: (output.dtype()==payload.dtype()) is false:

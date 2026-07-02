@@ -100,6 +100,11 @@ CAP = {
         # reserved (fp4/e8m0 output packing) until fp8-combine is GHA-validated.
         "combine_dtypes": ["bf16", "fp8", "nvfp4"],
         "quant_modes": ["none", "fp8", "nvfp4"],
+        # ALL quantized combine output (fp8 AND nvfp4) is Blackwell-only: the moe_a2a_combine kernel
+        # itself asserts `sm_version >= 100` (MEASURED on h100, run 28564329381, flashinfer 0.6.14:
+        # "Quantized moe_a2a_combine requires SM>=100 (Blackwell), but got SM90") — not a build or
+        # wheel issue; the wheel/output_dtype path worked and every retry failed identically.
+        "quant_combine_arch": "blackwell",
         "routings": ALL_ROUTINGS, "eplb": True, "activation_profiles": ALL_ACTIVATION_PROFILES,
     },
     "deepep-hybrid": {
@@ -220,6 +225,10 @@ def resolve(sku, backend, mode="normal", dtype="bf16",
     if combine_quant_mode not in cap.get("quant_modes", ["none"]):
         return False, (f"{backend} quant_modes={cap.get('quant_modes', ['none'])} "
                        f"(got '{combine_quant_mode}') — quant combine not wired yet")
+    qc_arch = cap.get("quant_combine_arch")
+    if combine_quant_mode != "none" and qc_arch and _sku_arch(sku) != qc_arch:
+        return False, (f"{backend} quantized combine requires {qc_arch} (kernel asserts sm>=100; "
+                       f"measured on h100, run 28564329381); SKU '{sku}' is {_sku_arch(sku)}")
     if routing not in cap.get("routings", ALL_ROUTINGS):
         return False, f"{backend} routings={cap.get('routings', ALL_ROUTINGS)} (got '{routing}')"
     if eplb and not cap.get("eplb", False):

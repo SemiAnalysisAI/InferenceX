@@ -38,10 +38,11 @@ This note was originally written before the FlashInfer adapter landed. The curre
 - **FlashInfer dispatch:** BF16, e4m3 FP8 variants, MXFP8, and NVFP4 dispatch have valid runs where
   the backend and architecture support them. NVFP4 is Blackwell-only.
 - **FlashInfer quantized combine:** MXFP8 and NVFP4 combine have valid B300 runs through the
-  `moe_a2a_combine` output-quant path. H100 was build-budget-limited for the source-build path, not
-  architecturally ruled out — and since the nightly wheel gained `output_dtype` the source build is no
-  longer needed, so an H100 mxfp8-combine re-run is attainable (subject to the h100 intermittent MNNVL
-  deadlock; see docs/gated.md).
+  `moe_a2a_combine` output-quant path. H100 is ruled out BY THE KERNEL (measured, run 28564329381,
+  flashinfer 0.6.14): quantized `moe_a2a_combine` asserts `sm_version >= 100` — "requires SM>=100
+  (Blackwell), but got SM90". The old build-budget blocker is gone (the wheel now carries
+  `output_dtype`), which is exactly what let the re-run reach the kernel and measure the real wall.
+  Quant combine is Blackwell-only; `capability.resolve` enforces it (see docs/gated.md).
 - **MXFP4 dispatch/combine:** still gated because the FlashInfer MXFP4 scale-factor layout is
   tile-padded/swizzled rather than a simple per-token tensor that can be moved through the current A2A
   payload list.
