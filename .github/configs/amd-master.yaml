@@ -1979,7 +1979,7 @@ dsv4-fp4-mi355x-vllm:
 # above ~conc32 (-37% @ conc32). Image reuses the base entry's v0.22.0 ROCm
 # build, which already contains the MTP commit.
 dsv4-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
