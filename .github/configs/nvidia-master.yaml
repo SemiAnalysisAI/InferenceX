@@ -12847,7 +12847,7 @@ minimaxm3-fp4-b300-vllm:
 # /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
 # launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
+  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -12859,21 +12859,17 @@ minimaxm3-fp4-b300-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 2, spec-decoding: mtp }
+      - { tp: 4, conc-start: 2, conc-end: 2, spec-decoding: mtp }
+      - { tp: 2, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 1024, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 2, spec-decoding: mtp }
+      - { tp: 4, conc-start: 2, conc-end: 2, spec-decoding: mtp }
+      - { tp: 2, conc-start: 4, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 1024, spec-decoding: mtp }
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
