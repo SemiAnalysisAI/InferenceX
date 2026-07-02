@@ -184,7 +184,9 @@ jobs:
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
-            offloading: ${{ matrix.config.offloading }}
+            kv-offloading: ${{ matrix.config['kv-offloading'] }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'] }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             isl: '0'
             osl: '0'
@@ -216,7 +218,7 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            conc-list: '[${{ matrix.config.conc }}]'
+            conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
@@ -229,7 +231,7 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            conc: ${{ matrix.config.conc }}
+            conc: ${{ matrix.config.conc[0] }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -376,3 +378,44 @@ jobs:
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
+
+    trigger-agentic-ingest:
+        needs:
+            [
+                test-sweep-agentic,
+                test-sweep-multi-node-agentic,
+                collect-agentic-results,
+                calc-success-rate,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            needs.collect-agentic-results.result == 'success' &&
+            needs.calc-success-rate.result == 'success' &&
+            (
+              needs.test-sweep-agentic.result == 'success' ||
+              needs.test-sweep-multi-node-agentic.result == 'success'
+            ) &&
+            (
+              needs.test-sweep-agentic.result == 'success' ||
+              needs.test-sweep-agentic.result == 'skipped'
+            ) &&
+            (
+              needs.test-sweep-multi-node-agentic.result == 'success' ||
+              needs.test-sweep-multi-node-agentic.result == 'skipped'
+            )
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger agentic database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
+                    -d '{
+                      "event_type": "ingest-agentic-results",
+                      "client_payload": {
+                        "run-id": "${{ github.run_id }}",
+                        "run-attempt": "${{ github.run_attempt }}"
+                      }
+                    }'

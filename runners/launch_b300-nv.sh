@@ -449,9 +449,33 @@ else
         fi
     )
 
+    SALLOC_MEMORY_ARGS=()
+    if [[ "${OFFLOADING:-none}" != "none" ]]; then
+        # Host KV tiers (vLLM Mooncake cpu offload, SGLang HiCache) allocate
+        # multi-TB pinned host pools. Give them the full memory allocation of
+        # the exclusive node instead of Slurm's implicit 2 TB default.
+        SALLOC_MEMORY_ARGS=(--mem=0)
+    fi
+    DEFAULT_SALLOC_TIME_LIMIT=180
+    if [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "${DURATION:-0}" -ge 10800 ]]; then
+        # Three-hour profiles need enough lifecycle headroom for model startup,
+        # warmup, request draining, and CPU-heavy result processing.
+        DEFAULT_SALLOC_TIME_LIMIT=480
+    elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "${DURATION:-0}" -ge 5400 ]]; then
+        # A 90-minute profile plus model startup, warmup, request draining,
+        # and result processing can exceed the normal three-hour lifecycle.
+        DEFAULT_SALLOC_TIME_LIMIT=300
+    elif [[ "$IS_AGENTIC" == "1" && "$MODEL_PREFIX" == "dsv4" && "$FRAMEWORK" == "sglang" ]]; then
+        if [[ "$CONC" -ge 512 || ( "$DP_ATTENTION" == "true" && "$CONC" -ge 96 ) ]]; then
+            # C512 and high-concurrency DP replays can spend multiple hours in
+            # long-context warmup before the 30-minute profiling phase.
+            DEFAULT_SALLOC_TIME_LIMIT=300
+        fi
+    fi
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-$DEFAULT_SALLOC_TIME_LIMIT}"
     # Default 180 min; AL-matrix collection (16 server starts) needs longer and
     # overrides via SALLOC_TIME_LIMIT.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time="${SALLOC_TIME_LIMIT:-180}" --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive "${SALLOC_MEMORY_ARGS[@]}" --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
@@ -459,6 +483,7 @@ else
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
+        --container-remap-root \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash "$BENCH_SCRIPT"
