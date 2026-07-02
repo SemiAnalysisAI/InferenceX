@@ -137,10 +137,30 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         eval_indices.add(best_idx)
         mn_eval_conc[best_idx] = best_eval_conc
 
-    # Mark the selected entries (skip agentic entries which don't support evals)
+    # Agentic-coding entries run swebench (single-shot), not gsm8k, and have no
+    # isl/osl so the 8k1k logic above never selects them. Single-node only for
+    # now: mark one entry per (model, runner, framework, precision) at its
+    # highest concurrency. (Multi-node agentic eval is a future extension.)
+    ag_sn_groups = defaultdict(list)
     for i, entry in enumerate(matrix_values):
-        if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+        if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
             continue
+        if Fields.PREFILL.value in entry:  # multi-node agentic: not yet
+            continue
+        conc = entry[Fields.CONC.value]
+        conc_val = max(conc) if isinstance(conc, list) else conc
+        key = (
+            entry[Fields.MODEL.value],
+            entry[Fields.RUNNER.value],
+            entry[Fields.FRAMEWORK.value],
+            entry[Fields.PRECISION.value],
+        )
+        ag_sn_groups[key].append((i, conc_val))
+    for entries in ag_sn_groups.values():
+        eval_indices.add(max(entries, key=lambda item: item[1])[0])
+
+    # Mark the selected entries (agentic-coding entries run swebench; see above).
+    for i, entry in enumerate(matrix_values):
         entry[Fields.RUN_EVAL.value] = i in eval_indices
         if i in mn_eval_conc:
             entry[Fields.EVAL_CONC.value] = mn_eval_conc[i]
@@ -154,7 +174,8 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
     Evals only run at 8k1k (matching mark_eval_entries), so entries at other
     sequence lengths (e.g. 1k1k) are passed through untouched rather than
     expanded into eval rows.
-    Agentic entries are left untouched because they do not support lm-eval.
+    Single-node agentic entries run swebench (single-shot) and are marked for
+    eval (multi-node agentic eval is a future extension).
     Multi-node rows with the same engine topology are merged into one eval row
     whose full concurrency list is run sequentially against the same engine.
     """
@@ -165,6 +186,10 @@ def mark_all_eval_entries(matrix_values: list[dict]) -> list[dict]:
 
     for entry in matrix_values:
         if entry.get(Fields.SCENARIO_TYPE.value) == 'agentic-coding':
+            # Agentic runs swebench (single-shot); mark single-node agentic for
+            # eval. Multi-node agentic eval is a future extension.
+            if Fields.PREFILL.value not in entry:
+                entry[Fields.RUN_EVAL.value] = True
             expanded_entries.append(entry)
             continue
 
