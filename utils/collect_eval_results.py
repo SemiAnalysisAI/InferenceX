@@ -6,17 +6,41 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 from tabulate import tabulate
 
-# Import shared utilities from summarize
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-from summarize import (
-    load_json, MODEL, HARDWARE, FRAMEWORK, PRECISION,
-    ISL, OSL, TP, EP, CONC, DP_ATTENTION, TASK, SCORE,
-    EM_STRICT, EM_FLEXIBLE, N_EFF,
-    SPEC_DECODING, PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_WORKERS,
-    DECODE_TP, DECODE_EP, DECODE_DP_ATTN, DECODE_WORKERS
-)
+MODEL = "Model"
+HARDWARE = "Hardware"
+FRAMEWORK = "Framework"
+PRECISION = "Precision"
+ISL = "ISL"
+OSL = "OSL"
+TP = "TP"
+EP = "EP"
+DP_ATTENTION = "DP Attention"
+CONC = "Conc"
+PREFILL_TP = "Prefill TP"
+PREFILL_EP = "Prefill EP"
+PREFILL_DP_ATTN = "Prefill DP Attn"
+PREFILL_WORKERS = "Prefill Workers"
+DECODE_TP = "Decode TP"
+DECODE_EP = "Decode EP"
+DECODE_DP_ATTN = "Decode DP Attn"
+DECODE_WORKERS = "Decode Workers"
+TASK = "Task"
+SCORE = "Score"
+EM_STRICT = "EM Strict"
+EM_FLEXIBLE = "EM Flexible"
+N_EFF = "N (eff)"
+SPEC_DECODING = "Spec Decode"
 
 CONC_SUFFIX_RE = re.compile(r"_conc(\d+)(?:_\d+)?\.json$")
+
+
+def load_json(path: Path) -> Optional[Dict[str, Any]]:
+    """Load JSON file and return dict, or None on error."""
+    try:
+        with open(path, 'r') as f:
+            return json.load(f)
+    except Exception:
+        return None
 
 
 def find_eval_sets(root: Path) -> List[Path]:
