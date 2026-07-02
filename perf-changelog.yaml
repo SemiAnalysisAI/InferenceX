@@ -4411,7 +4411,7 @@
 - config-keys:
     - minimaxm3-fp4-b200-dynamo-vllm
   description:
-    - "Add MiniMax-M3 NVFP4 B200 Dynamo-vLLM disaggregated 8k1k configuration at concurrency 4096."
+    - "Add MiniMax-M3 NVFP4 B200 Dynamo-vLLM disaggregated 8k1k configuration at concurrency 2048."
     - "Port the B300 4P2D DEP2/DEP8 recipe to a B200 2P1D topology using one prefill node and one decode node."
     - "Use the b200-multinode runner and vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41; omit max-cudagraph-capture-size and max-num-batched-tokens from prefill."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1982
