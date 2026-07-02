@@ -11,7 +11,7 @@ from github import Auth, Github
 
 def load_gpu_skus():
     """Load GPU SKUs from runners.yaml, extracting the part before the first hyphen from each key."""
-    runners_path = Path(__file__).parent.parent / ".github" / "configs" / "runners.yaml"
+    runners_path = Path(__file__).parent.parent / "configs" / "runners.yaml"
     with open(runners_path) as f:
         runners = yaml.safe_load(f)
 
