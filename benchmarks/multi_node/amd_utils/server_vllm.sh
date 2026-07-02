@@ -338,7 +338,7 @@ capture_vllm_cache_metrics() {
             [[ -n "$url" ]] || continue
             echo "--- ${url} ---"
             curl -fsS --max-time 5 "$url" 2>/dev/null \
-                | grep -Ei 'external|prefix_cache|prompt_tokens_by_source|kv_cache|gpu_cache|cpu_kv|kv_offload|cache_hit|lmcache' \
+                | grep -E '^(vllm:num_requests_running|vllm:num_requests_waiting|vllm:prompt_tokens_by_source|vllm:external_prefix_cache_hits|vllm:external_prefix_cache_queries|vllm:kv_cache_usage_perc|vllm:gpu_cache_usage_perc|vllm:prefix_cache_hits|vllm:prefix_cache_queries|vllm:kv_offload|vllm:cpu_kv|vllm:.*lmcache)' \
                 || true
         done
     } | tee -a "$out"
