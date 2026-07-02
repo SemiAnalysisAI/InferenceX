@@ -12809,7 +12809,7 @@ minimaxm3-fp8-b300-vllm:
 # weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
 # the STAGED_MODELS allow-list in launch_b300-nv.sh).
 minimaxm3-fp4-b300-vllm:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
+  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -12821,22 +12821,17 @@ minimaxm3-fp4-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512 }
-      - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+      - { tp: 8, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 2, conc-end: 2 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 1024 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 2, conc-end: 2 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 1024 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of MiniMax-M3 NVFP4
 # (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM, pairing the target with the
