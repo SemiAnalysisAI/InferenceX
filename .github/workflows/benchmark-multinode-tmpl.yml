@@ -170,7 +170,12 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | P(tp${{ inputs.prefill-tp }}/ep${{ inputs.prefill-ep }}/dp${{ inputs.prefill-dp-attn }}/nw${{ inputs.prefill-num-worker }}) D(tp${{ inputs.decode-tp }}/ep${{ inputs.decode-ep }}/dp${{ inputs.decode-dp-attn }}/nw${{ inputs.decode-num-worker }}) | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
+    name: >-
+      ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }}
+      ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}/EP${{ inputs.prefill-ep }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
+      x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}/EP${{ inputs.decode-ep }}${{ inputs.decode-dp-attn == 'true' && '/DPA' || '' }})
+      ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
+      conc=${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
       - name: Slurm cleanup (pre-run)

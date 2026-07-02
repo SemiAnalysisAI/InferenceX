@@ -20,8 +20,8 @@ def get_config_paths() -> List[str]:
     """Get paths to InferenceX config files."""
     root = Path(os.getenv('INFERENCEMAX_ROOT', Path.cwd()))
     return [
-        str(root / '.github/configs/amd-master.yaml'),
-        str(root / '.github/configs/nvidia-master.yaml'),
+        str(root / 'configs/amd-master.yaml'),
+        str(root / 'configs/nvidia-master.yaml'),
     ]
 
 

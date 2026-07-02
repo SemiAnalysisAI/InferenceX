@@ -1682,14 +1682,13 @@ dsr1-fp4-b200-sglang:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 1, conc-end: 256 }
-      - { tp: 8, ep: 8, conc-list: [1] }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, ep: 4, conc-start: 1, conc-end: 128 }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32 }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256 }
-      - { tp: 8, ep: 8, conc-list: [1] }
     # agentic-coding: temporarily disabled — blocked by e2e-tests.yml artifact
     # name mismatch (downloads `agentic_*` but benchmark-tmpl.yml uploads as
     # `bmk_agentic_*`). Re-enable once that workflow is aligned.
@@ -1700,7 +1699,7 @@ dsr1-fp4-b200-sglang:
     #   - { tp: 8, ep: 8, offloading: none, conc-list: [1, 2, 4, 8, 12, 16, 32, 64, 128, 256, 512] }
 
 dsr1-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.12.post1
   model: nvidia/DeepSeek-R1-0528-FP4-V2
   model-prefix: dsr1
   runner: b200
@@ -1712,11 +1711,13 @@ dsr1-fp4-b200-sglang-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 512, spec-decoding: mtp }
+      - { tp: 4, ep: 1, conc-start: 1, conc-end: 32, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 256, spec-decoding: mtp }
 
 dsv4-fp4-b200-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260628-da802ddc
@@ -11698,7 +11699,7 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   model-prefix: dsv4
   # gb300-nv (not generic gb300) — the generic label is shared by both NV
   # and CW runner pools, so runs-on: gb300 lets CW runners pick up shards.
-  # The gb300-nv label is on NV runners only (per .github/configs/runners.yaml
+  # The gb300-nv label is on NV runners only (per configs/runners.yaml
   # + actual runner label listings). Pins agentic to the NVIDIA cluster
   # for initial validation. Drop -nv suffix to widen later.
   runner: gb300-nv
@@ -12808,7 +12809,7 @@ minimaxm3-fp8-b300-vllm:
 # weights are pre-staged read-only at /scratch/models/MiniMax-M3-NVFP4 (added to
 # the STAGED_MODELS allow-list in launch_b300-nv.sh).
 minimaxm3-fp4-b300-vllm:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
+  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -12820,22 +12821,19 @@ minimaxm3-fp4-b300-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 64 }
+      - { tp: 8, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 4, conc-start: 64, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512 }
-      - { tp: 2, ep: 2, conc-start: 16, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 1024 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 512 }
-      - { tp: 4, conc-start: 1, conc-end: 128 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256 }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128 }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 2, conc-start: 4, conc-end: 256 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of MiniMax-M3 NVFP4
 # (nvidia/MiniMax-M3-NVFP4) B300 single-node vLLM, pairing the target with the
