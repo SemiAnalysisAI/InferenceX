@@ -340,14 +340,28 @@ jobs:
           FRONTEND_PAT: ${{ secrets.INFX_FRONTEND_PAT }}
         run: |
           set -euo pipefail
-          curl -sSf -X POST \
-            -H "Authorization: Bearer $FRONTEND_PAT" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/dispatches \
-            -d '{
-              "event_type": "update-collectivex-data",
-              "client_payload": {
-                "source_run_id": "${{ github.run_id }}"
-              }
-            }'
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          git clone --quiet --depth 1 --branch collectivex \
+            "https://x-access-token:${FRONTEND_PAT}@github.com/SemiAnalysisAI/InferenceX-app.git" \
+            "$tmp/app"
+          cd "$tmp/app"
+          git pull --rebase origin collectivex
+          mkdir -p .github
+          {
+            echo "source_run_id=${{ github.run_id }}"
+            echo "source_sha=${{ github.sha }}"
+            echo "source_workflow=${{ github.workflow }}"
+            echo "source_run_url=https://github.com/SemiAnalysisAI/InferenceX/actions/runs/${{ github.run_id }}"
+            echo "triggered_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > .github/collectivex-source-run.env
+
+          git config user.name "InferenceX Data Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/collectivex-source-run.env
+          if git diff --cached --quiet; then
+            echo "CollectiveX source-run marker is already current."
+            exit 0
+          fi
+          git commit -m "chore: trigger CollectiveX data update for ${{ github.run_id }}"
+          git push origin HEAD:collectivex
