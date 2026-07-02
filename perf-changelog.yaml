@@ -4345,7 +4345,7 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1931
 
 - config-keys:
-    - dsv4-fp4-gb300-dynamo-sglang-1k1k-stp
+    - dsv4-fp4-gb300-dynamo-sglang
   description:
-    - "Add 7 DSV4 GB300 1k1k STP disagg configs with lmsysorg/sglang:nightly-dev-cu13-20260602-98a1b58c and megamoe backend"
+    - "Add 7 DSV4 GB300 1k/1k STP disagg configs under the existing dsv4-fp4-gb300-dynamo-sglang key so a single top-level config covers both 8k/1k and 1k/1k on GB300. Config image stays at lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd (unchanged); the 7 new 1k/1k recipes pin lmsysorg/sglang:nightly-dev-cu13-20260602-98a1b58c and use the megamoe backend"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1530
