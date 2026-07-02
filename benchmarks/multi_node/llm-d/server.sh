@@ -245,12 +245,12 @@ COMMON_ARGS=(
 #                rank, so a worker node (START_RANK>0) binds VLLM_PORT+START_RANK..
 export LLMD_LB_MODE="${LLMD_LB_MODE:-hybrid}"
 DP_SUPERVISOR_PORT=$(( VLLM_PORT + DP_SIZE ))
-# The node-local rank-0 serving port: VLLM_PORT on the engine leader, and
-# VLLM_PORT+START_RANK on a worker in multi-port mode. Used for the /health wait.
+# In multi-port mode EVERY node (leader or worker) binds its LOCAL DP ranks at
+# VLLM_PORT + local_index, i.e. VLLM_PORT .. VLLM_PORT+DP_SIZE_LOCAL-1 (8200-8203)
+# regardless of --data-parallel-start-rank (start-rank only sets the logical DP
+# rank IDs, not the serving ports - confirmed from vLLM rank logs). So the local
+# rank-0 health port is always VLLM_PORT.
 HEALTH_PORT="$VLLM_PORT"
-if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
-    HEALTH_PORT=$(( VLLM_PORT + START_RANK ))
-fi
 # api-server-count is a hybrid-lb concept (several frontends sharing one port);
 # multi-port runs one server per rank instead, so it is skipped there.
 API_SERVER_COUNT="${LLMD_API_SERVER_COUNT:-4}"
@@ -326,8 +326,7 @@ if [[ "$ROLE" == "decode" ]]; then
     # rank directly (matches the upstream generic decode sidecar). Its local
     # rank-0 port is SIDECAR_PORT+START_RANK on a worker node.
     if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
-        SIDECAR_FLAGS+=(--data-parallel-size="$DP_SIZE")
-        SIDECAR_HEALTH_PORT=$(( SIDECAR_PORT + START_RANK ))
+        SIDECAR_FLAGS+=(--data-parallel-size="$DP_SIZE_LOCAL")
     fi
     echo "Starting pd-sidecar (decode node_rank=$NODE_RANK worker_index=$LWS_WORKER_INDEX): ${SIDECAR_FLAGS[*]}"
     pd-sidecar "${SIDECAR_FLAGS[@]}" > "$SIDECAR_LOG" 2>&1 &
@@ -379,13 +378,15 @@ def add_role(role, ips, base_port, workers):
     #               base_port + (rank within its engine). A node that is worker j
     #               of its engine owns ranks [j*gpn, j*gpn+gpn); the EPP then
     #               balances across every rank instead of node-granular.
-    nodes_per_engine = max(1, len(ips) // max(1, workers))
     for i, ip in enumerate(ips):
         if lb == 'multi-port':
-            start_rank = (i % nodes_per_engine) * gpn
+            # Every node binds its local DP ranks at base_port + local_index
+            # (base_port .. base_port+gpn-1), the SAME range on every node
+            # (start-rank only sets DP rank IDs, not ports). Distinct 'name' per
+            # (node, port) keeps the endpoints unique across nodes.
             for k in range(gpn):
-                port = base_port + start_rank + k
-                endpoints.append({'name': f'{role}-{i}-p{port}', 'namespace': NS,
+                port = base_port + k
+                endpoints.append({'name': f'{role}-{i}-p{k}', 'namespace': NS,
                                   'address': ip, 'port': str(port),
                                   'labels': {'llm-d.ai/role': role}})
         else:
@@ -568,11 +569,7 @@ PY
     PREFILL_WAIT_DEADLINE=$(( $(date +%s) + 300 ))
     for _pidx in "${!_prefill_ips[@]}"; do
         _pip="${_prefill_ips[$_pidx]}"
-        if [[ "$LLMD_LB_MODE" == "multi-port" ]]; then
-            _pport=$(( VLLM_PORT + (_pidx % _npe_prefill) * GPUS_PER_NODE ))
-        else
-            _pport="$VLLM_PORT"
-        fi
+        _pport="$VLLM_PORT"
         until curl --output /dev/null --silent --fail \
                 --connect-timeout 5 --max-time 10 \
                 "http://$_pip:$_pport/health"; do
