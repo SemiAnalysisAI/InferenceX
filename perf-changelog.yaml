@@ -4431,6 +4431,7 @@
     - minimaxm3-fp4-b300-vllm-mtp
   description:
     - "Switch the MiniMax-M3 B300 vLLM MTP recipe from the custom perf image to a pinned mainline nightly."
+    - "Select the TRT-LLM backend when FlashInfer all-reduce is enabled."
     - "Refocus both 1k/1k and 8k/1k search spaces on TP2 c4-c256 and TP2/EP2 DP-attention c512, while retaining TP8 and TP4 c1-c2."
     - "Drop the TP8/EP8 and TP4/EP4 lanes."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1991
