@@ -2666,7 +2666,7 @@ minimaxm3-fp4-mi355x-vllm:
 # tokens. Search space mirrors the MI355X MXFP8 MTP entry, trimming the base
 # FP4 sweep at extreme concurrency where speculative decoding loses value.
 minimaxm3-fp4-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-3f5a1e1733200760169ff31ebe60a271072b199e
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2695,7 +2695,7 @@ minimaxm3-fp4-mi355x-vllm-mtp:
 # https://github.com/ROCm/ATOM/blob/5d42d49f9e4292e5b61475917e92e7ec1b1dacb7/recipes/MiniMax-M3.md
 # block size 128 is mandatory for MSA. TP4 on a single gfx950 node, per the recipe.
 minimaxm3-fp4-mi355x-atom:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2714,7 +2714,7 @@ minimaxm3-fp4-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp4-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
@@ -2733,7 +2733,7 @@ minimaxm3-fp4-mi355x-atom-mtp:
       - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp  }
 
 minimaxm3-fp8-mi355x-atom:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2752,7 +2752,7 @@ minimaxm3-fp8-mi355x-atom:
       - { tp: 4, conc-start: 1, conc-end: 256 }
 
 minimaxm3-fp8-mi355x-atom-mtp:
-  image: rocm/atom-dev:MiniMax-M3-20260623
+  image: rocm/atom-dev:MiniMax-M3-20260630
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
