@@ -132,6 +132,16 @@ def main() -> int:
             lad_specs = [(lad, "")]
             if sku == "mi355x":
                 rmode = "tuned"
+                # MEASURED (run 28577799750): decode is clean 1..128 on EVERY routing; prefill is
+                # clean to 512 on the SPREADING routings (uniform/balanced/balanced-rank-local) but
+                # the SKEWED ones (zipf/zipf-heavy/hotspot-single) time out rc=124 even at 8:1:4 —
+                # skew concentrates the RECEIVED tokens on the hot rank (~global = 8xT), blowing the
+                # 2GiB-heap receive envelope at prefill scale. Skewed prefill is therefore SKIPPED
+                # (its sub-floor small-T points would be invisible anyway; re-widen only with a
+                # bigger-MR fabric or a receive-capped kernel path).
+                MI355X_PREFILL_OK = {"uniform", "balanced", "balanced-rank-local"}
+                if phase == "prefill" and c["routing"] not in MI355X_PREFILL_OK:
+                    continue
                 default_pts = [1, 2, 4, 8, 16, 32, 64, 128] if phase == "decode" else [128, 256, 512]
                 pts = [int(x) for x in lad.split()] if lad else default_pts
                 small = [p for p in pts if p <= 16]
