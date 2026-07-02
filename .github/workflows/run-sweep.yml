@@ -723,6 +723,8 @@ jobs:
                   find source-artifacts -maxdepth 1 -mindepth 1 -type d -printf '  %f\n' | sort
 
             - name: Validate reusable artifacts
+              # Collapses reran (flaky) eval duplicates to the latest result
+              # per identity, then validates consistency for ingest.
               run: |
                   python3 utils/validate_reusable_sweep_artifacts.py \
                     --artifacts-dir source-artifacts
