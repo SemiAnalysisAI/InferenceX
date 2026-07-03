@@ -76,7 +76,6 @@ declare -A NUM_SPEC_TOKENS_MAP=(
   [1024:2:2:false:512]=1
   [1024:2:2:false:1]=4
   [1024:4:4:false:2]=4
-  [1024:8:1:false:2]=2
   [1024:8:1:false:1]=4
   # --- ISL=8192 / OSL=1024 ---
   [8192:2:1:false:2]=2

@@ -12656,7 +12656,7 @@ minimaxm3-fp4-b300-vllm-mtp:
       - { tp: 2, ep: 2, dp-attn: true, conc-list: [256, 512], spec-decoding: mtp }
       - { tp: 4, conc-list: [8, 16, 32], spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-list: [2, 32], spec-decoding: mtp }
-      - { tp: 8, conc-list: [1, 2], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1], spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
