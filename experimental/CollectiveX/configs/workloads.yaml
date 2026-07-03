@@ -1,0 +1,26 @@
+# CollectiveX v1 canonical workload and phase metadata.
+schema_version: 1
+
+model_derived:
+  deepseek-v3-v1:
+    kind: model-derived
+    hidden: 7168
+    topk: 8
+    routed_experts: 256
+    shared_experts: 1
+    expert_alignment: 128
+    dispatch_dtype: bf16
+    combine_dtype: bf16
+    verified_against: "deepseek-ai/DeepSeek-V3@e815299b0bcbac849fa540c768ef21845365c9eb/config.json"
+
+phase_profiles:
+  decode:
+    token_ladder: [1, 2, 4, 8, 16, 32, 64, 128]
+    description: "one MoE layer and one decode-step dispatch/combine pair"
+    active_sequences: "one batch of active sequences"
+    tokens_per_iter: "one or a few per active sequence"
+  prefill:
+    token_ladder: [128, 256, 512, 1024, 2048, 4096]
+    description: "one MoE layer and one chunked-prefill dispatch/combine pair"
+    chunk_size: "the tokens/rank point entering the MoE layer"
+    tokens_entering_moe: "chunk_size * ep_size"

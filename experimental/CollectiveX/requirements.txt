@@ -1,0 +1,7 @@
+# Matrix and strict artifact validation dependencies. GPU libraries are supplied by
+# each benchmark container and are intentionally not installed from this file.
+PyYAML>=6.0.2,<7
+jsonschema>=4.23,<5
+
+# Canonical workload serialization and the independent correctness oracle.
+numpy>=1.26,<3

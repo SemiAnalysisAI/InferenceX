@@ -1,0 +1,53 @@
+# CollectiveX v1 promoted suites. Diagnostic adapter capabilities stay available through the
+# manual workflow, but are not multiplied across the comparison matrix.
+schema_version: 1
+
+timing_profile:
+  iters: 8
+  trials: 64
+  warmup: 32
+  warmup_semantics: full-roundtrip-per-trial-point-v1
+
+headline_distribution:
+  routing: uniform
+  basis: synthetic
+  rationale: >-
+    Uniform is the deterministic cross-chip headline. One Zipf trace measures skew sensitivity;
+    the same trace with EPLB measures remediation. Other synthetic routes are diagnostics, not
+    promoted dimensions.
+  sensitivity_distributions: [zipf, zipf+eplb]
+
+suites:
+  ep-core-v1:
+    description: "portable BF16 EP comparison across every supported stack and topology"
+    workloads: [deepseek-v3-v1]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x, mi325x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [uniform]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    token_points_prefill: [256, 512]
+    canonical: true
+    samples_per_point: 512
+    required_publication: official
+
+  ep-routing-v1:
+    description: "Zipf skew and EPLB recovery at decision-relevant anchors"
+    workloads: [deepseek-v3-v1]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x, mi325x]
+    backends: [deepep, mori]
+    modes: [normal]
+    dtypes: [bf16]
+    contracts: [layout-and-dispatch-v1]
+    routings: [zipf]
+    eplb: [false, true]
+    resource_modes: [tuned]
+    phases: [decode, prefill]
+    token_points_decode: [128]
+    token_points_prefill: [512, 2048]
+    canonical: true
+    samples_per_point: 512
+    required_publication: comparable-experimental

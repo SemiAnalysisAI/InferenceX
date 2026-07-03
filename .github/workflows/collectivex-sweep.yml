@@ -5,36 +5,43 @@
 # sweeps many cases sharing (sku, backend, mode, resource) — generate_matrix's own grouping, chunked
 # so no cell exceeds the job budget. Each cell emits a handful of per-case JSONs; the aggregate job
 # collects every shard into ONE line-delimited file (results/aggregate/*.ndjson) so there aren't
-# thousands of individual result files. Run once per backend (deepep / uccl / flashinfer /
-# deepep-hybrid / nccl-ep, + deepep_v2) for full parity.
+# thousands of individual result files. The default `all` expands every EP backend into one matrix.
 name: CollectiveX Sweep
 on:
   workflow_dispatch:
     inputs:
       backend:
-        description: EP library to sweep (deepep matrix is remapped onto the others, capability-filtered)
+        description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
-        default: deepep
-        options: [deepep, uccl, flashinfer, deepep-hybrid, nccl-ep]
-      deepep_v2:
-        description: DeepEP V2 from-source kernels (kernel_gen=v2; deepep backend only)
-        type: boolean
-        default: false
+        default: all
+        options: [all, deepep, uccl, flashinfer, deepep-hybrid, mori, nccl-ep]
       suites:
         description: "'all' or comma-list of suite names"
         type: string
         default: all
       only_sku:
-        description: Restrict to one SKU (h100-dgxc|h200|b300|b200-dgxc|gb200|gb300|mi355x); blank = all
+        description: Restrict to one GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi325x|mi355x); blank = all
+        type: string
+        default: ''
+      min_nodes:
+        description: Keep only shards with >= this tray count (2 = rack-scale EP8 only; blank = all)
+        type: string
+        default: ''
+      max_nodes:
+        description: Keep only shards with <= this tray count (1 = single-tray EP4 only; blank = all)
         type: string
         default: ''
       max_cases:
-        description: Max cases per shard cell (chunk larger shards)
+        description: Max cases per shard cell before chunking into another GHA job (128 = no chunking for current suites)
         type: string
-        default: '14'
+        default: '128'
+      flashinfer_upgrade:
+        description: Upgrade FlashInfer to the newer (MNNVL-fixed) wheel for plain flashinfer runs too (fixes h100 completion-flag deadlock)
+        type: boolean
+        default: false
 
 concurrency:
-  group: cx-sweep-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.deepep_v2 }}-${{ inputs.only_sku }}
+  group: cx-sweep-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
 
 jobs:
@@ -47,16 +54,22 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
-      - run: pip install --quiet pyyaml
+      - name: Install matrix dependencies
+        run: python3 -m pip install --quiet PyYAML==6.0.2 jsonschema==4.23.0
       - id: gen
         working-directory: experimental/CollectiveX
         run: |
           set -euo pipefail
-          ov=""; [ "${{ inputs.backend }}" != "deepep" ] && ov="--backend ${{ inputs.backend }}"
-          v2=""; [ "${{ inputs.deepep_v2 }}" = "true" ] && v2="--deepep-v2"
-          os=""; [ -n "${{ inputs.only_sku }}" ] && os="--only-sku ${{ inputs.only_sku }}"
-          # full matrix (with cases) -> artifact for the cells; slim (no cases) -> the strategy output.
-          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $ov $v2 $os --out matrix_full.json >/dev/null
+          args=(--suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}")
+          case "${{ inputs.backend }}" in
+            all) args+=(--backends all) ;;
+            deepep) ;;
+            *) args+=(--backend "${{ inputs.backend }}") ;;
+          esac
+          [ -n "${{ inputs.only_sku }}" ] && args+=(--only-sku "${{ inputs.only_sku }}")
+          [ -n "${{ inputs.min_nodes }}" ] && args+=(--min-nodes "${{ inputs.min_nodes }}")
+          [ -n "${{ inputs.max_nodes }}" ] && args+=(--max-nodes "${{ inputs.max_nodes }}")
+          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='cases'} for x in m['include']]}))")
           echo "matrix=$SLIM" >> "$GITHUB_OUTPUT"
           echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")" >> "$GITHUB_OUTPUT"
@@ -73,19 +86,24 @@ jobs:
     if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
-      max-parallel: 10            # don't saturate the ~20-runner fleet; cells queue as slots free
+      max-parallel: 10
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    # h200 label spans two clusters; pin to the validated dgxc pool (mirrors collectivex-experimental).
-    runs-on: ${{ matrix.sku == 'h200' && 'h200-dgxc' || matrix.sku }}
+    runs-on: ${{ matrix.sku }}
     timeout-minutes: 350
     env:
       CX_BENCH: ${{ matrix.backend }}
-      CX_DEEPEP_V2: ${{ matrix.deepep_v2 && '1' || '' }}
       CX_NODES: ${{ matrix.nodes }}
+      CX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
+      CX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
       CX_SHARD_FILE: results/.shard_${{ matrix.id }}.json
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      CX_NODELIST: ${{ matrix.sku == 'mi355x' && 'mia1-p01-g10,mia1-p01-g15' || '' }}
-      CX_STAGE_DIR: ${{ matrix.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
+      COLLECTIVEX_ARTIFACT_NAME: cxshard-${{ matrix.id }}-${{ github.run_id }}
+      # Consolidated shards run one build-group (currently at most six cases) in one
+      # slurm allocation, so the launcher's default 45-min --time is too short. 120 min gives headroom;
+      # the allocation releases early when the shard finishes, so short shards don't waste it.
+      CX_TIME: '120'
+      CX_FLASHINFER_UPGRADE: ${{ inputs.flashinfer_upgrade && '1' || '' }}
+      COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
@@ -103,22 +121,28 @@ jobs:
           s=[x for x in m['include'] if x['id']=='${{ matrix.id }}']
           assert s, 'shard ${{ matrix.id }} not in matrix'
           s=s[0]
-          json.dump({'id':s['id'],'sku':s['sku'],'backend':s['backend'],'nodes':s['nodes'],'deepep_v2':s['deepep_v2'],'cases':s['cases']}, open('results/.shard_${{ matrix.id }}.json','w'))
+          json.dump({'id':s['id'],'sku':s['sku'],'backend':s['backend'],'nodes':s['nodes'],'cases':s['cases']}, open('results/.shard_${{ matrix.id }}.json','w'))
           print('shard ${{ matrix.id }}:', len(s['cases']), 'cases')
           "
       - name: Sweep shard ${{ matrix.id }} (${{ matrix.n }} cases, one allocation)
-        env:
-          RUNNER_NAME: ${{ runner.name }}
-        run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
+        run: |
+          RUNNER_NAME="${{ matrix.sku }}" \
+            bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
       - name: Shard summary
         if: always()
         run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Upload shard results
+      - name: Validate shard artifact safety
+        id: artifact_safety
         if: always()
+        run: python3 experimental/CollectiveX/artifact_safety.py experimental/CollectiveX/results/*.json
+      - name: Upload shard results
+        if: always() && steps.artifact_safety.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxshard-${{ matrix.id }}-${{ github.run_id }}
-          path: experimental/CollectiveX/results/*.json   # glob skips the hidden .shard_*.json
+          path: |
+            experimental/CollectiveX/results/*.json
+            !experimental/CollectiveX/results/env_*.json
           if-no-files-found: warn
 
   # ---- aggregate: collect every shard into ONE ndjson (the "result aggregator at the end") ----
@@ -129,26 +153,51 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
         with: { clean: true }
+      - name: Install bundle dependencies
+        run: python3 -m pip install --quiet PyYAML==6.0.2 jsonschema==4.23.0
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: cxsweep-matrix-${{ github.run_id }}
+          path: experimental/CollectiveX
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: cxshard-*-${{ github.run_id }}
           path: _shards
-          merge-multiple: true
-      - name: Aggregate shards -> one ndjson
+      # Aggregate + publication bundle. The bundle IS the artifact-validation stage:
+      # make_bundle.py validates every doc (version-selected EP schema + semantic gates) before
+      # writing manifest/report/checksums; any validation error fails this job.
+      - name: Aggregate shards -> ndjson + publication bundle
         working-directory: experimental/CollectiveX
         run: |
           set -euo pipefail
-          tag="${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}"
+          tag="${{ inputs.backend }}"
           python3 aggregate_results.py --in-dir ../../_shards --out "results/aggregate/collectivex_${tag}_${{ github.run_id }}.ndjson"
+          python3 make_bundle.py \
+            --aggregate "results/aggregate/collectivex_${tag}_${{ github.run_id }}.ndjson" \
+            --matrix matrix_full.json \
+            --out-dir results/bundle \
+            --source-run-id "${{ github.run_id }}" \
+            --source-sha "${{ github.sha }}" \
+            --source-workflow "${{ github.workflow }}" \
+            --source-run-url "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           {
             echo "## CollectiveX sweep aggregate (${tag})"
             echo '```'
             wc -l results/aggregate/*.ndjson 2>/dev/null || echo "no ndjson"
+            python3 -c "import json; m=json.load(open('results/bundle/manifest.json')); print('bundle:', m['docs'], 'docs,', m['validation']['by_publication_status'])"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload aggregate
+        if: success()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cxsweep-aggregate-${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}-${{ github.run_id }}
+          name: cxsweep-aggregate-${{ inputs.backend }}-${{ github.run_id }}
           path: experimental/CollectiveX/results/aggregate/*.ndjson
           if-no-files-found: warn
+      - name: Upload publication bundle
+        if: success()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxsweep-bundle-${{ inputs.backend }}-${{ github.run_id }}
+          path: experimental/CollectiveX/results/bundle
+          if-no-files-found: ignore

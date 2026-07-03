@@ -1,0 +1,192 @@
+name: CollectiveX Experimental
+
+# Orchestration only — all benchmark logic lives in experimental/CollectiveX/.
+# Manual one-off diagnostics. Promoted v1 coverage uses collectivex-sweep.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      sku:
+        description: Public self-hosted runner pool
+        type: choice
+        default: gb200
+        options: [gb200, b200-dgxc, mi355x, mi325x, h100-dgxc, h200-dgxc, b300, gb300]
+      benchmark:
+        description: EP backend to bring up
+        type: choice
+        default: deepep
+        options: [deepep, deepep-hybrid, mori, uccl, nccl-ep, flashinfer]
+      nodes:
+        description: Node count (gb200 multi-node MNNVL; 2 = 8 GPU). Blank/1 = single node.
+        type: string
+        default: ''
+      phase:
+        # EP only. 'both' fans out to one job per phase (decode + prefill).
+        description: EP phase — decode (small T) / prefill (large T); 'both' = a job each
+        type: choice
+        default: both
+        options: [both, decode, prefill]
+      tokens_ladder:
+        description: EP source-tokens-per-rank sweep (space/comma sep); blank = phase default
+        type: string
+        default: ''
+      dispatch_dtype:
+        description: EP dispatch payload precision (fp8 scale-layout recipes + FlashInfer OCP-microscaling mxfp8/nvfp4)
+        type: choice
+        default: bf16
+        options: [bf16, fp8, fp8-pertoken, fp8-directcast, mxfp8, mxfp4, nvfp4]
+      mode:
+        # LL is retained for manual diagnostics only; it is not a promoted v1 dimension.
+        description: EP kernel path (LL is diagnostic only)
+        type: choice
+        default: normal
+        options: [normal, ll]
+      resource_mode:
+        # normalized = ~sm_fraction of device units (cross-vendor apples-to-apples);
+        # tuned = each backend's own recommended/default launch config.
+        description: Comm resource regime
+        type: choice
+        default: tuned
+        options: [normalized, tuned, default]
+      contract:
+        # [cl]/[rv] are retained for explicit diagnostics, never promoted v1 comparisons.
+        description: Measurement contract (non-default contracts are diagnostic only)
+        type: choice
+        default: layout-and-dispatch-v1
+        options: [layout-and-dispatch-v1, cached-layout-comm-only-v1, runtime-visible-v1]
+      routing:
+        # v1 schedules uniform and zipf only. The remaining choices are one-off diagnostics.
+        description: EP routing distribution
+        type: choice
+        default: uniform
+        options: [uniform, zipf, balanced, balanced-rank-local, hotspot-single]
+      eplb:
+        # EPLB = replicate hot experts + balanced-place (the remedy for skewed routing). A pure
+        # routing-trace transform; experts -> num_logical+redundant. Meaningful with zipf*.
+        description: Apply EPLB expert replication/placement
+        type: boolean
+        default: false
+      canonical:
+        # Consume a CANONICAL serialized workload (generated deterministically in-container) instead
+        # of seeded-runtime. A canonical-serialized run with full GHA provenance is publication
+        # 'official' — this is the switch that promotes a cohort past comparable-experimental.
+        description: Use canonical serialized workload (official-grade workload identity)
+        type: boolean
+        default: false
+      activation_profile:
+        # Activation VALUE distribution of expert inputs. normal = headline; the others stress a
+        # future quantized combine (latency-neutral under bf16 — the expected null result).
+        description: Activation value profile
+        type: choice
+        default: normal
+        options: [normal, zeros, small-amplitude, wide-dynamic-range, fp8-saturation]
+      sm_fraction:
+        # normalized comm-resource fraction (DeepEP sm_fraction*SMs / MoRI ~*CUs). Sweep this with
+        # resource_mode=normalized to build the resource-Pareto (latency vs comm fraction). Blank =
+        # harness default 0.18.
+        description: Normalized comm-resource fraction (resource_mode=normalized)
+        type: string
+        default: ''
+      hidden:
+        # Manual shape override. Blank = deepseek-v3-v1 default 7168.
+        description: MoE hidden dim (model-derived workloads); blank = 7168
+        type: string
+        default: ''
+      topk:
+        description: MoE top-k (model-derived workloads); blank = 8
+        type: string
+        default: ''
+      experts:
+        description: MoE total experts (model-derived workloads); blank = 256
+        type: string
+        default: ''
+      uneven_tokens:
+        # Manual diagnostic only; not a promoted v1 dimension.
+        description: Uneven source-token allocation
+        type: choice
+        default: none
+        options: [none, linear, empty-rank]
+
+concurrency:
+  # Group per (SKU + FULL config): GitHub keeps only one running + one pending per group and
+  # cancels the rest, so a coarse per-SKU group made a fan-out of many configs on one SKU
+  # self-cancel down to ~2. Including dtype/mode/contract/routing/eplb/phase gives each config
+  # its OWN group -> all configs survive; they queue only on the runner's own capacity, not on
+  # GitHub concurrency. cancel-in-progress FALSE so a re-dispatch of the SAME config queues.
+  # Resource/value axes remain in the group so distinct diagnostics do not self-cancel.
+  group: collectivex-${{ github.ref }}-${{ inputs.sku }}-${{ inputs.benchmark }}-${{ inputs.dispatch_dtype }}-${{ inputs.mode }}-${{ inputs.contract }}-${{ inputs.routing }}-${{ inputs.eplb }}-${{ inputs.phase }}-${{ inputs.resource_mode }}-${{ inputs.sm_fraction }}-${{ inputs.activation_profile }}-${{ inputs.hidden }}-${{ inputs.topk }}-${{ inputs.experts }}-${{ inputs.uneven_tokens }}-${{ inputs.nodes }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Manual dispatch -> chosen SKU + benchmark. Lands on the inputs.sku runner.
+  dispatch:
+    runs-on: ${{ inputs.sku }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        phase: ${{ fromJSON(inputs.phase == 'both' && '["decode","prefill"]' || format('["{0}"]', inputs.phase)) }}
+    env:
+      CX_BENCH: ${{ inputs.benchmark }}
+      CX_NODES: ${{ inputs.nodes }}
+      CX_PHASE: ${{ matrix.phase }}
+      CX_TOKENS_LADDER: ${{ inputs.tokens_ladder }}
+      CX_DISPATCH_DTYPE: ${{ inputs.dispatch_dtype }}
+      CX_MODE: ${{ inputs.mode }}
+      CX_RESOURCE_MODE: ${{ inputs.resource_mode }}
+      CX_MEASUREMENT_CONTRACT: ${{ inputs.contract }}
+      CX_ROUTING: ${{ inputs.routing }}
+      CX_EPLB: ${{ inputs.eplb && '1' || '' }}
+      # Canonical serialized workload (official-grade identity) + value diagnostics.
+      CX_CANONICAL: ${{ inputs.canonical && '1' || '' }}
+      CX_ACTIVATION_PROFILE: ${{ inputs.activation_profile }}
+      CX_SM_FRACTION: ${{ inputs.sm_fraction }}
+      # Manual shape and uneven-allocation diagnostics.
+      CX_HIDDEN: ${{ inputs.hidden }}
+      CX_TOPK: ${{ inputs.topk }}
+      CX_EXPERTS: ${{ inputs.experts }}
+      CX_UNEVEN_TOKENS: ${{ inputs.uneven_tokens }}
+      CX_TIMING: '8:64:32'
+      # GHA run provenance: run_ep records git_run (repo/run/attempt/ref/sha/job/artifact) -> a GHA result
+      # is provenance_complete (publication_status >= comparable-experimental, official w/ canonical).
+      COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+      COLLECTIVEX_ARTIFACT_NAME: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ matrix.phase }}_${{ github.run_id }}
+      COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ inputs.sku }}_${{ matrix.phase }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v5.0.0
+        with: { clean: true }
+      - name: Install workflow dependencies
+        run: python3 -m pip install --quiet PyYAML==6.0.2 jsonschema==4.23.0
+      # Reject an unsupported backend/SKU/mode/dtype/contract BEFORE consuming the runner
+      # Fail before requesting an allocation when the public capability table rejects a combination.
+      - name: Validate capability
+        run: |
+          python3 experimental/CollectiveX/capability.py \
+            --sku "${{ inputs.sku }}" \
+            --backend "${{ inputs.benchmark }}" \
+            --mode "${{ inputs.mode }}" --dtype "${{ inputs.dispatch_dtype }}" \
+            --contract "${{ inputs.contract }}"
+      - name: Launch ${{ inputs.sku }} / ${{ inputs.benchmark }} (${{ matrix.phase }})
+        run: |
+          launcher="$(python3 experimental/CollectiveX/capability.py --launcher-for "${{ inputs.sku }}")"
+          RUNNER_NAME="${{ inputs.sku }}" \
+            bash "experimental/CollectiveX/launchers/launch_${launcher}.sh"
+      - name: Results summary
+        if: always()
+        run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY"
+      - name: Validate result artifact safety
+        id: artifact_safety
+        if: always()
+        run: python3 experimental/CollectiveX/artifact_safety.py experimental/CollectiveX/results/*.json
+      - name: Upload results
+        if: always() && steps.artifact_safety.outcome == 'success'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: collectivex_${{ inputs.sku }}_${{ inputs.benchmark }}_${{ matrix.phase }}_${{ github.run_id }}
+          path: |
+            experimental/CollectiveX/results/*.json
+            !experimental/CollectiveX/results/env_*.json
+          if-no-files-found: warn

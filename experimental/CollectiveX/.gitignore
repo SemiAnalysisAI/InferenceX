@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+results/*
+!results/.gitkeep
+.cx_workloads/
+
+# Local plans and infrastructure inventory.
+goal.md
+notes.md
+configs/platforms.yaml
+private-infra.md

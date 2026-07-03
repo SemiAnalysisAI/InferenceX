@@ -1,0 +1,230 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://semianalysis/collectivex/schemas/ep-result-v5.schema.json",
+  "title": "CollectiveX EP dispatch/combine result (v5)",
+  "description": "One (backend, phase, dtype, mode, contract, routing) sweep. v5 adds the required fixed-512-v1 sampling contract (8 timed iterations x 64 trials with 32 warmups on every SKU/backend) to v4's multi-dimensional validity, measured roundtrip, dual byte contracts, per-rank diagnostics, raw-sample histograms, and workload identity. record_type=failed-case marks an intentionally preserved failure skeleton (judge-by-data doctrine): empty rows + a failure block, exempt from the full-sweep requirements.",
+  "type": "object",
+  "required": ["schema_version", "family", "runner", "backend", "publication_status", "rows"],
+  "if": {"properties": {"record_type": {"const": "failed-case"}}, "required": ["record_type"]},
+  "then": {
+    "required": ["failure"],
+    "properties": {
+      "publication_status": {"const": "failed"},
+      "rows": {"maxItems": 0}
+    }
+  },
+  "else": {
+    "required": ["mode", "phase", "ep_size", "measurement_contract", "shape",
+                 "validity", "workload", "reproduction",
+                 "backend_provenance", "comparison_key"],
+    "properties": {
+      "rows": {"minItems": 1}
+    }
+  },
+  "properties": {
+    "schema_version": {"const": 5},
+    "family": {"const": "moe"},
+    "runner": {"type": "string"},
+    "case_id": {"type": ["string", "null"], "pattern": "^cxv1-[0-9a-f]{20}$"},
+    "record_type": {"type": "string", "enum": ["failed-case"]},
+    "failure": {
+      "type": "object",
+      "required": ["failure_mode", "return_code", "case"],
+      "properties": {
+        "failure_mode": {"type": "string"},
+        "return_code": {"type": "integer"},
+        "case": {"type": "object"},
+        "evidence": {"type": "string"}
+      }
+    },
+    "backend": {"type": "string", "enum": ["deepep", "deepep-hybrid", "mori", "aiter", "uccl", "flashinfer", "nccl-ep"]},
+    "mode": {"type": "string", "enum": ["normal", "ll"]},
+    "phase": {"type": "string", "enum": ["decode", "prefill"]},
+    "ep_size": {"type": "integer", "minimum": 1},
+    "world_size": {"type": "integer", "minimum": 1},
+    "nodes": {"type": "integer", "minimum": 1},
+    "topology_class": {"type": "string"},
+    "transport": {"type": "string"},
+    "resource_mode": {"type": "string", "enum": ["normalized", "tuned", "default"]},
+    "measurement_contract": {"type": "string",
+      "enum": ["layout-and-dispatch-v1", "cached-layout-comm-only-v1", "runtime-visible-v1",
+               "mori-quant-combine-v1"]},
+    "publication_status": {"type": "string",
+      "enum": ["official", "comparable-experimental", "diagnostic", "invalid", "failed"]},
+    "validity": {
+      "type": "object",
+      "required": ["execution_status", "semantic_correctness", "workload_identity",
+                   "measurement_conformance", "sampling_conformance", "resource_conformance",
+                   "provenance_complete"],
+      "properties": {
+        "execution_status": {"type": "string", "enum": ["complete", "failed"]},
+        "semantic_correctness": {"type": "string", "enum": ["pass", "fail"]},
+        "workload_identity": {"type": "string"},
+        "workload_source": {"type": "string", "enum": ["canonical-serialized", "seeded-runtime"]},
+        "measurement_conformance": {"type": "string", "enum": ["conformant", "nonconformant"]},
+        "sampling_conformance": {"type": "string", "enum": ["conformant", "nonconformant"]},
+        "resource_conformance": {"type": "string"},
+        "provenance_complete": {"type": "boolean"},
+        "anomaly_free": {"type": "boolean"}
+      }
+    },
+    "workload": {
+      "type": "object",
+      "required": ["source", "trace_signature", "cross_rank_consistent"],
+      "properties": {
+        "source": {"type": "string", "enum": ["canonical-serialized", "seeded-runtime"]},
+        "workload_id": {"type": ["string", "null"]},
+        "manifest_checksums": {"type": ["object", "null"]},
+        "trace_signature": {"type": "string"},
+        "distinct_per_T_hashes": {"type": "array", "items": {"type": "string"}},
+        "cross_rank_consistent": {"type": "boolean"},
+        "activation_profile": {"type": "string"},
+        "activation_identity": {"type": ["string", "null"]}
+      }
+    },
+    "shape": {
+      "type": "object",
+      "required": ["hidden", "topk", "experts", "experts_per_rank", "dispatch_dtype", "routing"],
+      "properties": {
+        "hidden": {"type": "integer"}, "topk": {"type": "integer"},
+        "experts": {"type": "integer"}, "experts_per_rank": {"type": "integer"},
+        "dispatch_dtype": {"type": "string", "enum": ["bf16", "fp8", "fp8-pertoken", "fp8-directcast", "mxfp8", "mxfp4", "nvfp4"]},
+        "routing": {"type": "string"},
+        "eplb": {"type": "boolean"}, "num_logical_experts": {"type": "integer"},
+        "kernel_gen": {"type": "string"},
+        "activation_profile": {"type": "string"},
+        "quant": {
+          "type": "object",
+          "properties": {
+            "combine_input_dtype": {"type": "string"},
+            "combine_accum_dtype": {"type": "string"},
+            "combine_output_dtype": {"type": "string"},
+            "combine_quant_mode": {"type": "string"},
+            "scale_layout": {"type": ["string", "null"]}
+          }
+        }
+      }
+    },
+    "reproduction": {
+      "type": "object",
+      "required": ["command", "seed", "warmup", "iters", "trials", "measurement_contract",
+                   "sampling_contract", "samples_per_point", "warmup_semantics"],
+      "properties": {
+        "command": {"type": "string"},
+        "image": {"type": ["string", "null"]},
+        "image_digest": {"type": ["string", "null"]},
+        "image_arch": {"type": ["string", "null"]},
+        "squash_sha256": {"type": ["string", "null"]},
+        "git_run": {"type": ["object", "null"]},
+        "warmup": {"const": 32},
+        "iters": {"const": 8},
+        "trials": {"const": 64},
+        "warmup_semantics": {"const": "full-roundtrip-per-trial-point-v1"},
+        "fp8_quant_in_timing": {"type": ["boolean", "null"]},
+        "combine_quant_in_timing": {"type": ["boolean", "null"]},
+        "combine_dequant_in_timing": {"type": ["boolean", "null"]},
+        "combine_dtype": {"type": "string"}, "combine_quant_mode": {"type": "string"},
+        "activation_profile": {"type": "string"},
+        "routing_step": {"type": "integer"}, "uneven_tokens": {"type": "string"},
+        "sampling_contract": {"const": "fixed-512-v1"},
+        "samples_per_point": {"const": 512},
+        "waive_anomaly": {"type": "boolean"}, "roundtrip_anomaly_threshold": {"type": "number"}
+      }
+    },
+    "backend_provenance": {"type": "object"},
+    "phase_profile": {"type": "object"},
+    "source_allocation": {
+      "type": "object",
+      "properties": {
+        "mode": {"type": "string", "enum": ["none", "linear", "empty-rank"]},
+        "routing_step": {"type": "integer"}
+      }
+    },
+    "placement": {
+      "type": "object",
+      "properties": {
+        "kind": {"type": "string", "enum": ["packed", "striped", "runtime-native", "adversarial"]},
+        "nodes": {"type": "integer"}, "gpus_per_node": {"type": "integer"},
+        "scale_up_domain": {"type": "integer"}, "ranks": {"type": "integer"}
+      }
+    },
+    "eplb": {
+      "type": "object",
+      "properties": {
+        "enabled": {"type": "boolean"},
+        "num_logical_experts": {"type": "integer"}, "num_physical_experts": {"type": "integer"},
+        "imbalance_before": {"type": "number"}, "imbalance_after": {"type": "number"},
+        "mapping_hash": {"type": ["string", "null"]}
+      }
+    },
+    "anomalies": {"type": "array", "items": {"type": "object"}},
+    "anomaly_summary": {
+      "type": "object",
+      "properties": {
+        "count": {"type": "integer"}, "waived": {"type": "boolean"},
+        "types": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["tokens_per_rank", "global_tokens", "dispatch", "combine", "roundtrip",
+                     "isolated_sum", "samples_pooled", "byte_contracts", "correct"],
+        "properties": {
+          "tokens_per_rank": {"type": "integer", "minimum": 1},
+          "global_tokens": {"type": "integer", "minimum": 1},
+          "dispatch": {"$ref": "#/definitions/percentiles"},
+          "combine": {"$ref": "#/definitions/percentiles"},
+          "roundtrip": {"$ref": "#/definitions/percentiles"},
+          "isolated_sum": {"type": "object"},
+          "samples_pooled": {"const": 512},
+          "trials": {"const": 64},
+          "percentile_interpolation": {"type": "string"},
+          "per_rank_dispatch_us": {"type": "object"},
+          "raw_samples": {"type": "object"},
+          "byte_contracts": {
+            "type": "object",
+            "required": ["token_rank_payload_copies", "token_expert_payload_copies",
+                         "dispatch_bytes", "combine_bytes"],
+            "properties": {
+              "token_rank_payload_copies": {"type": "integer"},
+              "token_expert_payload_copies": {"type": "integer"},
+              "dispatch_bytes": {"type": "integer"}, "combine_bytes": {"type": "integer"}
+            }
+          },
+          "roundtrip_tokens_per_second": {"type": ["number", "null"]},
+          "bandwidth": {
+            "type": "object",
+            "properties": {
+              "logical_payload_rate_gbps": {"type": "object"},
+              "backend_buffer_rate_gbps": {"type": "object"},
+              "algorithm_bandwidth_gbps": {"type": ["number", "null"]},
+              "bus_bandwidth_gbps": {"type": ["number", "null"]},
+              "wire_utilization": {"type": ["number", "null"]}
+            }
+          },
+          "fanout_hist": {"type": "array"},
+          "rank_load_hist": {"type": "array"},
+          "expert_load_cv": {"type": "number"}, "rank_load_cv": {"type": "number"},
+          "hotspot_ratio": {"type": "number"},
+          "dest_rank_load_max": {"type": "integer"}, "dest_rank_load_mean": {"type": "number"},
+          "empty_expert_count": {"type": "integer"}, "empty_rank_count": {"type": "integer"},
+          "source_token_stats": {"type": ["object", "null"]},
+          "anomalies": {"type": "array", "items": {"type": "object"}},
+          "correct": {"type": "boolean"}
+        }
+      }
+    }
+  },
+  "definitions": {
+    "percentiles": {
+      "type": "object",
+      "required": ["p50", "p90", "p95", "p99"],
+      "properties": {
+        "p50": {"type": "number"}, "p90": {"type": "number"},
+        "p95": {"type": "number"}, "p99": {"type": "number"}
+      }
+    }
+  }
+}
