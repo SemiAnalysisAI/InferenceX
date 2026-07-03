@@ -471,15 +471,8 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
     }
 
     # HiCache capacity via --hicache-ratio (scales with GPU KV pool).
-    # Default: ratio=2 at TP>=8, ratio=16 at lower TP (matches single-node DSv4 recipe).
-    HICACHE_RATIO="${HICACHE_RATIO:-}"
-    if [[ -z "$HICACHE_RATIO" ]]; then
-        if [[ "$PREFILL_TP_SIZE" -ge 8 ]]; then
-            HICACHE_RATIO=32
-        else
-            HICACHE_RATIO=16
-        fi
-    fi
+    HICACHE_RATIO="${HICACHE_RATIO:-16}"
+
     build_hicache_flags() {
         echo "--page-size ${HICACHE_PAGE_SIZE} --enable-hierarchical-cache --hicache-ratio ${HICACHE_RATIO} --hicache-io-backend ${HICACHE_IO_BACKEND} --hicache-mem-layout ${HICACHE_MEM_LAYOUT} --hicache-write-policy ${HICACHE_WRITE_POLICY} --hicache-storage-prefetch-policy ${HICACHE_PREFETCH_POLICY} $(build_storage_flags)"
     }
