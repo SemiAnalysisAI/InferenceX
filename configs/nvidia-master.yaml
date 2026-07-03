@@ -12784,14 +12784,6 @@ minimaxm3-fp4-b200-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
-    # Search space trimmed to the (parallelism, concurrency) points on the
-    # Total-TPS/GPU vs median-interactivity Pareto frontier of the EAGLE3 offline
-    # sweep (bench_results_b200.json). The best num_speculative_tokens varies
-    # along the frontier (fewer at the throughput end, up to 6 at the latency
-    # tail); the recipe shell (minimaxm3_fp4_b200_mtp.sh) selects it per point
-    # from the same ISL:TP:EP_SIZE:DP_ATTENTION:CONC key. TP2 (plain / EP) carries
-    # the throughput-to-mid front; TP4/TP8 hold the low-concurrency tail. DP-attn
-    # never reached the frontier on B200, so it is dropped.
     - isl: 1024
       osl: 1024
       search-space:
