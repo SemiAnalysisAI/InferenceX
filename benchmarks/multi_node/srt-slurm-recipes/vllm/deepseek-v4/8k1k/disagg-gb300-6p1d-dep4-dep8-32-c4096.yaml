@@ -2,11 +2,11 @@ name: "svf-vllm-disagg-gb300-6p1d-dep4-dep8-32"
 
 # Topology: 6 prefill (DEP=4 each) + 1 decode (DEP=8). 8 GB300 nodes (6P + 2D
 # = 32 GPUs at 4 GPUs/node) plus a dedicated NATS/etcd infra node.
-# Max-throughput point at concurrency 4096 with deep_gemm_mega_moe on
+# Max-throughput point at concurrency 4096 with deep_gemm_amxf4_mega_moe on
 # both workers.
 model:
   path: "deepseek-v4-pro"
-  container: "vllm/vllm-openai:v0.20.0-ubuntu2404"
+  container: "vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72"
   precision: "fp4"
 
 dynamo:
@@ -51,6 +51,7 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
 
   decode_environment:
     TILELANG_CLEANUP_TEMP_FILES: "1"
@@ -60,6 +61,7 @@ backend:
     NCCL_MNNVL_ENABLE: "1"
     NCCL_NVLS_ENABLE: "1"
     TORCH_SYMMMEM: "NVSHMEM"
+    VLLM_DSV4_MEGA_FP8_COMBINE: "1"
 
   vllm_config:
     prefill:
@@ -86,7 +88,7 @@ backend:
       tokenizer-mode: deepseek_v4
       enable-ep-weight-filter: true
       enable-sleep-mode: true
-      moe-backend: "deep_gemm_mega_moe"
+      moe-backend: "deep_gemm_amxf4_mega_moe"
 
     decode:
       kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
@@ -98,7 +100,7 @@ backend:
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
       max-model-len: 16384
-      max-num-seqs: 512
+      max-num-seqs: 384
       max-cudagraph-capture-size: 512
       trust-remote-code: true
       no-enable-prefix-caching: true
@@ -110,7 +112,8 @@ backend:
       tokenizer-mode: deepseek_v4
       enable-ep-weight-filter: true
       enable-sleep-mode: true
-      moe-backend: "deep_gemm_mega_moe"
+      moe-backend: "deep_gemm_amxf4_mega_moe"
+      no-enable-flashinfer-autotune: true
 
 benchmark:
   type: "sa-bench"

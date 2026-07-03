@@ -9572,7 +9572,7 @@ dsv4-fp4-b300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-nv
@@ -9605,9 +9605,9 @@ dsv4-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p17d-tep4-tp4.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p9d-tep4-tp4.yaml"
         decode:
-          num-worker: 17
+          num-worker: 9
           tp: 4
           ep: 1
           dp-attn: false
