@@ -475,8 +475,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
+        # Redirect via process substitution (not `| tee`) so $! is the server
+        # PID, not tee's. With a pipeline `$!` is the LAST stage (tee), so the
+        # teardown `kill $prefill0_pid` would kill tee while the real server
+        # leaks (holding GPUs + :8000). Mirrors the router launch above.
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null &
+            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill0_pid=$!
     fi
@@ -673,8 +677,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Killing the proxy server and prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        kill $proxy_pid
-        kill $prefill0_pid
+        # proxy_pid is the `python -m sglang_router.launch_router` launcher.
+        # It spawns a separate Rust worker (`sglang::router`) that actually
+        # binds :30000. A plain `kill $proxy_pid` leaves that child alive, so
+        # :30000 never closes and decode/prefill nodes wait on it forever.
+        # Kill the launcher, its children, any stray router process, and finally
+        # whatever still holds :30000, so the port is guaranteed to close.
+        kill $proxy_pid 2>/dev/null || true
+        pkill -TERM -P "$proxy_pid" 2>/dev/null || true
+        pkill -TERM -f "sglang_router.launch_router" 2>/dev/null || true
+        if command -v fuser >/dev/null 2>&1; then
+            fuser -k -TERM 30000/tcp 2>/dev/null || true
+        fi
+        kill $prefill0_pid 2>/dev/null || true
     fi
 
     if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
@@ -713,8 +728,10 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
+        # Process substitution (not `| tee`) so $! is the server PID, not tee's;
+        # otherwise `kill $prefill_pid` kills tee and the server leaks.
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null &
+            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill_pid=$!
     fi
@@ -782,8 +799,10 @@ else
         echo "DRY RUN: $DECODE_CMD"
     else
         set -x
+        # Process substitution (not `| tee`) so $! is the server PID, not tee's;
+        # otherwise `kill $decode_pid` kills tee and the server leaks.
         eval "$DECODE_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log >/dev/null &
+            > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log >/dev/null) 2>&1 &
 
         set +x
         decode_pid=$!

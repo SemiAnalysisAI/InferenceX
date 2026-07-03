@@ -172,10 +172,13 @@ def cmd_barrier(args):
 
 def cmd_wait(args):
     """Wait while a remote port remains open, exit when it closes."""
-    print(f"Waiting while port {args.remote_port} on {args.remote_ip} is open...")
+    print(
+        f"Waiting while port {args.remote_port} on {args.remote_ip} is open...",
+        flush=True,
+    )
     while is_port_open(args.remote_ip, args.remote_port):
         time.sleep(5)
-    print(f"Port {args.remote_port} on {args.remote_ip} is now closed.")
+    print(f"Port {args.remote_port} on {args.remote_ip} is now closed.", flush=True)
 
 
 # =============================================================================
