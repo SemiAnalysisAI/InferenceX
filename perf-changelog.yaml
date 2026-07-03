@@ -4428,6 +4428,20 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1975
 
 - config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update Minimax M3 b300 vllm image tag"
+    - "Update search space to cover more configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1990
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Update Minimax M3 b200 vllm image tag"
+    - "Update search space to cover more configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1978
+
+- config-keys:
     - minimaxm3-fp4-b300-vllm-mtp
   description:
     - "Switch the MiniMax-M3 B300 vLLM MTP recipe from the custom perf image to a pinned mainline nightly."
