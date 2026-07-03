@@ -449,9 +449,8 @@ else
         fi
     )
 
-    # Default 180 min; AL-matrix collection (16 server starts) needs longer and
-    # overrides via SALLOC_TIME_LIMIT.
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --time="${SALLOC_TIME_LIMIT:-180}" --no-shell --job-name="$RUNNER_NAME"
+    SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT -N 1 --gres=gpu:$TP --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     srun --jobid=$JOB_ID \
@@ -459,6 +458,7 @@ else
         --container-image=$SQUASH_FILE \
         --container-mounts=$GITHUB_WORKSPACE:$CONTAINER_MOUNT_DIR,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE_MOUNT,$WRITABLE_MODELS_DIR:$WRITABLE_MODELS_DIR \
         --no-container-mount-home \
+        --container-remap-root \
         --container-workdir=$CONTAINER_MOUNT_DIR \
         --no-container-entrypoint --export=ALL,PORT=8888 \
         bash "$BENCH_SCRIPT"
