@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Wrapper for the DeepSeek-V4-Pro GB200 llm-d-vllm 1P+1D smoke benchmark.
-# Sibling of gptoss_fp4_h200_llm-d-vllm.sh - same shape, different
-# topology (GB200 = 4 GPUs/node, role spans 2 nodes; H200 = 8 GPUs/node,
-# role on a single node). The runner resolves this script via
-#   SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llm-d-vllm.sh"
+# Wrapper for the DeepSeek-V4-Pro GB200 llm-d-vllm P/D disagg benchmark
+# (mid-curve 1P1D and high-tpt 2P1D). Sibling of gptoss_fp4_h200_llm-d-vllm.sh -
+# same shape, different topology (GB200 = 4 GPUs/node, role spans 2 nodes;
+# H200 = 8 GPUs/node, role on a single node). The runner resolves this script via
+#   SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llm-d-vllm-disagg.sh"
 # from launch_gb200-nv.sh.
 
 set -euo pipefail
