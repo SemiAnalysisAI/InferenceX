@@ -104,7 +104,7 @@ if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
     export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
     mkdir -p "$BENCHMARK_LOGS_DIR"
 
-    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llm-d-vllm.sh"
+    SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llm-d-vllm-disagg.sh"
     BENCH_SCRIPT="benchmarks/multi_node/${SCRIPT_NAME}"
     if [[ ! -f "$BENCH_SCRIPT" ]]; then
         echo "Error: llm-d wrapper not found: $BENCH_SCRIPT" >&2
