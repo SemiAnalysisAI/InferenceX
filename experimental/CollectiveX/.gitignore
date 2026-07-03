@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+results/
+unsupported/
+.shards/
+.cx_workloads/
+.cx_backend/
+/matrix_full.json
+gpucore.*
+
+# Local plans and infrastructure inventory.
+goal.md
+notes.md
+configs/platforms.yaml
+private-infra.md

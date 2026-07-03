@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""CollectiveX — deterministic, platform-independent MoE routing trace.
+
+Fair-comparison fix #1: routing (per-token expert IDs + gate weights) is generated
+ONCE from a fixed seed over the *global* token batch, indexed by global token id, and
+is identical on every SKU for the same (seed, routing, global_tokens, experts, top-k).
+Each rank materializes its slice `[rank*T,(rank+1)*T)`. Activations
+are per-rank (same rank ⇒ same x on any platform), so a given global token id has
+identical activation everywhere without materializing a global activation tensor.
+
+The v1 suite keeps two routing distributions:
+
+  * uniform   — top-k distinct experts drawn uniformly per token. The DEFAULT.
+                Expected fan-out for top-k=8, 256 experts, EP8 (32 experts/rank) ≈
+                8·(1 − C(224,8)/C(256,8)) ≈ 5.3 ranks/token. Load ~ Poisson.
+  * zipf      — expert popularity proportional to 1/rank, producing expert/rank load skew.
+
+Always publish the realized fan-out so the workload is never misread again
+(`routing_stats`).
+"""
+from __future__ import annotations
+
+import hashlib
+
+import torch
+
+ACTIVATION_GENERATOR = "collectivex-activation-counter-v3"
+SOURCE_ID_BASE = 128
+SOURCE_ID_COLUMNS = 4
+
+
+def build_global_routing(
+    global_tokens: int, experts: int, topk: int, routing: str, seed: int
+):
+    """Return byte-stable counter-generated routing tensors on CPU."""
+    import workload
+
+    indices, weights = workload.canonical_routing_rows(
+        int(global_tokens), int(experts), int(topk), routing, int(seed)
+    )
+    return (
+        torch.tensor(indices, dtype=torch.int64),
+        torch.tensor(weights, dtype=torch.float32),
+    )
+
+
+def rank_slice(idx, weights, rank: int, tokens_per_rank: int):
+    lo = rank * tokens_per_rank
+    return idx[lo:lo + tokens_per_rank].contiguous(), weights[lo:lo + tokens_per_rank].contiguous()
+
+
+def rank_activations(tokens: int, hidden: int, seed: int, rank: int, device,
+                     dtype=torch.bfloat16):
+    """Exact counter-derived inputs with a reversible global source-token prefix."""
+    source = torch.arange(tokens, device=device, dtype=torch.int64) + rank * tokens
+    return activations_for_source_ids(source, hidden, seed, dtype)
+
+
+def activations_for_source_ids(source, hidden: int, seed: int, dtype=torch.bfloat16):
+    """Materialize canonical activations for arbitrary global source-token IDs."""
+    if hidden < SOURCE_ID_COLUMNS:
+        raise ValueError(f"hidden must be at least {SOURCE_ID_COLUMNS}")
+    source = source.to(torch.int64)
+    column = torch.arange(hidden, device=source.device, dtype=torch.int64)
+    values = (source[:, None] * 131 + column[None, :] * 17 + int(seed) * 19) % 257 - 128
+    output = values.to(dtype).mul_(1 / 64)
+    output[:, 0] = source % SOURCE_ID_BASE
+    output[:, 1] = (source // SOURCE_ID_BASE) % SOURCE_ID_BASE
+    output[:, 2] = (source // (SOURCE_ID_BASE**2)) % SOURCE_ID_BASE
+    output[:, 3] = (source * 29 + int(seed) * 7) % SOURCE_ID_BASE
+    return output
+
+
+def decode_source_ids(payload, seed: int):
+    """Decode and validate source IDs carried by rank_activations."""
+    if payload.ndim != 2 or payload.shape[1] < SOURCE_ID_COLUMNS:
+        raise ValueError("received payload cannot carry the source-token prefix")
+    prefix = payload[:, :SOURCE_ID_COLUMNS].float()
+    digits = prefix.round().to(torch.int64)
+    if not torch.equal(prefix, digits.float()):
+        raise ValueError("received source-token prefix is not exact")
+    if bool(((digits < 0) | (digits >= SOURCE_ID_BASE)).any().item()):
+        raise ValueError("received source-token prefix is out of range")
+    source = digits[:, 0] + SOURCE_ID_BASE * digits[:, 1] + SOURCE_ID_BASE**2 * digits[:, 2]
+    checksum = (source * 29 + int(seed) * 7) % SOURCE_ID_BASE
+    if not torch.equal(checksum, digits[:, 3]):
+        raise ValueError("received source-token checksum differs")
+    return source
+
+
+def routing_locality(idx, experts_per_rank: int, ep_size: int, tokens_per_rank: int,
+                     gpus_per_node: int, scale_up_domain: int = None) -> dict:
+    """Locality of rank-deduplicated payload copies under packed placement."""
+    import torch as _t
+    gt = idx.shape[0]
+    assignments = (idx // experts_per_rank).clamp(max=ep_size - 1)
+    destinations = _t.zeros((gt, ep_size), dtype=_t.bool)
+    destinations.scatter_(1, assignments, True)
+    token, dest = destinations.nonzero(as_tuple=True)
+    src = (token // max(1, tokens_per_rank)).clamp(max=ep_size - 1)
+    sud = scale_up_domain or (gpus_per_node * ep_size)                  # default: all one domain
+    phys = _t.arange(ep_size, dtype=_t.int64)
+    pd, ps = phys[dest], phys[src]
+    local = (dest == src)
+    same_node = (pd // gpus_per_node) == (ps // gpus_per_node)
+    same_dom = (pd // sud) == (ps // sud)
+    n = dest.numel()
+    return {
+        "placement": "packed",
+        "local_rank_fraction": float(local.float().mean()),
+        "same_node_fraction": float(same_node.float().mean()),
+        "same_scaleup_domain_fraction": float(same_dom.float().mean()),
+        "cross_node_fraction": float((~same_node).float().mean()),
+        "cross_domain_fraction": float((~same_dom).float().mean()),
+        "gpus_per_node": gpus_per_node, "scale_up_domain": sud, "copies": int(n),
+    }
+
+
+def routing_stats(idx, experts: int, experts_per_rank: int, weights=None) -> dict:
+    """Realized routing properties for the GLOBAL trace — published per point so the
+    fan-out / load can never be silently misread. idx is the global [gt, topk] tensor;
+    weights the matching [gt, topk] gate weights (hashed too for workload identity).
+    """
+    ep = max(1, experts // max(1, experts_per_rank))
+    ranks = (idx // experts_per_rank)                       # [gt, topk] destination rank per assignment
+    # unique destination ranks per token (fan-out)
+    onehot = torch.zeros(idx.shape[0], ep, dtype=torch.bool)
+    onehot.scatter_(1, ranks.clamp(max=ep - 1), True)
+    fanout = onehot.sum(dim=1)                              # [gt]
+    hist = torch.bincount(fanout, minlength=ep + 1)[1:ep + 1].tolist()  # counts for fan-out 1..ep
+    load = torch.bincount(idx.reshape(-1), minlength=experts).float()
+    # Keep expert assignments (compute load) separate from rank-deduplicated payload copies
+    # (network load). Conflating them overstates traffic when two experts share a rank.
+    assignment_load = torch.bincount(
+        ranks.reshape(-1).clamp(max=ep - 1), minlength=ep
+    ).float()
+    payload_load = onehot.sum(dim=0).float()
+    # One-number imbalance summaries so a row is self-describing for the distribution-sensitivity
+    # suite (no need to read the full histograms): CV = std/mean of the load; hotspot_ratio =
+    # worst expert load over the mean. Zipf should be more concentrated than uniform.
+    def _cv(t):
+        m = float(t.mean())
+        return float(t.std(unbiased=False) / m) if m > 0 else 0.0
+    expert_load_cv = _cv(load)
+    assignment_rank_cv = _cv(assignment_load)
+    payload_rank_cv = _cv(payload_load)
+    hotspot_ratio = float(load.max() / load.mean()) if float(load.mean()) > 0 else 0.0
+    # Empty experts capture compute skew; empty destination ranks capture network skew.
+    empty_expert_count = int((load == 0).sum())
+    empty_rank_count = int((payload_load == 0).sum())
+    # SHA-256 workload identity over both topk_idx and gate weights: a chart
+    # point's routing is provably identical across SKUs only if both hashes match.
+    idx_bytes = idx.to(torch.int32).cpu().numpy().tobytes()
+    idx_hash = hashlib.sha256(idx_bytes).hexdigest()
+    if weights is not None:
+        w_bytes = weights.to(torch.float32).cpu().numpy().tobytes()
+        w_hash = hashlib.sha256(w_bytes).hexdigest()
+        routing_hash = hashlib.sha256(idx_bytes + w_bytes).hexdigest()
+    else:
+        w_hash, routing_hash = None, idx_hash
+    return {
+        "fanout_mean": float(fanout.float().mean()),
+        "fanout_min": int(fanout.min()), "fanout_max": int(fanout.max()),
+        "fanout_hist": hist,                               # index k-1 = #tokens with fan-out k
+        "expert_assignments_per_rank": [int(x) for x in assignment_load.tolist()],
+        "payload_copies_per_rank": [int(x) for x in payload_load.tolist()],
+        "routed_copies": int(fanout.sum()),                # total (token, dest-rank) pairs
+        "expert_load_min": int(load.min()), "expert_load_max": int(load.max()),
+        "expert_load_mean": float(load.mean()), "expert_load_cv": expert_load_cv,
+        "expert_assignment_rank_cv": assignment_rank_cv,
+        "payload_rank_cv": payload_rank_cv, "hotspot_ratio": hotspot_ratio,
+        "empty_expert_count": empty_expert_count, "empty_rank_count": empty_rank_count,
+        "routing_hash": routing_hash, "idx_hash": idx_hash, "weights_hash": w_hash,
+    }
+
+
+# --------------------------------------------------------------------------- self-test
+if __name__ == "__main__":
+    import sys
+    E, TOPK, EPR, GT = 256, 8, 32, 4096
+    ui, _ = build_global_routing(GT, E, TOPK, "uniform", 67)
+    zi, _ = build_global_routing(GT, E, TOPK, "zipf", 67)
+    assert all(len(set(row.tolist())) == TOPK for row in ui[:16])
+    uniform, zipf = routing_stats(ui, E, EPR), routing_stats(zi, E, EPR)
+    assert uniform["hotspot_ratio"] < zipf["hotspot_ratio"]
+    dev = torch.device("cpu")
+    first = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32)
+    second = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32)
+    assert torch.equal(first, second) and torch.isfinite(first).all()
+    print("routing self-test: PASS")
+    sys.exit(0)

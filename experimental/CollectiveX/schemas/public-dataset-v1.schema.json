@@ -1,0 +1,606 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://inferencex.com/schemas/collectivex/public-dataset-v1.schema.json",
+  "title": "CollectiveX sanitized public dataset v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+      "format",
+      "schema_version",
+      "generated_at",
+      "source_bundle_ids",
+      "promotion",
+      "coverage",
+      "attempts",
+      "series",
+      "cohorts",
+      "rankings",
+      "recommendations",
+      "sensitivities"
+    ],
+  "properties": {
+      "format": {"const": "collectivex.public.v1"},
+      "schema_version": {"const": 1},
+      "generated_at": {"type": "string","format": "date-time"},
+      "source_bundle_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/sha256"}},
+      "promotion": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "status",
+                    "reason",
+                    "matrix_id",
+                    "allocation_ids",
+                    "required_allocations",
+                    "requested_cases",
+                    "terminal_cases",
+                    "policy"
+                  ],
+            "properties": {
+                    "status": {"enum": ["promoted","diagnostic","quarantined"]},
+                    "reason": {"$ref": "#/$defs/reason"},
+                    "matrix_id": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/sha256"}]},
+                    "allocation_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/allocationId"}},
+                    "required_allocations": {"const": 3},
+                    "requested_cases": {"type": "integer","minimum": 0},
+                    "terminal_cases": {"type": "integer","minimum": 0},
+                    "policy": {"const": "collectivex-decision-grade-v1"}
+                  }
+          },
+      "coverage": {"type": "array","items": {"$ref": "#/$defs/coverage"}},
+      "attempts": {"type": "array","items": {"$ref": "#/$defs/attempt"}},
+      "series": {"type": "array","items": {"$ref": "#/$defs/series"}},
+      "cohorts": {"type": "array","items": {"$ref": "#/$defs/cohort"}},
+      "rankings": {"type": "array","items": {"$ref": "#/$defs/ranking"}},
+      "recommendations": {"type": "array","items": {"$ref": "#/$defs/recommendation"}},
+      "sensitivities": {"type": "array","items": {"$ref": "#/$defs/sensitivity"}}
+    },
+  "$defs": {
+      "sha256": {"type": "string","pattern": "^[0-9a-f]{64}$"},
+      "caseId": {"type": "string","pattern": "^cxcase-v1-[0-9a-f]{64}$"},
+      "workloadId": {"type": "string","pattern": "^cxwork-v1-[0-9a-f]{64}$"},
+      "seriesId": {"type": "string","pattern": "^cxseries-v1-[0-9a-f]{64}$"},
+      "pointId": {"type": "string","pattern": "^cxpoint-v1-[0-9a-f]{64}$"},
+      "evidenceId": {"type": "string","pattern": "^cxevidence-v1-[0-9a-f]{64}$"},
+      "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
+      "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
+      "safeId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 128},
+      "publicationTier": {"enum": ["official","comparable-experimental"]},
+      "label": {"type": "string","minLength": 1,"maxLength": 160},
+      "nullableLabel": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/label"}]},
+      "reason": {"oneOf": [{"type": "null"},{"type": "string","pattern": "^[a-z0-9][a-z0-9.-]*$","maxLength": 96}]},
+      "outcome": {"enum": ["success","unsupported","failed","invalid","diagnostic"]},
+      "coverageTopology": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "ep_size",
+                    "nodes",
+                    "gpus_per_node",
+                    "scale_up_domain",
+                    "scope",
+                    "scale_up_transport",
+                    "scale_out_transport",
+                    "transport",
+                    "topology_class"
+                  ],
+            "properties": {
+                    "ep_size": {"type": "integer","minimum": 1},
+                    "nodes": {"type": "integer","minimum": 1},
+                    "gpus_per_node": {"type": "integer","minimum": 1},
+                    "scale_up_domain": {"type": "integer","minimum": 1},
+                    "scope": {"enum": ["scale-up","scale-out"]},
+                    "scale_up_transport": {"$ref": "#/$defs/safeId"},
+                    "scale_out_transport": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/safeId"}]},
+                    "transport": {"$ref": "#/$defs/safeId"},
+                    "topology_class": {"$ref": "#/$defs/safeId"}
+                  }
+          },
+      "coverage": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "case_id",
+                    "label",
+                    "required",
+                    "sku",
+                    "backend",
+                    "mode",
+                    "phase",
+                    "topology",
+                    "disposition",
+                    "selected_attempt_id",
+                    "outcome",
+                    "failure_mode",
+                    "reason",
+                    "attempt_ids"
+                  ],
+            "properties": {
+                    "case_id": {"$ref": "#/$defs/caseId"},
+                    "label": {"$ref": "#/$defs/label"},
+                    "required": {"type": "boolean"},
+                    "sku": {"$ref": "#/$defs/safeId"},
+                    "backend": {"$ref": "#/$defs/safeId"},
+                    "mode": {"enum": ["normal","low-latency"]},
+                    "phase": {"enum": ["decode","prefill"]},
+                    "topology": {"$ref": "#/$defs/coverageTopology"},
+                    "disposition": {"enum": ["runnable","unsupported"]},
+                    "selected_attempt_id": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/attemptId"}]},
+                    "outcome": {"$ref": "#/$defs/outcome"},
+                    "failure_mode": {"$ref": "#/$defs/reason"},
+                    "reason": {"$ref": "#/$defs/reason"},
+                    "attempt_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/attemptId"}}
+                  }
+          },
+      "attempt": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "attempt_id",
+                    "evidence",
+                    "case_id",
+                    "allocation_id",
+                    "run_id",
+                    "run_attempt",
+                    "attempt_index",
+                    "selected",
+                    "outcome",
+                    "failure_mode",
+                    "reason",
+                    "series_id",
+                    "completed_at"
+                  ],
+            "properties": {
+                    "attempt_id": {"$ref": "#/$defs/attemptId"},
+                    "evidence": {
+                              "type": "array",
+                              "uniqueItems": true,
+                              "items": {
+                                          "type": "object",
+                                          "additionalProperties": false,
+                                          "required": ["evidence_id","point_id"],
+                                          "properties": {"evidence_id": {"$ref": "#/$defs/evidenceId"},"point_id": {"$ref": "#/$defs/pointId"}}
+                                        }
+                            },
+                    "case_id": {"$ref": "#/$defs/caseId"},
+                    "allocation_id": {"$ref": "#/$defs/allocationId"},
+                    "run_id": {"type": "string","pattern": "^[1-9][0-9]*$"},
+                    "run_attempt": {"type": "integer","minimum": 1},
+                    "attempt_index": {"type": "integer","minimum": 1},
+                    "selected": {"type": "boolean"},
+                    "outcome": {"$ref": "#/$defs/outcome"},
+                    "failure_mode": {"$ref": "#/$defs/reason"},
+                    "reason": {"$ref": "#/$defs/reason"},
+                    "series_id": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/seriesId"}]},
+                    "completed_at": {"oneOf": [{"type": "null"},{"type": "string","format": "date-time"}]}
+                  }
+          },
+      "eligibility": {
+            "type": "object",
+            "additionalProperties": false,
+            "allOf": [{
+                    "if": {"properties": {"decision_grade": {"const": true}},"required": ["decision_grade"]},
+                    "then": {"properties": {"reasons": {"maxItems": 0}}},
+                    "else": {"properties": {"reasons": {"minItems": 1}}}
+                  }],
+            "required": [
+                    "decision_grade",
+                    "allocation_ids",
+                    "complete",
+                    "correct",
+                    "measured_roundtrip_p99",
+                    "stable_p50",
+                    "stable_p99",
+                    "stable_ordering",
+                    "p50_max_min_ratio",
+                    "p99_max_min_ratio",
+                    "reasons"
+                  ],
+            "properties": {
+                    "decision_grade": {"type": "boolean"},
+                    "allocation_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/allocationId"}},
+                    "complete": {"type": "boolean"},
+                    "correct": {"type": "boolean"},
+                    "measured_roundtrip_p99": {"type": "boolean"},
+                    "stable_p50": {"type": "boolean"},
+                    "stable_p99": {"type": "boolean"},
+                    "stable_ordering": {"type": "boolean"},
+                    "p50_max_min_ratio": {"oneOf": [{"type": "null"},{"type": "number","minimum": 1}]},
+                    "p99_max_min_ratio": {"oneOf": [{"type": "null"},{"type": "number","minimum": 1}]},
+                    "reasons": {
+                              "type": "array",
+                              "uniqueItems": true,
+                              "items": {"type": "string","pattern": "^[a-z0-9][a-z0-9.-]*$","maxLength": 96}
+                            }
+                  }
+          },
+      "percentiles": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["p50","p90","p95","p99"],
+            "properties": {
+                    "p50": {"type": "number","exclusiveMinimum": 0},
+                    "p90": {"type": "number","exclusiveMinimum": 0},
+                    "p95": {"type": "number","exclusiveMinimum": 0},
+                    "p99": {"type": "number","exclusiveMinimum": 0}
+                  }
+          },
+      "component": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["origin","latency_us","logical_bytes","logical_payload_rate_gbps_at_latency_percentile","sample_count"],
+            "properties": {
+                    "origin": {"enum": ["measured","derived"]},
+                    "latency_us": {"$ref": "#/$defs/percentiles"},
+                    "logical_bytes": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]},
+                    "logical_payload_rate_gbps_at_latency_percentile": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/percentiles"}]},
+                    "sample_count": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]}
+                  }
+          },
+      "nullableComponent": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/component"}]},
+      "point": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "point_id",
+                    "tokens_per_rank",
+                    "global_tokens",
+                    "correct",
+                    "routing",
+                    "components",
+                    "roundtrip_token_rate_at_latency_percentile",
+                    "evidence_ids"
+                  ],
+            "properties": {
+                    "point_id": {"$ref": "#/$defs/pointId"},
+                    "tokens_per_rank": {"type": "integer","minimum": 1},
+                    "global_tokens": {"type": "integer","minimum": 1},
+                    "correct": {"type": "boolean"},
+                    "routing": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                          "fanout_mean",
+                                          "recv_tokens_max",
+                                          "expert_load_cv",
+                                          "payload_rank_cv",
+                                          "hotspot_ratio",
+                                          "empty_expert_count",
+                                          "empty_rank_count",
+                                          "routed_copies"
+                                        ],
+                              "properties": {
+                                          "fanout_mean": {"type": "number","minimum": 0},
+                                          "recv_tokens_max": {"type": "integer","minimum": 0},
+                                          "expert_load_cv": {"type": "number","minimum": 0},
+                                          "payload_rank_cv": {"type": "number","minimum": 0},
+                                          "hotspot_ratio": {"type": "number","minimum": 0},
+                                          "empty_expert_count": {"type": "integer","minimum": 0},
+                                          "empty_rank_count": {"type": "integer","minimum": 0},
+                                          "routed_copies": {"type": "integer","minimum": 1}
+                                        }
+                            },
+                    "components": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["dispatch","combine","roundtrip","isolated_sum"],
+                              "properties": {
+                                          "dispatch": {"$ref": "#/$defs/nullableComponent"},
+                                          "combine": {"$ref": "#/$defs/nullableComponent"},
+                                          "roundtrip": {"$ref": "#/$defs/nullableComponent"},
+                                          "isolated_sum": {"$ref": "#/$defs/nullableComponent"}
+                                        }
+                            },
+                    "roundtrip_token_rate_at_latency_percentile": {"$ref": "#/$defs/percentiles"},
+                    "evidence_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/evidenceId"}}
+                  }
+          },
+      "series": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "series_id",
+                    "label",
+                    "status",
+                    "case_ids",
+                    "allocation_ids",
+                    "model",
+                    "suite",
+                    "mode",
+                    "phase",
+                    "publication_tier",
+                    "backend",
+                    "build",
+                    "system",
+                    "workload",
+                    "eplb",
+                    "resource",
+                    "measurement",
+                    "points",
+                    "eligibility"
+                  ],
+            "properties": {
+                    "series_id": {"$ref": "#/$defs/seriesId"},
+                    "label": {"$ref": "#/$defs/label"},
+                    "status": {"enum": ["decision-grade","diagnostic"]},
+                    "case_ids": {"type": "array","minItems": 1,"uniqueItems": true,"items": {"$ref": "#/$defs/caseId"}},
+                    "allocation_ids": {"type": "array","minItems": 1,"uniqueItems": true,"items": {"$ref": "#/$defs/allocationId"}},
+                    "model": {"$ref": "#/$defs/safeId"},
+                    "suite": {"$ref": "#/$defs/safeId"},
+                    "mode": {"enum": ["normal","low-latency"]},
+                    "phase": {"enum": ["decode","prefill"]},
+                    "publication_tier": {"$ref": "#/$defs/publicationTier"},
+                    "backend": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["id","label","role","generation","version"],
+                              "properties": {
+                                          "id": {"$ref": "#/$defs/safeId"},
+                                          "label": {"$ref": "#/$defs/label"},
+                                          "role": {"enum": ["library","reference"]},
+                                          "generation": {"$ref": "#/$defs/nullableLabel"},
+                                          "version": {"$ref": "#/$defs/nullableLabel"}
+                                        }
+                            },
+                    "build": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["implementation_contract_sha256","public_config_sha256","routing_control_sha256","runtime_fingerprint_sha256","image_digest","source_sha","squash_sha256"],
+                              "properties": {
+                                          "implementation_contract_sha256": {"$ref": "#/$defs/sha256"},
+                                          "public_config_sha256": {"$ref": "#/$defs/sha256"},
+                                          "routing_control_sha256": {"$ref": "#/$defs/sha256"},
+                                          "runtime_fingerprint_sha256": {"$ref": "#/$defs/sha256"},
+                                          "image_digest": {"type": "string","pattern": "^sha256:[0-9a-f]{64}$"},
+                                          "source_sha": {"type": "string","pattern": "^[0-9a-f]{40,64}$"},
+                                          "squash_sha256": {"$ref": "#/$defs/sha256"}
+                                        }
+                            },
+                    "system": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["sku","label","vendor","topology_class","transport","scale_up_transport","scale_out_transport","scope","nodes","gpus_per_node","scale_up_domain","world_size","ep_size","placement"],
+                              "properties": {
+                                          "sku": {"$ref": "#/$defs/safeId"},
+                                          "label": {"$ref": "#/$defs/label"},
+                                          "vendor": {"enum": ["nvidia","amd"]},
+                                          "topology_class": {"$ref": "#/$defs/safeId"},
+                                          "transport": {"$ref": "#/$defs/safeId"},
+                                          "scale_up_transport": {"$ref": "#/$defs/safeId"},
+                                          "scale_out_transport": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/safeId"}]},
+                                          "scope": {"enum": ["scale-up","scale-out"]},
+                                          "nodes": {"type": "integer","minimum": 1},
+                                          "gpus_per_node": {"type": "integer","minimum": 1},
+                                          "scale_up_domain": {"type": "integer","minimum": 1},
+                                          "world_size": {"type": "integer","minimum": 1},
+                                          "ep_size": {"type": "integer","minimum": 1},
+                                          "placement": {"enum": ["packed"]}
+                                        }
+                            },
+                    "workload": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                          "workload_id",
+                                          "hidden",
+                                          "top_k",
+                                          "experts",
+                                          "routing",
+                                          "eplb",
+                                          "dispatch_dtype",
+                                          "combine_dtype",
+                                          "activation_profile"
+                                        ],
+                              "properties": {
+                                          "workload_id": {"$ref": "#/$defs/workloadId"},
+                                          "hidden": {"type": "integer","minimum": 1},
+                                          "top_k": {"type": "integer","minimum": 1},
+                                          "experts": {"type": "integer","minimum": 1},
+                                          "routing": {"enum": ["uniform","zipf"]},
+                                          "eplb": {"type": "boolean"},
+                                          "dispatch_dtype": {"const": "bf16"},
+                                          "combine_dtype": {"const": "bf16"},
+                                          "activation_profile": {"const": "canonical-counter-source-v3"}
+                                        }
+                            },
+                    "eplb": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                          "enabled",
+                                          "planner",
+                                          "mapping_sha256",
+                                          "logical_experts",
+                                          "physical_experts",
+                                          "redundant_experts",
+                                          "reference_tokens_per_rank",
+                                          "replicated_experts",
+                                          "max_replicas",
+                                          "imbalance_before",
+                                          "imbalance_after"
+                                        ],
+                              "properties": {
+                                          "enabled": {"type": "boolean"},
+                                          "planner": {"$ref": "#/$defs/nullableLabel"},
+                                          "mapping_sha256": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/sha256"}]},
+                                          "logical_experts": {"type": "integer","minimum": 1},
+                                          "physical_experts": {"type": "integer","minimum": 1},
+                                          "redundant_experts": {"type": "integer","minimum": 0},
+                                          "reference_tokens_per_rank": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]},
+                                          "replicated_experts": {"type": "integer","minimum": 0},
+                                          "max_replicas": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 0}]},
+                                          "imbalance_before": {"oneOf": [{"type": "null"},{"type": "number","minimum": 0}]},
+                                          "imbalance_after": {"oneOf": [{"type": "null"},{"type": "number","minimum": 0}]}
+                                        }
+                            },
+                    "resource": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": ["mode","profile","comm_units_kind","configured_units"],
+                              "properties": {
+                                          "mode": {"const": "tuned"},
+                                          "profile": {"$ref": "#/$defs/safeId"},
+                                          "comm_units_kind": {"$ref": "#/$defs/nullableLabel"},
+                                          "configured_units": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]}
+                                        }
+                            },
+                    "measurement": {
+                              "type": "object",
+                              "additionalProperties": false,
+                              "required": [
+                                          "contract",
+                                          "component_order_contract",
+                                          "combine_semantics",
+                                          "payload_unit",
+                                          "sampling_contract",
+                                          "iters",
+                                          "trials",
+                                          "warmups",
+                                          "samples_per_component",
+                                          "headline_component",
+                                          "headline_percentile"
+                                        ],
+                              "properties": {
+                                          "contract": {"enum": ["layout-and-dispatch-v1","expert-packed-weighted-combine-v1"]},
+                                          "component_order_contract": {"enum": ["roundtrip-dispatch-activation-only-combine-v2","roundtrip-dispatch-gate-weighted-combine-v1"]},
+                                          "combine_semantics": {"enum": ["activation-only","gate-weighted"]},
+                                          "payload_unit": {"enum": ["token-rank","token-expert"]},
+                                          "sampling_contract": {"const": "fixed-512-v1"},
+                                          "iters": {"const": 8},
+                                          "trials": {"const": 64},
+                                          "warmups": {"const": 32},
+                                          "samples_per_component": {"const": 512},
+                                          "headline_component": {"const": "roundtrip"},
+                                          "headline_percentile": {"const": "p99"}
+                                        }
+                            },
+                    "points": {"type": "array","minItems": 1,"items": {"$ref": "#/$defs/point"}},
+                    "eligibility": {"$ref": "#/$defs/eligibility"}
+                  }
+          },
+      "cohort": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "cohort_id",
+                    "kind",
+                    "label",
+                    "description",
+                    "series_ids",
+                    "controlled_factors",
+                    "varying_factors",
+                    "publication_tier",
+                    "eligibility"
+                  ],
+            "properties": {
+                    "cohort_id": {"type": "string","pattern": "^cxcohort-v1-[0-9a-f]{64}$"},
+                    "kind": {"enum": ["library","chip","system","routing"]},
+                    "label": {"$ref": "#/$defs/label"},
+                    "description": {"$ref": "#/$defs/label"},
+                    "series_ids": {"type": "array","minItems": 2,"uniqueItems": true,"items": {"$ref": "#/$defs/seriesId"}},
+                    "controlled_factors": {"type": "array","minItems": 1,"uniqueItems": true,"items": {"$ref": "#/$defs/safeId"}},
+                    "varying_factors": {"type": "array","minItems": 1,"uniqueItems": true,"items": {"$ref": "#/$defs/safeId"}},
+                    "publication_tier": {"$ref": "#/$defs/publicationTier"},
+                    "eligibility": {"$ref": "#/$defs/eligibility"}
+                  }
+          },
+      "metric": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation","statistic","measure","objective","tokens_per_rank","phase"],
+            "properties": {
+                    "operation": {"const": "roundtrip"},
+                    "statistic": {"enum": ["p50","p99"]},
+                    "measure": {"enum": ["latency_us","logical_payload_rate_gbps_at_latency_percentile"]},
+                    "objective": {"enum": ["min","max"]},
+                    "tokens_per_rank": {"type": "integer","minimum": 1},
+                    "phase": {"enum": ["decode","prefill"]}
+                  }
+          },
+      "ranking": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["ranking_id","cohort_id","label","metric","entries","publication_tier","eligibility"],
+            "properties": {
+                    "ranking_id": {"type": "string","pattern": "^cxranking-v1-[0-9a-f]{64}$"},
+                    "cohort_id": {"type": "string","pattern": "^cxcohort-v1-[0-9a-f]{64}$"},
+                    "label": {"$ref": "#/$defs/label"},
+                    "metric": {"$ref": "#/$defs/metric"},
+                    "entries": {
+                              "type": "array",
+                              "minItems": 2,
+                              "items": {
+                                          "type": "object",
+                                          "additionalProperties": false,
+                                          "required": ["rank","series_id","point_id","value","unit"],
+                                          "properties": {
+                                                        "rank": {"type": "integer","minimum": 1},
+                                                        "series_id": {"$ref": "#/$defs/seriesId"},
+                                                        "point_id": {"$ref": "#/$defs/pointId"},
+                                                        "value": {"type": "number","exclusiveMinimum": 0},
+                                                        "unit": {"enum": ["us","GB/s"]}
+                                                      }
+                                        }
+                            },
+                    "publication_tier": {"$ref": "#/$defs/publicationTier"},
+                    "eligibility": {"$ref": "#/$defs/eligibility"}
+                  }
+          },
+      "recommendation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "recommendation_id",
+                    "cohort_id",
+                    "label",
+                    "objective",
+                    "series_id",
+                    "point_id",
+                    "value",
+                    "unit",
+                    "rationale",
+                    "publication_tier",
+                    "eligibility"
+                  ],
+            "properties": {
+                    "recommendation_id": {"type": "string","pattern": "^cxrecommendation-v1-[0-9a-f]{64}$"},
+                    "cohort_id": {"type": "string","pattern": "^cxcohort-v1-[0-9a-f]{64}$"},
+                    "label": {"$ref": "#/$defs/label"},
+                    "objective": {"enum": ["min-p50-latency","min-p99-latency","max-payload-rate-at-p50-latency","max-payload-rate-at-p99-latency"]},
+                    "series_id": {"$ref": "#/$defs/seriesId"},
+                    "point_id": {"$ref": "#/$defs/pointId"},
+                    "value": {"type": "number","exclusiveMinimum": 0},
+                    "unit": {"enum": ["us","GB/s"]},
+                    "rationale": {"$ref": "#/$defs/label"},
+                    "publication_tier": {"const": "official"},
+                    "eligibility": {"$ref": "#/$defs/eligibility"}
+                  }
+          },
+      "sensitivity": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                    "sensitivity_id",
+                    "cohort_id",
+                    "label",
+                    "baseline_series_id",
+                    "candidate_series_id",
+                    "metric",
+                    "signed_change_ratio",
+                    "publication_tier",
+                    "eligibility"
+                  ],
+            "properties": {
+                    "sensitivity_id": {"type": "string","pattern": "^cxsensitivity-v1-[0-9a-f]{64}$"},
+                    "cohort_id": {"type": "string","pattern": "^cxcohort-v1-[0-9a-f]{64}$"},
+                    "label": {"$ref": "#/$defs/label"},
+                    "baseline_series_id": {"$ref": "#/$defs/seriesId"},
+                    "candidate_series_id": {"$ref": "#/$defs/seriesId"},
+                    "metric": {"$ref": "#/$defs/metric"},
+                    "signed_change_ratio": {"type": "number"},
+                    "publication_tier": {"$ref": "#/$defs/publicationTier"},
+                    "eligibility": {"$ref": "#/$defs/eligibility"}
+                  }
+          }
+    }
+}

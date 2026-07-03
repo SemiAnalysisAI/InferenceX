@@ -1,0 +1,8 @@
+# Host-side matrix generation. GPU libraries are supplied by benchmark images.
+PyYAML==6.0.2
+
+# Canonical workload serialization.
+numpy>=1.26,<3
+
+# Host-only strict artifact publisher schemas (never imported by GPU execution).
+jsonschema==4.25.1

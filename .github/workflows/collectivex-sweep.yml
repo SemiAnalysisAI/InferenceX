@@ -1,40 +1,46 @@
 # CollectiveX Sweep — one structured run instead of thousands of dispatches.
 #
-# Shape (mirrors the InferenceX CI tracker): setup -> sweep (a MATRIX job = "a job with other jobs
-# in it") -> aggregate (the collector "at the end"). The matrix unit is a SHARD = one allocation that
-# sweeps many cases sharing (sku, backend, mode, resource) — generate_matrix's own grouping, chunked
-# so no cell exceeds the job budget. Each cell emits a handful of per-case JSONs; the aggregate job
-# collects every shard into ONE line-delimited file (results/aggregate/*.ndjson) so there aren't
-# thousands of individual result files. Run once per backend (deepep / uccl / flashinfer /
-# deepep-hybrid / nccl-ep, + deepep_v2) for full parity.
+# Shape: setup -> sweep. The matrix unit is a shard: one allocation that sweeps
+# cases sharing (sku, backend, nodes). Each cell uploads its privacy-checked raw
+# result JSONs. The isolated v1 publisher consumes downloaded shards separately.
 name: CollectiveX Sweep
+permissions:
+  contents: read
 on:
   workflow_dispatch:
     inputs:
       backend:
-        description: EP library to sweep (deepep matrix is remapped onto the others, capability-filtered)
+        description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
-        default: deepep
-        options: [deepep, uccl, flashinfer, deepep-hybrid, nccl-ep]
-      deepep_v2:
-        description: DeepEP V2 from-source kernels (kernel_gen=v2; deepep backend only)
-        type: boolean
-        default: false
+        default: all
+        options: [all, deepep, deepep-v2, uccl, deepep-hybrid, mori, nccl-ep]
       suites:
         description: "'all' or comma-list of suite names"
         type: string
         default: all
       only_sku:
-        description: Restrict to one SKU (h100-dgxc|h200|b300|b200-dgxc|gb200|gb300|mi355x); blank = all
+        description: Restrict to one GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi325x|mi355x); blank = all
+        type: string
+        default: ''
+      min_nodes:
+        description: Keep only shards with at least this node/tray count (2 keeps every EP16 and GB EP8; blank = all)
+        type: string
+        default: ''
+      max_nodes:
+        description: Keep only shards with at most this node/tray count (1 keeps non-GB EP8; blank = all)
         type: string
         default: ''
       max_cases:
-        description: Max cases per shard cell (chunk larger shards)
+        description: Max cases per shard cell before chunking into another GHA job (128 = no chunking for current suites)
         type: string
-        default: '14'
-
+        default: '128'
+      release_tag:
+        description: Publication gate; unversioned runs are diagnostic and cannot be published
+        type: choice
+        default: unversioned
+        options: [unversioned, v1]
 concurrency:
-  group: cx-sweep-${{ github.ref }}-${{ inputs.backend }}-${{ inputs.deepep_v2 }}-${{ inputs.only_sku }}
+  group: cx-sweep-${{ github.ref }}-${{ inputs.release_tag }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
 
 jobs:
@@ -46,26 +52,150 @@ jobs:
       n: ${{ steps.gen.outputs.n }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with: { clean: true }
-      - run: pip install --quiet pyyaml
+        with: { clean: true, persist-credentials: false }
+      - name: Install matrix dependencies
+        run: python3 -m pip install --quiet PyYAML==6.0.2
       - id: gen
         working-directory: experimental/CollectiveX
+        env:
+          INPUT_BACKEND: ${{ inputs.backend }}
+          INPUT_SUITES: ${{ inputs.suites }}
+          INPUT_ONLY_SKU: ${{ inputs.only_sku }}
+          INPUT_MIN_NODES: ${{ inputs.min_nodes }}
+          INPUT_MAX_NODES: ${{ inputs.max_nodes }}
+          INPUT_MAX_CASES: ${{ inputs.max_cases }}
+          COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
+          COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
+          COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
         run: |
           set -euo pipefail
-          ov=""; [ "${{ inputs.backend }}" != "deepep" ] && ov="--backend ${{ inputs.backend }}"
-          v2=""; [ "${{ inputs.deepep_v2 }}" = "true" ] && v2="--deepep-v2"
-          os=""; [ -n "${{ inputs.only_sku }}" ] && os="--only-sku ${{ inputs.only_sku }}"
-          # full matrix (with cases) -> artifact for the cells; slim (no cases) -> the strategy output.
-          python3 sweep_matrix.py --suites "${{ inputs.suites }}" --max-cases "${{ inputs.max_cases }}" $ov $v2 $os --out matrix_full.json >/dev/null
-          SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='cases'} for x in m['include']]}))")
-          echo "matrix=$SLIM" >> "$GITHUB_OUTPUT"
-          echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")" >> "$GITHUB_OUTPUT"
-          python3 -c "import json;m=json.load(open('matrix_full.json'));print('shard-cells:',len(m['include']),'cases:',sum(x['n'] for x in m['include']))"
+          args=(--suites "$INPUT_SUITES" --max-cases "$INPUT_MAX_CASES")
+          case "$INPUT_BACKEND" in
+            all) args+=(--backends all) ;;
+            *) args+=(--backend "$INPUT_BACKEND") ;;
+          esac
+          [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+          [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
+          [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
+          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
+          python3 artifact_safety.py matrix_full.json
+          SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='case_ids'} for x in m['include']]}))")
+          {
+            echo "matrix=$SLIM"
+            echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")"
+            echo "source_backends=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(' '.join(sorted({x['backend'] for x in m['include']} & {'deepep-v2','deepep-hybrid'})))")"
+          } >> "$GITHUB_OUTPUT"
+          unsupported_n=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(sum(x['disposition']=='unsupported' for x in m['requested_cases']))")
+          echo "unsupported_n=$unsupported_n" >> "$GITHUB_OUTPUT"
+          if [ "$unsupported_n" -gt 0 ]; then
+            python3 sweep_matrix.py --emit-unsupported-from matrix_full.json \
+              --out-dir unsupported
+          fi
+          python3 -c "import json;m=json.load(open('matrix_full.json'));r=m['requested_cases'];print('shard-cells:',len(m['include']),'runnable:',sum(x['disposition']=='runnable' for x in r),'unsupported:',sum(x['disposition']=='unsupported' for x in r))"
+      - name: Prepare pinned backend source archive
+        if: ${{ steps.gen.outputs.source_backends != '' }}
+        working-directory: experimental/CollectiveX
+        env:
+          SOURCE_BACKENDS: ${{ steps.gen.outputs.source_backends }}
+          COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_sources
+        run: |
+          set -euo pipefail
+          source runtime/common.sh
+          work="$RUNNER_TEMP/collectivex-backend-sources"
+          archive="$RUNNER_TEMP/collectivex-backend-sources.tar"
+          rm -rf -- "$work" "$archive"
+          umask 077
+          mkdir -m 700 "$work"
+          mkdir -p "$work/experimental/CollectiveX"
+          read -r -a backends <<< "$SOURCE_BACKENDS"
+          [ "${#backends[@]}" -gt 0 ]
+          for backend in "${backends[@]}"; do
+            cx_prepare_backend_source "$work" "$backend"
+          done
+          cx_cleanup_private_logs 0
+          tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
+            -C "$work/experimental/CollectiveX" -cf "$archive" .cx_sources
+          sha256sum "$archive"
+          rm -rf -- "$work"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ steps.gen.outputs.source_backends != '' }}
+        with:
+          name: cxbackend-sources-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/collectivex-backend-sources.tar
+          if-no-files-found: error
+          retention-days: 3
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cxsweep-matrix-${{ github.run_id }}
+          name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
           path: experimental/CollectiveX/matrix_full.json
           if-no-files-found: error
+          retention-days: 3
+      - name: Create V1 release marker
+        if: ${{ inputs.release_tag == 'v1' }}
+        env:
+          EXPECTED_MATRIX_SHA256: f1ca85f9689922b90edd5767b9ff2a902f6b896f32f68b2ca086dde3fd2157d0
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          destination="$RUNNER_TEMP/collectivex-release"
+          install -d -m 700 "$destination"
+          python3 - "$destination/release.json" <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import sys
+
+          matrix = pathlib.Path("experimental/CollectiveX/matrix_full.json").read_bytes()
+          matrix_sha256 = hashlib.sha256(matrix).hexdigest()
+          if matrix_sha256 != os.environ["EXPECTED_MATRIX_SHA256"]:
+              raise SystemExit("V1 release tag requires the locked full matrix")
+          marker = {
+              "format": "collectivex.release-tag.v1",
+              "matrix_sha256": matrix_sha256,
+              "release_tag": "v1",
+              "run_attempt": os.environ["RUN_ATTEMPT"],
+              "run_id": os.environ["RUN_ID"],
+              "source_sha": os.environ["SOURCE_SHA"],
+          }
+          pathlib.Path(sys.argv[1]).write_text(
+              json.dumps(marker, sort_keys=True, separators=(",", ":")) + "\n"
+          )
+          PY
+          python3 experimental/CollectiveX/artifact_safety.py "$destination/release.json"
+      - name: Upload V1 release marker
+        if: ${{ inputs.release_tag == 'v1' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxrelease-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/collectivex-release/release.json
+          if-no-files-found: error
+          retention-days: 3
+      - name: Validate unsupported artifact safety
+        id: unsupported_safety
+        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 }}
+        run: |
+          python3 experimental/CollectiveX/artifact_safety.py experimental/CollectiveX/unsupported/*.json
+      - name: Validate unsupported outcomes
+        id: unsupported_contracts
+        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 && steps.unsupported_safety.outcome == 'success' }}
+        env:
+          COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
+          COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
+        run: |
+          python3 experimental/CollectiveX/contracts.py validate-delivery \
+            --source experimental/CollectiveX/matrix_full.json \
+            --disposition unsupported \
+            experimental/CollectiveX/unsupported/*.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 && steps.unsupported_contracts.outcome == 'success' && steps.unsupported_safety.outcome == 'success' }}
+        with:
+          name: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
+          path: experimental/CollectiveX/unsupported/*.json
+          if-no-files-found: error
+          retention-days: 3
 
   # ---- sweep: ONE matrix cell per shard (the parent job with child jobs) ----
   sweep:
@@ -73,82 +203,234 @@ jobs:
     if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
-      max-parallel: 10            # don't saturate the ~20-runner fleet; cells queue as slots free
+      max-parallel: 10
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
-    # h200 label spans two clusters; pin to the validated dgxc pool (mirrors collectivex-experimental).
-    runs-on: ${{ matrix.sku == 'h200' && 'h200-dgxc' || matrix.sku }}
+    runs-on: ${{ matrix.sku }}
     timeout-minutes: 350
     env:
       CX_BENCH: ${{ matrix.backend }}
-      CX_DEEPEP_V2: ${{ matrix.deepep_v2 && '1' || '' }}
       CX_NODES: ${{ matrix.nodes }}
-      CX_SHARD_FILE: results/.shard_${{ matrix.id }}.json
+      CX_GPUS_PER_NODE: ${{ matrix.gpus_per_node }}
+      CX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
+      CX_SHARD_FILE: .shards/${{ matrix.id }}.json
+      CX_SHARD_SKU: ${{ matrix.sku }}
+      COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      CX_NODELIST: ${{ matrix.sku == 'mi355x' && 'mia1-p01-g10,mia1-p01-g15' || '' }}
-      CX_STAGE_DIR: ${{ matrix.sku == 'gb200' && '/mnt/lustre01/users-public/sa-shared/cx-stage' || '' }}
+      COLLECTIVEX_ARTIFACT_NAME: cxshard-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+      # Consolidated shards run one bounded build-group in one Slurm allocation, so
+      # the launcher's default 45-min --time is too short. 300 min covers a cold
+      # compute-node image import plus the shard. The allocation releases early
+      # when the shard finishes, so short shards don't waste it.
+      CX_TIME: '300'
+      COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
+      CX_JOB_ROOT: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
+      CX_SOURCE_ROOT: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}/source
+      HOME: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}/home
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with: { clean: true }
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: cxsweep-matrix-${{ github.run_id }}
-          path: experimental/CollectiveX
-      - name: Extract this shard's cases (stdlib only — no runner deps)
-        working-directory: experimental/CollectiveX
-        run: |
-          set -euo pipefail
-          python3 -c "
-          import json
-          m=json.load(open('matrix_full.json'))
-          s=[x for x in m['include'] if x['id']=='${{ matrix.id }}']
-          assert s, 'shard ${{ matrix.id }} not in matrix'
-          s=s[0]
-          json.dump({'id':s['id'],'sku':s['sku'],'backend':s['backend'],'nodes':s['nodes'],'deepep_v2':s['deepep_v2'],'cases':s['cases']}, open('results/.shard_${{ matrix.id }}.json','w'))
-          print('shard ${{ matrix.id }}:', len(s['cases']), 'cases')
-          "
-      - name: Sweep shard ${{ matrix.id }} (${{ matrix.n }} cases, one allocation)
+      - name: Prepare isolated source
+        id: source
         env:
-          RUNNER_NAME: ${{ runner.name }}
-        run: bash "experimental/CollectiveX/launchers/launch_${RUNNER_NAME%%_*}.sh"
-      - name: Shard summary
-        if: always()
-        run: python3 experimental/CollectiveX/summarize.py --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Upload shard results
-        if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: cxshard-${{ matrix.id }}-${{ github.run_id }}
-          path: experimental/CollectiveX/results/*.json   # glob skips the hidden .shard_*.json
-          if-no-files-found: warn
-
-  # ---- aggregate: collect every shard into ONE ndjson (the "result aggregator at the end") ----
-  aggregate:
-    needs: sweep
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
-        with: { clean: true }
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          pattern: cxshard-*-${{ github.run_id }}
-          path: _shards
-          merge-multiple: true
-      - name: Aggregate shards -> one ndjson
-        working-directory: experimental/CollectiveX
+          COLLECTIVEX_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          tag="${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}"
-          python3 aggregate_results.py --in-dir ../../_shards --out "results/aggregate/collectivex_${tag}_${{ github.run_id }}.ndjson"
-          {
-            echo "## CollectiveX sweep aggregate (${tag})"
-            echo '```'
-            wc -l results/aggregate/*.ndjson 2>/dev/null || echo "no ndjson"
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-      - name: Upload aggregate
+          python3 - <<'PY'
+          import os
+          import re
+          import shutil
+          import stat
+          import time
+
+          pattern = re.compile(r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+")
+          cutoff = time.time() - 86400
+          for entry in os.scandir("/tmp"):
+              if not pattern.fullmatch(entry.name):
+                  continue
+              try:
+                  metadata = entry.stat(follow_symlinks=False)
+              except FileNotFoundError:
+                  continue
+              if (
+                  not stat.S_ISDIR(metadata.st_mode)
+                  or metadata.st_uid != os.getuid()
+                  or stat.S_IMODE(metadata.st_mode) != 0o700
+                  or metadata.st_mtime >= cutoff
+              ):
+                  continue
+              marked = False
+              for marker_name in ("cleanup-safe", "cleanup-unsafe"):
+                  try:
+                      marker = os.stat(
+                          os.path.join(entry.path, marker_name), follow_symlinks=False
+                      )
+                  except FileNotFoundError:
+                      continue
+                  marked = (
+                      stat.S_ISREG(marker.st_mode)
+                      and marker.st_uid == os.getuid()
+                      and stat.S_IMODE(marker.st_mode) == 0o600
+                  )
+                  if marked:
+                      break
+              if marked:
+                  shutil.rmtree(entry.path)
+          PY
+          [[ "$CX_JOB_ROOT" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+            || { echo "CollectiveX isolated root is invalid" >&2; exit 1; }
+          [ "$CX_SOURCE_ROOT" = "$CX_JOB_ROOT/source" ] \
+            || { echo "CollectiveX source root is invalid" >&2; exit 1; }
+          if [ -e "$CX_JOB_ROOT" ] || [ -L "$CX_JOB_ROOT" ]; then
+            echo "CollectiveX isolated root already exists" >&2
+            exit 1
+          fi
+          umask 077
+          mkdir -m 700 -- "$CX_JOB_ROOT"
+          trap 'rc=$?; [ "$rc" = 0 ] || rm -rf -- "$CX_JOB_ROOT"; exit "$rc"' EXIT
+          mkdir -m 700 -- "$HOME" "$CX_JOB_ROOT/control" "$CX_JOB_ROOT/artifact" "$CX_SOURCE_ROOT"
+          : > "$CX_JOB_ROOT/cleanup-safe"
+          if ! {
+            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git init -q "$CX_SOURCE_ROOT"
+            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+              git -C "$CX_SOURCE_ROOT" remote add origin \
+                "https://github.com/${COLLECTIVEX_REPOSITORY}.git"
+            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+              git -C "$CX_SOURCE_ROOT" -c credential.helper= -c protocol.version=2 \
+                fetch -q --no-tags --depth=1 origin "$COLLECTIVEX_SOURCE_SHA"
+            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+              git -C "$CX_SOURCE_ROOT" -c advice.detachedHead=false \
+                checkout -q --detach FETCH_HEAD
+            [ "$(git -C "$CX_SOURCE_ROOT" rev-parse HEAD)" = "$COLLECTIVEX_SOURCE_SHA" ]
+          } </dev/null >/dev/null 2>&1; then
+            echo "CollectiveX source preparation failed" >&2
+            exit 1
+          fi
+          [ "$(stat -c '%a' "$CX_JOB_ROOT")" = 700 ] \
+            || { echo "CollectiveX isolated root has unsafe permissions" >&2; exit 1; }
+          echo 'prepared=true' >> "$GITHUB_OUTPUT"
+          trap - EXIT
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CX_JOB_ROOT }}/control
+      - name: Download pinned backend source archive
+        if: ${{ matrix.backend == 'deepep-v2' || matrix.backend == 'deepep-hybrid' }}
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cxbackend-sources-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CX_JOB_ROOT }}/control
+      - name: Install pinned backend source seed
+        if: ${{ matrix.backend == 'deepep-v2' || matrix.backend == 'deepep-hybrid' }}
+        env:
+          EXPECTED_BACKEND: ${{ matrix.backend }}
+        run: |
+          set -euo pipefail
+          archive="$CX_JOB_ROOT/control/collectivex-backend-sources.tar"
+          destination="$CX_SOURCE_ROOT/experimental/CollectiveX"
+          seed_root="$destination/.cx_sources"
+          [ -f "$archive" ] && [ ! -e "$seed_root" ] && [ ! -L "$seed_root" ]
+          source "$destination/runtime/common.sh"
+          source_path="$(cx_backend_source_path "$seed_root" "$EXPECTED_BACKEND")"
+          source_basename="${source_path#"$seed_root/"}"
+          [ -n "$source_basename" ] \
+            && [ "$source_path" = "$seed_root/$source_basename" ] \
+            && [[ "$source_basename" != */* ]]
+          python3 "$destination/source_archive.py" \
+            "$archive" "$destination" "$source_basename"
+          cx_backend_source_is_valid "$EXPECTED_BACKEND" "$source_path"
+          printf 'CX_BACKEND_SOURCE_SEED_ROOT=%s\n' "$seed_root" >> "$GITHUB_ENV"
+      - name: Extract and validate this shard's cases
+        run: |
+          set -euo pipefail
+          cd "$CX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          python3 sweep_matrix.py \
+            --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
+            --shard-id '${{ matrix.id }}' \
+            --expect-sku '${{ matrix.sku }}' \
+            --expect-backend '${{ matrix.backend }}' \
+            --expect-nodes '${{ matrix.nodes }}' \
+            --out '${{ env.CX_SHARD_FILE }}' >/dev/null
+      - name: Sweep shard ${{ matrix.id }} (${{ matrix.n }} cases, one allocation)
+        id: sweep_shard
+        env:
+          COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
+          COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          : > "$CX_JOB_ROOT/cleanup-unsafe"
+          rm -f -- "$CX_JOB_ROOT/cleanup-safe"
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
+      - name: Confirm allocation cleanup
+        id: allocation_cleanup
+        if: ${{ always() && steps.source.outputs.prepared == 'true' }}
+        run: |
+          set -euo pipefail
+          [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
+            || { echo "CollectiveX allocation cleanup was not confirmed" >&2; exit 1; }
+      - name: Validate shard artifact safety
+        id: artifact_safety
+        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
+        run: |
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          python3 experimental/CollectiveX/artifact_safety.py experimental/CollectiveX/results/*.json
+      - name: Validate shard delivery completeness
+        id: delivery_contracts
+        if: ${{ always() && steps.artifact_safety.outcome == 'success' }}
+        run: |
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          python3 experimental/CollectiveX/contracts.py validate-delivery \
+            --source "experimental/CollectiveX/${CX_SHARD_FILE}" \
+            experimental/CollectiveX/results/*.json
+      - name: Shard summary
+        if: ${{ always() && steps.artifact_safety.outcome == 'success' && steps.delivery_contracts.outcome == 'success' }}
+        run: |
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          python3 experimental/CollectiveX/summarize.py \
+            --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Stage shard artifact
+        id: stage_artifact
+        if: ${{ always() && steps.delivery_contracts.outcome == 'success' && steps.artifact_safety.outcome == 'success' }}
+        run: |
+          set -euo pipefail
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          cp -- experimental/CollectiveX/results/*.json "$CX_JOB_ROOT/artifact/"
+      - name: Upload shard results
+        id: upload_artifact
+        if: always() && steps.stage_artifact.outcome == 'success' && steps.delivery_contracts.outcome == 'success' && steps.artifact_safety.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cxsweep-aggregate-${{ inputs.backend }}${{ inputs.deepep_v2 && '-v2' || '' }}-${{ github.run_id }}
-          path: experimental/CollectiveX/results/aggregate/*.ndjson
-          if-no-files-found: warn
+          name: cxshard-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ env.CX_JOB_ROOT }}/artifact/*.json
+          if-no-files-found: error
+          retention-days: 3
+      - name: Cleanup isolated workspace
+        if: ${{ always() && steps.source.outputs.prepared == 'true' }}
+        run: |
+          set -euo pipefail
+          [[ "$CX_JOB_ROOT" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+            || { echo "CollectiveX cleanup root is invalid" >&2; exit 1; }
+          [ "$CX_SOURCE_ROOT" = "$CX_JOB_ROOT/source" ] \
+            || { echo "CollectiveX cleanup source is invalid" >&2; exit 1; }
+          [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
+            || { echo "CollectiveX allocation cleanup was not confirmed; retaining isolated files" >&2; exit 1; }
+          if [ '${{ steps.sweep_shard.outcome }}' = success ] \
+              && [ '${{ steps.allocation_cleanup.outcome }}' = success ] \
+              && [ '${{ steps.artifact_safety.outcome }}' = success ] \
+              && [ '${{ steps.delivery_contracts.outcome }}' = success ] \
+              && [ '${{ steps.stage_artifact.outcome }}' = success ] \
+              && [ '${{ steps.upload_artifact.outcome }}' = success ] \
+              && [ -f "$CX_SOURCE_ROOT/experimental/CollectiveX/runtime/common.sh" ]; then
+            # shellcheck source=/dev/null
+            if source "$CX_SOURCE_ROOT/experimental/CollectiveX/runtime/common.sh" \
+                >/dev/null 2>&1; then
+              cx_cleanup_private_logs 0
+            fi
+          fi
+          rm -rf -- "$CX_JOB_ROOT"
