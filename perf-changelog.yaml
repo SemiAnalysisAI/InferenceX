@@ -4446,6 +4446,6 @@
   description:
     - "Switch the MiniMax-M3 B300 vLLM MTP recipe from the custom perf image to a pinned mainline nightly."
     - "Select the TRT-LLM backend when FlashInfer all-reduce is enabled."
-    - "Refocus both 1k/1k and 8k/1k search spaces on TP2 c4-c256 and TP2/EP2 DP-attention c512, while retaining TP8 and TP4 c1-c2."
-    - "Drop the TP8/EP8 and TP4/EP4 lanes."
+    - "For 1k/1k, retain TP8/EP1 c1-c4 and TP8/EP8 c128-c256 bridge lanes, TP4/EP1 c1-c64 and TP4/EP4 c64-c256, and limit TP2/EP1 to c128-c256 plus TP2/EP2 DP-attention c512."
+    - "For 8k/1k, use TP4/EP1 c1-c8 and TP2/EP1 c8-c256 plus TP2/EP2 DP-attention c512; drop TP8."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1991
