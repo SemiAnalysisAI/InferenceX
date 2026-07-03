@@ -143,8 +143,10 @@ EOF
         fi
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":false}}'
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}'
         )
+
+        python3 /workspace/benchmarks/single_node/agentic/patch_vllm_0_24_async_kv_deadlock.py
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
