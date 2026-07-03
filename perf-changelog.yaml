@@ -4433,3 +4433,9 @@
     - "Add --online_quant_config with ptpc_fp8 and MoE layer exclusions (*block_sparse_moe) to all scripts."
     - "Replace deprecated AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2001
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Use fp8 indexer kv cache dtype"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2009
