@@ -29,7 +29,7 @@ workflow callers can still override the `duration` input explicitly.
 
 Agentic master configs must use an exact `cluster:<name>` runner label so every
 search-space point lands on the same hardware fleet. Machine-level host memory
-is declared once in the `.github/configs/runners.yaml` `hardware` entry matching
+is declared once in the `configs/runners.yaml` `hardware` entry matching
 that runner label:
 
 ```yaml
