@@ -167,6 +167,11 @@ env:
   DURATION: ${{ inputs.duration }}
   KV_OFFLOADING: ${{ inputs.kv-offloading }}
   KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
+  # Server recipes (multi_node/agentic/*.sh, server_sglang.sh) gate HiCache on
+  # OFFLOADING=<backend>. Map kv-offloading/kv-offload-backend onto it: when KV
+  # offloading is active the backend name (e.g. hicache) is the OFFLOADING value;
+  # otherwise 'none'. Propagates via sbatch --export=ALL -> job.slurm -> docker.
+  OFFLOADING: ${{ (inputs.kv-offloading == '' || inputs.kv-offloading == 'none') && 'none' || inputs.kv-offload-backend }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
