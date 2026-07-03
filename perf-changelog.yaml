@@ -4306,14 +4306,15 @@
 
 - config-keys:
     - minimaxm3-fp4-mi355x-atom-disagg
+    - minimaxm3-fp4-mi355x-atom-disagg-mtp
+    - minimaxm3-fp8-mi355x-atom-disagg
+    - minimaxm3-fp8-mi355x-atom-disagg-mtp
   description:
-    - "Add minimaxm3-fp4-mi355x-atom-disagg CI recipe: multi-node disaggregated PD on MI355X via ATOM for MiniMax-M3-MXFP4"
-    - "Image: rocm/atom-dev:MiniMax-M3-20260623; model: amd/MiniMax-M3-MXFP4; framework: atom-disagg"
-    - "Search space: ISL=8192 and ISL=1024, OSL=1024, 1P1D TP4, conc 1-512"
-    - "Refactor server_atom.sh to eliminate all hardcoded MODEL_NAME checks; all model-specific config (env, parallel flags, MTP flags, KV cache flags, HF overrides) now driven from models_atom.yaml"
-    - "Add MiniMax-M3-MXFP4 and MiniMax-M3-MXFP8 entries to models_atom.yaml with EAGLE3 MTP flags (--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3)"
-    - "Fix model HuggingFace path for minimaxm3-fp8-mi355x-atom-disagg: amd/MiniMax-M3-MXFP8 -> MiniMaxAI/MiniMax-M3-MXFP8"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1940
+    - "Refactor ATOM disagg server_atom.sh and models_atom.yaml: split MODEL_TP_DP_FLAGS and MODEL_EP_DP_FLAGS into per-role prefill/decode variants, move BLOCK_SIZE (128), MEM_FRAC_STATIC (0.8), MAX_MODEL_LEN (32768), MAX_NUM_SEQS (256), MAX_NUM_BATCHED_TOKENS (32768) from launch scripts into models_atom.yaml with env-var override support."
+    - "Add hf_overrides and online_quant_config (with DPA-specific variant) to models_atom.yaml. FP8 uses different online_quant_config exclude patterns when DPA is enabled (*.gate.*, *.block_sparse_moe.experts*) vs disabled (*block_sparse_moe)."
+    - "Add minimaxm3-fp4/fp8-mi355x-atom-disagg-mtp recipes with EAGLE3 speculative decoding (DECODE_MTP_SIZE=3) at 1P1D and 2P1D DPA TP4 search spaces for 8k1k and 1k1k."
+    - "Fix YAML server-tuning defaults precedence (env var > YAML > shell default) and remove redundant SPEC_DECODING gating in favor of MODEL_MTP_FLAGS + DECODE_MTP_SIZE > 0."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2000
 
 - config-keys:
     - minimaxm3-fp8-mi355x-vllm-mtp
