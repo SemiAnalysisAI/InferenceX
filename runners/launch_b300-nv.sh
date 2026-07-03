@@ -76,18 +76,6 @@ elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git checkout aflowers/vllm-gb200-v0.20.0
     mkdir -p recipes/vllm/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout main
-    mkdir -p recipes/vllm/minimax-m2.5
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300" recipes/vllm/minimax-m2.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout main
-    mkdir -p recipes/vllm/minimax-m2.5-fp8
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-b300-fp8" recipes/vllm/minimax-m2.5-fp8
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECISION == "fp4" || $PRECISION == "fp8" ) ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR" || exit 1
