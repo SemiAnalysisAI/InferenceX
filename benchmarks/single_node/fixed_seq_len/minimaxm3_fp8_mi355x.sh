@@ -51,12 +51,11 @@ elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
-# https://github.com/vllm-project/vllm/pull/47158 fix this
-if printf '%s\n' "${PARALLEL_ARGS[@]}" | grep -qxF -- '--enable-expert-parallel'; then
-    export VLLM_ROCM_USE_AITER=0
-else
-    export VLLM_ROCM_USE_AITER=1
-fi
+# Previously when EP is On, VLLM_ROCM_USE_AITER needs to be off.
+# After https://github.com/vllm-project/vllm/pull/47158, 
+# it can be simplified as VLLM_ROCM_USE_AITER=1.
+# As the configs are TP only, remove the conditional check.
+export VLLM_ROCM_USE_AITER=1
 
 # Larger per-step prefill token budget to improve TP4 throughput at high
 # concurrency. Overridable via env.

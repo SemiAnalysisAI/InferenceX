@@ -4442,4 +4442,4 @@
     - "Add --max-num-batched-tokens 32768 (env MAX_NUM_BATCHED_TOKENS) to enlarge the per-step prefill budget and improve TP4 throughput at high concurrency"
     - "Enable the AITER master switch for TP-only (no-EP) runs via --moe-backend aiter: the earlier degenerate-output issue that forced it off for TP-only is fixed by vllm-project/vllm#47158, so TP4 uses the AITER_MXFP8 MoE path (verified GSM8K 0.9613 flex / 0.9621 strict on this nightly)"
     - "Simplify both search spaces to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8 and TP4/EP4: TP8 has poor throughput/GPU and plain TP4 matches or beats TP4/EP4 at high concurrency)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2003
