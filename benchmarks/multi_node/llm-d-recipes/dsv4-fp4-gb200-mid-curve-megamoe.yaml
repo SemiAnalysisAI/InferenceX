@@ -25,9 +25,21 @@
 #   CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml
 #   PREFILL_NODES=2 DECODE_NODES=2 GPUS_PER_NODE=4
 
-# ---- EPP scheduling config ----
-# Same plugins/profiles as dsv4-fp4-gb200-1p1d-simple.yaml. EPP routing
-# is engine-config-agnostic.
+# ---- EPP scheduling config (matched to upstream wide-ep-lws) ----
+# Scorers match the upstream generic wide-ep-lws router config
+# (llm-d guides/wide-ep-lws/router/wide-ep-lws.values.yaml):
+#   prefill = prefix-cache(3) + queue(2) + active-request(2)
+#   decode  = active-request only
+# Two deltas from our earlier config were removed:
+#   1. dropped kv-cache-utilization-scorer from prefill (upstream does not use
+#      it; replaced its weight with active-request(2) to match upstream);
+#   2. dropped prefix-cache-scorer from decode - it outweighed active-request
+#      (weight 3 vs 2) and pinned decode to one pod on a shared prompt prefix,
+#      giving the observed 2:1 decode routing imbalance. Upstream decode routes
+#      on active-request alone, which balances evenly.
+# (max-score-picker is kept as the picker; functionally the profile default.)
+# EPP routing is engine-config-agnostic, so this recipe file also backs the
+# high-tpt (2P1D conc4096) key.
 apiVersion: llm-d.ai/v1alpha1
 kind: EndpointPickerConfig
 
@@ -47,7 +59,6 @@ plugins:
   - type: decode-filter
   - type: prefix-cache-scorer
   - type: queue-scorer
-  - type: kv-cache-utilization-scorer
   - type: active-request-scorer
   - type: max-score-picker
 
@@ -59,16 +70,13 @@ schedulingProfiles:
         weight: 3
       - pluginRef: queue-scorer
         weight: 2
-      - pluginRef: kv-cache-utilization-scorer
+      - pluginRef: active-request-scorer
         weight: 2
       - pluginRef: max-score-picker
   - name: decode
     plugins:
       - pluginRef: decode-filter
       - pluginRef: active-request-scorer
-        weight: 2
-      - pluginRef: prefix-cache-scorer
-        weight: 3
       - pluginRef: max-score-picker
 
 dataLayer:
