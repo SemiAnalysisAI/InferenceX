@@ -149,7 +149,12 @@ fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "$DP_ATTENTION" = "true" ]; then
-    PARALLEL_ARGS=(--tensor-parallel-size 1 --data-parallel-size "$TP")
+    # Each DEP rank owns one GPU, so keep its worker in the EngineCore process.
+    PARALLEL_ARGS=(
+        --tensor-parallel-size 1
+        --data-parallel-size "$TP"
+        --distributed-executor-backend uni
+    )
 fi
 
 EP_ARGS=()
