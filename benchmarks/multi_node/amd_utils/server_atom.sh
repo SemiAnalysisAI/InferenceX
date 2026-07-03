@@ -44,12 +44,7 @@ DECODE_PORT="${DECODE_PORT:-8020}"
 ROUTER_PORT="${ROUTER_PORT:-8000}"
 HANDSHAKE_PORT="${HANDSHAKE_PORT:-6301}"
 
-# ATOM server tuning (from reference script defaults)
-MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-0.85}"
-BLOCK_SIZE="${BLOCK_SIZE:-16}"
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-256}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
-MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-}"
+# ATOM server tuning — defaults applied after YAML load (env var > YAML > shell default)
 EXTRA_SERVER_ARGS="${EXTRA_SERVER_ARGS:-}"
 
 # Benchmark Configuration
@@ -111,22 +106,12 @@ source "$_yaml_tmp"
 rm -f "$_yaml_tmp"
 unset _yaml_tmp
 
-# Apply YAML server-tuning defaults (env vars take precedence)
-if [[ -n "$_YAML_BLOCK_SIZE" ]]; then
-    BLOCK_SIZE="${BLOCK_SIZE:-$_YAML_BLOCK_SIZE}"
-fi
-if [[ -n "$_YAML_MEM_FRAC_STATIC" ]]; then
-    MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-$_YAML_MEM_FRAC_STATIC}"
-fi
-if [[ -n "$_YAML_MAX_MODEL_LEN" ]]; then
-    MAX_MODEL_LEN="${MAX_MODEL_LEN:-$_YAML_MAX_MODEL_LEN}"
-fi
-if [[ -n "$_YAML_MAX_NUM_SEQS" ]]; then
-    MAX_NUM_SEQS="${MAX_NUM_SEQS:-$_YAML_MAX_NUM_SEQS}"
-fi
-if [[ -n "$_YAML_MAX_NUM_BATCHED_TOKENS" ]]; then
-    MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-$_YAML_MAX_NUM_BATCHED_TOKENS}"
-fi
+# Apply server-tuning: env var > YAML > shell default
+BLOCK_SIZE="${BLOCK_SIZE:-${_YAML_BLOCK_SIZE:-16}}"
+MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-${_YAML_MEM_FRAC_STATIC:-0.85}}"
+MAX_MODEL_LEN="${MAX_MODEL_LEN:-${_YAML_MAX_MODEL_LEN:-}}"
+MAX_NUM_SEQS="${MAX_NUM_SEQS:-${_YAML_MAX_NUM_SEQS:-256}}"
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-${_YAML_MAX_NUM_BATCHED_TOKENS:-}}"
 unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS
 
 # =============================================================================

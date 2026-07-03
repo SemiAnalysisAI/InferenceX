@@ -44,7 +44,7 @@ MiniMax-M3-MXFP4:
   env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
   kv_cache_flags: "--kv_cache_dtype fp8"
   tp_dp_flags: "--enable-dp-attention"
-  prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo prefill"
+  prefill_tp_dp_flags: "--enable-dp-attention --enable-tbo"
   decode_tp_dp_flags: "--enable-dp-attention"
   ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
