@@ -811,7 +811,7 @@ kimik2.5-fp4-mi355x-vllm-agentic:
 
 
 kimik2.5-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
+  image: benenzhu/benenzhu-amd:dev5
   model: amd/Kimi-K2.5-MXFP4
   model-prefix: kimik2.5
   runner: mi355x
