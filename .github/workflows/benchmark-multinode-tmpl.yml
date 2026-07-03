@@ -181,6 +181,8 @@ jobs:
       ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}/EP${{ inputs.prefill-ep }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
       x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}/EP${{ inputs.decode-ep }}${{ inputs.decode-dp-attn == 'true' && '/DPA' || '' }})
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
+      ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('kv={0}', inputs.kv-offloading) || '' }}
+      ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && format('kv_backend={0}', inputs.kv-offload-backend) || '' }}
       conc=${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
