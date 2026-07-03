@@ -468,7 +468,7 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
     HICACHE_RATIO="${HICACHE_RATIO:-}"
     if [[ -z "$HICACHE_RATIO" ]]; then
         if [[ "$PREFILL_TP_SIZE" -ge 8 ]]; then
-            HICACHE_RATIO=8
+            HICACHE_RATIO=32
         else
             HICACHE_RATIO=16
         fi
@@ -658,12 +658,23 @@ if [ "$NODE_RANK" -eq 0 ]; then
     # with 100% errors. Disable the breaker and relax health-check sensitivity so
     # a busy-but-alive worker is not ejected. Override via ROUTER_RESILIENCE_FLAGS.
     ROUTER_RESILIENCE_FLAGS="${ROUTER_RESILIENCE_FLAGS:---disable-circuit-breaker --health-failure-threshold 100 --health-check-timeout-secs 600 --health-check-interval-secs 30}"
+
+    # Router scheduling policy. cache_aware prefill routing exploits HiCache/radix
+    # prefix reuse across the agentic trace; round_robin decode keeps the single
+    # decode worker fed evenly. cache_threshold / balance_*_threshold tune the
+    # cache_aware load-balancing (router defaults are 0.5 / 64 / 1.5). Override any
+    # of these via env.
+    ROUTER_PREFILL_POLICY="${ROUTER_PREFILL_POLICY:-cache_aware}"
+    ROUTER_DECODE_POLICY="${ROUTER_DECODE_POLICY:-round_robin}"
+    ROUTER_CACHE_THRESHOLD="${ROUTER_CACHE_THRESHOLD:-0.3}"
+    ROUTER_BALANCE_ABS_THRESHOLD="${ROUTER_BALANCE_ABS_THRESHOLD:-2}"
+    ROUTER_BALANCE_REL_THRESHOLD="${ROUTER_BALANCE_REL_THRESHOLD:-1.1}"
+    ROUTER_POLICY_FLAGS="${ROUTER_POLICY_FLAGS:---policy ${ROUTER_PREFILL_POLICY} --prefill-policy ${ROUTER_PREFILL_POLICY} --decode-policy ${ROUTER_DECODE_POLICY} --cache-threshold ${ROUTER_CACHE_THRESHOLD} --balance-abs-threshold ${ROUTER_BALANCE_ABS_THRESHOLD} --balance-rel-threshold ${ROUTER_BALANCE_REL_THRESHOLD}}"
+
     ROUTER_CMD="python -m sglang_router.launch_router \
         --pd-disaggregation \
         --port 30000 \
-        --policy random \
-        --prefill-policy random \
-        --decode-policy random \
+        ${ROUTER_POLICY_FLAGS} \
         ${ROUTER_RESILIENCE_FLAGS} \
         ${PREFILL_ARGS} \
         ${DECODE_ARGS}"
