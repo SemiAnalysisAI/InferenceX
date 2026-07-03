@@ -107,6 +107,9 @@ DECODE_MTP_SIZE=${DECODE_MTP_SIZE:-0}
 ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 ROUTER_PORT="${ROUTER_PORT:-30000}"
 PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
+VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
+VLLM_ROUTER_PREFILL_POLICY="${VLLM_ROUTER_PREFILL_POLICY:-consistent_hash}"
+VLLM_ROUTER_DECODE_POLICY="${VLLM_ROUTER_DECODE_POLICY:-round_robin}"
 
 # =============================================================================
 # Model Path Resolution
@@ -349,6 +352,9 @@ export DURATION="${DURATION:-1800}"
 export MODEL="${MODEL:-}"
 export ROUTER_TYPE="${ROUTER_TYPE:-vllm-router}"
 export ROUTER_PORT="${ROUTER_PORT:-30000}"
+export VLLM_ROUTER_POLICY="${VLLM_ROUTER_POLICY:-consistent_hash}"
+export VLLM_ROUTER_PREFILL_POLICY="${VLLM_ROUTER_PREFILL_POLICY:-consistent_hash}"
+export VLLM_ROUTER_DECODE_POLICY="${VLLM_ROUTER_DECODE_POLICY:-round_robin}"
 export ENABLE_PREFIX_CACHING="${ENABLE_PREFIX_CACHING:-}"
 export MAX_MODEL_LEN="${MAX_MODEL_LEN:-}"
 export WEKA_LOADER_OVERRIDE="${WEKA_LOADER_OVERRIDE:-}"
@@ -452,6 +458,9 @@ DOCKER_ENV_COMMON=(
     -e MODEL=\$MODEL
     -e ROUTER_TYPE=\$ROUTER_TYPE
     -e ROUTER_PORT=\$ROUTER_PORT
+    -e VLLM_ROUTER_POLICY=\$VLLM_ROUTER_POLICY
+    -e VLLM_ROUTER_PREFILL_POLICY=\$VLLM_ROUTER_PREFILL_POLICY
+    -e VLLM_ROUTER_DECODE_POLICY=\$VLLM_ROUTER_DECODE_POLICY
     -e ENABLE_PREFIX_CACHING=\$ENABLE_PREFIX_CACHING
     -e MAX_NUM_SEQS=\$MAX_NUM_SEQS
     -e WEKA_LOADER_OVERRIDE=\$WEKA_LOADER_OVERRIDE
@@ -649,7 +658,7 @@ fi  # end: if ENGINE == atom-disagg
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
     \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
-    echo \"[ROUTER_CMD] image=$VLLM_ROUTER_IMAGE vllm-router --vllm-pd-disaggregation --kv-connector moriio --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} --port ${ROUTER_PORT} --host 0.0.0.0 --policy consistent_hash --prefill-policy consistent_hash --decode-policy consistent_hash --log-level info\"
+    echo \"[ROUTER_CMD] image=$VLLM_ROUTER_IMAGE vllm-router --vllm-pd-disaggregation --kv-connector moriio --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} --port ${ROUTER_PORT} --host 0.0.0.0 --policy ${VLLM_ROUTER_POLICY} --prefill-policy ${VLLM_ROUTER_PREFILL_POLICY} --decode-policy ${VLLM_ROUTER_DECODE_POLICY} --log-level info\"
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
@@ -661,9 +670,9 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
             --vllm-discovery-address 0.0.0.0:${PROXY_PING_PORT} \
             --port ${ROUTER_PORT} \
             --host 0.0.0.0 \
-            --policy consistent_hash \
-            --prefill-policy consistent_hash \
-            --decode-policy consistent_hash \
+            --policy ${VLLM_ROUTER_POLICY} \
+            --prefill-policy ${VLLM_ROUTER_PREFILL_POLICY} \
+            --decode-policy ${VLLM_ROUTER_DECODE_POLICY} \
             --log-level info 2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/vllm_router_\$(hostname).log \"
 fi
 
