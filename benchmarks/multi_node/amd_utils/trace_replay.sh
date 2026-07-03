@@ -57,7 +57,6 @@ RESULT_FILENAME_BASE="${RESULT_FILENAME:-agentic_bench}"
 
 mkdir -p "$RESULT_DIR"
 
-export WEKA_LOADER_OVERRIDE=semianalysis_cc_traces_weka_061526
 resolve_trace_source
 install_agentic_deps
 
