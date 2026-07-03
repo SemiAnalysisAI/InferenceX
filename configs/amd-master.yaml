@@ -2475,7 +2475,7 @@ dsv4-fp4-mi355x-atom-disagg:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2487,14 +2487,11 @@ minimaxm3-fp8-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 32 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 2 }
-      - { tp: 4, conc-start: 2, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 512 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi355x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
