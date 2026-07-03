@@ -488,7 +488,9 @@ jobs:
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
-            offloading: ${{ matrix.config.offloading }}
+            kv-offloading: ${{ matrix.config['kv-offloading'] }}
+            kv-offload-backend: ${{ matrix.config['kv-offload-backend'] }}
+            total-cpu-dram-gb: ${{ matrix.config['total-cpu-dram-gb'] }}
             duration: ${{ matrix.config.duration }}
             isl: '0'
             osl: '0'
@@ -848,6 +850,67 @@ jobs:
                       "client_payload": {
                         "run-id": "${{ github.run_id }}",
                         "run-attempt": "${{ github.run_attempt }}"
+                      }
+                    }'
+
+    trigger-agentic-ingest:
+        needs:
+            [
+                setup,
+                sweep-agentic,
+                sweep-multi-node-agentic,
+                upload-changelog-metadata,
+                reuse-ingest-artifacts,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'push' &&
+            github.ref == 'refs/heads/main' &&
+            needs.setup.result == 'success' &&
+            needs.upload-changelog-metadata.result == 'success' &&
+            (
+              (
+                needs.reuse-ingest-artifacts.result == 'success' &&
+                (
+                  (
+                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != 'null' &&
+                    toJson(fromJson(needs.setup.outputs.search-space-config).single_node['agentic']) != '[]'
+                  ) ||
+                  (
+                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != 'null' &&
+                    toJson(fromJson(needs.setup.outputs.search-space-config).multi_node['agentic']) != '[]'
+                  )
+                )
+              ) ||
+              (
+                (
+                  needs.sweep-agentic.result == 'success' ||
+                  needs.sweep-multi-node-agentic.result == 'success'
+                ) &&
+                (
+                  needs.sweep-agentic.result == 'success' ||
+                  needs.sweep-agentic.result == 'skipped'
+                ) &&
+                (
+                  needs.sweep-multi-node-agentic.result == 'success' ||
+                  needs.sweep-multi-node-agentic.result == 'skipped'
+                )
+              )
+            )
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger agentic database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
+                    -d '{
+                      "ref": "feat/agentx",
+                      "inputs": {
+                        "run-id": "${{ github.run_id }}",
+                        "run-attempt": "${{ github.run_attempt }}",
+                        "database-target": "production"
                       }
                     }'
 

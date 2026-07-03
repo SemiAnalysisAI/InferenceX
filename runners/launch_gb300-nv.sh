@@ -17,6 +17,9 @@ export ENROOT_ROOTFS_WRITABLE=1
 # write to it.
 export AIPERF_MMAP_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/ai-perf-cache"
 
+export HF_HUB_CACHE_HOST_PATH="/data/home/sa-shared/gharunners/hf-hub-cache"
+mkdir -p "$HF_HUB_CACHE_HOST_PATH"
+
 export MODEL_PATH=$MODEL
 
 if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
@@ -254,6 +257,7 @@ srtctl_root: "${SRTCTL_ROOT}"
 # re-tokenized + re-written every job.
 default_mounts:
   "${AIPERF_MMAP_CACHE_HOST_PATH}": "/aiperf_mmap_cache"
+  "${HF_HUB_CACHE_HOST_PATH}": "/hf_hub_cache"
 
 # Model path aliases
 model_paths:

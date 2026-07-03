@@ -214,7 +214,7 @@ jobs:
             {"fastMode": true}
 
           claude_args: |
-            --model 'claude-opus-4-8'
+            --model 'claude-fable-5'
             --mcp-config '{"mcpServers": {"fetch": {"command": "npx", "args": ["-y", "@anthropic-ai/mcp-server-fetch@latest"]}, "inferencemax-repos": {"command": "python3", "args": ["${{ github.workspace }}/.claude/mcp/server.py"], "env": {"INFERENCEMAX_ROOT": "${{ github.workspace }}"}}}}'
             --allowedTools "Read,Glob,Grep,WebFetch,mcp__github__*,mcp__github_ci__*,mcp__fetch__*,mcp__inferencemax-repos__*,Bash"
           prompt: |
@@ -257,7 +257,7 @@ jobs:
             The sign-off must come from a CODEOWNER for what the PR changes. Read
             `.github/CODEOWNERS` (in the checked-out default branch) and, for each changed file,
             find its owners via last-matching-pattern-wins (the LAST matching line wins; owners do
-            not accumulate, so `.github/configs/nvidia-master.yaml @a @b` overrides `* @org/team`).
+            not accumulate, so `configs/nvidia-master.yaml @a @b` overrides `* @org/team`).
             Then decide:
             - A path whose most-specific owner is a SPECIFIC line (named users/team): the signer
               `@${{ needs.gate.outputs.signoff-author }}` must be one of those owners (listed
@@ -332,7 +332,7 @@ jobs:
             ## Check 3 — Recipe linked AND complete
             The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
             (especially `benchmarks/single_node/**/*.sh`) plus its entry in
-            `.github/configs/*-master.yaml`. The merge standard is: the community must be able to
+            `configs/*-master.yaml`. The merge standard is: the community must be able to
             reproduce this benchmark from a public recipe.
             - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
               the corresponding recipe — a PR/commit in

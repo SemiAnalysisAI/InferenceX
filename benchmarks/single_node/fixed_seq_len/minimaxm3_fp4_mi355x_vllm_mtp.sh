@@ -36,6 +36,18 @@ fi
 SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
+# Use AITER MoE for the MXFP4 experts, matching minimaxm3_fp4_mi355x_vllm.sh.
+# This is required for ALL configs including expert parallelism: with EP enabled
+# and moe_backend=auto, the AITER MXFP4 backend is skipped and selection falls
+# back to Mxfp4MoeBackend.EMULATION, which triggers a first-time build of the
+# Quark hw-emulation C++ kernel (kernel_ext, 9 ROCm arches) on every worker at
+# warmup. Concurrent EP workers deadlock on the shared torch_extensions build
+# lock, hanging engine-core for hours. Forcing --moe-backend aiter selects the
+# AITER_MXFP4_MXFP4 backend instead (verified working under TP4+EP4 with EAGLE3
+# spec decoding), avoiding the emulation build entirely.
+export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MOE=1
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -65,6 +77,7 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
+    --moe-backend aiter \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
     --enable-auto-tool-choice \

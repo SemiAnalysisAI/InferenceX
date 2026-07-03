@@ -18,7 +18,7 @@ Run `ls` for details. Key paths:
 - `utils/matrix_logic/` - `generate_sweep_configs.py`, `validation.py` Pydantic schemas, tests.
 - `utils/bench_serving/` - `benchmark_serving.py` and backends.
 - `utils/evals/` - lm-eval task configs, thresholds, `validate_scores.py` (see `EVALS.md`).
-- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `summarize.py`, `collect_*.py`, `compare_results.py`.
+- `utils/` - `process_result.py`, `process_changelog.py` (incl. `trim_conc`), `collect_*.py`, `compare_results.py`.
 - `experimental/` - non-core experiments.
 
 ## Terminology
@@ -33,14 +33,14 @@ Generate configs:
 
 ```bash
 python utils/matrix_logic/generate_sweep_configs.py full-sweep \
-  --config-files .github/configs/nvidia-master.yaml \
+  --config-files configs/nvidia-master.yaml \
   [--model-prefix dsr1|gptoss|dsv4|...] \
   [--framework sglang|trt|vllm|atom|dynamo-trt|dynamo-sglang] \
   [--precision fp4|fp8|...] \
   [--runner-type b200|h100|h200|gb200|...]
 ```
 
-Process results: `python utils/process_result.py && python utils/summarize.py`.
+Process results: `python utils/process_result.py`.
 
 ## Supported Configuration Values
 
@@ -87,7 +87,7 @@ gh api -X POST \
   -f ref='main' \
   -f 'inputs[ref]=my-feature-branch' \
   -f 'inputs[test-name]=DSR1 fp8 H200 sglang smoke' \
-  -f 'inputs[generate-cli-command]=full-sweep --config-files .github/configs/nvidia-master.yaml --model-prefix dsr1 --framework sglang --runner-type h200 --min-conc 4 --max-conc 4 --seq-lens 1k1k' \
+  -f 'inputs[generate-cli-command]=full-sweep --config-files configs/nvidia-master.yaml --model-prefix dsr1 --framework sglang --runner-type h200 --min-conc 4 --max-conc 4 --seq-lens 1k1k' \
   -f 'inputs[duration-override]='
 ```
 
@@ -109,11 +109,11 @@ Artifacts: see "Fetching GitHub Actions Benchmark Results" below.
 
 ### Adding a benchmark configuration
 
-Add entry to `.github/configs/nvidia-master.yaml` or `amd-master.yaml`, append to `perf-changelog.yaml`, validate with `generate_sweep_configs.py full-sweep`.
+Add entries to `configs/nvidia-master.yaml` or `amd-master.yaml` (agentic-coding entries live in the Agentic benchmark configurations section at the bottom), append to `perf-changelog.yaml`, then validate with `generate_sweep_configs.py full-sweep`.
 
 ### Adding a runner
 
-Add to `.github/configs/runners.yaml`, create launcher in `runners/`, add the runner type to the relevant master config.
+Add to `configs/runners.yaml`, create launcher in `runners/`, add the runner type to the relevant master config.
 
 ### Registering recipes from srtslurm
 
@@ -123,7 +123,7 @@ Multi-node srt-slurm changes must edit the recipe yaml AND `nvidia-master.yaml` 
 
 ### Updating Docker images
 
-Update the image tag in the relevant `.github/configs/*-master.yaml` and/or `benchmarks/*.sh`, update any related env vars / config params, and append a `perf-changelog.yaml` entry (required - triggers benchmarks):
+Update the image tag in the relevant `configs/*-master.yaml` and/or `benchmarks/*.sh`, update any related env vars / config params, and append a `perf-changelog.yaml` entry (required - triggers benchmarks):
 
 ```yaml
 - config-keys:
@@ -142,7 +142,7 @@ Eval selection is marked by `mark_eval_entries()` in `utils/matrix_logic/generat
 
 ## Key Files
 
-`utils/matrix_logic/validation.py` (config schemas), `generate_sweep_configs.py` (config generation), `utils/bench_serving/benchmark_serving.py` (benchmark client), `.github/configs/nvidia-master.yaml` (NVIDIA benchmark definitions), `.github/workflows/run-sweep.yml` (main CI/CD), `.github/workflows/collect-evals.yml` (eval collection), `benchmarks/benchmark_lib.sh` (shared utilities), `utils/evals/` (eval task definitions), `utils/collect_eval_results.py` (aggregator).
+`utils/matrix_logic/validation.py` (config schemas), `generate_sweep_configs.py` (config generation), `utils/bench_serving/benchmark_serving.py` (benchmark client), `configs/nvidia-master.yaml` / `configs/amd-master.yaml` (benchmark definitions, with agentic sections at the bottom), `.github/workflows/run-sweep.yml` (main CI/CD), `.github/workflows/collect-evals.yml` (eval collection), `benchmarks/benchmark_lib.sh` (shared utilities), `utils/evals/` (eval task definitions), `utils/collect_eval_results.py` (aggregator).
 
 ## Important Notes
 
