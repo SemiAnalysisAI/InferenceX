@@ -90,6 +90,18 @@ SERVER_PID=""
 ROUTER_PID=""
 MOONCAKE_MASTER_PID=""
 
+cleanup_background_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$ROUTER_PID" "vLLM router" 5
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 5
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master" 5
+    exit "$exit_code"
+}
+
+trap cleanup_background_services EXIT INT TERM
+
 OFFLOAD_ARGS=()
 
 if require_agentic_kv_offload_backend mooncake; then
