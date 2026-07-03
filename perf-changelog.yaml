@@ -4426,3 +4426,17 @@
     - "Use 1k/1k TP4/EP1 c1-c32 and TP4/EP4 c64-c256; use 8k/1k TP4/EP1 c1-c32 and TP4/EP4 DP-attention c64-c256."
     - "Drop the TP8/EP8 single-concurrency points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1975
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update Minimax M3 b300 vllm image tag"
+    - "Update search space to cover more configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1990
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Update Minimax M3 b200 vllm image tag"
+    - "Update search space to cover more configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1978
