@@ -143,7 +143,7 @@ EOF
         fi
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}'
         )
 fi
 
