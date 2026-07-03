@@ -1542,16 +1542,31 @@ write_agentic_result_json() {
 run_agentic_replay_and_write_outputs() {
     local result_dir="$1"
     local replay_rc
+    local replay_pid
+    local tail_pid
     local validation_rc
 
     echo "$REPLAY_CMD" > "$result_dir/benchmark_command.txt"
 
     set +e
     set -x
-    $REPLAY_CMD 2>&1 | tee "$result_dir/benchmark.log"
-    replay_rc=${PIPESTATUS[0]}
+    setsid bash -lc "$REPLAY_CMD" > "$result_dir/benchmark.log" 2>&1 &
+    replay_pid=$!
+    tail -n +1 -f "$result_dir/benchmark.log" &
+    tail_pid=$!
+    wait "$replay_pid"
+    replay_rc=$?
+    sleep 1
+    kill "$tail_pid" 2>/dev/null || true
+    wait "$tail_pid" 2>/dev/null || true
     set +x
     set -e
+
+    if kill -0 -- "-$replay_pid" 2>/dev/null; then
+        kill -TERM -- "-$replay_pid" 2>/dev/null || true
+        sleep 2
+        kill -KILL -- "-$replay_pid" 2>/dev/null || true
+    fi
 
     write_agentic_result_json "$result_dir"
 
