@@ -36,8 +36,7 @@ DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
 # MTP
-SPEC_DECODING="${SPEC_DECODING:-}"
-DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-1}"
+DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
 
 # ATOM server ports (different from SGLang which uses 8000 for all)
 PREFILL_PORT="${PREFILL_PORT:-8010}"
@@ -88,18 +87,47 @@ with open('${ATOM_WS_PATH}/models_atom.yaml') as f:
     m = yaml.safe_load(f).get('${MODEL_NAME}', {})
 def sh(v): return v.replace("'", "'\\''")
 print(f"MODEL_ENVS='{sh(m.get('env', ''))}'")
-print(f"MODEL_TP_DP_FLAGS='{sh(m.get('tp_dp_flags', ''))}'")
-print(f"MODEL_EP_DP_FLAGS='{sh(m.get('ep_dp_flags', ''))}'")
+_tp_dp = m.get('tp_dp_flags', '')
+print(f"PREFILL_MODEL_TP_DP_FLAGS='{sh(m.get('prefill_tp_dp_flags', _tp_dp))}'")
+print(f"DECODE_MODEL_TP_DP_FLAGS='{sh(m.get('decode_tp_dp_flags', _tp_dp))}'")
+_ep_dp = m.get('ep_dp_flags', '')
+print(f"PREFILL_MODEL_EP_DP_FLAGS='{sh(m.get('prefill_ep_dp_flags', _ep_dp))}'")
+print(f"DECODE_MODEL_EP_DP_FLAGS='{sh(m.get('decode_ep_dp_flags', _ep_dp))}'")
 print(f"MODEL_TP_DP_ENV='{sh(m.get('tp_dp_env', ''))}'")
 print(f"MODEL_EP_DP_ENV='{sh(m.get('ep_dp_env', ''))}'")
 print(f"MODEL_MTP_FLAGS='{sh(m.get('mtp_flags', ''))}'")
 print(f"MODEL_KV_ARG='{sh(m.get('kv_cache_flags', ''))}'")
 print(f"_HF_OVERRIDES='{sh(m.get('hf_overrides', ''))}'")
+print(f"_ONLINE_QUANT_CONFIG='{sh(m.get('online_quant_config', ''))}'")
+print(f"_ONLINE_QUANT_DPA_CONFIG='{sh(m.get('online_quant_dpa_config', m.get('online_quant_config', '')))}'")
+print(f"_YAML_BLOCK_SIZE='{sh(m.get('block_size', ''))}'")
+print(f"_YAML_MEM_FRAC_STATIC='{sh(m.get('mem_frac_static', ''))}'")
+print(f"_YAML_MAX_MODEL_LEN='{sh(m.get('max_model_len', ''))}'")
+print(f"_YAML_MAX_NUM_SEQS='{sh(m.get('max_num_seqs', ''))}'")
+print(f"_YAML_MAX_NUM_BATCHED_TOKENS='{sh(m.get('max_num_batched_tokens', ''))}'")
 PYEOF
 # shellcheck source=/dev/null
 source "$_yaml_tmp"
 rm -f "$_yaml_tmp"
 unset _yaml_tmp
+
+# Apply YAML server-tuning defaults (env vars take precedence)
+if [[ -n "$_YAML_BLOCK_SIZE" ]]; then
+    BLOCK_SIZE="${BLOCK_SIZE:-$_YAML_BLOCK_SIZE}"
+fi
+if [[ -n "$_YAML_MEM_FRAC_STATIC" ]]; then
+    MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-$_YAML_MEM_FRAC_STATIC}"
+fi
+if [[ -n "$_YAML_MAX_MODEL_LEN" ]]; then
+    MAX_MODEL_LEN="${MAX_MODEL_LEN:-$_YAML_MAX_MODEL_LEN}"
+fi
+if [[ -n "$_YAML_MAX_NUM_SEQS" ]]; then
+    MAX_NUM_SEQS="${MAX_NUM_SEQS:-$_YAML_MAX_NUM_SEQS}"
+fi
+if [[ -n "$_YAML_MAX_NUM_BATCHED_TOKENS" ]]; then
+    MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-$_YAML_MAX_NUM_BATCHED_TOKENS}"
+fi
+unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS
 
 # =============================================================================
 # Cluster Topology Configuration
@@ -134,29 +162,41 @@ PREFILL_ENABLE_DP="${PREFILL_ENABLE_DP}"
 DECODE_ENABLE_EP="${DECODE_ENABLE_EP}"
 DECODE_ENABLE_DP="${DECODE_ENABLE_DP}"
 
+
+
+
 # Parallel args
 PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE") #TP
+ONLINE_QUANT_ARG=""
 if [ "$PREFILL_ENABLE_DP" = "true" ]; then
     if [ "$PREFILL_ENABLE_EP" = "true" ]; then #EP+DPA
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${MODEL_EP_DP_FLAGS})
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${PREFILL_MODEL_EP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
     else #TP+DPA
-        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${MODEL_TP_DP_FLAGS})
+        PREFILL_PARALLEL_ARGS=(-tp "$PREFILL_TP_SIZE" ${PREFILL_MODEL_TP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
+    fi
+    if [[ -n "$_ONLINE_QUANT_DPA_CONFIG" ]]; then
+        ONLINE_QUANT_ARG="--online_quant_config '${_ONLINE_QUANT_DPA_CONFIG}'"
+    fi
+else
+    if [[ -n "$_ONLINE_QUANT_CONFIG" ]]; then
+        ONLINE_QUANT_ARG="--online_quant_config '${_ONLINE_QUANT_CONFIG}'"
     fi
 fi
 
 DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE") #TP
 if [ "$DECODE_ENABLE_DP" = "true" ]; then
     if [ "$DECODE_ENABLE_EP" = "true" ]; then #EP+DPA
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${MODEL_EP_DP_FLAGS})
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${DECODE_MODEL_EP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_EP_DP_ENV}; do export "$_dp_env_pair"; done
     else #TP+DPA
-        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${MODEL_TP_DP_FLAGS})
+        DECODE_PARALLEL_ARGS=(-tp "$DECODE_TP_SIZE" ${DECODE_MODEL_TP_DP_FLAGS})
         for _dp_env_pair in ${MODEL_TP_DP_ENV}; do export "$_dp_env_pair"; done
     fi
 fi
 unset _dp_env_pair
+unset _ONLINE_QUANT_CONFIG _ONLINE_QUANT_DPA_CONFIG
 
 # HF overrides (single-quoted JSON preserved through eval)
 HF_OVERRIDES_ARG=""
@@ -172,7 +212,7 @@ unset _env_pair
 
 # MTP args
 SPEC_ARGS=()
-if [[ "$SPEC_DECODING" != "none" && "$SPEC_DECODING" != "" && -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
+if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
     SPEC_ARGS=(${MODEL_MTP_FLAGS} "$DECODE_MTP_SIZE")
 fi
 
@@ -203,7 +243,7 @@ Model len: max_model_len=${MAX_MODEL_LEN:-unset} max_num_batched_tokens=${MAX_NU
 Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
 Decode  args : ${DECODE_PARALLEL_ARGS[*]}
 Spec    args : ${SPEC_ARGS[*]}
-Opt     args : ${HF_OVERRIDES_ARG}
+Opt     args : ${HF_OVERRIDES_ARG} ${ONLINE_QUANT_ARG}
 =====================
 INFO
 
@@ -244,6 +284,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
+        ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -334,7 +375,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     cd $ATOM_WS_PATH
 
     export IS_MTP="false"
-    if [ "$SPEC_DECODING" = "mtp" ]; then
+    if [[ -n "$MODEL_MTP_FLAGS" && "${DECODE_MTP_SIZE:-0}" -gt 0 ]]; then
         export IS_MTP="true"
     fi
 
@@ -466,6 +507,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
+        ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
 
@@ -522,21 +564,9 @@ else
     echo "${host_name}:${host_ip} is Decode Node (rank ${RANK})"
 
     _MAX_CONC=$(echo "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
-    if [[ "$_MAX_CONC" -gt 2048 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048,4096]'
-    elif [[ "$_MAX_CONC" -gt 1024 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,1024,2048]'
-    elif [[ "$_MAX_CONC" -gt 512 ]]; then
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512,768,1024]'
-    else
-        CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256,512]'
-    fi
+    CUDAGRAPH_SIZES='[1,2,4,8,12,16,20,24,28,32,36,40,44,48,52,56,60,64,68,72,76,80,84,88,92,96,100,104,108,112,116,120,124,128,132,136,140,144,148,152,156,160,164,168,172,176,180,184,188,192,196,200,204,208,212,216,220,224,228,232,236,240,244,248,252,256]'
 
-    if [[ "$BENCH_INPUT_LEN" == "1024" && "$BENCH_OUTPUT_LEN" == "1024" ]]; then
-        DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
-    else
-        DECODE_MAX_NUM_SEQS="${MAX_NUM_SEQS}"
-    fi
+    DECODE_MAX_NUM_SEQS="${_MAX_CONC}"
 
     DECODE_CMD="python3 -m atom.entrypoints.openai_server \
         --model ${MODEL_DIR}/${MODEL_NAME} \
@@ -551,6 +581,7 @@ else
         ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
         ${HF_OVERRIDES_ARG} \
+        ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
         ${EXTRA_SERVER_ARGS}"
