@@ -518,16 +518,26 @@ if [ "$NODE_RANK" -eq 0 ]; then
         ROUTER_LOG_FILE="/run_logs/slurm_job-${SLURM_JOB_ID}/proxy_${host_name}.log"
         # sgl-router (Rust/tracing) emits ANSI color codes. NO_COLOR asks it to
         # skip them at the source; the sed strip guarantees a clean file even if
-        # it doesn't honor NO_COLOR. Default branch uses process substitution so
-        # $! stays the router pid (needed by the kill below), not sed's pid.
+        # it doesn't honor NO_COLOR. Both branches use process substitution so
+        # $! stays the router pid, not sed's/tee's pid.
+        #
+        # Newer sglang-router (>=0.5.14) spawns the actual Rust worker
+        # (`sglang::router`, which binds :30000) as a child and lets the python
+        # launcher exit, so the worker reparents to init. It KEEPS its process
+        # group, though. We therefore launch under `setsid` to isolate the
+        # launcher+worker in a dedicated process group and record that pgid, so
+        # teardown can `kill -- -$proxy_pgid` the whole group even after the
+        # launcher is gone. `kill $proxy_pid` alone would miss the worker.
         set -x
         if [[ "${SGLANG_ROUTER_STDOUT_LOGS:-0}" == "1" ]]; then
-            eval "NO_COLOR=1 $ROUTER_CMD" 2>&1 | sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "$ROUTER_LOG_FILE" &
+            NO_COLOR=1 setsid bash -c "exec $ROUTER_CMD" > >(sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' | tee "$ROUTER_LOG_FILE") 2>&1 &
         else
-            eval "NO_COLOR=1 $ROUTER_CMD" > >(sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' >"$ROUTER_LOG_FILE") 2>&1 &
+            NO_COLOR=1 setsid bash -c "exec $ROUTER_CMD" > >(sed -u -r 's/\x1b\[[0-9;]*[a-zA-Z]//g' >"$ROUTER_LOG_FILE") 2>&1 &
         fi
         set +x
         proxy_pid=$!
+        proxy_pgid=$(ps -o pgid= -p "$proxy_pid" 2>/dev/null | tr -d ' ')
+        : "${proxy_pgid:=$proxy_pid}"
 
         # Wait for router to be ready via health endpoint
         HEALTH_BARRIER_CMD="python3 $SGLANG_WS_PATH/sync.py barrier \
@@ -677,18 +687,12 @@ if [ "$NODE_RANK" -eq 0 ]; then
     echo "Killing the proxy server and prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        # proxy_pid is the `python -m sglang_router.launch_router` launcher.
-        # It spawns a separate Rust worker (`sglang::router`) that actually
-        # binds :30000. A plain `kill $proxy_pid` leaves that child alive, so
-        # :30000 never closes and decode/prefill nodes wait on it forever.
-        # Kill the launcher, its children, any stray router process, and finally
-        # whatever still holds :30000, so the port is guaranteed to close.
-        kill $proxy_pid 2>/dev/null || true
-        pkill -TERM -P "$proxy_pid" 2>/dev/null || true
-        pkill -TERM -f "sglang_router.launch_router" 2>/dev/null || true
-        if command -v fuser >/dev/null 2>&1; then
-            fuser -k -TERM 30000/tcp 2>/dev/null || true
-        fi
+        # Kill the router's entire process group (isolated via setsid at launch).
+        # The python launcher (proxy_pid) has usually already exited after
+        # spawning the detached Rust worker; the worker reparents to init but
+        # stays in this process group, so a group-kill reliably closes :30000.
+        # `kill $proxy_pid` alone misses the worker and hangs decode/prefill.
+        kill -TERM -"${proxy_pgid:-$proxy_pid}" 2>/dev/null || true
         kill $prefill0_pid 2>/dev/null || true
     fi
 
