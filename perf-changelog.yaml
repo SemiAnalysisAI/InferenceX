@@ -4445,4 +4445,4 @@
     - minimaxm3-fp4-b200-vllm
   description:
     - "Revert Minimax M3 b200 vllm image back to vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1997
