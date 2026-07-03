@@ -307,20 +307,6 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout main || exit 1
-    if [[ $PRECISION == "fp8" ]]; then
-        mkdir -p recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200-fp8" recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-    elif [[ $PRECISION == "fp4" ]]; then
-        mkdir -p recipes/vllm/minimax-m2.5-gb200 || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200 || exit 1
-    else
-        echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
-        exit 1
-    fi
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
