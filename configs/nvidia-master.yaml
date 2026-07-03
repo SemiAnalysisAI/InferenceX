@@ -2965,12 +2965,7 @@ dsr1-fp8-b300-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
 kimik2.5-fp4-b300-vllm-agentic:
-  # v0.20.2 (cu129) lacks the flashinfer kernels for B300's reported SM
-  # (sm_12x); workers hit "Only SM 10.x and 11.x are supported" in the
-  # trtllm_fp4_block_scale_moe path. v0.20.0-cu130 is the Blackwell-targeted
-  # build that has the full sm_10x/sm_11x/sm_12x kernel set and is what the
-  # INT4 B300 sister already uses successfully.
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: cluster:b300-nv
@@ -2981,8 +2976,10 @@ kimik2.5-fp4-b300-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 16, 32, 40, 48, 56, 64] }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [64, 72, 80] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [64, 72, 80] }
 
 
 dsr1-fp8-b200-trt:

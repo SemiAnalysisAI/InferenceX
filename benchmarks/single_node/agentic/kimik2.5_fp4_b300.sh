@@ -7,7 +7,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native or KV_OFFLOAD_BACKEND=mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -37,39 +37,112 @@ install_agentic_deps
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
-OFFLOAD_ARGS=()
-PREFIX_CACHE_ARGS=()
+SERVER_PID=""
+MOONCAKE_MASTER_PID=""
 
-if require_agentic_kv_offload_backend native; then
-    export VLLM_USE_SIMPLE_KV_OFFLOAD=1
-    OFFLOAD_ARGS=(
-        --kv_offloading_backend native
-        --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
-        --disable-hybrid-kv-cache-manager
-    )
+cleanup_agentic_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
+    exit "$exit_code"
+}
+trap cleanup_agentic_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+OFFLOAD_ARGS=()
+
+if agentic_kv_offload_enabled; then
+    case "$KV_OFFLOAD_BACKEND" in
+    native)
+        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        OFFLOAD_ARGS=(
+            --kv_offloading_backend native
+            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --disable-hybrid-kv-cache-manager
+        )
+        ;;
+    mooncake)
+        { set +x; } 2>/dev/null
+        unset VLLM_USE_SIMPLE_KV_OFFLOAD
+
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "rdma",
+  "device_name": ""
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        export WITH_NVIDIA_PEERMEM=0
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+
+        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
+        MOONCAKE_EVICTION_RATIO=0.10
+        MOONCAKE_KV_LEASE_TTL=60s
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --default_kv_lease_ttl=1h \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup." >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2
+            exit 1
+        fi
+        OFFLOAD_ARGS=(
+            --kv-transfer-config
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}'
+        )
+        ;;
+    *) echo "Error: unsupported KV_OFFLOAD_BACKEND value '$KV_OFFLOAD_BACKEND' (expected one of: native, mooncake)" >&2; exit 1 ;;
+    esac
 fi
 
 echo "Starting vllm server..."
 export PYTHONNOUSERSITE=1
+
+DCP_ARGS=()
+if [[ "$CONC" -ge 16 ]]; then
+    DCP_ARGS=(--decode-context-parallel-size "$TP")
+fi
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
-    --tensor-parallel-size="$TP"
-    --gpu-memory-utilization 0.90
-    --max-num-seqs "$CONC"
-    --reasoning-parser kimi_k2
-    --tool-call-parser kimi_k2
-    --compilation_config.pass_config.fuse_allreduce_rms true
     --kv-cache-dtype fp8
-    --max-cudagraph-capture-size 2048
-    --stream-interval 20
     --trust-remote-code
-    "${PREFIX_CACHE_ARGS[@]}"
+    --block-size 64
+    --language-model-only
+    --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --max-cudagraph-capture-size 2048
+    --max-num-batched-tokens 16384
+    --stream-interval 10
+    --enable-prefix-caching
+    --tensor-parallel-size "$TP"
+    "${DCP_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"

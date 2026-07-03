@@ -4440,3 +4440,9 @@
     - "Update Minimax M3 b200 vllm image tag"
     - "Update search space to cover more configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1978
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm-agentic
+  description:
+    - "Update kimi k2.5 agentx B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/
