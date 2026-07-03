@@ -92,7 +92,6 @@ print(f"MODEL_TP_DP_ENV='{sh(m.get('tp_dp_env', ''))}'")
 print(f"MODEL_EP_DP_ENV='{sh(m.get('ep_dp_env', ''))}'")
 print(f"MODEL_MTP_FLAGS='{sh(m.get('mtp_flags', ''))}'")
 print(f"MODEL_KV_ARG='{sh(m.get('kv_cache_flags', ''))}'")
-print(f"_HF_OVERRIDES='{sh(m.get('hf_overrides', ''))}'")
 print(f"_ONLINE_QUANT_CONFIG='{sh(m.get('online_quant_config', ''))}'")
 print(f"_ONLINE_QUANT_DPA_CONFIG='{sh(m.get('online_quant_dpa_config', m.get('online_quant_config', '')))}'")
 print(f"_YAML_BLOCK_SIZE='{sh(m.get('block_size', ''))}'")
@@ -183,13 +182,6 @@ fi
 unset _dp_env_pair
 unset _ONLINE_QUANT_CONFIG _ONLINE_QUANT_DPA_CONFIG
 
-# HF overrides (single-quoted JSON preserved through eval)
-HF_OVERRIDES_ARG=""
-if [[ -n "$_HF_OVERRIDES" ]]; then
-    HF_OVERRIDES_ARG="--hf-overrides '${_HF_OVERRIDES}'"
-fi
-unset _HF_OVERRIDES
-
 for _env_pair in ${MODEL_ENVS}; do
     export "$_env_pair"
 done
@@ -228,7 +220,7 @@ Model len: max_model_len=${MAX_MODEL_LEN:-unset} max_num_batched_tokens=${MAX_NU
 Prefill args : ${PREFILL_PARALLEL_ARGS[*]}
 Decode  args : ${DECODE_PARALLEL_ARGS[*]}
 Spec    args : ${SPEC_ARGS[*]}
-Opt     args : ${HF_OVERRIDES_ARG} ${ONLINE_QUANT_ARG}
+Opt     args : ${ONLINE_QUANT_ARG}
 =====================
 INFO
 
@@ -268,7 +260,6 @@ if [ "$NODE_RANK" -eq 0 ]; then
         --max-num-seqs ${MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
-        ${HF_OVERRIDES_ARG} \
         ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
@@ -491,7 +482,6 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         --max-num-seqs ${MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
-        ${HF_OVERRIDES_ARG} \
         ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_producer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         ${EXTRA_SERVER_ARGS}"
@@ -565,7 +555,6 @@ else
         --max-num-seqs ${DECODE_MAX_NUM_SEQS} \
         ${MODEL_LEN_ARGS} \
         --no-enable_prefix_caching \
-        ${HF_OVERRIDES_ARG} \
         ${ONLINE_QUANT_ARG} \
         --kv-transfer-config '{\"kv_role\":\"kv_consumer\",\"kv_connector\":\"mooncake\",\"proxy_ip\":\"${host_ip}\",\"handshake_port\":${HANDSHAKE_PORT}}' \
         --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \

@@ -8,7 +8,6 @@
 # Schema:
 #   <model-name>:
 #     env:          str  # Space-separated KEY=VALUE pairs exported unconditionally
-#     hf_overrides: str  # JSON string passed to --hf-overrides
 #     tp_dp_flags:  str  # Shared TP+DPA flags (fallback when prefill/decode-specific keys are absent)
 #     prefill_tp_dp_flags: str  # TP+DPA flags for prefill only (overrides tp_dp_flags)
 #     decode_tp_dp_flags:  str  # TP+DPA flags for decode only (overrides tp_dp_flags)
@@ -38,7 +37,6 @@ DeepSeek-V4-Pro:
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   mtp_flags: "--method mtp --num-speculative-tokens"
-  hf_overrides: '{"use_index_cache":true,"index_topk_freq":4}'
 
 MiniMax-M3-MXFP4:
   env: "AITER_QUICK_REDUCE_QUANTIZATION=INT4 ATOM_FORCE_ATTN_TRITON=1"
@@ -50,7 +48,6 @@ MiniMax-M3-MXFP4:
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   mtp_flags: "--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens"
-  hf_overrides: '{"use_index_cache":true,"index_topk_freq":4}'
   online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
   online_quant_dpa_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
   block_size: "128"
@@ -69,7 +66,6 @@ MiniMax-M3-MXFP8:
   prefill_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   decode_ep_dp_flags: "--enable-expert-parallel --enable-dp-attention"
   mtp_flags: "--method eagle3 --draft-model Inferact/MiniMax-M3-EAGLE3 --num-speculative-tokens"
-  hf_overrides: '{"use_index_cache":true,"index_topk_freq":4}'
   online_quant_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*block_sparse_moe"]}'
   online_quant_dpa_config: '{"global_quant_config":"ptpc_fp8","exclude_layer":["lm_head","model.embed_tokens","vision_tower","multi_modal_projector","patch_merge_mlp","*.gate.*","*.block_sparse_moe.experts*"]}'
   block_size: "128"
