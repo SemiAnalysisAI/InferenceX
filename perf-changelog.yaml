@@ -4592,7 +4592,9 @@
 
 - config-keys:
     - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
+    - dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe
   description:
-    - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm mid-curve disaggregated multinode benchmarks"
+    - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm disaggregated multinode benchmarks"
     - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
+    - "High-tpt 2P+1D DEP8 (conc 4096)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
