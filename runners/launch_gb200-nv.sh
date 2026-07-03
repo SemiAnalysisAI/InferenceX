@@ -14,18 +14,11 @@ set -x
 # ----------------------------------------------------------------------
 if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
-        # Switched from per-node NVMe (/mnt/numa1/models/deepseek-v4-pro/)
-        # to shared Lustre (/mnt/lustre01/models/deepseek-v4-pro) on
-        # 2026-06-16 after the per-node NVMe stage went missing on every
-        # GB200 node. The DeepSeek-V4-Pro-NVFP4 lustre checkpoint we
-        # tried in between did not work; this is the path that does.
         export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
         # Candidate model dirs, probed per-node in job.slurm (AMD-style
         # SEARCH_PATHS): per-node NVMe FIRST (local, fast - the path the dynamo
         # block below uses), then shared Lustre as fallback. Self-heals when one
-        # is unmounted/missing on the GB200 nodes (the failure mode that killed
-        # runs 28287278282 / 28287379549). First path present on ALL allocated
-        # nodes wins; MODEL_PATH above is the default/fallback if none match.
+        # is unmounted/missing on the GB200 nodes 
         export MODEL_PATH_CANDIDATES="/mnt/numa1/models/deepseek-v4-pro /mnt/lustre01/models/DeepSeek-V4-Pro"
         export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
     else
@@ -41,11 +34,10 @@ if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
     export SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
 
     # Container engine: GB200 SLURM users do not have access to the
-    # docker daemon socket, so the H200's `docker run` path fails with
+    # docker daemon socket, so the `docker run` path fails with
     # "permission denied while trying to connect to the docker API at
     # unix:///var/run/docker.sock". Use pyxis srun --container-image=
-    # against an enroot-imported squash file, mirroring how the dynamo
-    # paths below run their containers.
+    # against an enroot-imported squash file
     SQUASH_DIR=""
     for cand in \
         /mnt/lustre01/users-public/sa-shared \
@@ -100,7 +92,7 @@ if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
     export LLMD_CONTAINER_ENGINE=pyxis
     export LLMD_SQUASH_FILE="$SQUASH_FILE"
 
-    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible); mirrors H200 path.
+    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible); 
     export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
     mkdir -p "$BENCHMARK_LOGS_DIR"
 
@@ -155,7 +147,7 @@ if [[ "$FRAMEWORK" == "llm-d-vllm" ]]; then
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
     wait $POLL_PID
 
-    # Result collection: same shape as H200 path. The server-log tarball
+    # Result collection: The server-log tarball
     # is produced by the EXIT trap above (so it ships even when this
     # step is cancelled mid-flight).
     for result_file in $(find "${BENCHMARK_LOGS_DIR}" -name "${RESULT_FILENAME}*.json" 2>/dev/null); do

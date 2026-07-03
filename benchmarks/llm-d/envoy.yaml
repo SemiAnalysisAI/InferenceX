@@ -86,12 +86,7 @@ static_resources:
       # FULL_DUPLEX_STREAMED body -> response -> trailers, up to message_timeout
       # 1000s). At conc4096 that means only 1024 active + 1024 pending = 2048
       # requests ever reach EPP; the rest get a fast 500 and never see the
-      # engine. This capped every high-tpt run at exactly 1024 completions /
-      # 2048 disagg decisions regardless of engine config or LB mode. Raise all
-      # thresholds far above max-concurrency so the front door never throttles.
-      # Values match the upstream no-kube reference
-      # (llm-d guides/no-kubernetes-deployment/router/envoy/envoy.yaml), which
-      # sets 40000 on both clusters for exactly this reason.
+      # engine. This capped every high-tpt run at exactly 1024 completions
       circuit_breakers:
         thresholds:
           - priority: DEFAULT

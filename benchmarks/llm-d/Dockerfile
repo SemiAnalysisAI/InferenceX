@@ -3,10 +3,7 @@
 # Base = vllm/vllm-openai (vLLM with the OpenAI-compatible API server).
 # We add the EPP, the routing-sidecar, and Envoy on top so every node in
 # a SLURM allocation can play any role (prefill, decode, or coordinator)
-# from a single image. DeepEP / NVSHMEM / GDRCopy are NOT bundled by
-# this base; they are not used by the simple 1P+1D recipe
-# (LWS_GROUP_SIZE=1 short-circuits the wide-EP NVSHMEM env in
-# server.sh). Wide-EP recipes will need a base that ships them.
+# from a single image. 
 #
 # Configs (epp-config.yaml, envoy.yaml, per-topology recipes) are NOT
 # baked in. They are mounted at runtime by job.slurm so config-only
