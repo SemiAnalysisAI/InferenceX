@@ -42,6 +42,55 @@ mkdir -p "$RESULT_DIR"
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# clear_kv_caches — wipe all KV cache tiers on every backend worker before a
+# concurrency point, so each conc is measured cold (no prefix reuse bleeding in
+# from the previous conc). Mirrors mori-scheduler/scripts/benchmark/lib/
+# clear_caches.sh, but the worker base URLs are already resolved by
+# server_sglang.sh (SERVER_FLUSH_URLS_CSV) so no SSH/IP lookup is needed.
+#
+# Tiers (SGLang server APIs), hit on EACH worker directly (the router does not
+# fan /flush_cache out):
+#   L1 (GPU radix) + L2 (host hicache): POST /flush_cache  — NO-OP while any
+#       request is in flight, so we drain-retry until "Cache flushed" or
+#       FLUSH_DRAIN_TIMEOUT (default 120s) elapses.
+#   L3 (umbp / mooncake store):         POST /hicache/storage-backend/clear
+#       — HTTP != 200 when L3 is off, tolerated.
+# Best-effort: logs WARN, never hard-fails the sweep.
+clear_kv_caches() {
+    local drain_tmo="${FLUSH_DRAIN_TIMEOUT:-120}"
+    local urls_csv="${SERVER_FLUSH_URLS_CSV:-}"
+    if [[ -z "$urls_csv" ]]; then
+        echo "[clear_caches] WARN: SERVER_FLUSH_URLS_CSV unset; skipping cache flush" >&2
+        return 0
+    fi
+    local -a urls
+    IFS=',' read -r -a urls <<< "$urls_csv"
+    local url start ok resp code
+    for url in "${urls[@]}"; do
+        [[ -n "$url" ]] || continue
+        # L1 + L2: drain-retry until flushed (no-op while requests in flight).
+        start=$(date +%s); ok=0; resp=""
+        while :; do
+            resp=$(curl -sf -m 10 -X POST "${url}/flush_cache" 2>/dev/null || true)
+            echo "$resp" | grep -qi "Cache flushed" && { ok=1; break; }
+            (( $(date +%s) - start >= drain_tmo )) && break
+            sleep 3
+        done
+        if [[ "$ok" == 1 ]]; then
+            echo "[clear_caches] ${url}: L1+L2 flushed"
+        else
+            echo "[clear_caches] WARN ${url}: L1+L2 flush NOT confirmed after ${drain_tmo}s (resp='${resp:0:80}')" >&2
+        fi
+        # L3: storage-backend clear (umbp / mooncake). 200 when a backend is attached.
+        code=$(curl -s -m 60 -o /dev/null -w '%{http_code}' -X POST "${url}/hicache/storage-backend/clear" 2>/dev/null || echo 000)
+        if [[ "$code" == 200 ]]; then
+            echo "[clear_caches] ${url}: L3 store cleared"
+        else
+            echo "[clear_caches] ${url}: L3 clear http=${code} (no storage backend / L3 off — ok)"
+        fi
+    done
+}
+
 # REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 PORT="${ROUTER_PORT}"
@@ -66,6 +115,14 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
     echo "=========================================="
     echo "Agentic trace replay: conc=$max_concurrency"
     echo "=========================================="
+
+    # Clear all KV cache tiers on every backend before this conc point so it is
+    # measured cold (no prefix reuse from the previous conc). Default on; set
+    # CLEAR_CACHE_BETWEEN_CONC=0 to disable. Best-effort — never fails the run.
+    if [[ "${CLEAR_CACHE_BETWEEN_CONC:-1}" == "1" ]]; then
+        echo "conc=$max_concurrency: clearing L1/L2/L3 on all backends (no server restart)"
+        clear_kv_caches || echo "WARNING: cache clear had issues for conc=$max_concurrency" >&2
+    fi
 
     # Mirror agentic_srt.sh (the srtctl/gb200 path): every concurrency writes
     # its artifacts into a conc_<N>/ subdir of RESULT_DIR. The CI matrix explodes

@@ -283,11 +283,16 @@ PREFILL_ARGS=""
 # --server-metrics scrape. The router on :30000 does not serve Prometheus, so
 # aiperf must scrape each prefill/decode worker directly (see ENABLE_METRICS).
 SERVER_METRICS_URLS=()
+# Per-worker base URLs (port 8000) for direct cache flushing between
+# concurrency points. The router (:30000) does not fan /flush_cache out, so
+# trace_replay.sh must POST to each prefill/decode worker directly.
+SERVER_FLUSH_URLS=()
 for i in $(seq 0 $((xP - 1))); do
     prefill_idx=$((i * PREFILL_NODES_PER_WORKER))
     PREFILL_HEADNODE_URLS[$i]="${IP_ARRAY[$prefill_idx]}:${HEADNODE_PORT}"
     PREFILL_ARGS="$PREFILL_ARGS --prefill http://${IP_ARRAY[$prefill_idx]}:8000"
     SERVER_METRICS_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000/metrics")
+    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$prefill_idx]}:8000")
 done
 
 # Build decode arguments dynamically based on yD
@@ -298,11 +303,13 @@ for i in $(seq 0 $((yD - 1))); do
     DECODE_HEADNODE_URLS[$i]="${IP_ARRAY[$decode_idx]}:${HEADNODE_PORT}"
     DECODE_ARGS="$DECODE_ARGS --decode http://${IP_ARRAY[$decode_idx]}:8000"
     SERVER_METRICS_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000/metrics")
+    SERVER_FLUSH_URLS+=("http://${IP_ARRAY[$decode_idx]}:8000")
 done
 
 echo "Prefill worker headnode list: ${PREFILL_HEADNODE_URLS[@]}"
 echo "Decode  worker headnode list: ${DECODE_HEADNODE_URLS[@]}"
 echo "Server metrics endpoints:     ${SERVER_METRICS_URLS[@]}"
+echo "Server flush endpoints:       ${SERVER_FLUSH_URLS[@]}"
 
 # =============================================================================
 # Configuration Builder Functions
@@ -737,6 +744,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
             AIPERF_SERVER_METRICS_URLS=$(IFS=,; echo "${SERVER_METRICS_URLS[*]}")
             export AIPERF_SERVER_METRICS_URLS
             echo "AIPERF_SERVER_METRICS_URLS=${AIPERF_SERVER_METRICS_URLS}"
+        fi
+        # Per-worker base URLs for cache flushing between concurrency points.
+        # trace_replay.sh consults these when CLEAR_CACHE_BETWEEN_CONC=1.
+        if [[ "${#SERVER_FLUSH_URLS[@]}" -gt 0 ]]; then
+            SERVER_FLUSH_URLS_CSV=$(IFS=,; echo "${SERVER_FLUSH_URLS[*]}")
+            export SERVER_FLUSH_URLS_CSV
+            echo "SERVER_FLUSH_URLS_CSV=${SERVER_FLUSH_URLS_CSV}"
         fi
         # trace_replay.sh signature: model_path model_name concurrency_list log_path
         BENCH_CMD="bash $SGLANG_WS_PATH/trace_replay.sh \
