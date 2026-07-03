@@ -294,7 +294,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
     """Generate full sweep configurations with optional filtering.
 
     Supports filtering by model prefix, precision, framework, runner type, sequence lengths,
-    and max concurrency.
+    KV offloading mode, and concurrency.
 
     All filters are optional - can generate sweeps for all configs or filter by specific criteria.
 
@@ -597,6 +597,11 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
                     kv_offload_backend = bmk.get(Fields.KV_OFFLOAD_BACKEND.value)
+                if (
+                    getattr(args, "kv_offloading", None)
+                    and kv_offloading not in args.kv_offloading
+                ):
+                    continue
                 total_cpu_dram_gb = (
                     0
                     if is_multinode
@@ -1080,6 +1085,13 @@ def main():
         nargs='+',
         required=False,
         help='Runner type(s) to filter by (e.g., h200, h100) (optional, can specify multiple)'
+    )
+    full_sweep_parser.add_argument(
+        '--kv-offloading',
+        nargs='+',
+        choices=['none', 'dram'],
+        required=False,
+        help='Agentic KV offloading mode(s) to include (optional, can specify multiple)'
     )
     full_sweep_parser.add_argument(
         '--seq-lens',

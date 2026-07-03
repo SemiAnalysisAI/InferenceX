@@ -744,6 +744,56 @@ class TestGenerateFullSweepSingleNode:
         )
         assert len(result) == 0
 
+    @pytest.mark.parametrize("mode", ["none", "dram"])
+    def test_filter_agentic_by_kv_offloading(
+        self,
+        mode,
+        sample_runner_config,
+        full_sweep_args_single_node,
+    ):
+        """KV offloading filter should retain only matching AgentX entries."""
+        config = {
+            "dsv4-fp4-b200-vllm-agentic": {
+                "image": "vllm/vllm-openai:v0.24.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "cluster:b200-dgxc",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [
+                            {
+                                "tp": 8,
+                                "kv-offloading": "none",
+                                "conc-list": [8],
+                            },
+                            {
+                                "tp": 8,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "mooncake",
+                                "conc-list": [8],
+                            },
+                        ],
+                    }],
+                },
+            },
+        }
+        full_sweep_args_single_node.scenario_type = ["agentic-coding"]
+        full_sweep_args_single_node.kv_offloading = [mode]
+
+        result = generate_full_sweep(
+            full_sweep_args_single_node,
+            config,
+            sample_runner_config,
+        )
+
+        assert len(result) == 1
+        assert result[0]["kv-offloading"] == mode
+        assert ("kv-offload-backend" in result[0]) is (mode == "dram")
+
     def test_invalid_runner_type_raises_error(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Invalid runner type should raise ValueError."""
         full_sweep_args_single_node.runner_type = ["invalid_runner"]
