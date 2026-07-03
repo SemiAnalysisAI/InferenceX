@@ -820,15 +820,9 @@ kimik2.5-fp4-mi355x-atom:
   multinode: false
   scenarios:
     fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 128 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
 gptoss-fp4-mi300x-vllm:
