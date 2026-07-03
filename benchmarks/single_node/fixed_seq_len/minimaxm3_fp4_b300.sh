@@ -60,6 +60,7 @@ $PARALLEL_ARGS \
 --gpu-memory-utilization 0.95 \
 --max-model-len $MAX_MODEL_LEN \
 --kv-cache-dtype fp8 \
+--attention_config.indexer_kv_dtype fp8 \
 --block-size 128 \
 --language-model-only \
 --max-cudagraph-capture-size 2048 \
