@@ -140,6 +140,20 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     resolve_hf_cache_path() {
         local base_path=$1
         if [[ -d "${base_path}/snapshots" ]]; then
+            if [[ -f "${base_path}/refs/main" ]]; then
+                local ref_snapshot
+                ref_snapshot="$(cat "${base_path}/refs/main" 2>/dev/null | tr -d '[:space:]')"
+                if [[ -n "$ref_snapshot" && -d "${base_path}/snapshots/${ref_snapshot}" ]]; then
+                    echo "${base_path}/snapshots/${ref_snapshot}"
+                    return 0
+                fi
+            fi
+            local processor_snapshot
+            processor_snapshot=$(find "${base_path}/snapshots" -mindepth 2 -maxdepth 2 -name preprocessor_config.json -print -quit 2>/dev/null | xargs -r dirname)
+            if [[ -n "$processor_snapshot" ]]; then
+                echo "$processor_snapshot"
+                return 0
+            fi
             local snapshot=$(ls -1 "${base_path}/snapshots" 2>/dev/null | head -1)
             if [[ -n "$snapshot" ]]; then
                 echo "${base_path}/snapshots/${snapshot}"
@@ -151,20 +165,26 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     }
 
     MODEL_PATH=""
-    SEARCH_PATHS=(
-        "${MODEL_DIR}/${DISK_DIR_NAME}"
-        "${MODEL_DIR}/${MODEL_NAME}"
-        "/nfsdata/hf_hub_cache-0/${DISK_DIR_NAME}"
-        "/nfsdata/hf_hub_cache-0/${MODEL_NAME}"
-    )
+    MODEL_MOUNT_DIR=""
+    SEARCH_ROOTS=("$MODEL_DIR")
+    if [[ "$(hostname -s)" == mia1* ]]; then
+        SEARCH_ROOTS+=("/it-share/models" "/it-share/hf_cache" "/it-share/data")
+    fi
+    SEARCH_ROOTS+=("/nfsdata/hf_hub_cache-0" "/nfsdata/hf_hub_cache" "/nfsdata")
 
-    for search_path in "${SEARCH_PATHS[@]}"; do
-        if [[ -d "$search_path" ]]; then
-            RESOLVED=$(resolve_hf_cache_path "$search_path")
-            MODEL_PATH="$RESOLVED"
-            echo "Found MODEL_PATH: $MODEL_PATH"
-            break
-        fi
+    SEARCH_PATHS=()
+    for search_root in "${SEARCH_ROOTS[@]}"; do
+        SEARCH_PATHS+=("${search_root}/${DISK_DIR_NAME}" "${search_root}/${MODEL_NAME}")
+        for search_path in "${search_root}/${DISK_DIR_NAME}" "${search_root}/${MODEL_NAME}"; do
+            if [[ -d "$search_path" ]]; then
+                RESOLVED=$(resolve_hf_cache_path "$search_path")
+                MODEL_PATH="$RESOLVED"
+                MODEL_MOUNT_DIR="$search_root"
+                echo "Found MODEL_PATH: $MODEL_PATH"
+                echo "Found MODEL_MOUNT_DIR: $MODEL_MOUNT_DIR"
+                break 2
+            fi
+        done
     done
 
     if [[ -z "$MODEL_PATH" ]]; then
@@ -309,7 +329,8 @@ echo "USER:        ${USER_NAME}"
 export TQDM_MININTERVAL=20
 
 # Translate the host-resolved MODEL_PATH to the Docker mount namespace
-DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_DIR//models}"
+MODEL_MOUNT_DIR="${MODEL_MOUNT_DIR:-$MODEL_DIR}"
+DOCKER_MODEL_PATH="${MODEL_PATH/#$MODEL_MOUNT_DIR//models}"
 
 export DI_REPO_DIR=$DI_REPO_DIR
 export WS_PATH=$WS_PATH
@@ -317,6 +338,7 @@ export NNODES=$NNODES
 export NODE0_ADDR=$NODE0_ADDR
 export MODEL_PATH=$MODEL_PATH
 export MODEL_DIR=$MODEL_DIR
+export MODEL_MOUNT_DIR=$MODEL_MOUNT_DIR
 export xP=$xP
 export yD=$yD
 export MODEL_NAME=$MODEL_NAME
@@ -652,8 +674,10 @@ fi
 fi  # end: if ENGINE == atom-disagg
 
 # Pre-clean (idempotent)
-\$DOCKER_CMD ps -aq --filter \"$CONT_FILTER\" | xargs -r \$DOCKER_CMD rm -f || true
-\$DOCKER_CMD ps -aq | xargs -r \$DOCKER_CMD stop || true
+\$DOCKER_CMD rm -f \"$DOCKER_CONT_NAME\" 2>/dev/null || true
+if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
+    \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
+fi
 
 # Start vLLM external router container on node 0
 if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \"\$SLURM_PROCID\" == \"0\" ]]; then
@@ -710,7 +734,7 @@ fi
     --privileged \
     -v /sys:/sys \
     $(command -v nicctl >/dev/null 2>&1 && echo "-v $(which nicctl):/usr/sbin/nicctl") \
-    -v ${MODEL_DIR}:/models \
+    -v ${MODEL_MOUNT_DIR}:/models \
     -v \$HOME/.ssh:/root/.ssh \
     --shm-size 128G \
     -v /tmp:/run_logs \
