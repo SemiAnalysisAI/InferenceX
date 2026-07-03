@@ -12605,15 +12605,6 @@ minimaxm3-fp4-b300-vllm:
   multinode: false
   scenarios:
     fixed-seq-len:
-    image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
-  model: nvidia/MiniMax-M3-NVFP4
-  model-prefix: minimaxm3
-  runner: b300
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
     - isl: 1024
       osl: 1024
       search-space:
