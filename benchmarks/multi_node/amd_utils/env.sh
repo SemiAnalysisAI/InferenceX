@@ -50,11 +50,11 @@ export NCCL_IB_HCA=${NCCL_IB_HCA:-$IBDEVICES}
 # =============================================================================
 # Shared by the vLLM MoRIIOConnector and the SGLang/MoRI KV-transfer path.
 
-export MORI_IO_SQ_BACKOFF_TIMEOUT_US=50000
-export MORI_IO_QP_MAX_SEND_WR=16384
-export MORI_IO_QP_MAX_CQE=32768
-export MORI_IO_QP_MAX_SGE=2
-export MORI_IO_TC_DISABLE=0
+export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-50000}"
+export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
+export MORI_IO_QP_MAX_CQE="${MORI_IO_QP_MAX_CQE:-32768}"
+export MORI_IO_QP_MAX_SGE="${MORI_IO_QP_MAX_SGE:-2}"
+export MORI_IO_TC_DISABLE="${MORI_IO_TC_DISABLE:-0}"
 
 # QoS/DSCP configuration
 # Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
