@@ -12799,7 +12799,7 @@ minimaxm3-fp4-b200-vllm-mtp:
       - { tp: 2, ep: 2, conc-list: [8, 512], spec-decoding: mtp }
       - { tp: 4, conc-list: [2, 4, 16, 32, 64], spec-decoding: mtp }
       - { tp: 4, ep: 4, conc-list: [4, 8], spec-decoding: mtp }
-      - { tp: 8, conc-list: [2, 4], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4], spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
