@@ -4,6 +4,26 @@ Guidance for AI agents working with InferenceX.
 
 > **PR titles & PR descriptions must be bilingual — include a Simplified Chinese version in addition to English.** Title format: `<English title> / <中文标题>`. In the PR body, follow the English content with its Chinese translation (e.g. a `## 中文说明` section mirroring the summary). This applies to every PR, matching the bilingual docs rule in Code Conventions.
 
+> **Translation quality bar:** write natural technical Chinese as used by ML infra engineers, not word-for-word machine translation. Follow the style of [`vllm-project/vllm-ascend` `README.zh.md`](https://github.com/vllm-project/vllm-ascend/blob/main/README.zh.md): translate concepts into idiomatic Chinese while preserving model names, hardware SKUs (MI355X, B300, GB200 ...), framework names (vLLM, SGLang, ATOM ...), flags, and CLI/env-var identifiers in English. Use parenthetical English clarification for acronyms on first use, e.g. 混合专家(MOE), 专家并行(EP). Preferred term mappings:
+>
+> | English | Chinese |
+> |---|---|
+> | benchmark | 基准测试 |
+> | image (Docker) | 镜像 |
+> | config / configuration | 配置 |
+> | single-node / multi-node | 单节点 / 多节点 |
+> | speculative decoding | 投机解码 |
+> | inference | 推理 |
+> | throughput | 吞吐量 |
+> | latency | 延迟 |
+> | prefill / decode | 预填充 / 解码 |
+> | disaggregated (serving) | 分离式（推理） |
+> | expert parallelism | 专家并行 |
+> | sweep | 扫描 |
+> | launcher | 启动器 |
+> | artifact | 产物 |
+> | evaluation / eval | 评估 |
+
 > **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
 
 ## Project Overview
