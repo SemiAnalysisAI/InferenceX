@@ -26,7 +26,7 @@ Inputs from `$ARGUMENTS` (links first, then SKU; the rest optional and order-tol
 
 **engine** defaults to `vllm`; infer otherwise from the sibling / recipes page.
 
-Standing prefs: PR title prefixed `[Klaud Cold]`; add `full-sweep-enabled` via the REST API
+Standing prefs: PR title prefixed `[Klaud Cold]`; add `full-sweep-fail-fast` (strongly recommended over `full-sweep-enabled`) via the REST API
 (`gh pr edit` hits the projects-classic GraphQL bug); fill the perf-changelog `pr-link` after
 the PR exists; then monitor the sweep to a fail/success conclusion and report the job
 breakdown. Do **not** invent image tags — verify on the registry first.
