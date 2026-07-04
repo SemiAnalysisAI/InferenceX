@@ -4434,3 +4434,14 @@
     - "Update Minimax M3 b200 vllm image tag"
     - "Update search space to cover more configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1978
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+    - minimaxm3-fp4-mi355x-atom-mtp
+    - minimaxm3-fp8-mi355x-atom
+    - minimaxm3-fp8-mi355x-atom-mtp
+  description:
+    - "Bump ATOM image from rocm/atom-dev:MiniMax-M3-20260623 to rocm/atom-dev:nightly_202607011530 for all single-node MiniMax-M3 ATOM recipes."
+    - "Add --online_quant_config with ptpc_fp8 and MoE layer exclusions (*block_sparse_moe) to all scripts."
+    - "Replace deprecated AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2001
