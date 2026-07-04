@@ -1,4 +1,4 @@
-#  InferenceX™, Open Source Continuous Inference Standard and Research Platform 
+#  InferenceX™, Open Source Continuous Inference Standard and Research Platform / 开源持续推理标准与研究平台
 <p align="center">
   <a href="https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
   <a href="https://github.com/SemiAnalysisAI/InferenceX/pulls"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
@@ -82,5 +82,5 @@ Finally, we’re grateful to Crusoe, CoreWeave, Nebius, TensorWave, Oracle and T
 
 Full list of supporters & quotes: https://inferencex.semianalysis.com/quotes
 
-<img width="1400" height="682" alt="image" src="https://github.com/user-attachments/assets/dcbda40c-4a6e-43a3-aca2-c830d3f2fb8d" />
+<img width="938" height="487" alt="image" src="https://github.com/user-attachments/assets/aa9b8257-fa7d-4691-97c3-dada8db05cb3" />
 

@@ -42,6 +42,25 @@ A full benchmark sweep is expensive GPU time, and the runners are shared by ever
 - **This reduces CI queue time for everyone** — each reused merge frees hours of GPU runner time for other PRs, so please prefer the reuse path over merging without it. A green sweep alone is not enough: the `/reuse-sweep-run` comment must be on record (the sign-off verification checks for it), otherwise `main` silently re-runs the full sweep.
 - `utils/merge_with_reuse.sh <pr-number>` is the supported merge path; it posts the command, syncs the branch with `main`, waits for checks, and squash-merges. See the [workflows README](.github/workflows/README.md#reusing-an-approved-pr-full-sweep) for eligibility details.
 
+## AMD cluster: never leave root-owned files in runner workspaces
+
+Multi-node benchmarks on the AMD MI355X TW cluster submit Slurm jobs whose containers often run as **root**. If those containers write files (typically `benchmark_logs/logs/slurm_job-*`) into the GitHub Actions runner workspace and the job is **cancelled** before teardown runs, the root-owned directories are stranded. The runner user cannot delete them, so `actions/checkout` fails with:
+
+```
+Error: File was unable to be removed
+Error: EACCES: permission denied, rmdir '.../benchmark_logs/logs/slurm_job-<id>'
+```
+
+**This bricks every subsequent job on that runner** until someone with `sudo` on the shared `/it-share` storage manually removes the files. Because all AMD MI355X sweeps share the same runner pool, a single stranded root-owned directory blocks the entire queue for everyone.
+
+**Rules for benchmark scripts and Slurm containers:**
+
+1. **Never write as root into the runner workspace.** If your container must run as root, write outputs to a separate scratch directory outside `_work/` (e.g. `/tmp` or a dedicated staging path).
+2. **If root writes are unavoidable**, add a cleanup trap or teardown step that `chown`s or `rm`s all root-owned files under the workspace **before** the job exits — including on cancellation (`trap cleanup EXIT`).
+3. **Test your teardown path.** Cancel a running benchmark mid-flight and verify no root-owned files remain in the workspace.
+
+If you find a stranded root-owned file blocking runners, the recovery procedure is documented in [`.claude/commands/clean-amd-mi355-runner-root-files.md`](.claude/commands/clean-amd-mi355-runner-root-files.md): SSH into the hop host with `sudo`, scan the `_work` directories, and delete the offending files.
+
 ## After merging
 
 **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. [See GitHub's docs on re-running failed jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow).
