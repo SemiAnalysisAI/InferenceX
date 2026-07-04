@@ -34,7 +34,17 @@ cd "$GITHUB_WORKSPACE/benchmarks/multi_node/amd_utils" || exit 1
 export TIME_LIMIT="08:00:00"
 export MODEL_PATH=$MODEL_PATH
 export SERVED_MODEL_NAME="${SERVED_MODEL_NAME:-$MODEL}"
-export MODEL_NAME="Kimi-K2.5-MXFP4-MoRI-LMCache-Agentic"
+if [[ -z "${MODEL_NAME:-}" ]]; then
+    case "${MODEL:-}" in
+        amd/Kimi-K2.7-Code-MXFP4|*/Kimi-K2.7-Code-MXFP4)
+            export MODEL_NAME="Kimi-K2.7-Code-MXFP4"
+            ;;
+        *)
+            export MODEL_NAME="Kimi-K2.5-MXFP4-MoRI-LMCache-Agentic"
+            ;;
+    esac
+fi
+export MODEL_NAME
 export CONTAINER_IMAGE=$IMAGE
 
 # Kimi vLLM-disagg agentic defaults. Keep these in the recipe, not the matrix
