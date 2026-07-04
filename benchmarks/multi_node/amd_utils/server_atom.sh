@@ -151,9 +151,6 @@ fi
 
 # HF overrides (single-quoted JSON preserved through eval)
 HF_OVERRIDES_ARG=""
-if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
-    HF_OVERRIDES_ARG="--hf-overrides '{\"use_index_cache\":true,\"index_topk_freq\":4}'"
-fi
 
 # KV cache dtype (skip if unset or 'auto')
 KV_CACHE_ARG=""
