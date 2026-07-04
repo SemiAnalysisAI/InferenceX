@@ -4448,3 +4448,9 @@
     - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
     - "Switch the MoE backend from triton_unfused to AITER MoE (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter) for the FP4 experts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1980
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Update vLLM image from vllm/vllm-openai:v0.22.0 to vllm/vllm-openai:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2073
