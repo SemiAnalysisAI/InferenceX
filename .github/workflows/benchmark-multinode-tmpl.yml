@@ -177,7 +177,7 @@ jobs:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
     name: >-
-      ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework }}
+      ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
       ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
       x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}${{ inputs.decode-ep != '' && inputs.decode-ep != '1' && format('/EP{0}', inputs.decode-ep) || '' }}${{ inputs.decode-dp-attn == 'true' && '/DPA' || '' }})
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
