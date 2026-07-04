@@ -8,6 +8,8 @@
 
 当相应硬件 AI 芯片公司的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 审阅并批准其相关 PR 时，请在批准评论中填写以下表单，然后再联系核心维护者进行最终批准。
 
+我们欢迎 InferenceX 合作伙伴与社区提交 PR，对本清单进行符合 InferenceX 原则的合理增补或删减 — 总体原则是：删除一条准则的流程应当与新增一条准则同样容易。
+
 > **重要：模板请保持英文原文，原样复制粘贴，不要翻译。** CI 签署验证工作流 [`codeowner-signoff-verify.yml`](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) 通过开头语句 "As a PR reviewer and CODEOWNER, I have reviewed this and have" 触发；模板被改写或翻译后，签署验证 CI 将不会触发。
 
 ## 模板（请复制英文原文）
