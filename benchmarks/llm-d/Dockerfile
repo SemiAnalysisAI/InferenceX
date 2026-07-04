@@ -32,8 +32,8 @@ RUN if [ "$UPGRADE_CUTLASS_DSL" = "1" ]; then \
 #     --build-arg EPP_FROM_IMAGE="$EPP_FROM_IMAGE" \
 #     --build-arg ROUTING_SIDECAR_IMAGE="$ROUTING_SIDECAR_IMAGE" \
 #     --build-arg ENVOY_FROM_IMAGE="$ENVOY_FROM_IMAGE" ...
-ARG EPP_FROM_IMAGE=ghcr.io/llm-d/llm-d-router-endpoint-picker-dev:main
-ARG ROUTING_SIDECAR_IMAGE=ghcr.io/llm-d/llm-d-router-disagg-sidecar-dev:main
+ARG EPP_FROM_IMAGE=ghcr.io/llm-d/llm-d-router-endpoint-picker:v0.9.0
+ARG ROUTING_SIDECAR_IMAGE=ghcr.io/llm-d/llm-d-router-disagg-sidecar:v0.9.0
 ARG ENVOY_FROM_IMAGE=envoyproxy/envoy:distroless-v1.33.2
 
 COPY --from=${EPP_FROM_IMAGE} \
