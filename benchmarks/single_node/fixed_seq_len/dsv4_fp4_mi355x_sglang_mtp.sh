@@ -26,7 +26,7 @@
 # -DSv4 image that carries #26383, bump amd-master.yaml and the detect restores
 # the deep_gemm perf path. RUN_EVAL on the high-conc points gates accuracy.
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \

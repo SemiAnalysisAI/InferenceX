@@ -4448,3 +4448,10 @@
     - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
     - "Switch the MoE backend from triton_unfused to AITER MoE (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter) for the FP4 experts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1980
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom-mtp
+    - dsv4-fp4-mi355x-sglang-mtp
+  description:
+    - "Fix benchmark_lib.sh source path (../ to ../../) broken when PR #1860 moved the MTP scripts into fixed_seq_len/; both configs failed at launch with No such file or directory since then."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
