@@ -69,6 +69,10 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 | Chip #1 from Hardware Vendor #4 | Coming Soon 🔜 |
 
 
+## 参与贡献
+
+欢迎提交 PR！有关 PR 审阅流程、[PR 审阅清单](./docs/PR_REVIEW_CHECKLIST_zh.md)与合并流程的更多详情，请参阅 [CONTRIBUTING_zh.md](./CONTRIBUTING_zh.md)。
+
 ## 致谢与支持者
 感谢 Lisa Su 与 Anush Elangovan 为这一免费开源项目提供 MI355X 与 CDNA3 GPU。我们也要感谢众多 AMD 贡献者的积极响应，以及他们在各类 AMD GPU 上进行调试、优化与性能验证所付出的努力。
 我们同样感谢 Jensen Huang 与 Ian Buck 通过提供 GB200 NVL72 机架（经由 OCI）与 B200 GPU 来支持本开源项目。感谢来自 NVIDIA 推理团队与 NVIDIA Dynamo 团队的众多 NVIDIA 贡献者。

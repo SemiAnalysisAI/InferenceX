@@ -2,6 +2,8 @@
 
 Guidance for AI agents working with InferenceX.
 
+> **PR titles & PR descriptions must be bilingual — include a Simplified Chinese version in addition to English.** Title format: `<English title> / <中文标题>`. In the PR body, follow the English content with its Chinese translation (e.g. a `## 中文说明` section mirroring the summary). This applies to every PR, matching the bilingual docs rule in Code Conventions.
+
 > **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
 
 ## Project Overview
@@ -57,7 +59,9 @@ Bash: source shared utilities via `source benchmark_lib.sh` (`check_env_vars`, `
 
 Git: conventional commit messages. `[skip-sweep]` in the latest PR head commit skips that PR's benchmark setup after changelog validation. It is ignored on pushes to `main`. Changes to `perf-changelog.yaml` trigger benchmark runs.
 
-Docs: the README is bilingual — `README.md` (English, default) and `README_zh.md` (Simplified Chinese), with an `English | 中文` switcher under the badges. **Any edit to `README.md` MUST be mirrored in `README_zh.md`, and vice versa** — keep the two in sync (same sections, links, badges, images) and update both in the same PR.
+Docs: all contributor-facing docs are bilingual — **every such Markdown doc MUST have a Simplified Chinese version** named `<name>_zh.md` alongside it, with an `English | 中文` switcher at the top. Current pairs: `README.md`/`README_zh.md`, `CONTRIBUTING.md`/`CONTRIBUTING_zh.md`, `docs/PR_REVIEW_CHECKLIST.md`/`docs/PR_REVIEW_CHECKLIST_zh.md`. **Any edit to an English doc MUST be mirrored in its `_zh` counterpart (and vice versa) in the same PR** — same sections, links, badges, images — and a new doc must ship with its `_zh` version in the same PR. Exceptions: agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`) and internal references under `.github/`/`utils/` are English-only; the sign-off template inside `docs/PR_REVIEW_CHECKLIST*.md` stays in English verbatim in BOTH versions, because `codeowner-signoff-verify.yml` triggers on its exact English opening phrase.
+
+Checklist ↔ sign-off verifier sync: `docs/PR_REVIEW_CHECKLIST.md` is the source of truth for the merge standard, and `.github/workflows/codeowner-signoff-verify.yml` encodes it as independently-verified checks in its Claude prompt. **Whenever `docs/PR_REVIEW_CHECKLIST.md` is updated — an item added, removed, or materially reworded — agents are allowed and expected to update `codeowner-signoff-verify.yml` to match, ideally in the same PR.** Cosmetic edits (formatting, typos, `_zh` translation sync) need no verifier change. The verifier's Check 5 already compares sign-offs against the live checklist file, so stale sign-off templates are caught automatically — but a new or removed policy item needs its own check logic added to / removed from the workflow prompt. To validate a verifier change: merge it, open a throwaway `[DO NOT MERGE]` test PR, post a sign-off comment (it must contain the exact phrase `As a PR reviewer and CODEOWNER` or the workflow won't trigger), read the posted verdict comment, then close the test PR.
 
 ### Pull Request Sweep Labels
 
