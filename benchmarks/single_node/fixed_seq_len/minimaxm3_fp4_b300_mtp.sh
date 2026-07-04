@@ -102,7 +102,7 @@ start_gpu_monitor
 set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port $PORT \
 $PARALLEL_ARGS \
---gpu-memory-utilization 0.95 \
+--gpu-memory-utilization 0.9 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --language-model-only \
