@@ -1,5 +1,5 @@
 ---
-description: Add a new model+hardware single-node benchmark recipe (script + master-config entry + perf-changelog + launcher routing), open a [Klaud Cold] PR, label full-sweep-enabled, and monitor CI
+description: Add a new model+hardware single-node benchmark recipe (script + master-config entry + perf-changelog + launcher routing), open a [Klaud Cold] PR, label full-sweep-fail-fast, and monitor CI
 argument-hint: <model-link> <gpu-sku> [recipes-link] [draft-model-link] [mtp]
 ---
 
@@ -164,7 +164,7 @@ git push -u origin feat/<model>-<sku>[-mtp]-dayzero
 gh pr create --repo SemiAnalysisAI/InferenceX --base main \
   --title "[Klaud Cold] <key>: day-zero <MODEL> <SKU> recipe" --body "<summary>"
 # fill perf-changelog pr-link with the real URL → commit → push
-gh api -X POST repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels -f "labels[]=full-sweep-enabled" --jq '.[].name'
+gh api -X POST repos/SemiAnalysisAI/InferenceX/issues/<PR>/labels -f "labels[]=full-sweep-fail-fast" --jq '.[].name'
 ```
 Wait for the sweep run to register on the head SHA, then monitor to a conclusion and report
 the job breakdown (e.g. 24 success / 6 skipped / 0 fail). If the **canary** fails, pull its log
