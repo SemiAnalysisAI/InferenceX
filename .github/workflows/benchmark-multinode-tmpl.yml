@@ -91,13 +91,14 @@ on:
         type: string
         required: false
         default: ""
+      # Agentic-coding inputs. Fixed-seq-len jobs leave these empty.
       scenario-type:
         description: "Scenario type (fixed-seq-len or agentic-coding)"
         type: string
         required: false
         default: fixed-seq-len
       conc:
-        description: "Concurrency for agentic-coding scenarios (single value per matrix entry)"
+        description: "First concurrency for agentic-coding scenarios; CONC_LIST carries the full batch"
         type: string
         required: false
         default: ""
@@ -105,12 +106,15 @@ on:
         description: "Agentic trace replay duration in seconds"
         type: string
         required: false
-        default: "1800"
-      offloading:
-        description: "KV offload backend for agentic scenarios (none/cpu/ssd)"
+        default: "3600"
+      kv-offloading:
+        description: "KV offload mode for agentic scenarios (none/dram)"
         required: false
         type: string
-        default: 'none'
+      kv-offload-backend:
+        description: "KV offload backend for agentic scenarios when kv-offloading is not none"
+        required: false
+        type: string
       total-cpu-dram-gb:
         description: "Total CPU DRAM in GB for KV offloading"
         required: false
@@ -143,12 +147,14 @@ env:
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
+  # Agentic-coding env. Fixed-seq-len jobs leave these empty.
   SCENARIO_TYPE: ${{ inputs.scenario-type }}
   SCENARIO_SUBDIR: ${{ inputs.scenario-type == 'agentic-coding' && 'agentic/' || 'fixed_seq_len/' }}
   IS_AGENTIC: ${{ inputs.scenario-type == 'agentic-coding' && '1' || '0' }}
   CONC: ${{ inputs.conc }}
   DURATION: ${{ inputs.duration }}
-  OFFLOADING: ${{ inputs.offloading }}
+  KV_OFFLOADING: ${{ inputs.kv-offloading }}
+  KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   PYTHONDONTWRITEBYTECODE: '1'
   PYTHONPYCACHEPREFIX: /tmp/inferencex-pycache
@@ -170,16 +176,23 @@ jobs:
   benchmark:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 480
-    name: "${{ inputs.exp-name }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework }} | P(tp${{ inputs.prefill-tp }}/ep${{ inputs.prefill-ep }}/dp${{ inputs.prefill-dp-attn }}/nw${{ inputs.prefill-num-worker }}) D(tp${{ inputs.decode-tp }}/ep${{ inputs.decode-ep }}/dp${{ inputs.decode-dp-attn }}/nw${{ inputs.decode-num-worker }}) | disagg-${{ inputs.disagg }} spec-${{ inputs.spec-decoding }} conc-${{ join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}"
+    name: >-
+      ${{ inputs.model-prefix }} ${{ inputs.precision }} ${{ inputs.runner }} ${{ inputs.framework == 'sglang' && 'sgl' || inputs.framework == 'dynamo-sglang' && 'dyn-sgl' || inputs.framework == 'sglang-disagg' && 'sgl-disagg' || inputs.framework }}
+      ${{ inputs.prefill-num-worker }}P (TP${{ inputs.prefill-tp }}${{ inputs.prefill-ep != '' && inputs.prefill-ep != '1' && format('/EP{0}', inputs.prefill-ep) || '' }}${{ inputs.prefill-dp-attn == 'true' && '/DPA' || '' }})
+      x ${{ inputs.decode-num-worker }}D (TP${{ inputs.decode-tp }}${{ inputs.decode-ep != '' && inputs.decode-ep != '1' && format('/EP{0}', inputs.decode-ep) || '' }}${{ inputs.decode-dp-attn == 'true' && '/DPA' || '' }})
+      ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
+      ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
+      ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
+      c=${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
       - name: Slurm cleanup (pre-run)
         run: &slurm-cleanup |
           if command -v squeue >/dev/null 2>&1; then
-            echo "[Slurm] Cleaning up jobs with name: ${{ runner.name }} ..."
+            echo "[Slurm] Cleaning up jobs named: ${{ runner.name }} ..."
             scancel --name="${{ runner.name }}" || true
-            while [ -n "$(squeue --name='${{ runner.name }}' --noheader --format='%i')" ]; do
-              squeue --name="${{ runner.name }}"
+            while [ -n "$(squeue --user="$USER" --name='${{ runner.name }}' --noheader --format='%i')" ]; do
+              squeue --user="$USER" --name="${{ runner.name }}"
               sleep 5
             done
           fi
@@ -192,13 +205,6 @@ jobs:
           clean: true
           submodules: true
 
-      - name: Cleanup stale eval outputs (pre-run)
-        if: ${{ inputs.run-eval || inputs.eval-only }}
-        run: |
-          rm -f meta_env.json || true
-          rm -f results*.json || true
-          rm -f sample*.jsonl || true
-
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}
@@ -208,7 +214,7 @@ jobs:
         run: |
           set -x
           # Export RESULT_FILENAME early so it's available for artifact uploads even if cancelled
-          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> $GITHUB_ENV
+          echo "RESULT_FILENAME=${RESULT_FILENAME}" >> "$GITHUB_ENV"
 
           export ${{ join(fromJson(inputs.prefill-additional-settings), ' ') }} ${{ join(fromJson(inputs.decode-additional-settings), ' ') }}
           export IS_MULTINODE=true
@@ -221,12 +227,25 @@ jobs:
               exit 1
             fi
           elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
-            if [ -f "${RESULT_FILENAME}.json" ]; then
-              echo "Found agentic result file: ${RESULT_FILENAME}.json"
-            else
-              echo "Run failed: Agentic benchmark result ${RESULT_FILENAME}.json not found." >&2
+            expected_count=$(wc -w <<< "$CONC_LIST" | tr -d ' ')
+            shopt -s nullglob
+            agentic_results=("${RESULT_FILENAME}"_conc*.json)
+            shopt -u nullglob
+            if [ "${#agentic_results[@]}" -ne "$expected_count" ]; then
+              echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
               exit 1
             fi
+            # Existence is not enough: the agentic aggregation step writes the
+            # aggregate even when aiperf recorded zero valid requests. Require
+            # successful requests in every concurrency result.
+            for result_file in "${agentic_results[@]}"; do
+              echo "Found agentic result file: $result_file"
+              ok=$(python3 -c "import json,sys; d=json.load(open(sys.argv[1])); print(int(bool(d.get('num_requests_successful'))))" "$result_file" 2>/dev/null || echo 0)
+              if [ "$ok" != "1" ]; then
+                echo "Run failed: $result_file has zero successful requests." >&2
+                exit 1
+              fi
+            done
           else
             # Check if at least one result file was created
             if ls ${RESULT_FILENAME}_*.json 1> /dev/null 2>&1; then
@@ -276,6 +295,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: multinode_server_logs_${{ env.RESULT_FILENAME }}
+          # multinode launchers package server logs into this tarball.
           path: multinode_server_logs.tar.gz
           if-no-files-found: ignore
 
@@ -284,7 +304,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}.json
+          path: ${{ env.RESULT_FILENAME }}_conc*.json
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}
@@ -292,12 +312,9 @@ jobs:
         with:
           name: agentic_${{ env.RESULT_FILENAME }}
           path: |
-            LOGS/agentic/benchmark.log
-            LOGS/agentic/benchmark_command.txt
-            LOGS/agentic/workload_distribution_summary.txt
-            LOGS/agentic/workload_distribution_plots.png
-            LOGS/agentic/aiperf_artifacts/detailed_results.csv
-            LOGS/agentic/aiperf_artifacts/debug_trace.jsonl
+            LOGS/agentic/**
+            !LOGS/agentic/**/aiperf_artifacts/inputs.json
+            !LOGS/agentic/**/aiperf_artifacts/profile_export_raw.jsonl
           if-no-files-found: ignore
 
       - name: Upload eval results (if any)

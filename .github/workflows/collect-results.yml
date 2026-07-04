@@ -28,15 +28,8 @@ jobs:
           path: results/
           pattern: ${{ inputs.result-prefix && format('{0}_*', inputs.result-prefix) || '*' }}
 
-      - name: Print summary
-        run: |
-          pip install tabulate
-          python3 utils/summarize.py results/ >> $GITHUB_STEP_SUMMARY
-
       - name: Aggregate results
-        run: |
-          pip install tabulate
-          python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
+        run: python3 utils/collect_results.py results/ ${{ inputs.result-prefix || 'all' }}
 
       - name: Upload aggregated results
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
