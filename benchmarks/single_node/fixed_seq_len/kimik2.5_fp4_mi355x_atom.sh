@@ -20,8 +20,8 @@ fi
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=/workspace/server.log
-git clone https://github.com/RadeonFlow/up-atom.git /up-atom
-git -C /up-atom show --pretty=format: --binary b86f697 | git -C /app/ATOM apply --3way -
+sed -i '1626c\      timeout=timedelta(seconds=1200))' /app/aiter-test/aiter/dist/parallel_state.py
+sed -i '33c\from datetime import timedelta' /app/aiter-test/aiter/dist/parallel_state.py
 
 
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
