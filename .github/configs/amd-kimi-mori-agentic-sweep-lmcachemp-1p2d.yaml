@@ -23,6 +23,7 @@ kimik2.7-code-fp4-mi355x-vllm-disagg-mori-lmcache-agentic:
           additional-settings:
           - "PREFILL_NODES=1"
           - "PREFILL_KV_CONNECTOR=moriio-lmcachemp"
+          - "TOTAL_CPU_DRAM_GB=2000"
           - "LMCACHE_L1_SIZE_GB=2000"
         decode:
           num-worker: 2
