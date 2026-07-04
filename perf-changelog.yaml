@@ -4433,3 +4433,11 @@
     - "Add --online_quant_config with ptpc_fp8 and MoE layer exclusions (*block_sparse_moe) to all scripts."
     - "Replace deprecated AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2001
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-sglang-mooncake-store
+    - qwen3.5-fp4-gb300-dynamo-sglang-mooncake-store
+  description:
+    - "Add mooncake store dedicated gb300 dynamo-sglang variants using new _mooncake_store recipe files, while preserving existing config keys and recipe execution paths unchanged."
+    - "Wire launcher routing so only CONFIG_FILE values ending with _mooncake_store.yaml use the srt-slurm main branch path; legacy recipes continue on their previous branch flow."
+  pr-link: XXX
