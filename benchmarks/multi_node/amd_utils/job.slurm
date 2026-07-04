@@ -301,7 +301,14 @@ export RUN_FILE_FULL="$WS_PATH/${RUN_FILE}"
 SELECTED_NODELIST_SRUN=$(echo "$SELECTED_NODES" | paste -sd,)
 
 cleanup() {
-  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up..."
+  echo "[${SLURM_JOB_ID}] termination received on $(hostname); cleaning up container + stale logs..."
+  # Backstop: on scancel/timeout/step-hang the foreground `exec docker run`
+  # client is killed before --rm can fire, so the container (and its GPU/ports/
+  # :30000) leaks and the step never returns. Force-remove THIS job's container
+  # on every allocated node. Scoped to $DOCKER_CONT_NAME so it never touches
+  # other users' containers. (Ported from InferenceY 51ebfa88.)
+  srun --nodelist="$SELECTED_NODELIST_SRUN" \
+    bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' 2>/dev/null || true
   rm -rf ${SLURM_SUBMIT_DIR}/logs 2>/dev/null || true
   echo "[${SLURM_JOB_ID}] cleanup done."
 }

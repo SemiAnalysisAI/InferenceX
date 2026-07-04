@@ -475,14 +475,19 @@ if [ "$NODE_RANK" -eq 0 ]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
-        # Redirect via process substitution (not `| tee`) so $! is the server
-        # PID, not tee's. With a pipeline `$!` is the LAST stage (tee), so the
-        # teardown `kill $prefill0_pid` would kill tee while the real server
-        # leaks (holding GPUs + :8000). Mirrors the router launch above.
-        eval "$PREFILL_CMD" \
+        # Launch under `setsid` so the server (python + its TP-scheduler
+        # children) sits in a dedicated process group; teardown can then
+        # `kill -- -$pgid` the WHOLE tree. Killing $prefill0_pid alone leaves
+        # children holding the process-sub tee's pipe, so the container's outer
+        # `| tee` never gets EOF and the container never exits (srun/CI hangs).
+        # Process substitution (not `| tee`) keeps $! as the setsid group leader,
+        # not tee's. Mirrors the router launch below.
+        setsid bash -c "$PREFILL_CMD" \
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill0_pid=$!
+        prefill0_pgid=$(ps -o pgid= -p "$prefill0_pid" 2>/dev/null | tr -d ' ')
+        : "${prefill0_pgid:=$prefill0_pid}"
     fi
 
 
@@ -693,7 +698,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # stays in this process group, so a group-kill reliably closes :30000.
         # `kill $proxy_pid` alone misses the worker and hangs decode/prefill.
         kill -TERM -"${proxy_pgid:-$proxy_pid}" 2>/dev/null || true
-        kill $prefill0_pid 2>/dev/null || true
+        # Group-kill the prefill server tree (setsid at launch) so its
+        # TP-scheduler children die too and release the process-sub tee ->
+        # the container's outer `| tee` gets EOF and the container can exit.
+        kill -TERM -"${prefill0_pgid:-$prefill0_pid}" 2>/dev/null || true
     fi
 
     if [[ "${EVAL_FAILED:-0}" -eq 1 ]]; then
@@ -732,12 +740,15 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
         echo "DRY RUN: $PREFILL_CMD"
     else
         set -x
-        # Process substitution (not `| tee`) so $! is the server PID, not tee's;
-        # otherwise `kill $prefill_pid` kills tee and the server leaks.
-        eval "$PREFILL_CMD" \
+        # setsid isolates the server tree in its own process group so teardown
+        # can group-kill it (python + TP-scheduler children); otherwise the
+        # children hold the process-sub tee's pipe and the container never exits.
+        setsid bash -c "$PREFILL_CMD" \
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log >/dev/null) 2>&1 &
         set +x
         prefill_pid=$!
+        prefill_pgid=$(ps -o pgid= -p "$prefill_pid" 2>/dev/null | tr -d ' ')
+        : "${prefill_pgid:=$prefill_pid}"
     fi
 
     echo "Waiting for proxy server to be up..."
@@ -767,7 +778,9 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     echo "Killing the rank $NODE_RANK prefill server"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        kill $prefill_pid
+        # Group-kill the whole server tree (setsid at launch) so TP-scheduler
+        # children die and the process-sub tee gets EOF -> container can exit.
+        kill -TERM -"${prefill_pgid:-$prefill_pid}" 2>/dev/null || true
     fi
 
 else
@@ -803,13 +816,16 @@ else
         echo "DRY RUN: $DECODE_CMD"
     else
         set -x
-        # Process substitution (not `| tee`) so $! is the server PID, not tee's;
-        # otherwise `kill $decode_pid` kills tee and the server leaks.
-        eval "$DECODE_CMD" \
+        # setsid isolates the server tree in its own process group so teardown
+        # can group-kill it (python + TP-scheduler children); otherwise the
+        # children hold the process-sub tee's pipe and the container never exits.
+        setsid bash -c "$DECODE_CMD" \
             > >(tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log >/dev/null) 2>&1 &
 
         set +x
         decode_pid=$!
+        decode_pgid=$(ps -o pgid= -p "$decode_pid" 2>/dev/null | tr -d ' ')
+        : "${decode_pgid:=$decode_pid}"
     fi
 
 
@@ -840,7 +856,9 @@ else
 
     echo "Killing the rank $RANK decode server"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        kill $decode_pid
+        # Group-kill the whole server tree (setsid at launch) so TP-scheduler
+        # children die and the process-sub tee gets EOF -> container can exit.
+        kill -TERM -"${decode_pgid:-$decode_pid}" 2>/dev/null || true
     fi
 
 fi
