@@ -34,13 +34,13 @@ jobs:
             }
 
             const body = `${marker}
-            Please reach out to respective companies' [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) to fill in the latest [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md) before pinging core maintainer on Slack for review.
+            Thanks for the contribution! Please reach out to respective companies' [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) to fill in the latest [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md) before pinging core maintainer on Slack for review.
 
             **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. [See GitHub's docs on re-running failed jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)
 
             ---
 
-            请联系相应公司的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 填写最新的 [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md)，然后再在 Slack 上联系核心维护者进行审阅。
+            感谢你的贡献！请联系相应公司的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 填写最新的 [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md)，然后再在 Slack 上联系核心维护者进行审阅。
 
             **PR 作者有责任确保合并后所有 GitHub Action 任务完全通过。** 很多时候失败只是偶发抖动（flake），重新运行失败的任务即可解决。[参见 GitHub 关于重新运行失败任务的文档](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)`.replace(/^            /gm, '');
 
