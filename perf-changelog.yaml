@@ -4597,4 +4597,4 @@
     - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm disaggregated multinode benchmarks"
     - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
     - "High-tpt 2P+1D DEP8 (conc 4096)"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050

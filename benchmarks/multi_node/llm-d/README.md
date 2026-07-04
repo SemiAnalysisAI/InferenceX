@@ -52,17 +52,27 @@ Generation flow:
    (= IPS[PREFILL_NODES]), and passes both into the container as env
    vars.
 3. On the decode leader, `server.sh` writes `/tmp/endpoints.yaml`
-   inside the container with one entry per leader:
+   inside the container with one entry per node:
 
    ```yaml
    endpoints:
      - name: prefill-0
-       address: <PREFILL_LEADER_IP>
-       port: "8000"            # pd-sidecar port
+       address: <prefill node 0 IP>
+       port: "8200"            # vLLM port (EPP hits prefill vLLM directly)
+       labels:
+         llm-d.ai/role: prefill
+     - name: prefill-1          # one entry per prefill node
+       address: <prefill node 1 IP>
+       port: "8200"
        labels:
          llm-d.ai/role: prefill
      - name: decode-0
-       address: <DECODE_LEADER_IP>
+       address: <decode node 0 IP>
+       port: "8000"            # pd-sidecar port
+       labels:
+         llm-d.ai/role: decode
+     - name: decode-1          # one entry per decode node
+       address: <decode node 1 IP>
        port: "8000"
        labels:
          llm-d.ai/role: decode
@@ -77,22 +87,22 @@ Generation flow:
    and `decode-filter` to pick the right backend per request phase,
    matching on the `llm-d.ai/role` label.
 
-### Why one entry per *leader* (not per node)
+### Why one entry per node (not per DP rank)
 
-In the wide-EP guide each instance is a single vLLM engine that spans
-multiple nodes via `--data-parallel-hybrid-lb`. With hybrid-lb, the
-leader pod (`LWS_WORKER_INDEX=0`) accepts external traffic and
-distributes it internally across the local DP ranks; in our LWS-free
-SLURM mapping, the prefill-leader and decode-leader are the only nodes
-addressable from outside. Adding an entry per worker would cause EPP to
-route directly to a worker, bypassing the engine's internal load
-balancing.
+Each instance is a vLLM engine that spans multiple nodes via
+`--data-parallel-hybrid-lb`. With hybrid-lb, every node runs its own
+api-server (prefill) or pd-sidecar (decode) on a fixed port
+(`VLLM_PORT`=8200 / `SIDECAR_PORT`=8000) and internally load-balances
+its own local DP ranks. So `server.sh` `add_role()` emits one endpoint
+per node (`prefill-0..N-1`, `decode-0..M-1`) and lets EPP fan out
+across nodes, while each node's hybrid-lb spreads work across its local
+ranks.
 
-If we later want to expose all pods of an instance (the alternative
-hybrid-lb interpretation: external LB across nodes too), we can extend
-the loop in `server.sh` to emit one entry per `IPS[i]` in the prefill
-range and one per `IPS[i]` in the decode range, all carrying the same
-role label. EPP then load-balances across them via `random-picker`.
+Per-node (rather than per-DP-rank) emission is what the multi-engine
+high-tpt topology needs: with `PREFILL_WORKERS>1` the prefill nodes form
+several independent DEP engines, and one endpoint per node is what
+exposes every engine to EPP. Emitting per-DP-rank instead would address
+ranks directly and bypass each node's internal hybrid-lb.
 
 ### Live reload
 
