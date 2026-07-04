@@ -20,6 +20,12 @@ name: CODEOWNER Sign-off Verify
 #      this InferenceX PR.
 #   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
 #      command on the PR (the reuse-merge path requires it).
+#   5. The sign-off uses the latest docs/PR_REVIEW_CHECKLIST.md template.
+#   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
+#      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
+#      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
+#   7. No benchmark hacks that change the model architecture / cut FLOPs.
+#   8. Speculative-decoding configs benchmark through chat templates.
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
@@ -229,9 +235,11 @@ jobs:
             A CODEOWNER (`${{ needs.gate.outputs.signoff-author }}`) just posted the reviewer
             sign-off checklist (as a ${{ needs.gate.outputs.signoff-kind }}) that marks
             PR #${{ needs.gate.outputs.pr-number }} as ready to merge. Your job is to
-            INDEPENDENTLY verify the checks below (0-3). Do not trust the reviewer's checkmarks
-            — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, and the linked
-            recipe yourself. Be rigorous and specific.
+            INDEPENDENTLY verify the checks below (0-8). Do not trust the reviewer's checkmarks
+            — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
+            configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
+            the merge standard in `docs/PR_REVIEW_CHECKLIST.md` (read it in the checked-out
+            default branch — it is the source of truth if wording here and there ever drifts).
 
             Read the exact sign-off body first (especially its "Additional detail section").
             The sign-off was posted as a ${{ needs.gate.outputs.signoff-kind }}, so fetch it with:
@@ -389,8 +397,76 @@ jobs:
               command has been posted on this PR" and remind the reviewer that an authorized
               maintainer must comment `/reuse-sweep-run` before this PR can be merged via reuse.
 
+            ## Check 5 — Sign-off uses the LATEST checklist template
+            The first item of the checklist has the reviewer affirm they used the latest version
+            of `docs/PR_REVIEW_CHECKLIST.md`. Verify it instead of trusting it: read the template
+            in `docs/PR_REVIEW_CHECKLIST.md` (checked-out default branch) and compare its items
+            against the sign-off body.
+            - PASS if every item in the current template has a corresponding checked (`[x]`) item
+              in the sign-off. Match items semantically — minor wording drift is fine; a missing
+              ITEM is not.
+            - FAIL if the sign-off is missing current-template items (stale copy) or left items
+              unchecked without an explanation in the additional detail section. Name the
+              missing/unchecked items and link the current template.
+
+            ## Check 6 — Upstream vLLM/SGLang images, and engine-first ordering
+            The checklist makes upstream engine images a HARD guideline: on established hardware,
+            vLLM/SGLang submissions must run images published by the upstream projects, not
+            vendor forks. Established (NOT "new hardware") SKUs: NVIDIA H100, H200, B200, B300,
+            GB200, GB300; AMD MI300X, MI325X, MI355X.
+            Identify each master-config entry this PR adds/changes (in `configs/*-master.yaml`)
+            and read its `framework:`, `runner:`, and `image:` fields.
+            - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
+              upstream vLLM Docker Hub org (https://hub.docker.com/u/vllm) — in the master configs
+              that looks like `vllm/vllm-openai:<tag>` or `vllm/vllm-openai-rocm:<tag>`. For
+              `framework: sglang`, it must come from the upstream org
+              (https://hub.docker.com/u/lmsysorg) — `lmsysorg/sglang:<tag>` or
+              `lmsysorg/sglang-rocm:<tag>` (digest-pinned `@sha256:...` variants are fine).
+              Vendor/private forks — e.g. `rocm/sgl-dev`, `rocm/vllm-dev`, `ghcr.io#...`, or any
+              non-`vllm/`/non-`lmsysorg/` repo — FAIL on the established SKUs above unless the
+              sign-off's additional detail section documents a genuine exception: truly new
+              hardware (e.g. MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8) or a new model
+              architecture that upstream vLLM/SGLang does not fundamentally support yet (as
+              backed by vLLM/SGLang community maintainers). Name the offending image and the
+              missing justification when you FAIL. (Note: some entries write the registry
+              separator as `#`, e.g. `nvcr.io#nvidia/...` — treat `#` as `/`.)
+            - (b) ENGINE-FIRST ORDERING: if this PR adds a config entry for a NON-vLLM/SGLang
+              framework (`framework:` of `trtllm`, `atom`, dynamo variants, etc. — images like
+              `rocm/atom*`, `nvcr.io...tensorrt-llm...`), check whether `configs/*-master.yaml`
+              already contains a vLLM or SGLang entry for the same model (`model-prefix`) and SKU
+              (`runner`). If none exists and no exception is documented in the sign-off, FAIL —
+              vLLM/SGLang submissions must land before additional frameworks. Otherwise PASS with
+              the matching entry named.
+            - N/A if the PR changes no master-config entries (state that in one line).
+
+            ## Check 7 — No benchmark hacks that change the model architecture
+            Verify from the PR diff (server args in `benchmarks/**` and master-config changes)
+            that nothing alters the model architecture or reduces its FLOPs — e.g. `--hf-overrides`
+            that skip the indexer every N layers on a model that doesn't natively support it,
+            trimming layers/experts/heads, or otherwise skipping computation. The rule: making the
+            SAME computation run faster is fair game; FLOPs at lower precision is fine when evals
+            pass; REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
+            production by accuracy-sensitive customers.
+            - Scan for architecture-override knobs: `--hf-overrides`, `hf_overrides`,
+              `--json-model-override-args`, config-editing `sed`/`jq` on the model files, etc. If
+              present, determine whether the override changes computed FLOPs vs the model's native
+              config and whether the model natively supports that mode.
+            - FAIL with the exact flag/value if architecture FLOPs are reduced without native
+              model support. PASS in one line otherwise; N/A if the PR touches no server args.
+
+            ## Check 8 — Speculative-decoding configs benchmark through chat templates
+            If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
+            flags such as `--speculative-config`, `--speculative-algorithm`, `spec-decode`, config
+            names ending in `-mtp`), verify the benchmark client exercises the model through its
+            chat template (e.g. chat-completions style endpoint/backend rather than raw
+            completions) so the acceptance-length distribution matches real-world traffic.
+            - FAIL if a spec-decode benchmark drives raw completions with no chat template —
+              name the config and script line.
+            - N/A if the PR has no speculative-decoding changes.
+
             ## Verdict and output
-            Decide PASS only if Checks 0, 1, 2, 3, and 4 ALL pass. Post EXACTLY ONE summary comment on
+            Decide PASS only if Checks 0-8 ALL pass (a check reported as `N/A` counts as a pass —
+            keep the `N/A — <reason>` row so the reviewer sees it was considered). Post EXACTLY ONE summary comment on
             PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
             the hidden marker so reruns are identifiable:
             `<!-- codeowner-signoff-verify sha=${{ needs.gate.outputs.head-sha }} -->`
@@ -409,7 +485,7 @@ jobs:
               restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
               run/recipe instead of describing it.
 
-            - If everything is to standard: post the verdict line + the five one-line PASS rows
+            - If everything is to standard: post the verdict line + the nine one-line PASS/N-A rows
               (with the green run URL). Do NOT @-mention anyone on a pass.
             - If anything is NOT to standard: the FIRST line (after the marker) must @-mention the
               sign-off author as `@${{ needs.gate.outputs.signoff-author }}` with the blocking
