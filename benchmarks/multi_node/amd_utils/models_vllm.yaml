@@ -59,3 +59,27 @@ MiniMax-M3-MXFP8:
   decode_flags: "--tensor-parallel-size 8 --block-size 128 --language-model-only --kv-cache-dtype fp8 --attention-backend TRITON_ATTN --no-enable-prefix-caching --gpu-memory-utilization 0.90 --tool-call-parser minimax_m3 --reasoning-parser minimax_m3 --enable-auto-tool-choice"
   env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_USE_BREAKABLE_CUDAGRAPH=0 VLLM_ENGINE_READY_TIMEOUT_S=3600"
   hf_dir: "models--MiniMaxAI--MiniMax-M3-MXFP8"
+
+DeepSeek-V4-Pro:
+  # DeepSeek-V4-Pro is mixed-precision FP4+FP8 (FP4 MoE expert weights dominate
+  # the ~960 GB footprint; FP8 on attention/norm/router; FP8 KV cache at runtime).
+  # InferenceX classifies this as the fp4 variant.
+  #
+  # Serving flags reuse the validated single-node MI355X recipe
+  # (benchmarks/single_node/fixed_seq_len/dsv4_fp4_mi355x_vllm.sh, from
+  # vllm-project/recipes#433) so the per-node engine config is identical to the
+  # known-good aggregated run; disaggregation only adds the MoRIIO kv-transfer
+  # role (injected by server_vllm.sh). Each P/D worker is a full TP=8 node, EP=1
+  # — matching the aggregated recipe, which runs DSv4 on TP=8 without expert
+  # parallelism. DEP decode is a follow-up.
+  #
+  # --moe-backend triton_unfused is REQUIRED for the FP4 MoE expert weight format;
+  # the auto backend doesn't register the FP4 scale params and safetensors load
+  # raises KeyError. --enforce-eager (no CUDA graphs) keeps the first disagg recipe
+  # robust against cudagraph/MoRIIO-hook interactions; FULL/PIECEWISE capture is a
+  # follow-up. --async-scheduling is intentionally omitted (not used by the kimi /
+  # minimax vllm-disagg recipes).
+  prefill_flags: "--tensor-parallel-size 8 --distributed-executor-backend mp --kv-cache-dtype fp8 --moe-backend triton_unfused --tokenizer-mode deepseek_v4 --reasoning-parser deepseek_v4 --no-enable-prefix-caching --gpu-memory-utilization 0.9 --max-num-batched-tokens 8192 --enforce-eager"
+  decode_flags: "--tensor-parallel-size 8 --distributed-executor-backend mp --kv-cache-dtype fp8 --moe-backend triton_unfused --tokenizer-mode deepseek_v4 --reasoning-parser deepseek_v4 --no-enable-prefix-caching --gpu-memory-utilization 0.9 --max-num-batched-tokens 8192 --enforce-eager"
+  env: "VLLM_USE_V1=1 VLLM_ROCM_USE_AITER=1 VLLM_ENGINE_READY_TIMEOUT_S=3600"
+  hf_dir: "models--deepseek-ai--DeepSeek-V4-Pro"

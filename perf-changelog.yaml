@@ -4455,3 +4455,12 @@
   description:
     - "Update SGLang image from qwen3.5-fp8-h200-sglang: lmsysorg/sglang:v0.5.12-cu130 / qwen3.5-fp8-h200-sglang-mtp: lmsysorg/sglang:v0.5.12 to lmsysorg/sglang:v0.5.14-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2061
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-disagg
+  description:
+    - "New recipe: DeepSeek-V4-Pro disaggregated prefill/decode on MI355X via vLLM + MoRI-IO, combining the validated single-node DSv4 vLLM serving recipe (dsv4-fp4-mi355x-vllm, vllm-project/recipes#433) with the existing vllm-disagg framework (MoRI-IO P/D, standalone router)."
+    - "New benchmarks/multi_node/dsv4_fp4_mi355x_vllm-disagg.sh launcher + DeepSeek-V4-Pro entry in amd_utils/models_vllm.yaml. Per-node flags reuse the aggregated recipe verbatim (--moe-backend triton_unfused for the FP4 expert format, deepseek_v4 tokenizer/reasoning parser, fp8 KV cache, --enforce-eager); the framework adds the MoRIIO kv-transfer role with the patch-free read_mode path already on main."
+    - "Image: latest vLLM ROCm nightly vllm/vllm-openai-rocm:nightly-f329ce405b12623fb8b1cf1830f12e5a712523be (2026-07-04)."
+    - "1P1D topology, TP8/EP1 prefill+decode. Smoke test: single ISL/OSL (8k/1k) at conc=32 to validate the path end-to-end before expanding to the full sweep."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2081
