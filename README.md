@@ -1,4 +1,4 @@
-#  InferenceX™, Open Source Continuous Inference Standard and Research Platform 
+#  InferenceX™, Open Source Continuous Inference Standard and Research Platform / 开源持续推理标准与研究平台
 <p align="center">
   <a href="https://github.com/SemiAnalysisAI/InferenceX/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-blue.svg"></a>
   <a href="https://github.com/SemiAnalysisAI/InferenceX/pulls"><img alt="PRs Welcome" src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg"></a>
