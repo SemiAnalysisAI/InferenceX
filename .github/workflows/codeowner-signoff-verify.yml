@@ -17,7 +17,8 @@ name: CODEOWNER Sign-off Verify
 #   2. Evals pass on that same green run.
 #   3. The single-node recipe(s) are linked in the sign-off AND the linked
 #      recipe PR/commit contains all of the reproduction information that is in
-#      this InferenceX PR.
+#      this InferenceX PR. Single-node submissions only — disaggregated /
+#      multi-node PRs (dynamo, ATOM/ATOMesh, sglang/vllm disagg) are N/A.
 #   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
 #      command on the PR (the reuse-merge path requires it).
 #   5. The sign-off uses the latest docs/PR_REVIEW_CHECKLIST.md template.
@@ -344,11 +345,25 @@ jobs:
               the same inference-engine image as this PR's config. FAIL if evals are
               skipped/failed/empty/below bar, or the image differs — say exactly which.
 
-            ## Check 3 — Recipe linked AND complete
-            The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
-            (especially `benchmarks/single_node/**/*.sh`) plus its entry in
-            `configs/*-master.yaml`. The merge standard is: the community must be able to
-            reproduce this benchmark from a public recipe.
+            ## Check 3 — Recipe linked AND complete (SINGLE-NODE recipes only)
+            APPLICABILITY — read this first: the recipe-link requirement covers SINGLE-NODE
+            recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
+            cookbook) publish single-node serve commands. Disaggregated / multi-node
+            submissions have NO recipe-link requirement. If the PR's benchmark changes are
+            exclusively multi-node/disagg — files under `benchmarks/multi_node/**` (including
+            `srt-slurm-recipes/**`), and/or master-config entries with `multinode: true` or
+            `disagg: true`, and/or disagg frameworks (`dynamo-trt`, `dynamo-sglang`,
+            `sglang-disagg`, vLLM disagg, ATOM/ATOMesh disagg) — report this check as
+            `N/A — disaggregated/multi-node submission; the recipe-link requirement applies to
+            single-node recipes only` and DO NOT fail it. A sign-off note like "this is a
+            disagg submission, no recipe update required" is a legitimate statement of that
+            fact, not a violation. If the PR touches BOTH single-node and multi-node recipes,
+            apply (a)/(b) below to the single-node portion only.
+
+            The InferenceX "recipe" for this PR = the files it changes under
+            `benchmarks/single_node/**` plus its entry in `configs/*-master.yaml`. The merge
+            standard is: the community must be able to reproduce this benchmark from a public
+            recipe.
             - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
               the corresponding recipe — a PR/commit in
               `https://github.com/vllm-project/recipes` or
