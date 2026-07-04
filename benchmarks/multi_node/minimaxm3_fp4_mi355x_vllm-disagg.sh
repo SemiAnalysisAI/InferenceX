@@ -76,3 +76,5 @@ if [[ $? -ne 0 ]]; then
 fi
 
 echo "$JOB_ID"
+
+# test: verifying disagg Check 3 N/A in codeowner-signoff-verify (PR will be closed without merging)
