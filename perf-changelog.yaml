@@ -4107,4 +4107,5 @@
     - "Revert model to amd/gpt-oss-120b-w-mxfp4-a-fp8 (W4A8): restores the activation-quantized a8w4 Triton MoE path"
     - "aiter a8w4 opt: updated A8W4 MoE GEMM tuning configs for better pipelining, plus an output allocation correctness fix"
     - "vLLM a8w4 opt: hybrid CDNA4 MX-scale swizzle gate (swizzle ON for TP<=2, OFF for TP4/8)"
+    - "Extend the concurrency sweep: TP1 to 256, add TP2 (conc 4/8/16/32), and TP4 at conc 4/16 (both isl 1024 and 8192)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

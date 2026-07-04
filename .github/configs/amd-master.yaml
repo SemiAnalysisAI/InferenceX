@@ -934,14 +934,16 @@ gptoss-fp4-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
+      - { tp: 1, conc-start: 4, conc-end: 256 }
+      - { tp: 2, conc-start: 4, conc-end: 32 }
+      - { tp: 4, conc-list: [4, 16] }
       - { tp: 8, conc-start: 4, conc-end: 16 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 4 }
+      - { tp: 1, conc-start: 4, conc-end: 256 }
+      - { tp: 2, conc-start: 4, conc-end: 32 }
+      - { tp: 4, conc-list: [4, 16] }
       - { tp: 8, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-mi355x-atom:
