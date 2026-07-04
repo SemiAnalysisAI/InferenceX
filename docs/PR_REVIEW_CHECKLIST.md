@@ -10,6 +10,8 @@ When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/
 
 We welcome InferenceX partners & the community to submit PRs for reasonable additions to this checklist — or deletions — that follow the principles of InferenceX, and the general principle that deleting a guideline should be as easy a process as adding a new one.
 
+We also welcome InferenceX partners & the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) — the CI bot that independently verifies these sign-offs — and make it more rigorous too.
+
 ## Template
 ```
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
