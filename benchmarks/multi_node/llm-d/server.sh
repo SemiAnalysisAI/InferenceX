@@ -586,6 +586,22 @@ PY
 
     # ---- Eval (optional) ----
     if [[ "${RUN_EVAL:-false}" == "true" ]]; then
+        # Concurrency for the eval and, crucially, for the concurrency stamped
+        # into meta_env.json. run_eval/append_lm_eval_summary read
+        # EVAL_CONCURRENT_REQUESTS and CONC (not EVAL_CONC), so mirror the AMD
+        # multi-node servers: use the workflow-provided EVAL_CONC when set, else
+        # fall back to the max of the (x-delimited) BENCH_MAX_CONCURRENCY list.
+        # Exporting CONC makes meta_env.json's "conc" match what
+        # utils/evals/validate_scores.py --expected-concs verifies; without it
+        # CONC is empty, the metadata records conc=1, and score verification
+        # fails ("eval metadata concurrency does not match workflow request")
+        # even when accuracy passes.
+        if [[ -n "${EVAL_CONC:-}" ]]; then
+            export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
+        else
+            export EVAL_CONCURRENT_REQUESTS=$(printf '%s' "$BENCH_MAX_CONCURRENCY" | tr 'x' '\n' | sort -n | tail -1)
+        fi
+        export CONC="${EVAL_CONCURRENT_REQUESTS}"
         # Run from /workspace (the repo bind-mount) so results*.json land where
         # the host-side workflow checks look; the subshell keeps the cd local.
         (
