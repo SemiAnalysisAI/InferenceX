@@ -10,7 +10,7 @@ on the actual nodes first (tighter loop than the full CI dispatch cycle), or to 
 node/infra issues, or just to gather context on a cluster.
 
 This composes with the other skills: use **`/nuke`** (or `/add-model-hardware`) to create
-the PR(s) with the image bump + perf-changelog entry + `full-sweep-enabled` label; this
+the PR(s) with the image bump + perf-changelog entry + `full-sweep-fail-fast` label; this
 skill is the **monitor → root-cause → fix → re-verify → merge-gate** loop that follows.
 
 ## Cluster access — read it from the canvas, never hardcode it
@@ -48,8 +48,8 @@ and the benchmark command.
 
 A PR's sweep is kicked by labels or a `/sweep` comment:
 
-- **`full-sweep-enabled`** — full GPU sweep (what `/nuke` attaches).
-- **`full-sweep-fail-fast`** — full sweep that bails on first failure (faster signal while debugging).
+- **`full-sweep-fail-fast`** — full sweep that bails on first failure per matrix (faster signal while debugging; **strongly recommended default**, and what `/nuke` attaches).
+- **`full-sweep-enabled`** — full GPU sweep that runs every job to completion despite failures; use only when a flaky job killing its matrix's in-flight results is unacceptable.
 - **`/sweep …`** PR comment (Slash Command Sweep) — re-trigger / reuse a sweep run without a new commit.
 
 For a **single config** (tightest CI loop, skips the rest of the matrix), dispatch e2e directly:
