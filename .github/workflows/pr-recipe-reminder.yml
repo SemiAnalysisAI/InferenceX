@@ -34,34 +34,14 @@ jobs:
             }
 
             const body = `${marker}
-            Thanks for the contribution! For vLLM & SGLang, please ensure that your recipes is similar to the official vLLM recipes and/or the SGLang cookbook
-            - https://docs.sglang.io/cookbook/intro
-            - https://recipes.vllm.ai/
+            Please reach out to respective companies' [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) to fill in the latest [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md) before pinging core maintainer on Slack for review.
 
-            If it is not, please create a PR first before we can merge your single node PR into the master branch. Let's ensure that the documentation is first class such that the entire ML community can benefit from your hard work! Thank you
-            - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sglang/tree/main/docs_new
-
-            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. If re-running failed jobs is attempted, PR authors are responsible for ensuring it passes. See GitHub's docs on re-running failed jobs: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
-
-            As a rule of thumb, generally, PR authors should request a review & get a PR approval from the respective companies' [CODEOWNERS](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) before requesting a review from core maintainers.
-
-            If additional help is needed, PR authors can reach out to core maintainers over Slack.
+            **PR authors are responsible for ensuring that after merging, all GitHub Action jobs fully pass.** A lot of the time, failures are just flakes and simply re-running the failed jobs will fix it. [See GitHub's docs on re-running failed jobs](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)
 
             ---
 
-            感谢你的贡献！对于 vLLM 与 SGLang，请确保你的 recipe 与官方 vLLM recipes 和/或 SGLang cookbook 保持一致
-            - https://docs.sglang.io/cookbook/intro
-            - https://recipes.vllm.ai/
+            请联系相应公司的 [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 填写最新的 [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md)，然后再在 Slack 上联系核心维护者进行审阅。
 
-            如果不一致，请先创建一个 PR，之后我们才能将你的单节点 PR 合并到 master 分支。让我们确保文档保持一流水准，使整个 ML 社区都能从你的辛勤工作中受益！谢谢
-            - https://github.com/vllm-project/recipes
-            - https://github.com/sgl-project/sglang/tree/main/docs_new
-
-            **PR 作者有责任确保合并后所有 GitHub Action 任务完全通过。** 很多时候失败只是偶发抖动（flake），重新运行失败的任务即可解决。如果选择重新运行失败的任务，PR 作者有责任确保其最终通过。参见 GitHub 关于重新运行失败任务的文档：https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow
-
-            一般而言，PR 作者应先向相应公司的 [CODEOWNERS](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) 请求审阅并获得 PR 批准，然后再请求核心维护者审阅。
-
-            如需更多帮助，PR 作者可通过 Slack 联系核心维护者。`.replace(/^            /gm, '');
+            **PR 作者有责任确保合并后所有 GitHub Action 任务完全通过。** 很多时候失败只是偶发抖动（flake），重新运行失败的任务即可解决。[参见 GitHub 关于重新运行失败任务的文档](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs#re-running-failed-jobs-in-a-workflow)`.replace(/^            /gm, '');
 
             await github.rest.issues.createComment({ owner, repo, issue_number, body });
