@@ -16,7 +16,7 @@ set -eo pipefail
 # scheduling, mode=3 FULL_AND_PIECEWISE compilation). See
 # dsv4_fp4_mi355x_vllm.sh for per-flag rationale.
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
