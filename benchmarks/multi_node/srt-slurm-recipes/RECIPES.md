@@ -90,3 +90,5 @@ python utils/matrix_logic/generate_sweep_configs.py full-sweep \
   --config-files configs/nvidia-master.yaml \
   --framework dynamo-sglang
 ```
+
+<!-- test: verifying pr-recipe-reminder signoff trigger note (PR will be closed without merging) -->
