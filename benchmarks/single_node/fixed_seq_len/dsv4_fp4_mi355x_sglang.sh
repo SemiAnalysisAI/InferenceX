@@ -22,7 +22,7 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # sglang ships in the image at the SHA encoded in the image tag (built
 # from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
-# bump the image tag in .github/configs/amd-master.yaml.
+# bump the image tag in configs/amd-master.yaml.
 
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=max

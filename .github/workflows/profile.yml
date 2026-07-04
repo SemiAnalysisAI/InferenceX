@@ -11,7 +11,7 @@ on:
         description: "Config file to use"
         required: false
         type: string
-        default: '.github/configs/nvidia-master.yaml'
+        default: 'configs/nvidia-master.yaml'
       conc:
         description: "Concurrency value (must exist in config's conc-range/list)"
         required: false

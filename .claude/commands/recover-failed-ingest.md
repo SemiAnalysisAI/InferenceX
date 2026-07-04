@@ -1,6 +1,6 @@
 ---
 description: Recover a failed main-branch sweep ingest through the normal artifact-reuse path without rerunning GPU benchmarks
-argument-hint: <failed-run-or-job-url> [source-run-id]
+argument-hint: <failed-run-or-job-url | pr-number> [source-run-id]
 ---
 
 Recover the official database ingest for a failed or skipped InferenceX
@@ -12,6 +12,12 @@ Inputs from `$ARGUMENTS`:
 - Use the first argument as `FAILED_RUN_OR_JOB_URL`.
 - Use the optional second argument as `SOURCE_RUN_ID`; treat it as a candidate
   until all source, ancestry, scope, and artifact checks pass.
+
+The most common invocation is a forgotten `/reuse-sweep-run` before merge, where
+you are handed the original PR number and/or its `pull_request` sweep run (the
+source) rather than a target URL. The failed target is then the push-to-main run
+on that PR's merge commit — derive it in step 1. `inspect-target` needs a
+run/job URL, not a bare ID.
 
 Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
 `python3`. Stop on any unexpected command failure.
@@ -50,10 +56,13 @@ Run from a clean InferenceX checkout with authenticated `gh`, `git`, `jq`, and
 
 ## 1. Inspect the target
 
-Install helper dependencies and inspect the target:
+Ensure `pydantic` and `pyyaml` are importable
+(`python3 -c 'import pydantic, yaml'`); they are usually already present. If not,
+install them — a plain `pip install` fails on PEP 668 managed Pythons, so use a
+venv or `--break-system-packages`. Then inspect the target:
 
 ```bash
-python3 -m pip install pydantic pyyaml
+python3 -m pip install pydantic pyyaml  # only if the import check failed
 python3 utils/recover_failed_ingest.py inspect-target \
   "$FAILED_RUN_OR_JOB_URL" \
   --output /tmp/infx-recovery-target.json
@@ -83,9 +92,33 @@ ORIGINAL_PR=$(gh api \
   --jq 'if length == 1 then .[0].number else error("expected one PR") end')
 ```
 
-Require event `push`, status `completed`, workflow path
-`.github/workflows/run-sweep.yml`, branch `main`, and a failed or skipped state
-that explains the missing ingest. Record the original PR and root cause.
+If you were given the original PR number or the source sweep run instead of a
+target URL — the usual forgotten-`/reuse` case — derive the target push run from
+the PR's merge commit:
+
+```bash
+ORIGINAL_PR=<pr-number>
+ORIGINAL_MERGE_SHA=$(gh pr view "$ORIGINAL_PR" \
+  --repo SemiAnalysisAI/InferenceX \
+  --json mergeCommit --jq .mergeCommit.oid)
+gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow run-sweep.yml --event push \
+  --commit "$ORIGINAL_MERGE_SHA" --limit 5 \
+  --json databaseId,status,conclusion,createdAt
+TARGET_RUN_ID=<matching-run-id>
+```
+
+Require event `push`, workflow path `.github/workflows/run-sweep.yml`, and branch
+`main`; confirm the target is no longer running before recovering. The
+disqualifying state is broader than `failure`/`skipped`: when `/reuse-sweep-run`
+was forgotten before merge, `reuse-ingest-artifacts` is skipped, the GPU jobs run
+(often `cancelled` to save cost), and because `collect-results`/`collect-evals`
+are not skipped, `trigger-ingest` still fires `always()` and lands a *bogus*
+ingest under the target's own `run_id`. So a target showing
+`trigger-ingest=success` (and concluding `success` or `cancelled`) can still hold
+no valid benchmark data — recovery is required. That bogus row is keyed on the
+target `run_id` and is superseded by the recovery ingest under a new `run_id`;
+leave it alone. Record the original PR and root cause.
 
 Fetch history and inspect the exact original changelog delta:
 
@@ -249,7 +282,9 @@ Confirm the generated config contains only the intended recovery scope. Its row
 counts may differ from the source run.
 
 Download only the result artifacts needed for local validation. This avoids the
-large server-log artifacts retained in the official ingest bundle:
+large server-log artifacts retained in the official ingest bundle. Raw per-config
+`bmk_<model>_*` artifacts are intentionally not selected — they fall through the
+`case` below; the aggregate `results_bmk` is what the validator reads:
 
 ```bash
 rm -rf /tmp/source-artifacts
@@ -288,6 +323,12 @@ Validate the source artifacts:
 python3 utils/validate_reusable_sweep_artifacts.py \
   --artifacts-dir /tmp/source-artifacts
 ```
+
+The validator first collapses reran (flaky) eval duplicates in place — keeping
+the latest result per eval identity when a retried eval left duplicate raw dirs
+/ aggregate rows — so a legitimate rerun does not fail validation. It only
+collapses identities with a clear latest result; genuinely ambiguous duplicates
+are still rejected.
 
 The validator does not compare source coverage with
 `/tmp/recovery-full-config.json`. It rejects duplicate fixed rows, missing run
@@ -351,6 +392,21 @@ gh pr checks "$RECOVERY_PR" \
   --watch --fail-fast
 ```
 
+`reuse-sweep-gate` appears only once the `pull_request` `run-sweep.yml` run for
+the new head SHA registers; immediately after pushing, `gh pr checks` may list
+only CodeQL/`check-changelog`/`comment`. Confirm that run exists and carries
+`reuse-sweep-gate` before trusting a green result, or watch it directly:
+
+```bash
+gh run list --repo SemiAnalysisAI/InferenceX \
+  --workflow run-sweep.yml --event pull_request \
+  --branch "$BRANCH" --limit 5 \
+  --json databaseId,status,conclusion,headSha
+```
+
+On the PR (`pull_request`) gate, `setup` is itself skipped and `reuse-sweep-gate`
+does the validation; `setup` only runs on the push-to-main run in step 8.
+
 ## 8. Merge and verify official ingest
 
 Keep the verified carrier commit as the PR head through merge. This repository
@@ -398,17 +454,27 @@ The push-to-main `Run Sweep` must:
 - run `trigger-ingest`.
 
 Then locate the resulting `repository_dispatch` run in
-`SemiAnalysisAI/InferenceX-app`:
+`SemiAnalysisAI/InferenceX-app`. In the forgotten-`/reuse` case the target's
+bogus ingest is also a recent successful `ingest-results` run, so do not pick by
+recency — pick the run whose `Download artifacts from InferenceX run` step logs
+`RUN_ID: <RECOVERY_RUN_ID>`:
 
 ```bash
 gh run list --repo SemiAnalysisAI/InferenceX-app \
   --workflow "Ingest Benchmark Results" \
-  --event repository_dispatch --limit 10
+  --event repository_dispatch --limit 10 \
+  --json databaseId,status,conclusion,createdAt
 
-INGEST_RUN_ID=<run-triggered-by-recovery>
+INGEST_RUN_ID=<candidate-run-id>
+gh run view "$INGEST_RUN_ID" --repo SemiAnalysisAI/InferenceX-app --log \
+  | grep -m1 "RUN_ID: $RECOVERY_RUN_ID"   # must match before you trust this run
+
 gh run watch "$INGEST_RUN_ID" \
   --repo SemiAnalysisAI/InferenceX-app --exit-status
 ```
+
+The ingest's first step is a `sleep 300` "wait for source run to finish", so the
+run idles ~5 minutes before doing work — that is normal, not a hang.
 
 Verify its logs identify `RECOVERY_RUN_ID` as the trigger and `SOURCE_RUN_ID`
 plus `SOURCE_RUN_ATTEMPT` as the reused source. Require successful artifact
