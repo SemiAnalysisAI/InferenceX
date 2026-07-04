@@ -4448,3 +4448,10 @@
     - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
     - "Switch the MoE backend from triton_unfused to AITER MoE (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter) for the FP4 experts."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1980
+
+- config-keys:
+    - qwen3.5-fp8-mi325x-sglang
+    - qwen3.5-fp8-mi325x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang:v0.5.12-rocm720-mi30x to lmsysorg/sglang:v0.5.14-rocm720-mi30x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2065
