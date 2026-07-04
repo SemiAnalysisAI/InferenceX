@@ -8737,6 +8737,50 @@ dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe:
           - "DECODE_NODES=2"
           - "GPUS_PER_NODE=4"
 
+# Max-throughput sibling of dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe.
+# Mirrors NVIDIA/srt-slurm disagg-gb200-max-tpt-megamoe.yaml, whose ONLY
+# diff from high-tpt is prefill scale-out (prefill_workers 2->3); the vLLM
+# engine args are identical, so this reuses the same CONFIG_FILE. 3 prefill
+# (DEP8 each) + 1 decode (DEP8) = 6 prefill + 2 decode = 8 GB200 nodes.
+# Validated standalone via e2e run 28711505502: 8797 tok/s/GPU at conc=4096.
+dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe:
+  image: ghcr.io/ezrasilvera/llm-d-nokube-vllm:vllm0.23
+  model: deepseek-ai/DeepSeek-V4-Pro
+  model-prefix: dsv4
+  runner: gb200
+  precision: fp4
+  framework: llm-d-vllm
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - spec-decoding: "none"
+        conc-list: [4096]
+        prefill:
+          num-worker: 3
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "PREFILL_NODES=6"
+          - "PREFILL_WORKERS=3"
+          - "GPUS_PER_NODE=4"
+          - "RANDOM_RANGE_RATIO=1.0"
+          - "CONFIG_FILE=dsv4-fp4-gb200-mid-curve-megamoe.yaml"
+          - "BENCH_NUM_PROMPTS_MULTIPLIER=3"
+          - "MAX_FAILURE_RATE=0.5"
+        decode:
+          num-worker: 1
+          tp: 1
+          ep: 8
+          dp-attn: true
+          additional-settings:
+          - "DECODE_NODES=2"
+          - "GPUS_PER_NODE=4"
+
 # MTP2 variant of dsv4-fp4-gb200-dynamo-vllm. Uses the vLLM 0.20.1 image
 # and hand-picked 8k/1k Pareto points mirrored from NVIDIA/srt-slurm.
 dsv4-fp4-gb200-dynamo-vllm-mtp2:
