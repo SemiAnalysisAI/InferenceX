@@ -727,7 +727,7 @@ kimik2.5-int4-mi355x-vllm:
       - { tp: 4, conc-start: 4, conc-end: 128 }
 
 kimik2.5-int4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.21.0
+  image: vllm/vllm-openai-rocm:v0.24.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: mi325x
