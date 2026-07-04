@@ -85,5 +85,3 @@ SGLang、vLLM、TensorRT-LLM、CUDA、ROCm 等 AI 软件通过核函式優化、
 <img width="1400" height="682" alt="image" src="https://github.com/user-attachments/assets/589bfdda-905d-425f-94dc-f2551746dd9d" />
 
 
-
-<!-- test: required signoff check gating (PR will be closed without merging) -->

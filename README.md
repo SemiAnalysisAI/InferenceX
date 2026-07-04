@@ -84,5 +84,3 @@ Full list of supporters & quotes: https://inferencex.semianalysis.com/quotes
 
 <img width="1400" height="682" alt="image" src="https://github.com/user-attachments/assets/dcbda40c-4a6e-43a3-aca2-c830d3f2fb8d" />
 
-
-<!-- test: required signoff check gating (PR will be closed without merging) -->
