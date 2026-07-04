@@ -29,6 +29,12 @@ name: CODEOWNER Sign-off Verify
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
 #
+# The verdict is also published as a `codeowner-signoff-verify` commit status
+# on the PR head SHA (success only on "Verdict: PASS"). That status context is
+# a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
+# (without org-admin bypass) until a sign-off has been posted AND independently
+# verified as passing on the current head commit.
+#
 # It can also be run manually via workflow_dispatch by passing the URL of the
 # sign-off comment/review to verify.
 
@@ -183,6 +189,7 @@ jobs:
       pull-requests: write
       issues: write
       actions: read
+      statuses: write
     steps:
       # SECURITY: this is a privileged job (write perms + secrets) triggered by
       # comment events, so it must NOT check out untrusted PR head code — the
@@ -502,3 +509,50 @@ jobs:
             Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ status emojis
             specified above. Use only facts you verified. If a required artifact or run is
             inaccessible, say so explicitly rather than assuming pass.
+
+      # Publish the verdict as a commit status on the PR head SHA so it can act
+      # as a required check. Deterministic: reads the verdict comment posted
+      # above (matched by the sha-pinned marker) and maps "Verdict: PASS" to
+      # success, anything else — including a missing verdict — to failure.
+      # Runs on always() so a crashed verify step still reports failure rather
+      # than leaving the status stuck at "expected".
+      - name: Publish verdict as commit status on PR head
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = process.env.HEAD_SHA;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const marker = `<!-- codeowner-signoff-verify sha=${headSha} -->`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const verdicts = comments.filter(c => c.body && c.body.includes(marker));
+            const latest = verdicts[verdicts.length - 1];
+
+            let state, description, target_url;
+            if (!latest) {
+              state = 'failure';
+              description = 'No verification verdict was posted for this commit';
+              target_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            } else if (latest.body.includes('**Verdict: PASS**')) {
+              state = 'success';
+              description = 'CODEOWNER sign-off independently verified';
+              target_url = latest.html_url;
+            } else {
+              state = 'failure';
+              description = 'Sign-off verification rejected - see verdict comment';
+              target_url = latest.html_url;
+            }
+
+            await github.rest.repos.createCommitStatus({
+              owner, repo, sha: headSha, state, description,
+              context: 'codeowner-signoff-verify', target_url,
+            });
+            core.info(`codeowner-signoff-verify=${state} on ${headSha}`);
