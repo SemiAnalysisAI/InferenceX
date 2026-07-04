@@ -85,6 +85,7 @@ $PARALLEL_ARGS \
 --max-cudagraph-capture-size $CAPTURE_SIZE \
 --max-num-batched-tokens "$((ISL * 2 ))" \
 --stream-interval 20 --no-enable-prefix-caching \
+--hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}' \
 --trust-remote-code > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
