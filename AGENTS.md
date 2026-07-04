@@ -2,6 +2,8 @@
 
 Guidance for AI agents working with InferenceX.
 
+> **PR titles & PR descriptions must be bilingual — include a Simplified Chinese version in addition to English.** Title format: `<English title> / <中文标题>`. In the PR body, follow the English content with its Chinese translation (e.g. a `## 中文说明` section mirroring the summary). This applies to every PR, matching the bilingual docs rule in Code Conventions.
+
 > **Before debugging a failing Klaud-Cold / claude/* image-bump PR, read [`KLAUD_DEBUG.md`](KLAUD_DEBUG.md).** It captures recurring failure modes (vLLM CUDA-graph OOM, B300 sglang regressions, cluster docker/perms/disk issues), the exact workarounds, and gh-CLI gotchas — most cron-PR failures are already cataloged there.
 
 ## Project Overview
