@@ -57,7 +57,7 @@ Bash: source shared utilities via `source benchmark_lib.sh` (`check_env_vars`, `
 
 Git: conventional commit messages. `[skip-sweep]` in the latest PR head commit skips that PR's benchmark setup after changelog validation. It is ignored on pushes to `main`. Changes to `perf-changelog.yaml` trigger benchmark runs.
 
-Docs: the README is bilingual — `README.md` (English, default) and `README_zh.md` (Simplified Chinese), with an `English | 中文` switcher under the badges. **Any edit to `README.md` MUST be mirrored in `README_zh.md`, and vice versa** — keep the two in sync (same sections, links, badges, images) and update both in the same PR.
+Docs: all contributor-facing docs are bilingual — **every such Markdown doc MUST have a Simplified Chinese version** named `<name>_zh.md` alongside it, with an `English | 中文` switcher at the top. Current pairs: `README.md`/`README_zh.md`, `CONTRIBUTING.md`/`CONTRIBUTING_zh.md`, `docs/PR_REVIEW_CHECKLIST.md`/`docs/PR_REVIEW_CHECKLIST_zh.md`. **Any edit to an English doc MUST be mirrored in its `_zh` counterpart (and vice versa) in the same PR** — same sections, links, badges, images — and a new doc must ship with its `_zh` version in the same PR. Exceptions: agent-instruction files (`AGENTS.md`, `CLAUDE.md`, `KLAUD_DEBUG.md`) and internal references under `.github/`/`utils/` are English-only; the sign-off template inside `docs/PR_REVIEW_CHECKLIST*.md` stays in English verbatim in BOTH versions, because `codeowner-signoff-verify.yml` triggers on its exact English opening phrase.
 
 ### Pull Request Sweep Labels
 

@@ -1,5 +1,11 @@
 # Contributing to InferenceX
 
+<div align="center">
+
+**English** | [中文](./CONTRIBUTING_zh.md)
+
+</div>
+
 Thanks for contributing! PRs are welcome. This page covers the review process every PR goes through before it can be merged.
 
 ## PR review flow
