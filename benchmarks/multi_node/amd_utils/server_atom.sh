@@ -75,6 +75,7 @@ host_name=$(hostname)
 # Model-Specific Configuration from YAML
 # =============================================================================
 # Load model-specific config from YAML (single parse for all fields)
+set -x
 _yaml_tmp=$(mktemp)
 python3 << PYEOF > "$_yaml_tmp"
 import yaml
@@ -105,12 +106,14 @@ source "$_yaml_tmp"
 rm -f "$_yaml_tmp"
 unset _yaml_tmp
 
-# Apply server-tuning: env var > YAML > shell default
-BLOCK_SIZE="${BLOCK_SIZE:-${_YAML_BLOCK_SIZE:-16}}"
-MEM_FRAC_STATIC="${MEM_FRAC_STATIC:-${_YAML_MEM_FRAC_STATIC:-0.85}}"
-MAX_MODEL_LEN="${MAX_MODEL_LEN:-${_YAML_MAX_MODEL_LEN:-}}"
-MAX_NUM_SEQS="${MAX_NUM_SEQS:-${_YAML_MAX_NUM_SEQS:-256}}"
-MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-${_YAML_MAX_NUM_BATCHED_TOKENS:-}}"
+# Apply server-tuning: YAML > env var > shell default
+# (job.slurm injects BLOCK_SIZE/MEM_FRAC_STATIC/MAX_NUM_SEQS with hardcoded
+#  defaults into the Docker env, so env-first would always shadow the YAML.)
+BLOCK_SIZE="${_YAML_BLOCK_SIZE:-${BLOCK_SIZE:-16}}"
+MEM_FRAC_STATIC="${_YAML_MEM_FRAC_STATIC:-${MEM_FRAC_STATIC:-0.85}}"
+MAX_MODEL_LEN="${_YAML_MAX_MODEL_LEN:-${MAX_MODEL_LEN:-}}"
+MAX_NUM_SEQS="${_YAML_MAX_NUM_SEQS:-${MAX_NUM_SEQS:-256}}"
+MAX_NUM_BATCHED_TOKENS="${_YAML_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS:-}}"
 unset _YAML_BLOCK_SIZE _YAML_MEM_FRAC_STATIC _YAML_MAX_MODEL_LEN _YAML_MAX_NUM_SEQS _YAML_MAX_NUM_BATCHED_TOKENS
 
 # =============================================================================
