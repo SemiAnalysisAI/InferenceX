@@ -4433,3 +4433,9 @@
     - "Add --online_quant_config with ptpc_fp8 and MoE layer exclusions (*block_sparse_moe) to all scripts."
     - "Replace deprecated AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2001
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Remove --hf-overrides use_index_cache/index_topk_freq indexer-skipping override from the ATOM serve command (not allowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
