@@ -2817,7 +2817,7 @@ kimik2.5-int4-b200-vllm-agentic:
 
 
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.24.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
