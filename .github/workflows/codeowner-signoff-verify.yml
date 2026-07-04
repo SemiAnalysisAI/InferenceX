@@ -477,20 +477,28 @@ jobs:
 
             KEEP IT TIGHT — a busy reviewer should get it in ~15 seconds. Not a novel, not a
             single terse line either. Rules:
-            - First line after the marker: the overall verdict (PASS, or one line naming what
-              blocks merge).
-            - Then ONE short line per check. For a passing check write `PASS — <brief reason>`;
-              spend words only on the checks that fail.
+            - First line after the marker: the overall verdict as a markdown header, with the
+              verdict word in bold and flanked by three status emojis on each side — EXACTLY:
+                on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
+                on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
+            - Then ONE short line per check, each STARTING with its status emoji so pass/fail is
+              scannable at a glance:
+                `✅ Check N (<name>): PASS — <brief reason>`
+                `❌ Check N (<name>): FAIL — <root issue>`
+                `➖ Check N (<name>): N/A — <reason>`
+              Spend words only on the checks that fail.
             - State conclusions, don't narrate your process. No multi-paragraph explanations, no
               restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
               run/recipe instead of describing it.
 
-            - If everything is to standard: post the verdict line + the nine one-line PASS/N-A rows
+            - If everything is to standard: post the verdict header + the nine one-line rows
               (with the green run URL). Do NOT @-mention anyone on a pass.
-            - If anything is NOT to standard: the FIRST line (after the marker) must @-mention the
-              sign-off author as `@${{ needs.gate.outputs.signoff-author }}` with the blocking
-              summary. Then the per-check lines, each failing one led by its root issue (e.g.
-              "No passing sweep/eval on any commit in this PR") with the supporting link after.
+            - If anything is NOT to standard: the verdict header must be immediately followed by a
+              line that @-mentions the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`
+              with the blocking summary. Then the per-check lines, each failing one led by its root
+              issue (e.g. "No passing sweep/eval on any commit in this PR") with the supporting
+              link after.
 
-            Do not use emojis anywhere in the comment. Use only facts you verified. If a required
-            artifact or run is inaccessible, say so explicitly rather than assuming pass.
+            Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ status emojis
+            specified above. Use only facts you verified. If a required artifact or run is
+            inaccessible, say so explicitly rather than assuming pass.
