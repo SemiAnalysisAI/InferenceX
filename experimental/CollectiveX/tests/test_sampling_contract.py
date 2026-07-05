@@ -2211,6 +2211,11 @@ class SamplingContractTest(unittest.TestCase):
             "PrecisionError: unsupported precision profile": "precision-contract",
             "AssertionError: probe invariant": "python-assertion",
             "RuntimeError: probe execution failed": "python-runtime",
+            "ValueError: probe argument": "python-value",
+            "KeyError: 'probe-key'": "python-key",
+            "OSError: probe path": "python-os",
+            "NotImplementedError: probe API": "python-system",
+            "CalledProcessError: probe command": "python-subprocess",
             "Traceback (most recent call last):": "python-exception",
         }
         with tempfile.TemporaryDirectory() as temporary:

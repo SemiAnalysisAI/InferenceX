@@ -81,6 +81,16 @@ cx_fail_stage() {
       diagnostic="python-assertion"
     elif grep -aEqi 'RuntimeError:' "$log_path"; then
       diagnostic="python-runtime"
+    elif grep -aEqi 'ValueError:' "$log_path"; then
+      diagnostic="python-value"
+    elif grep -aEqi 'KeyError:' "$log_path"; then
+      diagnostic="python-key"
+    elif grep -aEqi '(FileNotFoundError|PermissionError|IsADirectoryError|NotADirectoryError|OSError):' "$log_path"; then
+      diagnostic="python-os"
+    elif grep -aEqi '(NotImplemented|System)Error:' "$log_path"; then
+      diagnostic="python-system"
+    elif grep -aEqi 'CalledProcessError:' "$log_path"; then
+      diagnostic="python-subprocess"
     elif grep -aEqi 'Traceback \(most recent call last\)' "$log_path"; then
       diagnostic="python-exception"
     elif grep -aEqi 'SHARD done: [0-9]+/[0-9]+ case\(s\) failed|WARN: .* run failed rc=|completed with invalid semantic evidence' "$log_path"; then
