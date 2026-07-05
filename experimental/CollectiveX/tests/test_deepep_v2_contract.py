@@ -94,7 +94,7 @@ def operator_config(root: Path) -> dict[str, object]:
             "partition": "test", "squash_dir": path, "stage_dir": path, **network,
         },
         "b200-dgxc": {
-            "partition": "test", "account": "test", "squash_dir": path,
+            "partition": "test", "account": "test", "qos": "test-qos", "squash_dir": path,
             "stage_dir": path, **network,
         },
         "b300": {
@@ -1987,6 +1987,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
             'source "$1"; export COLLECTIVEX_EXECUTION_ID="operator-config-$$"; '
             "trap 'cx_cleanup_private_logs 0' EXIT; cx_load_operator_config; "
             'test "$CX_PARTITION" = test; '
+            '[ "$CX_RUNNER" != b200-dgxc ] || test "$CX_QOS" = test-qos; '
             'test -z "${COLLECTIVEX_OPERATOR_CONFIG_CONTENT+x}"; '
             'test -z "${ENROOT_CACHE_PATH+x}"'
         )

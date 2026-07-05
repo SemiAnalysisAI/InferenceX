@@ -103,6 +103,7 @@ allocation=(--partition="$CX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN" --exc
   --time="$TIME_MIN" "${ALLOC_EXTRA[@]}")
 [ "$NODES" = 1 ] || allocation+=(--ntasks-per-node="$GPN")
 [ -z "${CX_ACCOUNT:-}" ] || allocation+=(--account="$CX_ACCOUNT")
+[ -z "${CX_QOS:-}" ] || allocation+=(--qos="$CX_QOS")
 [ -z "${CX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$CX_EXCLUDE_NODES")
 cx_salloc_jobid "${allocation[@]}"
 [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"

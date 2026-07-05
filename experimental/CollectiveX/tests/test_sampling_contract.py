@@ -1363,8 +1363,12 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("CX_BACKEND_SOURCE_SEED_ROOT", workflow)
         self.assertIn("steps.gen.outputs.source_backends", workflow)
         self.assertIn("secrets.COLLECTIVEX_NETWORK_CONFIG_V1", workflow)
-        self.assertIn("network_fields = {", workflow)
-        self.assertIn("set(fields) - network_fields", workflow)
+        self.assertIn("secrets.COLLECTIVEX_B200_CONFIG_V1", workflow)
+        self.assertIn('set(overlay["runners"]) != {"b200-dgxc"}', workflow)
+        self.assertIn("set(fields) - private_fields", workflow)
+        self.assertIn('[ -z "${CX_QOS:-}" ] || allocation+=(--qos="$CX_QOS")', (
+            ROOT / "launchers" / "launch_single-slurm.sh"
+        ).read_text())
         self.assertIn("COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1", workflow)
         self.assertLess(
             workflow.index("unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED"),

@@ -163,7 +163,7 @@ cx_load_operator_config() {
   local audit_salt_override validation_code
   audit_salt_override="${COLLECTIVEX_OPERATOR_AUDIT_SALT:-}"
   unset COLLECTIVEX_OPERATOR_AUDIT_SALT
-  unset CX_PARTITION CX_ACCOUNT CX_SQUASH_DIR CX_STAGE_DIR CX_ENROOT_CACHE_PATH
+  unset CX_PARTITION CX_ACCOUNT CX_QOS CX_SQUASH_DIR CX_STAGE_DIR CX_ENROOT_CACHE_PATH
   unset ENROOT_CACHE_PATH
   unset CX_EXCLUDE_NODES CX_NODELIST CX_LOCK_DIR CX_MASTER_PORT
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
@@ -224,6 +224,7 @@ RUNNERS = {
 FIELDS = {
     "partition": "CX_PARTITION",
     "account": "CX_ACCOUNT",
+    "qos": "CX_QOS",
     "squash_dir": "CX_SQUASH_DIR",
     "stage_dir": "CX_STAGE_DIR",
     "enroot_cache_path": "CX_ENROOT_CACHE_PATH",
@@ -251,7 +252,7 @@ REQUIRED = {
 ALLOWED = {
     "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "h200-dgxc": REQUIRED["h200-dgxc"] | {"account", "exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
-    "b200-dgxc": REQUIRED["b200-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
+    "b200-dgxc": REQUIRED["b200-dgxc"] | {"exclude_nodes", "stage_dir", "qos"} | NETWORK_FIELDS,
     "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "gb200": REQUIRED["gb200"] | NETWORK_FIELDS,
     "gb300": REQUIRED["gb300"] | {"stage_dir"} | NETWORK_FIELDS,
@@ -1808,6 +1809,7 @@ cx_prepare_runner_shared_stage_base() {
 cx_lock_canonical_gha_env() {
   local runner="$1" expected_nodes expected_gpn expected_world trusted_lock_dir=""
   local trusted_stage_dir=""
+  local trusted_qos=""
   local trusted_socket_ifname="" trusted_rdma_devices=""
   local trusted_ib_gid_index="" trusted_rdma_service_level=""
   local trusted_audit_salt=""
@@ -1826,6 +1828,7 @@ cx_lock_canonical_gha_env() {
   if [ "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" = "$$" ]; then
     trusted_lock_dir="${CX_LOCK_DIR:-}"
     trusted_stage_dir="${CX_STAGE_DIR:-}"
+    trusted_qos="${CX_QOS:-}"
     trusted_socket_ifname="${CX_SOCKET_IFNAME:-}"
     trusted_rdma_devices="${CX_RDMA_DEVICES:-}"
     trusted_ib_gid_index="${CX_IB_GID_INDEX:-}"
@@ -1835,7 +1838,7 @@ cx_lock_canonical_gha_env() {
   # The legacy B300 operator row contains a root-owned stage path. B300's
   # compute-visible account home is the canonical source for its private base.
   case "$runner" in b300|gb300) trusted_stage_dir="" ;; esac
-  unset CX_NCCL_HOME CX_MASTER_PORT CX_MORI_KERNEL_TYPE CX_LOCK_DIR CX_STAGE_DIR
+  unset CX_NCCL_HOME CX_MASTER_PORT CX_MORI_KERNEL_TYPE CX_LOCK_DIR CX_STAGE_DIR CX_QOS
   unset CX_STAGE_PARENT_OWNER_OK
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
@@ -1948,6 +1951,7 @@ cx_lock_canonical_gha_env() {
     mi325x:?*|mi355x:?*) export CX_LOCK_DIR="$trusted_lock_dir" ;;
   esac
   CX_STAGE_DIR="$trusted_stage_dir"
+  [ -z "$trusted_qos" ] || export CX_QOS="$trusted_qos"
   [ -z "$trusted_socket_ifname" ] \
     || export CX_SOCKET_IFNAME="$trusted_socket_ifname"
   [ -z "$trusted_rdma_devices" ] \
