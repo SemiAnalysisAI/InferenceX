@@ -2052,7 +2052,7 @@ dsv4-fp4-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
 qwen3.5-bf16-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2071,7 +2071,7 @@ qwen3.5-bf16-b200-sglang:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64 }
 
 qwen3.5-bf16-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B
   model-prefix: qwen3.5
   runner: b200
@@ -2090,7 +2090,7 @@ qwen3.5-bf16-b200-sglang-mtp:
       - { tp: 8, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 qwen3.5-fp8-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2125,7 +2125,7 @@ qwen3.5-fp8-b200-sglang-agentic:
 
 
 qwen3.5-fp4-b200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2146,7 +2146,7 @@ qwen3.5-fp4-b200-sglang:
       - { tp: 2, ep: 1, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b200
@@ -2634,7 +2634,7 @@ glm5-fp4-gb300-dynamo-trt:
           dp-attn: true
 
 qwen3.5-fp8-b200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: b200
@@ -2694,7 +2694,7 @@ qwen3.5-fp8-b300-sglang:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 256 }
 
 qwen3.5-fp4-b300-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2715,7 +2715,7 @@ qwen3.5-fp4-b300-sglang:
       - { tp: 2, ep: 2, conc-start: 4, conc-end: 128 }
 
 qwen3.5-fp4-b300-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
   model-prefix: qwen3.5
   runner: b300
@@ -2778,7 +2778,7 @@ qwen3.5-bf16-b300-sglang-mtp:
       - { tp: 4, ep: 1, conc-start: 4, conc-end: 64, spec-decoding: mtp }
 
 kimik2.5-int4-b200-vllm:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.24.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b200
@@ -2817,7 +2817,7 @@ kimik2.5-int4-b200-vllm-agentic:
 
 
 kimik2.5-int4-b300-vllm:
-  image: vllm/vllm-openai:v0.21.0
+  image: vllm/vllm-openai:v0.24.0
   model: moonshotai/Kimi-K2.5
   model-prefix: kimik2.5
   runner: b300
@@ -3309,7 +3309,7 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
 qwen3.5-fp8-h200-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -3328,7 +3328,7 @@ qwen3.5-fp8-h200-sglang:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 64 }
 
 qwen3.5-fp8-h200-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h200
@@ -10967,7 +10967,7 @@ kimik2.5-int4-h100-vllm:
 
 
 qwen3.5-fp8-h100-sglang:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h100
@@ -10988,7 +10988,7 @@ qwen3.5-fp8-h100-sglang:
       - { tp: 8, ep: 8, conc-start: 16, conc-end: 256 }
 
 qwen3.5-fp8-h100-sglang-mtp:
-  image: lmsysorg/sglang:v0.5.12-cu130
+  image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8
   model-prefix: qwen3.5
   runner: h100

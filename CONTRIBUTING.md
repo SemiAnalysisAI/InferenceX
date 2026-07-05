@@ -10,7 +10,7 @@ Thanks for contributing! PRs are welcome. This page covers the review process ev
 
 ## PR review flow
 
-1. Open your PR and get it through PR validation: add the `full-sweep-enabled` (or `full-sweep-fail-fast`) label so the benchmark sweep runs, and get a green full sweep — including evals — on a commit in your PR.
+1. Open your PR and get it through PR validation: add the `full-sweep-fail-fast` label (strongly recommended — a broken change wastes one job per matrix, not the whole fan-out; use `full-sweep-enabled` only if you need jobs to keep running past a failure) so the benchmark sweep runs, and get a green full sweep — including evals — on a commit in your PR.
 2. Request a review from your respective company's [CODEOWNER](.github/CODEOWNERS).
 3. The CODEOWNER reviews and posts the **PR Review Checklist** sign-off (see below) in their approval comment.
 4. Only after the checklist sign-off is posted should you ping a core maintainer on Slack for final approval.
