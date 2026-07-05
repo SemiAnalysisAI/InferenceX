@@ -4602,4 +4602,5 @@
     - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
     - "High-tpt 2P+1D DEP8 (conc 4096)"
     - "Max-tpt 3P+1D DEP8 (conc 4096); same engine config as high-tpt, one more prefill instance"
+    - "Harden distributed coordination (TORCH_DISTRIBUTED_DEFAULT_TIMEOUT=1800) so the conc4096 decode survives the warmup burst under in-sweep contention"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050
