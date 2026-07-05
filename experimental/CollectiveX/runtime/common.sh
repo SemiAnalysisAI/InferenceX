@@ -767,39 +767,48 @@ if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
   done
 fi
 check_port() {
-  local port_path="$1" state gid link_layer
-  [ -d "$port_path" ] || return 1
+  local port_path="$1" ordinal="$2" state gid link_layer
+  [ -d "$port_path" ] \
+    || { printf '[collectivex-private] rdma-port-%s=missing\n' "$ordinal"; return 1; }
   read -r state _ < "$port_path/state"
-  [ "$state" = 4: ] || return 1
+  [ "$state" = 4: ] \
+    || { printf '[collectivex-private] rdma-port-%s=inactive\n' "$ordinal"; return 1; }
   if [ -n "${CX_IB_GID_INDEX:-}" ]; then
-    [ -r "$port_path/gids/$CX_IB_GID_INDEX" ] || return 1
+    [ -r "$port_path/gids/$CX_IB_GID_INDEX" ] \
+      || { printf '[collectivex-private] rdma-port-%s=gid-missing\n' "$ordinal"; return 1; }
     gid="$(tr -d ':0[:space:]' < "$port_path/gids/$CX_IB_GID_INDEX")"
-    [ -n "$gid" ] || return 1
+    [ -n "$gid" ] \
+      || { printf '[collectivex-private] rdma-port-%s=gid-empty\n' "$ordinal"; return 1; }
   fi
-  [ -r "$port_path/link_layer" ] || return 1
+  [ -r "$port_path/link_layer" ] \
+    || { printf '[collectivex-private] rdma-port-%s=link-layer-missing\n' "$ordinal"; return 1; }
   link_layer="$(< "$port_path/link_layer")"
   case "$link_layer" in
     Ethernet) link_layer=roce ;;
     InfiniBand) link_layer=infiniband ;;
-    *) return 1 ;;
+    *) printf '[collectivex-private] rdma-port-%s=link-layer-invalid\n' "$ordinal"; return 1 ;;
   esac
-  [ -z "${profile:-}" ] || [ "$profile" = "$link_layer" ] || return 1
+  [ -z "${profile:-}" ] || [ "$profile" = "$link_layer" ] \
+    || { printf '[collectivex-private] rdma-port-%s=link-layer-mixed\n' "$ordinal"; return 1; }
   profile="$link_layer"
 }
 profile=""
 IFS=, read -r -a devices <<< "$CX_RDMA_DEVICES"
+ordinal=0
 for selector in "${devices[@]}"; do
+  ordinal=$((ordinal + 1))
   device="${selector%%:*}"
   configured_port=""
   [ "$selector" = "$device" ] || configured_port="${selector#*:}"
   ports="/sys/class/infiniband/$device/ports"
-  [ -d "$ports" ]
+  [ -d "$ports" ] \
+    || { printf '[collectivex-private] rdma-device-%s=missing\n' "$ordinal"; exit 1; }
   if [ -n "$configured_port" ]; then
-    check_port "$ports/$configured_port"
+    check_port "$ports/$configured_port" "$ordinal"
   else
     active=0
     for port_path in "$ports"/*; do
-      if check_port "$port_path"; then
+      if check_port "$port_path" "$ordinal"; then
         active=1
       fi
     done

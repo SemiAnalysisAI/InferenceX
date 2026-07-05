@@ -2449,6 +2449,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("cx_fail_stage execution", distributed)
         self.assertIn('cx_fail_stage execution "$runtime_log"', distributed)
         self.assertIn("precision probe timed out rc=%s limit=%ss", distributed)
+        self.assertIn("rdma-port-%s=inactive", common)
+        self.assertIn("rdma-device-%s=missing", common)
 
     def test_case_failure_diagnostic_precedes_normal_srun_footer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
