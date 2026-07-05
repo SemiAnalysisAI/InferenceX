@@ -3193,7 +3193,9 @@ PY
                 case " $* " in
                   *' rev-parse HEAD '*) printf '%s\n' revision ;;
                   *' rev-parse HEAD^{tree} '*) printf '%s\n' tree ;;
-                  *' status --porcelain '*) [ "$mode" != status-error ] ;;
+                  *' status --porcelain '*)
+                    [ "${GIT_OPTIONAL_LOCKS:-}" = 0 ] && [ "$mode" != status-error ]
+                    ;;
                   *' ls-files --others --ignored '*)
                     [ "$mode" != ignored ] || printf '%s\n' ignored.bin
                     ;;

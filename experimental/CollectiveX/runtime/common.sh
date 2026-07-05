@@ -1312,8 +1312,9 @@ cx_backend_source_is_valid() {
     && [ "$(cx_git_in_tree "$source" rev-parse HEAD 2>/dev/null)" = "$revision" ] \
     && [ "$(cx_git_in_tree "$source" rev-parse 'HEAD^{tree}' 2>/dev/null)" = "$tree" ] \
     || return 1
-  status="$(cx_git_in_tree "$source" status --porcelain --untracked-files=all \
-    --ignore-submodules=none 2>/dev/null)" || return 1
+  status="$(GIT_OPTIONAL_LOCKS=0 cx_git_in_tree "$source" \
+    status --porcelain --untracked-files=all --ignore-submodules=none \
+    2>/dev/null)" || return 1
   [ -z "$status" ] || return 1
   ignored="$(cx_git_in_tree "$source" ls-files --others --ignored --exclude-standard \
     2>/dev/null)" || return 1
