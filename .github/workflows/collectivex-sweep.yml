@@ -461,6 +461,7 @@ jobs:
           COLLECTIVEX_NETWORK_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_NETWORK_CONFIG_V1 }}
           COLLECTIVEX_H100_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_H100_CONFIG_V1 }}
           COLLECTIVEX_B200_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B200_CONFIG_V1 }}
+          COLLECTIVEX_MI355_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI355_CONFIG_V1 }}
           COLLECTIVEX_OPERATOR_AUDIT_SALT: ${{ secrets.COLLECTIVEX_AUDIT_SALT_V1 }}
           COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
         run: |
@@ -490,7 +491,7 @@ jobs:
           base = load("COLLECTIVEX_OPERATOR_CONFIG_CONTENT")
           for overlay_name in (
               "COLLECTIVEX_NETWORK_CONFIG_CONTENT", "COLLECTIVEX_H100_CONFIG_CONTENT",
-              "COLLECTIVEX_B200_CONFIG_CONTENT",
+              "COLLECTIVEX_B200_CONFIG_CONTENT", "COLLECTIVEX_MI355_CONFIG_CONTENT",
           ):
               overlay_raw = os.environ.get(overlay_name, "")
               if not overlay_raw:
@@ -512,6 +513,9 @@ jobs:
                   if set(overlay["runners"]) != {"h100-dgxc"}:
                       raise ValueError("invalid H100 overlay runner")
                   private_fields.add("exclude_nodes")
+              elif overlay_name == "COLLECTIVEX_MI355_CONFIG_CONTENT":
+                  if set(overlay["runners"]) != {"mi355x"}:
+                      raise ValueError("invalid MI355 overlay runner")
               for runner, fields in overlay["runners"].items():
                   if runner not in base.get("runners", {}) or not isinstance(fields, dict) or not fields:
                       raise ValueError("invalid network overlay runner")
