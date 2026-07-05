@@ -1670,6 +1670,17 @@ print(current, end="")
 PY
 }
 
+cx_prepare_runner_shared_stage_base() {
+  local runner_temp="${RUNNER_TEMP:-}" runner_root
+  case "$runner_temp" in
+    /*/_work/_temp) runner_root="${runner_temp%/_work/_temp}" ;;
+    *) cx_die "canonical AMD execution requires a standard shared runner temp" ;;
+  esac
+  [ -n "$runner_root" ] && [ "$runner_root" != "$runner_temp" ] \
+    || cx_die "canonical AMD execution requires a shared runner root"
+  cx_prepare_implicit_stage_base "$runner_root"
+}
+
 cx_lock_canonical_gha_env() {
   local runner="$1" expected_nodes expected_gpn expected_world trusted_lock_dir=""
   local trusted_stage_dir=""
@@ -1742,10 +1753,11 @@ cx_lock_canonical_gha_env() {
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
       mi325x|mi355x)
-        # AMD Slurm jobs already consume the configured squash directory from
-        # compute-visible shared storage. Use it as the isolated staging base
-        # when the private row does not provide a separate location.
-        trusted_stage_dir="$CX_SQUASH_DIR"
+        # AMD self-hosted runners and compute nodes share the runner filesystem,
+        # while the image cache may be root-owned. Derive a runner-owned base
+        # outside _work instead of weakening stage ownership validation.
+        trusted_stage_dir="$(cx_prepare_runner_shared_stage_base)" \
+          || cx_die "canonical AMD execution cannot create an isolated shared stage directory"
         ;;
       *) cx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
     esac

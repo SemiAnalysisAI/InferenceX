@@ -2516,10 +2516,11 @@ class SamplingContractTest(unittest.TestCase):
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_SHARD_SKU=mi355x CX_NODES=1 CX_GPUS_PER_NODE=8
           export CX_SQUASH_DIR=/validated/amd-shared
+          export RUNNER_TEMP="$TEST_SHARED_PARENT/_work/_temp"
           export CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
           unset CX_STAGE_DIR
           cx_lock_canonical_gha_env mi355x
-          test "$CX_STAGE_DIR" = /validated/amd-shared
+          test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
 
           unset COLLECTIVEX_CANONICAL_GHA
           unset COLLECTIVEX_OPERATOR_CONFIG_LOADED

@@ -158,6 +158,11 @@ allocated node. Jobs create only a marked mode-0700 execution child, prove cross
 visibility, and remove that exact child after allocation teardown; they never mount the runner
 checkout or create a stage beneath image storage on AMD.
 
+When an AMD operator row omits `stage_dir`, the self-hosted runner derives a private base beside its
+standard `_work` directory on the shared runner filesystem. The root-owned squash cache is never
+used as a repository stage. The derived parent must be runner-owned, non-symlinked, and not writable
+by group or world before any benchmark source is copied.
+
 H200, B200, and B300 runners may omit `stage_dir`. Their isolated execution child is then created
 under a runner-owned mode-0700 base in the validated operating-system account home, independent of
 the workflow's temporary `HOME`. A symlinked account-home entry is resolved once to its canonical,

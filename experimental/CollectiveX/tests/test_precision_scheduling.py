@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 28)
+        self.assertEqual(len(targets), 21)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -78,7 +78,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(backend="mori", only_sku="b200-dgxc")
         ep8 = probe_precision.workflow_plan(
-            backend="deepep", only_sku="b300", max_nodes=1,
+            backend="mori", only_sku="mi355x", max_nodes=1,
         )
         self.assertTrue(ep8["include"])
         self.assertEqual({row["ep"] for row in ep8["include"]}, {8})
@@ -222,13 +222,13 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 66
+            len(targets) - len(capability.provisional_precision_targets()), 73
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 44
+            sum(item["disposition"] == "supported" for item in targets), 48
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 22
+            sum(item["disposition"] == "unsupported" for item in targets), 25
         )
         keys = {
             (
