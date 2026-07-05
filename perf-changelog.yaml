@@ -4477,6 +4477,61 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2054
 
 - config-keys:
+    - dsv4-fp4-mi355x-vllm-mtp
+  description:
+    - "Bump DeepSeek-V4-Pro FP4 MI355X single-node vLLM MTP image from vllm/vllm-openai-rocm:v0.22.0 to the latest nightly vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa."
+    - "The nightly enables two-stage attention kernels (split-KV decode), which reduce decode attention latency across all concurrency levels."
+    - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
+    - "Switch the MoE backend from triton_unfused to AITER MoE (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter) for the FP4 experts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1981
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2060
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2058
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Update vLLM image from vllm/vllm-openai:v0.22.0 to vllm/vllm-openai:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2073
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2056
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260528 to lmsysorg/sglang:v0.5.14-rocm720-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2067
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from vllm/vllm-openai-rocm:v0.22.0 to vllm/vllm-openai-rocm:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2074
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from vllm/vllm-openai-rocm:nightly-b8336c3c7c298e0878f22a7bf70f4e295b2f4e01 to vllm/vllm-openai-rocm:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2077
+
+- config-keys:
     - gptoss-fp4-mi355x-vllm
   description:
     - "Bump image to vllm/vllm-openai-rocm:nightly-68ee8300a047db78fb52bac477daaaac7be11216 (vLLM 0.23.1rc1, aiter 0.1.16.post2, triton 3.6.0)"
