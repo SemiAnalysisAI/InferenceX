@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import ast
 import copy
+from collections import Counter
 import hashlib
 import io
 import json
@@ -208,7 +209,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (58, 608, 364, 244, 1600, 940, 660),
+            (58, 656, 404, 252, 1648, 980, 668),
         )
         expected_topologies = {}
         for sku, product in (
@@ -260,23 +261,29 @@ class SamplingContractTest(unittest.TestCase):
             expected_topologies,
         )
         self.assertEqual(
-            {shard["n"] for shard in matrix["include"]}, {6, 7}
-        )
-        self.assertEqual(
-            sum(shard["n"] == 7 for shard in matrix["include"]), 16
+            Counter(shard["n"] for shard in matrix["include"]),
+            Counter({6: 42, 7: 2, 8: 1, 10: 13}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
             if item["case"]["mode"] == "low-latency"
         ]
-        self.assertEqual(len(ll_cases), 32)
+        self.assertEqual(len(ll_cases), 80)
         self.assertTrue(all(
-            item["case"]["suite"] == "ep-low-latency-v1"
-            and item["case"]["backend"] in {"deepep", "uccl"}
+            item["case"]["backend"] in {"deepep", "uccl"}
             and item["case"]["phase"] == "decode"
             and item["case"]["routing"] == "uniform"
             and not item["case"]["eplb"]
-            and item["case"]["ladder"] == "1 2 4 8 16 32 64 128"
+            and (
+                (
+                    item["case"]["suite"] == "ep-low-latency-v1"
+                    and item["case"]["ladder"] == "1 2 4 8 16 32 64 128"
+                )
+                or (
+                    item["case"]["suite"] == "ep-precision-low-latency-v1"
+                    and item["case"]["ladder"] == "128"
+                )
+            )
             for item in ll_cases
         ))
         for shard in matrix["include"]:
@@ -2193,7 +2200,11 @@ class SamplingContractTest(unittest.TestCase):
             out_dir.mkdir()
             existing = contracts.make_terminal_document(
                 allocation_factors=allocation, attempt_ordinal=1, case=first,
-                case_factors={"case": first, "profile": identity.V1_CASE_PROFILE, "sku": shard["sku"]},
+                case_factors={
+                    "case": first,
+                    "profile": identity.profile_for_case(first),
+                    "sku": shard["sku"],
+                },
                 control_sha256=hashlib.sha256(control_path.read_bytes()).hexdigest(),
                 failure_mode="setup", generated_at="2026-07-04T00:00:00Z", git_run=git_run,
                 reason="launcher-setup-failed", return_code=7, source="runtime-emitter",

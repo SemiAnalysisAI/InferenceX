@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 12)
+        self.assertEqual(len(targets), 6)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -53,10 +53,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
 
     def test_precision_probe_workflow_plan_binds_exact_controls(self) -> None:
-        plan = probe_precision.workflow_plan(backend="deepep", only_sku="b300")
+        plan = probe_precision.workflow_plan(backend="mori", only_sku="mi355x")
         self.assertTrue(plan["include"])
         self.assertTrue(all(
-            row["backend"] == "deepep" and row["sku"] == "b300"
+            row["backend"] == "mori" and row["sku"] == "mi355x"
             for row in plan["include"]
         ))
         row = plan["include"][0]
@@ -228,15 +228,15 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 82
+            len(targets) - len(capability.provisional_precision_targets()), 88
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 59
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 23
+            sum(item["disposition"] == "unsupported" for item in targets), 29
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 12)
+        self.assertEqual(len(capability.provisional_precision_targets()), 6)
         keys = {
             (
                 item["precision_profile"],
@@ -294,7 +294,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(h100_ep16, "supported")
         self.assertEqual(reason, "ok")
 
-    def test_split_suites_are_provisional_and_do_not_duplicate_bf16(self) -> None:
+    def test_split_suites_track_provisional_state_and_do_not_duplicate_bf16(self) -> None:
         suites = sweep_matrix._load("suites.yaml")
         workloads = sweep_matrix._load("workloads.yaml")
         sweep_matrix.validate_config_documents(suites, workloads)
@@ -318,7 +318,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             ("low-latency", ["decode"], [128]),
         )
         self.assertTrue(normal["provisional"])
-        self.assertTrue(low_latency["provisional"])
+        self.assertFalse(low_latency["provisional"])
         self.assertEqual(
             normal["required_publication"], "comparable-experimental"
         )
@@ -332,7 +332,12 @@ class PrecisionSchedulingTest(unittest.TestCase):
         matrix = sweep_matrix.validate_matrix_document(
             sweep_matrix.resolve_matrix(backends="all")
         )
-        self.assertFalse(any("precision_profile" in item["case"] for item in matrix["requested_cases"]))
+        scheduled_profiles = {
+            item["case"].get("precision_profile")
+            for item in matrix["requested_cases"]
+            if "precision_profile" in item["case"]
+        }
+        self.assertEqual(scheduled_profiles, set(low_latency["precision_profiles"]))
         with self.assertRaisesRegex(SystemExit, "provisional precision suites"):
             sweep_matrix.resolve_matrix(
                 suites="ep-precision-normal-v1", backends="all"

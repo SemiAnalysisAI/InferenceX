@@ -304,6 +304,19 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
 
 PRECISION_CELL_OVERRIDES: dict[tuple[str, str, str, int, str], dict[str, str]] = {}
 
+for _profile, _backend, _mode in (
+    (_NORMAL_E4M3FN_PROFILE, "deepep", "normal"),
+    (_NORMAL_E4M3FN_PROFILE, "deepep-v2", "normal"),
+    (_NORMAL_E4M3FN_PROFILE, "deepep-hybrid", "normal"),
+    (_LL_FP8_PROFILE, "deepep", "low-latency"),
+    (_LL_LOGFMT_PROFILE, "deepep", "low-latency"),
+    (_LL_FP8_LOGFMT_PROFILE, "deepep", "low-latency"),
+):
+    PRECISION_CELL_OVERRIDES[(_profile, _backend, "b300", 16, _mode)] = {
+        "disposition": "unsupported",
+        "basis": "v1-publication-fabric-unavailable",
+    }
+
 _VALIDATED_NATIVE_PROBE_CELLS = (
     # run, SKU, EP, backend, mode, profile, disposition, result
     ("28737315879", "b200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
