@@ -10,7 +10,7 @@
 
 ## PR 审阅流程
 
-1. 打开你的 PR 并通过 PR 验证：添加 `full-sweep-enabled`（或 `full-sweep-fail-fast`）标签以运行基准测试 sweep，并在 PR 的某个 commit 上获得全绿的完整 sweep（包括 evals）。
+1. 打开你的 PR 并通过 PR 验证：添加 `full-sweep-fail-fast` 标签（强烈推荐 — 变更有问题时每个矩阵最多浪费一个任务，而不是整个扇出；仅当需要任务在失败后继续运行时才使用 `full-sweep-enabled`）以运行基准测试 sweep，并在 PR 的某个 commit 上获得全绿的完整 sweep（包括 evals）。
 2. 向你所在公司的 [CODEOWNER](.github/CODEOWNERS) 请求审阅。
 3. CODEOWNER 审阅后在批准评论中填写 **PR Review Checklist** 签署（见下文）。
 4. 只有在清单签署发布之后，才应在 Slack 上联系核心维护者进行最终批准。
