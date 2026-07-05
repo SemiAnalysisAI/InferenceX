@@ -2289,7 +2289,8 @@ class SamplingContractTest(unittest.TestCase):
           export CX_SHARD_SKU=b200-dgxc CX_NODES=1 CX_GPUS_PER_NODE=8
           unset CX_STAGE_DIR
           cx_lock_canonical_gha_env b200-dgxc
-          test -z "$CX_STAGE_DIR"
+          test "$CX_STAGE_DIR" = "$HOME/.cache/inferencex/collectivex-stage"
+          test "$(stat -c '%a' "$CX_STAGE_DIR" 2>/dev/null || stat -f '%Lp' "$CX_STAGE_DIR")" = 700
 
           export CX_STAGE_DIR=/shared/gb-stage
           export CX_SHARD_SKU=gb300 CX_NODES=2 CX_GPUS_PER_NODE=4
@@ -2319,15 +2320,20 @@ class SamplingContractTest(unittest.TestCase):
           cx_lock_canonical_gha_env mi355x
           test "$CX_IMAGE:$CX_IMAGE_DIGEST:$CX_NGPUS:$CX_MORI_KERNEL_TYPE" = manual:manual:3:manual
         '''
-        with tempfile.TemporaryDirectory(dir=Path.home()) as workspace:
-            Path(workspace).chmod(0o720)
+        with tempfile.TemporaryDirectory(dir=Path.home()) as temporary:
+            root = Path(temporary)
+            home = root / "home"
+            workspace = root / "workspace"
+            home.mkdir(mode=0o700)
+            workspace.mkdir(mode=0o720)
             subprocess.run(
                 ["bash", "-c", command, "_", str(common)],
                 check=True,
                 env={
                     **os.environ,
+                    "HOME": str(home),
                     "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
-                    "GITHUB_WORKSPACE": workspace,
+                    "GITHUB_WORKSPACE": str(workspace),
                 },
             )
             self.assertEqual(list(Path(workspace).iterdir()), [])
@@ -2440,8 +2446,7 @@ class SamplingContractTest(unittest.TestCase):
             squash = root / "squash"
             source = repo / "experimental" / "CollectiveX"
             source.mkdir(parents=True)
-            squash.mkdir(mode=0o1777)
-            squash.chmod(0o1777)
+            squash.mkdir(mode=0o700)
             (source / "public.py").write_text("public\n")
             (source / "private-infra.md").write_text("private\n")
             command = r'''

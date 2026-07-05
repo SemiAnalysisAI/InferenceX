@@ -1430,6 +1430,46 @@ cx_materialize_backend_source() {
   return 0
 }
 
+cx_prepare_implicit_stage_base() {
+  python3 - "${HOME:-}" <<'PY'
+import os
+from pathlib import Path
+import stat
+import sys
+
+home = Path(sys.argv[1])
+try:
+    if not home.is_absolute() or Path(os.path.realpath(home)) != home:
+        raise OSError
+    metadata = os.stat(home, follow_symlinks=False)
+    if (
+        not stat.S_ISDIR(metadata.st_mode)
+        or metadata.st_uid != os.getuid()
+        or stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
+    ):
+        raise OSError
+    current = home
+    for component in (".cache", "inferencex", "collectivex-stage"):
+        current /= component
+        try:
+            os.mkdir(current, mode=0o700)
+        except FileExistsError:
+            pass
+        metadata = os.stat(current, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != os.getuid()
+            or Path(os.path.realpath(current)) != current
+            or stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
+        ):
+            raise OSError
+    os.chmod(current, 0o700)
+except (OSError, ValueError):
+    raise SystemExit(1)
+print(current, end="")
+PY
+}
+
 cx_lock_canonical_gha_env() {
   local runner="$1" expected_nodes expected_gpn expected_world trusted_lock_dir=""
   local trusted_stage_dir=""
@@ -1478,7 +1518,10 @@ cx_lock_canonical_gha_env() {
     || cx_die "canonical CollectiveX execution requires shared container storage"
   if [ -z "$trusted_stage_dir" ]; then
     case "$runner" in
-      h100-dgxc|h200-dgxc|b200-dgxc) ;;
+      h100-dgxc|h200-dgxc|b200-dgxc)
+        trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
+          || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
+        ;;
       *) cx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
     esac
   fi
@@ -1793,7 +1836,7 @@ BASH
 # EXIT trap can remove an interrupted partial stage. The configured base must
 # already exist on compute-visible storage and must not traverse symlinks.
 cx_stage_path() {
-  local repo_root="$1" stage_base="${2:-}" tag safe_tag stage_path stage_fallback=0
+  local repo_root="$1" stage_base="${2:-}" tag safe_tag stage_path
   tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
   [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
     || cx_die "invalid staging execution identity"
@@ -1803,17 +1846,16 @@ cx_stage_path() {
       || cx_die "CollectiveX staging requires CX_STAGE_DIR or CX_SQUASH_DIR"
     stage_base="$CX_SQUASH_DIR"
     stage_path="${stage_base%/}/.collectivex-stage-$safe_tag"
-    stage_fallback=1
   else
     stage_path="${stage_base%/}/job_$safe_tag"
   fi
   python3 - "$repo_root" "$stage_base" "$stage_path" \
-    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" "$stage_fallback" <<'PY'
+    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" <<'PY'
 import os
 import stat
 import sys
 
-repo, base, child, job_root, workspace, fallback = sys.argv[1:]
+repo, base, child, job_root, workspace = sys.argv[1:]
 def reject(reason):
     print(f"[collectivex] FATAL: stage-base-validation={reason}", file=sys.stderr)
     raise SystemExit(1)
@@ -1844,12 +1886,9 @@ try:
         reject("not-directory")
     if metadata.st_uid != os.getuid():
         reject("owner")
-    if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP and fallback != "1":
+    if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
         reject("group-writable")
-    if (
-        stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH
-        and not (fallback == "1" and metadata.st_mode & stat.S_ISVTX)
-    ):
+    if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
         reject("world-writable")
     if not os.access(base, os.W_OK | os.X_OK):
         reject("access")
