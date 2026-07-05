@@ -352,6 +352,8 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
       for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
                             (_LL_LOGFMT_PROFILE, "low-latency"), (_LL_FP8_LOGFMT_PROFILE, "low-latency"))),
     ("28738445591", "gb300", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
+    ("28738738793", "b300", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28738738793", "b300", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
 )
 PRECISION_CELL_OVERRIDES.update({
     (profile, backend, sku, ep, mode): {
