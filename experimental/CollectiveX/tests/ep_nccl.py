@@ -74,7 +74,18 @@ class NCCLBackend:
                 r"(?:,[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?)*",
                 hcas,
             ):
-                raise RuntimeError("scale-out collective HCA allowlist is invalid")
+                entries = hcas.removeprefix("=").split(",") if hcas else []
+                shaped = all(
+                    re.fullmatch(
+                        r"[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?", entry
+                    )
+                    for entry in entries
+                )
+                raise RuntimeError(
+                    "scale-out collective HCA allowlist is invalid "
+                    f"(present={bool(hcas)}, exact={hcas.startswith('=')}, "
+                    f"entries={len(entries)}, shaped={shaped})"
+                )
         self.kernel_generation = contracts.collective_kernel_generation(_library)
         self.backend_provenance = {
             "backend": f"{_library}-all2all",
