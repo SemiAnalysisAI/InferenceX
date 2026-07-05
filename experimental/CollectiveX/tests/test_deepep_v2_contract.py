@@ -2061,9 +2061,9 @@ class DeepEPV2ContractTests(unittest.TestCase):
             del missing_rdma["runners"]["mi355x"]["rdma_devices"]
             missing_amd_stage = json.loads(json.dumps(document))
             del missing_amd_stage["runners"]["mi325x"]["stage_dir"]
-            missing_nvidia_stage = json.loads(json.dumps(document))
-            del missing_nvidia_stage["runners"]["h100-dgxc"]["stage_dir"]
-            for invalid in (rejected, boolean_version, missing_nvidia_stage):
+            missing_nvidia_account = json.loads(json.dumps(document))
+            del missing_nvidia_account["runners"]["h100-dgxc"]["account"]
+            for invalid in (rejected, boolean_version, missing_nvidia_account):
                 config.write_text(json.dumps(invalid))
                 config.chmod(0o600)
                 result = subprocess.run(

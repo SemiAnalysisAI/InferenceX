@@ -23,15 +23,20 @@ It does not predict serving throughput without a separate correlation study.
 
 ## Implemented Matrix
 
-The implemented workload is `deepseek-v3-v1`: hidden 7168, top-k 8, 256 routed experts, BF16 dispatch
-and combine, packed placement, and backend-tuned resources. Each case explicitly selects normal
-`layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
+The implemented workload is `deepseek-v3-v1`: hidden 7168, top-k 8, 256 routed experts, packed
+placement, and one pinned fixed resource profile per backend/topology/precision. The BF16/BF16
+control is portable; endpoint precision suites schedule only allowlisted native communication-format
+profiles after real-hardware probes resolve their capability cells. Each case explicitly selects
+normal `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
 
 - `ep-core-v1`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
 - `ep-routing-v1`: Zipf with EPLB off/on; decode T=128; prefill T=512.
 - `ep-low-latency-v1`: DeepEP V1/UCCL native low-latency APIs; uniform decode T=1..128 powers of
   two; the capability contract rejects every other backend instead of fabricating a low-latency path.
-- Implemented baseline surface: 608 requested cases / 1,600 token points; 364 runnable cases / 940
+- `ep-precision-normal-v1`: nonbaseline native dispatch/combine profiles at decode T=128 and prefill
+  T=512; BF16/BF16 endpoint controls are referenced rather than duplicated.
+- `ep-precision-low-latency-v1`: nonbaseline native low-latency profiles at decode T=128.
+- BF16 planning baseline: 608 requested cases / 1,600 token points; 364 runnable cases / 940
   points in
   58 executable workflow shards/allocation cells; 244 unsupported cases / 660 points.
 
@@ -181,9 +186,9 @@ frozen percentile, rank-reduction, conditioning, warmup, and correctness semanti
 
 A controlled comparison declares one contrast:
 
-- `library`: backend implementation and its tuned resource profile may differ; the realized system,
+- `library`: backend implementation and its pinned fixed resource profile may differ; the realized system,
   workload, EP, resource policy, source, and measurement remain matched;
-- `chip`: a controlled platform contrast. The full realized system/topology and tuned resource
+- `chip`: a controlled platform contrast. The full realized system/topology and pinned resource
   profile may differ while workload, EP, placement class, resource policy, backend lineage, source,
   and measurement remain matched. It is not a silicon-only comparison;
 - `system`: all hardware/backend differences stay visible while workload, EP, and measurement match;
@@ -247,7 +252,7 @@ $COLLECTIVEX_STORE_ROOT/
   private/bundles/<sha256>/  # immutable source archives, native results/samples, matrix, checksums
   private/quarantine/        # rejected attempts plus machine-readable reasons
   public/datasets/<sha256>/  # immutable sanitized frontend datasets
-  public/channels/           # small atomic pointers: latest-attempt, dev-latest
+  public/channels/           # promoted dev-latest pointer; never served from persistent storage
   locks/
 ```
 
@@ -278,13 +283,14 @@ Publication is fail-closed:
 6. build and validate the sanitized content-addressed dataset, fsync, then atomically rename it;
 7. atomically replace `dev-latest.json` only when every promotion gate passes.
 
-Rejected attempts may update workspace `latest-attempt` but never `dev-latest`. The workspace is
-destroyed with the publication runner and is never attached to the frontend. No artifact is emitted
-unless all three selected bundles advance `dev-latest`.
+Rejected attempts remain only in the disposable private workspace and short-lived source artifacts;
+they never advance `dev-latest` or enter a production channel. The workspace is destroyed with the
+publication runner and is never attached to the frontend. No publication artifact is emitted unless
+all three selected bundles advance `dev-latest`.
 
 `publisher.py ingest` accepts the exact matrix plus one `--artifact` directory or ZIP per GitHub
 artifact. `promote` accepts explicit immutable bundle IDs. Default `verify` requires
-`latest-attempt`; it also verifies `dev-latest` when present, while an explicit
+the private workspace; it also verifies `dev-latest` when present, while an explicit
 `--channel dev-latest` requires it. The workflow copies only the verified sanitized dataset to a
 one-record `collectivex_public_v1_<sha256>.ndjson` artifact. Raw artifacts and private workspace
 content are never bundled into the application.

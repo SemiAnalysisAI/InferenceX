@@ -169,9 +169,9 @@ NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
 }
 REQUIRED = {
-    "h100-dgxc": {"partition", "account", "squash_dir", "stage_dir"},
-    "h200-dgxc": {"partition", "squash_dir", "stage_dir"},
-    "b200-dgxc": {"partition", "account", "squash_dir", "stage_dir"},
+    "h100-dgxc": {"partition", "account", "squash_dir"},
+    "h200-dgxc": {"partition", "squash_dir"},
+    "b200-dgxc": {"partition", "account", "squash_dir"},
     "b300": {
         "partition", "account", "squash_dir", "stage_dir",
     },
@@ -1795,10 +1795,8 @@ cx_stage_path() {
     || cx_die "invalid staging execution identity"
   safe_tag="$(printf '%s' "$tag" | tr -c 'A-Za-z0-9._-' '_')"
   if [ -z "$stage_base" ] || [ "$stage_base" = "$repo_root" ]; then
-    [ "${COLLECTIVEX_CANONICAL_GHA:-0}" != 1 ] \
-      || cx_die "canonical CollectiveX execution requires compute-visible staging"
     [ -n "${CX_SQUASH_DIR:-}" ] \
-      || cx_die "manual CollectiveX staging requires CX_SQUASH_DIR"
+      || cx_die "CollectiveX staging requires CX_STAGE_DIR or CX_SQUASH_DIR"
     stage_base="$CX_SQUASH_DIR"
     stage_path="${stage_base%/}/.collectivex-stage-$safe_tag"
   else

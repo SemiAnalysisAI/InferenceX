@@ -12,14 +12,15 @@ combine, and paired roundtrip latency across EP libraries and accelerator system
 > Publication hold: historical schema 3-5 data is diagnostic. No current dataset is approved for
 > rankings, recommendations, or regression baselines.
 
-> Development status: the sections below document the implemented BF16 pre-V1 baseline, not the
-> final V1 qualification contract. Precision profiles, full point-level publication, and branch-only
-> publication are under active implementation; case counts and digests are not frozen.
+> Development status: the V1 precision, point-level publication, branch-only delivery, and frontend
+> contracts are implemented. Native precision capability probes are still resolving provisional
+> cells, so the BF16 counts below remain a planning baseline and V1 counts/digests are not frozen.
 
 ## Implemented Pre-V1 Execution Profile
 
-Every scheduled case is BF16 with backend-tuned resources and packed placement. The explicit mode
-selects one of two contracts:
+The BF16/BF16 control and endpoint precision suites use packed placement and one pinned
+`fixed-profile` resource configuration per backend/topology/precision. V1 performs no tuning sweep.
+The explicit mode selects one of two contracts:
 
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Uniform core coverage and one Zipf sensitivity remain; EPLB is measured only as the Zipf
@@ -33,8 +34,8 @@ warmups before each measured component at every trial/point. Roundtrip is measur
 iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the
 headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
 
-The implemented baseline matrix covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X.
-It requests
+The BF16 planning baseline covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X. It
+requests
 608 cases / 1,600 token points: 364 runnable cases / 940 points, emitted as 58 executable workflow
 shards/allocation cells, plus 244 explicit unsupported cases / 660 points. `sweep_matrix.py`
 materializes every token ladder and rejects missing, stale, malformed, or altered shard controls.
@@ -88,9 +89,10 @@ raw GitHub artifacts. Runs default to `release_tag=unversioned` and are diagnost
 must explicitly select `release_tag=v1`; setup then requires the locked full-matrix digest and emits
 a run/attempt/source-bound `cxrelease-v1-*` marker. Partial and filtered runs cannot receive it.
 
-The main-registered `.github/workflows/collectivex-sweep.yml` provides `sweep`, `publish-v1`, and
-`refresh-v1` operations, so its branch revision can be dispatched with `--ref collectivex` without
-a standalone branch-only workflow. Publication accepts exactly three successful first-attempt tagged
+The main-registered `.github/workflows/collectivex-sweep.yml` provides `probe-precision`, `sweep`,
+`publish-v1`, and `refresh-v1` operations, so its branch revision can be dispatched with
+`--ref collectivex` without a standalone branch-only workflow. Probes are unversioned, bounded,
+native-runtime checks and cannot publish. Publication accepts exactly three successful first-attempt tagged
 sweep run IDs from one source SHA, revalidates their metadata and release markers, and runs
 `publisher.py` in a disposable runner-local workspace. Refresh revalidates and reuploads only the
 exact content-addressed sanitized dataset. Raw artifacts and the private publisher workspace are
