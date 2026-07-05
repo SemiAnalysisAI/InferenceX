@@ -418,6 +418,16 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertTrue(direct_cases)
         self.assertEqual({item["case"]["ep"] for item in direct_cases}, {8})
 
+    def test_probe_runtime_diagnostics_are_closed_stage_codes(self) -> None:
+        probe = (ROOT / "tests" / "probe_precision.py").read_text()
+        for stage in (
+            "distributed-init", "runtime-context", "construction-consensus",
+            "operation-consensus", "evidence-aggregation",
+        ):
+            self.assertIn(f'"{stage}"', probe)
+        self.assertIn("precision-probe-diagnostic={diagnostic_stage}-exception", probe)
+        self.assertNotIn("precision-probe-diagnostic={exc}", probe)
+
 
 if __name__ == "__main__":
     unittest.main()

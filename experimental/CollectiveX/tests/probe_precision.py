@@ -1034,8 +1034,8 @@ def run_target(target: dict[str, Any], output: Path) -> int:
     os.environ.setdefault("MASTER_PORT", "12355")
     torch.cuda.set_device(local_rank)
     device = torch.device(f"cuda:{local_rank}")
-    _init_distributed(torch, dist, target["backend"], device, rank, world_size)
     backend = None
+    diagnostic_stage = "distributed-init"
     topology = capability.topology_for(target["sku"], target["ep"])
     topology_record = _topology_record(topology, False) if topology is not None else {
         "gpus_per_node": 1, "nodes": target["ep"], "placement_valid": False,
@@ -1044,6 +1044,8 @@ def run_target(target: dict[str, Any], output: Path) -> int:
         "topology_class": "unknown", "transport": "unknown", "world_size": target["ep"],
     }
     try:
+        _init_distributed(torch, dist, target["backend"], device, rank, world_size)
+        diagnostic_stage = "runtime-context"
         topology, placement, fingerprint = _runtime_context(
             torch, dist, target, device, local_rank
         )
@@ -1057,6 +1059,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
         except Exception:
             construction = {"ok": False, "reason": "backend-construction-failed"}
         gathered: list[Any] = [None] * world_size
+        diagnostic_stage = "construction-consensus"
         dist.all_gather_object(gathered, construction)
         if not all(record.get("ok") is True for record in gathered):
             manifest = build_manifest(
@@ -1073,6 +1076,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
             except Exception:
                 local = {"ok": False, "reason": "native-operation-failed"}
             gathered = [None] * world_size
+            diagnostic_stage = "operation-consensus"
             dist.all_gather_object(gathered, local)
             if not all(record.get("ok") is True for record in gathered):
                 reasons = {record.get("reason") for record in gathered}
@@ -1082,6 +1086,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
                     reason=reason, runtime_executed=True, evidence=None,
                 )
             else:
+                diagnostic_stage = "evidence-aggregation"
                 evidence = _aggregate_local([record["evidence"] for record in gathered])
                 manifest = build_manifest(
                     target=target, topology=topology_record, disposition="supported",
@@ -1092,6 +1097,12 @@ def run_target(target: dict[str, Any], output: Path) -> int:
             target=target, topology=topology_record, disposition="unsupported",
             reason=exc.reason, runtime_executed=False, evidence=None,
         )
+    except Exception:
+        print(
+            f"[collectivex] precision-probe-diagnostic={diagnostic_stage}-exception",
+            file=sys.stderr,
+        )
+        raise
     if rank == 0:
         _write_atomic(output, manifest)
         print(json.dumps(manifest, allow_nan=False, sort_keys=True, separators=(",", ":")))
