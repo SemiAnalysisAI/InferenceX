@@ -67,7 +67,7 @@ on:
         type: string
         default: ''
 concurrency:
-  group: cx-${{ inputs.operation }}-${{ github.ref }}-${{ inputs.release_tag }}-${{ inputs.backend }}-${{ inputs.only_sku }}
+  group: cx-${{ inputs.operation }}-${{ github.ref }}-${{ inputs.release_tag }}-${{ inputs.backend }}-${{ inputs.only_sku }}-${{ inputs.probe_id }}
   cancel-in-progress: false
 
 jobs:

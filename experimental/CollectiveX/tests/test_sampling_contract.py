@@ -1486,6 +1486,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertFalse((workflows / "collectivex-publish.yml").exists())
 
         self.assertIn("options: [sweep, probe-precision, publish-v1, refresh-v1]", sweep)
+        self.assertIn("${{ inputs.only_sku }}-${{ inputs.probe_id }}", sweep)
+        self.assertIn("cancel-in-progress: false", sweep)
         self.assertIn("collectivex.precision-probe-plan.v1", (ROOT / "tests" / "probe_precision.py").read_text())
         self.assertIn("cxprecision-probes-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
         self.assertIn("--validate-bundle", sweep)
