@@ -2539,6 +2539,26 @@ class SamplingContractTest(unittest.TestCase):
                 "diagnostic=backend-construction-accelerator-memory", result.stderr
             )
 
+    def test_precision_probe_unknown_failure_reports_only_the_last_closed_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "runtime.log"
+            log.write_text(
+                "[collectivex] precision-probe-stage=native-operation\n"
+                "private backend failure details\n"
+            )
+            result = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; cx_fail_stage execution "$2"',
+                    "_", str(ROOT / "runtime" / "common.sh"), str(log),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("diagnostic=native-operation-failed", result.stderr)
+            self.assertNotIn("private backend", result.stderr)
+
     def test_private_runtime_failure_signatures_override_case_footer(self) -> None:
         signatures = {
             "DeepEP V2 no-GIN run is outside one realized LSA domain":
