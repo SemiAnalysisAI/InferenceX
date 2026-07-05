@@ -1208,6 +1208,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("Install pinned backend source seed", workflow)
         self.assertIn("CX_BACKEND_SOURCE_SEED_ROOT", workflow)
         self.assertIn("steps.gen.outputs.source_backends", workflow)
+        self.assertIn("secrets.COLLECTIVEX_NETWORK_CONFIG_V1", workflow)
+        self.assertIn("network_fields = {", workflow)
+        self.assertIn("set(fields) - network_fields", workflow)
+        self.assertIn("COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1", workflow)
         prepare_start = workflow.index("- name: Prepare pinned backend source archive")
         source_archive_step = workflow[
             prepare_start:workflow.index("- uses: actions/upload-artifact", prepare_start)

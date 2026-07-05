@@ -451,11 +451,61 @@ jobs:
         id: sweep_shard
         env:
           COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
+          COLLECTIVEX_NETWORK_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_NETWORK_CONFIG_V1 }}
           COLLECTIVEX_OPERATOR_AUDIT_SALT: ${{ secrets.COLLECTIVEX_AUDIT_SALT_V1 }}
           COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
         run: |
           set -euo pipefail
           umask 077
+          operator_config="$CX_JOB_ROOT/operator-config.json"
+          python3 - "$operator_config" <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          def pairs(items):
+              result = {}
+              for key, value in items:
+                  if key in result:
+                      raise ValueError("duplicate configuration key")
+                  result[key] = value
+              return result
+
+          def load(name):
+              return json.loads(
+                  os.environ[name], object_pairs_hook=pairs,
+                  parse_constant=lambda _: (_ for _ in ()).throw(ValueError()),
+              )
+
+          base = load("COLLECTIVEX_OPERATOR_CONFIG_CONTENT")
+          overlay_raw = os.environ.get("COLLECTIVEX_NETWORK_CONFIG_CONTENT", "")
+          if overlay_raw:
+              overlay = load("COLLECTIVEX_NETWORK_CONFIG_CONTENT")
+              network_fields = {
+                  "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
+              }
+              if set(overlay) != {"schema_version", "runners"} or overlay["schema_version"] != 1:
+                  raise ValueError("invalid network overlay envelope")
+              if not isinstance(overlay["runners"], dict) or not overlay["runners"]:
+                  raise ValueError("invalid network overlay runners")
+              for runner, fields in overlay["runners"].items():
+                  if runner not in base.get("runners", {}) or not isinstance(fields, dict) or not fields:
+                      raise ValueError("invalid network overlay runner")
+                  if set(fields) - network_fields:
+                      raise ValueError("network overlay contains a non-network field")
+                  base["runners"][runner].update(fields)
+          payload = json.dumps(base, sort_keys=True, separators=(",", ":")) + "\n"
+          if len(payload.encode()) > 65536:
+              raise ValueError("merged operator configuration is too large")
+          path = Path(sys.argv[1])
+          descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+              stream.write(payload)
+          PY
+          unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
+          export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
+          export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
           : > "$CX_JOB_ROOT/cleanup-unsafe"
           rm -f -- "$CX_JOB_ROOT/cleanup-safe"
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
