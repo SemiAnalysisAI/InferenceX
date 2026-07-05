@@ -57,6 +57,9 @@ cx_fail_stage() {
       diagnostic="nccl-device-api"
     elif grep -aEqi 'NVCC (PTX )?compilation failed|cuobjdump failed|invalid device (kernel )?image|no kernel image is available' "$log_path"; then
       diagnostic="jit-toolchain"
+    elif [ -n "$probe_stage" ] \
+        && grep -aEqi 'cuda out of memory|CUDA_ERROR_OUT_OF_MEMORY|out of memory.*cuda' "$log_path"; then
+      diagnostic="${probe_stage}-accelerator-memory"
     elif grep -aEqi 'cuda out of memory|CUDA_ERROR_OUT_OF_MEMORY|out of memory.*cuda' "$log_path"; then
       diagnostic="accelerator-memory"
     elif grep -aEqi 'does not match its pinned image contract|requires the exact pinned|version mismatch' "$log_path"; then
