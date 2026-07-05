@@ -838,6 +838,10 @@ case "${SLURM_PROCID:-}:${SLURM_NTASKS:-}:${SLURM_LOCALID:-}:${SLURM_NODEID:-}" 
 esac
 [ "$SLURM_NTASKS" = "$CX_NGPUS" ] || exit 67
 [ "$SLURM_LOCALID" -lt "$CX_GPUS_PER_NODE" ] || exit 67
+if [ "${CX_NODES:-1}" -gt 1 ] && [ "${CX_TRANSPORT:-}" != mnnvl ]; then
+  . /ix/experimental/CollectiveX/runtime/common.sh || exit 68
+  cx_restore_exact_hca_selector || exit 68
+fi
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$CX_GPUS_PER_NODE"
 case "${CX_PRECISION_PROBE:-0}" in
