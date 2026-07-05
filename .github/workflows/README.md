@@ -149,7 +149,7 @@ test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config
 
 ## PR Eval Modifiers
 
-Use `all-evals` and/or `evals-only` with one primary sweep label. `all-evals`
+Use `all-evals` and/or `evals-only` with one primary sweep label (`full-sweep-fail-fast` is the strongly recommended primary for full sweeps; use `full-sweep-enabled` only when jobs must keep running past a failure). `all-evals`
 covers every fixed-sequence config; each multi-node topology runs all
 `conc-list` values on one engine. `evals-only` suppresses throughput; together
 they run all evals only. The primary label still controls canary/fail-fast.

@@ -228,7 +228,7 @@ RECOVERY_PR=$(gh pr view "$RECOVERY_PR_URL" \
 
 gh pr edit "$RECOVERY_PR" \
   --repo SemiAnalysisAI/InferenceX \
-  --add-label full-sweep-enabled
+  --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" \
   --repo SemiAnalysisAI/InferenceX \
   --body "/reuse-sweep-run $SOURCE_RUN_ID"
