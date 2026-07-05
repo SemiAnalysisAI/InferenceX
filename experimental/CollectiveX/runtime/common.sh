@@ -1813,6 +1813,10 @@ import stat
 import sys
 
 repo, base, child, job_root, workspace = sys.argv[1:]
+def reject(reason):
+    print(f"[collectivex] FATAL: stage-base-validation={reason}", file=sys.stderr)
+    raise SystemExit(1)
+
 try:
     if (
         not os.path.isabs(repo)
@@ -1821,25 +1825,32 @@ try:
         or os.path.realpath(base) != base
         or not os.path.isabs(child)
         or os.path.dirname(child) != base.rstrip("/")
-        or os.path.lexists(child)
     ):
-        raise OSError
-    metadata = os.stat(base, follow_symlinks=False)
+        reject("path-shape")
+    if os.path.lexists(child):
+        reject("child-exists")
+    try:
+        metadata = os.stat(base, follow_symlinks=False)
+    except OSError:
+        reject("base-stat")
     excluded = [repo]
     excluded.extend(path for path in (job_root, workspace) if path)
     for path in excluded:
         resolved = os.path.realpath(path)
         if os.path.commonpath((base, resolved)) == resolved:
-            raise OSError
-    if (
-        not stat.S_ISDIR(metadata.st_mode)
-        or metadata.st_uid != os.getuid()
-        or stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
-        or not os.access(base, os.W_OK | os.X_OK)
-    ):
-        raise OSError
-except OSError:
-    raise SystemExit(1)
+            reject("overlap")
+    if not stat.S_ISDIR(metadata.st_mode):
+        reject("not-directory")
+    if metadata.st_uid != os.getuid():
+        reject("owner")
+    if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
+        reject("group-writable")
+    if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
+        reject("world-writable")
+    if not os.access(base, os.W_OK | os.X_OK):
+        reject("access")
+except ValueError:
+    reject("path-shape")
 print(child, end="")
 PY
 }
