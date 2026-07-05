@@ -590,13 +590,7 @@ class SamplingContractTest(unittest.TestCase):
             self.assertIn("validation-missing-required-account", rejected.stderr)
 
     def test_scaleout_network_profile_is_explicit_and_allowlisted(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary:
-            sysfs = Path(temporary)
-            for device in ("mlx5_0", "mlx5_1"):
-                port = sysfs / device / "ports" / "1"
-                port.mkdir(parents=True)
-                (port / "link_layer").write_text("Ethernet\n")
-            command = r'''
+        command = r'''
           set -euo pipefail
           source "$1"
           test "$(cx_nccl_hca_device_name '=mlx5_0:1')" = mlx5_0
@@ -609,8 +603,10 @@ class SamplingContractTest(unittest.TestCase):
           cx_apply_network_profile 1 nvlink
           test "$NVSHMEM_DISABLE_IB" = 1
           export CX_BENCH=deepep CX_MODE=low-latency CX_IB_GID_INDEX=3
-          cx_apply_network_profile 1 nvlink "$2"
+          cx_apply_network_profile 1 nvlink
           test -z "${NVSHMEM_DISABLE_IB+x}${NCCL_NET+x}${NCCL_IB_HCA+x}"
+          test -z "${NVSHMEM_IB_GID_INDEX+x}"
+          cx_export_gid_index_for_link_layer roce 0
           test "$NVSHMEM_HCA_LIST:$NVSHMEM_IB_GID_INDEX" = mlx5_0:1,mlx5_1:1:3
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
@@ -621,28 +617,26 @@ class SamplingContractTest(unittest.TestCase):
           cx_apply_network_profile 4 mnnvl
           test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_HCA_LIST+x}"
           export CX_IB_GID_INDEX=3 CX_RDMA_SERVICE_LEVEL=2
-          cx_apply_network_profile 2 nvlink-rdma "$2"
+          cx_apply_network_profile 2 nvlink-rdma
           test "$NCCL_SOCKET_IFNAME:$GLOO_SOCKET_IFNAME:$UCCL_SOCKET_IFNAME" = ib0:ib0:ib0
           test "$NCCL_NET:$NCCL_IB_HCA" = 'IB:=mlx5_0:1,mlx5_1:1'
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$MORI_RDMA_DEVICES:$EP_NIC_NAME" = mlx5_0,mlx5_1:mlx5_0
+          test -z "${NCCL_IB_GID_INDEX+x}${NVSHMEM_IB_GID_INDEX+x}${UCCL_IB_GID_INDEX+x}"
+          cx_export_gid_index_for_link_layer roce 1
           test "$NCCL_IB_GID_INDEX:$NCCL_IB_SL" = 3:2
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
-          printf 'InfiniBand\n' > "$2/mlx5_0/ports/1/link_layer"
-          printf 'InfiniBand\n' > "$2/mlx5_1/ports/1/link_layer"
-          cx_apply_network_profile 2 nvlink-rdma "$2"
+          cx_apply_network_profile 2 nvlink-rdma
+          cx_export_gid_index_for_link_layer infiniband 1
           test -z "${NVSHMEM_IB_GID_INDEX+x}${NCCL_IB_GID_INDEX+x}${UCCL_IB_GID_INDEX+x}"
           test "$NVSHMEM_IB_SL:$NCCL_IB_SL:$UCCL_IB_SL" = 2:2:2
         '''
-            subprocess.run(
-                [
-                    "bash", "-c", command, "_",
-                    str(ROOT / "runtime" / "common.sh"), str(sysfs),
-                ],
-                check=True,
-                env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
-            )
+        subprocess.run(
+            ["bash", "-c", command, "_", str(ROOT / "runtime" / "common.sh")],
+            check=True,
+            env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
+        )
 
         v2_adapter = (ROOT / "tests" / "ep_deepep_v2.py").read_text()
         container_runtime = (ROOT / "runtime" / "run_in_container.sh").read_text()
@@ -660,6 +654,15 @@ class SamplingContractTest(unittest.TestCase):
                 "#!/usr/bin/env bash\n"
                 "printf '%s\\n' \"$@\" > \"$CAPTURE_ARGS\"\n"
                 "cat > \"$CAPTURE_SCRIPT\"\n"
+                "tasks=1\n"
+                "for arg in \"$@\"; do\n"
+                "  case \"$arg\" in --ntasks=*) tasks=\"${arg#--ntasks=}\" ;; esac\n"
+                "done\n"
+                "if [ \"${SRUN_RC:-0}\" = 0 ]; then\n"
+                "  for ((task=0; task<tasks; task++)); do\n"
+                "    printf '[collectivex-private] rdma-link-layer=roce\\n'\n"
+                "  done\n"
+                "fi\n"
                 "exit \"${SRUN_RC:-0}\"\n"
             )
             binary.chmod(0o700)
@@ -690,7 +693,9 @@ class SamplingContractTest(unittest.TestCase):
             self.assertIn("--ntasks=2", invoked)
             self.assertIn("--input=all", invoked)
             self.assertIn("CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX", invoked)
-            self.assertIn('/sys/class/infiniband/$device/ports', script.read_text())
+            validation_script = script.read_text()
+            self.assertIn('/sys/class/infiniband/$device/ports', validation_script)
+            self.assertIn('rdma-link-layer=%s', validation_script)
             self.assertNotIn("privateif0", result.stdout + result.stderr)
             self.assertNotIn("privatehca0", result.stdout + result.stderr)
 
@@ -1246,7 +1251,51 @@ class SamplingContractTest(unittest.TestCase):
                 env={**os.environ, "PATH": f"{directory}:{os.environ['PATH']}"},
             )
             self.assertNotEqual(result.returncode, 0)
-            self.assertIn("did not terminate", result.stderr)
+        self.assertIn("did not terminate", result.stderr)
+
+    def test_launcher_signal_traps_cancel_the_allocation(self) -> None:
+        prefix = f"inferencex-collectivex-{os.getpid()}-1-"
+        with tempfile.TemporaryDirectory(prefix=prefix, dir="/tmp") as temporary:
+            root = Path(temporary)
+            binary = root / "bin"
+            repo = root / "repo"
+            calls = root / "scancel-calls"
+            binary.mkdir()
+            repo.mkdir()
+            for name, body in {
+                "scancel": 'printf "%s\\n" "$*" >> "$CX_TEST_SCANCEL_CALLS"',
+                "squeue": "exit 0",
+            }.items():
+                path = binary / name
+                path.write_text(f"#!/usr/bin/env bash\n{body}\n")
+                path.chmod(0o700)
+            command = r'''
+              set -euo pipefail
+              source "$1"
+              export JOB_ID=5151 CX_JOB_ROOT="$2" REPO_ROOT="$2/repo" MOUNT_SRC="$2/repo"
+              export COLLECTIVEX_CANONICAL_GHA=1
+              cx_write_cleanup_guard() {
+                rm -f -- "$CX_JOB_ROOT/cleanup-safe" "$CX_JOB_ROOT/cleanup-unsafe"
+                : > "$CX_JOB_ROOT/cleanup-$1"
+              }
+              cx_install_launcher_fail_safe
+              kill -TERM $$
+              exit 99
+            '''
+            result = subprocess.run(
+                ["bash", "-c", command, "_", str(ROOT / "runtime" / "common.sh"), str(root)],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{binary}:{os.environ['PATH']}",
+                    "CX_TEST_SCANCEL_CALLS": str(calls),
+                },
+            )
+            self.assertEqual(result.returncode, 143, result.stderr)
+            self.assertEqual(calls.read_text().splitlines(), ["5151"])
+            self.assertTrue((root / "cleanup-safe").is_file())
+            self.assertFalse((root / "cleanup-unsafe").exists())
 
         workflow = (ROOT.parent.parent / ".github" / "workflows" / "collectivex-sweep.yml").read_text()
         self.assertIn("cleanup-unsafe", workflow)

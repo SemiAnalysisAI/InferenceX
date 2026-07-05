@@ -367,6 +367,7 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
     ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28740154697", "h200-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28740154697", "h200-dgxc", 16, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-setup-timeout"),
     *(('28740381789', 'b300', 8, 'deepep', 'low-latency', profile,
        'unsupported', 'backend-construction-failed')
       for profile in (_LL_FP8_PROFILE, _LL_LOGFMT_PROFILE, _LL_FP8_LOGFMT_PROFILE)),

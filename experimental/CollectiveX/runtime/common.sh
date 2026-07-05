@@ -617,43 +617,29 @@ cx_nccl_hca_device_name() {
   printf '%s' "${selector%%:*}"
 }
 
-cx_rdma_profile_link_layer() {
-  local sysfs_root="$1" selector device configured_port port_path layer profile=""
-  local -a selectors port_paths
-  IFS=, read -r -a selectors <<< "$CX_RDMA_DEVICES"
-  for selector in "${selectors[@]}"; do
-    device="${selector%%:*}"
-    configured_port=""
-    [ "$selector" = "$device" ] || configured_port="${selector#*:}"
-    if [ -n "$configured_port" ]; then
-      port_paths=("$sysfs_root/$device/ports/$configured_port")
-    else
-      port_paths=("$sysfs_root/$device/ports"/*)
-    fi
-    [ "${#port_paths[@]}" -gt 0 ] || cx_die "RDMA selector has no visible ports"
-    for port_path in "${port_paths[@]}"; do
-      [ -r "$port_path/link_layer" ] || cx_die "RDMA link layer is unavailable"
-      layer="$(< "$port_path/link_layer")"
-      case "$layer" in
-        Ethernet) layer=roce ;;
-        InfiniBand) layer=infiniband ;;
-        *) cx_die "unsupported RDMA link layer" ;;
-      esac
-      [ -z "$profile" ] || [ "$profile" = "$layer" ] \
-        || cx_die "mixed RDMA link layers are unsupported"
-      profile="$layer"
-    done
-  done
-  [ -n "$profile" ] || cx_die "RDMA link layer is unavailable"
-  printf '%s' "$profile"
+cx_export_gid_index_for_link_layer() {
+  local link_layer="$1" scaleout="$2"
+  unset NVSHMEM_IB_GID_INDEX NCCL_IB_GID_INDEX UCCL_IB_GID_INDEX
+  [ -n "${CX_IB_GID_INDEX:-}" ] || return 0
+  case "$link_layer" in
+    roce)
+      export NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
+      if [ "$scaleout" = 1 ]; then
+        export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
+        export UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
+      fi
+      ;;
+    infiniband) ;;
+    *) cx_die "unsupported RDMA link layer" ;;
+  esac
 }
 
 # Convert private, runner-local network selectors into the public library
 # variables needed inside the container. Values are interface/HCA identifiers,
 # never addresses; the rendezvous hostname is derived from the allocation.
 cx_apply_network_profile() {
-  local nodes="$1" transport="$2" rdma_sysfs_root="${3:-/sys/class/infiniband}"
-  local selector rdma_name rdma_names="" ep_nic="" rdma_link_layer=""
+  local nodes="$1" transport="$2"
+  local selector rdma_name rdma_names="" ep_nic=""
   local scaleout=0 single_node_rdma=0
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || cx_die "invalid network placement"
@@ -704,13 +690,6 @@ cx_apply_network_profile() {
   if [ -n "${CX_IB_GID_INDEX:-}" ]; then
     [[ "$CX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$CX_IB_GID_INDEX" -le 255 ] \
       || cx_die "invalid private IB GID index"
-    rdma_link_layer="$(cx_rdma_profile_link_layer "$rdma_sysfs_root")"
-    if [ "$rdma_link_layer" = roce ]; then
-      export NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
-      if [ "$scaleout" = 1 ]; then
-        export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX" UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
-      fi
-    fi
   fi
   if [ -n "${CX_RDMA_SERVICE_LEVEL:-}" ]; then
     [[ "$CX_RDMA_SERVICE_LEVEL" =~ ^[0-9]+$ ]] && [ "$CX_RDMA_SERVICE_LEVEL" -le 15 ] \
@@ -728,7 +707,7 @@ cx_apply_network_profile() {
 # node before image import or backend initialization. Selector values and node
 # diagnostics stay in the runner-private log.
 cx_validate_network_profile_on_job() {
-  local job_id="$1" nodes="$2" transport="$3" log rc=0 scaleout=0
+  local job_id="$1" nodes="$2" transport="$3" log rc=0 scaleout=0 marker_count link_layer
   local single_node_rdma=0
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
@@ -763,7 +742,7 @@ if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
   done
 fi
 check_port() {
-  local port_path="$1" state gid
+  local port_path="$1" state gid link_layer
   [ -d "$port_path" ] || return 1
   read -r state _ < "$port_path/state"
   [ "$state" = 4: ] || return 1
@@ -772,7 +751,17 @@ check_port() {
     gid="$(tr -d ':0[:space:]' < "$port_path/gids/$CX_IB_GID_INDEX")"
     [ -n "$gid" ] || return 1
   fi
+  [ -r "$port_path/link_layer" ] || return 1
+  link_layer="$(< "$port_path/link_layer")"
+  case "$link_layer" in
+    Ethernet) link_layer=roce ;;
+    InfiniBand) link_layer=infiniband ;;
+    *) return 1 ;;
+  esac
+  [ -z "${profile:-}" ] || [ "$profile" = "$link_layer" ] || return 1
+  profile="$link_layer"
 }
+profile=""
 IFS=, read -r -a devices <<< "$CX_RDMA_DEVICES"
 for selector in "${devices[@]}"; do
   device="${selector%%:*}"
@@ -787,17 +776,28 @@ for selector in "${devices[@]}"; do
     for port_path in "$ports"/*; do
       if check_port "$port_path"; then
         active=1
-        break
       fi
     done
     [ "$active" = 1 ]
   fi
 done
+[ -n "$profile" ]
+printf '[collectivex-private] rdma-link-layer=%s\n' "$profile"
 BASH
   if [ "$rc" != 0 ]; then
     cx_fail_stage setup "$log" || true
     return "$rc"
   fi
+  link_layer="$(
+    sed -nE 's/^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$/\1/p' "$log" \
+      | sort -u
+  )"
+  marker_count="$(grep -Ec '^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$' "$log")"
+  case "$marker_count:$link_layer" in
+    "$nodes":roce|"$nodes":infiniband) ;;
+    *) cx_fail_stage setup "$log" || true; return 1 ;;
+  esac
+  cx_export_gid_index_for_link_layer "$link_layer" "$scaleout"
 }
 
 cx_resolve_slurm_rendezvous() {
@@ -2729,7 +2729,7 @@ PY
 cx_launcher_cleanup() {
   local rc="$1" stage_root="${MOUNT_SRC:-}" source_root out_dir allocation_stopped=1
   source_root="${stage_root:-${REPO_ROOT:-}}"
-  trap - EXIT
+  trap - EXIT HUP INT TERM
   if [ -n "${COLLECTIVEX_EPHEMERAL_CONFIG_PATH:-}" ]; then
     rm -f -- "$COLLECTIVEX_EPHEMERAL_CONFIG_PATH" >/dev/null 2>&1 || true
     unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
@@ -2775,4 +2775,7 @@ cx_launcher_cleanup() {
 cx_install_launcher_fail_safe() {
   CX_ALLOCATION_UNCERTAIN=0
   trap 'cx_launcher_cleanup "$?"' EXIT
+  trap 'cx_launcher_cleanup 129' HUP
+  trap 'cx_launcher_cleanup 130' INT
+  trap 'cx_launcher_cleanup 143' TERM
 }
