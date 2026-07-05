@@ -1476,8 +1476,12 @@ cx_lock_canonical_gha_env() {
 
   [ -n "${CX_SQUASH_DIR:-}" ] \
     || cx_die "canonical CollectiveX execution requires shared container storage"
-  [ -n "$trusted_stage_dir" ] \
-    || cx_die "canonical CollectiveX execution requires a configured shared stage directory"
+  if [ -z "$trusted_stage_dir" ]; then
+    case "$runner" in
+      h100-dgxc|h200-dgxc|b200-dgxc) ;;
+      *) cx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
+    esac
+  fi
   [[ "$trusted_audit_salt" =~ ^[0-9a-f]{64}$ ]] \
     || cx_die "canonical CollectiveX execution requires a private audit salt"
 

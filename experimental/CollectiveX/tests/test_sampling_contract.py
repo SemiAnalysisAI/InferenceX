@@ -2284,6 +2284,12 @@ class SamplingContractTest(unittest.TestCase):
           test -z "${CX_PREPARED_BACKEND_CACHE+x}${CX_BACKEND_SOURCE_ROOT+x}"
           test -z "${CX_DRYRUN+x}"
 
+          export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
+          export CX_SHARD_SKU=b200-dgxc CX_NODES=1 CX_GPUS_PER_NODE=8
+          unset CX_STAGE_DIR
+          cx_lock_canonical_gha_env b200-dgxc
+          test -z "$CX_STAGE_DIR"
+
           export CX_STAGE_DIR=/shared/gb-stage
           export CX_SHARD_SKU=gb300 CX_NODES=2 CX_GPUS_PER_NODE=4
           export CX_IMAGE=untrusted CX_NGPUS=1 CX_MORI_KERNEL_TYPE=untrusted
