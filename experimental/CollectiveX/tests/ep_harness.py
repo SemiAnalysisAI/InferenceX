@@ -27,7 +27,8 @@ Backend protocol:
     buffer_cap(args) -> int|None
     make_problem(T, idx, weights, x) -> problem   # materialize this rank's trace slice
     dispatch(problem) -> handle                   # pure dispatch comm (timed)
-    stage(problem, handle)                        # untimed expert-output placement
+    stage(problem, handle)                        # expert-output placement
+    stage_device_work                             # true only when stage launches device work
     combine(problem, handle) -> tensor            # pure combine comm (timed)
     inspect_dispatch(problem, handle) -> view     # normalized payload/expert/weight metadata
     combine_transformed(problem, handle, tensor) -> tensor
@@ -60,16 +61,17 @@ TIMED_ITERS_PER_TRIAL = 8
 TRIALS_PER_POINT = 64
 WARMUP_ITERS_PER_TRIAL = 32
 WARMUP_SEMANTICS = "full-roundtrip-before-each-component-trial-point-v1"
+QUALIFICATION_RUNS = 3
 ROUTING_SEED = 67
 ROUTING_GENERATOR = workload_contract.GENERATOR_VERSION
-ACTIVATION_PROFILE = "canonical-counter-source-v3"
+ACTIVATION_PROFILE = "canonical-counter-source-v4"
 ACTIVATION_GENERATOR = workload_contract.ACTIVATION_GENERATOR
 PLACEMENT = "packed"
-COMPONENT_ORDER_CONTRACT = "roundtrip-dispatch-activation-only-combine-v2"
+COMPONENT_ORDER_CONTRACT = "qualification-hash-rotated-components-v1"
 LOW_LATENCY_MODE = "low-latency"
 LOW_LATENCY_MAX_TOKENS_PER_RANK = 128
 LOW_LATENCY_MEASUREMENT_CONTRACT = "expert-packed-weighted-combine-v1"
-LOW_LATENCY_COMPONENT_ORDER_CONTRACT = "roundtrip-dispatch-gate-weighted-combine-v1"
+LOW_LATENCY_COMPONENT_ORDER_CONTRACT = "qualification-hash-rotated-components-v1"
 LOW_LATENCY_ORACLE_CONTRACT = "expert-assignment-transform-v1"
 LOW_LATENCY_CORRECTNESS_SCOPE = "expert-assignment-and-weighted-combine"
 
@@ -87,7 +89,6 @@ ORACLE_CONTRACT = identity.V1_CASE_PROFILE["oracle_contract"]
 ORACLE_RTOL = 5e-2
 ORACLE_ATOL = 2e-2
 
-BF16_BYTES = 2
 EPLB_REDUNDANT_EXPERTS = 32
 EPLB_REFERENCE_TOKENS_PER_RANK = 2048
 EPLB_PLANNER = "greedy-rank-major-v1"
@@ -97,7 +98,7 @@ V1_PROFILE = {
     "combine_quant_mode": "none",
     "mode": "normal",
     "measurement_contract": "layout-and-dispatch-v1",
-    "resource_mode": "tuned",
+    "resource_mode": "fixed-profile",
     "placement": PLACEMENT,
     "activation_profile": ACTIVATION_PROFILE,
     "activation_generator": ACTIVATION_GENERATOR,
@@ -110,6 +111,37 @@ V1_PROFILE = {
     # DeepEP/UCCL use this only as the fallback when their tuned default is not exported.
     "num_sms": 24,
 }
+
+
+def precision_byte_provenance(
+    axis: dict, logical_copies: int, hidden: int
+) -> dict[str, int | str]:
+    """Return comparable logical activation and required scale bytes for one direction."""
+    if logical_copies < 0 or hidden < 0:
+        raise ValueError("logical precision byte dimensions must be non-negative")
+    bits_per_value = {
+        "bf16": 16,
+        "fp8-e4m3fn": 8,
+        "fp8-e4m3fnuz": 8,
+        "logfmt10": 10,
+    }.get(axis["communication_format"])
+    if bits_per_value is None:
+        raise ValueError(f"unknown communication format {axis['communication_format']!r}")
+    activation_data_bytes = logical_copies * math.ceil(hidden * bits_per_value / 8)
+    scale_bytes_per_value = {None: 0, "f32": 4, "implicit-logfmt10": 0}.get(
+        axis["scale_dtype"]
+    )
+    if scale_bytes_per_value is None:
+        raise ValueError(f"unknown communication scale dtype {axis['scale_dtype']!r}")
+    group_size = axis["scale_group_size"]
+    scale_groups = math.ceil(hidden / group_size) if group_size is not None else 0
+    scale_bytes = logical_copies * scale_groups * scale_bytes_per_value
+    return {
+        "accounting_contract": "activation-data-plus-scales-v1",
+        "activation_data_bytes": activation_data_bytes,
+        "scale_bytes": scale_bytes,
+        "total_logical_bytes": activation_data_bytes + scale_bytes,
+    }
 
 def format_collective_version(raw) -> str:
     """Normalize PyTorch's tuple or packed NCCL/RCCL version representation."""
@@ -126,6 +158,12 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
     ap.set_defaults(**V1_PROFILE)
     ap.add_argument("--mode", default="normal", choices=["normal", LOW_LATENCY_MODE])
+    ap.add_argument(
+        "--precision-profile",
+        default="",
+        choices=("", *identity.V1_PRECISION_PROFILES),
+        help="exact native dispatch/combine communication profile; blank selects BF16 control",
+    )
     ap.add_argument("--phase", default="decode", choices=["decode", "prefill"],
                     help="token-size regime: decode (small T) / prefill (large T) — picks the default ladder")
     ap.add_argument("--tokens-ladder", default="",
@@ -149,6 +187,13 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--workload-name", default="")
     ap.add_argument("--required-publication", default="")
     ap.add_argument("--seed", type=int, default=ROUTING_SEED)
+    ap.add_argument(
+        "--qualification-index",
+        type=int,
+        choices=range(1, QUALIFICATION_RUNS + 1),
+        default=os.environ.get("COLLECTIVEX_QUALIFICATION_INDEX", "1"),
+        help="one-based qualification repeat used for deterministic measurement ordering",
+    )
     # 32: B300/Blackwell needs ~30 untimed iters to reach steady-state GPU clocks +
     # establish NVLink/NVSHMEM connections — at warmup=8 its dispatch read ~1787us
     # (cold), at warmup>=30 it settles to ~85us (faster than H100, reproducible within
@@ -198,6 +243,67 @@ def sampling_contract_error(iters: int, trials: int, warmup: int) -> str | None:
                 f"{observed[0]}:{observed[1]}:{observed[2]} "
                 f"({iters * trials if iters > 0 and trials > 0 else 'invalid'} timed samples)")
     return None
+
+
+def qualification_order(
+    values: list, qualification_index: int, trial_index: int, *, identity_key: str = ""
+) -> list:
+    """Return a deterministic, position-balanced order for one qualification trial.
+
+    Official runs bind the base permutation to the case identity. The cyclic schedule then gives
+    every value every position equally often over 64 trials while qualification repeats start at
+    different offsets. Keeping the empty-key behavior stable preserves local diagnostic fixtures.
+    """
+    if not values or len(values) != len(set(values)):
+        raise ValueError("qualification order requires non-empty unique values")
+    if qualification_index not in range(1, QUALIFICATION_RUNS + 1):
+        raise ValueError(f"qualification_index must be in 1..{QUALIFICATION_RUNS}")
+    if type(trial_index) is not int or trial_index < 0:
+        raise ValueError("trial_index must be a non-negative integer")
+    if not isinstance(identity_key, str):
+        raise ValueError("qualification identity_key must be a string")
+    base_values = list(values)
+    if identity_key:
+        base_values.sort(
+            key=lambda value: hashlib.sha256(
+                f"{identity_key}\0{qualification_index}\0{value}".encode("utf-8")
+            ).digest()
+        )
+    position = trial_index + qualification_index - 1
+    cycle, offset = divmod(position, len(values))
+    base = base_values if cycle % 2 == 0 else list(reversed(base_values))
+    return base[offset:] + base[:offset]
+
+
+def sampled_component_evidence(trials: list[list[float]]) -> dict:
+    """Validate and copy private 64x8 trial blocks without flattening their boundaries."""
+    if not trials:
+        return {"availability": "unavailable", "sample_count": 0, "trials": None}
+    if len(trials) != TRIALS_PER_POINT:
+        raise ValueError(
+            f"measured component needs {TRIALS_PER_POINT} trial blocks; got {len(trials)}"
+        )
+    normalized: list[list[float]] = []
+    for trial in trials:
+        if len(trial) != TIMED_ITERS_PER_TRIAL:
+            raise ValueError(
+                f"measured trial needs {TIMED_ITERS_PER_TRIAL} samples; got {len(trial)}"
+            )
+        block = []
+        for sample in trial:
+            if isinstance(sample, bool) or not isinstance(sample, (int, float)):
+                raise ValueError("measured samples must be numeric")
+            value = float(sample)
+            if not math.isfinite(value) or value < 0:
+                raise ValueError("measured samples must be finite and non-negative")
+            block.append(value)
+        normalized.append(block)
+    count = sum(map(len, normalized))
+    if count != TIMED_SAMPLES_PER_POINT:
+        raise ValueError(
+            f"measured component needs {TIMED_SAMPLES_PER_POINT} samples; got {count}"
+        )
+    return {"availability": "measured", "sample_count": count, "trials": normalized}
 
 
 def _stats_vec(xs: list[int]) -> dict:
@@ -504,10 +610,11 @@ def _expert_transform_expanded(torch, payload, expert_ids):
 
 def _expected_transformed_combine(torch, problem):
     """Independently derive sum_i gate_i * expert_i(x) for each source token."""
-    expected = torch.zeros_like(problem.x, dtype=torch.float32)
+    semantic_x = getattr(problem, "oracle_x", problem.x)
+    expected = torch.zeros_like(semantic_x, dtype=torch.float32)
     expert_ids = problem.topk_idx.to(torch.int64)
     weights = problem.topk_weights.to(torch.float32)
-    columns = torch.arange(problem.x.shape[1], device=problem.x.device, dtype=torch.int64)
+    columns = torch.arange(semantic_x.shape[1], device=semantic_x.device, dtype=torch.int64)
     pattern = (((columns * 13) % 17) - 8).to(torch.float32) / 8
     for slot in range(expert_ids.shape[1]):
         expert = expert_ids[:, slot]
@@ -515,9 +622,127 @@ def _expected_transformed_combine(torch, problem):
         scale = (((expert * 17 + 5) % 31 + 1).to(torch.float32) / 32).unsqueeze(1)
         offset_a = ((((expert * 29 + 7) % 37) - 18).to(torch.float32) / 64).unsqueeze(1)
         offset_b = ((((expert * 43 + 11) % 41) - 20).to(torch.float32) / 128).unsqueeze(1)
-        expert_output = problem.x.float() * scale + offset_a + offset_b * pattern.unsqueeze(0)
+        expert_output = semantic_x.float() * scale + offset_a + offset_b * pattern.unsqueeze(0)
         expected.add_(gate * expert_output)
     return expected
+
+
+def _baseline_precision_axis() -> dict:
+    return {
+        "encoded_payload_valid": True,
+        "scales_finite": None,
+        "scales_positive": None,
+        "dequantized_semantics": True,
+        "saturation_count": 0,
+        "saturation_rate": 0.0,
+        "max_abs_error": 0.0,
+        "max_rel_error": 0.0,
+        "passed": True,
+    }
+
+
+def _precision_evidence(backend, problem, view, combined, expected_combined) -> dict:
+    method = getattr(backend, "precision_evidence", None)
+    if method is not None:
+        evidence = method(problem, view)
+        combine_axis = backend.communication_precision["combine"]
+        if combine_axis["communication_format"] != "bf16":
+            if combined.shape == expected_combined.shape and combined.numel():
+                absolute = (combined.float() - expected_combined.float()).abs()
+                max_abs_error = float(absolute.max().item())
+                max_rel_error = max_abs_error / (
+                    float(expected_combined.float().abs().max().item()) + 1e-6
+                )
+                tolerance = ORACLE_ATOL + float(
+                    getattr(backend, "tolerance", ORACLE_RTOL)
+                ) * expected_combined.float().abs()
+                semantics = bool((absolute <= tolerance).all().item())
+            elif combined.shape == expected_combined.shape:
+                max_abs_error = max_rel_error = 0.0
+                semantics = True
+            else:
+                max_abs_error = max_rel_error = 1e30
+                semantics = False
+            direction = evidence["combine"]
+            direction.update({
+                "dequantized_semantics": semantics,
+                "max_abs_error": max_abs_error,
+                "max_rel_error": max_rel_error,
+            })
+            scale_ok = (
+                direction["scales_finite"] is not False
+                and direction["scales_positive"] is not False
+            )
+            direction["passed"] = bool(
+                direction["encoded_payload_valid"] and semantics and scale_ok
+            )
+            evidence["passed"] = bool(
+                evidence["dispatch"]["passed"] and direction["passed"]
+            )
+        return evidence
+    profile_id = getattr(backend, "precision_profile_id", None)
+    if profile_id != identity.V1_CONTROL_PRECISION_PROFILE:
+        failed = _baseline_precision_axis()
+        failed.update({"encoded_payload_valid": False, "dequantized_semantics": False,
+                       "passed": False})
+        return {"profile_id": profile_id, "dispatch": failed, "combine": dict(failed),
+                "passed": False}
+    return {
+        "profile_id": profile_id,
+        "dispatch": _baseline_precision_axis(),
+        "combine": _baseline_precision_axis(),
+        "passed": True,
+    }
+
+
+def _failed_precision_evidence(backend) -> dict:
+    failed = _baseline_precision_axis()
+    failed.update({"encoded_payload_valid": False, "dequantized_semantics": False,
+                   "passed": False})
+    return {
+        "profile_id": getattr(backend, "precision_profile_id", None),
+        "dispatch": failed,
+        "combine": dict(failed),
+        "passed": False,
+    }
+
+
+def aggregate_precision_evidence(evidence_by_rank: list[dict]) -> dict:
+    """Collapse pre/post rank evidence without hiding any direction's worst observation."""
+    records = [record[phase] for record in evidence_by_rank for phase in ("pre", "post")]
+    profile_ids = {record["profile_id"] for record in records}
+    if len(profile_ids) != 1:
+        raise ValueError("precision evidence profiles differ across ranks or oracle passes")
+    result = {"profile_id": profile_ids.pop()}
+    for direction in ("dispatch", "combine"):
+        axes = [record[direction] for record in records]
+        rank_counts = []
+        for rank_index in range(len(evidence_by_rank)):
+            rank_counts.append(max(
+                evidence_by_rank[rank_index][phase][direction]["saturation_count"]
+                for phase in ("pre", "post")
+            ))
+        scale_finite = [axis["scales_finite"] for axis in axes]
+        scale_positive = [axis["scales_positive"] for axis in axes]
+        result[direction] = {
+            "encoded_payload_valid": all(axis["encoded_payload_valid"] for axis in axes),
+            "scales_finite": (
+                None if all(value is None for value in scale_finite)
+                else all(value is True for value in scale_finite)
+            ),
+            "scales_positive": (
+                None if all(value is None for value in scale_positive)
+                else all(value is True for value in scale_positive)
+            ),
+            "dequantized_semantics": all(axis["dequantized_semantics"] for axis in axes),
+            "saturation_count": sum(rank_counts),
+            "saturation_rate": max(axis["saturation_rate"] for axis in axes),
+            "max_abs_error": max(axis["max_abs_error"] for axis in axes),
+            "max_rel_error": max(axis["max_rel_error"] for axis in axes),
+            "passed": all(axis["passed"] for axis in axes),
+        }
+    result["passed"] = all(result[direction]["passed"] for direction in ("dispatch", "combine"))
+    return result
 
 
 def _run_expert_packed_oracle(
@@ -558,6 +783,7 @@ def _run_expert_packed_oracle(
         except Exception as cleanup_error:
             raise inspection_error from cleanup_error
         return {
+            "_precision": _failed_precision_evidence(backend),
             "contract": contract,
             "passed": False,
             "ordering_contract": "adapter-inspection-failed",
@@ -618,6 +844,9 @@ def _run_expert_packed_oracle(
         if source_range
         else torch.empty_like(view.payload)
     )
+    normalize_payload = getattr(backend, "oracle_dispatch_payload", None)
+    if source_range and normalize_payload is not None:
+        expected_payload = normalize_payload(expected_payload)
     payload_ok = bool(
         source_range
         and torch.equal(decoded_source_ids.to(torch.int64), view.source_ids)
@@ -708,6 +937,7 @@ def _run_expert_packed_oracle(
         max_relative_error = None
         combine_values_ok = False
     tolerance = float(getattr(backend, "tolerance", ORACLE_RTOL))
+    precision = _precision_evidence(backend, problem, view, combined, expected_combined)
     checks = {
         "combine_values": combine_values_ok,
         "counts": counts_ok,
@@ -718,9 +948,11 @@ def _run_expert_packed_oracle(
         "weights": weights_ok,
     }
     return {
+        "_precision": precision,
         "contract": contract,
         "passed": bool(
             all(checks.values())
+            and precision["passed"]
             and ordering_contract
             and max_relative_error is not None
             and max_relative_error < tolerance
@@ -778,6 +1010,7 @@ def _run_expert_oracle(
         except Exception as cleanup_error:
             raise inspection_error from cleanup_error
         return {
+            "_precision": _failed_precision_evidence(backend),
             "contract": ORACLE_CONTRACT,
             "passed": False,
             "ordering_contract": "adapter-inspection-failed",
@@ -823,6 +1056,9 @@ def _run_expert_oracle(
         expected_payload = routing.activations_for_source_ids(
             source_ids, problem.x.shape[1], seed, problem.x.dtype
         )
+        normalize_payload = getattr(backend, "oracle_dispatch_payload", None)
+        if normalize_payload is not None:
+            expected_payload = normalize_payload(expected_payload)
     else:
         expected_ids = torch.full_like(view.expert_ids, -1)
         expected_weights = torch.zeros_like(view.weights)
@@ -901,6 +1137,7 @@ def _run_expert_oracle(
         max_relative_error = None
         combine_values_ok = False
     tolerance = float(getattr(backend, "tolerance", 5e-2))
+    precision = _precision_evidence(backend, problem, view, combined, expected_combined)
     checks = {
         "combine_values": combine_values_ok,
         "counts": counts_ok,
@@ -911,9 +1148,11 @@ def _run_expert_oracle(
         "weights": weights_ok,
     }
     return {
+        "_precision": precision,
         "contract": ORACLE_CONTRACT,
         "passed": bool(
             all(checks.values())
+            and precision["passed"]
             and ordering_contract
             and max_relative_error is not None
             and max_relative_error < tolerance
@@ -963,8 +1202,14 @@ def _derive_publication_status(v: dict) -> str:
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = getattr(args, "mode", "normal")
+    requested_precision = getattr(args, "precision_profile", "") or None
+    resolved_precision_id = requested_precision or identity.V1_CONTROL_PRECISION_PROFILE
     try:
-        case_profile = identity.case_profile(mode)
+        profile_case = {"mode": mode}
+        if requested_precision is not None:
+            profile_case["precision_profile"] = requested_precision
+        case_profile = identity.profile_for_case(profile_case)
+        communication_precision = identity.precision_profile(resolved_precision_id)
     except identity.IdentityError as exc:
         if rank == 0:
             print(f"ERROR: {exc}")
@@ -992,6 +1237,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     if getattr(backend, "mode", None) != mode:
         if rank == 0:
             print(f"ERROR: backend mode {getattr(backend, 'mode', None)!r} != {mode!r}")
+        return 2
+    if (
+        getattr(backend, "precision_profile_id", None) != resolved_precision_id
+        or getattr(backend, "communication_precision", None) != communication_precision
+    ):
+        if rank == 0:
+            print("ERROR: backend did not realize the requested communication precision")
         return 2
     expected_weight_semantics = (
         "gate-weighted-sum"
@@ -1034,14 +1286,34 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # plans from an observed load estimate). build_trace builds the LOGICAL trace and remaps
     # to physical when the plan is present; otherwise it's the identity (logical == physical).
     eplb_plan = None
+    eplb_calibration = None
     if eplb_on:
-        ref_idx, _ = routing.build_global_routing(
-            EPLB_REFERENCE_TOKENS_PER_RANK * ep_size,
-            num_logical,
-            args.topk,
-            args.routing,
-            args.seed,
+        calibration_id, calibration_checksums, calibration_rows, _ = (
+            workload_contract.canonical_eplb_calibration_member(
+                args.routing,
+                args.hidden,
+                args.topk,
+                num_logical,
+                ep_size,
+                EPLB_REFERENCE_TOKENS_PER_RANK,
+                args.seed,
+            )
         )
+        ref_idx = torch.tensor(
+            calibration_rows,
+            dtype=torch.int64,
+        )
+        eplb_calibration = {
+            "token_offset": workload_contract.EPLB_CALIBRATION_TOKEN_OFFSET,
+            "trace_sha256": calibration_checksums["trace"],
+            "window": workload_contract.EPLB_CALIBRATION_WINDOW,
+            "workload_id": calibration_id,
+        }
+        if ref_idx.shape != (
+            EPLB_REFERENCE_TOKENS_PER_RANK * ep_size,
+            args.topk,
+        ):
+            raise RuntimeError("EPLB calibration trace dimensions differ from the contract")
         load = torch.bincount(ref_idx.reshape(-1), minlength=num_logical).float().tolist()
         eplb_plan = eplb.build_plan(load, args.experts, ep_size)
         if rank == 0:
@@ -1117,8 +1389,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 f"in {backend.backend_provenance}"
             )
         return 4
-    elem_dispatch = BF16_BYTES
-
     # ---- Pass 1: build each deterministic problem and run the expert oracle. ----
     problems, gate, gts, global_traces, input_snapshots = {}, {}, {}, {}, {}
     routing_hashes = set()
@@ -1145,6 +1415,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             torch, routing, backend, problem, idx_g, w_g, rank, experts_per_rank,
             args.seed,
         )
+        precision_pre = oracle.pop("_precision")
         before_x, before_idx, before_weights = input_snapshots[T]
         pre_input_unchanged = (
             torch.equal(problem.x, before_x)
@@ -1159,19 +1430,38 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "max_rel": oracle["max_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
+            "precision_pre": precision_pre,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
     # ---- Pass 2: every backend uses the same ascending point order and conditioning ramp.
     # Per-iteration cross-rank MAX samples are pooled across trials. ----
     disp_pool = {T: [] for T in ladder}     # pooled per-iteration cross-rank MAX (dispatch)
+    stage_pool = {T: [] for T in ladder}    # measured only when stage launches device work
     comb_pool = {T: [] for T in ladder}     # ... combine
     rt_pool = {T: [] for T in ladder}       # independently measured round trip
     disp_trials = {T: [] for T in ladder}
+    stage_trials = {T: [] for T in ladder}
     comb_trials = {T: [] for T in ladder}
     rt_trials = {T: [] for T in ladder}
-    order = list(ladder)
-    for _trial in range(args.trials):
+    stage_device_work = getattr(backend, "stage_device_work", False)
+    if type(stage_device_work) is not bool:
+        raise ValueError("backend.stage_device_work must be a boolean")
+    order_identity = args.case_id or _sha256_json({
+        "backend": backend.name,
+        "ep_size": ep_size,
+        "mode": mode,
+        "phase": args.phase,
+        "precision_profile": resolved_precision_id,
+        "runner": args.runner,
+        "suite": args.suite,
+    })
+    observed_component_orders = []
+    for trial_index in range(args.trials):
+        order = qualification_order(
+            list(ladder), args.qualification_index, trial_index,
+            identity_key=f"{order_identity}:tokens",
+        )
         for T in order:
             problem = problems[T]
             # Stateful paired APIs may expose only a measured round trip.
@@ -1183,30 +1473,76 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 backend.stage(p, hh)
                 return backend.combine(p, hh)
 
-            # Every available component starts after the same synchronized full-roundtrip warmup.
-            # Roundtrip is first on every backend because it is the comparison headline.
-            warm_roundtrips(problem, args.warmup)
-            rt_iters = time_us(torch, lambda p=problem: rt_once(p), 0, args.iters)
-            if roundtrip_only:
-                disp_iters = comb_iters = []
-            else:
-                warm_roundtrips(problem, args.warmup)
-                disp_iters = time_us(torch, lambda p=problem: backend.dispatch(p),
-                                     0, args.iters)
+            available_components = ["roundtrip"]
+            if not roundtrip_only:
+                available_components.extend(["dispatch", "combine"])
+                if stage_device_work:
+                    available_components.append("stage")
+            component_order = qualification_order(
+                available_components,
+                args.qualification_index,
+                trial_index,
+                identity_key=f"{order_identity}:components:{T}",
+            )
+            observed_component_orders.append({
+                "components": component_order,
+                "tokens_per_rank": T,
+                "trial_index": trial_index,
+            })
+            measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
 
-                def prep(p=problem):
-                    hh = backend.dispatch(p)
-                    backend.stage(p, hh)
-                    return hh
+            def prep_stage(p=problem):
+                return backend.dispatch(p)
+
+            def prep_combine(p=problem):
+                hh = backend.dispatch(p)
+                backend.stage(p, hh)
+                return hh
+
+            for component_name in component_order:
+                # Every measured component receives the same 32 synchronized full-roundtrip
+                # warmups immediately before its timed trial.
                 warm_roundtrips(problem, args.warmup)
-                if backend.combine_needs_redispatch:
-                    comb_iters = time_us(torch, lambda hh, p=problem: backend.combine(p, hh),
-                                         0, args.iters, pre=prep)
-                else:
-                    hh = prep()
-                    torch.cuda.synchronize()
-                    comb_iters = time_us(torch, lambda p=problem, hx=hh: backend.combine(p, hx),
-                                         0, args.iters)
+                if component_name == "roundtrip":
+                    measured[component_name] = time_us(
+                        torch, lambda p=problem: rt_once(p), 0, args.iters
+                    )
+                elif component_name == "dispatch":
+                    measured[component_name] = time_us(
+                        torch, lambda p=problem: backend.dispatch(p), 0, args.iters
+                    )
+                elif component_name == "stage":
+                    measured[component_name] = time_us(
+                        torch,
+                        lambda hh, p=problem: backend.stage(p, hh),
+                        0,
+                        args.iters,
+                        pre=prep_stage,
+                    )
+                elif component_name == "combine":
+                    if backend.combine_needs_redispatch:
+                        measured[component_name] = time_us(
+                            torch,
+                            lambda hh, p=problem: backend.combine(p, hh),
+                            0,
+                            args.iters,
+                            pre=prep_combine,
+                        )
+                    else:
+                        hh = prep_combine()
+                        torch.cuda.synchronize()
+                        measured[component_name] = time_us(
+                            torch,
+                            lambda p=problem, hx=hh: backend.combine(p, hx),
+                            0,
+                            args.iters,
+                        )
+                else:  # pragma: no cover - generated from the fixed list above
+                    raise RuntimeError(f"unknown timed component {component_name!r}")
+            disp_iters = measured["dispatch"]
+            stage_iters = measured["stage"]
+            comb_iters = measured["combine"]
+            rt_iters = measured["roundtrip"]
             # per-iteration cross-rank MAX (the distributed-op latency per iter), pooled.
             if disp_iters:
                 reduced_dispatch = _reduce_vec(torch, dist, device, disp_iters, MAX)
@@ -1215,6 +1551,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 comb_trials[T].append(reduced_combine)
                 disp_pool[T] += reduced_dispatch
                 comb_pool[T] += reduced_combine
+            if stage_iters:
+                reduced_stage = _reduce_vec(torch, dist, device, stage_iters, MAX)
+                stage_trials[T].append(reduced_stage)
+                stage_pool[T] += reduced_stage
             reduced_roundtrip = _reduce_vec(torch, dist, device, rt_iters, MAX)
             rt_trials[T].append(reduced_roundtrip)
             rt_pool[T] += reduced_roundtrip
@@ -1233,6 +1573,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             torch, routing, backend, problem, idx_g, w_g, rank, experts_per_rank,
             args.seed,
         )
+        precision_post = post.pop("_precision")
         pre = gate[T]["oracle_pre"]
         order_stable = (
             pre["ordering_contract"] == post["ordering_contract"]
@@ -1244,6 +1585,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "local_ok": int(pre["passed"] and post["passed"] and input_unchanged and order_stable),
             "max_rel": max(pre["max_relative_error"] or 0.0, post["max_relative_error"] or 0.0),
             "oracle_post": post,
+            "precision_post": precision_post,
             "order_stable": order_stable,
         })
 
@@ -1269,12 +1611,16 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         gt = gts[T]
         g = gate[T]
         rstats = g["rstats"]
-        d, c, rt = disp_pool[T], comb_pool[T], rt_pool[T]
-        dp, cp, rtp = pcts(d), pcts(c), pcts(rt)
-        # isolated_sum = SUM of the isolated dispatch+combine percentiles. NOT a measured op
+        d, s, c, rt = disp_pool[T], stage_pool[T], comb_pool[T], rt_pool[T]
+        dp, sp, cp, rtp = pcts(d), pcts(s), pcts(c), pcts(rt)
+        # isolated_sum = SUM of the isolated dispatch+stage+combine percentiles. Stage contributes
+        # zero when it is explicitly not applicable. This is NOT a measured chained operation
         # (can't reveal shared sync / launch amortization / overlap) — do NOT use for throughput
         # or SLO capacity. The MEASURED round trip (rtp) is the real chained latency.
-        isum = {key: dp[key] + cp[key] for key in dp} if dp and cp else None
+        isum = (
+            {key: dp[key] + (sp[key] if sp is not None else 0.0) + cp[key] for key in dp}
+            if dp and cp else None
+        )
         recv_total = _reduce_int(torch, dist, device, g["recv_local"], SUM)
         recv_max = _reduce_int(torch, dist, device, g["recv_local"], MAX)
         recv_min = _reduce_int(torch, dist, device, g["recv_local"], MIN)
@@ -1292,6 +1638,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "rank": rank,
             },
         )
+        precision_rank_evidence = [None] * world_size
+        dist.all_gather_object(
+            precision_rank_evidence,
+            {"pre": g["precision_pre"], "post": g["precision_post"]},
+        )
+        precision_evidence = aggregate_precision_evidence(precision_rank_evidence)
         # Canonical LOGICAL payload byte contracts (from the routing trace, NOT backend recv
         # tensors): token-rank = one copy per unique (token,dest-rank); token-expert = one copy
         # per routed (token,expert). routed_copies = token-rank copies; gt*topk = token-expert.
@@ -1306,8 +1658,27 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             percentile_name: gt / (latency_us * 1e-6)
             for percentile_name, latency_us in rtp.items()
         }
-        disp_bytes_l = logical_copies * H * elem_dispatch
-        comb_bytes_l = logical_copies * H * BF16_BYTES
+        dispatch_bytes = precision_byte_provenance(
+            communication_precision["dispatch"], logical_copies, H
+        )
+        combine_bytes = precision_byte_provenance(
+            communication_precision["combine"], logical_copies, H
+        )
+        stage_bytes = {
+            "accounting_contract": "activation-data-plus-scales-v1",
+            "activation_data_bytes": 0,
+            "scale_bytes": 0,
+            "total_logical_bytes": 0,
+        }
+        roundtrip_bytes = {
+            "accounting_contract": "activation-data-plus-scales-v1",
+            **{
+                field: dispatch_bytes[field] + combine_bytes[field]
+                for field in (
+                    "activation_data_bytes", "scale_bytes", "total_logical_bytes"
+                )
+            },
+        }
         # Contract-level anomalies are attached to the row and rolled into validity.
         #   roundtrip_gt_isolated_sum: measured RT p99 >> Σ(isolated dispatch+combine) p99.
         #   roundtrip_lt_component_floor: measured RT p50 < max(dispatch,combine) p50 — a chained
@@ -1317,7 +1688,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             row_anoms.append({"type": "roundtrip_gt_isolated_sum", "T": T,
                               "roundtrip_p99": round(rtp["p99"], 2), "isolated_sum_p99": round(isum["p99"], 2),
                               "ratio": round(rtp["p99"] / isum["p99"], 2), "threshold": thr_rt})
-        floor = max(dp["p50"], cp["p50"]) if dp and cp else None
+        floor = (
+            max(dp["p50"], cp["p50"], sp["p50"] if sp is not None else 0.0)
+            if dp and cp else None
+        )
         if floor and rtp["p50"] > 0 and rtp["p50"] < 0.95 * floor:
             row_anoms.append({"type": "roundtrip_lt_component_floor", "T": T,
                               "roundtrip_p50": round(rtp["p50"], 2), "component_floor_p50": round(floor, 2)})
@@ -1329,19 +1703,22 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "dispatch": component(dp, len(d)),
                 "isolated_sum": component(isum, 0, derived=True),
                 "roundtrip": component(rtp, len(rt)),
+                "stage": component(sp, len(s)),
             },
             "correctness": {
                 "contract": case_profile["oracle_contract"],
                 "max_relative_error": max_rel,
                 "passed": point_ok,
+                "precision": precision_evidence,
                 "rank_evidence": rank_evidence,
                 "scope": case_profile["correctness_scope"],
             },
             "global_tokens": gt,
-            "logical_bytes": {
-                "combine": comb_bytes_l,
-                "dispatch": disp_bytes_l,
-                "roundtrip": disp_bytes_l + comb_bytes_l,
+            "byte_provenance": {
+                "combine": combine_bytes,
+                "dispatch": dispatch_bytes,
+                "roundtrip": roundtrip_bytes,
+                "stage": stage_bytes,
             },
             "receive": {
                 "max": recv_max,
@@ -1372,6 +1749,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             },
             "sample_histograms": {
                 "dispatch": _histogram(d) if d else None,
+                "stage": _histogram(s) if s else None,
                 "combine": _histogram(c) if c else None,
                 "roundtrip": _histogram(rt),
             },
@@ -1406,10 +1784,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     # Adapters never self-label official; status is derived from these gates.
     prov = backend.backend_provenance
+    allocation_stratum_sha256 = getattr(args, "allocation_stratum_sha256", None)
     provenance_complete = contracts.provenance_complete(
         prov,
         backend.name,
         getattr(args, "git_run", None),
+        allocation_stratum_sha256=allocation_stratum_sha256,
         image_digest=getattr(args, "image_digest", None),
         image_verified=getattr(args, "image_digest_verified", False),
         squash_sha256=getattr(args, "squash_sha256", None),
@@ -1453,17 +1833,14 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
-        "experts_per_rank": experts_per_rank, "dispatch_dtype": "bf16",
+        "experts_per_rank": experts_per_rank,
+        "precision_profile": resolved_precision_id,
+        "dispatch_precision": communication_precision["dispatch"],
+        "combine_precision": communication_precision["combine"],
         "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
         # V2 is reserved for the PR #605 ElasticBuffer adapter; package versions never imply it.
         "kernel_gen": kernel_generation(backend),
         "activation_profile": ACTIVATION_PROFILE,
-        "quant": {
-            "combine_input_dtype": "bf16",
-            "combine_accum_dtype": getattr(backend, "combine_accum_dtype", "fp32"),
-            "combine_output_dtype": "bf16", "combine_quant_mode": "none",
-            "scale_layout": None,
-        },
     }
     generated_at = args.timestamp or _dt.datetime.now().astimezone().isoformat()
     realized_placement = getattr(args, "realized_placement", None)
@@ -1472,8 +1849,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         if realized_placement is not None
         else int(os.environ.get("SLURM_NNODES", "1"))
     )
-    case_factors = {
-        "case": {
+    scheduled_case = {
             "backend": backend.name,
             "canonical": canonical,
             "eplb": bool(eplb_plan),
@@ -1499,7 +1875,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "transport": args.transport,
             "warmup_semantics": WARMUP_SEMANTICS,
             "workload": args.workload_name or "manual",
-        },
+    }
+    if requested_precision is not None:
+        scheduled_case["precision_profile"] = requested_precision
+    case_factors = {
+        "case": scheduled_case,
         "profile": case_profile,
         "sku": args.runner,
     }
@@ -1514,6 +1894,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "artifact": git_run.get("artifact"),
         "execution_id": getattr(args, "allocation_execution_id", None),
         "job": git_run.get("job"),
+        "qualification_index": args.qualification_index,
         "repo": git_run.get("repo"),
         "run_attempt": git_run.get("run_attempt"),
         "run_id": git_run.get("run_id"),
@@ -1564,18 +1945,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     for row in rows:
         token_count = row["tokens_per_rank"]
 
-        def sampled_component(trials):
-            return {
-                "availability": "measured" if trials else "unavailable",
-                "sample_count": sum(len(trial) for trial in trials),
-                "trials": trials if trials else None,
-            }
-
         sample_point = {
             "components": {
-                "combine": sampled_component(comb_trials[token_count]),
-                "dispatch": sampled_component(disp_trials[token_count]),
-                "roundtrip": sampled_component(rt_trials[token_count]),
+                "combine": sampled_component_evidence(comb_trials[token_count]),
+                "dispatch": sampled_component_evidence(disp_trials[token_count]),
+                "roundtrip": sampled_component_evidence(rt_trials[token_count]),
+                "stage": sampled_component_evidence(stage_trials[token_count]),
             },
             "tokens_per_rank": token_count,
         }
@@ -1610,6 +1985,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "case_id": case_identifier,
         "format": "collectivex.samples.v1",
         "points": sample_points,
+        "qualification_index": args.qualification_index,
         "sampling": {
             "iterations_per_trial": args.iters,
             "reduction": case_profile["rank_reduction"],
@@ -1630,6 +2006,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     headline = next((r for r in rows if r["tokens_per_rank"] == 64), rows[len(rows) // 2])
     eplb_record = (
         {
+            "calibration_token_offset": eplb_calibration["token_offset"],
+            "calibration_trace_sha256": eplb_calibration["trace_sha256"],
+            "calibration_window": eplb_calibration["window"],
+            "calibration_workload_id": eplb_calibration["workload_id"],
             "enabled": True,
             "imbalance_after": eplb_plan["imbalance_after"],
             "imbalance_before": eplb_plan["imbalance_before"],
@@ -1644,6 +2024,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         }
         if eplb_plan
         else {
+            "calibration_token_offset": None,
+            "calibration_trace_sha256": None,
+            "calibration_window": None,
+            "calibration_workload_id": None,
             "enabled": False,
             "imbalance_after": None,
             "imbalance_before": None,
@@ -1680,7 +2064,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "mode": mode,
             "phase": args.phase,
             "required_publication": args.required_publication or "diagnostic",
-            "resource_mode": "tuned",
+            "resource_mode": "fixed-profile",
             "runner": args.runner,
             "shape": shape,
             "suite": args.suite or "manual",
@@ -1707,6 +2091,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "roundtrips_per_shape": CONDITIONING_ROUNDS_PER_SHAPE,
             },
             "contract": case_profile["contract"],
+            "execution_order_sha256": _sha256_json(observed_component_orders),
+            "qualification_index": args.qualification_index,
             "rows": rows,
             "sampling": {
                 "contract": SAMPLING_CONTRACT,
@@ -1743,6 +2129,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "runtime_fingerprint": runtime_fingerprint,
         "provenance": {
+            "allocation_stratum_sha256": allocation_stratum_sha256,
             "command": getattr(args, "reproduction_command", ""),
             "distributed_launcher": getattr(args, "distributed_launcher", None),
             "git_run": getattr(args, "git_run", None),

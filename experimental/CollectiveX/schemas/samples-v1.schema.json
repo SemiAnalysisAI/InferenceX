@@ -4,7 +4,7 @@
   "title": "CollectiveX exact private samples v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["allocation_id","attempt_id","case_id","format","points","sampling","schema_version","series_id"],
+  "required": ["allocation_id","attempt_id","case_id","format","points","qualification_index","sampling","schema_version","series_id"],
   "properties": {
       "allocation_id": {"$ref": "#/$defs/allocationId"},
       "attempt_id": {"$ref": "#/$defs/attemptId"},
@@ -21,11 +21,12 @@
                               "components": {
                                           "type": "object",
                                           "additionalProperties": false,
-                                          "required": ["combine","dispatch","roundtrip"],
+                                          "required": ["combine","dispatch","roundtrip","stage"],
                                           "properties": {
                                                         "combine": {"$ref": "#/$defs/component"},
                                                         "dispatch": {"$ref": "#/$defs/component"},
-                                                        "roundtrip": {"$ref": "#/$defs/component"}
+                                                        "roundtrip": {"$ref": "#/$defs/component"},
+                                                        "stage": {"$ref":"#/$defs/component"}
                                                       }
                                         },
                               "evidence_id": {"$ref": "#/$defs/evidenceId"},
@@ -35,6 +36,7 @@
                             }
                   }
           },
+      "qualification_index": {"type":"integer","minimum":1,"maximum":3},
       "sampling": {
             "type": "object",
             "additionalProperties": false,
@@ -56,25 +58,36 @@
       "evidenceId": {"type": "string","pattern": "^cxevidence-v1-[0-9a-f]{64}$"},
       "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
       "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
-      "component": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["availability","sample_count","trials"],
+      "trials": {
+            "type":"array",
+            "minItems":64,
+            "maxItems":64,
+            "items":{"type":"array","minItems":8,"maxItems":8,"items":{"type":"number","minimum":0}}
+          },
+      "measuredComponent": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["availability","sample_count","trials"],
             "properties": {
-                    "availability": {"enum": ["measured","unavailable"]},
-                    "sample_count": {"type": "integer","minimum": 0,"maximum": 512},
-                    "trials": {
-                              "oneOf": [
-                                          {"type": "null"},
-                                          {
-                                                        "type": "array",
-                                                        "minItems": 64,
-                                                        "maxItems": 64,
-                                                        "items": {"type": "array","minItems": 8,"maxItems": 8,"items": {"type": "number","minimum": 0}}
-                                                      }
-                                        ]
-                            }
+                    "availability":{"const":"measured"},
+                    "sample_count":{"const":512},
+                    "trials":{"$ref":"#/$defs/trials"}
                   }
+          },
+      "component": {
+            "oneOf": [
+                    {"$ref":"#/$defs/measuredComponent"},
+                    {
+                              "type":"object",
+                              "additionalProperties":false,
+                              "required":["availability","sample_count","trials"],
+                              "properties": {
+                                      "availability":{"const":"unavailable"},
+                                      "sample_count":{"const":0},
+                                      "trials":{"type":"null"}
+                                    }
+                            }
+                  ]
           }
     }
 }

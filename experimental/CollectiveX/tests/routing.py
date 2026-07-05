@@ -24,19 +24,32 @@ import hashlib
 
 import torch
 
-ACTIVATION_GENERATOR = "collectivex-activation-counter-v3"
-SOURCE_ID_BASE = 128
-SOURCE_ID_COLUMNS = 4
+ACTIVATION_GENERATOR = "collectivex-activation-counter-v4"
+SOURCE_ID_BITS = 32
+SOURCE_CHECKSUM_BITS = 16
+SOURCE_ID_COLUMNS = SOURCE_ID_BITS + SOURCE_CHECKSUM_BITS
+SOURCE_ID_CONTRACT = "bounded-sign-bit-source-v1"
 
 
 def build_global_routing(
-    global_tokens: int, experts: int, topk: int, routing: str, seed: int
+    global_tokens: int,
+    experts: int,
+    topk: int,
+    routing: str,
+    seed: int,
+    *,
+    token_offset: int = 0,
 ):
-    """Return byte-stable counter-generated routing tensors on CPU."""
+    """Return one byte-stable counter-generated routing window on CPU."""
     import workload
 
     indices, weights = workload.canonical_routing_rows(
-        int(global_tokens), int(experts), int(topk), routing, int(seed)
+        int(global_tokens),
+        int(experts),
+        int(topk),
+        routing,
+        int(seed),
+        token_offset=token_offset,
     )
     return (
         torch.tensor(indices, dtype=torch.int64),
@@ -51,7 +64,7 @@ def rank_slice(idx, weights, rank: int, tokens_per_rank: int):
 
 def rank_activations(tokens: int, hidden: int, seed: int, rank: int, device,
                      dtype=torch.bfloat16):
-    """Exact counter-derived inputs with a reversible global source-token prefix."""
+    """Exact counter-derived inputs with a quantization-safe source-token prefix."""
     source = torch.arange(tokens, device=device, dtype=torch.int64) + rank * tokens
     return activations_for_source_ids(source, hidden, seed, dtype)
 
@@ -64,10 +77,19 @@ def activations_for_source_ids(source, hidden: int, seed: int, dtype=torch.bfloa
     column = torch.arange(hidden, device=source.device, dtype=torch.int64)
     values = (source[:, None] * 131 + column[None, :] * 17 + int(seed) * 19) % 257 - 128
     output = values.to(dtype).mul_(1 / 64)
-    output[:, 0] = source % SOURCE_ID_BASE
-    output[:, 1] = (source // SOURCE_ID_BASE) % SOURCE_ID_BASE
-    output[:, 2] = (source // (SOURCE_ID_BASE**2)) % SOURCE_ID_BASE
-    output[:, 3] = (source * 29 + int(seed) * 7) % SOURCE_ID_BASE
+    if bool((source < 0).any().item()) or bool((source >= (1 << SOURCE_ID_BITS)).any().item()):
+        raise ValueError("source token ID is outside the bounded identity contract")
+    source_columns = torch.arange(SOURCE_ID_BITS, device=source.device, dtype=torch.int64)
+    source_bits = ((source[:, None] >> source_columns[None, :]) & 1) * 2 - 1
+    checksum = (source * 0x9E37 + int(seed) * 0xA24B) & ((1 << SOURCE_CHECKSUM_BITS) - 1)
+    checksum_columns = torch.arange(
+        SOURCE_CHECKSUM_BITS, device=source.device, dtype=torch.int64
+    )
+    checksum_bits = ((checksum[:, None] >> checksum_columns[None, :]) & 1) * 2 - 1
+    # Magnitude one sits inside the ordinary [-2, 2] activation range, so the identity cannot set
+    # an FP8 block scale. Decode depends only on sign and remains stable after dequantization.
+    output[:, :SOURCE_ID_BITS] = source_bits.to(dtype)
+    output[:, SOURCE_ID_BITS:SOURCE_ID_COLUMNS] = checksum_bits.to(dtype)
     return output
 
 
@@ -76,14 +98,21 @@ def decode_source_ids(payload, seed: int):
     if payload.ndim != 2 or payload.shape[1] < SOURCE_ID_COLUMNS:
         raise ValueError("received payload cannot carry the source-token prefix")
     prefix = payload[:, :SOURCE_ID_COLUMNS].float()
-    digits = prefix.round().to(torch.int64)
-    if not torch.equal(prefix, digits.float()):
-        raise ValueError("received source-token prefix is not exact")
-    if bool(((digits < 0) | (digits >= SOURCE_ID_BASE)).any().item()):
-        raise ValueError("received source-token prefix is out of range")
-    source = digits[:, 0] + SOURCE_ID_BASE * digits[:, 1] + SOURCE_ID_BASE**2 * digits[:, 2]
-    checksum = (source * 29 + int(seed) * 7) % SOURCE_ID_BASE
-    if not torch.equal(checksum, digits[:, 3]):
+    if not bool(torch.isfinite(prefix).all().item()) or bool((prefix.abs() < 0.25).any().item()):
+        raise ValueError("received source-token prefix is not quantization-stable")
+    bits = prefix >= 0
+    powers = 1 << torch.arange(SOURCE_ID_BITS, device=payload.device, dtype=torch.int64)
+    source = (bits[:, :SOURCE_ID_BITS].to(torch.int64) * powers).sum(dim=1)
+    checksum_powers = 1 << torch.arange(
+        SOURCE_CHECKSUM_BITS, device=payload.device, dtype=torch.int64
+    )
+    observed_checksum = (
+        bits[:, SOURCE_ID_BITS:SOURCE_ID_COLUMNS].to(torch.int64) * checksum_powers
+    ).sum(dim=1)
+    checksum = (source * 0x9E37 + int(seed) * 0xA24B) & (
+        (1 << SOURCE_CHECKSUM_BITS) - 1
+    )
+    if not torch.equal(checksum, observed_checksum):
         raise ValueError("received source-token checksum differs")
     return source
 

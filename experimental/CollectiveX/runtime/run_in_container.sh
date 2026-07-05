@@ -80,6 +80,7 @@ run_ep_suite() {
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
     local out="results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
     local -a EPARGS=(--backend "$backend" --mode "${CX_MODE:-normal}" --phase "$phase"
+      --precision-profile "${CX_PRECISION_PROFILE:-}"
       --tokens-ladder "$ladder"
       --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}"
       --routing "${CX_ROUTING:-uniform}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-8}"
@@ -89,6 +90,7 @@ run_ep_suite() {
       --scale-out-transport "${CX_SCALE_OUT_TRANSPORT:-}"
       --case-id "${CX_CASE_ID:-}" --suite "${CX_SUITE:-}" --workload-name "${CX_WORKLOAD_NAME:-}"
       --required-publication "${CX_REQUIRED_PUBLICATION:-}"
+      --qualification-index "${CX_QUALIFICATION_INDEX:-1}"
       --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
       --out "$out")
     cx_bool_enabled "${CX_EPLB:-0}" && EPARGS+=(--eplb)
@@ -987,6 +989,25 @@ dispatch_bench() {
   esac
 }
 
+run_precision_probe() {
+  local fields probe_id backend sku ep mode profile out rc_run
+  fields="$(cx_precision_probe_control_fields "$PWD")" || return 1
+  IFS='|' read -r probe_id backend sku ep mode profile <<< "$fields"
+  [ "$backend" = "$CX_BENCH" ] && [ "$sku" = "$CX_RUNNER" ] && [ "$ep" = "$CX_NGPUS" ] \
+    || { cx_log "ERROR: precision probe control differs from runtime placement"; return 1; }
+  out="results/${probe_id}.json"
+  cx_write_runtime_stage execution || return 1
+  if timeout -k 30 "${CX_RUN_TIMEOUT:-900}" torchrun --nproc_per_node="$CX_NGPUS" \
+      tests/probe_precision.py --backend "$backend" --sku "$sku" --ep "$ep" \
+      --mode "$mode" --precision-profile "$profile" --out "$out"; then
+    rc_run=0
+  else
+    rc_run=$?
+  fi
+  [ "$rc_run" = 0 ] || return "$rc_run"
+  python3 tests/probe_precision.py --validate-manifest "$out"
+}
+
 rc=0
 cx_validate_shard_control "$PWD"
 # Build-only mode: rack launchers run the shared backend preparation hook once per
@@ -1000,7 +1021,13 @@ if [ -n "${CX_BUILD_ONLY:-}" ]; then
   cx_log "backend preparation: bench=${CX_BENCH:-unknown} rc=$rc"
   exit "$rc"
 fi
-if [ -n "${CX_SHARD_FILE:-}" ]; then
+if [ "${CX_PRECISION_PROBE:-0}" = 1 ]; then
+  if cx_probe_scaleout_network && cx_prepare_backend "${CX_BENCH:-}"; then
+    run_precision_probe || rc=$?
+  else
+    rc=1
+  fi
+elif [ -n "${CX_SHARD_FILE:-}" ]; then
   # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
   # All cases share (sku, backend, nodes), so backend preparation is paid once and cached.
   ncases="$(python3 -c "import json;print(len(json.load(open('$CX_SHARD_FILE'))['cases']))")"
@@ -1083,5 +1110,7 @@ else
 fi
 
 # Summary table for the log; also fails the job if no valid results were produced.
-python3 summarize.py --results-dir results --runner "$CX_RUNNER" --ts "$CX_TS" || rc=1
+if [ "${CX_PRECISION_PROBE:-0}" != 1 ]; then
+  python3 summarize.py --results-dir results --runner "$CX_RUNNER" --ts "$CX_TS" || rc=1
+fi
 exit "$rc"

@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from copy import deepcopy
 from typing import Any
 
 IDENTITY_VERSION = 1
@@ -19,12 +20,12 @@ PREFIXES = {
     "attempt": "cxattempt-v1-",
 }
 V1_NORMAL_CASE_PROFILE = {
-    "activation_generator": "collectivex-activation-counter-v3",
-    "activation_profile": "canonical-counter-source-v3",
+    "activation_generator": "collectivex-activation-counter-v4",
+    "activation_profile": "canonical-counter-source-v4",
     "combine_dtype": "bf16",
     "combine_quant_mode": "none",
     "combine_semantics": "activation-only",
-    "component_order_contract": "roundtrip-dispatch-activation-only-combine-v2",
+    "component_order_contract": "qualification-hash-rotated-components-v1",
     "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
     "contract": "layout-and-dispatch-v1",
     "correctness_scope": "dispatch-metadata-and-transformed-combine",
@@ -39,15 +40,16 @@ V1_NORMAL_CASE_PROFILE = {
     "placement": "packed",
     "percentile_method": "nearest-rank",
     "rank_reduction": "cross-rank-max-per-iteration",
-    "resource_mode": "tuned",
+    "resource_mode": "fixed-profile",
     "routing_generator": "collectivex-routing-counter-v3",
     "sampling_contract": "fixed-512-v1",
     "seed": 67,
+    "source_identity_contract": "bounded-sign-bit-source-v1",
 }
 
 V1_LOW_LATENCY_CASE_PROFILE = {
     **V1_NORMAL_CASE_PROFILE,
-    "component_order_contract": "roundtrip-dispatch-gate-weighted-combine-v1",
+    "component_order_contract": "qualification-hash-rotated-components-v1",
     "combine_semantics": "gate-weighted",
     "contract": "expert-packed-weighted-combine-v1",
     "correctness_scope": "expert-assignment-and-weighted-combine",
@@ -64,6 +66,187 @@ V1_CASE_PROFILES = {
     "low-latency": V1_LOW_LATENCY_CASE_PROFILE,
 }
 
+V1_CONTROL_PRECISION_PROFILE = "d-bf16.c-bf16"
+V1_NORMAL_PRECISION_PROFILE_IDS = (
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale",
+)
+V1_LOW_LATENCY_PRECISION_PROFILE_IDS = (
+    "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
+    "d-bf16.c-logfmt10-dynamic64",
+    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
+)
+
+
+def _communication_axis(
+    *,
+    api_input_dtype: str,
+    api_output_dtype: str,
+    communication_format: str,
+    scale_dtype: str | None,
+    scale_layout: str,
+    scale_group_size: int | None,
+    padding_contract: str,
+    alignment_contract: str,
+    quantization_origin: str,
+    conversion_boundary: str,
+) -> dict[str, Any]:
+    return {
+        "api_input_dtype": api_input_dtype,
+        "api_output_dtype": api_output_dtype,
+        "communication_format": communication_format,
+        "scale_dtype": scale_dtype,
+        "scale_layout": scale_layout,
+        "scale_group_size": scale_group_size,
+        "padding_contract": padding_contract,
+        "alignment_contract": alignment_contract,
+        "quantization_origin": quantization_origin,
+        "conversion_boundary": conversion_boundary,
+    }
+
+
+_BF16_AXIS = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="bf16",
+    scale_dtype=None,
+    scale_layout="none",
+    scale_group_size=None,
+    padding_contract="none",
+    alignment_contract="native-bf16-vector-alignment",
+    quantization_origin="none",
+    conversion_boundary="none",
+)
+_FP8_E4M3FN_PREQUANTIZED_DISPATCH = _communication_axis(
+    api_input_dtype="fp8-e4m3fn-with-f32-scale",
+    api_output_dtype="fp8-e4m3fn-with-f32-scale",
+    communication_format="fp8-e4m3fn",
+    scale_dtype="f32",
+    scale_layout="per-token-hidden-block",
+    scale_group_size=128,
+    padding_contract="right-zero-pad-hidden-to-128",
+    alignment_contract="hidden-block-128",
+    quantization_origin="caller-prequantized",
+    conversion_boundary="before-dispatch-timing",
+)
+_FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH = _communication_axis(
+    api_input_dtype="fp8-e4m3fnuz-with-f32-scale",
+    api_output_dtype="fp8-e4m3fnuz-with-f32-scale",
+    communication_format="fp8-e4m3fnuz",
+    scale_dtype="f32",
+    scale_layout="per-token-hidden-block",
+    scale_group_size=128,
+    padding_contract="right-zero-pad-hidden-to-128",
+    alignment_contract="hidden-block-128",
+    quantization_origin="caller-prequantized",
+    conversion_boundary="before-dispatch-timing",
+)
+_FP8_E4M3FN_FUSED_DISPATCH = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="fp8-e4m3fn-with-f32-scale",
+    communication_format="fp8-e4m3fn",
+    scale_dtype="f32",
+    scale_layout="per-token-hidden-block",
+    scale_group_size=128,
+    padding_contract="right-zero-pad-hidden-to-128",
+    alignment_contract="hidden-block-128",
+    quantization_origin="backend-fused",
+    conversion_boundary="inside-dispatch-timing",
+)
+_LOGFMT10_DYNAMIC64_COMBINE = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="logfmt10",
+    scale_dtype="implicit-logfmt10",
+    scale_layout="dynamic-per-64-values",
+    scale_group_size=64,
+    padding_contract="right-zero-pad-values-to-64",
+    alignment_contract="value-block-64",
+    quantization_origin="backend-internal",
+    conversion_boundary="inside-combine-timing",
+)
+_FP8_E4M3FN_DIRECT_CAST_COMBINE = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="fp8-e4m3fn",
+    scale_dtype=None,
+    scale_layout="none",
+    scale_group_size=None,
+    padding_contract="none",
+    alignment_contract="native-fp8-vector-alignment",
+    quantization_origin="backend-internal-direct-cast",
+    conversion_boundary="inside-combine-timing",
+)
+_FP8_E4M3FNUZ_DIRECT_CAST_COMBINE = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="fp8-e4m3fnuz",
+    scale_dtype=None,
+    scale_layout="none",
+    scale_group_size=None,
+    padding_contract="none",
+    alignment_contract="native-fp8-vector-alignment",
+    quantization_origin="backend-internal-direct-cast",
+    conversion_boundary="inside-combine-timing",
+)
+
+V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
+    V1_CONTROL_PRECISION_PROFILE: {
+        "modes": ["normal", "low-latency"],
+        "dispatch": _BF16_AXIS,
+        "combine": _BF16_AXIS,
+    },
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FN_PREQUANTIZED_DISPATCH,
+        "combine": _BF16_AXIS,
+    },
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH,
+        "combine": _BF16_AXIS,
+    },
+    "d-fp8-e4m3fn-b128-f32-fused.c-bf16": {
+        "modes": ["low-latency"],
+        "dispatch": _FP8_E4M3FN_FUSED_DISPATCH,
+        "combine": _BF16_AXIS,
+    },
+    "d-bf16.c-logfmt10-dynamic64": {
+        "modes": ["low-latency"],
+        "dispatch": _BF16_AXIS,
+        "combine": _LOGFMT10_DYNAMIC64_COMBINE,
+    },
+    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64": {
+        "modes": ["low-latency"],
+        "dispatch": _FP8_E4M3FN_FUSED_DISPATCH,
+        "combine": _LOGFMT10_DYNAMIC64_COMBINE,
+    },
+    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _BF16_AXIS,
+        "combine": _FP8_E4M3FN_DIRECT_CAST_COMBINE,
+    },
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FN_PREQUANTIZED_DISPATCH,
+        "combine": _FP8_E4M3FN_DIRECT_CAST_COMBINE,
+    },
+    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _BF16_AXIS,
+        "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
+    },
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH,
+        "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
+    },
+}
+
 
 def case_profile(mode: str) -> dict[str, Any]:
     """Return the immutable measurement profile for one scheduled mode."""
@@ -73,12 +256,32 @@ def case_profile(mode: str) -> dict[str, Any]:
         raise IdentityError(f"unknown CollectiveX case mode {mode!r}") from exc
 
 
+def precision_profile(name: str) -> dict[str, Any]:
+    """Return one exact dispatch/combine communication-format profile."""
+    try:
+        profile = V1_PRECISION_PROFILES[name]
+    except KeyError as exc:
+        raise IdentityError(f"unknown CollectiveX precision profile {name!r}") from exc
+    return {"profile_id": name, **deepcopy(profile)}
+
+
 def profile_for_case(case: dict[str, Any]) -> dict[str, Any]:
     """Resolve a scheduled case's explicit mode to its identity profile."""
     mode = case.get("mode")
     if not isinstance(mode, str):
         raise IdentityError("scheduled case mode is missing")
-    return case_profile(mode)
+    base = case_profile(mode)
+    precision_name = case.get("precision_profile")
+    if precision_name is None:
+        return base
+    if not isinstance(precision_name, str):
+        raise IdentityError("scheduled case precision_profile must be a string")
+    precision = precision_profile(precision_name)
+    if mode not in precision["modes"]:
+        raise IdentityError(
+            f"precision profile {precision_name!r} is not valid in mode {mode!r}"
+        )
+    return {**base, "communication_precision": precision}
 
 
 class IdentityError(ValueError):

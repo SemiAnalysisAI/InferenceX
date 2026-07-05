@@ -1,14 +1,20 @@
 # CollectiveX Sweep — one structured run instead of thousands of dispatches.
 #
-# Shape: setup -> sweep. The matrix unit is a shard: one allocation that sweeps
-# cases sharing (sku, backend, nodes). Each cell uploads its privacy-checked raw
-# result JSONs. The isolated v1 publisher consumes downloaded shards separately.
+# Shape: sweep/probe runs setup -> GPU cells; publish-v1 and refresh-v1 stay on disposable
+# GitHub-hosted storage and skip GPU jobs. This file is registered on the default
+# branch, so its collectivex branch revision can be dispatched with --ref.
 name: CollectiveX Sweep
 permissions:
+  actions: read
   contents: read
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Operation to execute
+        type: choice
+        default: sweep
+        options: [sweep, probe-precision, publish-v1, refresh-v1]
       backend:
         description: "EP library to sweep — 'all' runs every EP backend in one matrix"
         type: choice
@@ -39,17 +45,36 @@ on:
         type: choice
         default: unversioned
         options: [unversioned, v1]
+      qualification_index:
+        description: Deterministic execution-order index; V1 qualification uses 1, then 2, then 3
+        type: choice
+        default: '1'
+        options: ['1', '2', '3']
+      publish_run_ids:
+        description: For publish-v1, exactly three successful V1 sweep run IDs
+        type: string
+        default: ''
+      refresh_run_id:
+        description: For refresh-v1, source publication workflow run ID
+        type: string
+        default: ''
+      refresh_digest:
+        description: For refresh-v1, exact publication dataset SHA-256
+        type: string
+        default: ''
 concurrency:
-  group: cx-sweep-${{ github.ref }}-${{ inputs.release_tag }}-${{ inputs.backend }}-${{ inputs.only_sku }}
+  group: cx-${{ inputs.operation }}-${{ github.ref }}-${{ inputs.release_tag }}-${{ inputs.backend }}-${{ inputs.only_sku }}
   cancel-in-progress: false
 
 jobs:
   # ---- setup: resolve the suites into the shard matrix (the "pending jobs" node) ----
   setup:
+    if: ${{ inputs.operation == 'sweep' || inputs.operation == 'probe-precision' }}
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.gen.outputs.matrix }}
       n: ${{ steps.gen.outputs.n }}
+      max_parallel: ${{ steps.gen.outputs.max_parallel }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
@@ -59,39 +84,74 @@ jobs:
         working-directory: experimental/CollectiveX
         env:
           INPUT_BACKEND: ${{ inputs.backend }}
+          INPUT_OPERATION: ${{ inputs.operation }}
           INPUT_SUITES: ${{ inputs.suites }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
           INPUT_MIN_NODES: ${{ inputs.min_nodes }}
           INPUT_MAX_NODES: ${{ inputs.max_nodes }}
           INPUT_MAX_CASES: ${{ inputs.max_cases }}
+          INPUT_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
+          CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
           COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
           COLLECTIVEX_ARTIFACT_NAME: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
           COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_unsupported
         run: |
           set -euo pipefail
-          args=(--suites "$INPUT_SUITES" --max-cases "$INPUT_MAX_CASES")
-          case "$INPUT_BACKEND" in
-            all) args+=(--backends all) ;;
-            *) args+=(--backend "$INPUT_BACKEND") ;;
-          esac
-          [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
-          [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
-          [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
-          python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
+          if [ "$INPUT_OPERATION" = probe-precision ] && [ "${{ inputs.release_tag }}" != unversioned ]; then
+            echo 'precision probes cannot carry a V1 release tag' >&2
+            exit 1
+          fi
+          if [ "$INPUT_OPERATION" = sweep ] && [ "${{ inputs.release_tag }}" = v1 ]; then
+            [[ "$INPUT_QUALIFICATION_INDEX" =~ ^[123]$ ]] || {
+              echo 'V1 sweeps require qualification_index 1, 2, or 3' >&2
+              exit 1
+            }
+            [ "$INPUT_BACKEND" = all ] && [ "$INPUT_SUITES" = all ] \
+              && [ -z "$INPUT_ONLY_SKU" ] && [ -z "$INPUT_MIN_NODES" ] \
+              && [ -z "$INPUT_MAX_NODES" ] && [ "$INPUT_MAX_CASES" = 128 ] || {
+                echo 'V1 sweeps require the exact unfiltered full matrix' >&2
+                exit 1
+              }
+            python3 - <<'PY'
+          import capability
+
+          if capability.provisional_precision_targets():
+              raise SystemExit("V1 sweeps require every precision capability cell to be resolved")
+          PY
+          fi
+          if [ "$INPUT_OPERATION" = probe-precision ]; then
+            args=(--workflow-plan --backend "$INPUT_BACKEND" --out matrix_full.json)
+            [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+            python3 tests/probe_precision.py "${args[@]}"
+          else
+            args=(--suites "$INPUT_SUITES" --max-cases "$INPUT_MAX_CASES")
+            case "$INPUT_BACKEND" in
+              all) args+=(--backends all) ;;
+              *) args+=(--backend "$INPUT_BACKEND") ;;
+            esac
+            [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+            [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
+            [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
+            python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
+          fi
           python3 artifact_safety.py matrix_full.json
           SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='case_ids'} for x in m['include']]}))")
           {
             echo "matrix=$SLIM"
             echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")"
             echo "source_backends=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(' '.join(sorted({x['backend'] for x in m['include']} & {'deepep-v2','deepep-hybrid'})))")"
+            echo "max_parallel=$(python3 -c "import json;m=json.load(open('matrix_full.json'));w=max(x['execution_weight'] for x in m['include']);b=64 if '$INPUT_OPERATION' == 'probe-precision' else 4096;print(max(1,min(10,b//w)))")"
           } >> "$GITHUB_OUTPUT"
-          unsupported_n=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(sum(x['disposition']=='unsupported' for x in m['requested_cases']))")
+          unsupported_n=0
+          if [ "$INPUT_OPERATION" = sweep ]; then
+            unsupported_n=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(sum(x['disposition']=='unsupported' for x in m['requested_cases']))")
+          fi
           echo "unsupported_n=$unsupported_n" >> "$GITHUB_OUTPUT"
           if [ "$unsupported_n" -gt 0 ]; then
             python3 sweep_matrix.py --emit-unsupported-from matrix_full.json \
               --out-dir unsupported
           fi
-          python3 -c "import json;m=json.load(open('matrix_full.json'));r=m['requested_cases'];print('shard-cells:',len(m['include']),'runnable:',sum(x['disposition']=='runnable' for x in r),'unsupported:',sum(x['disposition']=='unsupported' for x in r))"
+          python3 -c "import json;m=json.load(open('matrix_full.json'));print('execution-cells:',len(m['include']))"
       - name: Prepare pinned backend source archive
         if: ${{ steps.gen.outputs.source_backends != '' }}
         working-directory: experimental/CollectiveX
@@ -123,20 +183,21 @@ jobs:
           name: cxbackend-sources-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/collectivex-backend-sources.tar
           if-no-files-found: error
-          retention-days: 3
+          retention-days: ${{ inputs.release_tag == 'v1' && 90 || 3 }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
           path: experimental/CollectiveX/matrix_full.json
           if-no-files-found: error
-          retention-days: 3
+          retention-days: ${{ inputs.release_tag == 'v1' && 90 || 3 }}
       - name: Create V1 release marker
-        if: ${{ inputs.release_tag == 'v1' }}
+        if: ${{ inputs.operation == 'sweep' && inputs.release_tag == 'v1' }}
         env:
           EXPECTED_MATRIX_SHA256: f1ca85f9689922b90edd5767b9ff2a902f6b896f32f68b2ca086dde3fd2157d0
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           SOURCE_SHA: ${{ github.sha }}
+          QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
         run: |
           set -euo pipefail
           destination="$RUNNER_TEMP/collectivex-release"
@@ -148,13 +209,22 @@ jobs:
           import pathlib
           import sys
 
+          sys.path.insert(0, str(pathlib.Path("experimental/CollectiveX").resolve()))
+          import sweep_matrix
+
           matrix = pathlib.Path("experimental/CollectiveX/matrix_full.json").read_bytes()
           matrix_sha256 = hashlib.sha256(matrix).hexdigest()
           if matrix_sha256 != os.environ["EXPECTED_MATRIX_SHA256"]:
               raise SystemExit("V1 release tag requires the locked full matrix")
+          qualification_index = int(os.environ["QUALIFICATION_INDEX"])
+          execution_plan_sha256 = sweep_matrix.qualification_execution_plan_sha256(
+              json.loads(matrix), qualification_index
+          )
           marker = {
+              "execution_plan_sha256": execution_plan_sha256,
               "format": "collectivex.release-tag.v1",
               "matrix_sha256": matrix_sha256,
+              "qualification_index": qualification_index,
               "release_tag": "v1",
               "run_attempt": os.environ["RUN_ATTEMPT"],
               "run_id": os.environ["RUN_ID"],
@@ -166,13 +236,13 @@ jobs:
           PY
           python3 experimental/CollectiveX/artifact_safety.py "$destination/release.json"
       - name: Upload V1 release marker
-        if: ${{ inputs.release_tag == 'v1' }}
+        if: ${{ inputs.operation == 'sweep' && inputs.release_tag == 'v1' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxrelease-v1-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/collectivex-release/release.json
           if-no-files-found: error
-          retention-days: 3
+          retention-days: 90
       - name: Validate unsupported artifact safety
         id: unsupported_safety
         if: ${{ always() && fromJSON(steps.gen.outputs.unsupported_n) > 0 }}
@@ -195,15 +265,15 @@ jobs:
           name: cxunsupported-${{ github.run_id }}-${{ github.run_attempt }}
           path: experimental/CollectiveX/unsupported/*.json
           if-no-files-found: error
-          retention-days: 3
+          retention-days: ${{ inputs.release_tag == 'v1' && 90 || 3 }}
 
   # ---- sweep: ONE matrix cell per shard (the parent job with child jobs) ----
   sweep:
     needs: setup
-    if: ${{ fromJSON(needs.setup.outputs.n) > 0 }}
+    if: ${{ (inputs.operation == 'sweep' || inputs.operation == 'probe-precision') && fromJSON(needs.setup.outputs.n) > 0 }}
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: ${{ fromJSON(needs.setup.outputs.max_parallel) }}
       matrix: ${{ fromJSON(needs.setup.outputs.matrix) }}
     runs-on: ${{ matrix.sku }}
     timeout-minutes: 350
@@ -214,15 +284,17 @@ jobs:
       CX_SCALE_UP_DOMAIN: ${{ matrix.scale_up_domain }}
       CX_SHARD_FILE: .shards/${{ matrix.id }}.json
       CX_SHARD_SKU: ${{ matrix.sku }}
+      CX_PRECISION_PROBE: ${{ inputs.operation == 'probe-precision' && '1' || '0' }}
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
-      COLLECTIVEX_ARTIFACT_NAME: cxshard-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+      COLLECTIVEX_ARTIFACT_NAME: ${{ inputs.operation == 'probe-precision' && format('cxprobe-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) || format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
       # Consolidated shards run one bounded build-group in one Slurm allocation, so
       # the launcher's default 45-min --time is too short. 300 min covers a cold
       # compute-node image import plus the shard. The allocation releases early
       # when the shard finishes, so short shards don't waste it.
-      CX_TIME: '300'
+      CX_TIME: ${{ inputs.operation == 'probe-precision' && '90' || '300' }}
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
+      CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
       CX_JOB_ROOT: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
       CX_SOURCE_ROOT: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}/source
       HOME: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}/home
@@ -337,19 +409,29 @@ jobs:
             "$archive" "$destination" "$source_basename"
           cx_backend_source_is_valid "$EXPECTED_BACKEND" "$source_path"
           printf 'CX_BACKEND_SOURCE_SEED_ROOT=%s\n' "$seed_root" >> "$GITHUB_ENV"
-      - name: Extract and validate this shard's cases
+      - name: Extract and validate this execution control
         run: |
           set -euo pipefail
           cd "$CX_SOURCE_ROOT/experimental/CollectiveX" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          python3 sweep_matrix.py \
-            --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
-            --shard-id '${{ matrix.id }}' \
-            --expect-sku '${{ matrix.sku }}' \
-            --expect-backend '${{ matrix.backend }}' \
-            --expect-nodes '${{ matrix.nodes }}' \
-            --out '${{ env.CX_SHARD_FILE }}' >/dev/null
-      - name: Sweep shard ${{ matrix.id }} (${{ matrix.n }} cases, one allocation)
+          if [ '${{ inputs.operation }}' = probe-precision ]; then
+            python3 tests/probe_precision.py \
+              --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
+              --probe-id '${{ matrix.id }}' \
+              --expect-sku '${{ matrix.sku }}' \
+              --expect-backend '${{ matrix.backend }}' \
+              --expect-nodes '${{ matrix.nodes }}' \
+              --out '${{ env.CX_SHARD_FILE }}'
+          else
+            python3 sweep_matrix.py \
+              --extract-from "$CX_JOB_ROOT/control/matrix_full.json" \
+              --shard-id '${{ matrix.id }}' \
+              --expect-sku '${{ matrix.sku }}' \
+              --expect-backend '${{ matrix.backend }}' \
+              --expect-nodes '${{ matrix.nodes }}' \
+              --out '${{ env.CX_SHARD_FILE }}' >/dev/null
+          fi
+      - name: Execute ${{ inputs.operation }} cell ${{ matrix.id }}
         id: sweep_shard
         env:
           COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
@@ -382,11 +464,16 @@ jobs:
         run: |
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          python3 experimental/CollectiveX/contracts.py validate-delivery \
-            --source "experimental/CollectiveX/${CX_SHARD_FILE}" \
-            experimental/CollectiveX/results/*.json
+          if [ '${{ inputs.operation }}' = probe-precision ]; then
+            python3 experimental/CollectiveX/tests/probe_precision.py \
+              --validate-manifest experimental/CollectiveX/results/*.json
+          else
+            python3 experimental/CollectiveX/contracts.py validate-delivery \
+              --source "experimental/CollectiveX/${CX_SHARD_FILE}" \
+              experimental/CollectiveX/results/*.json
+          fi
       - name: Shard summary
-        if: ${{ always() && steps.artifact_safety.outcome == 'success' && steps.delivery_contracts.outcome == 'success' }}
+        if: ${{ inputs.operation == 'sweep' && always() && steps.artifact_safety.outcome == 'success' && steps.delivery_contracts.outcome == 'success' }}
         run: |
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
@@ -405,11 +492,11 @@ jobs:
         if: always() && steps.stage_artifact.outcome == 'success' && steps.delivery_contracts.outcome == 'success' && steps.artifact_safety.outcome == 'success'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cxshard-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ inputs.operation == 'probe-precision' && format('cxprobe-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) || format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
           path: |
             ${{ env.CX_JOB_ROOT }}/artifact/*.json
           if-no-files-found: error
-          retention-days: 3
+          retention-days: ${{ inputs.release_tag == 'v1' && 90 || 3 }}
       - name: Cleanup isolated workspace
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
@@ -434,3 +521,331 @@ jobs:
             fi
           fi
           rm -rf -- "$CX_JOB_ROOT"
+
+  probe-summary:
+    needs: [setup, sweep]
+    if: ${{ always() && inputs.operation == 'probe-precision' && needs.sweep.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
+        with: { clean: true, persist-credentials: false }
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/collectivex-probes/control
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: cxprobe-*-${{ github.run_id }}-${{ github.run_attempt }}
+          merge-multiple: true
+          path: ${{ runner.temp }}/collectivex-probes/results
+      - name: Validate exact precision probe coverage
+        run: |
+          set -euo pipefail
+          plan="$RUNNER_TEMP/collectivex-probes/control/matrix_full.json"
+          shopt -s nullglob
+          manifests=("$RUNNER_TEMP"/collectivex-probes/results/*.json)
+          [ "${#manifests[@]}" -gt 0 ] || {
+            echo 'precision probe artifacts are empty' >&2
+            exit 1
+          }
+          python3 experimental/CollectiveX/artifact_safety.py "$plan" "${manifests[@]}"
+          python3 experimental/CollectiveX/tests/probe_precision.py \
+            --validate-bundle "$plan" --validate-manifest "${manifests[@]}"
+      - name: Upload validated precision probe bundle
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxprecision-probes-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/collectivex-probes
+          if-no-files-found: error
+          retention-days: 30
+
+  publish:
+    if: ${{ inputs.operation == 'publish-v1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RUN_IDS: ${{ inputs.publish_run_ids }}
+    steps:
+      - name: Verify source runs
+        id: runs
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a run_ids <<< "$RUN_IDS"
+          [ "${#run_ids[@]}" -eq 3 ] || {
+            echo 'publish_run_ids must contain exactly three IDs' >&2
+            exit 1
+          }
+          [ "$(printf '%s\n' "${run_ids[@]}" | sort -u | wc -l)" -eq 3 ] || {
+            echo 'publish_run_ids must be unique' >&2
+            exit 1
+          }
+
+          : > "$RUNNER_TEMP/collectivex-runs.tsv"
+          source_sha=''
+          for run_id in "${run_ids[@]}"; do
+            [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || {
+              echo 'publish_run_ids contains a non-decimal ID' >&2
+              exit 1
+            }
+            metadata=$(gh api "repos/$REPOSITORY/actions/runs/$run_id")
+            name=$(jq -r '.name' <<< "$metadata")
+            path=$(jq -r '.path' <<< "$metadata")
+            branch=$(jq -r '.head_branch' <<< "$metadata")
+            status=$(jq -r '.status' <<< "$metadata")
+            conclusion=$(jq -r '.conclusion' <<< "$metadata")
+            sha=$(jq -r '.head_sha' <<< "$metadata")
+            attempt=$(jq -r '.run_attempt' <<< "$metadata")
+            [ "$name" = 'CollectiveX Sweep' ] \
+              && [ "$path" = '.github/workflows/collectivex-sweep.yml' ] \
+              && [ "$branch" = 'collectivex' ] \
+              && [ "$status" = 'completed' ] \
+              && [ "$conclusion" = 'success' ] \
+              && [ "$attempt" = 1 ] \
+              && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+                echo "run $run_id is not an eligible first-attempt V1 sweep" >&2
+                exit 1
+              }
+            if [ -z "$source_sha" ]; then
+              source_sha="$sha"
+            else
+              [ "$sha" = "$source_sha" ] || {
+                echo 'source runs do not share one source SHA' >&2
+                exit 1
+              }
+            fi
+            printf '%s\t%s\t%s\n' "$run_id" "$attempt" "$sha" \
+              >> "$RUNNER_TEMP/collectivex-runs.tsv"
+          done
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
+        with:
+          ref: ${{ steps.runs.outputs.source_sha }}
+          clean: true
+          persist-credentials: false
+
+      - name: Install publisher dependencies
+        run: python3 -m pip install --quiet -r experimental/CollectiveX/requirements.txt
+
+      - name: Build promoted publication
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          store="$RUNNER_TEMP/collectivex-publisher"
+          downloads="$RUNNER_TEMP/collectivex-downloads"
+          output="$RUNNER_TEMP/collectivex-publication"
+          umask 027
+          mkdir -m 750 "$store" "$downloads" "$output"
+          : > "$RUNNER_TEMP/collectivex-bundles.txt"
+          : > "$RUNNER_TEMP/collectivex-qualification-indices.txt"
+
+          while IFS=$'\t' read -r run_id attempt source_sha; do
+            run_dir="$downloads/$run_id"
+            mkdir -m 750 "$run_dir"
+            gh run download "$run_id" --repo "$REPOSITORY" --dir "$run_dir"
+            matrix="$run_dir/cxsweep-matrix-$run_id-$attempt/matrix_full.json"
+            marker="$run_dir/cxrelease-v1-$run_id-$attempt/release.json"
+            [ -f "$matrix" ] || {
+              echo "run $run_id is missing its exact matrix artifact" >&2
+              exit 1
+            }
+            [ -f "$marker" ] || {
+              echo "run $run_id is not tagged for V1 publication" >&2
+              exit 1
+            }
+            matrix_sha=$(sha256sum "$matrix" | cut -d' ' -f1)
+            qualification_index=$(jq -r '.qualification_index' "$marker")
+            execution_plan_sha=$(
+              PYTHONPATH=experimental/CollectiveX python3 -c \
+                'import json,sys,sweep_matrix as s; print(s.qualification_execution_plan_sha256(json.load(open(sys.argv[1], encoding="utf-8")), int(sys.argv[2])))' \
+                "$matrix" "$qualification_index"
+            )
+            jq -e \
+              --arg run_id "$run_id" \
+              --arg attempt "$attempt" \
+              --arg source_sha "$source_sha" \
+              --arg matrix_sha "$matrix_sha" \
+              --arg execution_plan_sha "$execution_plan_sha" \
+              'keys == ["execution_plan_sha256","format","matrix_sha256","qualification_index","release_tag","run_attempt","run_id","source_sha"]
+               and .format == "collectivex.release-tag.v1"
+               and .release_tag == "v1"
+               and .run_id == $run_id
+               and .run_attempt == $attempt
+               and .source_sha == $source_sha
+               and (.qualification_index == 1 or .qualification_index == 2 or .qualification_index == 3)
+               and .matrix_sha256 == $matrix_sha
+               and .execution_plan_sha256 == $execution_plan_sha' \
+              "$marker" >/dev/null || {
+                echo "run $run_id has an invalid V1 release marker" >&2
+                exit 1
+              }
+            jq -r '.qualification_index' "$marker" \
+              >> "$RUNNER_TEMP/collectivex-qualification-indices.txt"
+
+            mapfile -t artifacts < <(
+              find "$run_dir" -mindepth 1 -maxdepth 1 -type d \
+                \( -name "cxshard-*-$run_id-$attempt" \
+                -o -name "cxunsupported-$run_id-$attempt" \) -print | sort
+            )
+            [ "${#artifacts[@]}" -gt 0 ] || {
+              echo "run $run_id has no result artifacts" >&2
+              exit 1
+            }
+            artifact_args=()
+            for artifact in "${artifacts[@]}"; do
+              artifact_args+=(--artifact "$artifact")
+            done
+            result=$(
+              python3 experimental/CollectiveX/publisher.py --store-root "$store" ingest \
+                --matrix "$matrix" \
+                "${artifact_args[@]}" \
+                --repository "$REPOSITORY" \
+                --run-id "$run_id" \
+                --run-attempt "$attempt" \
+                --qualification-index "$qualification_index" \
+                --source-sha "$source_sha"
+            )
+            bundle_id=$(jq -er '.bundle_id' <<< "$result")
+            printf '%s\n' "$bundle_id" >> "$RUNNER_TEMP/collectivex-bundles.txt"
+          done < "$RUNNER_TEMP/collectivex-runs.tsv"
+
+          [ "$(sort -n "$RUNNER_TEMP/collectivex-qualification-indices.txt" | tr '\n' ' ')" = '1 2 3 ' ] || {
+            echo 'source runs must contain qualification indices 1, 2, and 3 exactly once' >&2
+            exit 1
+          }
+
+          mapfile -t bundle_ids < "$RUNNER_TEMP/collectivex-bundles.txt"
+          promote_args=()
+          for bundle_id in "${bundle_ids[@]}"; do
+            promote_args+=(--bundle "$bundle_id")
+          done
+          result=$(
+            python3 experimental/CollectiveX/publisher.py --store-root "$store" promote \
+              "${promote_args[@]}"
+          )
+          dataset_id=$(jq -er '.dataset_sha256' <<< "$result")
+          dataset="$store/public/datasets/$dataset_id/dataset.json"
+          [ -f "$dataset" ] || {
+            echo 'publisher did not install the promoted dataset' >&2
+            exit 1
+          }
+          publication="$output/collectivex_public_v1_$dataset_id.ndjson"
+          cp -- "$dataset" "$publication"
+          python3 experimental/CollectiveX/artifact_safety.py "$publication"
+          python3 experimental/CollectiveX/publisher.py --store-root "$store" verify \
+            --channel dev-latest "${promote_args[@]}"
+          [ "$(stat -c %s "$publication")" -le 33554432 ] || {
+            echo 'publication exceeds the 32 MiB frontend limit' >&2
+            exit 1
+          }
+          sha256sum "$publication"
+          {
+            echo '## CollectiveX V1 publication'
+            echo
+            echo "Dataset: \`$dataset_id\`"
+            echo
+            echo 'Source runs:'
+            sed 's/^/- `/' "$RUNNER_TEMP/collectivex-runs.tsv" | sed 's/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload JIT publication artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxpublication-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/collectivex-publication/*.ndjson
+          if-no-files-found: error
+          retention-days: 90
+
+  refresh:
+    if: ${{ inputs.operation == 'refresh-v1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN_ID: ${{ inputs.refresh_run_id }}
+      EXPECTED_DIGEST: ${{ inputs.refresh_digest }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
+        with: { clean: true, persist-credentials: false }
+
+      - name: Revalidate promoted publication
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]] || {
+            echo 'refresh_run_id must be a decimal workflow run ID' >&2
+            exit 1
+          }
+          [[ "$EXPECTED_DIGEST" =~ ^[0-9a-f]{64}$ ]] || {
+            echo 'refresh_digest must be a SHA-256 digest' >&2
+            exit 1
+          }
+          metadata=$(gh api "repos/$REPOSITORY/actions/runs/$SOURCE_RUN_ID")
+          path=$(jq -r '.path' <<< "$metadata")
+          branch=$(jq -r '.head_branch' <<< "$metadata")
+          status=$(jq -r '.status' <<< "$metadata")
+          conclusion=$(jq -r '.conclusion' <<< "$metadata")
+          attempt=$(jq -r '.run_attempt' <<< "$metadata")
+          [ "$path" = '.github/workflows/collectivex-sweep.yml' ] \
+            && [ "$branch" = 'collectivex' ] \
+            && [ "$status" = completed ] \
+            && [ "$conclusion" = success ] \
+            && [[ "$attempt" =~ ^[1-9][0-9]*$ ]] || {
+              echo 'refresh source is not an eligible CollectiveX workflow run' >&2
+              exit 1
+            }
+
+          source="$RUNNER_TEMP/collectivex-refresh-source"
+          output="$RUNNER_TEMP/collectivex-publication"
+          install -d -m 750 "$source" "$output"
+          gh run download "$SOURCE_RUN_ID" --repo "$REPOSITORY" \
+            --name "cxpublication-v1-$SOURCE_RUN_ID-$attempt" --dir "$source"
+          mapfile -t files < <(find "$source" -mindepth 1 -maxdepth 1 -type f -print)
+          [ "${#files[@]}" -eq 1 ] || {
+            echo 'refresh source must contain exactly one root file' >&2
+            exit 1
+          }
+          expected_name="collectivex_public_v1_${EXPECTED_DIGEST}.ndjson"
+          [ "$(basename "${files[0]}")" = "$expected_name" ] || {
+            echo 'refresh source filename differs from its requested digest' >&2
+            exit 1
+          }
+          [ "$(sha256sum "${files[0]}" | cut -d' ' -f1)" = "$EXPECTED_DIGEST" ] || {
+            echo 'refresh source bytes differ from their requested digest' >&2
+            exit 1
+          }
+          [ "$(stat -c %s "${files[0]}")" -le 33554432 ] || {
+            echo 'refresh source exceeds the 32 MiB frontend limit' >&2
+            exit 1
+          }
+          python3 - "${files[0]}" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          path = pathlib.Path(sys.argv[1])
+          text = path.read_text(encoding="utf-8")
+          if not text.endswith("\n") or text.count("\n") != 1:
+              raise SystemExit("publication must contain exactly one NDJSON record")
+          document = json.loads(text)
+          if document.get("format") != "collectivex.public.v1":
+              raise SystemExit("publication format is invalid")
+          if document.get("promotion", {}).get("status") != "promoted":
+              raise SystemExit("publication is not promoted")
+          PY
+          python3 experimental/CollectiveX/artifact_safety.py "${files[0]}"
+          cp -- "${files[0]}" "$output/$expected_name"
+
+      - name: Upload refreshed JIT publication artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxpublication-v1-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/collectivex-publication/*.ndjson
+          if-no-files-found: error
+          retention-days: 90

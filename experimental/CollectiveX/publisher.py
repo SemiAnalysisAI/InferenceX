@@ -22,6 +22,7 @@ from typing import Any, Iterator, Sequence
 import zipfile
 
 import jsonschema
+import numpy as np
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -40,6 +41,9 @@ PUBLISHER_POLICY = "collectivex-publisher-v1"
 OUTCOMES = ("success", "unsupported", "failed", "invalid", "diagnostic")
 REQUIRED_ALLOCATIONS = 3
 REQUIRED_COHORT_KINDS = ("library", "chip", "system", "routing")
+PRECISION_COHORT_KINDS = (
+    "dispatch-precision", "combine-precision", "precision-pair",
+)
 REQUIRED_PROMOTION_COHORT_COUNTS = {"library": 76, "system": 12, "routing": 116}
 CANONICAL_FULL_V1_MATRIX_SHA256 = (
     "f1ca85f9689922b90edd5767b9ff2a902f6b896f32f68b2ca086dde3fd2157d0"
@@ -49,6 +53,14 @@ CANONICAL_FULL_V1_CASE_CATALOG_SHA256 = (
 )
 P50_STABILITY_LIMIT = 1.10
 P99_STABILITY_LIMIT = 1.25
+TRIAL_DRIFT_RATIO_LIMIT = 1.10
+TRIAL_OUTLIER_FRACTION_LIMIT = 0.05
+TRIAL_OUTLIER_MAD_MULTIPLIER = 6.0
+BOOTSTRAP_RESAMPLES = 10_000
+BOOTSTRAP_CONFIDENCE = 0.95
+BOOTSTRAP_EQUIVALENCE_BAND = 0.05
+BOOTSTRAP_POLICY = "hierarchical-run-trial-p99-ratio-v1"
+BOOTSTRAP_CHUNK_SIZE = 250
 MAX_ARCHIVE_MEMBERS = 20_000
 MAX_ARCHIVE_MEMBER_BYTES = 2 * 1024**3
 MAX_ARCHIVE_TOTAL_BYTES = 16 * 1024**3
@@ -66,6 +78,7 @@ COVERAGE_TOPOLOGY_FIELDS = (
 CHANNEL_PATH = re.compile(r"datasets/([0-9a-f]{64})/dataset\.json")
 SCHEMA_DIR = HERE / "schemas"
 _SCHEMAS: dict[str, jsonschema.protocols.Validator] = {}
+_BOOTSTRAP_CACHE: dict[tuple[Any, ...], dict[str, Any]] = {}
 
 
 class PublisherError(ValueError):
@@ -188,9 +201,9 @@ def _metric_value(series: dict[str, Any], metric: dict[str, Any]) -> tuple[str, 
         value = component["latency_us"][metric["statistic"]]
         unit = "us"
     else:
-        rates = component["logical_payload_rate_gbps_at_latency_percentile"]
+        rates = component[metric["measure"]]
         if rates is None:
-            raise PublisherError("logical bandwidth decision has no logical byte contract")
+            raise PublisherError("data-rate decision has no byte accounting contract")
         value = rates[metric["statistic"]]
         unit = "GB/s"
     return point["point_id"], value, unit
@@ -203,11 +216,14 @@ def _validate_metric(metric: dict[str, Any]) -> None:
 
 
 def _metric_label(measure: str, statistic: str) -> str:
-    return (
-        f"{statistic} latency"
-        if measure == "latency_us"
-        else f"payload rate at {statistic} latency"
+    if measure == "latency_us":
+        return f"{statistic} latency"
+    label = (
+        "activation data rate"
+        if measure == "activation_data_rate_gbps_at_latency_percentile"
+        else "total logical data rate"
     )
+    return f"{label} at {statistic} latency"
 
 
 def _routing_build_control(build: dict[str, Any]) -> dict[str, Any]:
@@ -262,6 +278,8 @@ def _public_case_factors(series: dict[str, Any]) -> dict[str, Any]:
         "warmup_semantics": sweep_matrix.ep_harness.WARMUP_SEMANTICS,
         "workload": series["model"],
     }
+    if workload["precision_profile"] != identity.V1_CONTROL_PRECISION_PROFILE:
+        case["precision_profile"] = workload["precision_profile"]
     return {
         "case": case,
         "profile": identity.profile_for_case(case),
@@ -289,9 +307,12 @@ def _coverage_coordinates(case: dict[str, Any]) -> dict[str, Any]:
 def _canonical_coverage_cases() -> dict[str, dict[str, Any]]:
     matrix = sweep_matrix.resolve_matrix(suites="all", max_cases=128, backends="all")
     return {
-        item["case"]["case_id"]: _coverage_coordinates({
-            "sku": item["sku"], **item["case"],
-        })
+        item["case"]["case_id"]: {
+            "sku": item["sku"],
+            **item["case"],
+            "disposition": item["disposition"],
+            "reason": item["reason"],
+        }
         for item in matrix["requested_cases"]
     }
 
@@ -313,8 +334,8 @@ def _public_cohort_factors(kind: str, item: dict[str, Any]) -> tuple[Any, Any]:
     shape = {
         key: workload[key]
         for key in (
-            "hidden", "top_k", "experts", "dispatch_dtype", "combine_dtype",
-            "activation_profile",
+            "hidden", "top_k", "experts", "precision_profile", "dispatch_precision",
+            "combine_precision", "activation_profile",
         )
     }
     common = {
@@ -345,6 +366,47 @@ def _public_cohort_factors(kind: str, item: dict[str, Any]) -> tuple[Any, Any]:
             [workload["routing"], workload["eplb"],
              build["implementation_contract_sha256"]],
         )
+    if kind in PRECISION_COHORT_KINDS:
+        static_shape = {
+            key: workload[key]
+            for key in ("hidden", "top_k", "experts", "activation_profile")
+        }
+        control = {
+            "backend": item["backend"],
+            "build": {
+                key: build[key]
+                for key in (
+                    "image_digest", "runtime_fingerprint_sha256", "source_sha",
+                    "squash_sha256",
+                )
+            },
+            "measurement": item["measurement"],
+            "mode": item["mode"],
+            "model": item["model"],
+            "phase": item["phase"],
+            "resource": item["resource"],
+            "shape": static_shape,
+            "system": item["system"],
+            "workload": {
+                "eplb": workload["eplb"],
+                "routing": workload["routing"],
+            },
+        }
+        if kind == "dispatch-precision":
+            control["combine_precision"] = workload["combine_precision"]
+            variant = workload["dispatch_precision"]
+        elif kind == "combine-precision":
+            control["dispatch_precision"] = workload["dispatch_precision"]
+            variant = workload["combine_precision"]
+        else:
+            control.pop("resource")
+            variant = {
+                "combine_precision": workload["combine_precision"],
+                "dispatch_precision": workload["dispatch_precision"],
+                "precision_profile": workload["precision_profile"],
+                "resource": item["resource"],
+            }
+        return control, variant
     raise PublisherError(f"unknown cohort kind {kind}")
 
 
@@ -412,15 +474,40 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             )
         ):
             raise PublisherError("coverage topology differs from the capability registry")
-        coordinates = {
-            "sku": item["sku"], "backend": item["backend"],
-            "mode": item["mode"], "phase": item["phase"], "topology": topology,
-        }
         canonical = canonical_cases.get(item["case_id"])
-        if canonical is not None and coordinates != canonical:
-            raise PublisherError("coverage coordinates differ from its case identity")
+        if canonical is not None:
+            precision_profile = canonical.get(
+                "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
+            )
+            precision = identity.precision_profile(precision_profile)
+            expected_projection = {
+                "sku": canonical["sku"],
+                "suite": canonical["suite"],
+                "workload": canonical["workload"],
+                "publication_tier": canonical["required_publication"],
+                "backend": canonical["backend"],
+                "mode": canonical["mode"],
+                "phase": canonical["phase"],
+                "routing": canonical["routing"],
+                "eplb": canonical["eplb"],
+                "precision_profile": precision_profile,
+                "dispatch_precision": precision["dispatch"],
+                "combine_precision": precision["combine"],
+                "topology": _coverage_topology(canonical),
+                "disposition": canonical["disposition"],
+            }
+            if any(item[field] != value for field, value in expected_projection.items()):
+                raise PublisherError("coverage dimensions differ from its case identity")
+            expected_tokens = [int(value) for value in canonical["ladder"].split()]
+            if [point["tokens_per_rank"] for point in item["points"]] != expected_tokens:
+                raise PublisherError("coverage points differ from the requested token ladder")
         if canonical is None and item["case_id"] not in series_case_ids:
             raise PublisherError("coverage case identity is outside the v1 catalog")
+        for point in item["points"]:
+            if point["global_tokens"] != point["tokens_per_rank"] * topology["ep_size"]:
+                raise PublisherError("coverage point global token count differs")
+            if (point["terminal_status"] == "measured") != (point["reason"] is None):
+                raise PublisherError("coverage point terminal reason differs from status")
     for item in doc["attempts"]:
         if item["case_id"] not in case_ids or item["allocation_id"] not in allocation_ids:
             raise PublisherError("attempt references undeclared coverage or allocation")
@@ -483,7 +570,54 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             )
             if selected != latest["attempt_id"]:
                 raise PublisherError("coverage does not select the latest canonical allocation")
-    if promotion["requested_cases"] != len(doc["coverage"]) or promotion["terminal_cases"] != terminal:
+            expected_status = (
+                "measured" if attempts[selected]["outcome"] == "success"
+                else attempts[selected]["outcome"]
+            )
+            if any(point["terminal_status"] != expected_status for point in item["points"]):
+                raise PublisherError("coverage point status differs from selected attempt")
+            if expected_status == "measured":
+                selected_series = series.get(attempts[selected]["series_id"])
+                if selected_series is None:
+                    raise PublisherError("measured coverage points lack a public series")
+                public_points = {
+                    point["tokens_per_rank"]: point for point in selected_series["points"]
+                }
+                if any(
+                    point["series_id"] != selected_series["series_id"]
+                    or point["point_id"]
+                    != public_points.get(point["tokens_per_rank"], {}).get("point_id")
+                    for point in item["points"]
+                ):
+                    raise PublisherError("coverage point identities differ from series")
+    measured_cases = sum(
+        all(point["terminal_status"] == "measured" for point in item["points"])
+        for item in doc["coverage"]
+    )
+    unsupported_cases = sum(
+        all(point["terminal_status"] == "unsupported" for point in item["points"])
+        for item in doc["coverage"]
+    )
+    requested_points = sum(len(item["points"]) for item in doc["coverage"])
+    measured_points = sum(
+        point["terminal_status"] == "measured"
+        for item in doc["coverage"] for point in item["points"]
+    )
+    unsupported_points = sum(
+        point["terminal_status"] == "unsupported"
+        for item in doc["coverage"] for point in item["points"]
+    )
+    expected_counts = {
+        "requested_cases": len(doc["coverage"]),
+        "terminal_cases": terminal,
+        "measured_cases": measured_cases,
+        "unsupported_cases": unsupported_cases,
+        "requested_points": requested_points,
+        "terminal_points": requested_points,
+        "measured_points": measured_points,
+        "unsupported_points": unsupported_points,
+    }
+    if any(promotion[field] != value for field, value in expected_counts.items()):
         raise PublisherError("promotion coverage counts differ")
     selected_evidence: dict[tuple[str, str], set[str]] = {}
     for attempt in doc["attempts"]:
@@ -500,7 +634,11 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         coordinate = (
             item["mode"], item["phase"], workload["routing"], workload["eplb"]
         )
-        profile = identity.case_profile(item["mode"])
+        profile_case = {"mode": item["mode"]}
+        if workload["precision_profile"] != identity.V1_CONTROL_PRECISION_PROFILE:
+            profile_case["precision_profile"] = workload["precision_profile"]
+        profile = identity.profile_for_case(profile_case)
+        communication_precision = identity.precision_profile(workload["precision_profile"])
         if (
             item["model"] != model
             or (workload["hidden"], workload["top_k"], workload["experts"])
@@ -517,6 +655,12 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             != profile["component_order_contract"]
             or item["measurement"]["combine_semantics"] != profile["combine_semantics"]
             or item["measurement"]["payload_unit"] != profile["payload_unit"]
+            or workload["dispatch_precision"] != communication_precision["dispatch"]
+            or workload["combine_precision"] != communication_precision["combine"]
+            or item["measurement"]["qualification_indices"]
+            != sorted(item["measurement"]["qualification_indices"])
+            or len(set(item["measurement"]["qualification_indices"]))
+            != len(item["measurement"]["qualification_indices"])
         ):
             raise PublisherError("series differs from the frozen v1 workload/suite profile")
         backend_id = item["backend"]["id"]
@@ -534,13 +678,18 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         registered_topology = capability.topology_for(sku, ep_size)
         if platform is None or registered_topology is None:
             raise PublisherError("series system projection differs from v1")
-        supported, _ = capability.resolve(
+        disposition, _ = capability.resolve_disposition(
             sku, backend_id, ep=ep_size, nodes=item["system"]["nodes"],
             routing=workload["routing"], eplb=workload["eplb"],
             mode=item["mode"],
+            precision_profile=(
+                workload["precision_profile"]
+                if workload["precision_profile"] != identity.V1_CONTROL_PRECISION_PROFILE
+                else None
+            ),
         )
         if (
-            not supported
+            disposition != "supported"
             or item["system"]["vendor"] != platform["vendor"]
             or any(
                 item["system"][field] != registered_topology[field]
@@ -585,7 +734,8 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         expected_physical = eplb["logical_experts"] + eplb["redundant_experts"]
         nullable_eplb = (
             "planner", "mapping_sha256", "reference_tokens_per_rank", "max_replicas",
-            "imbalance_before", "imbalance_after",
+            "imbalance_before", "imbalance_after", "calibration_workload_id",
+            "calibration_trace_sha256", "calibration_window", "calibration_token_offset",
         )
         if eplb["enabled"]:
             if (
@@ -605,13 +755,14 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 or not 1 <= eplb["imbalance_after"] <= eplb["imbalance_before"] <= ep_size
             ):
                 raise PublisherError("enabled EPLB descriptor is incomplete")
-            expected_plan = contracts._expected_eplb_plan(
-                workload["routing"], workload["top_k"],
+            expected_plan, calibration = contracts._expected_eplb_calibration(
+                workload["routing"], workload["hidden"], workload["top_k"],
                 eplb["logical_experts"], eplb["physical_experts"], ep_size,
                 identity.V1_CASE_PROFILE["seed"],
                 identity.V1_CASE_PROFILE["eplb_reference_tokens_per_rank"],
             )
             expected_eplb = {
+                **calibration,
                 "enabled": True,
                 "planner": identity.V1_CASE_PROFILE["eplb_planner"],
                 "mapping_sha256": contracts.eplb_contract.mapping_hash(expected_plan),
@@ -645,7 +796,11 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError("series status differs from eligibility")
         if (
             set(eligibility["allocation_ids"]) != set(item["allocation_ids"])
-            or eligibility["correct"] != all(point["correct"] for point in item["points"])
+            or eligibility["correct"] != all(
+                point["correctness"]["semantic_pass"]
+                and point["correctness"]["precision"]["passed"]
+                for point in item["points"]
+            )
         ):
             raise PublisherError("series eligibility differs from its evidence")
         selected_attempts = selected_by_series.get(item["series_id"], [])
@@ -653,6 +808,8 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             set(item["case_ids"]) != {attempt["case_id"] for attempt in selected_attempts}
             or set(item["allocation_ids"])
             != {attempt["allocation_id"] for attempt in selected_attempts}
+            or item["measurement"]["qualification_indices"]
+            != sorted({attempt["qualification_index"] for attempt in selected_attempts})
         ):
             raise PublisherError("series case/allocation catalog differs from selected attempts")
         if item["eligibility"]["decision_grade"] and len(
@@ -712,6 +869,44 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             )
             if set(point["evidence_ids"]) != expected_evidence:
                 raise PublisherError("point evidence differs from selected series attempts")
+            point_correctness = point["correctness"]
+            if (
+                point_correctness["precision"]["profile_id"]
+                != workload["precision_profile"]
+                or (
+                    point_correctness["semantic_pass"]
+                    and not point_correctness["precision"]["passed"]
+                )
+                or point["stability"]["qualification_indices"]
+                != item["measurement"]["qualification_indices"]
+            ):
+                raise PublisherError("point correctness/stability differs from series evidence")
+            diagnostics = point["trial_diagnostics"]
+            diagnostic_reasons = set(diagnostics["reasons"])
+            component_reasons: set[str] = set()
+            for name, summary in diagnostics["components"].items():
+                if summary is None:
+                    if point["components"][name] is not None:
+                        raise PublisherError("trial diagnostics omit a measured component")
+                    continue
+                if point["components"][name] is None:
+                    raise PublisherError("trial diagnostics describe an unavailable component")
+                if summary["drift_flagged"] != (
+                    summary["first_last_median_ratio"] > TRIAL_DRIFT_RATIO_LIMIT
+                ) or summary["outlier_flagged"] != (
+                    summary["robust_outlier_fraction"] > TRIAL_OUTLIER_FRACTION_LIMIT
+                ):
+                    raise PublisherError("trial diagnostic flags differ from their thresholds")
+                if summary["drift_flagged"]:
+                    component_reasons.add("trial-drift")
+                if summary["outlier_flagged"]:
+                    component_reasons.add("trial-outliers")
+            if (
+                diagnostic_reasons != component_reasons
+                or diagnostics["flagged"] != bool(diagnostic_reasons)
+                or not diagnostic_reasons.issubset(point["anomalies"])
+            ):
+                raise PublisherError("trial diagnostic summary is inconsistent")
             components = point["components"]
             if (components["dispatch"] is None) != (components["combine"] is None):
                 raise PublisherError("dispatch/combine availability differs")
@@ -722,24 +917,31 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 expected_samples = None if name == "isolated_sum" else 512
                 if component["origin"] != expected_origin or component["sample_count"] != expected_samples:
                     raise PublisherError(f"{name} origin or sample count differs")
-                if name == "isolated_sum" and (
-                    component["logical_bytes"] is not None
-                    or component["logical_payload_rate_gbps_at_latency_percentile"] is not None
-                ):
-                    raise PublisherError("isolated_sum cannot publish logical bandwidth")
-                if name != "isolated_sum" and (
-                    component["logical_bytes"] is None
-                    or component["logical_payload_rate_gbps_at_latency_percentile"] is None
-                ):
-                    raise PublisherError(f"{name} measured logical bandwidth is missing")
+                rate_fields = (
+                    "activation_data_rate_gbps_at_latency_percentile",
+                    "total_logical_data_rate_gbps_at_latency_percentile",
+                )
+                if name == "isolated_sum" and any(component[field] is not None for field in rate_fields):
+                    raise PublisherError("isolated_sum cannot publish a derived data rate")
+                if name != "isolated_sum" and any(component[field] is None for field in rate_fields):
+                    raise PublisherError(f"{name} measured data rates are missing")
                 latency = component["latency_us"]
                 if list(latency.values()) != sorted(latency.values()):
                     raise PublisherError("latency percentiles are not ordered")
-                if component["logical_payload_rate_gbps_at_latency_percentile"] is not None:
-                    for statistic, rate in component["logical_payload_rate_gbps_at_latency_percentile"].items():
-                        expected = component["logical_bytes"] / (latency[statistic] * 1000.0)
-                        if not math.isclose(rate, expected, rel_tol=1e-9, abs_tol=1e-12):
-                            raise PublisherError("logical GB/s formula differs")
+                byte_provenance = component["byte_provenance"]
+                if byte_provenance["total_logical_bytes"] != (
+                    byte_provenance["activation_data_bytes"] + byte_provenance["scale_bytes"]
+                ):
+                    raise PublisherError("component byte accounting does not reconcile")
+                for field, byte_field in (
+                    ("activation_data_rate_gbps_at_latency_percentile", "activation_data_bytes"),
+                    ("total_logical_data_rate_gbps_at_latency_percentile", "total_logical_bytes"),
+                ):
+                    if component[field] is not None:
+                        for statistic, rate in component[field].items():
+                            expected = byte_provenance[byte_field] / (latency[statistic] * 1000.0)
+                            if not math.isclose(rate, expected, rel_tol=1e-9, abs_tol=1e-12):
+                                raise PublisherError("component GB/s formula differs")
             if components["roundtrip"] is None or components["roundtrip"]["origin"] != "measured":
                 raise PublisherError("roundtrip must be measured")
             for statistic, throughput in point["roundtrip_token_rate_at_latency_percentile"].items():
@@ -753,11 +955,19 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 if derived is None or any(not math.isclose(
                     derived["latency_us"][statistic],
                     components["dispatch"]["latency_us"][statistic]
+                    + (
+                        components["stage"]["latency_us"][statistic]
+                        if components["stage"] is not None else 0.0
+                    )
                     + components["combine"]["latency_us"][statistic], rel_tol=1e-12
                 ) for statistic in ("p50", "p90", "p95", "p99")):
                     raise PublisherError("isolated_sum is not the component percentile sum")
             elif components["isolated_sum"] is not None:
                 raise PublisherError("isolated_sum requires measured dispatch/combine components")
+        if any(point["trial_diagnostics"]["flagged"] for point in item["points"]) != (
+            "unresolved-trial-diagnostic" in item["eligibility"]["reasons"]
+        ):
+            raise PublisherError("series trial diagnostic eligibility is inconsistent")
     cohorts = {item["cohort_id"]: item for item in doc["cohorts"]}
     if len(cohorts) != len(doc["cohorts"]):
         raise PublisherError("dataset has duplicate cohort IDs")
@@ -779,7 +989,7 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError("library cohort contains non-library evidence")
         if item["kind"] == "system" and roles != {"reference"}:
             raise PublisherError("system cohort is not a portable reference comparison")
-        if item["kind"] in {"chip", "routing"} and len(
+        if item["kind"] in {"chip", "routing", *PRECISION_COHORT_KINDS} and len(
             {_canonical(member["backend"]) for member in members}
         ) != 1:
             raise PublisherError(f"{item['kind']} cohort mixes backend implementations")
@@ -803,6 +1013,31 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             mismatch_reason = "implementation-config-mismatch" in item["eligibility"]["reasons"]
             if mismatch != mismatch_reason:
                 raise PublisherError("routing implementation control and eligibility disagree")
+        if item["kind"] in PRECISION_COHORT_KINDS:
+            if item["publication_tier"] != "comparable-experimental":
+                raise PublisherError("precision cohorts must be experimental")
+            if item["kind"] in {"dispatch-precision", "combine-precision"}:
+                axis = (
+                    "dispatch"
+                    if item["kind"] == "dispatch-precision"
+                    else "combine"
+                )
+                field = f"{axis}_precision"
+                bf16 = identity.precision_profile(
+                    identity.V1_CONTROL_PRECISION_PROFILE
+                )[axis]
+                has_baseline = sum(
+                    _canonical(member["workload"][field]) == _canonical(bf16)
+                    for member in members
+                ) == 1
+                missing_reason = (
+                    "missing-bf16-precision-baseline"
+                    in item["eligibility"]["reasons"]
+                )
+                if has_baseline == missing_reason:
+                    raise PublisherError(
+                        "precision baseline and eligibility reason disagree"
+                    )
         expected_id = _derived_id("cxcohort-v1-", {
             "kind": item["kind"], "series_ids": item["series_ids"],
             "controlled_factors": item["controlled_factors"],
@@ -827,6 +1062,33 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 ["backend", "implementation-static-build", "system", "model-shape", "mode", "phase", "measurement", "resource"],
                 ["workload.routing", "workload.eplb", "implementation-config"],
             ),
+            "dispatch-precision": (
+                [
+                    "backend", "implementation-static-build", "system", "model-shape",
+                    "mode", "phase", "workload.routing", "workload.eplb",
+                    "measurement", "resource", "combine-precision",
+                ],
+                ["dispatch-precision"],
+            ),
+            "combine-precision": (
+                [
+                    "backend", "implementation-static-build", "system", "model-shape",
+                    "mode", "phase", "workload.routing", "workload.eplb",
+                    "measurement", "resource", "dispatch-precision",
+                ],
+                ["combine-precision"],
+            ),
+            "precision-pair": (
+                [
+                    "backend", "implementation-static-build", "system", "model-shape",
+                    "mode", "phase", "workload.routing", "workload.eplb",
+                    "measurement",
+                ],
+                [
+                    "dispatch-precision", "combine-precision", "precision-profile",
+                    "resource",
+                ],
+            ),
         }[item["kind"]]
         member_allocations = {
             allocation for series_id in item["series_ids"]
@@ -850,10 +1112,15 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         expected_ranking_keys.update(
             (cohort["cohort_id"], measure, statistic, token)
             for token in tokens
-            for measure in ("latency_us", "logical_payload_rate_gbps_at_latency_percentile")
+            for measure in (
+                "latency_us", "activation_data_rate_gbps_at_latency_percentile",
+                "total_logical_data_rate_gbps_at_latency_percentile",
+            )
             for statistic in ("p50", "p99")
         )
-    ranking_top: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    ranking_top: dict[
+        tuple[str, str, str, int], dict[str, Any] | None
+    ] = {}
     ranking_ids: set[str] = set()
     for ranking in doc["rankings"]:
         cohort = cohorts.get(ranking["cohort_id"])
@@ -879,32 +1146,51 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 raise PublisherError("ranking entry differs from series data")
         reverse = ranking["metric"]["objective"] == "max"
         expected = sorted(entries, key=lambda entry: (entry["value"], entry["series_id"]), reverse=reverse)
-        if entries != expected or [entry["rank"] for entry in entries] != list(range(1, len(entries) + 1)):
-            raise PublisherError("ranking order differs")
         metric = ranking["metric"]
+        ranks = [entry["rank"] for entry in entries]
+        if metric["measure"] == "latency_us" and metric["statistic"] == "p99":
+            tied_first = sum(rank == 1 for rank in ranks)
+            expected_ranks = [1] * tied_first + list(
+                range(tied_first + 1, len(entries) + 1)
+            )
+        else:
+            expected_ranks = list(range(1, len(entries) + 1))
+        if entries != expected or not ranks or ranks != expected_ranks:
+            raise PublisherError("ranking order differs")
         expected_id = _derived_id("cxranking-v1-", {
             "cohort_id": ranking["cohort_id"], "metric": metric,
         })
         if ranking["ranking_id"] != expected_id or expected_id in ranking_ids:
             raise PublisherError("ranking ID is duplicate or differs")
         ranking_ids.add(expected_id)
-        ranking_top[(ranking["cohort_id"], metric["measure"], metric["statistic"], metric["tokens_per_rank"])] = entries[0]
+        ranking_top[(ranking["cohort_id"], metric["measure"], metric["statistic"], metric["tokens_per_rank"])] = (
+            entries[0] if ranks.count(1) == 1 else None
+        )
     if set(ranking_top) != expected_ranking_keys:
         raise PublisherError("rankings do not cover every eligible cohort metric")
     objective = {
         "min-p50-latency": ("latency_us", "p50"), "min-p99-latency": ("latency_us", "p99"),
-        "max-payload-rate-at-p50-latency": (
-            "logical_payload_rate_gbps_at_latency_percentile", "p50"
+        "max-activation-data-rate-at-p50-latency": (
+            "activation_data_rate_gbps_at_latency_percentile", "p50"
         ),
-        "max-payload-rate-at-p99-latency": (
-            "logical_payload_rate_gbps_at_latency_percentile", "p99"
+        "max-activation-data-rate-at-p99-latency": (
+            "activation_data_rate_gbps_at_latency_percentile", "p99"
+        ),
+        "max-total-logical-data-rate-at-p50-latency": (
+            "total_logical_data_rate_gbps_at_latency_percentile", "p50"
+        ),
+        "max-total-logical-data-rate-at-p99-latency": (
+            "total_logical_data_rate_gbps_at_latency_percentile", "p99"
         ),
     }
     recommendation_ids: set[str] = set()
     for item in doc["recommendations"]:
+        if item["objective"] != "min-p99-latency":
+            raise PublisherError("recommendation is not a unique p99 latency winner")
         measure, statistic = objective[item["objective"]]
         candidates = [top for key, top in ranking_top.items()
-                      if key[:3] == (item["cohort_id"], measure, statistic) and top["point_id"] == item["point_id"]]
+                      if key[:3] == (item["cohort_id"], measure, statistic)
+                      and top is not None and top["point_id"] == item["point_id"]]
         if len(candidates) != 1 or any(item[field] != candidates[0][field] for field in ("series_id", "point_id", "value", "unit")):
             raise PublisherError("recommendation is not a ranking winner")
         matching_ranking = next(
@@ -926,6 +1212,9 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         recommendation_ids.add(expected_id)
     expected_recommendations = sum(
         cohorts[ranking["cohort_id"]]["publication_tier"] == "official"
+        and ranking["metric"]["measure"] == "latency_us"
+        and ranking["metric"]["statistic"] == "p99"
+        and sum(entry["rank"] == 1 for entry in ranking["entries"]) == 1
         for ranking in doc["rankings"]
     )
     if len(doc["recommendations"]) != expected_recommendations:
@@ -936,24 +1225,39 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         cohort = cohorts.get(item["cohort_id"])
         if (
             cohort is None
-            or cohort["kind"] != "routing"
+            or cohort["kind"] not in {
+                "routing", "dispatch-precision", "combine-precision",
+            }
             or not cohort["eligibility"]["decision_grade"]
             or item["publication_tier"] != cohort["publication_tier"]
             or item["eligibility"] != cohort["eligibility"]
         ):
-            raise PublisherError("sensitivity references a non-routing cohort")
+            raise PublisherError("sensitivity references an ineligible contrast cohort")
         if (
             item["baseline_series_id"] == item["candidate_series_id"]
             or not {item["baseline_series_id"], item["candidate_series_id"]}.issubset(cohort["series_ids"])
         ):
-            raise PublisherError("sensitivity series differ from its routing cohort")
+            raise PublisherError("sensitivity series differ from its cohort")
         _validate_metric(item["metric"])
         baseline_series = series[item["baseline_series_id"]]
-        if (
-            baseline_series["workload"]["routing"] != "uniform"
-            or baseline_series["workload"]["eplb"]
-        ):
-            raise PublisherError("sensitivity baseline is not uniform without EPLB")
+        if cohort["kind"] == "routing":
+            if (
+                baseline_series["workload"]["routing"] != "uniform"
+                or baseline_series["workload"]["eplb"]
+            ):
+                raise PublisherError("sensitivity baseline is not uniform without EPLB")
+        else:
+            axis = (
+                "dispatch"
+                if cohort["kind"] == "dispatch-precision"
+                else "combine"
+            )
+            field = f"{axis}_precision"
+            bf16 = identity.precision_profile(
+                identity.V1_CONTROL_PRECISION_PROFILE
+            )[axis]
+            if _canonical(baseline_series["workload"][field]) != _canonical(bf16):
+                raise PublisherError("precision sensitivity baseline is not BF16")
         _, baseline, _ = _metric_value(series[item["baseline_series_id"]], item["metric"])
         _, candidate, _ = _metric_value(series[item["candidate_series_id"]], item["metric"])
         if not math.isclose(item["signed_change_ratio"], (candidate - baseline) / baseline, rel_tol=1e-12):
@@ -973,13 +1277,34 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         ))
     expected_sensitivity_keys: set[tuple[str, str, str, str, str, int]] = set()
     for cohort in doc["cohorts"]:
-        if cohort["kind"] != "routing" or not cohort["eligibility"]["decision_grade"]:
+        if (
+            cohort["kind"] not in {
+                "routing", "dispatch-precision", "combine-precision",
+            }
+            or not cohort["eligibility"]["decision_grade"]
+        ):
             continue
         members = [series[series_id] for series_id in cohort["series_ids"]]
-        baseline = next((
-            member for member in members
-            if member["workload"]["routing"] == "uniform" and not member["workload"]["eplb"]
-        ), None)
+        if cohort["kind"] == "routing":
+            baseline = next((
+                member for member in members
+                if member["workload"]["routing"] == "uniform"
+                and not member["workload"]["eplb"]
+            ), None)
+        else:
+            axis = (
+                "dispatch"
+                if cohort["kind"] == "dispatch-precision"
+                else "combine"
+            )
+            field = f"{axis}_precision"
+            bf16 = identity.precision_profile(
+                identity.V1_CONTROL_PRECISION_PROFILE
+            )[axis]
+            baseline = next((
+                member for member in members
+                if _canonical(member["workload"][field]) == _canonical(bf16)
+            ), None)
         if baseline is None:
             continue
         tokens = set.intersection(*(
@@ -991,19 +1316,27 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
              measure, statistic, token)
             for candidate in members if candidate is not baseline
             for token in tokens
-            for measure in ("latency_us", "logical_payload_rate_gbps_at_latency_percentile")
+            for measure in (
+                "latency_us", "activation_data_rate_gbps_at_latency_percentile",
+                "total_logical_data_rate_gbps_at_latency_percentile",
+            )
             for statistic in ("p50", "p99")
         )
     if sensitivity_keys != expected_sensitivity_keys:
-        raise PublisherError("sensitivities do not cover every routing contrast metric")
+        raise PublisherError("sensitivities do not cover every declared contrast metric")
+    observed_qualification_indices = sorted({
+        item["qualification_index"] for item in doc["attempts"] if item["selected"]
+    })
+    if promotion["qualification_indices"] != observed_qualification_indices:
+        raise PublisherError("promotion qualification index catalog differs from attempts")
     if promotion["status"] == "promoted":
         run_ids = {item["run_id"] for item in doc["attempts"] if item["selected"]}
         repeated_cases = all(
-            len({
-                attempts[attempt_id]["run_id"]
+            {
+                attempts[attempt_id]["qualification_index"]
                 for attempt_id in coverage["attempt_ids"]
                 if attempts[attempt_id]["selected"]
-            }) == REQUIRED_ALLOCATIONS
+            } == {1, 2, 3}
             for coverage in doc["coverage"]
         )
         if promotion["matrix_id"] != CANONICAL_FULL_V1_MATRIX_SHA256:
@@ -1015,6 +1348,12 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError("promotion requires the canonical case/disposition catalog")
         if (
             terminal != len(doc["coverage"])
+            or promotion["qualification_indices"] != [1, 2, 3]
+            or promotion["measured_cases"] + promotion["unsupported_cases"]
+            != promotion["requested_cases"]
+            or promotion["measured_points"] + promotion["unsupported_points"]
+            != promotion["requested_points"]
+            or promotion["terminal_points"] != promotion["requested_points"]
             or len(doc["source_bundle_ids"]) != REQUIRED_ALLOCATIONS
             or len(run_ids) != REQUIRED_ALLOCATIONS
             or not repeated_cases
@@ -1045,8 +1384,8 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             )
         _require_promotion_series(doc["series"])
         _require_promotion_cohorts(doc["cohorts"], doc["series"])
-        if not doc["rankings"] or not doc["recommendations"]:
-            raise PublisherError("promoted dataset lacks eligible decisions")
+        if not doc["rankings"]:
+            raise PublisherError("promoted dataset lacks eligible rankings")
     if promotion["status"] == "quarantined" and any((
         doc["source_bundle_ids"], promotion["allocation_ids"], doc["coverage"],
         doc["attempts"], doc["series"], doc["cohorts"], doc["rankings"],
@@ -1653,6 +1992,7 @@ def _run_matches(document: dict[str, Any], run: dict[str, Any]) -> bool:
     return (
         str(git_run.get("run_id")) == run["run_id"]
         and str(git_run.get("run_attempt")) == str(run["run_attempt"])
+        and git_run.get("qualification_index") == run["qualification_index"]
         and git_run.get("source_sha") == run["source_sha"]
         and (git_run.get("repo") or git_run.get("repository")) == run["repository"]
     )
@@ -1665,7 +2005,7 @@ def _case_matches(document: dict[str, Any], expected: dict[str, Any]) -> bool:
     }
     return document.get("identity", {}).get("case_factors") == {
         "case": scheduled,
-        "profile": identity.V1_CASE_PROFILE,
+        "profile": identity.profile_for_case(scheduled),
         "sku": expected["sku"],
     }
 
@@ -2025,6 +2365,7 @@ def _public_attempt(document: dict[str, Any], *, selected: bool = False) -> dict
         "allocation_id": normalized["allocation_id"],
         "run_id": str(run["run_id"]),
         "run_attempt": int(run["run_attempt"]),
+        "qualification_index": int(run["qualification_index"]),
         "attempt_index": document["identity"]["attempt_ordinal"],
         "selected": selected,
         "outcome": status,
@@ -2037,6 +2378,238 @@ def _public_attempt(document: dict[str, Any], *, selected: bool = False) -> dict
 
 def _ratio(values: Sequence[float]) -> float | None:
     return max(values) / min(values) if len(values) >= REQUIRED_ALLOCATIONS and min(values) > 0 else None
+
+
+def _private_trial_components(sample_document: dict[str, Any]) -> dict[int, dict[str, Any]]:
+    """Copy validated trial blocks into publisher-private memory without fixing component names."""
+    points: dict[int, dict[str, Any]] = {}
+    for point in sample_document["points"]:
+        token = point["tokens_per_rank"]
+        components: dict[str, Any] = {}
+        for name, component in point["components"].items():
+            availability = component["availability"]
+            if availability in {"unavailable", "not-applicable"}:
+                components[name] = None
+                continue
+            if availability != "measured":
+                raise PublisherError(f"private sample component {name} has invalid availability")
+            trials = component["trials"]
+            if (
+                not isinstance(trials, list)
+                or len(trials) != 64
+                or any(not isinstance(trial, list) or len(trial) != 8 for trial in trials)
+            ):
+                raise PublisherError(f"private sample component {name} is not 64x8")
+            copied = tuple(
+                tuple(float(sample) for sample in trial)
+                for trial in trials
+            )
+            if any(
+                not math.isfinite(sample) or sample < 0
+                for trial in copied for sample in trial
+            ):
+                raise PublisherError(f"private sample component {name} is not finite")
+            components[name] = copied
+        points[token] = components
+    return points
+
+
+def _trial_diagnostics(
+    trial_blocks: dict[str, dict[int, dict[str, Any]]], token: int,
+) -> dict[str, Any]:
+    components: dict[str, Any] = {}
+    reasons: set[str] = set()
+    for name in ("dispatch", "stage", "combine", "roundtrip"):
+        values = [trial_blocks[run_id][token][name] for run_id in sorted(trial_blocks)]
+        if all(value is None for value in values):
+            components[name] = None
+            continue
+        if any(value is None for value in values):
+            raise PublisherError(f"{name} trial availability differs across qualification runs")
+        array = np.asarray(values, dtype=np.float64)
+        if array.shape != (REQUIRED_ALLOCATIONS, 64, 8) or not np.isfinite(array).all():
+            raise PublisherError(f"{name} trial diagnostics require three finite 64x8 runs")
+        medians = np.median(array, axis=2)
+        first = np.median(medians[:, :8], axis=1)
+        last = np.median(medians[:, -8:], axis=1)
+        if np.any(first <= 0) or np.any(last <= 0):
+            raise PublisherError(f"{name} trial diagnostics require positive latency")
+        drift_ratio = float(np.max(np.maximum(first / last, last / first)))
+        center = float(np.median(medians))
+        mad = float(np.median(np.abs(medians - center)))
+        if mad == 0:
+            outliers = np.abs(medians - center) > 0
+        else:
+            outliers = np.abs(medians - center) > (
+                TRIAL_OUTLIER_MAD_MULTIPLIER * 1.4826 * mad
+            )
+        outlier_fraction = float(np.count_nonzero(outliers) / medians.size)
+        drift_flagged = drift_ratio > TRIAL_DRIFT_RATIO_LIMIT
+        outlier_flagged = outlier_fraction > TRIAL_OUTLIER_FRACTION_LIMIT
+        if drift_flagged:
+            reasons.add("trial-drift")
+        if outlier_flagged:
+            reasons.add("trial-outliers")
+        components[name] = {
+            "drift_flagged": drift_flagged,
+            "first_last_median_ratio": drift_ratio,
+            "outlier_flagged": outlier_flagged,
+            "robust_outlier_fraction": outlier_fraction,
+            "trial_count": int(medians.size),
+        }
+    return {
+        "flagged": bool(reasons),
+        "reasons": sorted(reasons),
+        "components": components,
+    }
+
+
+def _nearest_rank_p99(blocks: Sequence[Sequence[float]]) -> float:
+    samples = sorted(float(sample) for block in blocks for sample in block)
+    if len(samples) != 512 or samples[0] < 0 or not all(map(math.isfinite, samples)):
+        raise PublisherError("p99 bootstrap input must contain 512 finite samples")
+    return samples[math.ceil(0.99 * len(samples)) - 1]
+
+
+def _roundtrip_trial_array(
+    internal: dict[str, Any], token: int
+) -> tuple[tuple[str, ...], np.ndarray]:
+    trial_blocks = internal.get("trial_blocks")
+    if not isinstance(trial_blocks, dict):
+        raise PublisherError("series is missing private trial blocks")
+    run_ids = tuple(sorted(trial_blocks, key=lambda value: (int(value), value)))
+    if len(run_ids) != REQUIRED_ALLOCATIONS:
+        raise PublisherError("p99 bootstrap requires exactly three run blocks")
+    values = []
+    for run_id in run_ids:
+        point = trial_blocks[run_id].get(token)
+        blocks = point.get("roundtrip") if isinstance(point, dict) else None
+        if blocks is None:
+            raise PublisherError("p99 bootstrap requires measured roundtrip blocks")
+        if len(blocks) != 64 or any(len(block) != 8 for block in blocks):
+            raise PublisherError("p99 bootstrap roundtrip blocks must be 64x8")
+        values.append(blocks)
+    array = np.asarray(values, dtype=np.float64)
+    if array.shape != (REQUIRED_ALLOCATIONS, 64, 8):
+        raise PublisherError("p99 bootstrap trial array shape differs")
+    if not np.isfinite(array).all() or np.any(array <= 0):
+        raise PublisherError("p99 bootstrap latencies must be finite and positive")
+    return run_ids, array
+
+
+def _bootstrap_seed(
+    dataset_binding: str, baseline_series_id: str, candidate_series_id: str, token: int
+) -> tuple[str, int]:
+    payload = _canonical({
+        "policy": BOOTSTRAP_POLICY,
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "confidence": BOOTSTRAP_CONFIDENCE,
+        "equivalence_band": BOOTSTRAP_EQUIVALENCE_BAND,
+        "dataset_binding": dataset_binding,
+        "baseline_series_id": baseline_series_id,
+        "candidate_series_id": candidate_series_id,
+        "tokens_per_rank": token,
+    })
+    digest = hashlib.sha256(payload).digest()
+    return digest.hex(), int.from_bytes(digest[:16], "big")
+
+
+def _hierarchical_p99_ratio(
+    baseline_series_id: str,
+    candidate_series_id: str,
+    token: int,
+    internals: dict[str, dict[str, Any]],
+    dataset_binding: str,
+) -> dict[str, Any]:
+    """Bootstrap candidate/baseline p99 across runs, then 64 trial blocks."""
+    baseline_runs, baseline = _roundtrip_trial_array(
+        internals[baseline_series_id], token
+    )
+    candidate_runs, candidate = _roundtrip_trial_array(
+        internals[candidate_series_id], token
+    )
+    if baseline_runs != candidate_runs:
+        raise PublisherError("p99 bootstrap run blocks are not aligned")
+    seed_sha256, seed = _bootstrap_seed(
+        dataset_binding, baseline_series_id, candidate_series_id, token
+    )
+    cache_key = (
+        seed_sha256,
+        _sha_bytes(baseline.tobytes()),
+        _sha_bytes(candidate.tobytes()),
+    )
+    cached = _BOOTSTRAP_CACHE.get(cache_key)
+    if cached is not None:
+        return dict(cached)
+
+    baseline_run_p99 = np.asarray(
+        [_nearest_rank_p99(run) for run in baseline], dtype=np.float64
+    )
+    candidate_run_p99 = np.asarray(
+        [_nearest_rank_p99(run) for run in candidate], dtype=np.float64
+    )
+    run_ratios = candidate_run_p99 / baseline_run_p99
+    point_ratio = float(np.median(candidate_run_p99) / np.median(baseline_run_p99))
+
+    rng = np.random.Generator(np.random.PCG64(seed))
+    ratios = np.empty(BOOTSTRAP_RESAMPLES, dtype=np.float64)
+    p99_index = math.ceil(0.99 * 512) - 1
+    for start in range(0, BOOTSTRAP_RESAMPLES, BOOTSTRAP_CHUNK_SIZE):
+        size = min(BOOTSTRAP_CHUNK_SIZE, BOOTSTRAP_RESAMPLES - start)
+        sampled_runs = rng.integers(0, REQUIRED_ALLOCATIONS, size=(size, 3))
+        sampled_blocks = rng.integers(0, 64, size=(size, 3, 64))
+        run_index = sampled_runs[:, :, None]
+        baseline_sample = baseline[run_index, sampled_blocks].reshape(size, 3, 512)
+        candidate_sample = candidate[run_index, sampled_blocks].reshape(size, 3, 512)
+        baseline_p99 = np.partition(baseline_sample, p99_index, axis=2)[:, :, p99_index]
+        candidate_p99 = np.partition(candidate_sample, p99_index, axis=2)[:, :, p99_index]
+        ratios[start:start + size] = (
+            np.median(candidate_p99, axis=1) / np.median(baseline_p99, axis=1)
+        )
+    ratios.sort()
+    tail = (1.0 - BOOTSTRAP_CONFIDENCE) / 2.0
+    lower_index = max(0, math.ceil(tail * BOOTSTRAP_RESAMPLES) - 1)
+    upper_index = min(
+        BOOTSTRAP_RESAMPLES - 1,
+        math.ceil((1.0 - tail) * BOOTSTRAP_RESAMPLES) - 1,
+    )
+    ci = [float(ratios[lower_index]), float(ratios[upper_index])]
+    threshold = 1.0 + BOOTSTRAP_EQUIVALENCE_BAND
+    baseline_wins = ci[0] > threshold and bool(np.all(run_ratios > threshold))
+    result = {
+        "policy": BOOTSTRAP_POLICY,
+        "resamples": BOOTSTRAP_RESAMPLES,
+        "confidence": BOOTSTRAP_CONFIDENCE,
+        "equivalence_band": BOOTSTRAP_EQUIVALENCE_BAND,
+        "seed_sha256": seed_sha256,
+        "point_ratio": point_ratio,
+        "ci95": ci,
+        "run_ratios": [float(value) for value in run_ratios],
+        "all_runs_agree": bool(np.all(run_ratios > threshold)),
+        "baseline_wins": baseline_wins,
+        "tie": not baseline_wins,
+    }
+    _BOOTSTRAP_CACHE[cache_key] = result
+    return dict(result)
+
+
+def _bootstrap_inputs_ready(
+    members: Sequence[dict[str, Any]],
+    internals: dict[str, dict[str, Any]],
+    tokens: Sequence[int],
+) -> bool:
+    try:
+        expected_runs: tuple[str, ...] | None = None
+        for member in members:
+            for token in tokens:
+                run_ids, _ = _roundtrip_trial_array(internals[member["series_id"]], token)
+                if expected_runs is None:
+                    expected_runs = run_ids
+                elif run_ids != expected_runs:
+                    return False
+        return expected_runs is not None
+    except (KeyError, PublisherError, TypeError, ValueError):
+        return False
 
 
 def _eligibility_record(
@@ -2099,23 +2672,38 @@ def _aggregate_component(
         raise PublisherError("component availability differs across repeat allocations")
     latency = _aggregate_percentiles([component["percentiles_us"] for component in components])
     if name == "isolated_sum":
+        byte_provenance = {
+            "accounting_contract": "activation-data-plus-scales-v1",
+            "activation_data_bytes": 0,
+            "scale_bytes": 0,
+            "total_logical_bytes": 0,
+        }
         return {
             "origin": "derived",
             "latency_us": latency,
-            "logical_bytes": None,
-            "logical_payload_rate_gbps_at_latency_percentile": None,
+            "byte_provenance": byte_provenance,
+            "activation_data_rate_gbps_at_latency_percentile": None,
+            "total_logical_data_rate_gbps_at_latency_percentile": None,
             "sample_count": None,
         }
-    byte_values = {row["logical_bytes"][name] for row in rows}
-    if len(byte_values) != 1:
-        raise PublisherError("logical byte accounting differs across repeat allocations")
-    logical_bytes = byte_values.pop()
-    rates = {statistic: logical_bytes / (latency[statistic] * 1000.0) for statistic in latency}
+    byte_provenance = _exact_repeat_value(
+        [row["byte_provenance"][name] for row in rows],
+        f"{name} byte accounting",
+    )
+    activation_rates = {
+        statistic: byte_provenance["activation_data_bytes"] / (latency[statistic] * 1000.0)
+        for statistic in latency
+    }
+    total_rates = {
+        statistic: byte_provenance["total_logical_bytes"] / (latency[statistic] * 1000.0)
+        for statistic in latency
+    }
     return {
         "origin": "measured",
         "latency_us": latency,
-        "logical_bytes": logical_bytes,
-        "logical_payload_rate_gbps_at_latency_percentile": rates,
+        "byte_provenance": byte_provenance,
+        "activation_data_rate_gbps_at_latency_percentile": activation_rates,
+        "total_logical_data_rate_gbps_at_latency_percentile": total_rates,
         "sample_count": 512,
     }
 
@@ -2130,6 +2718,10 @@ def _eplb_descriptor(document: dict[str, Any]) -> dict[str, Any]:
     value = document["case"]["eplb"]
     return {
         "enabled": value["enabled"],
+        "calibration_workload_id": value["calibration_workload_id"],
+        "calibration_trace_sha256": value["calibration_trace_sha256"],
+        "calibration_window": value["calibration_window"],
+        "calibration_token_offset": value["calibration_token_offset"],
         "planner": value["planner"],
         "mapping_sha256": value["mapping_hash"],
         "logical_experts": value["num_logical_experts"],
@@ -2155,6 +2747,35 @@ def _routing_facts(row: dict[str, Any]) -> dict[str, Any]:
         "empty_rank_count": routing["empty_rank_count"],
         "routed_copies": routing["routed_copies"],
     }
+
+
+def _aggregate_precision_evidence(rows: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    values = [row["correctness"]["precision"] for row in rows]
+    profile_ids = {value["profile_id"] for value in values}
+    if len(profile_ids) != 1:
+        raise PublisherError("precision evidence profile differs across qualification runs")
+    result: dict[str, Any] = {"profile_id": profile_ids.pop()}
+    for direction in ("dispatch", "combine"):
+        axes = [value[direction] for value in values]
+        finite = [axis["scales_finite"] for axis in axes]
+        positive = [axis["scales_positive"] for axis in axes]
+        result[direction] = {
+            "encoded_payload_valid": all(axis["encoded_payload_valid"] for axis in axes),
+            "scales_finite": None if all(value is None for value in finite) else all(
+                value is True for value in finite
+            ),
+            "scales_positive": None if all(value is None for value in positive) else all(
+                value is True for value in positive
+            ),
+            "dequantized_semantics": all(axis["dequantized_semantics"] for axis in axes),
+            "saturation_count": max(axis["saturation_count"] for axis in axes),
+            "saturation_rate": max(axis["saturation_rate"] for axis in axes),
+            "max_abs_error": max(axis["max_abs_error"] for axis in axes),
+            "max_rel_error": max(axis["max_rel_error"] for axis in axes),
+            "passed": all(axis["passed"] for axis in axes),
+        }
+    result["passed"] = result["dispatch"]["passed"] and result["combine"]["passed"]
+    return result
 
 
 def _series_extra_reasons(documents: Sequence[dict[str, Any]]) -> list[str]:
@@ -2192,6 +2813,7 @@ BACKEND_LABELS = {
 def _build_series(
     series_id: str,
     documents: Sequence[dict[str, Any]],
+    sample_documents: Sequence[dict[str, Any]],
     expected_repeats: int,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     if not documents:
@@ -2199,6 +2821,8 @@ def _build_series(
     first = documents[0]
     if any(document["identity"]["series_id"] != series_id for document in documents):
         raise PublisherError("series aggregation mixed identities")
+    if len(sample_documents) != len(documents):
+        raise PublisherError("series aggregation lost private sample documents")
     allocations = [document["identity"]["allocation_id"] for document in documents]
     if len(allocations) != len(set(allocations)):
         raise PublisherError("series repeats reuse an allocation identity")
@@ -2210,6 +2834,9 @@ def _build_series(
     if len(token_sets) != 1:
         raise PublisherError("series token coverage differs across allocations")
     tokens = list(next(iter(token_sets)))
+    qualification_indices = sorted(
+        document["measurement"]["qualification_index"] for document in documents
+    )
     p50_ratios = [
         _ratio([rows[token]["components"]["roundtrip"]["percentiles_us"]["p50"] for rows in row_maps])
         for token in tokens
@@ -2229,17 +2856,7 @@ def _build_series(
         and row["components"]["roundtrip"]["percentiles_us"].get("p99") is not None
         for document in documents for row in document["measurement"]["rows"]
     )
-    eligibility = _eligibility_record(
-        allocations,
-        complete=len(documents) == expected_repeats,
-        correct=correct,
-        measured=measured,
-        # Ordering is defined only across alternatives in a controlled cohort.
-        stable_ordering=True,
-        p50_ratio=p50_ratio,
-        p99_ratio=p99_ratio,
-        extra_reasons=_series_extra_reasons(documents),
-    )
+    extra_reasons = _series_extra_reasons(documents)
     case = first["case"]
     shape = case["shape"]
     topology = first["topology"]
@@ -2269,47 +2886,101 @@ def _build_series(
     )
     points: list[dict[str, Any]] = []
     run_metrics: dict[str, dict[int, dict[str, float]]] = {}
-    for document, rows in zip(documents, row_maps, strict=True):
+    trial_blocks: dict[str, dict[int, dict[str, Any]]] = {}
+    for document, sample_document, rows in zip(
+        documents, sample_documents, row_maps, strict=True
+    ):
+        if any(
+            sample_document[field] != document["identity"][field]
+            for field in ("allocation_id", "attempt_id", "case_id", "series_id")
+        ):
+            raise PublisherError("private samples differ from their selected raw attempt")
+        if sample_document["qualification_index"] != document["measurement"]["qualification_index"]:
+            raise PublisherError("private sample qualification index differs from raw attempt")
         run_id = str(_git_run(document)["run_id"])
         if run_id in run_metrics:
             raise PublisherError("series has two allocations from one workflow run")
+        trial_blocks[run_id] = _private_trial_components(sample_document)
         run_metrics[run_id] = {}
         for token in tokens:
             latency = rows[token]["components"]["roundtrip"]["percentiles_us"]
-            logical_bytes = rows[token]["logical_bytes"]["roundtrip"]
+            byte_provenance = rows[token]["byte_provenance"]["roundtrip"]
             run_metrics[run_id][token] = {
                 "latency_us": {statistic: latency[statistic] for statistic in ("p50", "p99")},
-                "logical_payload_rate_gbps_at_latency_percentile": {
-                    statistic: logical_bytes / (latency[statistic] * 1000.0)
+                "activation_data_rate_gbps_at_latency_percentile": {
+                    statistic: byte_provenance["activation_data_bytes"]
+                    / (latency[statistic] * 1000.0)
+                    for statistic in ("p50", "p99")
+                },
+                "total_logical_data_rate_gbps_at_latency_percentile": {
+                    statistic: byte_provenance["total_logical_bytes"]
+                    / (latency[statistic] * 1000.0)
                     for statistic in ("p50", "p99")
                 },
             }
     for token in tokens:
         rows = [row_map[token] for row_map in row_maps]
+        diagnostics = _trial_diagnostics(trial_blocks, token)
+        if diagnostics["flagged"]:
+            extra_reasons.append("unresolved-trial-diagnostic")
         routing = _exact_repeat_value(
             [_routing_facts(row) for row in rows], "routing/load facts"
         )
         components = {
             name: _aggregate_component(rows, name)
-            for name in ("dispatch", "combine", "roundtrip")
+            for name in ("dispatch", "stage", "combine", "roundtrip")
         }
         if components["dispatch"] is None:
             components["isolated_sum"] = None
         else:
             latency = {
                 statistic: components["dispatch"]["latency_us"][statistic]
+                + (
+                    components["stage"]["latency_us"][statistic]
+                    if components["stage"] is not None else 0.0
+                )
                 + components["combine"]["latency_us"][statistic]
                 for statistic in ("p50", "p90", "p95", "p99")
             }
             components["isolated_sum"] = {
-                "origin": "derived", "latency_us": latency, "logical_bytes": None,
-                "logical_payload_rate_gbps_at_latency_percentile": None, "sample_count": None,
+                "origin": "derived",
+                "latency_us": latency,
+                "byte_provenance": components["roundtrip"]["byte_provenance"],
+                "activation_data_rate_gbps_at_latency_percentile": None,
+                "total_logical_data_rate_gbps_at_latency_percentile": None,
+                "sample_count": None,
             }
         points.append({
             "point_id": rows[0]["point_id"],
             "tokens_per_rank": token,
             "global_tokens": token * case["ep_size"],
-            "correct": all(row["correctness"]["passed"] for row in rows),
+            "correctness": {
+                "semantic_pass": all(row["correctness"]["passed"] for row in rows),
+                "precision": _aggregate_precision_evidence(rows),
+            },
+            "anomalies": sorted({
+                anomaly["type"].replace("_", "-")
+                for row in rows for anomaly in row["anomalies"]
+            } | set(diagnostics["reasons"])),
+            "stability": {
+                "complete": qualification_indices == [1, 2, 3],
+                "qualification_indices": qualification_indices,
+                "p50_max_min_ratio": p50_ratios[tokens.index(token)]
+                if qualification_indices == [1, 2, 3] else None,
+                "p99_max_min_ratio": p99_ratios[tokens.index(token)]
+                if qualification_indices == [1, 2, 3] else None,
+                "stable_p50": bool(
+                    qualification_indices == [1, 2, 3]
+                    and p50_ratios[tokens.index(token)] is not None
+                    and p50_ratios[tokens.index(token)] <= P50_STABILITY_LIMIT
+                ),
+                "stable_p99": bool(
+                    qualification_indices == [1, 2, 3]
+                    and p99_ratios[tokens.index(token)] is not None
+                    and p99_ratios[tokens.index(token)] <= P99_STABILITY_LIMIT
+                ),
+            },
+            "trial_diagnostics": diagnostics,
             "routing": routing,
             "components": components,
             "roundtrip_token_rate_at_latency_percentile": {
@@ -2319,6 +2990,17 @@ def _build_series(
             },
             "evidence_ids": [row["evidence_id"] for row in rows],
         })
+    eligibility = _eligibility_record(
+        allocations,
+        complete=len(documents) == expected_repeats,
+        correct=correct,
+        measured=measured,
+        # Ordering is defined only across alternatives in a controlled cohort.
+        stable_ordering=True,
+        p50_ratio=p50_ratio,
+        p99_ratio=p99_ratio,
+        extra_reasons=sorted(set(extra_reasons)),
+    )
     series = {
         "series_id": series_id,
         "label": (
@@ -2386,8 +3068,9 @@ def _build_series(
             "experts": case["eplb"]["num_logical_experts"],
             "routing": shape["routing"],
             "eplb": case["eplb"]["enabled"],
-            "dispatch_dtype": shape["dispatch_dtype"],
-            "combine_dtype": shape["quant"]["combine_output_dtype"],
+            "precision_profile": shape["precision_profile"],
+            "dispatch_precision": shape["dispatch_precision"],
+            "combine_precision": shape["combine_precision"],
             "activation_profile": shape["activation_profile"],
         },
         "eplb": eplb,
@@ -2402,6 +3085,7 @@ def _build_series(
             "trials": first["measurement"]["sampling"]["trials"],
             "warmups": first["measurement"]["sampling"]["warmup_iterations"],
             "samples_per_component": first["measurement"]["sampling"]["samples_per_component"],
+            "qualification_indices": qualification_indices,
             "headline_component": "roundtrip",
             "headline_percentile": "p99",
         },
@@ -2411,6 +3095,7 @@ def _build_series(
     internal = {
         "documents": list(documents),
         "run_metrics": run_metrics,
+        "trial_blocks": trial_blocks,
         "series_factors": first["identity"]["series_factors"],
     }
     return series, internal
@@ -2477,6 +3162,7 @@ def load_bundle(store: Store, bundle_id: str) -> dict[str, Any]:
     if {item["case_id"] for item in manifest["coverage"]["selections"]} != set(expected_by_id):
         raise PublisherError("bundle selected coverage differs from requested matrix")
     documents: dict[str, dict[str, Any]] = {}
+    sample_documents: dict[str, dict[str, Any]] = {}
     runtime_fingerprints: set[str] = set()
     for attempt in manifest["attempts"]:
         document_path = _resolve_bundle_file(root, attempt["document"])
@@ -2493,7 +3179,9 @@ def load_bundle(store: Store, bundle_id: str) -> dict[str, Any]:
             sample_document = contracts.strict_load(sample_path)
             artifact_safety.assert_publication_safe([sample_document])
             _schema("samples-v1.schema.json", sample_document)
+            sample_document = contracts.validate_samples_document(sample_document)
             document = contracts.load_raw_attempt(document_path)
+            sample_documents[attempt["attempt_id"]] = sample_document
         else:
             if attempt["samples"] is not None:
                 raise PublisherError("terminal attempt unexpectedly names a sample artifact")
@@ -2523,6 +3211,7 @@ def load_bundle(store: Store, bundle_id: str) -> dict[str, Any]:
         "manifest": manifest,
         "cases": cases,
         "documents": documents,
+        "sample_documents": sample_documents,
         "selected": selected,
     }
 
@@ -2535,7 +3224,10 @@ def _cohort_control(
     workload = series["workload"]
     shape = {
         key: workload[key]
-        for key in ("hidden", "top_k", "experts", "dispatch_dtype", "combine_dtype", "activation_profile")
+        for key in (
+            "hidden", "top_k", "experts", "precision_profile", "dispatch_precision",
+            "combine_precision", "activation_profile",
+        )
     }
     common = {
         "model": series["model"], "mode": series["mode"],
@@ -2572,6 +3264,31 @@ def _cohort_control(
             ["workload.routing", "workload.eplb", "implementation-config"],
             varying,
         )
+    if kind in PRECISION_COHORT_KINDS:
+        control, variant = _public_cohort_factors(kind, series)
+        if kind == "dispatch-precision":
+            controlled = [
+                "backend", "implementation-static-build", "system", "model-shape",
+                "mode", "phase", "workload.routing", "workload.eplb", "measurement",
+                "resource", "combine-precision",
+            ]
+            varying = ["dispatch-precision"]
+        elif kind == "combine-precision":
+            controlled = [
+                "backend", "implementation-static-build", "system", "model-shape",
+                "mode", "phase", "workload.routing", "workload.eplb", "measurement",
+                "resource", "dispatch-precision",
+            ]
+            varying = ["combine-precision"]
+        else:
+            controlled = [
+                "backend", "implementation-static-build", "system", "model-shape",
+                "mode", "phase", "workload.routing", "workload.eplb", "measurement",
+            ]
+            varying = [
+                "dispatch-precision", "combine-precision", "precision-profile", "resource",
+            ]
+        return control, controlled, varying, variant
     raise PublisherError(f"unknown cohort kind {kind}")
 
 
@@ -2586,7 +3303,10 @@ def _cohort_ordering(
     orders: list[tuple[str, str, int, str, tuple[str, ...]]] = []
     for run_id in sorted(run_ids):
         for token in tokens:
-            for measure in ("latency_us", "logical_payload_rate_gbps_at_latency_percentile"):
+            for measure in (
+                "latency_us", "activation_data_rate_gbps_at_latency_percentile",
+                "total_logical_data_rate_gbps_at_latency_percentile",
+            ):
                 for statistic in ("p50", "p99"):
                     ordered = tuple(
                         member["series_id"]
@@ -2596,12 +3316,15 @@ def _cohort_ordering(
                                 internals[item["series_id"]]["run_metrics"][run_id][token][measure][statistic],
                                 item["series_id"],
                             ),
-                            reverse=measure == "logical_payload_rate_gbps_at_latency_percentile",
+                            reverse=measure != "latency_us",
                         )
                     )
                     orders.append((measure, statistic, token, run_id, ordered))
     for token in tokens:
-        for measure in ("latency_us", "logical_payload_rate_gbps_at_latency_percentile"):
+        for measure in (
+            "latency_us", "activation_data_rate_gbps_at_latency_percentile",
+            "total_logical_data_rate_gbps_at_latency_percentile",
+        ):
             for statistic in ("p50", "p99"):
                 observed = {
                     entry[4]
@@ -2613,11 +3336,61 @@ def _cohort_ordering(
     return True, len(run_ids)
 
 
+def _p99_top_tie_ids(
+    members: Sequence[dict[str, Any]],
+    internals: dict[str, dict[str, Any]],
+    token: int,
+    dataset_binding: str,
+    cohort_id: str,
+) -> set[str]:
+    metric = {
+        "operation": "roundtrip",
+        "statistic": "p99",
+        "measure": "latency_us",
+        "objective": "min",
+        "tokens_per_rank": token,
+        "phase": members[0]["phase"],
+    }
+    ordered = sorted(
+        members,
+        key=lambda member: (
+            _metric_value(member, metric)[1], member["series_id"]
+        ),
+    )
+    baseline_id = ordered[0]["series_id"]
+    comparisons: dict[str, dict[str, Any]] = {}
+    tie_end = 0
+    for index, candidate in enumerate(ordered[1:], 1):
+        candidate_id = candidate["series_id"]
+        result = _hierarchical_p99_ratio(
+            baseline_id, candidate_id, token, internals, dataset_binding
+        )
+        comparisons[candidate_id] = result
+        if not result["baseline_wins"]:
+            tie_end = index
+    tie_ids = {member["series_id"] for member in ordered[:tie_end + 1]}
+    internals[baseline_id].setdefault("decision_statistics", {})[
+        f"{cohort_id}:p99:{token}"
+    ] = {
+        "baseline_series_id": baseline_id,
+        "comparisons": comparisons,
+        "tie_series_ids": sorted(tie_ids),
+    }
+    return tie_ids
+
+
 def build_decisions(
-    series: Sequence[dict[str, Any]], internals: dict[str, dict[str, Any]]
+    series: Sequence[dict[str, Any]],
+    internals: dict[str, dict[str, Any]],
+    *,
+    dataset_binding: str | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    if dataset_binding is None:
+        dataset_binding = _sha_bytes(_canonical({
+            "series_ids": sorted(item["series_id"] for item in series),
+        }))
     cohorts: list[dict[str, Any]] = []
-    for kind in ("library", "chip", "system", "routing"):
+    for kind in (*REQUIRED_COHORT_KINDS, *PRECISION_COHORT_KINDS):
         groups: dict[bytes, list[tuple[dict[str, Any], Any, list[str], list[str]]]] = {}
         for item in series:
             if kind == "library" and item["backend"]["role"] != "library":
@@ -2650,6 +3423,8 @@ def build_decisions(
             }
             if aligned_runs < REQUIRED_ALLOCATIONS:
                 extra.add("incomplete-aligned-repeats")
+            if tokens and not _bootstrap_inputs_ready(members, internals, tokens):
+                extra.add("missing-trial-blocks")
             if kind == "routing" and sum(
                 member["workload"]["routing"] == "uniform"
                 and not member["workload"]["eplb"]
@@ -2663,12 +3438,24 @@ def build_decisions(
                 extra.add("incomplete-routing-anchors")
             if kind == "routing" and _routing_implementation_mismatch(members):
                 extra.add("implementation-config-mismatch")
-            if not tokens or (kind != "routing" and not same_points):
+            endpoint_contrast = kind == "routing" or kind in PRECISION_COHORT_KINDS
+            if not tokens or (not endpoint_contrast and not same_points):
                 extra.add("unmatched-token-coverage")
+            if kind in {"dispatch-precision", "combine-precision"}:
+                axis = "dispatch" if kind == "dispatch-precision" else "combine"
+                field = f"{axis}_precision"
+                bf16 = identity.precision_profile(
+                    identity.V1_CONTROL_PRECISION_PROFILE
+                )[axis]
+                if sum(
+                    _canonical(member["workload"][field]) == _canonical(bf16)
+                    for member in members
+                ) != 1:
+                    extra.add("missing-bf16-precision-baseline")
             eligibility = _eligibility_record(
                 allocations,
                 complete=all(member["eligibility"]["complete"] for member in members)
-                and bool(tokens) and (kind == "routing" or same_points),
+                and bool(tokens) and (endpoint_contrast or same_points),
                 correct=all(member["eligibility"]["correct"] for member in members),
                 measured=all(member["eligibility"]["measured_roundtrip_p99"] for member in members),
                 stable_ordering=ordering,
@@ -2687,7 +3474,12 @@ def build_decisions(
                 "kind": kind, "series_ids": member_ids,
                 "controlled_factors": controlled, "varying_factors": varying,
             })
-            kind_label = "Platform" if kind == "chip" else kind.title()
+            kind_label = {
+                "chip": "Platform",
+                "dispatch-precision": "Dispatch precision",
+                "combine-precision": "Combine precision",
+                "precision-pair": "Precision profile",
+            }.get(kind, kind.title())
             first = members[0]
             routing_label = first["workload"]["routing"] + (
                 "+EPLB" if first["workload"]["eplb"] else ""
@@ -2709,6 +3501,18 @@ def build_decisions(
                     f"{first['system']['sku'].upper()} / {first['backend']['label']} / "
                     f"EP{first['system']['ep_size']} / {first['mode']} / {first['phase']}"
                 ),
+                "dispatch-precision": (
+                    f"{first['system']['sku'].upper()} / {first['backend']['label']} / "
+                    f"EP{first['system']['ep_size']} / {first['mode']} / {first['phase']}"
+                ),
+                "combine-precision": (
+                    f"{first['system']['sku'].upper()} / {first['backend']['label']} / "
+                    f"EP{first['system']['ep_size']} / {first['mode']} / {first['phase']}"
+                ),
+                "precision-pair": (
+                    f"{first['system']['sku'].upper()} / {first['backend']['label']} / "
+                    f"EP{first['system']['ep_size']} / {first['mode']} / {first['phase']}"
+                ),
             }[kind]
             cohorts.append({
                 "cohort_id": cohort_id,
@@ -2717,7 +3521,11 @@ def build_decisions(
                 "description": (
                     "Publisher-controlled NCCL/RCCL system comparison"
                     if kind == "system"
-                    else f"Publisher-controlled {kind_label.lower()} comparison"
+                    else (
+                        "Descriptive configured-stack precision comparison; no isolated axis claim"
+                        if kind == "precision-pair"
+                        else f"Publisher-controlled {kind_label.lower()} comparison"
+                    )
                 ),
                 "series_ids": member_ids,
                 "controlled_factors": controlled,
@@ -2738,8 +3546,13 @@ def build_decisions(
             {point["tokens_per_rank"] for point in member["points"]} for member in members
         )))
         for token in tokens:
+            p99_tie_ids = _p99_top_tie_ids(
+                members, internals, token, dataset_binding, cohort["cohort_id"]
+            )
             for measure, objective, unit in (
-                ("latency_us", "min", "us"), ("logical_payload_rate_gbps_at_latency_percentile", "max", "GB/s")
+                ("latency_us", "min", "us"),
+                ("activation_data_rate_gbps_at_latency_percentile", "max", "GB/s"),
+                ("total_logical_data_rate_gbps_at_latency_percentile", "max", "GB/s"),
             ):
                 for statistic in ("p50", "p99"):
                     metric = {
@@ -2758,7 +3571,13 @@ def build_decisions(
                         })
                     entries.sort(key=lambda item: (item["value"], item["series_id"]), reverse=objective == "max")
                     for rank, entry in enumerate(entries, 1):
-                        entry["rank"] = rank
+                        entry["rank"] = (
+                            1
+                            if measure == "latency_us"
+                            and statistic == "p99"
+                            and entry["series_id"] in p99_tie_ids
+                            else rank
+                        )
                     ranking_id = _derived_id("cxranking-v1-", {
                         "cohort_id": cohort["cohort_id"], "metric": metric,
                     })
@@ -2770,13 +3589,14 @@ def build_decisions(
                         "publication_tier": cohort["publication_tier"],
                         "eligibility": cohort["eligibility"],
                     })
-                    if cohort["publication_tier"] != "official":
+                    if (
+                        cohort["publication_tier"] != "official"
+                        or measure != "latency_us"
+                        or statistic != "p99"
+                        or sum(entry["rank"] == 1 for entry in entries) != 1
+                    ):
                         continue
-                    objective_name = (
-                        f"min-{statistic}-latency"
-                        if measure == "latency_us"
-                        else f"max-payload-rate-at-{statistic}-latency"
-                    )
+                    objective_name = "min-p99-latency"
                     top = entries[0]
                     recommendation_id = _derived_id("cxrecommendation-v1-", {
                         "objective": objective_name, "ranking_id": ranking_id,
@@ -2788,7 +3608,10 @@ def build_decisions(
                         "objective": objective_name,
                         "series_id": top["series_id"], "point_id": top["point_id"],
                         "value": top["value"], "unit": top["unit"],
-                        "rationale": "Top stable measured roundtrip result in a controlled cohort",
+                        "rationale": (
+                            "Unique p99 winner after deterministic hierarchical bootstrap "
+                            "and all-run agreement"
+                        ),
                         "publication_tier": cohort["publication_tier"],
                         "eligibility": cohort["eligibility"],
                     })
@@ -2803,7 +3626,11 @@ def build_decisions(
                     if candidate is baseline:
                         continue
                     for token in tokens:
-                        for measure, objective in (("latency_us", "min"), ("logical_payload_rate_gbps_at_latency_percentile", "max")):
+                        for measure, objective in (
+                            ("latency_us", "min"),
+                            ("activation_data_rate_gbps_at_latency_percentile", "max"),
+                            ("total_logical_data_rate_gbps_at_latency_percentile", "max"),
+                        ):
                             for statistic in ("p50", "p99"):
                                 metric = {
                                     "operation": "roundtrip", "statistic": statistic,
@@ -2830,6 +3657,62 @@ def build_decisions(
                                     "publication_tier": cohort["publication_tier"],
                                     "eligibility": cohort["eligibility"],
                                 })
+        if cohort["kind"] in {"dispatch-precision", "combine-precision"}:
+            axis = (
+                "dispatch"
+                if cohort["kind"] == "dispatch-precision"
+                else "combine"
+            )
+            field = f"{axis}_precision"
+            bf16 = identity.precision_profile(
+                identity.V1_CONTROL_PRECISION_PROFILE
+            )[axis]
+            baseline = next(
+                member for member in members
+                if _canonical(member["workload"][field]) == _canonical(bf16)
+            )
+            for candidate in members:
+                if candidate is baseline:
+                    continue
+                for token in tokens:
+                    for measure, objective in (
+                        ("latency_us", "min"),
+                        ("activation_data_rate_gbps_at_latency_percentile", "max"),
+                        ("total_logical_data_rate_gbps_at_latency_percentile", "max"),
+                    ):
+                        for statistic in ("p50", "p99"):
+                            metric = {
+                                "operation": "roundtrip",
+                                "statistic": statistic,
+                                "measure": measure,
+                                "objective": objective,
+                                "tokens_per_rank": token,
+                                "phase": baseline["phase"],
+                            }
+                            _, base_value, _ = _metric_value(baseline, metric)
+                            _, candidate_value, _ = _metric_value(candidate, metric)
+                            sensitivity_id = _derived_id("cxsensitivity-v1-", {
+                                "baseline": baseline["series_id"],
+                                "candidate": candidate["series_id"],
+                                "cohort": cohort["cohort_id"],
+                                "metric": metric,
+                            })
+                            sensitivities.append({
+                                "sensitivity_id": sensitivity_id,
+                                "cohort_id": cohort["cohort_id"],
+                                "label": (
+                                    f"{axis.title()} precision sensitivity: "
+                                    f"{_metric_label(measure, statistic)} T={token}"
+                                ),
+                                "baseline_series_id": baseline["series_id"],
+                                "candidate_series_id": candidate["series_id"],
+                                "metric": metric,
+                                "signed_change_ratio": (
+                                    candidate_value - base_value
+                                ) / base_value,
+                                "publication_tier": cohort["publication_tier"],
+                                "eligibility": cohort["eligibility"],
+                            })
     rankings.sort(key=lambda item: item["ranking_id"])
     recommendations.sort(key=lambda item: item["recommendation_id"])
     sensitivities.sort(key=lambda item: item["sensitivity_id"])
@@ -2876,7 +3759,16 @@ def _require_promotion_cohorts(
         for cohort in cohorts
         if cohort["eligibility"]["decision_grade"]
     }
-    missing = [kind for kind in REQUIRED_COHORT_KINDS if kind not in eligible_kinds]
+    required_kinds = list(REQUIRED_COHORT_KINDS)
+    if any(
+        item["workload"].get(
+            "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
+        )
+        != identity.V1_CONTROL_PRECISION_PROFILE
+        for item in series
+    ):
+        required_kinds.extend(PRECISION_COHORT_KINDS)
+    missing = [kind for kind in required_kinds if kind not in eligible_kinds]
     if missing:
         raise PublisherError(
             "promotion lacks decision-grade cohort kinds: " + ", ".join(missing)
@@ -2947,11 +3839,18 @@ def build_dataset(
     if len(matrix_ids) != 1 or len({tuple(sorted(values)) for values in case_sets}) != 1:
         raise PublisherError("dataset bundles do not share one exact requested matrix")
     run_ids = [bundle["manifest"]["run"]["run_id"] for bundle in loaded]
+    qualification_indices = sorted(
+        bundle["manifest"]["run"]["qualification_index"] for bundle in loaded
+    )
     if promote and (
         len(loaded) != REQUIRED_ALLOCATIONS
         or len(run_ids) != len(set(run_ids))
+        or qualification_indices != [1, 2, 3]
+        or any(bundle["manifest"]["run"]["run_attempt"] != 1 for bundle in loaded)
     ):
-        raise PublisherError("promotion requires three independent complete workflow runs")
+        raise PublisherError(
+            "promotion requires qualification indices 1, 2, and 3 from first-attempt runs"
+        )
     if promote and matrix_ids != {CANONICAL_FULL_V1_MATRIX_SHA256}:
         raise PublisherError("promotion requires the canonical full-v1 matrix")
     cases = {case["case_id"]: case for case in loaded[0]["cases"]}
@@ -2975,6 +3874,11 @@ def build_dataset(
         case_id: [bundle["selected"][case_id] for bundle in loaded]
         for case_id in sorted(cases)
     }
+    samples_by_attempt = {
+        attempt_id: sample_document
+        for bundle in loaded
+        for attempt_id, sample_document in bundle["sample_documents"].items()
+    }
     coverage: list[dict[str, Any]] = []
     for case_id, case in sorted(cases.items()):
         attempts = sorted(
@@ -2984,7 +3888,64 @@ def build_dataset(
                 attempt["attempt_index"], attempt["attempt_id"],
             ),
         )
-        selected = _public_attempt(selected_by_case[case_id][-1], selected=True)
+        selected_document = selected_by_case[case_id][-1]
+        selected = _public_attempt(selected_document, selected=True)
+        precision_profile = case.get(
+            "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
+        )
+        precision = identity.precision_profile(precision_profile)
+        selected_raw = (
+            selected_document
+            if selected_document["format"] == contracts.RAW_FORMAT
+            and selected_document["outcome"]["status"] == "success"
+            else None
+        )
+        if selected_raw is not None:
+            backend_generation = selected_raw["implementation"]["kernel_generation"]
+            projected = contracts.public_series_config(
+                kernel_generation=backend_generation,
+                provenance=selected_raw["implementation"]["provenance"],
+                resource_profile=selected_raw["implementation"]["resource_profile"],
+                resource_mode=selected_raw["case"]["resource_mode"],
+                device_product=selected_raw["topology"]["device_product"],
+            )
+            resource = projected["resource"]
+            rows_by_token = {
+                row["tokens_per_rank"]: row for row in selected_raw["measurement"]["rows"]
+            }
+            series_id = selected_raw["identity"]["series_id"]
+        else:
+            backend_generation = None
+            resource = {
+                "mode": "fixed-profile",
+                "profile": None,
+                "comm_units_kind": None,
+                "configured_units": None,
+            }
+            rows_by_token = {}
+            series_id = None
+        point_status = (
+            "measured" if selected["outcome"] == "success" else selected["outcome"]
+        )
+        point_reason = (
+            None
+            if point_status == "measured"
+            else case["_reason"]
+            if point_status == "unsupported"
+            else selected["reason"]
+        )
+        token_ladder = [int(value) for value in case["ladder"].split()]
+        coverage_points = []
+        for token in token_ladder:
+            row = rows_by_token.get(token)
+            coverage_points.append({
+                "point_id": row["point_id"] if row is not None else None,
+                "series_id": series_id if row is not None else None,
+                "tokens_per_rank": token,
+                "global_tokens": token * case["ep"],
+                "terminal_status": point_status,
+                "reason": point_reason,
+            })
         coverage.append({
             "case_id": case_id,
             "label": (
@@ -2993,10 +3954,21 @@ def build_dataset(
             ),
             "required": True,
             "sku": _slug(case["sku"]),
+            "suite": _slug(case["suite"]),
+            "workload": _slug(case["workload"]),
+            "publication_tier": case["required_publication"],
             "backend": _slug(case["backend"]),
+            "backend_generation": backend_generation,
             "mode": case["mode"],
             "phase": case["phase"],
+            "routing": case["routing"],
+            "eplb": case["eplb"],
+            "precision_profile": precision_profile,
+            "dispatch_precision": precision["dispatch"],
+            "combine_precision": precision["combine"],
+            "resource": resource,
             "topology": _coverage_topology(case),
+            "points": coverage_points,
             "disposition": case["_disposition"],
             "selected_attempt_id": selected["attempt_id"],
             "outcome": selected["outcome"],
@@ -3015,11 +3987,46 @@ def build_dataset(
     series: list[dict[str, Any]] = []
     internals: dict[str, dict[str, Any]] = {}
     for series_id, documents in sorted(by_series.items()):
-        item, internal = _build_series(series_id, documents, len(loaded))
+        try:
+            sample_documents = [
+                samples_by_attempt[document["identity"]["attempt_id"]]
+                for document in documents
+            ]
+        except KeyError as exc:
+            raise PublisherError(
+                "selected raw evidence is missing its private sample document"
+            ) from exc
+        item, internal = _build_series(
+            series_id, documents, sample_documents, len(loaded)
+        )
         series.append(item)
         internals[series_id] = internal
-    cohorts, rankings, recommendations, sensitivities = build_decisions(series, internals)
+    dataset_binding = _sha_bytes(_canonical({
+        "matrix_id": next(iter(matrix_ids)),
+        "source_bundle_ids": sorted(bundle_ids),
+    }))
+    cohorts, rankings, recommendations, sensitivities = build_decisions(
+        series, internals, dataset_binding=dataset_binding
+    )
     allocation_ids = sorted({attempt["allocation_id"] for attempt in public_attempts})
+    qualification_indices = sorted({int(value) for value in qualification_indices})
+    measured_cases = sum(
+        all(point["terminal_status"] == "measured" for point in item["points"])
+        for item in coverage
+    )
+    unsupported_cases = sum(
+        all(point["terminal_status"] == "unsupported" for point in item["points"])
+        for item in coverage
+    )
+    requested_points = sum(len(item["points"]) for item in coverage)
+    measured_points = sum(
+        point["terminal_status"] == "measured"
+        for item in coverage for point in item["points"]
+    )
+    unsupported_points = sum(
+        point["terminal_status"] == "unsupported"
+        for item in coverage for point in item["points"]
+    )
     status = "promoted" if promote else "diagnostic"
     dataset = {
         "format": FORMAT_PUBLIC,
@@ -3034,8 +4041,15 @@ def build_dataset(
             "matrix_id": next(iter(matrix_ids)),
             "allocation_ids": allocation_ids,
             "required_allocations": REQUIRED_ALLOCATIONS,
+            "qualification_indices": qualification_indices,
             "requested_cases": len(coverage),
             "terminal_cases": len(coverage),
+            "measured_cases": measured_cases,
+            "unsupported_cases": unsupported_cases,
+            "requested_points": requested_points,
+            "terminal_points": requested_points,
+            "measured_points": measured_points,
+            "unsupported_points": unsupported_points,
             "policy": POLICY,
         },
         "coverage": coverage,
@@ -3049,34 +4063,6 @@ def build_dataset(
     if promote:
         _require_promotion_series(series)
         _require_promotion_cohorts(cohorts, series)
-    validate_public_dataset(dataset)
-    return dataset
-
-
-def _quarantine_dataset(reason: str, generated_at: str) -> dict[str, Any]:
-    dataset = {
-        "format": FORMAT_PUBLIC,
-        "schema_version": 1,
-        "generated_at": generated_at,
-        "source_bundle_ids": [],
-        "promotion": {
-            "status": "quarantined",
-            "reason": reason,
-            "matrix_id": None,
-            "allocation_ids": [],
-            "required_allocations": REQUIRED_ALLOCATIONS,
-            "requested_cases": 0,
-            "terminal_cases": 0,
-            "policy": POLICY,
-        },
-        "coverage": [],
-        "attempts": [],
-        "series": [],
-        "cohorts": [],
-        "rankings": [],
-        "recommendations": [],
-        "sensitivities": [],
-    }
     validate_public_dataset(dataset)
     return dataset
 
@@ -3103,11 +4089,6 @@ def quarantine_incoming(
         store.install(stage, store.quarantine / digest, private=True)
     if _sha_bytes(_canonical(strict_load(store.quarantine / digest / "quarantine.json"))) != digest:
         raise PublisherError("existing quarantine object differs")
-    # The incoming digest distinguishes separate rejected deliveries while preserving
-    # byte-identical output when the operator retries the same immutable input.
-    dataset = _quarantine_dataset(public_reason, generated_at)
-    dataset_digest, size = store.install_dataset(dataset)
-    store.update_channel("latest-attempt", dataset_digest, size, generated_at)
     return digest
 
 
@@ -3131,6 +4112,7 @@ def _run_metadata(args: argparse.Namespace) -> dict[str, Any]:
         "repository": args.repository,
         "run_id": args.run_id,
         "run_attempt": args.run_attempt,
+        "qualification_index": args.qualification_index,
         "source_sha": args.source_sha,
     }
     # Reuse the authoritative private schema constraints before any filesystem mutation.
@@ -3140,6 +4122,8 @@ def _run_metadata(args: argparse.Namespace) -> dict[str, Any]:
         raise PublisherError("--run-id must be a positive decimal string")
     if type(run["run_attempt"]) is not int or run["run_attempt"] < 1:
         raise PublisherError("--run-attempt must be positive")
+    if type(run["qualification_index"]) is not int or run["qualification_index"] not in range(1, 4):
+        raise PublisherError("--qualification-index must be 1, 2, or 3")
     if not re.fullmatch(r"[0-9a-f]{40}", run["source_sha"] or ""):
         raise PublisherError("--source-sha must be a 40-character lowercase Git SHA")
     return run
@@ -3186,16 +4170,9 @@ def ingest_command(args: argparse.Namespace) -> dict[str, Any]:
         )
         try:
             bundle_id, _, _ = build_bundle(store, ingest_id, incoming, run)
-            dataset = build_dataset(store, [bundle_id], promote=False)
-            dataset_id, size = store.install_dataset(dataset)
-            store.update_channel(
-                "latest-attempt", dataset_id, size, dataset["generated_at"]
-            )
-            store.verify_channel("latest-attempt")
             return {
                 "status": "accepted", "incoming_id": ingest_id,
-                "bundle_id": bundle_id, "dataset_sha256": dataset_id,
-                "channel": "latest-attempt",
+                "bundle_id": bundle_id,
             }
         except (
             PublisherError, contracts.ContractError, artifact_safety.ArtifactSafetyError,
@@ -3228,12 +4205,10 @@ def promote_command(args: argparse.Namespace) -> dict[str, Any]:
 
 def verify_command(args: argparse.Namespace) -> dict[str, Any]:
     bundle_ids = _bundle_ids(args.bundle, promote=False) if args.bundle else []
-    channels = args.channel or ["latest-attempt"]
-    if any(channel not in {"latest-attempt", "dev-latest"} for channel in channels):
+    channels = args.channel or ["dev-latest"]
+    if any(channel != "dev-latest" for channel in channels):
         raise PublisherError("unknown channel")
     store = _store_from_args(args)
-    if args.channel is None and (store.channels / "dev-latest.json").is_file():
-        channels.append("dev-latest")
     with store.locked():
         pointers = {channel: store.verify_channel(channel) for channel in channels}
         bundles = [load_bundle(store, bundle_id)["id"] for bundle_id in bundle_ids]
@@ -3250,11 +4225,12 @@ def _parser() -> argparse.ArgumentParser:
     ingest.add_argument("--repository", required=True)
     ingest.add_argument("--run-id", required=True)
     ingest.add_argument("--run-attempt", required=True, type=int)
+    ingest.add_argument("--qualification-index", required=True, type=int)
     ingest.add_argument("--source-sha", required=True)
     promote = subparsers.add_parser("promote", help="publish explicit independent bundles")
     promote.add_argument("--bundle", action="append", required=True)
     verify = subparsers.add_parser("verify", help="verify immutable targets and pointers")
-    verify.add_argument("--channel", action="append", choices=["latest-attempt", "dev-latest"])
+    verify.add_argument("--channel", action="append", choices=["dev-latest"])
     verify.add_argument("--bundle", action="append", default=[])
     return parser
 

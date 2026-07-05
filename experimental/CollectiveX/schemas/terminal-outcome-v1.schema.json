@@ -24,62 +24,7 @@
                               "required": ["case","profile","sku"],
                               "properties": {
                                           "case": {"$ref": "#/$defs/case"},
-                                          "profile": {
-                                                        "oneOf": [
-                                                          {"const": {
-                                                                        "activation_generator": "collectivex-activation-counter-v3",
-                                                                        "activation_profile": "canonical-counter-source-v3",
-                                                                        "combine_dtype": "bf16",
-                                                                        "combine_quant_mode": "none",
-                                                                        "combine_semantics": "activation-only",
-                                                                        "component_order_contract": "roundtrip-dispatch-activation-only-combine-v2",
-                                                                        "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
-                                                                        "contract": "layout-and-dispatch-v1",
-                                                                        "correctness_scope": "dispatch-metadata-and-transformed-combine",
-                                                                        "dtype": "bf16",
-                                                                        "eplb_planner": "greedy-rank-major-v1",
-                                                                        "eplb_redundant_experts": 32,
-                                                                        "eplb_reference_tokens_per_rank": 2048,
-                                                                        "mode": "normal",
-                                                                        "oracle_contract": "expert-specific-transform-v1",
-                                                                        "oracle_tolerances": "rtol=0.05,atol=0.02",
-                                                                        "payload_unit": "token-rank",
-                                                                        "placement": "packed",
-                                                                        "percentile_method": "nearest-rank",
-                                                                        "rank_reduction": "cross-rank-max-per-iteration",
-                                                                        "resource_mode": "tuned",
-                                                                        "routing_generator": "collectivex-routing-counter-v3",
-                                                                        "sampling_contract": "fixed-512-v1",
-                                                                        "seed": 67
-                                                                      }},
-                                                          {"const": {
-                                                                        "activation_generator": "collectivex-activation-counter-v3",
-                                                                        "activation_profile": "canonical-counter-source-v3",
-                                                                        "combine_dtype": "bf16",
-                                                                        "combine_quant_mode": "none",
-                                                                        "combine_semantics": "gate-weighted",
-                                                                        "component_order_contract": "roundtrip-dispatch-gate-weighted-combine-v1",
-                                                                        "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
-                                                                        "contract": "expert-packed-weighted-combine-v1",
-                                                                        "correctness_scope": "expert-assignment-and-weighted-combine",
-                                                                        "dtype": "bf16",
-                                                                        "eplb_planner": "greedy-rank-major-v1",
-                                                                        "eplb_redundant_experts": 32,
-                                                                        "eplb_reference_tokens_per_rank": 2048,
-                                                                        "mode": "low-latency",
-                                                                        "oracle_contract": "expert-assignment-transform-v1",
-                                                                        "oracle_tolerances": "rtol=0.05,atol=0.02",
-                                                                        "payload_unit": "token-expert",
-                                                                        "placement": "packed",
-                                                                        "percentile_method": "nearest-rank",
-                                                                        "rank_reduction": "cross-rank-max-per-iteration",
-                                                                        "resource_mode": "tuned",
-                                                                        "routing_generator": "collectivex-routing-counter-v3",
-                                                                        "sampling_contract": "fixed-512-v1",
-                                                                        "seed": 67
-                                                                      }}
-                                                        ]
-                                                      },
+                                          "profile": {"$ref":"#/$defs/caseProfile"},
                                           "sku": {"$ref": "#/$defs/safeId"}
                                         }
                             },
@@ -187,25 +132,126 @@
                     "reason": {
                               "enum": [
                                           "backend-platform-unsupported",
-                                          "backend-token-capacity"
+                                          "backend-token-capacity",
+                                          "precision-profile-unsupported"
                                         ]
                             }
                   }
           },
       "sha256": {"type": "string","pattern": "^[0-9a-f]{64}$"},
       "safeId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 128},
+      "precisionProfile": {
+            "enum":[
+                    "d-bf16.c-bf16",
+                    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+                    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+                    "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
+                    "d-bf16.c-logfmt10-dynamic64",
+                    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
+                    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+                    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+                    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+                    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
+                  ]
+          },
       "caseId": {"type": "string","pattern": "^cxcase-v1-[0-9a-f]{64}$"},
       "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
       "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
       "nullableText": {"oneOf": [{"type": "null"},{"type": "string","minLength": 1}]},
+      "communicationAxis": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["alignment_contract","api_input_dtype","api_output_dtype","communication_format","conversion_boundary","padding_contract","quantization_origin","scale_dtype","scale_group_size","scale_layout"],
+            "properties": {
+                    "alignment_contract":{"enum":["native-bf16-vector-alignment","hidden-block-128","native-fp8-vector-alignment","value-block-64"]},
+                    "api_input_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
+                    "api_output_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
+                    "communication_format":{"enum":["bf16","fp8-e4m3fn","fp8-e4m3fnuz","logfmt10"]},
+                    "conversion_boundary":{"enum":["none","before-dispatch-timing","inside-dispatch-timing","inside-combine-timing"]},
+                    "padding_contract":{"enum":["none","right-zero-pad-hidden-to-128","right-zero-pad-values-to-64"]},
+                    "quantization_origin":{"enum":["none","caller-prequantized","backend-fused","backend-internal","backend-internal-direct-cast"]},
+                    "scale_dtype":{"oneOf":[{"type":"null"},{"enum":["f32","implicit-logfmt10"]}]},
+                    "scale_group_size":{"oneOf":[{"type":"null"},{"enum":[64,128]}]},
+                    "scale_layout":{"enum":["none","per-token-hidden-block","dynamic-per-64-values"]}
+                  }
+          },
+      "communicationPrecision": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["combine","dispatch","modes","profile_id"],
+            "properties": {
+                    "combine":{"$ref":"#/$defs/communicationAxis"},
+                    "dispatch":{"$ref":"#/$defs/communicationAxis"},
+                    "modes":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["normal","low-latency"]}},
+                    "profile_id":{"$ref":"#/$defs/precisionProfile"}
+                  }
+          },
+      "caseProfile": {
+            "type":"object",
+            "additionalProperties":false,
+            "allOf":[
+                    {
+                              "if":{"properties":{"mode":{"const":"normal"}},"required":["mode"]},
+                              "then":{"properties":{
+                                      "combine_semantics":{"const":"activation-only"},
+                                      "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
+                                      "contract":{"const":"layout-and-dispatch-v1"},
+                                      "correctness_scope":{"const":"dispatch-metadata-and-transformed-combine"},
+                                      "oracle_contract":{"const":"expert-specific-transform-v1"},
+                                      "payload_unit":{"const":"token-rank"}
+                                    }}
+                            },
+                    {
+                              "if":{"properties":{"mode":{"const":"low-latency"}},"required":["mode"]},
+                              "then":{"properties":{
+                                      "combine_semantics":{"const":"gate-weighted"},
+                                      "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
+                                      "contract":{"const":"expert-packed-weighted-combine-v1"},
+                                      "correctness_scope":{"const":"expert-assignment-and-weighted-combine"},
+                                      "oracle_contract":{"const":"expert-assignment-transform-v1"},
+                                      "payload_unit":{"const":"token-expert"}
+                                    }}
+                            }
+                  ],
+            "required":["activation_generator","activation_profile","combine_dtype","combine_quant_mode","combine_semantics","component_order_contract","conditioning_contract","contract","correctness_scope","dtype","eplb_planner","eplb_redundant_experts","eplb_reference_tokens_per_rank","mode","oracle_contract","oracle_tolerances","payload_unit","placement","percentile_method","rank_reduction","resource_mode","routing_generator","sampling_contract","seed","source_identity_contract"],
+            "properties": {
+                    "activation_generator":{"const":"collectivex-activation-counter-v4"},
+                    "activation_profile":{"const":"canonical-counter-source-v4"},
+                    "combine_dtype":{"const":"bf16"},
+                    "combine_quant_mode":{"const":"none"},
+                    "combine_semantics":{"enum":["activation-only","gate-weighted"]},
+                    "communication_precision":{"$ref":"#/$defs/communicationPrecision"},
+                    "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
+                    "conditioning_contract":{"const":"fixed-phase-ramp-8-roundtrips-v1"},
+                    "contract":{"enum":["layout-and-dispatch-v1","expert-packed-weighted-combine-v1"]},
+                    "correctness_scope":{"enum":["dispatch-metadata-and-transformed-combine","expert-assignment-and-weighted-combine"]},
+                    "dtype":{"const":"bf16"},
+                    "eplb_planner":{"const":"greedy-rank-major-v1"},
+                    "eplb_redundant_experts":{"const":32},
+                    "eplb_reference_tokens_per_rank":{"const":2048},
+                    "mode":{"enum":["normal","low-latency"]},
+                    "oracle_contract":{"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
+                    "oracle_tolerances":{"const":"rtol=0.05,atol=0.02"},
+                    "payload_unit":{"enum":["token-rank","token-expert"]},
+                    "placement":{"const":"packed"},
+                    "percentile_method":{"const":"nearest-rank"},
+                    "rank_reduction":{"const":"cross-rank-max-per-iteration"},
+                    "resource_mode":{"const":"fixed-profile"},
+                    "routing_generator":{"const":"collectivex-routing-counter-v3"},
+                    "sampling_contract":{"const":"fixed-512-v1"},
+                    "seed":{"const":67},
+                    "source_identity_contract":{"const":"bounded-sign-bit-source-v1"}
+                  }
+          },
       "allocationFactors": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["artifact","execution_id","job","repo","run_attempt","run_id","runner","source_sha"],
+            "required": ["artifact","execution_id","job","qualification_index","repo","run_attempt","run_id","runner","source_sha"],
             "properties": {
                     "artifact": {"$ref": "#/$defs/nullableText"},
                     "execution_id": {"$ref": "#/$defs/nullableText"},
                     "job": {"$ref": "#/$defs/nullableText"},
+                    "qualification_index": {"type":"integer","minimum":1,"maximum":3},
                     "repo": {"$ref": "#/$defs/nullableText"},
                     "run_attempt": {"$ref": "#/$defs/nullableText"},
                     "run_id": {"$ref": "#/$defs/nullableText"},
@@ -216,10 +262,11 @@
       "gitRun": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["artifact","job","ref","repo","run_attempt","run_id","source_sha"],
+            "required": ["artifact","job","qualification_index","ref","repo","run_attempt","run_id","source_sha"],
             "properties": {
                     "artifact": {"type": "string","minLength": 1},
                     "job": {"type": "string","minLength": 1},
+                    "qualification_index": {"type":"integer","minimum":1,"maximum":3},
                     "ref": {"type": "string","minLength": 1},
                     "repo": {"type": "string","pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
                     "run_attempt": {"type": "string","pattern": "^[1-9][0-9]*$"},
@@ -269,6 +316,7 @@
                     "mode": {"enum": ["normal","low-latency"]},
                     "nodes": {"type": "integer","minimum": 1},
                     "phase": {"enum": ["decode","prefill"]},
+                    "precision_profile": {"$ref":"#/$defs/precisionProfile"},
                     "required_publication": {"enum": ["official","comparable-experimental","diagnostic"]},
                     "routing": {"enum": ["uniform","zipf"]},
                     "samples_per_point": {"const": 512},

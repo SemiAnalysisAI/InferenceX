@@ -77,6 +77,164 @@
       "type": "object"
     },
     "nullable_sha256": {"oneOf":[{"type":"null"},{"pattern":"^[0-9a-f]{64}$","type":"string"}]},
+    "precision_profile": {
+      "enum": [
+        "d-bf16.c-bf16",
+        "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+        "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+        "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
+        "d-bf16.c-logfmt10-dynamic64",
+        "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
+        "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+        "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+        "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+        "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
+      ]
+    },
+    "communication_axis": {
+      "additionalProperties": false,
+      "properties": {
+        "alignment_contract": {"enum":["native-bf16-vector-alignment","hidden-block-128","native-fp8-vector-alignment","value-block-64"]},
+        "api_input_dtype": {"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
+        "api_output_dtype": {"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
+        "communication_format": {"enum":["bf16","fp8-e4m3fn","fp8-e4m3fnuz","logfmt10"]},
+        "conversion_boundary": {"enum":["none","before-dispatch-timing","inside-dispatch-timing","inside-combine-timing"]},
+        "padding_contract": {"enum":["none","right-zero-pad-hidden-to-128","right-zero-pad-values-to-64"]},
+        "quantization_origin": {"enum":["none","caller-prequantized","backend-fused","backend-internal","backend-internal-direct-cast"]},
+        "scale_dtype": {"oneOf":[{"type":"null"},{"enum":["f32","implicit-logfmt10"]}]},
+        "scale_group_size": {"oneOf":[{"type":"null"},{"enum":[64,128]}]},
+        "scale_layout": {"enum":["none","per-token-hidden-block","dynamic-per-64-values"]}
+      },
+      "required": [
+        "alignment_contract","api_input_dtype","api_output_dtype","communication_format",
+        "conversion_boundary","padding_contract","quantization_origin","scale_dtype",
+        "scale_group_size","scale_layout"
+      ],
+      "type": "object"
+    },
+    "communication_precision": {
+      "additionalProperties": false,
+      "properties": {
+        "combine": {"$ref":"#/$defs/communication_axis"},
+        "dispatch": {"$ref":"#/$defs/communication_axis"},
+        "modes": {
+          "items":{"enum":["normal","low-latency"]},
+          "minItems":1,
+          "type":"array",
+          "uniqueItems":true
+        },
+        "profile_id": {"$ref":"#/$defs/precision_profile"}
+      },
+      "required": ["combine","dispatch","modes","profile_id"],
+      "type": "object"
+    },
+    "byte_accounting": {
+      "additionalProperties": false,
+      "properties": {
+        "accounting_contract": {"const":"activation-data-plus-scales-v1"},
+        "activation_data_bytes": {"minimum":0,"type":"integer"},
+        "scale_bytes": {"minimum":0,"type":"integer"},
+        "total_logical_bytes": {"minimum":0,"type":"integer"}
+      },
+      "required": [
+        "accounting_contract","activation_data_bytes","scale_bytes","total_logical_bytes"
+      ],
+      "type": "object"
+    },
+    "precision_axis_evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "dequantized_semantics": {"type":"boolean"},
+        "encoded_payload_valid": {"type":"boolean"},
+        "max_abs_error": {"minimum":0,"type":"number"},
+        "max_rel_error": {"minimum":0,"type":"number"},
+        "passed": {"type":"boolean"},
+        "saturation_count": {"minimum":0,"type":"integer"},
+        "saturation_rate": {"maximum":1,"minimum":0,"type":"number"},
+        "scales_finite": {"oneOf":[{"type":"null"},{"type":"boolean"}]},
+        "scales_positive": {"oneOf":[{"type":"null"},{"type":"boolean"}]}
+      },
+      "required": [
+        "dequantized_semantics","encoded_payload_valid","max_abs_error","max_rel_error",
+        "passed","saturation_count","saturation_rate","scales_finite","scales_positive"
+      ],
+      "type":"object"
+    },
+    "precision_evidence": {
+      "additionalProperties": false,
+      "properties": {
+        "combine": {"$ref":"#/$defs/precision_axis_evidence"},
+        "dispatch": {"$ref":"#/$defs/precision_axis_evidence"},
+        "passed": {"type":"boolean"},
+        "profile_id": {"$ref":"#/$defs/precision_profile"}
+      },
+      "required": ["combine","dispatch","passed","profile_id"],
+      "type":"object"
+    },
+    "case_profile": {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties":{"mode":{"const":"normal"}},"required":["mode"]},
+          "then": {"properties": {
+            "combine_semantics":{"const":"activation-only"},
+            "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
+            "contract":{"const":"layout-and-dispatch-v1"},
+            "correctness_scope":{"const":"dispatch-metadata-and-transformed-combine"},
+            "oracle_contract":{"const":"expert-specific-transform-v1"},
+            "payload_unit":{"const":"token-rank"}
+          }}
+        },
+        {
+          "if": {"properties":{"mode":{"const":"low-latency"}},"required":["mode"]},
+          "then": {"properties": {
+            "combine_semantics":{"const":"gate-weighted"},
+            "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
+            "contract":{"const":"expert-packed-weighted-combine-v1"},
+            "correctness_scope":{"const":"expert-assignment-and-weighted-combine"},
+            "oracle_contract":{"const":"expert-assignment-transform-v1"},
+            "payload_unit":{"const":"token-expert"}
+          }}
+        }
+      ],
+      "properties": {
+        "activation_generator": {"const":"collectivex-activation-counter-v4"},
+        "activation_profile": {"const":"canonical-counter-source-v4"},
+        "combine_dtype": {"const":"bf16"},
+        "combine_quant_mode": {"const":"none"},
+        "combine_semantics": {"enum":["activation-only","gate-weighted"]},
+        "communication_precision": {"$ref":"#/$defs/communication_precision"},
+        "component_order_contract": {"const":"qualification-hash-rotated-components-v1"},
+        "conditioning_contract": {"const":"fixed-phase-ramp-8-roundtrips-v1"},
+        "contract": {"enum":["layout-and-dispatch-v1","expert-packed-weighted-combine-v1"]},
+        "correctness_scope": {"enum":["dispatch-metadata-and-transformed-combine","expert-assignment-and-weighted-combine"]},
+        "dtype": {"const":"bf16"},
+        "eplb_planner": {"const":"greedy-rank-major-v1"},
+        "eplb_redundant_experts": {"const":32},
+        "eplb_reference_tokens_per_rank": {"const":2048},
+        "mode": {"enum":["normal","low-latency"]},
+        "oracle_contract": {"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
+        "oracle_tolerances": {"const":"rtol=0.05,atol=0.02"},
+        "payload_unit": {"enum":["token-rank","token-expert"]},
+        "placement": {"const":"packed"},
+        "percentile_method": {"const":"nearest-rank"},
+        "rank_reduction": {"const":"cross-rank-max-per-iteration"},
+        "resource_mode": {"const":"fixed-profile"},
+        "routing_generator": {"const":"collectivex-routing-counter-v3"},
+        "sampling_contract": {"const":"fixed-512-v1"},
+        "seed": {"const":67},
+        "source_identity_contract": {"const":"bounded-sign-bit-source-v1"}
+      },
+      "required": [
+        "activation_generator","activation_profile","combine_dtype","combine_quant_mode",
+        "combine_semantics","component_order_contract","conditioning_contract","contract",
+        "correctness_scope","dtype","eplb_planner","eplb_redundant_experts",
+        "eplb_reference_tokens_per_rank","mode","oracle_contract","oracle_tolerances",
+        "payload_unit","placement","percentile_method","rank_reduction","resource_mode",
+        "routing_generator","sampling_contract","seed","source_identity_contract"
+      ],
+      "type": "object"
+    },
     "oracle": {
       "additionalProperties": false,
       "properties": {
@@ -139,6 +297,27 @@
     },
     "component": {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties":{"availability":{"const":"measured"}},"required":["availability"]},
+          "then": {
+            "properties": {
+              "origin": {"const":"measured"},
+              "percentiles_us": {"$ref":"#/$defs/percentiles"},
+              "sample_count": {"const":512}
+            }
+          }
+        },
+        {
+          "if": {"properties":{"availability":{"const":"unavailable"}},"required":["availability"]},
+          "then": {
+            "properties": {
+              "percentiles_us": {"type":"null"},
+              "sample_count": {"const":0}
+            }
+          }
+        }
+      ],
       "properties": {
         "availability": {"enum":["measured","derived","unavailable"]},
         "origin": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
@@ -174,6 +353,7 @@
         "mode": {"enum":["normal","low-latency"]},
         "nodes": {"minimum":1,"type":"integer"},
         "phase": {"enum":["decode","prefill"]},
+        "precision_profile": {"$ref":"#/$defs/precision_profile"},
         "required_publication": {"enum":["official","comparable-experimental"]},
         "routing": {"enum":["uniform","zipf"]},
         "samples_per_point": {"const":512},
@@ -227,13 +407,40 @@
         "repo": {"pattern":"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$","type":"string"},
         "run_attempt": {"pattern":"^[1-9][0-9]*$","type":"string"},
         "run_id": {"pattern":"^[1-9][0-9]*$","type":"string"},
+        "qualification_index": {"maximum":3,"minimum":1,"type":"integer"},
         "source_sha": {"pattern":"^[0-9a-f]{40}$","type":"string"}
       },
-      "required": ["artifact","job","ref","repo","run_attempt","run_id","source_sha"],
+      "required": ["artifact","job","qualification_index","ref","repo","run_attempt","run_id","source_sha"],
       "type": "object"
     }
   },
   "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "workload": {
+            "properties": {"source": {"const":"canonical-serialized"}},
+            "required": ["source"]
+          }
+        },
+        "required": ["workload"]
+      },
+      "then": {
+        "properties": {
+          "provenance": {
+            "properties": {
+              "allocation_stratum_sha256": {
+                "pattern":"^[0-9a-f]{64}$",
+                "type":"string"
+              }
+            },
+            "required": ["allocation_stratum_sha256"]
+          }
+        }
+      }
+    }
+  ],
   "properties": {
     "case": {
       "additionalProperties": false,
@@ -243,7 +450,32 @@
         "ep_size": {"minimum":1,"type":"integer"},
         "eplb": {
           "additionalProperties": false,
+          "allOf": [
+            {
+              "if": {"properties":{"enabled":{"const":true}},"required":["enabled"]},
+              "then": {
+                "properties": {
+                  "calibration_token_offset": {"minimum":0,"type":"integer"},
+                  "calibration_trace_sha256": {"pattern":"^[0-9a-f]{64}$","type":"string"},
+                  "calibration_window": {"const":"collectivex-eplb-calibration-window-v1"},
+                  "calibration_workload_id": {"pattern":"^cxwork-v1-[0-9a-f]{64}$","type":"string"}
+                }
+              },
+              "else": {
+                "properties": {
+                  "calibration_token_offset": {"type":"null"},
+                  "calibration_trace_sha256": {"type":"null"},
+                  "calibration_window": {"type":"null"},
+                  "calibration_workload_id": {"type":"null"}
+                }
+              }
+            }
+          ],
           "properties": {
+            "calibration_token_offset": {"oneOf":[{"type":"null"},{"minimum":0,"type":"integer"}]},
+            "calibration_trace_sha256": {"$ref":"#/$defs/nullable_sha256"},
+            "calibration_window": {"oneOf":[{"type":"null"},{"const":"collectivex-eplb-calibration-window-v1"}]},
+            "calibration_workload_id": {"oneOf":[{"type":"null"},{"pattern":"^cxwork-v1-[0-9a-f]{64}$","type":"string"}]},
             "enabled": {"type":"boolean"},
             "imbalance_after": {"oneOf":[{"type":"null"},{"minimum":0,"type":"number"}]},
             "imbalance_before": {"oneOf":[{"type":"null"},{"minimum":0,"type":"number"}]},
@@ -257,6 +489,10 @@
             "replicated_experts": {"minimum":0,"type":"integer"}
           },
           "required": [
+            "calibration_token_offset",
+            "calibration_trace_sha256",
+            "calibration_window",
+            "calibration_workload_id",
             "enabled",
             "imbalance_after",
             "imbalance_before",
@@ -274,50 +510,35 @@
         "mode": {"enum":["normal","low-latency"]},
         "phase": {"enum":["decode","prefill"]},
         "required_publication": {"enum":["official","comparable-experimental"]},
-        "resource_mode": {"const":"tuned"},
+        "resource_mode": {"const":"fixed-profile"},
         "runner": {"maxLength":128,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"},
         "shape": {
           "additionalProperties": false,
           "properties": {
-            "activation_profile": {"const":"canonical-counter-source-v3"},
-            "dispatch_dtype": {"const":"bf16"},
+            "activation_profile": {"const":"canonical-counter-source-v4"},
+            "combine_precision": {"$ref":"#/$defs/communication_axis"},
+            "dispatch_precision": {"$ref":"#/$defs/communication_axis"},
             "eplb": {"type":"boolean"},
             "experts": {"minimum":1,"type":"integer"},
             "experts_per_rank": {"minimum":1,"type":"integer"},
             "hidden": {"minimum":1,"type":"integer"},
             "kernel_gen": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
             "num_logical_experts": {"minimum":1,"type":"integer"},
-            "quant": {
-              "additionalProperties": false,
-              "properties": {
-                "combine_accum_dtype": {"minLength":1,"type":"string"},
-                "combine_input_dtype": {"const":"bf16"},
-                "combine_output_dtype": {"const":"bf16"},
-                "combine_quant_mode": {"const":"none"},
-                "scale_layout": {"type":"null"}
-              },
-              "required": [
-                "combine_accum_dtype",
-                "combine_input_dtype",
-                "combine_output_dtype",
-                "combine_quant_mode",
-                "scale_layout"
-              ],
-              "type": "object"
-            },
+            "precision_profile": {"$ref":"#/$defs/precision_profile"},
             "routing": {"enum":["uniform","zipf"]},
             "topk": {"minimum":1,"type":"integer"}
           },
           "required": [
             "activation_profile",
-            "dispatch_dtype",
+            "combine_precision",
+            "dispatch_precision",
             "eplb",
             "experts",
             "experts_per_rank",
             "hidden",
             "kernel_gen",
             "num_logical_experts",
-            "quant",
+            "precision_profile",
             "routing",
             "topk"
           ],
@@ -356,10 +577,11 @@
             "repo": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
             "run_attempt": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
             "run_id": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
+            "qualification_index": {"maximum":3,"minimum":1,"type":"integer"},
             "runner": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
             "source_sha": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]}
           },
-          "required": ["artifact","execution_id","job","repo","run_attempt","run_id","runner","source_sha"],
+          "required": ["artifact","execution_id","job","qualification_index","repo","run_attempt","run_id","runner","source_sha"],
           "type": "object"
         },
         "allocation_id": {"pattern":"^cxallocation-v1-[0-9a-f]{64}$","type":"string"},
@@ -369,61 +591,7 @@
           "additionalProperties": false,
           "properties": {
             "case": {"$ref":"#/$defs/scheduled_case"},
-            "profile": {
-              "oneOf": [
-              {"const": {
-                "activation_generator": "collectivex-activation-counter-v3",
-                "activation_profile": "canonical-counter-source-v3",
-                "combine_dtype": "bf16",
-                "combine_quant_mode": "none",
-                "combine_semantics": "activation-only",
-                "component_order_contract": "roundtrip-dispatch-activation-only-combine-v2",
-                "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
-                "contract": "layout-and-dispatch-v1",
-                "correctness_scope": "dispatch-metadata-and-transformed-combine",
-                "dtype": "bf16",
-                "eplb_planner": "greedy-rank-major-v1",
-                "eplb_redundant_experts": 32,
-                "eplb_reference_tokens_per_rank": 2048,
-                "mode": "normal",
-                "oracle_contract": "expert-specific-transform-v1",
-                "oracle_tolerances": "rtol=0.05,atol=0.02",
-                "payload_unit": "token-rank",
-                "placement": "packed",
-                "percentile_method": "nearest-rank",
-                "rank_reduction": "cross-rank-max-per-iteration",
-                "resource_mode": "tuned",
-                "routing_generator": "collectivex-routing-counter-v3",
-                "sampling_contract": "fixed-512-v1",
-                "seed": 67
-              }},
-              {"const": {
-                "activation_generator": "collectivex-activation-counter-v3",
-                "activation_profile": "canonical-counter-source-v3",
-                "combine_dtype": "bf16",
-                "combine_quant_mode": "none",
-                "combine_semantics": "gate-weighted",
-                "component_order_contract": "roundtrip-dispatch-gate-weighted-combine-v1",
-                "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
-                "contract": "expert-packed-weighted-combine-v1",
-                "correctness_scope": "expert-assignment-and-weighted-combine",
-                "dtype": "bf16",
-                "eplb_planner": "greedy-rank-major-v1",
-                "eplb_redundant_experts": 32,
-                "eplb_reference_tokens_per_rank": 2048,
-                "mode": "low-latency",
-                "oracle_contract": "expert-assignment-transform-v1",
-                "oracle_tolerances": "rtol=0.05,atol=0.02",
-                "payload_unit": "token-expert",
-                "placement": "packed",
-                "percentile_method": "nearest-rank",
-                "rank_reduction": "cross-rank-max-per-iteration",
-                "resource_mode": "tuned",
-                "routing_generator": "collectivex-routing-counter-v3",
-                "sampling_contract": "fixed-512-v1",
-                "seed": 67
-              }}]
-            },
+            "profile": {"$ref":"#/$defs/case_profile"},
             "sku": {"maxLength":128,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"}
           },
           "required": ["case","profile","sku"],
@@ -679,7 +847,7 @@
     "measurement": {
       "additionalProperties": false,
       "properties": {
-        "component_order_contract": {"enum":["roundtrip-dispatch-activation-only-combine-v2","roundtrip-dispatch-gate-weighted-combine-v1"]},
+        "component_order_contract": {"const":"qualification-hash-rotated-components-v1"},
         "conditioning": {
           "additionalProperties": false,
           "properties": {
@@ -691,6 +859,8 @@
           "type": "object"
         },
         "contract": {"enum":["layout-and-dispatch-v1","expert-packed-weighted-combine-v1"]},
+        "execution_order_sha256": {"pattern":"^[0-9a-f]{64}$","type":"string"},
+        "qualification_index": {"maximum":3,"minimum":1,"type":"integer"},
         "rows": {
           "items": {
             "additionalProperties": false,
@@ -719,9 +889,10 @@
                   "combine": {"$ref":"#/$defs/component"},
                   "dispatch": {"$ref":"#/$defs/component"},
                   "isolated_sum": {"$ref":"#/$defs/component"},
-                  "roundtrip": {"$ref":"#/$defs/component"}
+                  "roundtrip": {"$ref":"#/$defs/component"},
+                  "stage": {"$ref":"#/$defs/component"}
                 },
-                "required": ["combine","dispatch","isolated_sum","roundtrip"],
+                "required": ["combine","dispatch","isolated_sum","roundtrip","stage"],
                 "type": "object"
               },
               "correctness": {
@@ -730,6 +901,7 @@
                   "contract": {"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
                   "max_relative_error": {"minimum":0,"type":"number"},
                   "passed": {"type":"boolean"},
+                  "precision": {"$ref":"#/$defs/precision_evidence"},
                   "rank_evidence": {
                     "items": {
                       "additionalProperties": false,
@@ -748,19 +920,20 @@
                   },
                   "scope": {"enum":["dispatch-metadata-and-transformed-combine","expert-assignment-and-weighted-combine"]}
                 },
-                "required": ["contract","max_relative_error","passed","rank_evidence","scope"],
+                "required": ["contract","max_relative_error","passed","precision","rank_evidence","scope"],
                 "type": "object"
               },
               "evidence_id": {"pattern":"^cxevidence-v1-[0-9a-f]{64}$","type":"string"},
               "global_tokens": {"minimum":1,"type":"integer"},
-              "logical_bytes": {
+              "byte_provenance": {
                 "additionalProperties": false,
                 "properties": {
-                  "combine": {"minimum":1,"type":"integer"},
-                  "dispatch": {"minimum":1,"type":"integer"},
-                  "roundtrip": {"minimum":1,"type":"integer"}
+                  "combine": {"$ref":"#/$defs/byte_accounting"},
+                  "dispatch": {"$ref":"#/$defs/byte_accounting"},
+                  "roundtrip": {"$ref":"#/$defs/byte_accounting"},
+                  "stage": {"$ref":"#/$defs/byte_accounting"}
                 },
-                "required": ["combine","dispatch","roundtrip"],
+                "required": ["combine","dispatch","roundtrip","stage"],
                 "type": "object"
               },
               "point_id": {"pattern":"^cxpoint-v1-[0-9a-f]{64}$","type":"string"},
@@ -874,9 +1047,10 @@
                 "properties": {
                   "combine": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/histogram"}]},
                   "dispatch": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/histogram"}]},
-                  "roundtrip": {"$ref":"#/$defs/histogram"}
+                  "roundtrip": {"$ref":"#/$defs/histogram"},
+                  "stage": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/histogram"}]}
                 },
-                "required": ["dispatch","combine","roundtrip"],
+                "required": ["dispatch","combine","roundtrip","stage"],
                 "type": "object"
               },
               "sample_sha256": {"pattern":"^[0-9a-f]{64}$","type":"string"},
@@ -887,9 +1061,9 @@
               "anomalies",
               "components",
               "correctness",
+              "byte_provenance",
               "evidence_id",
               "global_tokens",
-              "logical_bytes",
               "point_id",
               "receive",
               "routing",
@@ -933,6 +1107,8 @@
         "component_order_contract",
         "conditioning",
         "contract",
+        "execution_order_sha256",
+        "qualification_index",
         "rows",
         "sampling",
         "source_allocation"
@@ -978,6 +1154,12 @@
     "provenance": {
       "additionalProperties": false,
       "properties": {
+        "allocation_stratum_sha256": {
+          "oneOf": [
+            {"type":"null"},
+            {"pattern":"^[0-9a-f]{64}$","type":"string"}
+          ]
+        },
         "command": {"minLength":1,"type":"string"},
         "distributed_launcher": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
         "git_run": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/git_run"}]},
@@ -997,7 +1179,7 @@
         },
         "redaction": {"const":"sanitized-v1"}
       },
-      "required": ["command","distributed_launcher","git_run","image","redaction"],
+      "required": ["allocation_stratum_sha256","command","distributed_launcher","git_run","image","redaction"],
       "type": "object"
     },
     "record_type": {"const":"case-attempt"},
@@ -1117,9 +1299,9 @@
     "workload": {
       "additionalProperties": false,
       "properties": {
-        "activation_generator": {"const":"collectivex-activation-counter-v3"},
+        "activation_generator": {"const":"collectivex-activation-counter-v4"},
         "activation_identity": {"pattern":"^[0-9a-f]{64}$","type":"string"},
-        "activation_profile": {"const":"canonical-counter-source-v3"},
+        "activation_profile": {"const":"canonical-counter-source-v4"},
         "cross_rank_consistent": {"const":true},
         "manifest_checksums": {
           "oneOf": [

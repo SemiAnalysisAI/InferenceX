@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CollectiveX DeepEP adapter for the v1 BF16 normal-mode workload."""
+"""CollectiveX DeepEP adapter for native V1 dispatch/combine precision profiles."""
 from __future__ import annotations
 
 import inspect
@@ -10,6 +10,7 @@ import types
 import torch
 import torch.distributed as dist
 import contracts
+import ep_precision
 
 try:
     import deep_ep
@@ -69,6 +70,7 @@ def _normal_buffer_sizes(hidden: int, world_size: int) -> tuple[int, int]:
 
 class DeepEPBackend:
     name = "deepep"
+    stage_device_work = False
     combine_needs_redispatch = False
     # DeepEP reduces activations and top-k weights independently. The activation
     # tensor must therefore carry the complete local weighted expert sum.
@@ -84,11 +86,48 @@ class DeepEPBackend:
         self.mode = getattr(args, "mode", "normal")
         if self.mode not in {"normal", "low-latency"}:
             raise ValueError(f"unsupported DeepEP mode {self.mode!r}")
+        supported_profiles = {
+            "normal": {
+                "d-bf16.c-bf16",
+                "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+            },
+            "low-latency": {
+                "d-bf16.c-bf16",
+                "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
+                "d-bf16.c-logfmt10-dynamic64",
+                "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
+            },
+        }
+        self.precision_profile_id, self.communication_precision = (
+            ep_precision.resolve_precision(
+                args,
+                backend=self.name,
+                mode=self.mode,
+                supported_profiles=supported_profiles[self.mode],
+            )
+        )
+        self._fp8_dispatch = ep_precision.is_low_precision_dispatch(
+            self.communication_precision
+        )
+        self._use_logfmt = ep_precision.uses_logfmt_combine(
+            self.communication_precision
+        )
+        self.stage_device_work = self._fp8_dispatch
 
         self.group = dist.group.WORLD
         device_sms = torch.cuda.get_device_properties(device).multi_processor_count
         mnnvl_kwargs, mnnvl_comm = _mnnvl_buffer_configuration()
         if self.mode == "low-latency":
+            ep_precision.require_keyword(
+                Buffer.low_latency_dispatch,
+                "use_fp8",
+                api="deep_ep.Buffer.low_latency_dispatch",
+            )
+            ep_precision.require_keyword(
+                Buffer.low_latency_combine,
+                "use_logfmt",
+                api="deep_ep.Buffer.low_latency_combine",
+            )
             if args.phase != "decode":
                 raise ValueError("DeepEP low-latency mode only supports the decode ladder")
             if args.experts % world_size:
@@ -126,6 +165,16 @@ class DeepEPBackend:
                 "num_qps_per_rank": num_qps_per_rank,
             }
         else:
+            ep_precision.require_keyword(
+                Buffer.dispatch,
+                "async_finish",
+                api="deep_ep.Buffer.dispatch",
+            )
+            ep_precision.require_keyword(
+                Buffer.combine,
+                "async_finish",
+                api="deep_ep.Buffer.combine",
+            )
             num_nvl_bytes, num_rdma_bytes = _normal_buffer_sizes(args.hidden, world_size)
             if world_size > args.scale_up_domain and num_rdma_bytes == 0:
                 raise RuntimeError("DeepEP scale-out configuration returned no RDMA buffer")
@@ -158,9 +207,13 @@ class DeepEPBackend:
             "deepep_commit": os.environ.get("DEEPEP_COMMIT") or f"pkg-{version}",
             "backend_lineage": "deepep-v1",
             "mode": self.mode,
-            "dispatch_dtype": "bf16",
-            "combine_dtype": "bf16",
-            "resource_mode": "tuned",
+            "dispatch_dtype": ep_precision.communication_format(
+                self.communication_precision, "dispatch"
+            ),
+            "combine_dtype": ep_precision.communication_format(
+                self.communication_precision, "combine"
+            ),
+            "resource_mode": "fixed-profile",
             "device_sms": device_sms,
             "allow_mnnvl": bool(mnnvl_kwargs),
             "mnnvl_comm": mnnvl_comm,
@@ -171,9 +224,15 @@ class DeepEPBackend:
         return self.max_tokens_per_rank if self.mode == "low-latency" else None
 
     def make_problem(self, T, idx, weights, x):
+        encoding = ep_precision.encode_dispatch(
+            torch, x, self.communication_precision
+        )
         return types.SimpleNamespace(
             T=T,
             x=x,
+            dispatch_x=encoding.native_input,
+            oracle_x=encoding.semantic,
+            dispatch_precision_evidence=encoding.evidence,
             topk_idx=idx.to(torch.int64),
             topk_weights=weights.to(torch.float32),
         )
@@ -185,7 +244,7 @@ class DeepEPBackend:
                 p.topk_idx,
                 self.max_tokens_per_rank,
                 self.args.experts,
-                use_fp8=False,
+                use_fp8=self._fp8_dispatch,  # BF16 control realizes use_fp8=False.
                 async_finish=False,
                 return_recv_hook=False,
             )
@@ -202,13 +261,14 @@ class DeepEPBackend:
             _,
         ) = self.buffer.get_dispatch_layout(p.topk_idx, self.args.experts)
         recv_x, recv_topk_idx, recv_topk_weights, recv_counts, handle, _ = self.buffer.dispatch(
-            p.x,
+            p.dispatch_x,
             topk_idx=p.topk_idx,
             topk_weights=p.topk_weights,
             num_tokens_per_rank=num_tokens_per_rank,
             num_tokens_per_rdma_rank=num_tokens_per_rdma_rank,
             is_token_in_rank=is_token_in_rank,
             num_tokens_per_expert=num_tokens_per_expert,
+            async_finish=False,
         )
         return types.SimpleNamespace(
             recv_x=recv_x,
@@ -219,7 +279,7 @@ class DeepEPBackend:
         )
 
     def stage(self, p, h):
-        h.combine_input = h.recv_x
+        h.combine_input = self._semantic_recv(h, p)
 
     def combine(self, p, h):
         if self.mode == "low-latency":
@@ -228,11 +288,14 @@ class DeepEPBackend:
                 p.topk_idx,
                 p.topk_weights,
                 h.handle,
+                use_logfmt=self._use_logfmt,
                 async_finish=False,
                 return_recv_hook=False,
             )
             return combined_x
-        combined_x, _, _ = self.buffer.combine(h.combine_input, h.handle)
+        combined_x, _, _ = self.buffer.combine(
+            h.combine_input, h.handle, async_finish=False
+        )
         return combined_x
 
     def inspect_dispatch(self, p, h):
@@ -243,7 +306,9 @@ class DeepEPBackend:
             h.recv_topk_idx,
         )
         return types.SimpleNamespace(
-            payload=h.recv_x,
+            payload=self._semantic_recv(h, p),
+            encoded_payload=self._encoded_recv(h),
+            scales=self._recv_scales(h),
             expert_ids=expert_ids,
             weights=h.recv_topk_weights.masked_fill(~valid, 0),
             local_expert_counts=torch.tensor(h.recv_counts, device=self.device, dtype=torch.int64),
@@ -253,8 +318,11 @@ class DeepEPBackend:
     def inspect_expert_dispatch(self, p, h):
         if self.mode != "low-latency":
             raise RuntimeError("expert-packed inspection requires low-latency mode")
+        p.recv_counts = tuple(int(value) for value in h.recv_counts.tolist())
         return types.SimpleNamespace(
-            payload=h.recv_x,
+            payload=self._semantic_recv(h, p),
+            encoded_payload=self._encoded_recv(h),
+            scales=self._recv_scales(h),
             local_expert_counts=h.recv_counts,
             source_info=h.handle[0],
             layout_range=h.handle[1],
@@ -262,26 +330,88 @@ class DeepEPBackend:
 
     def combine_transformed(self, p, h, transformed):
         if self.mode == "low-latency":
-            packed = torch.zeros_like(h.recv_x)
+            packed = torch.zeros(
+                self._encoded_recv(h).shape,
+                dtype=torch.bfloat16,
+                device=self._encoded_recv(h).device,
+            )
             packed[h.oracle_local_expert_slots, h.oracle_packed_positions] = transformed.to(
-                h.recv_x.dtype
+                packed.dtype
             )
             combined, _, _ = self.buffer.low_latency_combine(
                 packed,
                 p.topk_idx,
                 p.topk_weights,
                 h.handle,
+                use_logfmt=self._use_logfmt,
                 async_finish=False,
                 return_recv_hook=False,
             )
             return combined
-        combined, _, _ = self.buffer.combine(transformed.to(h.recv_x.dtype), h.handle)
+        semantic = self._semantic_recv(h, p)
+        combined, _, _ = self.buffer.combine(
+            transformed.to(semantic.dtype), h.handle, async_finish=False
+        )
         return combined
 
     def recv_tokens(self, h):
         if self.mode == "low-latency":
             return int(h.recv_counts.to(torch.int64).sum().item())
-        return int(h.recv_x.shape[0])
+        return int(self._encoded_recv(h).shape[0])
+
+    def _encoded_recv(self, h):
+        return h.recv_x[0] if isinstance(h.recv_x, tuple) else h.recv_x
+
+    def _recv_scales(self, h):
+        return h.recv_x[1] if isinstance(h.recv_x, tuple) else None
+
+    def _semantic_recv(self, h, problem=None):
+        if not self._fp8_dispatch:
+            return h.recv_x
+        if not hasattr(h, "recv_semantic"):
+            if self.mode == "low-latency":
+                counts = getattr(problem, "recv_counts", None)
+                if counts is None:
+                    counts = tuple(int(value) for value in h.recv_counts.tolist())
+                    if problem is not None:
+                        problem.recv_counts = counts
+                workspace = getattr(self, "_ll_semantic_workspace", None)
+                if workspace is None:
+                    encoded = self._encoded_recv(h)
+                    workspace = torch.empty(
+                        encoded.shape, dtype=torch.bfloat16, device=encoded.device
+                    )
+                    self._ll_semantic_workspace = workspace
+                h.recv_semantic = ep_precision.dequantize_expert_prefixes(
+                    torch,
+                    self._encoded_recv(h),
+                    self._recv_scales(h),
+                    self.communication_precision["dispatch"],
+                    counts,
+                    workspace,
+                )
+            else:
+                h.recv_semantic = ep_precision.dequantize_dispatch(
+                    torch,
+                    self._encoded_recv(h),
+                    self._recv_scales(h),
+                    self.communication_precision["dispatch"],
+                )
+        return h.recv_semantic
+
+    def oracle_dispatch_payload(self, payload):
+        return ep_precision.encode_dispatch(
+            torch, payload, self.communication_precision
+        ).semantic
+
+    def precision_evidence(self, problem, view=None):
+        return ep_precision.precision_evidence(
+            torch,
+            profile_id=self.precision_profile_id,
+            profile=self.communication_precision,
+            problem=problem,
+            view=view,
+        )
 
     def finalize(self, rc):
         try:

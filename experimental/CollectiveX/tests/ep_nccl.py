@@ -20,6 +20,7 @@ import types
 import torch
 import torch.distributed as dist
 import contracts
+import ep_precision
 
 
 def _runtime_collective(args, torch_module) -> tuple[str, str]:
@@ -38,6 +39,7 @@ def _runtime_collective(args, torch_module) -> tuple[str, str]:
 
 class NCCLBackend:
     name = "nccl-ep"
+    stage_device_work = False
     combine_needs_redispatch = False  # dispatch saves the permutation + splits
     combine_weight_semantics = "unweighted-rank-sum"
 
@@ -47,6 +49,17 @@ class NCCLBackend:
         self.world_size = world_size
         self.device = device
         self.experts = args.experts
+        self.mode = getattr(args, "mode", "normal")
+        if self.mode != "normal":
+            raise ep_precision.PrecisionError("NCCL/RCCL EP supports normal mode only")
+        self.precision_profile_id, self.communication_precision = (
+            ep_precision.resolve_precision(
+                args,
+                backend=self.name,
+                mode=self.mode,
+                supported_profiles={"d-bf16.c-bf16"},
+            )
+        )
         if args.experts % world_size:
             raise ValueError(f"experts({args.experts}) must divide world_size({world_size})")
         self.experts_per_rank = args.experts // world_size
@@ -67,21 +80,33 @@ class NCCLBackend:
             "collective_library": _library,
             "nccl_version": _version,
             "transport": f"{_library}-all_to_all_single",
-            "resource_mode": "tuned",
+            "resource_mode": "fixed-profile",
             "num_sms": None,
             "device_sms": torch.cuda.get_device_properties(device).multi_processor_count,
             "tuned_source": "nccl-collective",
             "reference_semantics": "rank-deduplicated-payload-plus-routing-metadata-v2",
             "routing_metadata": "expert-index-gate-weight-source-token",
+            "dispatch_dtype": "bf16",
+            "combine_dtype": "bf16",
         }
 
     def buffer_cap(self, args):
         return None  # no fixed pre-allocated buffer; all-to-all sizes itself per step
 
     def make_problem(self, T, idx, weights, x):
+        encoding = ep_precision.encode_dispatch(
+            torch, x, self.communication_precision
+        )
         # idx[T,topk] int64, weights[T,topk] f32, x[T,hidden] bf16 — the shared routing-trace slice.
-        return types.SimpleNamespace(T=T, x=x, topk_idx=idx.to(torch.int64),
-                                     topk_weights=weights.to(torch.float32), layout=None)
+        return types.SimpleNamespace(
+            T=T,
+            x=x,
+            oracle_x=encoding.semantic,
+            dispatch_precision_evidence=encoding.evidence,
+            topk_idx=idx.to(torch.int64),
+            topk_weights=weights.to(torch.float32),
+            layout=None,
+        )
 
     def dispatch(self, p):
         ws = self.world_size
@@ -176,6 +201,18 @@ class NCCLBackend:
 
     def recv_tokens(self, h):
         return int(h.total_recv)
+
+    def oracle_dispatch_payload(self, payload):
+        return payload
+
+    def precision_evidence(self, problem, view=None):
+        return ep_precision.precision_evidence(
+            torch,
+            profile_id=self.precision_profile_id,
+            profile=self.communication_precision,
+            problem=problem,
+            view=view,
+        )
 
     def finalize(self, rc):
         try:

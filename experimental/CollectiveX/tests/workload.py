@@ -29,7 +29,9 @@ WORKLOAD_SCHEMA_VERSION = 1
 # Bump when the counter or byte encoding changes. The workload ID binds parameters and trace bytes.
 GENERATOR_VERSION = "collectivex-routing-counter-v3"
 GATE_WEIGHT_FORMAT = "counter-u16-normalized-f32"
-ACTIVATION_GENERATOR = "collectivex-activation-counter-v3"
+ACTIVATION_GENERATOR = "collectivex-activation-counter-v4"
+EPLB_CALIBRATION_WINDOW = "collectivex-eplb-calibration-window-v1"
+EPLB_CALIBRATION_TOKEN_OFFSET = 1 << 32
 _MASK64 = (1 << 64) - 1
 
 
@@ -56,13 +58,21 @@ def _counter(seed: int, token: int, slot: int, attempt: int, stream: int) -> int
 
 
 def canonical_routing_rows(
-    global_tokens: int, experts: int, topk: int, routing: str, seed: int
+    global_tokens: int,
+    experts: int,
+    topk: int,
+    routing: str,
+    seed: int,
+    *,
+    token_offset: int = 0,
 ) -> tuple[list[list[int]], list[list[float]]]:
-    """Generate distinct experts and normalized weights using exact integer counters."""
+    """Generate a deterministic routing window from exact integer counters."""
     if routing not in {"uniform", "zipf"}:
         raise ValueError(f"unknown routing {routing!r} (uniform|zipf)")
     if global_tokens <= 0 or experts <= 0 or topk <= 0 or topk > experts:
         raise ValueError("global_tokens/experts/topk must be positive and topk <= experts")
+    if type(token_offset) is not int or token_offset < 0:
+        raise ValueError("token_offset must be a non-negative integer")
 
     cumulative: list[int] | None = None
     if routing == "zipf":
@@ -74,7 +84,8 @@ def canonical_routing_rows(
 
     indices: list[list[int]] = []
     weights: list[list[float]] = []
-    for token in range(global_tokens):
+    for local_token in range(global_tokens):
+        token = token_offset + local_token
         selected: list[int] = []
         used: set[int] = set()
         for slot in range(topk):
@@ -133,10 +144,19 @@ def canonical_member(
     ep_size: int,
     tokens_per_rank: int,
     seed: int,
+    *,
+    token_offset: int = 0,
 ) -> tuple[str, dict[str, str], list[list[int]], list[list[float]]]:
     """Derive one canonical manifest member and retain its rows for proof checks."""
     global_tokens = ep_size * tokens_per_rank
-    indices, weights = canonical_routing_rows(global_tokens, experts, topk, routing, seed)
+    indices, weights = canonical_routing_rows(
+        global_tokens,
+        experts,
+        topk,
+        routing,
+        seed,
+        token_offset=token_offset,
+    )
     checksums = trace_checksums(indices, weights)
     member = compute_workload_id(
         routing,
@@ -147,19 +167,52 @@ def canonical_member(
         global_tokens,
         seed,
         trace_checksum=checksums["trace"],
+        token_offset=token_offset,
     )
     return member, checksums, indices, weights
+
+
+def canonical_eplb_calibration_member(
+    routing: str,
+    hidden: int,
+    topk: int,
+    experts: int,
+    ep_size: int,
+    tokens_per_rank: int,
+    seed: int,
+) -> tuple[str, dict[str, str], list[list[int]], list[list[float]]]:
+    """Return the EPLB calibration trace from a disjoint global-token window."""
+    return canonical_member(
+        routing,
+        hidden,
+        topk,
+        experts,
+        ep_size,
+        tokens_per_rank,
+        seed,
+        token_offset=EPLB_CALIBRATION_TOKEN_OFFSET,
+    )
 
 
 def compute_workload_id(routing: str, hidden: int, topk: int, experts: int,
                         ep_size: int, global_tokens: int, seed: int,
                         generator: str = GENERATOR_VERSION,
-                        trace_checksum: str | None = None) -> str:
+                        trace_checksum: str | None = None,
+                        token_offset: int = 0) -> str:
     """Deterministic ID over parameters and canonical trace bytes."""
     if generator != GENERATOR_VERSION:
         raise ValueError(f"unsupported workload generator {generator!r}")
+    if type(token_offset) is not int or token_offset < 0:
+        raise ValueError("token_offset must be a non-negative integer")
     if trace_checksum is None:
-        indices, weights = canonical_routing_rows(global_tokens, experts, topk, routing, seed)
+        indices, weights = canonical_routing_rows(
+            global_tokens,
+            experts,
+            topk,
+            routing,
+            seed,
+            token_offset=token_offset,
+        )
         idx_bytes, weight_bytes = _canonical_bytes(indices, weights)
         trace_checksum = _sha256(idx_bytes + weight_bytes)
     key = {
@@ -169,6 +222,11 @@ def compute_workload_id(routing: str, hidden: int, topk: int, experts: int,
         "activation_generator": ACTIVATION_GENERATOR,
         "activation_identity": compute_activation_identity(seed, hidden),
     }
+    if token_offset:
+        key.update({
+            "routing_window": EPLB_CALIBRATION_WINDOW,
+            "token_offset": token_offset,
+        })
     return identity.workload_id(key)
 
 

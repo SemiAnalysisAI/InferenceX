@@ -7,7 +7,7 @@
   "required": ["format","channel","dataset","generated_at"],
   "properties": {
       "format": {"const": "collectivex.channel.v1"},
-      "channel": {"enum": ["latest-attempt","dev-latest"]},
+      "channel": {"const": "dev-latest"},
       "dataset": {
             "type": "object",
             "additionalProperties": false,

@@ -53,10 +53,10 @@ class SamplingContractTest(unittest.TestCase):
             ),
             (8, 64, 512, 32),
         )
-        self.assertEqual(identity.V1_CASE_PROFILE["activation_profile"], "canonical-counter-source-v3")
+        self.assertEqual(identity.V1_CASE_PROFILE["activation_profile"], "canonical-counter-source-v4")
         self.assertEqual(
             identity.V1_CASE_PROFILE["activation_generator"],
-            "collectivex-activation-counter-v3",
+            "collectivex-activation-counter-v4",
         )
         self.assertEqual(identity.V1_CASE_PROFILE["sampling_contract"], "fixed-512-v1")
         self.assertEqual(identity.V1_CASE_PROFILE["percentile_method"], "nearest-rank")
@@ -88,6 +88,7 @@ class SamplingContractTest(unittest.TestCase):
             ]
         )
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 64, 32))
+        self.assertEqual(args.qualification_index, 1)
         for profile in ((8, 64, 32), (128, 4, 32), (8, 1, 4), (0, 64, 32)):
             with self.subTest(profile=profile):
                 self.assertEqual(
@@ -99,6 +100,53 @@ class SamplingContractTest(unittest.TestCase):
         samples = list(range(1, 513))
         self.assertEqual(ep_harness.percentile(samples, 50), 256)
         self.assertEqual(ep_harness.percentile(samples, 99), 507)
+
+    def test_qualification_order_is_deterministic_and_position_balanced(self) -> None:
+        values = [1, 2, 4, 8, 16, 32, 64, 128]
+        for qualification_index in range(1, ep_harness.QUALIFICATION_RUNS + 1):
+            orders = [
+                ep_harness.qualification_order(values, qualification_index, trial)
+                for trial in range(64)
+            ]
+            self.assertEqual(
+                orders,
+                [
+                    ep_harness.qualification_order(values, qualification_index, trial)
+                    for trial in range(64)
+                ],
+            )
+            self.assertTrue(all(sorted(order) == values for order in orders))
+            for position in range(len(values)):
+                self.assertEqual(
+                    {value: sum(order[position] == value for order in orders) for value in values},
+                    {value: 8 for value in values},
+                )
+        with self.assertRaises(ValueError):
+            ep_harness.qualification_order(values, 0, 0)
+        with self.assertRaises(ValueError):
+            ep_harness.qualification_order([1, 1], 1, 0)
+
+    def test_sample_evidence_preserves_exact_trial_blocks(self) -> None:
+        trials = [
+            [float(trial * 8 + sample) for sample in range(8)]
+            for trial in range(64)
+        ]
+        evidence = ep_harness.sampled_component_evidence(trials)
+        self.assertEqual(evidence["availability"], "measured")
+        self.assertEqual(evidence["sample_count"], 512)
+        self.assertEqual(evidence["trials"], trials)
+        self.assertIsNot(evidence["trials"], trials)
+        self.assertEqual(
+            ep_harness.sampled_component_evidence([]),
+            {"availability": "unavailable", "sample_count": 0, "trials": None},
+        )
+        for malformed in (trials[:-1], [*trials[:-1], trials[-1][:-1]]):
+            with self.assertRaises(ValueError):
+                ep_harness.sampled_component_evidence(malformed)
+        invalid = copy.deepcopy(trials)
+        invalid[0][0] = float("nan")
+        with self.assertRaises(ValueError):
+            ep_harness.sampled_component_evidence(invalid)
 
     def test_terminal_summary_uses_bound_sku_and_route(self) -> None:
         terminal = {
@@ -446,6 +494,72 @@ class SamplingContractTest(unittest.TestCase):
         self.assertNotIn("flashinfer", capability.BACKENDS)
         self.assertFalse((HERE / "ep_flashinfer.py").exists())
 
+    def test_canonical_operator_config_requires_a_private_audit_salt(self) -> None:
+        salt = "a" * 64
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            config = root / "operator.json"
+            document = {
+                "schema_version": 1,
+                "audit_salt": salt,
+                "runners": {
+                    "h100-dgxc": {
+                        "partition": "test", "account": "test",
+                        "squash_dir": str(root), "stage_dir": str(root),
+                    },
+                },
+            }
+            command = (
+                'source "$1"; export COLLECTIVEX_EXECUTION_ID="audit-config-$$"; '
+                "trap 'cx_cleanup_private_logs 0' EXIT; cx_load_operator_config; "
+                'test "$CX_AUDIT_SALT" = "$EXPECTED_AUDIT_SALT"'
+            )
+
+            def invoke(
+                value: dict, *, canonical: bool, expect_salt: bool = True
+            ) -> subprocess.CompletedProcess[str]:
+                config.write_text(json.dumps(value))
+                config.chmod(0o600)
+                environment = {
+                    **os.environ,
+                    "CX_RUNNER": "h100-dgxc",
+                    "COLLECTIVEX_OPERATOR_CONFIG": str(config),
+                    "EXPECTED_AUDIT_SALT": salt,
+                }
+                if canonical:
+                    environment["COLLECTIVEX_CANONICAL_GHA"] = "1"
+                invocation = command if expect_salt else (
+                    'source "$1"; export COLLECTIVEX_EXECUTION_ID="audit-config-$$"; '
+                    "trap 'cx_cleanup_private_logs 0' EXIT; cx_load_operator_config; "
+                    'test -z "${CX_AUDIT_SALT+x}"'
+                )
+                return subprocess.run(
+                    ["bash", "-c", invocation, "_", str(ROOT / "runtime" / "common.sh")],
+                    text=True,
+                    capture_output=True,
+                    env=environment,
+                )
+
+            accepted = invoke(document, canonical=True)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertNotIn(salt, accepted.stdout + accepted.stderr)
+
+            missing = copy.deepcopy(document)
+            del missing["audit_salt"]
+            rejected = invoke(missing, canonical=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertNotIn(salt, rejected.stdout + rejected.stderr)
+
+            manual = invoke(missing, canonical=False, expect_salt=False)
+            self.assertEqual(manual.returncode, 0, manual.stderr)
+            self.assertNotIn(salt, manual.stdout + manual.stderr)
+
+            malformed = copy.deepcopy(document)
+            malformed["audit_salt"] = "A" * 64
+            rejected = invoke(malformed, canonical=False)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertNotIn("A" * 64, rejected.stdout + rejected.stderr)
+
     def test_scaleout_network_profile_is_explicit_and_allowlisted(self) -> None:
         command = r'''
           set -euo pipefail
@@ -634,7 +748,10 @@ class SamplingContractTest(unittest.TestCase):
             pass_one.index("oracle = _run_expert_oracle"),
         )
         self.assertIn("pre_input_unchanged", pass_one)
-        self.assertIn("hh = prep()\n                    torch.cuda.synchronize()", harness)
+        self.assertIn(
+            "hh = prep_combine()\n                        torch.cuda.synchronize()",
+            harness,
+        )
 
     def test_squash_imports_are_reproducible_and_use_a_fresh_cache_key(self) -> None:
         common = (ROOT / "runtime" / "common.sh").read_text()
@@ -1085,26 +1202,32 @@ class SamplingContractTest(unittest.TestCase):
     def test_v1_publication_requires_explicit_release_markers(self) -> None:
         workflows = ROOT.parent.parent / ".github" / "workflows"
         sweep = (workflows / "collectivex-sweep.yml").read_text()
-        publish = (workflows / "collectivex-publish.yml").read_text()
+        self.assertFalse((workflows / "collectivex-publish.yml").exists())
 
+        self.assertIn("options: [sweep, probe-precision, publish-v1, refresh-v1]", sweep)
+        self.assertIn("collectivex.precision-probe-plan.v1", (ROOT / "tests" / "probe_precision.py").read_text())
+        self.assertIn("cxprecision-probes-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
+        self.assertIn("--validate-bundle", sweep)
         self.assertIn("release_tag:", sweep)
         self.assertIn("default: unversioned", sweep)
         self.assertIn("options: [unversioned, v1]", sweep)
+        self.assertIn("qualification_index:", sweep)
         self.assertIn("inputs.release_tag == 'v1'", sweep)
         self.assertIn("collectivex.release-tag.v1", sweep)
         self.assertIn("V1 release tag requires the locked full matrix", sweep)
         self.assertIn("EXPECTED_MATRIX_SHA256", sweep)
         self.assertIn("cxrelease-v1-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
 
-        self.assertIn("run_ids must contain exactly three IDs", publish)
-        self.assertIn("source runs do not share one source SHA", publish)
-        self.assertIn("cxrelease-v1-$run_id-$attempt/release.json", publish)
-        self.assertIn("run $run_id is not tagged for V1 publication", publish)
-        self.assertIn("collectivex.release-tag.v1", publish)
-        self.assertIn("ref: ${{ steps.runs.outputs.source_sha }}", publish)
-        self.assertIn("cxpublication-v1-${{ github.run_id }}-${{ github.run_attempt }}", publish)
-        self.assertIn("retention-days: 90", publish)
-        self.assertNotIn("workflow_run:", publish)
+        self.assertIn("publish_run_ids must contain exactly three IDs", sweep)
+        self.assertIn("source runs do not share one source SHA", sweep)
+        self.assertIn("cxrelease-v1-$run_id-$attempt/release.json", sweep)
+        self.assertIn("run $run_id is not tagged for V1 publication", sweep)
+        self.assertIn("ref: ${{ steps.runs.outputs.source_sha }}", sweep)
+        self.assertIn("[ \"$attempt\" = 1 ]", sweep)
+        self.assertIn("cxpublication-v1-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
+        self.assertIn("refresh source bytes differ from their requested digest", sweep)
+        self.assertIn("retention-days: 90", sweep)
+        self.assertNotIn("workflow_run:", sweep)
 
     def test_source_archive_preserves_only_contained_leaf_symlinks(self) -> None:
         selected = "deepep-hybrid-pinned"
@@ -1391,6 +1514,66 @@ class SamplingContractTest(unittest.TestCase):
                 expected_world_size=8,
             )
 
+    def test_private_allocation_stratum_is_salted_ordered_and_rank_consistent(self) -> None:
+        salt = "a" * 64
+        hosts = ["private-node-b", "private-node-a", "private-node-a"]
+        selectors = {
+            "ib_gid_index": "3",
+            "rdma_devices": "private-hca0:1,private-hca1:1",
+            "rdma_service_level": "2",
+            "socket_ifname": "private-if0",
+        }
+        digest = run_ep._allocation_stratum_sha256(
+            hosts, audit_salt=salt, fabric_selectors=selectors, required=True
+        )
+        self.assertRegex(digest or "", r"^[0-9a-f]{64}$")
+        self.assertEqual(
+            digest,
+            run_ep._allocation_stratum_sha256(
+                list(reversed(hosts)),
+                audit_salt=salt,
+                fabric_selectors=selectors,
+                required=True,
+            ),
+        )
+        for changed_hosts, changed_salt, changed_selectors in (
+            (hosts + ["private-node-c"], salt, selectors),
+            (hosts, "b" * 64, selectors),
+            (hosts, salt, {**selectors, "ib_gid_index": "4"}),
+        ):
+            self.assertNotEqual(
+                digest,
+                run_ep._allocation_stratum_sha256(
+                    changed_hosts,
+                    audit_salt=changed_salt,
+                    fabric_selectors=changed_selectors,
+                    required=True,
+                ),
+            )
+        serialized = json.dumps({"allocation_stratum_sha256": digest})
+        private_literals = [
+            salt,
+            *hosts,
+            selectors["rdma_devices"],
+            selectors["socket_ifname"],
+        ]
+        self.assertFalse(any(value in serialized for value in private_literals))
+        self.assertNotIn("physical_hosts", serialized)
+        self.assertNotIn("fabric_selectors", serialized)
+        self.assertEqual(
+            run_ep._common_allocation_stratum([digest, digest, digest], required=True),
+            digest,
+        )
+        with self.assertRaisesRegex(ValueError, "differs across distributed ranks"):
+            run_ep._common_allocation_stratum([digest, "b" * 64], required=True)
+        with self.assertRaisesRegex(ValueError, "requires"):
+            run_ep._allocation_stratum_sha256(
+                hosts, audit_salt=None, fabric_selectors=selectors, required=True
+            )
+        self.assertIsNone(run_ep._allocation_stratum_sha256(
+            hosts, audit_salt=None, fabric_selectors=selectors, required=False
+        ))
+
     def test_collective_version_and_rccl_fingerprint_are_normalized(self) -> None:
         self.assertEqual(ep_harness.format_collective_version(23004), "2.30.4")
         self.assertEqual(ep_harness.format_collective_version(21805), "2.18.5")
@@ -1471,9 +1654,30 @@ class SamplingContractTest(unittest.TestCase):
         self.assertEqual(member, manifest["workload_id"])
         self.assertEqual(checksums, manifest["checksums"])
 
+    def test_eplb_calibration_window_is_disjoint_and_identity_bound(self) -> None:
+        evaluation = workload.canonical_member("zipf", 8, 2, 8, 2, 4, 67)
+        calibration = workload.canonical_eplb_calibration_member(
+            "zipf", 8, 2, 8, 2, 4, 67
+        )
+        self.assertNotEqual(evaluation[0], calibration[0])
+        self.assertNotEqual(evaluation[1]["trace"], calibration[1]["trace"])
+        self.assertGreater(
+            workload.EPLB_CALIBRATION_TOKEN_OFFSET,
+            2 * 4,
+        )
+        repeated = workload.canonical_eplb_calibration_member(
+            "zipf", 8, 2, 8, 2, 4, 67
+        )
+        self.assertEqual(calibration, repeated)
+        with self.assertRaises(ValueError):
+            workload.canonical_routing_rows(
+                8, 8, 2, "zipf", 67, token_offset=-1
+            )
+
     def test_canonical_members_are_bound_to_each_scheduled_row(self) -> None:
         case = {
             "routing": "uniform", "hidden": 8, "topk": 2, "experts": 4, "ep": 2,
+            "mode": "normal",
         }
         eplb_record = {
             "enabled": False, "mapping_hash": None, "num_physical_experts": 4,
@@ -1537,7 +1741,10 @@ class SamplingContractTest(unittest.TestCase):
                 )
 
     def test_eplb_row_hash_is_bound_to_the_frozen_remap(self) -> None:
-        case = {"routing": "zipf", "hidden": 8, "topk": 2, "experts": 4, "ep": 2}
+        case = {
+            "routing": "zipf", "hidden": 8, "topk": 2, "experts": 4, "ep": 2,
+            "mode": "normal",
+        }
         physical = eplb.physical_count(4, 32, 2)
         plan = contracts._expected_eplb_plan("zipf", 2, 4, physical, 2, 67, 2048)
         eplb_record = {
@@ -1635,11 +1842,13 @@ class SamplingContractTest(unittest.TestCase):
                 "artifact": "artifact", "job": "job", "ref": "collectivex",
                 "repo": "SemiAnalysisAI/InferenceX", "run_attempt": "1",
                 "run_id": "123", "source_sha": "a" * 40,
+                "qualification_index": 1,
             }
             allocation = {
                 "artifact": "artifact", "execution_id": "execution", "job": "job",
                 "repo": "SemiAnalysisAI/InferenceX", "run_attempt": "1", "run_id": "123",
                 "runner": shard["sku"], "source_sha": "a" * 40,
+                "qualification_index": 1,
             }
             out_dir.mkdir()
             existing = contracts.make_terminal_document(
@@ -1672,6 +1881,7 @@ class SamplingContractTest(unittest.TestCase):
                 "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
                 "GITHUB_RUN_ATTEMPT": "1", "GITHUB_RUN_ID": "123",
                 "GITHUB_SHA": "a" * 40,
+                "CX_QUALIFICATION_INDEX": "1",
             }
             subprocess.run(
                 [
@@ -1824,7 +2034,8 @@ class SamplingContractTest(unittest.TestCase):
             manual["identity"]["allocation_factors"],
             {
                 "artifact": None, "execution_id": "manual-execution", "job": None,
-                "repo": None, "run_attempt": None, "run_id": None,
+                "qualification_index": 1, "repo": None,
+                "run_attempt": None, "run_id": None,
                 "runner": "manual-runner", "source_sha": None,
             },
         )
@@ -2034,7 +2245,7 @@ class SamplingContractTest(unittest.TestCase):
           export CX_PREPARED_BACKEND_CACHE=/untrusted CX_BACKEND_SOURCE_ROOT=/untrusted
           ! (cx_lock_canonical_gha_env mi325x)
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
-          export CX_STAGE_DIR="$GITHUB_WORKSPACE"
+          export CX_STAGE_DIR="$GITHUB_WORKSPACE" CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
           unset CX_LOCK_DIR
           cx_lock_canonical_gha_env mi325x
           test "$CX_IMAGE" = "$CX_IMAGE_AMD_MORI_MI325"
@@ -2064,6 +2275,7 @@ class SamplingContractTest(unittest.TestCase):
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_SHARD_SKU=mi355x CX_NODES=1 CX_GPUS_PER_NODE=8
           export CX_LOCK_DIR=/validated/amd-locks CX_STAGE_DIR=/validated/amd-stage
+          export CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
           cx_lock_canonical_gha_env mi355x
           test "$CX_LOCK_DIR" = /validated/amd-locks
           test "$CX_STAGE_DIR" = /validated/amd-stage
@@ -2099,6 +2311,7 @@ class SamplingContractTest(unittest.TestCase):
           export CX_SHARD_FILE=.shards/test.json CX_SHARD_SKU=mi325x
           export CX_NODES=1 CX_GPUS_PER_NODE=8 CX_SQUASH_DIR=/shared/containers
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$ CX_STAGE_DIR=/shared/amd-stage
+          export CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
           cx_lock_canonical_gha_env mi325x
           printf '%s' "$CX_STAGE_DIR"
         '''
@@ -2128,6 +2341,7 @@ class SamplingContractTest(unittest.TestCase):
           export CX_SHARD_FILE=.shards/test.json CX_SHARD_SKU=mi325x
           export CX_NODES=1 CX_GPUS_PER_NODE=8 CX_SQUASH_DIR=/shared/containers
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$ CX_STAGE_DIR=/shared/amd-stage
+          export CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
           cx_lock_canonical_gha_env mi325x
           printf '%s' "$CX_STAGE_DIR"
         '''

@@ -26,11 +26,12 @@
       "run": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["repository","run_id","run_attempt","source_sha"],
+            "required": ["repository","run_id","run_attempt","qualification_index","source_sha"],
             "properties": {
                     "repository": {"type": "string","pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
                     "run_id": {"type": "string","pattern": "^[1-9][0-9]*$"},
                     "run_attempt": {"type": "integer","minimum": 1},
+                    "qualification_index": {"type":"integer","minimum":1,"maximum":3},
                     "source_sha": {"type": "string","pattern": "^[0-9a-f]{40}$"}
                   }
           },

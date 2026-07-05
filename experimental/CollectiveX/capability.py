@@ -6,6 +6,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+import identity
+
 
 DEEPEP_V2_COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 DEEPEP_V2_SKU_CAPABILITIES = {
@@ -158,6 +160,148 @@ BACKENDS = {
 }
 SWEEP_BACKENDS = tuple(BACKENDS)
 
+PRECISION_DISPOSITIONS = {
+    "supported", "unsupported", "not-applicable", "provisional",
+}
+_NVIDIA_SKUS = (
+    "h100-dgxc", "h200-dgxc", "b200-dgxc", "b300", "gb200", "gb300",
+)
+_DEEPEP_V2_PRECISION_SKUS = (
+    "h200-dgxc", "b200-dgxc", "b300", "gb200", "gb300",
+)
+_HOPPER_UCCL_SKUS = ("h100-dgxc", "h200-dgxc")
+
+
+def _precision_rule(
+    *,
+    backend: str,
+    skus: tuple[str, ...],
+    ep_degrees: tuple[int, ...],
+    mode: str,
+    basis: str,
+    disposition: str = "provisional",
+) -> dict[str, Any]:
+    return {
+        "backend": backend,
+        "skus": skus,
+        "ep_degrees": ep_degrees,
+        "mode": mode,
+        "disposition": disposition,
+        "basis": basis,
+    }
+
+
+_NORMAL_E4M3FN_PROFILE = "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16"
+_NORMAL_E4M3FNUZ_PROFILE = "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"
+_LL_FP8_PROFILE = "d-fp8-e4m3fn-b128-f32-fused.c-bf16"
+_LL_LOGFMT_PROFILE = "d-bf16.c-logfmt10-dynamic64"
+_LL_FP8_LOGFMT_PROFILE = (
+    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64"
+)
+_MORI_E4M3FN_DIRECT_PROFILE = "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
+_MORI_E4M3FN_BOTH_PROFILE = (
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale"
+)
+_MORI_E4M3FNUZ_DIRECT_PROFILE = "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale"
+_MORI_E4M3FNUZ_BOTH_PROFILE = (
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
+)
+
+# These are native-path candidates, not executable claims. A cell must be changed
+# from provisional to supported or unsupported after its pinned runtime probe.
+PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
+    _NORMAL_E4M3FN_PROFILE: (
+        _precision_rule(
+            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16), mode="normal",
+            basis="deepep-v1-normal-prequantized-e4m3fn-block128-f32-scale",
+        ),
+        _precision_rule(
+            backend="deepep-v2", skus=_DEEPEP_V2_PRECISION_SKUS,
+            ep_degrees=(8, 16), mode="normal",
+            basis="deepep-v2-normal-prequantized-e4m3fn-block128-f32-scale",
+        ),
+        _precision_rule(
+            backend="deepep-hybrid", skus=_NVIDIA_SKUS,
+            ep_degrees=(8, 16), mode="normal",
+            basis="deepep-hybrid-normal-uint8-e4m3fn-block128-f32-scale",
+        ),
+        _precision_rule(
+            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16), mode="normal",
+            basis="uccl-deepep-api-normal-prequantized-e4m3fn-block128-f32-scale",
+        ),
+        _precision_rule(
+            backend="mori", skus=("mi355x",), ep_degrees=(8, 16), mode="normal",
+            basis="mori-gfx950-normal-prequantized-ocp-e4m3fn-block128-f32-scale",
+        ),
+    ),
+    _NORMAL_E4M3FNUZ_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi325x",), ep_degrees=(8, 16), mode="normal",
+            basis="mori-gfx942-normal-prequantized-e4m3fnuz-block128-f32-scale",
+        ),
+    ),
+    _LL_FP8_PROFILE: (
+        _precision_rule(
+            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
+            mode="low-latency",
+            basis="deepep-v1-low-latency-fused-e4m3fn-block128-f32-scale",
+        ),
+        _precision_rule(
+            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16),
+            mode="low-latency",
+            basis="uccl-deepep-api-low-latency-fused-e4m3fn-block128-f32-scale",
+        ),
+    ),
+    _LL_LOGFMT_PROFILE: (
+        _precision_rule(
+            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
+            mode="low-latency",
+            basis="deepep-v1-low-latency-logfmt10-dynamic-per64-combine",
+        ),
+        _precision_rule(
+            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16),
+            mode="low-latency",
+            basis="uccl-deepep-api-low-latency-logfmt10-dynamic-per64-combine",
+        ),
+    ),
+    _LL_FP8_LOGFMT_PROFILE: (
+        _precision_rule(
+            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
+            mode="low-latency",
+            basis="deepep-v1-low-latency-fused-e4m3fn-dispatch-logfmt10-combine",
+        ),
+        _precision_rule(
+            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16),
+            mode="low-latency",
+            basis="uccl-deepep-api-low-latency-fused-e4m3fn-dispatch-logfmt10-combine",
+        ),
+    ),
+    _MORI_E4M3FN_DIRECT_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
+            basis="mori-gfx950-ep8-intranode-e4m3fn-direct-cast-combine",
+        ),
+    ),
+    _MORI_E4M3FN_BOTH_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
+            basis="mori-gfx950-ep8-intranode-e4m3fn-dispatch-and-direct-cast-combine",
+        ),
+    ),
+    _MORI_E4M3FNUZ_DIRECT_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi325x",), ep_degrees=(8,), mode="normal",
+            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-direct-cast-combine",
+        ),
+    ),
+    _MORI_E4M3FNUZ_BOTH_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi325x",), ep_degrees=(8,), mode="normal",
+            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-dispatch-and-direct-cast-combine",
+        ),
+    ),
+}
+
 
 def runtime_identity_issues(
     sku: str, *, vendor: str, arch: str, machine: str, device_name: str,
@@ -191,10 +335,17 @@ def topology_for(sku: str, ep: int) -> dict[str, Any] | None:
     return platform["topologies"].get(ep)
 
 
-def resolve(sku: str, backend: str, *, ep: int | None = None, nodes: int | None = None,
-            routing: str = "uniform", eplb: bool = False,
-            mode: str = "normal") -> tuple[bool, str]:
-    """Return whether one fixed-v1 case can run on a public GHA runner label."""
+def _resolve_base(
+    sku: str,
+    backend: str,
+    *,
+    ep: int | None = None,
+    nodes: int | None = None,
+    routing: str = "uniform",
+    eplb: bool = False,
+    mode: str = "normal",
+) -> tuple[bool, str]:
+    """Resolve the existing BF16 capability without a precision candidate."""
     platform, implementation = PLATFORMS.get(sku), BACKENDS.get(backend)
     if platform is None:
         return False, f"unknown GHA runner label {sku!r}"
@@ -230,3 +381,189 @@ def resolve(sku: str, backend: str, *, ep: int | None = None, nodes: int | None 
     if sku in implementation.get("excluded_skus", set()):
         return False, f"{backend} is unavailable on {sku}"
     return True, "ok"
+
+
+def precision_targets(
+    profile_names: tuple[str, ...] | list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Expand exact native precision candidates into deterministic target cells."""
+    names = list(PRECISION_CAPABILITIES) if profile_names is None else list(profile_names)
+    unknown = sorted(set(names) - set(PRECISION_CAPABILITIES))
+    if unknown:
+        raise ValueError(f"unknown precision capability profiles {unknown}")
+    targets: list[dict[str, Any]] = []
+    seen: set[tuple[str, str, str, int, str]] = set()
+    for profile_name in names:
+        for rule in PRECISION_CAPABILITIES[profile_name]:
+            for sku in rule["skus"]:
+                for ep in rule["ep_degrees"]:
+                    key = (profile_name, rule["backend"], sku, ep, rule["mode"])
+                    if key in seen:
+                        raise RuntimeError(f"duplicate precision capability target {key}")
+                    seen.add(key)
+                    targets.append({
+                        "precision_profile": profile_name,
+                        "backend": rule["backend"],
+                        "sku": sku,
+                        "ep": ep,
+                        "mode": rule["mode"],
+                        "disposition": rule["disposition"],
+                        "basis": rule["basis"],
+                    })
+    return targets
+
+
+def provisional_precision_targets(
+    profile_names: tuple[str, ...] | list[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Return probe-gated targets that must be eliminated before scheduling."""
+    return [
+        target for target in precision_targets(profile_names)
+        if target["disposition"] == "provisional"
+    ]
+
+
+def precision_target_declared(
+    precision_profile: str,
+    *,
+    sku: str,
+    backend: str,
+    ep: int,
+    mode: str,
+) -> bool:
+    """Return whether a profile has an exact native candidate for this cell."""
+    return any(
+        target["precision_profile"] == precision_profile
+        and target["sku"] == sku
+        and target["backend"] == backend
+        and target["ep"] == ep
+        and target["mode"] == mode
+        for target in precision_targets([precision_profile])
+    )
+
+
+def resolve_disposition(
+    sku: str,
+    backend: str,
+    *,
+    ep: int | None = None,
+    nodes: int | None = None,
+    routing: str = "uniform",
+    eplb: bool = False,
+    mode: str = "normal",
+    precision_profile: str | None = None,
+) -> tuple[str, str]:
+    """Resolve a baseline or exact precision cell to its capability disposition."""
+    base_ok, base_detail = _resolve_base(
+        sku,
+        backend,
+        ep=ep,
+        nodes=nodes,
+        routing=routing,
+        eplb=eplb,
+        mode=mode,
+    )
+    if precision_profile is None or precision_profile == identity.V1_CONTROL_PRECISION_PROFILE:
+        return ("supported", "ok") if base_ok else ("unsupported", base_detail)
+    if precision_profile not in identity.V1_PRECISION_PROFILES:
+        return "unsupported", f"unknown precision profile {precision_profile!r}"
+    profile = identity.V1_PRECISION_PROFILES[precision_profile]
+    if mode not in profile["modes"]:
+        return (
+            "not-applicable",
+            f"precision profile {precision_profile} is not defined for {mode} mode",
+        )
+    if ep is None:
+        platform = PLATFORMS.get(sku)
+        if platform is None:
+            return "unsupported", base_detail
+        if nodes is None:
+            ep = platform["ep_degrees"][0]
+        else:
+            matches = [
+                degree for degree, topology in platform["topologies"].items()
+                if topology["nodes"] == nodes
+            ]
+            if len(matches) != 1:
+                return "unsupported", base_detail
+            ep = matches[0]
+    matches = [
+        target for target in precision_targets([precision_profile])
+        if target["sku"] == sku
+        and target["backend"] == backend
+        and target["ep"] == ep
+        and target["mode"] == mode
+    ]
+    if not matches:
+        return (
+            "not-applicable",
+            f"{precision_profile} has no native {backend} target on {sku} EP{ep}",
+        )
+    if not base_ok:
+        return "unsupported", base_detail
+    target = matches[0]
+    return target["disposition"], target["basis"]
+
+
+def resolve(
+    sku: str,
+    backend: str,
+    *,
+    ep: int | None = None,
+    nodes: int | None = None,
+    routing: str = "uniform",
+    eplb: bool = False,
+    mode: str = "normal",
+    precision_profile: str | None = None,
+) -> tuple[bool, str]:
+    """Return whether one fixed-v1 case can run on a public GHA runner label."""
+    disposition, detail = resolve_disposition(
+        sku,
+        backend,
+        ep=ep,
+        nodes=nodes,
+        routing=routing,
+        eplb=eplb,
+        mode=mode,
+        precision_profile=precision_profile,
+    )
+    return disposition == "supported", detail
+
+
+def _validate_precision_capabilities() -> None:
+    expected = set(identity.V1_PRECISION_PROFILES) - {
+        identity.V1_CONTROL_PRECISION_PROFILE
+    }
+    if set(PRECISION_CAPABILITIES) != expected:
+        raise RuntimeError("precision capability profiles differ from the identity registry")
+    empty = sorted(
+        profile for profile, rules in PRECISION_CAPABILITIES.items() if not rules
+    )
+    if empty:
+        raise RuntimeError(f"precision profiles have no native targets: {empty}")
+    for target in precision_targets():
+        if target["backend"] not in BACKENDS or target["sku"] not in PLATFORMS:
+            raise RuntimeError(f"unknown precision target: {target}")
+        if target["ep"] not in PLATFORMS[target["sku"]]["ep_degrees"]:
+            raise RuntimeError(f"invalid precision target EP degree: {target}")
+        if target["disposition"] not in PRECISION_DISPOSITIONS - {"not-applicable"}:
+            raise RuntimeError(f"invalid declared precision disposition: {target}")
+        if target["mode"] not in identity.V1_PRECISION_PROFILES[
+            target["precision_profile"]
+        ]["modes"]:
+            raise RuntimeError(f"precision target mode differs from its profile: {target}")
+        topology = topology_for(target["sku"], target["ep"])
+        base_ok, base_detail = _resolve_base(
+            target["sku"],
+            target["backend"],
+            ep=target["ep"],
+            nodes=topology["nodes"] if topology is not None else None,
+            mode=target["mode"],
+        )
+        if target["disposition"] in {"supported", "provisional"} and not base_ok:
+            raise RuntimeError(
+                f"precision target exceeds its backend capability: {target}: {base_detail}"
+            )
+
+
+_validate_precision_capabilities()

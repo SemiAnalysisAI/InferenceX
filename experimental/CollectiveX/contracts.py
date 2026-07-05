@@ -35,9 +35,12 @@ TERMINAL_CASE_FIELDS = {
 }
 ALLOCATION_FACTOR_FIELDS = {
     "artifact", "execution_id", "job", "repo", "run_attempt", "run_id", "runner",
+    "source_sha", "qualification_index",
+}
+GIT_RUN_FIELDS = {
+    "artifact", "job", "qualification_index", "ref", "repo", "run_attempt", "run_id",
     "source_sha",
 }
-GIT_RUN_FIELDS = {"artifact", "job", "ref", "repo", "run_attempt", "run_id", "source_sha"}
 PRE_EXECUTION_FAILURE_REASONS = {
     "setup": "launcher-setup-failed",
     "repository-stage": "repository-staging-failed",
@@ -166,6 +169,14 @@ def scheduled_case_profile(case: dict[str, Any], path: str = "case") -> dict[str
         raise ContractError(f"{path}: {exc}") from exc
 
 
+def _scheduled_case(value: Any, path: str) -> dict[str, Any]:
+    """Validate baseline or explicit-precision scheduled case fields."""
+    fields = set(TERMINAL_CASE_FIELDS)
+    if isinstance(value, dict) and "precision_profile" in value:
+        fields.add("precision_profile")
+    return _keys(value, fields, path)
+
+
 def resolve_deepep_mnnvl(
     *, requested: bool, signature_parameters: Iterable[str], deepep_commit: str | None
 ) -> tuple[dict[str, bool], str]:
@@ -213,8 +224,8 @@ def project_resource_profile(provenance: dict[str, Any]) -> dict[str, Any]:
         "comm_units_kind": kind,
         "configured_units": configured,
         "conformance_class": (
-            "not-applicable" if fixed else "best-known" if "default" not in source
-            else "backend-default"
+            "not-applicable" if fixed else "backend-default" if "default" in source
+            else "pinned-upstream"
         ),
         "device_units": device_units,
         "fixed_kernel": fixed,
@@ -223,7 +234,7 @@ def project_resource_profile(provenance: dict[str, Any]) -> dict[str, Any]:
         "persistent_bytes": persistent_bytes,
         "qps_per_rank": provenance.get("num_qps_per_rank"),
         "requested_fraction": None,
-        "resource_class": "fixed-kernel" if fixed else "backend-tuned",
+        "resource_class": "fixed-kernel" if fixed else "fixed-profile",
         "target_achieved_within_tol": None,
         "tolerance": 0.10,
         "tuned_source": provenance.get("tuned_source"),
@@ -649,12 +660,15 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
 
 def provenance_complete(
     provenance: dict[str, Any], backend: str, git_run: dict[str, Any] | None,
-    *, image_digest: Any, image_verified: Any, squash_sha256: Any,
+    *, allocation_stratum_sha256: Any, image_digest: Any, image_verified: Any,
+    squash_sha256: Any,
 ) -> bool:
     image = str(image_digest or "")
     squash = str(squash_sha256 or "")
+    allocation_stratum = str(allocation_stratum_sha256 or "")
     return (
         not backend_provenance_issues(backend, provenance)
+        and bool(re.fullmatch(r"[0-9a-f]{64}", allocation_stratum))
         and image_verified is True
         and bool(re.fullmatch(r"sha256:[0-9a-f]{64}", image))
         and bool(re.fullmatch(r"[0-9a-f]{64}", squash))
@@ -822,6 +836,66 @@ def _sha256_json(value: Any) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _precision_byte_provenance(
+    axis: dict[str, Any], logical_copies: int, hidden: int
+) -> dict[str, Any]:
+    bits_per_value = {
+        "bf16": 16,
+        "fp8-e4m3fn": 8,
+        "fp8-e4m3fnuz": 8,
+        "logfmt10": 10,
+    }.get(axis["communication_format"])
+    if bits_per_value is None:
+        raise ContractError("unknown communication precision format")
+    scale_size = {None: 0, "f32": 4, "implicit-logfmt10": 0}.get(axis["scale_dtype"])
+    if scale_size is None:
+        raise ContractError("unknown communication scale dtype")
+    group_size = axis["scale_group_size"]
+    groups = math.ceil(hidden / group_size) if group_size is not None else 0
+    activation = logical_copies * math.ceil(hidden * bits_per_value / 8)
+    scales = logical_copies * groups * scale_size
+    return {
+        "accounting_contract": "activation-data-plus-scales-v1",
+        "activation_data_bytes": activation,
+        "scale_bytes": scales,
+        "total_logical_bytes": activation + scales,
+    }
+
+
+@lru_cache(maxsize=None)
+def _expected_eplb_calibration(
+    routing: str,
+    hidden: int,
+    topk: int,
+    logical_experts: int,
+    physical_experts: int,
+    ep_size: int,
+    seed: int,
+    reference_tokens_per_rank: int,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    member, checksums, indices, _ = workload_contract.canonical_eplb_calibration_member(
+        routing,
+        hidden,
+        topk,
+        logical_experts,
+        ep_size,
+        reference_tokens_per_rank,
+        seed,
+    )
+    load = [0] * logical_experts
+    for row in indices:
+        for expert in row:
+            load[expert] += 1
+    plan = eplb_contract.build_plan(load, physical_experts, ep_size)
+    descriptor = {
+        "calibration_token_offset": workload_contract.EPLB_CALIBRATION_TOKEN_OFFSET,
+        "calibration_trace_sha256": checksums["trace"],
+        "calibration_window": workload_contract.EPLB_CALIBRATION_WINDOW,
+        "calibration_workload_id": member,
+    }
+    return plan, descriptor
+
+
 @lru_cache(maxsize=None)
 def _expected_eplb_plan(
     routing: str,
@@ -831,19 +905,20 @@ def _expected_eplb_plan(
     ep_size: int,
     seed: int,
     reference_tokens_per_rank: int,
+    hidden: int = 7168,
 ) -> dict[str, Any]:
-    indices, _ = workload_contract.canonical_routing_rows(
-        reference_tokens_per_rank * ep_size,
-        logical_experts,
-        topk,
+    """Compatibility wrapper returning the disjoint calibration plan."""
+    plan, _ = _expected_eplb_calibration(
         routing,
+        hidden,
+        topk,
+        logical_experts,
+        physical_experts,
+        ep_size,
         seed,
+        reference_tokens_per_rank,
     )
-    load = [0] * logical_experts
-    for row in indices:
-        for expert in row:
-            load[expert] += 1
-    return eplb_contract.build_plan(load, physical_experts, ep_size)
+    return plan
 
 
 @lru_cache(maxsize=None)
@@ -877,6 +952,7 @@ def _expected_canonical_trace(
             ep_size,
             seed,
             reference_tokens_per_rank,
+            hidden,
         )
         indices = eplb_contract.remap_rows(indices, plan)
     routing_hash = workload_contract.trace_checksums(indices, weights)["trace"]
@@ -986,6 +1062,7 @@ def _expected_anomalies(
     tokens: int, components: dict[str, Any]
 ) -> list[dict[str, Any]]:
     dispatch = components["dispatch"]["percentiles_us"]
+    stage = components["stage"]["percentiles_us"]
     combine = components["combine"]["percentiles_us"]
     roundtrip = components["roundtrip"]["percentiles_us"]
     isolated = components["isolated_sum"]["percentiles_us"]
@@ -999,7 +1076,10 @@ def _expected_anomalies(
             "ratio": round(roundtrip["p99"] / isolated["p99"], 2),
             "threshold": 3.0,
         })
-    floor = max(dispatch["p50"], combine["p50"]) if dispatch and combine else None
+    floor = (
+        max(dispatch["p50"], combine["p50"], stage["p50"] if stage is not None else 0.0)
+        if dispatch and combine else None
+    )
     if floor and roundtrip["p50"] < 0.95 * floor:
         anomalies.append({
             "type": "roundtrip_lt_component_floor",
@@ -1017,7 +1097,7 @@ def _validate_canonical_workload(
     eplb: dict[str, Any],
 ) -> None:
     """Bind every canonical member and measured routing hash to its scheduled token row."""
-    profile = identity.V1_CASE_PROFILE
+    profile = identity.profile_for_case(scheduled_case)
     if eplb["enabled"]:
         plan = _expected_eplb_plan(
             scheduled_case["routing"],
@@ -1027,6 +1107,7 @@ def _validate_canonical_workload(
             scheduled_case["ep"],
             profile["seed"],
             profile["eplb_reference_tokens_per_rank"],
+            scheduled_case["hidden"],
         )
         if eplb["mapping_hash"] != eplb_contract.mapping_hash(plan):
             raise ContractError("raw EPLB mapping differs from the frozen canonical plan")
@@ -1259,8 +1340,8 @@ def validate_samples_document(document: Any) -> dict[str, Any]:
     _validate_native_schema("samples-v1.schema.json", document)
     doc = _keys(
         document,
-        {"allocation_id", "attempt_id", "case_id", "format", "points", "sampling",
-         "schema_version", "series_id"},
+        {"allocation_id", "attempt_id", "case_id", "format", "points",
+         "qualification_index", "sampling", "schema_version", "series_id"},
         "samples",
     )
     if doc["format"] != SAMPLES_FORMAT or doc["schema_version"] != 1:
@@ -1270,6 +1351,11 @@ def validate_samples_document(document: Any) -> dict[str, Any]:
         ("case_id", "case"), ("series_id", "series"),
     ):
         _typed(doc[field], kind, f"samples.{field}")
+    qualification_index = _integer(
+        doc["qualification_index"], "samples.qualification_index", minimum=1
+    )
+    if qualification_index > 3:
+        raise ContractError("samples.qualification_index must be in 1..3")
     sampling = _keys(
         doc["sampling"], {"iterations_per_trial", "reduction", "trials"}, "samples.sampling"
     )
@@ -1296,7 +1382,10 @@ def validate_samples_document(document: Any) -> dict[str, Any]:
         seen.add(tokens)
         _typed(point["point_id"], "point", f"{path}.point_id")
         _typed(point["evidence_id"], "evidence", f"{path}.evidence_id")
-        components = _keys(point["components"], {"combine", "dispatch", "roundtrip"}, f"{path}.components")
+        components = _keys(
+            point["components"], {"combine", "dispatch", "roundtrip", "stage"},
+            f"{path}.components",
+        )
         for name, component_value in components.items():
             component = _keys(
                 component_value, {"availability", "sample_count", "trials"},
@@ -1421,6 +1510,55 @@ def _validate_oracle(
     return oracle
 
 
+def _validate_precision_evidence(
+    value: Any, profile_id: str, communication_precision: dict[str, Any], path: str
+) -> dict[str, Any]:
+    precision = _keys(value, {"combine", "dispatch", "passed", "profile_id"}, path)
+    if precision["profile_id"] != profile_id or type(precision["passed"]) is not bool:
+        raise ContractError(f"{path} profile/outcome differs")
+    for direction in ("dispatch", "combine"):
+        axis_path = f"{path}.{direction}"
+        axis = _keys(
+            precision[direction],
+            {"dequantized_semantics", "encoded_payload_valid", "max_abs_error",
+             "max_rel_error", "passed", "saturation_count", "saturation_rate",
+             "scales_finite", "scales_positive"},
+            axis_path,
+        )
+        for field in ("dequantized_semantics", "encoded_payload_valid", "passed"):
+            if type(axis[field]) is not bool:
+                raise ContractError(f"{axis_path}.{field} must be boolean")
+        expects_scales = communication_precision[direction]["scale_dtype"] is not None
+        for field in ("scales_finite", "scales_positive"):
+            if expects_scales:
+                if type(axis[field]) is not bool:
+                    raise ContractError(f"{axis_path}.{field} must be boolean")
+            elif axis[field] is not None:
+                raise ContractError(f"{axis_path}.{field} must be null without scales")
+        saturation_count = _integer(
+            axis["saturation_count"], f"{axis_path}.saturation_count"
+        )
+        saturation_rate = _number(
+            axis["saturation_rate"], f"{axis_path}.saturation_rate", minimum=0.0
+        )
+        if saturation_rate > 1.0:
+            raise ContractError(f"{axis_path}.saturation_rate must be <= 1")
+        _number(axis["max_abs_error"], f"{axis_path}.max_abs_error", minimum=0.0)
+        _number(axis["max_rel_error"], f"{axis_path}.max_rel_error", minimum=0.0)
+        expected_pass = (
+            axis["encoded_payload_valid"]
+            and axis["dequantized_semantics"]
+            and (not expects_scales or (axis["scales_finite"] and axis["scales_positive"]))
+            and saturation_count >= 0
+        )
+        if axis["passed"] != bool(expected_pass):
+            raise ContractError(f"{axis_path}.passed differs from its evidence")
+    expected_pass = precision["dispatch"]["passed"] and precision["combine"]["passed"]
+    if precision["passed"] != expected_pass:
+        raise ContractError(f"{path}.passed differs from direction evidence")
+    return precision
+
+
 def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any]:
     """Validate identities, exact samples, formulas, privacy, and the native raw shape."""
     _validate_native_schema("raw-case-v1.schema.json", document)
@@ -1451,12 +1589,19 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         identifiers["allocation_factors"], ALLOCATION_FACTOR_FIELDS,
         "raw.identity.allocation_factors",
     )
+    qualification_index = _integer(
+        allocation_factors["qualification_index"],
+        "raw.identity.allocation_factors.qualification_index",
+        minimum=1,
+    )
+    if qualification_index > 3:
+        raise ContractError("raw qualification index must be in 1..3")
     case_factors = _keys(
         identifiers["case_factors"], {"case", "profile", "sku"},
         "raw.identity.case_factors",
     )
-    scheduled_case = _keys(
-        case_factors["case"], TERMINAL_CASE_FIELDS, "raw.identity.case_factors.case"
+    scheduled_case = _scheduled_case(
+        case_factors["case"], "raw.identity.case_factors.case"
     )
     profile = scheduled_case_profile(scheduled_case, "raw.identity.case_factors.case")
     if case_factors["profile"] != profile:
@@ -1484,6 +1629,8 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
     for field in ("allocation_id", "attempt_id", "case_id", "series_id"):
         if samples[field] != identifiers[field]:
             raise ContractError(f"samples.{field} differs from raw identity")
+    if samples["qualification_index"] != qualification_index:
+        raise ContractError("samples qualification index differs from raw allocation")
     sample_by_token = {point["tokens_per_rank"]: point for point in samples["points"]}
 
     case = _keys(
@@ -1500,8 +1647,9 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         _text(case[field], f"raw.case.{field}")
     shape = _keys(
         case["shape"],
-        {"activation_profile", "dispatch_dtype", "eplb", "experts", "experts_per_rank",
-         "hidden", "kernel_gen", "num_logical_experts", "quant", "routing", "topk"},
+        {"activation_profile", "combine_precision", "dispatch_precision", "eplb", "experts",
+         "experts_per_rank", "hidden", "kernel_gen", "num_logical_experts",
+         "precision_profile", "routing", "topk"},
         "raw.case.shape",
     )
     hidden = _integer(shape["hidden"], "raw.case.shape.hidden", minimum=1)
@@ -1517,17 +1665,22 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
     experts_per_rank = _integer(
         shape["experts_per_rank"], "raw.case.shape.experts_per_rank", minimum=1
     )
-    quant = _keys(
-        shape["quant"],
-        {"combine_accum_dtype", "combine_input_dtype", "combine_output_dtype",
-         "combine_quant_mode", "scale_layout"},
-        "raw.case.shape.quant",
+    precision_profile_id = scheduled_case.get(
+        "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
     )
+    communication_precision = identity.precision_profile(precision_profile_id)
+    if (
+        shape["precision_profile"] != precision_profile_id
+        or shape["dispatch_precision"] != communication_precision["dispatch"]
+        or shape["combine_precision"] != communication_precision["combine"]
+    ):
+        raise ContractError("raw communication precision differs from scheduled case")
     eplb = _keys(
         case["eplb"],
-        {"enabled", "imbalance_after", "imbalance_before", "mapping_hash", "max_replicas",
-         "num_logical_experts", "num_physical_experts", "num_redundant", "planner",
-         "reference_tokens_per_rank", "replicated_experts"},
+        {"calibration_token_offset", "calibration_trace_sha256", "calibration_window",
+         "calibration_workload_id", "enabled", "imbalance_after", "imbalance_before",
+         "mapping_hash", "max_replicas", "num_logical_experts", "num_physical_experts",
+         "num_redundant", "planner", "reference_tokens_per_rank", "replicated_experts"},
         "raw.case.eplb",
     )
     if not isinstance(eplb["enabled"], bool):
@@ -1549,8 +1702,9 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
     ):
         raise ContractError("raw EPLB/shape dimensions differ from the frozen profile")
     if eplb["enabled"]:
-        expected_plan = _expected_eplb_plan(
+        expected_plan, calibration_descriptor = _expected_eplb_calibration(
             scheduled_case["routing"],
+            hidden,
             topk,
             logical_experts,
             physical_experts,
@@ -1559,6 +1713,7 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             profile["eplb_reference_tokens_per_rank"],
         )
         expected_eplb = {
+            **calibration_descriptor,
             "enabled": True,
             "imbalance_after": expected_plan["imbalance_after"],
             "imbalance_before": expected_plan["imbalance_before"],
@@ -1575,6 +1730,10 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         }
     else:
         expected_eplb = {
+            "calibration_token_offset": None,
+            "calibration_trace_sha256": None,
+            "calibration_window": None,
+            "calibration_workload_id": None,
             "enabled": False,
             "imbalance_after": None,
             "imbalance_before": None,
@@ -1635,10 +1794,16 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
 
     measurement = _keys(
         doc["measurement"],
-        {"component_order_contract", "conditioning", "contract", "rows",
-         "sampling", "source_allocation"},
+        {"component_order_contract", "conditioning", "contract", "execution_order_sha256",
+         "qualification_index", "rows", "sampling", "source_allocation"},
         "raw.measurement",
     )
+    if measurement["qualification_index"] != qualification_index:
+        raise ContractError("raw measurement qualification index differs from allocation")
+    if not isinstance(measurement["execution_order_sha256"], str) or not re.fullmatch(
+        r"[0-9a-f]{64}", measurement["execution_order_sha256"]
+    ):
+        raise ContractError("raw measurement execution order digest is invalid")
     validate_conditioning_contract(measurement["conditioning"], case["phase"])
     sampling = _keys(
         measurement["sampling"],
@@ -1662,11 +1827,6 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         or measurement["component_order_contract"] != profile["component_order_contract"]
         or measurement["source_allocation"] != "even"
         or shape["activation_profile"] != profile["activation_profile"]
-        or shape["dispatch_dtype"] != profile["dtype"]
-        or quant["combine_input_dtype"] != profile["combine_dtype"]
-        or quant["combine_output_dtype"] != profile["combine_dtype"]
-        or quant["combine_quant_mode"] != profile["combine_quant_mode"]
-        or quant["scale_layout"] is not None
         or workload["activation_generator"] != profile["activation_generator"]
         or workload["activation_profile"] != profile["activation_profile"]
         or workload["routing_generator"] != profile["routing_generator"]
@@ -1690,8 +1850,8 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         path = f"raw.measurement.rows[{index}]"
         row = _keys(
             row_value,
-            {"anomalies", "components", "correctness", "evidence_id", "global_tokens",
-             "logical_bytes", "point_id", "receive", "routing",
+            {"anomalies", "byte_provenance", "components", "correctness", "evidence_id",
+             "global_tokens", "point_id", "receive", "routing",
              "sample_histograms", "sample_sha256", "token_rate_at_latency_percentile",
              "tokens_per_rank"},
             path,
@@ -1716,16 +1876,24 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         if row["sample_sha256"] != sample_point["sample_sha256"]:
             raise ContractError(f"{path}.sample_sha256 differs")
         components = _keys(
-            row["components"], {"combine", "dispatch", "isolated_sum", "roundtrip"},
+            row["components"], {"combine", "dispatch", "isolated_sum", "roundtrip", "stage"},
             f"{path}.components",
         )
-        for name in ("combine", "dispatch", "roundtrip"):
+        for name in ("combine", "dispatch", "roundtrip", "stage"):
             _validate_component(
                 components[name], sample_point["components"][name], f"{path}.components.{name}"
             )
         _validate_component(
             components["isolated_sum"], None, f"{path}.components.isolated_sum", derived=True
         )
+        expected_stage_availability = (
+            "measured"
+            if communication_precision["dispatch"]["communication_format"] != "bf16"
+            or (case["backend"] == "mori" and shape["kernel_gen"] == "intranode")
+            else "unavailable"
+        )
+        if components["stage"]["availability"] != expected_stage_availability:
+            raise ContractError(f"{path}.components.stage differs from adapter device work")
         _, _, _, expected_indices, expected_weights = _expected_canonical_trace(
             scheduled_case["routing"],
             hidden,
@@ -1769,7 +1937,7 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             )
         correctness = _keys(
             row["correctness"],
-            {"contract", "max_relative_error", "passed", "rank_evidence", "scope"},
+            {"contract", "max_relative_error", "passed", "precision", "rank_evidence", "scope"},
             f"{path}.correctness",
         )
         if (
@@ -1778,6 +1946,10 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             or type(correctness["passed"]) is not bool
         ):
             raise ContractError(f"{path}.correctness contract differs")
+        precision_evidence = _validate_precision_evidence(
+            correctness["precision"], precision_profile_id, communication_precision,
+            f"{path}.correctness.precision",
+        )
         _number(
             correctness["max_relative_error"],
             f"{path}.correctness.max_relative_error",
@@ -1830,6 +2002,7 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             evidence_passed = evidence_passed and all(
                 (evidence["input_unchanged"], evidence["order_stable"], pre["passed"], post["passed"])
             )
+        evidence_passed = evidence_passed and precision_evidence["passed"]
         if ranks != set(range(ep_size)) or correctness["passed"] != evidence_passed:
             raise ContractError(f"{path}.correctness rank coverage or outcome differs")
         _close(
@@ -1840,6 +2013,11 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             for percentile in PERCENTILES:
                 expected = (
                     components["dispatch"]["percentiles_us"][percentile]
+                    + (
+                        components["stage"]["percentiles_us"][percentile]
+                        if components["stage"]["availability"] == "measured"
+                        else 0.0
+                    )
                     + components["combine"]["percentiles_us"][percentile]
                 )
                 _close(
@@ -1851,13 +2029,36 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             if profile["payload_unit"] == "token-expert"
             else expected_routing["routed_copies"]
         )
-        expected_bytes = logical_copies * hidden * 2
-        expected_logical = {
-            "combine": expected_bytes,
-            "dispatch": expected_bytes,
-            "roundtrip": expected_bytes * 2,
+        dispatch_bytes = _precision_byte_provenance(
+            communication_precision["dispatch"], logical_copies, hidden
+        )
+        combine_bytes = _precision_byte_provenance(
+            communication_precision["combine"], logical_copies, hidden
+        )
+        stage_bytes = {
+            "accounting_contract": "activation-data-plus-scales-v1",
+            "activation_data_bytes": 0,
+            "scale_bytes": 0,
+            "total_logical_bytes": 0,
         }
-        _equivalent(row["logical_bytes"], expected_logical, f"{path}.logical_bytes")
+        roundtrip_bytes = {
+            "accounting_contract": "activation-data-plus-scales-v1",
+            **{
+                field: dispatch_bytes[field] + combine_bytes[field]
+                for field in (
+                    "activation_data_bytes", "scale_bytes", "total_logical_bytes"
+                )
+            },
+        }
+        expected_byte_provenance = {
+            "combine": combine_bytes,
+            "dispatch": dispatch_bytes,
+            "roundtrip": roundtrip_bytes,
+            "stage": stage_bytes,
+        }
+        _equivalent(
+            row["byte_provenance"], expected_byte_provenance, f"{path}.byte_provenance"
+        )
 
         max_receive = max(expected_payload_counts)
         expected_receive = {
@@ -1877,7 +2078,7 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
                 if sample_point["components"][name]["availability"] == "measured"
                 else None
             )
-            for name in ("dispatch", "combine", "roundtrip")
+            for name in ("dispatch", "stage", "combine", "roundtrip")
         }
         _equivalent(
             row["sample_histograms"], expected_histograms, f"{path}.sample_histograms"
@@ -2085,9 +2286,17 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
                 + "; ".join(identity_issues)
             )
     raw_provenance = _keys(
-        doc["provenance"], {"command", "distributed_launcher", "git_run", "image", "redaction"},
+        doc["provenance"],
+        {"allocation_stratum_sha256", "command", "distributed_launcher", "git_run",
+         "image", "redaction"},
         "raw.provenance",
     )
+    allocation_stratum = raw_provenance["allocation_stratum_sha256"]
+    if workload["source"] == "canonical-serialized" and not (
+        isinstance(allocation_stratum, str)
+        and re.fullmatch(r"[0-9a-f]{64}", allocation_stratum)
+    ):
+        raise ContractError("canonical raw evidence is missing its private allocation stratum")
     image = _keys(
         raw_provenance["image"],
         {"arch", "digest", "digest_verified", "reference", "squash_sha256"},
@@ -2104,10 +2313,13 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
     git_run = raw_provenance["git_run"]
     if git_run is not None:
         git_run = _keys(git_run, GIT_RUN_FIELDS, "raw.provenance.git_run")
+        if git_run["qualification_index"] != qualification_index:
+            raise ContractError("raw git run qualification index differs from allocation")
     expected_provenance_complete = provenance_complete(
         provenance_fields,
         case["backend"],
         git_run,
+        allocation_stratum_sha256=allocation_stratum,
         image_digest=image["digest"],
         image_verified=image["digest_verified"],
         squash_sha256=image["squash_sha256"],
@@ -2143,6 +2355,8 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         "warmup_semantics": sampling["warmup_semantics"],
         "workload": case["workload_name"],
     }
+    if "precision_profile" in scheduled_case:
+        actual_scheduled_case["precision_profile"] = shape["precision_profile"]
     if scheduled_case != actual_scheduled_case:
         mismatches = sorted(
             field for field in scheduled_case
@@ -2182,6 +2396,7 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
         "artifact": git_run["artifact"] if git_run is not None else None,
         "execution_id": allocation_factors["execution_id"],
         "job": git_run["job"] if git_run is not None else None,
+        "qualification_index": qualification_index,
         "repo": git_run["repo"] if git_run is not None else None,
         "run_attempt": git_run["run_attempt"] if git_run is not None else None,
         "run_id": git_run["run_id"] if git_run is not None else None,
@@ -2306,7 +2521,7 @@ def validate_terminal_document(document: Any) -> dict[str, Any]:
     for field, kind in (("allocation_id", "allocation"), ("attempt_id", "attempt"), ("case_id", "case")):
         _typed(ids[field], kind, f"terminal.identity.{field}")
     ordinal = _integer(ids["attempt_ordinal"], "terminal.identity.attempt_ordinal", minimum=1)
-    case = _keys(doc["case"], TERMINAL_CASE_FIELDS, "terminal.case")
+    case = _scheduled_case(doc["case"], "terminal.case")
     factors = _keys(ids["case_factors"], {"case", "profile", "sku"}, "terminal.identity.case_factors")
     if factors["case"] != case or factors["profile"] != scheduled_case_profile(
         case, "terminal.case"
@@ -2317,6 +2532,13 @@ def validate_terminal_document(document: Any) -> dict[str, Any]:
         ids["allocation_factors"], ALLOCATION_FACTOR_FIELDS,
         "terminal.identity.allocation_factors",
     )
+    qualification_index = _integer(
+        allocation["qualification_index"],
+        "terminal.identity.allocation_factors.qualification_index",
+        minimum=1,
+    )
+    if qualification_index > 3:
+        raise ContractError("terminal qualification index must be in 1..3")
     expected_case = identity.digest("case", factors)
     expected_allocation = identity.allocation_id(allocation)
     expected_attempt = identity.attempt_id(
@@ -2333,6 +2555,10 @@ def validate_terminal_document(document: Any) -> dict[str, Any]:
     git_run = provenance["git_run"]
     if git_run is not None:
         git_run = _keys(git_run, GIT_RUN_FIELDS, "terminal.provenance.git_run")
+        if git_run["qualification_index"] != qualification_index:
+            raise ContractError(
+                "terminal git run qualification index differs from allocation"
+            )
     control = provenance["control_sha256"]
     if control is not None and (
         not isinstance(control, str) or len(control) != 64
@@ -2373,6 +2599,7 @@ def validate_terminal_document(document: Any) -> dict[str, Any]:
         "artifact": git_run["artifact"] if git_run is not None else None,
         "execution_id": allocation["execution_id"],
         "job": git_run["job"] if git_run is not None else None,
+        "qualification_index": qualification_index,
         "repo": git_run["repo"] if git_run is not None else None,
         "run_attempt": git_run["run_attempt"] if git_run is not None else None,
         "run_id": git_run["run_id"] if git_run is not None else None,
@@ -2480,7 +2707,7 @@ def _terminal_case_from_environment(backend: str, phase: str) -> dict[str, Any]:
         if phase == "decode"
         else "128 256 512 1024 2048 4096"
     )
-    return {
+    case = {
         "suite": os.environ.get("CX_SUITE") or "manual",
         "workload": os.environ.get("CX_WORKLOAD_NAME") or "manual",
         "required_publication": os.environ.get("CX_REQUIRED_PUBLICATION") or "diagnostic",
@@ -2513,6 +2740,10 @@ def _terminal_case_from_environment(backend: str, phase: str) -> dict[str, Any]:
         "scale_up_transport": os.environ.get("CX_SCALE_UP_TRANSPORT", "unknown"),
         "scale_out_transport": os.environ.get("CX_SCALE_OUT_TRANSPORT") or None,
     }
+    precision_profile = os.environ.get("CX_PRECISION_PROFILE") or None
+    if precision_profile is not None:
+        case["precision_profile"] = precision_profile
+    return case
 
 
 def _git_run_from_environment() -> dict[str, Any] | None:
@@ -2528,7 +2759,10 @@ def _git_run_from_environment() -> dict[str, Any] | None:
         "job": value("GITHUB_JOB"),
         "artifact": value("COLLECTIVEX_ARTIFACT_NAME"),
     }
-    return git_run if any(value is not None for value in git_run.values()) else None
+    if not any(item is not None for item in git_run.values()):
+        return None
+    git_run["qualification_index"] = _env_integer("CX_QUALIFICATION_INDEX", 1)
+    return git_run
 
 
 def _allocation_factors_from_environment(
@@ -2538,6 +2772,7 @@ def _allocation_factors_from_environment(
         "artifact": git_run["artifact"] if git_run is not None else None,
         "execution_id": os.environ.get("COLLECTIVEX_EXECUTION_ID") or None,
         "job": git_run["job"] if git_run is not None else None,
+        "qualification_index": _env_integer("CX_QUALIFICATION_INDEX", 1),
         "repo": git_run["repo"] if git_run is not None else None,
         "run_attempt": git_run["run_attempt"] if git_run is not None else None,
         "run_id": git_run["run_id"] if git_run is not None else None,

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import ctypes
+import hashlib
+import hmac
 import json
 import os
 import platform
@@ -21,6 +23,15 @@ sys.path[:0] = [HERE, os.path.dirname(HERE)]
 
 import ep_harness  # noqa: E402  (stdlib-only; safe before torch)
 import identity  # noqa: E402
+
+
+ALLOCATION_STRATUM_CONTRACT = "collectivex-allocation-stratum-v1"
+PRIVATE_FABRIC_ENV = {
+    "ib_gid_index": "CX_IB_GID_INDEX",
+    "rdma_devices": "CX_RDMA_DEVICES",
+    "rdma_service_level": "CX_RDMA_SERVICE_LEVEL",
+    "socket_ifname": "CX_SOCKET_IFNAME",
+}
 
 
 def _numeric_version(command: list[str]) -> str | None:
@@ -155,6 +166,71 @@ def _common_runtime_fingerprint(records: list[dict]) -> dict:
     return records[0]
 
 
+def _allocation_stratum_sha256(
+    physical_hosts: list[str],
+    *,
+    audit_salt: str | None,
+    fabric_selectors: dict[str, str | None],
+    required: bool,
+) -> str | None:
+    """Commit private allocation/fabric identity without exposing its inputs."""
+    if audit_salt in (None, ""):
+        if required:
+            raise ValueError("canonical execution requires a private allocation audit salt")
+        return None
+    if not isinstance(audit_salt, str) or not re.fullmatch(r"[0-9a-f]{64}", audit_salt):
+        raise ValueError("allocation audit salt is invalid")
+    if set(fabric_selectors) != set(PRIVATE_FABRIC_ENV):
+        raise ValueError("private fabric selector set differs from the stratum contract")
+    for value in fabric_selectors.values():
+        if value is not None and (
+            not isinstance(value, str)
+            or not value
+            or len(value) > 512
+            or any(ord(char) < 32 or ord(char) == 127 for char in value)
+        ):
+            raise ValueError("private fabric selector is invalid")
+    if not physical_hosts or any(
+        not isinstance(host, str)
+        or not host
+        or len(host) > 255
+        or any(ord(char) < 32 or ord(char) == 127 for char in host)
+        for host in physical_hosts
+    ):
+        raise ValueError("physical allocation host evidence is invalid")
+    payload = json.dumps(
+        {
+            "contract": ALLOCATION_STRATUM_CONTRACT,
+            "fabric_selectors": fabric_selectors,
+            "physical_hosts": sorted(set(physical_hosts)),
+        },
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    return hmac.new(bytes.fromhex(audit_salt), payload, hashlib.sha256).hexdigest()
+
+
+def _common_allocation_stratum(
+    records: list[str | None], *, required: bool
+) -> str | None:
+    """Require every distributed rank to derive the same private stratum."""
+    if not records or any(
+        value is not None
+        and (not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value))
+        for value in records
+    ):
+        raise ValueError("allocation stratum evidence is invalid")
+    distinct = set(records)
+    if len(distinct) != 1:
+        raise ValueError("allocation stratum differs across distributed ranks")
+    value = records[0]
+    if required and value is None:
+        raise ValueError("canonical execution requires an allocation stratum")
+    return value
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="CollectiveX EP dispatch/combine sweep")
     ap.add_argument(
@@ -188,6 +264,12 @@ def main() -> int:
     if args.case_id and args.seed != ep_harness.ROUTING_SEED:
         print(
             f"ERROR: scheduled v1 cases require seed={ep_harness.ROUTING_SEED}; got {args.seed}",
+            file=sys.stderr,
+        )
+        return 2
+    if args.qualification_index not in range(1, ep_harness.QUALIFICATION_RUNS + 1):
+        print(
+            f"ERROR: qualification index must be in 1..{ep_harness.QUALIFICATION_RUNS}",
             file=sys.stderr,
         )
         return 2
@@ -336,7 +418,11 @@ def main() -> int:
         "job": os.environ.get("GITHUB_JOB"),
         "artifact": os.environ.get("COLLECTIVEX_ARTIFACT_NAME"),
     }
-    args.git_run = _run if any(_run.values()) else None
+    if any(_run.values()):
+        _run["qualification_index"] = args.qualification_index
+        args.git_run = _run
+    else:
+        args.git_run = None
 
     # Import the backend class only after torch initializes. The selected mode is an
     # explicit case dimension; adapters do not infer it from the token ladder.
@@ -395,6 +481,21 @@ def main() -> int:
     args.runtime_fingerprint = _common_runtime_fingerprint(
         [record[2] for record in complete_records]
     )
+    canonical = bool(args.workload_dir)
+    local_stratum = _allocation_stratum_sha256(
+        [record[0] for record in complete_records],
+        audit_salt=os.environ.get("CX_AUDIT_SALT"),
+        fabric_selectors={
+            field: os.environ.get(environment) or None
+            for field, environment in PRIVATE_FABRIC_ENV.items()
+        },
+        required=canonical,
+    )
+    stratum_records: list[str | None] = [None] * world_size
+    dist.all_gather_object(stratum_records, local_stratum)
+    args.allocation_stratum_sha256 = _common_allocation_stratum(
+        stratum_records, required=canonical
+    )
 
     # Construct + run inside a try so a backend exception (esp. a new adapter on GPU) prints its
     # FULL traceback to STDOUT — torchrun captures per-rank stdout but only summarizes stderr, so an
@@ -406,7 +507,8 @@ def main() -> int:
                 f"[run_ep] backend={args.backend} phase={args.phase} mode={args.mode} "
                 f"world={world_size} ep_size={world_size} hidden={args.hidden} "
                 f"topk={args.topk} experts={args.experts} dtype=bf16 "
-                f"routing={args.routing} seed={args.seed}"
+                f"routing={args.routing} seed={args.seed} "
+                f"qualification_index={args.qualification_index}"
             )
         rc = ep_harness.run_sweep(args, backend, torch, dist, device, rank, world_size)
     except Exception:

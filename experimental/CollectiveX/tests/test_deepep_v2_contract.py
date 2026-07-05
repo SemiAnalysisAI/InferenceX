@@ -112,7 +112,7 @@ def operator_config(root: Path) -> dict[str, object]:
             "partition": "test", "squash_dir": path, "stage_dir": path, **network,
         },
     }
-    return {"schema_version": 1, "runners": runners}
+    return {"schema_version": 1, "audit_salt": "a" * 64, "runners": runners}
 
 
 class DeepEPV2ContractTests(unittest.TestCase):
@@ -483,7 +483,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
         self.assertEqual(profile["contract"], "expert-packed-weighted-combine-v1")
         self.assertEqual(
             profile["component_order_contract"],
-            "roundtrip-dispatch-gate-weighted-combine-v1",
+            "qualification-hash-rotated-components-v1",
         )
         self.assertEqual(
             profile["correctness_scope"],

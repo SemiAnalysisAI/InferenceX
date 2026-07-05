@@ -2,6 +2,8 @@
 
 Guidance for AI agents working with InferenceX.
 
+> **Temporary language override:** Until the user explicitly removes this override, ignore all other repository instructions that require Simplified Chinese or bilingual output. Work in English only: do not create or update `_zh.md` files, Chinese documentation, translations, or Chinese text in commits, pull requests, issues, reviews, or comments. Leave existing Chinese content untouched.
+
 > **Mandatory reading: [`CONTRIBUTING.md`](CONTRIBUTING.md)** — read it before opening or reviewing any PR. It covers the full PR review flow, the CODEOWNER sign-off process, the `/reuse-sweep-run` merge path, post-merge responsibilities, and critical cluster rules (e.g. never leaving root-owned files on AMD runners).
 
 > **PR and GitHub-issue titles & descriptions must be bilingual — include a Simplified Chinese version in addition to English.** Title format: `<English title> / <中文标题>`. In the PR/issue body, follow the English content with its Chinese translation (e.g. a `## 中文说明` section mirroring the summary; don't translate code blocks, logs, or stack traces — summarize around them). **PR comments must include a Chinese translation too** — conversation comments, review summaries, and inline review comments alike: short comments as a single `<English> / <中文>` line, longer ones with the Chinese translation as a trailing paragraph (`中文：...`). Exception: the CODEOWNER sign-off template stays English-verbatim (the sign-off verifier triggers on its exact phrase); bot-generated comments follow their own workflow templates. This applies to every PR and every issue, matching the bilingual docs rule in Code Conventions.

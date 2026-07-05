@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CollectiveX MoRI adapter for the v1 BF16 normal-mode workload."""
+"""CollectiveX MoRI adapter for native V1 dispatch/combine precision profiles."""
 from __future__ import annotations
 
 import os
@@ -14,6 +14,7 @@ os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 
 import torch
 import torch.distributed as dist
+import ep_precision
 
 try:
     import mori  # type: ignore
@@ -48,6 +49,7 @@ def _mori_source_commit() -> str:
 
 class MoRIBackend:
     name = "mori"
+    stage_device_work = False
     combine_needs_redispatch = True
     combine_weight_semantics = "unweighted-rank-sum"
 
@@ -57,10 +59,71 @@ class MoRIBackend:
         self.world_size = world_size
         self.device = device
         self.mode = "normal"
+        runner = str(getattr(args, "runner", ""))
+        if runner.startswith("mi355x"):
+            fp8_format = "fp8-e4m3fn"
+            supported_profiles = {
+                "d-bf16.c-bf16",
+                "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+            }
+            if world_size == 8:
+                supported_profiles.update({
+                    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+                    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+                })
+        elif runner.startswith("mi325x"):
+            fp8_format = "fp8-e4m3fnuz"
+            supported_profiles = {
+                "d-bf16.c-bf16",
+                "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+            }
+            if world_size == 8:
+                supported_profiles.update({
+                    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+                    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale",
+                })
+        else:
+            raise ep_precision.PrecisionError(
+                f"MoRI precision contract has no pinned FP8 format for runner {runner!r}"
+            )
+        self.precision_profile_id, self.communication_precision = (
+            ep_precision.resolve_precision(
+                args,
+                backend=self.name,
+                mode=self.mode,
+                supported_profiles=supported_profiles,
+            )
+        )
+        self._fp8_dispatch = ep_precision.is_low_precision_dispatch(
+            self.communication_precision
+        )
+        self._direct_cast_combine = ep_precision.uses_direct_cast_combine(
+            self.communication_precision
+        )
+        if self._fp8_dispatch and ep_precision.communication_format(
+            self.communication_precision, "dispatch"
+        ) != fp8_format:
+            raise ep_precision.PrecisionError(
+                "MoRI dispatch FP8 format differs from the pinned GPU architecture"
+            )
+        if self._direct_cast_combine:
+            quant_enum = getattr(mori.ops, "EpDispatchCombineQuantType", None)
+            if quant_enum is None or not hasattr(quant_enum, "Fp8DirectCast"):
+                raise ep_precision.PrecisionError(
+                    "pinned MoRI API omits EpDispatchCombineQuantType.Fp8DirectCast"
+                )
 
         self.ep_size = world_size
         self.experts_per_rank = args.experts // self.ep_size
-        device_cus = torch.cuda.get_device_properties(device).multi_processor_count
+        device_properties = torch.cuda.get_device_properties(device)
+        device_cus = device_properties.multi_processor_count
+        realized_arch = str(getattr(device_properties, "gcnArchName", "")).split(":", 1)[0]
+        expected_arch = "gfx950" if runner.startswith("mi355x") else "gfx942"
+        if realized_arch != expected_arch:
+            raise ep_precision.PrecisionError(
+                f"MoRI runner {runner!r} realized architecture {realized_arch!r}, "
+                f"expected {expected_arch!r}"
+            )
         gpus_per_node = int(args.gpus_per_node or world_size)
         scale_up_domain = int(args.scale_up_domain or gpus_per_node)
         scale_out = world_size > scale_up_domain
@@ -151,7 +214,12 @@ class MoRIBackend:
             else "async-ll" if self._async_ll
             else "intranode"
         )
-        self._external_input = self._async_ll or self._inter_node
+        self._external_input = (
+            self._async_ll or self._inter_node or self._direct_cast_combine
+        )
+        # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
+        # input kernels consume the dispatch output directly, so their stage is not applicable.
+        self.stage_device_work = self._fp8_dispatch or not self._external_input
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
@@ -163,13 +231,33 @@ class MoRIBackend:
             )
 
         self._cap = self.buffer_cap(args)
+        dispatch_dtype = (
+            getattr(
+                torch,
+                "float8_e4m3fn"
+                if fp8_format == "fp8-e4m3fn"
+                else "float8_e4m3fnuz",
+                None,
+            )
+            if self._fp8_dispatch
+            else torch.bfloat16
+        )
+        if dispatch_dtype is None:
+            raise ep_precision.PrecisionError(
+                f"active torch build does not expose {fp8_format}"
+            )
+        scale_dim = args.hidden // 128 if self._fp8_dispatch else 0
+        if self._fp8_dispatch and args.hidden % 128:
+            raise ep_precision.PrecisionError(
+                "MoRI native FP8 dispatch requires hidden divisible by 128"
+            )
         config_kwargs = {
-            "data_type": torch.bfloat16,
+            "data_type": dispatch_dtype,
             "rank": rank,
             "world_size": world_size,
             "hidden_dim": args.hidden,
-            "scale_dim": 0,
-            "scale_type_size": 1,
+            "scale_dim": scale_dim,
+            "scale_type_size": 4 if self._fp8_dispatch else 1,
             "max_token_type_size": (
                 torch.tensor([], dtype=torch.bfloat16).element_size()
                 if self._inter_node
@@ -179,7 +267,9 @@ class MoRIBackend:
             "num_experts_per_rank": self.experts_per_rank,
             "num_experts_per_token": args.topk,
             "use_external_inp_buf": self._external_input,
-            "quant_type": "none",
+            "quant_type": (
+                "fp8_direct_cast" if self._direct_cast_combine else "none"
+            ),
         }
         if self._kernel_type is not None:
             config_kwargs["kernel_type"] = self._kernel_type
@@ -195,7 +285,13 @@ class MoRIBackend:
                 "num_qp_per_pe": self.num_qps,
             })
         self.config = mori.ops.EpDispatchCombineConfig(**config_kwargs)
-        expected_config = {"use_external_inp_buf": self._external_input}
+        expected_config = {
+            "data_type": dispatch_dtype,
+            "scale_dim": scale_dim,
+            "scale_type_size": 4 if self._fp8_dispatch else 1,
+            "use_external_inp_buf": self._external_input,
+            "quant_type": config_kwargs["quant_type"],
+        }
         if self._async_ll or self._inter_node:
             expected_config.update({
                 "block_num": self.block_num,
@@ -228,8 +324,12 @@ class MoRIBackend:
                 else "mori.ops.EpDispatchCombineOp/registered-input"
             ),
             "mode": "normal",
-            "dispatch_dtype": "bf16",
-            "combine_dtype": "bf16",
+            "dispatch_dtype": ep_precision.communication_format(
+                self.communication_precision, "dispatch"
+            ),
+            "combine_dtype": ep_precision.communication_format(
+                self.communication_precision, "combine"
+            ),
             "kernel_type": self._kernel_type_label,
             "enable_sdma": os.environ.get("MORI_ENABLE_SDMA"),
             "heap_size": os.environ.get("MORI_SHMEM_HEAP_SIZE"),
@@ -239,7 +339,7 @@ class MoRIBackend:
             "rdma_block_num": self.rdma_block_num,
             "use_external_inp_buf": self._external_input,
             "num_qps": self.num_qps,
-            "resource_mode": "tuned",
+            "resource_mode": "fixed-profile",
             "block_num": self.block_num,
             "block_num_target": self._block_target,
             "block_num_floored": self._block_floored,
@@ -254,22 +354,32 @@ class MoRIBackend:
         return 512
 
     def make_problem(self, T, idx, weights, x):
+        encoding = ep_precision.encode_dispatch(
+            torch, x, self.communication_precision
+        )
         indices = idx.to(torch.int32)
         gate_weights = weights.to(torch.float32)
         return types.SimpleNamespace(
             T=T,
             x=x,
+            dispatch_x=encoding.native_input[0] if self._fp8_dispatch else x,
+            oracle_x=encoding.semantic,
+            dispatch_precision_evidence=encoding.evidence,
             topk_idx=indices,
             topk_weights=gate_weights,
             indices=indices,
             weights=gate_weights,
-            scales=torch.empty((T, 0), dtype=torch.uint8, device=self.device),
+            scales=(
+                encoding.scales
+                if encoding.scales is not None
+                else torch.empty((T, 0), dtype=torch.uint8, device=self.device)
+            ),
         )
 
     def dispatch(self, p):
         dispatch_output, dispatch_weights, _scales, dispatch_indices, recv_num = (
             self.op.dispatch(
-                p.x,
+                p.dispatch_x,
                 p.weights,
                 p.scales,
                 p.indices,
@@ -283,15 +393,17 @@ class MoRIBackend:
         return types.SimpleNamespace(
             dispatch_output=dispatch_output,
             dispatch_weights=dispatch_weights,
+            dispatch_scales=_scales,
             dispatch_indices=dispatch_indices,
             recv_num=recv_num[0],
-            combine_input=dispatch_output.to(torch.bfloat16),
+            combine_input=None,
         )
 
     def stage(self, p, h):
         rows = getattr(p, "recv_tokens", None)
-        if not isinstance(rows, int) or rows < 0 or rows > h.combine_input.size(0):
+        if not isinstance(rows, int) or rows < 0 or rows > h.dispatch_output.size(0):
             raise RuntimeError("MoRI receive count was not validated before staging")
+        h.combine_input = self._semantic_recv(h, rows)
         if self._external_input:
             return None
         buffer = self.op.get_registered_combine_input_buffer(
@@ -332,7 +444,13 @@ class MoRIBackend:
             self.experts_per_rank,
         )
         return types.SimpleNamespace(
-            payload=h.dispatch_output[:count],
+            payload=self._semantic_recv(h, count)[:count],
+            encoded_payload=h.dispatch_output[:count],
+            scales=(
+                h.dispatch_scales[:count]
+                if h.dispatch_scales is not None
+                else None
+            ),
             expert_ids=expert_ids,
             weights=weights,
             local_expert_counts=torch.bincount(
@@ -343,11 +461,58 @@ class MoRIBackend:
 
     def combine_transformed(self, p, h, transformed):
         h.combine_input = transformed.to(torch.bfloat16)
-        self.stage(p, h)
+        rows = getattr(p, "recv_tokens", None)
+        if not isinstance(rows, int) or rows < 0 or rows > h.combine_input.size(0):
+            raise RuntimeError("MoRI receive count was not validated before transformed combine")
+        if not self._external_input:
+            buffer = self.op.get_registered_combine_input_buffer(
+                torch.bfloat16, hidden_dim=h.combine_input.size(1)
+            )
+            buffer[:rows, :].copy_(h.combine_input[:rows, :])
+            h.combine_input = buffer
         return self.combine(p, h)
 
     def recv_tokens(self, h):
         return int(h.recv_num.item())
+
+    def _semantic_recv(self, h, rows):
+        if not self._fp8_dispatch:
+            return h.dispatch_output
+        if not hasattr(h, "recv_semantic"):
+            if h.dispatch_scales is None:
+                raise ep_precision.PrecisionError(
+                    "MoRI FP8 dispatch did not return scaling factors"
+                )
+            semantic = torch.empty(
+                h.dispatch_output.shape,
+                dtype=torch.bfloat16,
+                device=h.dispatch_output.device,
+            )
+            semantic[:rows].copy_(ep_precision.dequantize_dispatch(
+                torch,
+                h.dispatch_output[:rows],
+                h.dispatch_scales[:rows],
+                self.communication_precision["dispatch"],
+            ))
+            h.recv_semantic = semantic
+            h.recv_semantic_rows = rows
+        elif h.recv_semantic_rows != rows:
+            raise RuntimeError("MoRI receive count changed for one dispatch handle")
+        return h.recv_semantic
+
+    def oracle_dispatch_payload(self, payload):
+        return ep_precision.encode_dispatch(
+            torch, payload, self.communication_precision
+        ).semantic
+
+    def precision_evidence(self, problem, view=None):
+        return ep_precision.precision_evidence(
+            torch,
+            profile_id=self.precision_profile_id,
+            profile=self.communication_precision,
+            problem=problem,
+            view=view,
+        )
 
     def finalize(self, rc):
         try:

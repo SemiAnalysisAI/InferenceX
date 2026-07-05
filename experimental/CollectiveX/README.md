@@ -12,7 +12,11 @@ combine, and paired roundtrip latency across EP libraries and accelerator system
 > Publication hold: historical schema 3-5 data is diagnostic. No current dataset is approved for
 > rankings, recommendations, or regression baselines.
 
-## v1 Execution Profile
+> Development status: the sections below document the implemented BF16 pre-V1 baseline, not the
+> final V1 qualification contract. Precision profiles, full point-level publication, and branch-only
+> publication are under active implementation; case counts and digests are not frozen.
+
+## Implemented Pre-V1 Execution Profile
 
 Every scheduled case is BF16 with backend-tuned resources and packed placement. The explicit mode
 selects one of two contracts:
@@ -29,7 +33,8 @@ warmups before each measured component at every trial/point. Roundtrip is measur
 iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the
 headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
 
-The canonical matrix covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X. It requests
+The implemented baseline matrix covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X.
+It requests
 608 cases / 1,600 token points: 364 runnable cases / 940 points, emitted as 58 executable workflow
 shards/allocation cells, plus 244 explicit unsupported cases / 660 points. `sweep_matrix.py`
 materializes every token ladder and rejects missing, stale, malformed, or altered shard controls.
@@ -70,7 +75,8 @@ reports that its EP8 communicator lacks Device API symmetric-memory support; re-
 requires an all-rank CUDA P2P/LSA-capable runtime. Other NVIDIA SKUs remain unvalidated until their
 GPU outcomes pass the native correctness and publication gates.
 
-Removed v1 axes include cached-layout `[cl]`, runtime-visible `[rv]`, FP8, quantized combine,
+Axes not implemented in this baseline include cached-layout `[cl]`, runtime-visible `[rv]`, FP8,
+quantized combine,
 extra routing distributions, activation profiles, uneven allocation, placement permutations, model
 envelopes, and scaling studies.
 
@@ -82,11 +88,13 @@ raw GitHub artifacts. Runs default to `release_tag=unversioned` and are diagnost
 must explicitly select `release_tag=v1`; setup then requires the locked full-matrix digest and emits
 a run/attempt/source-bound `cxrelease-v1-*` marker. Partial and filtered runs cannot receive it.
 
-`.github/workflows/collectivex-publish.yml` is an explicit V1 gate. It accepts exactly three
-successful tagged sweep run IDs from one source SHA, revalidates their GitHub metadata and release
-markers, and runs `publisher.py` in a disposable runner-local workspace. Only a fully promoted,
-privacy-checked, content-addressed dataset is uploaded as `cxpublication-v1-*`; raw artifacts and
-the private publisher workspace are never exposed to the frontend.
+The main-registered `.github/workflows/collectivex-sweep.yml` provides `sweep`, `publish-v1`, and
+`refresh-v1` operations, so its branch revision can be dispatched with `--ref collectivex` without
+a standalone branch-only workflow. Publication accepts exactly three successful first-attempt tagged
+sweep run IDs from one source SHA, revalidates their metadata and release markers, and runs
+`publisher.py` in a disposable runner-local workspace. Refresh revalidates and reuploads only the
+exact content-addressed sanitized dataset. Raw artifacts and the private publisher workspace are
+never exposed to the frontend.
 
 There is no results server, attached store, Vercel storage, GCP, Neon, managed database, or managed
 object store. With the existing server-side `GITHUB_TOKEN`, the frontend discovers the latest

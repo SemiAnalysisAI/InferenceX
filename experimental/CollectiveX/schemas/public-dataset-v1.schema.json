@@ -32,8 +32,15 @@
                     "matrix_id",
                     "allocation_ids",
                     "required_allocations",
+                    "qualification_indices",
                     "requested_cases",
                     "terminal_cases",
+                    "measured_cases",
+                    "unsupported_cases",
+                    "requested_points",
+                    "terminal_points",
+                    "measured_points",
+                    "unsupported_points",
                     "policy"
                   ],
             "properties": {
@@ -42,12 +49,19 @@
                     "matrix_id": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/sha256"}]},
                     "allocation_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/allocationId"}},
                     "required_allocations": {"const": 3},
+                    "qualification_indices": {"type":"array","minItems":0,"maxItems":3,"uniqueItems":true,"items":{"enum":[1,2,3]}},
                     "requested_cases": {"type": "integer","minimum": 0},
                     "terminal_cases": {"type": "integer","minimum": 0},
+                    "measured_cases": {"type": "integer","minimum": 0},
+                    "unsupported_cases": {"type": "integer","minimum": 0},
+                    "requested_points": {"type": "integer","minimum": 0},
+                    "terminal_points": {"type": "integer","minimum": 0},
+                    "measured_points": {"type": "integer","minimum": 0},
+                    "unsupported_points": {"type": "integer","minimum": 0},
                     "policy": {"const": "collectivex-decision-grade-v1"}
                   }
           },
-      "coverage": {"type": "array","items": {"$ref": "#/$defs/coverage"}},
+      "coverage": {"type": "array","uniqueItems":true,"items": {"$ref": "#/$defs/coverage"}},
       "attempts": {"type": "array","items": {"$ref": "#/$defs/attempt"}},
       "series": {"type": "array","items": {"$ref": "#/$defs/series"}},
       "cohorts": {"type": "array","items": {"$ref": "#/$defs/cohort"}},
@@ -65,11 +79,129 @@
       "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
       "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
       "safeId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 128},
+      "communicationAxis": {
+            "type":"object",
+            "additionalProperties":false,
+            "required": [
+                    "alignment_contract","api_input_dtype","api_output_dtype","communication_format",
+                    "conversion_boundary","padding_contract","quantization_origin","scale_dtype",
+                    "scale_group_size","scale_layout"
+                  ],
+            "properties": {
+                    "alignment_contract":{"enum":["native-bf16-vector-alignment","hidden-block-128","native-fp8-vector-alignment","value-block-64"]},
+                    "api_input_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
+                    "api_output_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
+                    "communication_format":{"enum":["bf16","fp8-e4m3fn","fp8-e4m3fnuz","logfmt10"]},
+                    "conversion_boundary":{"enum":["none","before-dispatch-timing","inside-dispatch-timing","inside-combine-timing"]},
+                    "padding_contract":{"enum":["none","right-zero-pad-hidden-to-128","right-zero-pad-values-to-64"]},
+                    "quantization_origin":{"enum":["none","caller-prequantized","backend-fused","backend-internal","backend-internal-direct-cast"]},
+                    "scale_dtype":{"oneOf":[{"type":"null"},{"enum":["f32","implicit-logfmt10"]}]},
+                    "scale_group_size":{"oneOf":[{"type":"null"},{"enum":[64,128]}]},
+                    "scale_layout":{"enum":["none","per-token-hidden-block","dynamic-per-64-values"]}
+                  }
+          },
+      "precisionProfile": {
+            "enum": [
+                    "d-bf16.c-bf16",
+                    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+                    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+                    "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
+                    "d-bf16.c-logfmt10-dynamic64",
+                    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
+                    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+                    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+                    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+                    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
+                  ]
+          },
+      "byteAccounting": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["accounting_contract","activation_data_bytes","scale_bytes","total_logical_bytes"],
+            "properties": {
+                    "accounting_contract":{"const":"activation-data-plus-scales-v1"},
+                    "activation_data_bytes":{"type":"integer","minimum":0},
+                    "scale_bytes":{"type":"integer","minimum":0},
+                    "total_logical_bytes":{"type":"integer","minimum":0}
+                  }
+          },
       "publicationTier": {"enum": ["official","comparable-experimental"]},
       "label": {"type": "string","minLength": 1,"maxLength": 160},
       "nullableLabel": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/label"}]},
       "reason": {"oneOf": [{"type": "null"},{"type": "string","pattern": "^[a-z0-9][a-z0-9.-]*$","maxLength": 96}]},
+      "reasonId": {"type":"string","pattern":"^[a-z0-9][a-z0-9.-]*$","maxLength":96},
       "outcome": {"enum": ["success","unsupported","failed","invalid","diagnostic"]},
+      "precisionAxisEvidence": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":[
+                    "dequantized_semantics","encoded_payload_valid","max_abs_error","max_rel_error",
+                    "passed","saturation_count","saturation_rate","scales_finite","scales_positive"
+                  ],
+            "properties": {
+                    "dequantized_semantics":{"type":"boolean"},
+                    "encoded_payload_valid":{"type":"boolean"},
+                    "max_abs_error":{"type":"number","minimum":0},
+                    "max_rel_error":{"type":"number","minimum":0},
+                    "passed":{"type":"boolean"},
+                    "saturation_count":{"type":"integer","minimum":0},
+                    "saturation_rate":{"type":"number","minimum":0,"maximum":1},
+                    "scales_finite":{"oneOf":[{"type":"null"},{"type":"boolean"}]},
+                    "scales_positive":{"oneOf":[{"type":"null"},{"type":"boolean"}]}
+                  }
+          },
+      "precisionEvidence": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["combine","dispatch","passed","profile_id"],
+            "properties": {
+                    "combine":{"$ref":"#/$defs/precisionAxisEvidence"},
+                    "dispatch":{"$ref":"#/$defs/precisionAxisEvidence"},
+                    "passed":{"type":"boolean"},
+                    "profile_id":{"$ref":"#/$defs/precisionProfile"}
+                  }
+          },
+      "pointCorrectness": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["semantic_pass","precision"],
+            "properties": {
+                    "semantic_pass":{"type":"boolean"},
+                    "precision":{"$ref":"#/$defs/precisionEvidence"}
+                  }
+          },
+      "pointStability": {
+            "type":"object",
+            "additionalProperties":false,
+            "allOf":[
+                    {
+                              "if":{"properties":{"complete":{"const":true}},"required":["complete"]},
+                              "then":{"properties":{
+                                      "qualification_indices":{"const":[1,2,3]},
+                                      "p50_max_min_ratio":{"type":"number","minimum":1},
+                                      "p99_max_min_ratio":{"type":"number","minimum":1}
+                                    }},
+                              "else":{"properties":{
+                                      "p50_max_min_ratio":{"type":"null"},
+                                      "p99_max_min_ratio":{"type":"null"},
+                                      "stable_p50":{"const":false},
+                                      "stable_p99":{"const":false}
+                                    }}
+                            }
+                  ],
+            "required":[
+                    "complete","qualification_indices","p50_max_min_ratio","p99_max_min_ratio",
+                    "stable_p50","stable_p99"
+                  ],
+            "properties": {
+                    "complete":{"type":"boolean"},
+                    "qualification_indices":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":[1,2,3]}},
+                    "p50_max_min_ratio":{"oneOf":[{"type":"null"},{"type":"number","minimum":1}]},
+                    "p99_max_min_ratio":{"oneOf":[{"type":"null"},{"type":"number","minimum":1}]},
+                    "stable_p50":{"type":"boolean"},
+                    "stable_p99":{"type":"boolean"}
+                  }
+          },
       "coverageTopology": {
             "type": "object",
             "additionalProperties": false,
@@ -96,6 +228,44 @@
                     "topology_class": {"$ref": "#/$defs/safeId"}
                   }
           },
+      "coverageResource": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["mode","profile","comm_units_kind","configured_units"],
+            "properties": {
+                    "mode":{"const":"fixed-profile"},
+                    "profile":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/safeId"}]},
+                    "comm_units_kind":{"$ref":"#/$defs/nullableLabel"},
+                    "configured_units":{"oneOf":[{"type":"null"},{"type":"integer","minimum":1}]}
+                  }
+          },
+      "coveragePoint": {
+            "type":"object",
+            "additionalProperties":false,
+            "allOf":[
+                    {
+                              "if":{"properties":{"terminal_status":{"const":"measured"}},"required":["terminal_status"]},
+                              "then":{"properties":{"point_id":{"$ref":"#/$defs/pointId"},"series_id":{"$ref":"#/$defs/seriesId"},"reason":{"type":"null"}}}
+                            },
+                    {
+                              "if":{"properties":{"terminal_status":{"const":"unsupported"}},"required":["terminal_status"]},
+                              "then":{"properties":{"point_id":{"type":"null"},"series_id":{"type":"null"},"reason":{"$ref":"#/$defs/reasonId"}}}
+                            },
+                    {
+                              "if":{"properties":{"terminal_status":{"enum":["failed","invalid"]}},"required":["terminal_status"]},
+                              "then":{"properties":{"reason":{"$ref":"#/$defs/reasonId"}}}
+                            }
+                  ],
+            "required":["point_id","series_id","tokens_per_rank","global_tokens","terminal_status","reason"],
+            "properties": {
+                    "point_id":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/pointId"}]},
+                    "series_id":{"oneOf":[{"type":"null"},{"$ref":"#/$defs/seriesId"}]},
+                    "tokens_per_rank":{"type":"integer","minimum":1},
+                    "global_tokens":{"type":"integer","minimum":1},
+                    "terminal_status":{"enum":["measured","unsupported","failed","invalid","diagnostic"]},
+                    "reason":{"$ref":"#/$defs/reason"}
+                  }
+          },
       "coverage": {
             "type": "object",
             "additionalProperties": false,
@@ -104,10 +274,21 @@
                     "label",
                     "required",
                     "sku",
+                    "suite",
+                    "workload",
+                    "publication_tier",
                     "backend",
+                    "backend_generation",
                     "mode",
                     "phase",
+                    "routing",
+                    "eplb",
+                    "precision_profile",
+                    "dispatch_precision",
+                    "combine_precision",
+                    "resource",
                     "topology",
+                    "points",
                     "disposition",
                     "selected_attempt_id",
                     "outcome",
@@ -120,10 +301,21 @@
                     "label": {"$ref": "#/$defs/label"},
                     "required": {"type": "boolean"},
                     "sku": {"$ref": "#/$defs/safeId"},
+                    "suite": {"$ref":"#/$defs/safeId"},
+                    "workload": {"$ref":"#/$defs/safeId"},
+                    "publication_tier": {"$ref":"#/$defs/publicationTier"},
                     "backend": {"$ref": "#/$defs/safeId"},
+                    "backend_generation": {"$ref":"#/$defs/nullableLabel"},
                     "mode": {"enum": ["normal","low-latency"]},
                     "phase": {"enum": ["decode","prefill"]},
+                    "routing": {"enum":["uniform","zipf"]},
+                    "eplb": {"type":"boolean"},
+                    "precision_profile": {"$ref":"#/$defs/precisionProfile"},
+                    "dispatch_precision": {"$ref":"#/$defs/communicationAxis"},
+                    "combine_precision": {"$ref":"#/$defs/communicationAxis"},
+                    "resource": {"$ref":"#/$defs/coverageResource"},
                     "topology": {"$ref": "#/$defs/coverageTopology"},
+                    "points": {"type":"array","minItems":1,"uniqueItems":true,"items":{"$ref":"#/$defs/coveragePoint"}},
                     "disposition": {"enum": ["runnable","unsupported"]},
                     "selected_attempt_id": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/attemptId"}]},
                     "outcome": {"$ref": "#/$defs/outcome"},
@@ -142,6 +334,7 @@
                     "allocation_id",
                     "run_id",
                     "run_attempt",
+                    "qualification_index",
                     "attempt_index",
                     "selected",
                     "outcome",
@@ -166,6 +359,7 @@
                     "allocation_id": {"$ref": "#/$defs/allocationId"},
                     "run_id": {"type": "string","pattern": "^[1-9][0-9]*$"},
                     "run_attempt": {"type": "integer","minimum": 1},
+                    "qualification_index": {"type":"integer","minimum":1,"maximum":3},
                     "attempt_index": {"type": "integer","minimum": 1},
                     "selected": {"type": "boolean"},
                     "outcome": {"$ref": "#/$defs/outcome"},
@@ -228,16 +422,60 @@
       "component": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["origin","latency_us","logical_bytes","logical_payload_rate_gbps_at_latency_percentile","sample_count"],
+            "allOf":[
+                    {
+                              "if":{"properties":{"origin":{"const":"measured"}},"required":["origin"]},
+                              "then":{"properties":{"sample_count":{"const":512}}}
+                            },
+                    {
+                              "if":{"properties":{"origin":{"const":"derived"}},"required":["origin"]},
+                              "then":{"properties":{"sample_count":{"type":"null"}}}
+                            }
+                  ],
+            "required": ["origin","latency_us","byte_provenance","activation_data_rate_gbps_at_latency_percentile","total_logical_data_rate_gbps_at_latency_percentile","sample_count"],
             "properties": {
                     "origin": {"enum": ["measured","derived"]},
                     "latency_us": {"$ref": "#/$defs/percentiles"},
-                    "logical_bytes": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]},
-                    "logical_payload_rate_gbps_at_latency_percentile": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/percentiles"}]},
+                    "byte_provenance": {"$ref":"#/$defs/byteAccounting"},
+                    "activation_data_rate_gbps_at_latency_percentile": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/percentiles"}]},
+                    "total_logical_data_rate_gbps_at_latency_percentile": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/percentiles"}]},
                     "sample_count": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]}
                   }
           },
       "nullableComponent": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/component"}]},
+      "trialDiagnosticComponent": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["drift_flagged","first_last_median_ratio","outlier_flagged","robust_outlier_fraction","trial_count"],
+            "properties": {
+                    "drift_flagged":{"type":"boolean"},
+                    "first_last_median_ratio":{"type":"number","minimum":1},
+                    "outlier_flagged":{"type":"boolean"},
+                    "robust_outlier_fraction":{"type":"number","minimum":0,"maximum":1},
+                    "trial_count":{"const":192}
+                  }
+          },
+      "nullableTrialDiagnosticComponent": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/trialDiagnosticComponent"}]},
+      "trialDiagnostics": {
+            "type":"object",
+            "additionalProperties":false,
+            "required":["components","flagged","reasons"],
+            "properties": {
+                    "components": {
+                              "type":"object",
+                              "additionalProperties":false,
+                              "required":["dispatch","stage","combine","roundtrip"],
+                              "properties": {
+                                      "dispatch":{"$ref":"#/$defs/nullableTrialDiagnosticComponent"},
+                                      "stage":{"$ref":"#/$defs/nullableTrialDiagnosticComponent"},
+                                      "combine":{"$ref":"#/$defs/nullableTrialDiagnosticComponent"},
+                                      "roundtrip":{"$ref":"#/$defs/nullableTrialDiagnosticComponent"}
+                                    }
+                            },
+                    "flagged":{"type":"boolean"},
+                    "reasons":{"type":"array","maxItems":2,"uniqueItems":true,"items":{"enum":["trial-drift","trial-outliers"]}}
+                  }
+          },
       "point": {
             "type": "object",
             "additionalProperties": false,
@@ -245,7 +483,10 @@
                     "point_id",
                     "tokens_per_rank",
                     "global_tokens",
-                    "correct",
+                    "anomalies",
+                    "correctness",
+                    "stability",
+                    "trial_diagnostics",
                     "routing",
                     "components",
                     "roundtrip_token_rate_at_latency_percentile",
@@ -255,7 +496,10 @@
                     "point_id": {"$ref": "#/$defs/pointId"},
                     "tokens_per_rank": {"type": "integer","minimum": 1},
                     "global_tokens": {"type": "integer","minimum": 1},
-                    "correct": {"type": "boolean"},
+                    "anomalies": {"type":"array","maxItems":16,"uniqueItems":true,"items":{"$ref":"#/$defs/reasonId"}},
+                    "correctness": {"$ref":"#/$defs/pointCorrectness"},
+                    "stability": {"$ref":"#/$defs/pointStability"},
+                    "trial_diagnostics":{"$ref":"#/$defs/trialDiagnostics"},
                     "routing": {
                               "type": "object",
                               "additionalProperties": false,
@@ -283,16 +527,17 @@
                     "components": {
                               "type": "object",
                               "additionalProperties": false,
-                              "required": ["dispatch","combine","roundtrip","isolated_sum"],
+                              "required": ["dispatch","stage","combine","roundtrip","isolated_sum"],
                               "properties": {
                                           "dispatch": {"$ref": "#/$defs/nullableComponent"},
+                                          "stage": {"$ref":"#/$defs/nullableComponent"},
                                           "combine": {"$ref": "#/$defs/nullableComponent"},
                                           "roundtrip": {"$ref": "#/$defs/nullableComponent"},
                                           "isolated_sum": {"$ref": "#/$defs/nullableComponent"}
                                         }
                             },
                     "roundtrip_token_rate_at_latency_percentile": {"$ref": "#/$defs/percentiles"},
-                    "evidence_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/evidenceId"}}
+                    "evidence_ids": {"type": "array","minItems":1,"maxItems":3,"uniqueItems": true,"items": {"$ref": "#/$defs/evidenceId"}}
                   }
           },
       "series": {
@@ -387,8 +632,9 @@
                                           "experts",
                                           "routing",
                                           "eplb",
-                                          "dispatch_dtype",
-                                          "combine_dtype",
+                                          "precision_profile",
+                                          "dispatch_precision",
+                                          "combine_precision",
                                           "activation_profile"
                                         ],
                               "properties": {
@@ -398,16 +644,38 @@
                                           "experts": {"type": "integer","minimum": 1},
                                           "routing": {"enum": ["uniform","zipf"]},
                                           "eplb": {"type": "boolean"},
-                                          "dispatch_dtype": {"const": "bf16"},
-                                          "combine_dtype": {"const": "bf16"},
-                                          "activation_profile": {"const": "canonical-counter-source-v3"}
+                                          "precision_profile": {"$ref":"#/$defs/precisionProfile"},
+                                          "dispatch_precision": {"$ref":"#/$defs/communicationAxis"},
+                                          "combine_precision": {"$ref":"#/$defs/communicationAxis"},
+                                          "activation_profile": {"const": "canonical-counter-source-v4"}
                                         }
                             },
                     "eplb": {
                               "type": "object",
                               "additionalProperties": false,
+                              "allOf":[
+                                      {
+                                                "if":{"properties":{"enabled":{"const":true}},"required":["enabled"]},
+                                                "then":{"properties":{
+                                                        "calibration_workload_id":{"$ref":"#/$defs/workloadId"},
+                                                        "calibration_trace_sha256":{"$ref":"#/$defs/sha256"},
+                                                        "calibration_window":{"const":"collectivex-eplb-calibration-window-v1"},
+                                                        "calibration_token_offset":{"type":"integer","minimum":0}
+                                                      }},
+                                                "else":{"properties":{
+                                                        "calibration_workload_id":{"type":"null"},
+                                                        "calibration_trace_sha256":{"type":"null"},
+                                                        "calibration_window":{"type":"null"},
+                                                        "calibration_token_offset":{"type":"null"}
+                                                      }}
+                                              }
+                                    ],
                               "required": [
                                           "enabled",
+                                          "calibration_workload_id",
+                                          "calibration_trace_sha256",
+                                          "calibration_window",
+                                          "calibration_token_offset",
                                           "planner",
                                           "mapping_sha256",
                                           "logical_experts",
@@ -421,6 +689,10 @@
                                         ],
                               "properties": {
                                           "enabled": {"type": "boolean"},
+                                          "calibration_workload_id": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/workloadId"}]},
+                                          "calibration_trace_sha256": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/sha256"}]},
+                                          "calibration_window": {"oneOf":[{"type":"null"},{"const":"collectivex-eplb-calibration-window-v1"}]},
+                                          "calibration_token_offset": {"oneOf":[{"type":"null"},{"type":"integer","minimum":0}]},
                                           "planner": {"$ref": "#/$defs/nullableLabel"},
                                           "mapping_sha256": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/sha256"}]},
                                           "logical_experts": {"type": "integer","minimum": 1},
@@ -438,7 +710,7 @@
                               "additionalProperties": false,
                               "required": ["mode","profile","comm_units_kind","configured_units"],
                               "properties": {
-                                          "mode": {"const": "tuned"},
+                                          "mode": {"const": "fixed-profile"},
                                           "profile": {"$ref": "#/$defs/safeId"},
                                           "comm_units_kind": {"$ref": "#/$defs/nullableLabel"},
                                           "configured_units": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]}
@@ -457,12 +729,13 @@
                                           "trials",
                                           "warmups",
                                           "samples_per_component",
+                                          "qualification_indices",
                                           "headline_component",
                                           "headline_percentile"
                                         ],
                               "properties": {
                                           "contract": {"enum": ["layout-and-dispatch-v1","expert-packed-weighted-combine-v1"]},
-                                          "component_order_contract": {"enum": ["roundtrip-dispatch-activation-only-combine-v2","roundtrip-dispatch-gate-weighted-combine-v1"]},
+                                          "component_order_contract": {"const":"qualification-hash-rotated-components-v1"},
                                           "combine_semantics": {"enum": ["activation-only","gate-weighted"]},
                                           "payload_unit": {"enum": ["token-rank","token-expert"]},
                                           "sampling_contract": {"const": "fixed-512-v1"},
@@ -470,6 +743,7 @@
                                           "trials": {"const": 64},
                                           "warmups": {"const": 32},
                                           "samples_per_component": {"const": 512},
+                                          "qualification_indices": {"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":[1,2,3]}},
                                           "headline_component": {"const": "roundtrip"},
                                           "headline_percentile": {"const": "p99"}
                                         }
@@ -494,7 +768,7 @@
                   ],
             "properties": {
                     "cohort_id": {"type": "string","pattern": "^cxcohort-v1-[0-9a-f]{64}$"},
-                    "kind": {"enum": ["library","chip","system","routing"]},
+                    "kind": {"enum": ["library","chip","system","routing","dispatch-precision","combine-precision","precision-pair"]},
                     "label": {"$ref": "#/$defs/label"},
                     "description": {"$ref": "#/$defs/label"},
                     "series_ids": {"type": "array","minItems": 2,"uniqueItems": true,"items": {"$ref": "#/$defs/seriesId"}},
@@ -511,7 +785,7 @@
             "properties": {
                     "operation": {"const": "roundtrip"},
                     "statistic": {"enum": ["p50","p99"]},
-                    "measure": {"enum": ["latency_us","logical_payload_rate_gbps_at_latency_percentile"]},
+                    "measure": {"enum": ["latency_us","activation_data_rate_gbps_at_latency_percentile","total_logical_data_rate_gbps_at_latency_percentile"]},
                     "objective": {"enum": ["min","max"]},
                     "tokens_per_rank": {"type": "integer","minimum": 1},
                     "phase": {"enum": ["decode","prefill"]}
@@ -566,7 +840,7 @@
                     "recommendation_id": {"type": "string","pattern": "^cxrecommendation-v1-[0-9a-f]{64}$"},
                     "cohort_id": {"type": "string","pattern": "^cxcohort-v1-[0-9a-f]{64}$"},
                     "label": {"$ref": "#/$defs/label"},
-                    "objective": {"enum": ["min-p50-latency","min-p99-latency","max-payload-rate-at-p50-latency","max-payload-rate-at-p99-latency"]},
+                    "objective": {"enum": ["min-p50-latency","min-p99-latency","max-activation-data-rate-at-p50-latency","max-activation-data-rate-at-p99-latency","max-total-logical-data-rate-at-p50-latency","max-total-logical-data-rate-at-p99-latency"]},
                     "series_id": {"$ref": "#/$defs/seriesId"},
                     "point_id": {"$ref": "#/$defs/pointId"},
                     "value": {"type": "number","exclusiveMinimum": 0},

@@ -1,4 +1,4 @@
-# CollectiveX EP v1 Contract
+# CollectiveX EP Pre-V1 Baseline
 
 <div align="center">
 
@@ -6,7 +6,10 @@
 
 </div>
 
-This document defines new CollectiveX results. Historical run notes are evidence, not contract.
+This document describes the implemented BF16 baseline. It is not yet the V1 qualification contract.
+Before any V1-tagged run, this English document must match the implemented precision, measurement,
+publication, and frontend contracts; counts and digests remain unfrozen. Chinese documentation
+synchronization is explicitly deferred for the V1 implementation phase.
 
 ## Product Boundary
 
@@ -18,9 +21,9 @@ CollectiveX is a communication microbenchmark for:
 
 It does not predict serving throughput without a separate correlation study.
 
-## Matrix
+## Implemented Matrix
 
-The promoted workload is `deepseek-v3-v1`: hidden 7168, top-k 8, 256 routed experts, BF16 dispatch
+The implemented workload is `deepseek-v3-v1`: hidden 7168, top-k 8, 256 routed experts, BF16 dispatch
 and combine, packed placement, and backend-tuned resources. Each case explicitly selects normal
 `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
 
@@ -28,7 +31,8 @@ and combine, packed placement, and backend-tuned resources. Each case explicitly
 - `ep-routing-v1`: Zipf with EPLB off/on; decode T=128; prefill T=512.
 - `ep-low-latency-v1`: DeepEP V1/UCCL native low-latency APIs; uniform decode T=1..128 powers of
   two; the capability contract rejects every other backend instead of fabricating a low-latency path.
-- Canonical surface: 608 requested cases / 1,600 token points; 364 runnable cases / 940 points in
+- Implemented baseline surface: 608 requested cases / 1,600 token points; 364 runnable cases / 940
+  points in
   58 executable workflow shards/allocation cells; 244 unsupported cases / 660 points.
 
 | Systems | EP8 | EP16 |
@@ -49,7 +53,7 @@ remains MNNVL scale-up and uses LSA. NVIDIA capabilities declared in source rema
 GPU outcomes pass the native oracle and publisher gates. H100 V2 on the current runner pool is a
 declared unsupported combination in v1 because NCCL 2.30.4 reports no Device API symmetric-memory
 support for its EP8 communicator; that pool can return only after all-rank CUDA P2P/LSA support is
-restored. Removed axes include `[cl]`, `[rv]`, quantization, alternate activation/routing profiles,
+restored. This baseline omits `[cl]`, `[rv]`, quantization, alternate activation/routing profiles,
 uneven allocation, placement permutations, model envelopes, and scaling.
 FlashInfer is excluded from v1 after repeatable intermittent execution failures; those failures are
 not converted into planned-unsupported coverage.
@@ -285,12 +289,14 @@ artifact. `promote` accepts explicit immutable bundle IDs. Default `verify` requ
 one-record `collectivex_public_v1_<sha256>.ndjson` artifact. Raw artifacts and private workspace
 content are never bundled into the application.
 
-Sweeps default to `release_tag=unversioned`. Selecting `v1` requires the locked full-matrix digest
-and emits a marker bound to the run ID, attempt, source SHA, and matrix SHA-256. The manual
-publication workflow accepts exactly three unique successful `CollectiveX Sweep` run IDs from one
-source SHA, revalidates their metadata and exact markers, downloads their immutable artifacts, and
-passes the same provenance assertions to `publisher.py ingest`. Partial, filtered, untagged,
-cross-source, failed, or expired inputs fail closed.
+Sweeps default to `release_tag=unversioned`. The main-registered `collectivex-sweep.yml` owns
+`sweep`, `publish-v1`, and `refresh-v1`, so its branch revision remains dispatchable. V1 emits a
+marker bound to the run ID, first attempt, qualification index, source SHA, and locked matrix digest.
+Publication accepts exactly three unique successful run IDs from one source SHA with qualification
+indices 1, 2, and 3, downloads their immutable artifacts, and passes the same provenance assertions
+to `publisher.py ingest`. Refresh requires an exact source run and dataset digest and reuploads the
+same validated sanitized bytes. Partial, filtered, untagged, cross-source, rerun, failed, expired,
+or digest-mismatched inputs fail closed.
 
 Using a server-side GitHub read token, the frontend discovers the latest successful version-scoped
 publication run and downloads the publication artifact just in time. It requires exactly one root
