@@ -376,9 +376,6 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     *(("28740712155", "b300", 16, "deepep", "low-latency", profile,
        "unsupported", "backend-setup-timeout")
       for profile in (_LL_FP8_PROFILE, _LL_LOGFMT_PROFILE, _LL_FP8_LOGFMT_PROFILE)),
-    *(('28740381789', 'b300', 8, 'deepep', 'low-latency', profile,
-       'unsupported', 'backend-construction-failed')
-      for profile in (_LL_FP8_PROFILE, _LL_LOGFMT_PROFILE, _LL_FP8_LOGFMT_PROFILE)),
 )
 PRECISION_CELL_OVERRIDES.update({
     (profile, backend, sku, ep, mode): {
