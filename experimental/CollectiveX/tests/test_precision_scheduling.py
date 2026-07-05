@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 14)
+        self.assertEqual(len(targets), 13)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -53,10 +53,12 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
 
     def test_precision_probe_workflow_plan_binds_exact_controls(self) -> None:
-        plan = probe_precision.workflow_plan(backend="deepep", only_sku="b200-dgxc")
+        plan = probe_precision.workflow_plan(
+            backend="deepep-hybrid", only_sku="b200-dgxc"
+        )
         self.assertTrue(plan["include"])
         self.assertTrue(all(
-            row["backend"] == "deepep" and row["sku"] == "b200-dgxc"
+            row["backend"] == "deepep-hybrid" and row["sku"] == "b200-dgxc"
             for row in plan["include"]
         ))
         row = plan["include"][0]
@@ -228,15 +230,15 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 80
+            len(targets) - len(capability.provisional_precision_targets()), 81
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 59
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 21
+            sum(item["disposition"] == "unsupported" for item in targets), 22
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 14)
+        self.assertEqual(len(capability.provisional_precision_targets()), 13)
         keys = {
             (
                 item["precision_profile"],
