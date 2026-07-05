@@ -60,6 +60,12 @@ class PrecisionSchedulingTest(unittest.TestCase):
             for row in plan["include"]
         ))
         row = plan["include"][0]
+        exact = probe_precision.workflow_plan(probe_id=row["id"])
+        self.assertEqual(exact["include"], [row])
+        with self.assertRaisesRegex(ValueError, "ID is invalid"):
+            probe_precision.workflow_plan(probe_id="probe-invalid")
+        with self.assertRaisesRegex(ValueError, "select no provisional"):
+            probe_precision.workflow_plan(probe_id="probe-00000000000000000000")
         control = probe_precision.extract_control(
             plan, probe_id=row["id"], sku=row["sku"], backend=row["backend"],
             nodes=row["nodes"],

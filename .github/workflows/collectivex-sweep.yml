@@ -28,6 +28,10 @@ on:
         description: Restrict to one GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi325x|mi355x); blank = all
         type: string
         default: ''
+      probe_id:
+        description: Optional exact provisional probe ID; valid only for probe-precision
+        type: string
+        default: ''
       min_nodes:
         description: Keep only shards with at least this node/tray count (2 keeps every EP16 and GB EP8; blank = all)
         type: string
@@ -87,6 +91,7 @@ jobs:
           INPUT_OPERATION: ${{ inputs.operation }}
           INPUT_SUITES: ${{ inputs.suites }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
+          INPUT_PROBE_ID: ${{ inputs.probe_id }}
           INPUT_MIN_NODES: ${{ inputs.min_nodes }}
           INPUT_MAX_NODES: ${{ inputs.max_nodes }}
           INPUT_MAX_CASES: ${{ inputs.max_cases }}
@@ -122,10 +127,12 @@ jobs:
           if [ "$INPUT_OPERATION" = probe-precision ]; then
             args=(--workflow-plan --backend "$INPUT_BACKEND" --out matrix_full.json)
             [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+            [ -n "$INPUT_PROBE_ID" ] && args+=(--probe-id "$INPUT_PROBE_ID")
             [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
             [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
             python3 tests/probe_precision.py "${args[@]}"
           else
+            [ -z "$INPUT_PROBE_ID" ] || { echo 'probe_id requires probe-precision' >&2; exit 1; }
             args=(--suites "$INPUT_SUITES" --max-cases "$INPUT_MAX_CASES")
             case "$INPUT_BACKEND" in
               all) args+=(--backends all) ;;

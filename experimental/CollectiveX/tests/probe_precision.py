@@ -320,7 +320,7 @@ def _workflow_row(target: dict[str, Any]) -> dict[str, Any]:
 
 def workflow_plan(
     *, backend: str = "all", only_sku: str = "", min_nodes: int = 0,
-    max_nodes: int = 0,
+    max_nodes: int = 0, probe_id: str = "",
 ) -> dict[str, Any]:
     if min_nodes < 0 or max_nodes < 0 or (min_nodes and max_nodes and min_nodes > max_nodes):
         raise ValueError("precision probe node filters are invalid")
@@ -328,6 +328,7 @@ def workflow_plan(
         target for target in provisional_targets()
         if (backend == "all" or target["backend"] == backend)
         and (not only_sku or target["sku"] == only_sku)
+        and (not probe_id or _probe_id(target) == probe_id)
         and (
             not min_nodes
             or capability.topology_for(target["sku"], target["ep"])["nodes"] >= min_nodes
@@ -341,6 +342,8 @@ def workflow_plan(
         raise ValueError("precision probe backend is not registered")
     if only_sku and only_sku not in capability.PLATFORMS:
         raise ValueError("precision probe SKU is not registered")
+    if probe_id and not re.fullmatch(r"probe-[0-9a-f]{20}", probe_id):
+        raise ValueError("precision probe ID is invalid")
     if not targets:
         raise ValueError("precision probe filters select no provisional cells")
     return {
@@ -1154,6 +1157,7 @@ def main() -> int:
         plan = workflow_plan(
             backend=args.backend or "all", only_sku=args.only_sku,
             min_nodes=args.min_nodes, max_nodes=args.max_nodes,
+            probe_id=args.probe_id or "",
         )
         if args.out is None:
             print(json.dumps(plan, allow_nan=False, sort_keys=True, separators=(",", ":")))
