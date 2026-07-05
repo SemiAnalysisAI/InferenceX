@@ -147,6 +147,11 @@ all configured interfaces and active HCA ports exist before backend setup. Scale
 clear these overrides. Scale-out NCCL/RCCL is pinned to `IB` with exact-match HCA selectors so a
 socket fallback fails instead of being mislabeled as RDMA.
 
+`ib_gid_index` is applied only when every selected HCA port reports an Ethernet link layer, where it
+selects the operator-approved RoCE GID. Native InfiniBand profiles retain explicit HCA and service
+level pinning but leave the RoCE-only GID override unset so NVSHMEM/NCCL can use the native LID path.
+Mixed Ethernet and InfiniBand HCA lists are rejected.
+
 `stage_dir` is a pre-existing, runner-owned, non-symlinked base outside the checkout and workflow
 workspace. It is not group- or world-writable and is visible at the same path on the runner and every
 allocated node. Jobs create only a marked mode-0700 execution child, prove cross-node read/write

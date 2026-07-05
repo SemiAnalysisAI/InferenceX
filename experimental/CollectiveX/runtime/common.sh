@@ -617,11 +617,43 @@ cx_nccl_hca_device_name() {
   printf '%s' "${selector%%:*}"
 }
 
+cx_rdma_profile_link_layer() {
+  local sysfs_root="$1" selector device configured_port port_path layer profile=""
+  local -a selectors port_paths
+  IFS=, read -r -a selectors <<< "$CX_RDMA_DEVICES"
+  for selector in "${selectors[@]}"; do
+    device="${selector%%:*}"
+    configured_port=""
+    [ "$selector" = "$device" ] || configured_port="${selector#*:}"
+    if [ -n "$configured_port" ]; then
+      port_paths=("$sysfs_root/$device/ports/$configured_port")
+    else
+      port_paths=("$sysfs_root/$device/ports"/*)
+    fi
+    [ "${#port_paths[@]}" -gt 0 ] || cx_die "RDMA selector has no visible ports"
+    for port_path in "${port_paths[@]}"; do
+      [ -r "$port_path/link_layer" ] || cx_die "RDMA link layer is unavailable"
+      layer="$(< "$port_path/link_layer")"
+      case "$layer" in
+        Ethernet) layer=roce ;;
+        InfiniBand) layer=infiniband ;;
+        *) cx_die "unsupported RDMA link layer" ;;
+      esac
+      [ -z "$profile" ] || [ "$profile" = "$layer" ] \
+        || cx_die "mixed RDMA link layers are unsupported"
+      profile="$layer"
+    done
+  done
+  [ -n "$profile" ] || cx_die "RDMA link layer is unavailable"
+  printf '%s' "$profile"
+}
+
 # Convert private, runner-local network selectors into the public library
 # variables needed inside the container. Values are interface/HCA identifiers,
 # never addresses; the rendezvous hostname is derived from the allocation.
 cx_apply_network_profile() {
-  local nodes="$1" transport="$2" selector rdma_name rdma_names="" ep_nic=""
+  local nodes="$1" transport="$2" rdma_sysfs_root="${3:-/sys/class/infiniband}"
+  local selector rdma_name rdma_names="" ep_nic="" rdma_link_layer=""
   local scaleout=0 single_node_rdma=0
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || cx_die "invalid network placement"
@@ -672,9 +704,12 @@ cx_apply_network_profile() {
   if [ -n "${CX_IB_GID_INDEX:-}" ]; then
     [[ "$CX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$CX_IB_GID_INDEX" -le 255 ] \
       || cx_die "invalid private IB GID index"
-    export NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
-    if [ "$scaleout" = 1 ]; then
-      export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX" UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
+    rdma_link_layer="$(cx_rdma_profile_link_layer "$rdma_sysfs_root")"
+    if [ "$rdma_link_layer" = roce ]; then
+      export NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
+      if [ "$scaleout" = 1 ]; then
+        export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX" UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
+      fi
     fi
   fi
   if [ -n "${CX_RDMA_SERVICE_LEVEL:-}" ]; then

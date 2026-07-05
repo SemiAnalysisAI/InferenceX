@@ -590,7 +590,13 @@ class SamplingContractTest(unittest.TestCase):
             self.assertIn("validation-missing-required-account", rejected.stderr)
 
     def test_scaleout_network_profile_is_explicit_and_allowlisted(self) -> None:
-        command = r'''
+        with tempfile.TemporaryDirectory() as temporary:
+            sysfs = Path(temporary)
+            for device in ("mlx5_0", "mlx5_1"):
+                port = sysfs / device / "ports" / "1"
+                port.mkdir(parents=True)
+                (port / "link_layer").write_text("Ethernet\n")
+            command = r'''
           set -euo pipefail
           source "$1"
           test "$(cx_nccl_hca_device_name '=mlx5_0:1')" = mlx5_0
@@ -603,7 +609,7 @@ class SamplingContractTest(unittest.TestCase):
           cx_apply_network_profile 1 nvlink
           test "$NVSHMEM_DISABLE_IB" = 1
           export CX_BENCH=deepep CX_MODE=low-latency CX_IB_GID_INDEX=3
-          cx_apply_network_profile 1 nvlink
+          cx_apply_network_profile 1 nvlink "$2"
           test -z "${NVSHMEM_DISABLE_IB+x}${NCCL_NET+x}${NCCL_IB_HCA+x}"
           test "$NVSHMEM_HCA_LIST:$NVSHMEM_IB_GID_INDEX" = mlx5_0:1,mlx5_1:1:3
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
@@ -615,7 +621,7 @@ class SamplingContractTest(unittest.TestCase):
           cx_apply_network_profile 4 mnnvl
           test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_HCA_LIST+x}"
           export CX_IB_GID_INDEX=3 CX_RDMA_SERVICE_LEVEL=2
-          cx_apply_network_profile 2 nvlink-rdma
+          cx_apply_network_profile 2 nvlink-rdma "$2"
           test "$NCCL_SOCKET_IFNAME:$GLOO_SOCKET_IFNAME:$UCCL_SOCKET_IFNAME" = ib0:ib0:ib0
           test "$NCCL_NET:$NCCL_IB_HCA" = 'IB:=mlx5_0:1,mlx5_1:1'
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
@@ -623,12 +629,20 @@ class SamplingContractTest(unittest.TestCase):
           test "$MORI_RDMA_DEVICES:$EP_NIC_NAME" = mlx5_0,mlx5_1:mlx5_0
           test "$NCCL_IB_GID_INDEX:$NCCL_IB_SL" = 3:2
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
+          printf 'InfiniBand\n' > "$2/mlx5_0/ports/1/link_layer"
+          printf 'InfiniBand\n' > "$2/mlx5_1/ports/1/link_layer"
+          cx_apply_network_profile 2 nvlink-rdma "$2"
+          test -z "${NVSHMEM_IB_GID_INDEX+x}${NCCL_IB_GID_INDEX+x}${UCCL_IB_GID_INDEX+x}"
+          test "$NVSHMEM_IB_SL:$NCCL_IB_SL:$UCCL_IB_SL" = 2:2:2
         '''
-        subprocess.run(
-            ["bash", "-c", command, "_", str(ROOT / "runtime" / "common.sh")],
-            check=True,
-            env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
-        )
+            subprocess.run(
+                [
+                    "bash", "-c", command, "_",
+                    str(ROOT / "runtime" / "common.sh"), str(sysfs),
+                ],
+                check=True,
+                env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
+            )
 
         v2_adapter = (ROOT / "tests" / "ep_deepep_v2.py").read_text()
         container_runtime = (ROOT / "runtime" / "run_in_container.sh").read_text()
