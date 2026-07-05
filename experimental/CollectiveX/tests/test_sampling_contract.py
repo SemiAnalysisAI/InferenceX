@@ -2347,10 +2347,13 @@ class SamplingContractTest(unittest.TestCase):
             safe_home = root / "safe-home"
             unsafe_home = root / "unsafe-home"
             linked_home = root / "linked-home"
+            linked_child_home = root / "linked-child-home"
             safe_home.mkdir(mode=0o700)
             unsafe_home.mkdir(mode=0o770)
             unsafe_home.chmod(0o770)
             linked_home.symlink_to(safe_home, target_is_directory=True)
+            linked_child_home.mkdir(mode=0o700)
+            (linked_child_home / ".cache").symlink_to(safe_home, target_is_directory=True)
             command = r'''
               set -euo pipefail
               source "$1"
@@ -2358,13 +2361,14 @@ class SamplingContractTest(unittest.TestCase):
               test "$base" = "$2/.cache/inferencex/collectivex-stage"
               test "$(stat -c '%a' "$base" 2>/dev/null || stat -f '%Lp' "$base")" = 700
               ! cx_prepare_implicit_stage_base "$3"
-              ! cx_prepare_implicit_stage_base "$4"
+              test "$(cx_prepare_implicit_stage_base "$4")" = "$2/.cache/inferencex/collectivex-stage"
+              ! cx_prepare_implicit_stage_base "$5"
             '''
             subprocess.run(
                 [
                     "bash", "-c", command, "_",
                     str(ROOT / "runtime" / "common.sh"), str(safe_home),
-                    str(unsafe_home), str(linked_home),
+                    str(unsafe_home), str(linked_home), str(linked_child_home),
                 ],
                 check=True,
                 env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},

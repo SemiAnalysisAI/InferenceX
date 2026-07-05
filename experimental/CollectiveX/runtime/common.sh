@@ -1438,17 +1438,30 @@ import pwd
 import stat
 import sys
 
-home = Path(sys.argv[1] or pwd.getpwuid(os.getuid()).pw_dir)
+def reject(reason):
+    print(f"[collectivex] FATAL: implicit-stage-validation={reason}", file=sys.stderr)
+    raise SystemExit(1)
+
 try:
-    if not home.is_absolute() or Path(os.path.realpath(home)) != home:
-        raise OSError
+    configured_home = Path(sys.argv[1] or pwd.getpwuid(os.getuid()).pw_dir)
+except (KeyError, OSError):
+    reject("account-home")
+if not configured_home.is_absolute():
+    reject("path-shape")
+home = Path(os.path.realpath(configured_home))
+try:
     metadata = os.stat(home, follow_symlinks=False)
-    if (
-        not stat.S_ISDIR(metadata.st_mode)
-        or metadata.st_uid != os.getuid()
-        or stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
-    ):
-        raise OSError
+except OSError:
+    reject("home-stat")
+if not stat.S_ISDIR(metadata.st_mode):
+    reject("home-type")
+if metadata.st_uid != os.getuid():
+    reject("home-owner")
+if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
+    reject("home-group-writable")
+if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
+    reject("home-world-writable")
+try:
     current = home
     for component in (".cache", "inferencex", "collectivex-stage"):
         current /= component
@@ -1457,16 +1470,17 @@ try:
         except FileExistsError:
             pass
         metadata = os.stat(current, follow_symlinks=False)
-        if (
-            not stat.S_ISDIR(metadata.st_mode)
-            or metadata.st_uid != os.getuid()
-            or Path(os.path.realpath(current)) != current
-            or stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
-        ):
-            raise OSError
+        if not stat.S_ISDIR(metadata.st_mode):
+            reject("child-type")
+        if metadata.st_uid != os.getuid():
+            reject("child-owner")
+        if Path(os.path.realpath(current)) != current:
+            reject("child-symlink")
+        if stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH):
+            reject("child-writable")
     os.chmod(current, 0o700)
-except (OSError, ValueError):
-    raise SystemExit(1)
+except OSError:
+    reject("child-access")
 print(current, end="")
 PY
 }
