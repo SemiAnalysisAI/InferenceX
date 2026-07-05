@@ -597,8 +597,12 @@ class SamplingContractTest(unittest.TestCase):
           ! (export CX_SOCKET_IFNAME=eth0; unset CX_RDMA_DEVICES; cx_apply_network_profile 2 nvlink-rdma)
           export CX_SOCKET_IFNAME=ib0 CX_RDMA_DEVICES=mlx5_0:1,mlx5_1:1
           export NCCL_NET=Socket NCCL_IB_HCA=stale NVSHMEM_HCA_LIST=stale
+          export CX_SHARD_SKU=b300
           cx_apply_network_profile 1 nvlink
-          test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_HCA_LIST+x}"
+          test "$NVSHMEM_DISABLE_IB" = 1
+          unset CX_SHARD_SKU
+          cx_apply_network_profile 1 nvlink
+          test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_DISABLE_IB+x}${NVSHMEM_HCA_LIST+x}"
           cx_apply_network_profile 4 mnnvl
           test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_HCA_LIST+x}"
           export CX_IB_GID_INDEX=3 CX_RDMA_SERVICE_LEVEL=2
@@ -2427,6 +2431,7 @@ class SamplingContractTest(unittest.TestCase):
           cx_lock_canonical_gha_env b300
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
           test "$CX_STAGE_PARENT_OWNER_OK" = 1
+          test "$NVSHMEM_DISABLE_IB" = 1
 
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_STAGE_DIR=/legacy/group-writable-stage
@@ -2440,6 +2445,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$CX_NCCL_HOME:$CX_MASTER_PORT" = /usr:29551
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
           test -z "${CX_STAGE_PARENT_OWNER_OK+x}"
+          test -z "${NVSHMEM_DISABLE_IB+x}"
           test -z "${CX_MORI_KERNEL_TYPE+x}${MORI_ENABLE_SDMA+x}"
 
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
