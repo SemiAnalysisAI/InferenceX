@@ -497,7 +497,7 @@ jobs:
               if overlay_name == "COLLECTIVEX_B200_CONFIG_CONTENT":
                   if set(overlay["runners"]) != {"b200-dgxc"}:
                       raise ValueError("invalid B200 overlay runner")
-                  private_fields.add("qos")
+                  private_fields.update({"nodelist", "qos"})
               for runner, fields in overlay["runners"].items():
                   if runner not in base.get("runners", {}) or not isinstance(fields, dict) or not fields:
                       raise ValueError("invalid network overlay runner")

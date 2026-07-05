@@ -1367,7 +1367,11 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("secrets.COLLECTIVEX_B200_CONFIG_V1", workflow)
         self.assertIn('set(overlay["runners"]) != {"b200-dgxc"}', workflow)
         self.assertIn("set(fields) - private_fields", workflow)
+        self.assertIn('private_fields.update({"nodelist", "qos"})', workflow)
         self.assertIn('[ -z "${CX_QOS:-}" ] || allocation+=(--qos="$CX_QOS")', (
+            ROOT / "launchers" / "launch_single-slurm.sh"
+        ).read_text())
+        self.assertIn('[ -z "${CX_NODELIST:-}" ] || allocation+=(--nodelist="$CX_NODELIST")', (
             ROOT / "launchers" / "launch_single-slurm.sh"
         ).read_text())
         self.assertIn("COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1", workflow)

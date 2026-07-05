@@ -252,7 +252,9 @@ REQUIRED = {
 ALLOWED = {
     "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "h200-dgxc": REQUIRED["h200-dgxc"] | {"account", "exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
-    "b200-dgxc": REQUIRED["b200-dgxc"] | {"exclude_nodes", "stage_dir", "qos"} | NETWORK_FIELDS,
+    "b200-dgxc": REQUIRED["b200-dgxc"] | {
+        "exclude_nodes", "nodelist", "stage_dir", "qos",
+    } | NETWORK_FIELDS,
     "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "gb200": REQUIRED["gb200"] | NETWORK_FIELDS,
     "gb300": REQUIRED["gb300"] | {"stage_dir"} | NETWORK_FIELDS,
