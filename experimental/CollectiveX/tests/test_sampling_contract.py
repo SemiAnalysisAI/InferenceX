@@ -1196,6 +1196,12 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("CX_BACKEND_SOURCE_SEED_ROOT", workflow)
         self.assertIn("steps.gen.outputs.source_backends", workflow)
         self.assertIn('python3 "$destination/source_archive.py"', workflow)
+        install_source = workflow[workflow.index("- name: Install pinned backend source seed"):]
+        self.assertIn('chmod 600 -- "$archive"', install_source)
+        self.assertLess(
+            install_source.index('chmod 600 -- "$archive"'),
+            install_source.index('python3 "$destination/source_archive.py"'),
+        )
         artifact_validation = workflow[workflow.index("- name: Validate shard artifact safety"):]
         self.assertIn("steps.allocation_cleanup.outcome == 'success'", artifact_validation)
         self.assertIn(

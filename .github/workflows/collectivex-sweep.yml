@@ -401,6 +401,7 @@ jobs:
           destination="$CX_SOURCE_ROOT/experimental/CollectiveX"
           seed_root="$destination/.cx_sources"
           [ -f "$archive" ] && [ ! -e "$seed_root" ] && [ ! -L "$seed_root" ]
+          chmod 600 -- "$archive"
           source "$destination/runtime/common.sh"
           source_path="$(cx_backend_source_path "$seed_root" "$EXPECTED_BACKEND")"
           source_basename="${source_path#"$seed_root/"}"
