@@ -140,9 +140,10 @@ visibility, and remove that exact child after allocation teardown; they never mo
 checkout or create a stage beneath image storage on AMD.
 
 H100, H200, and B200 runners may omit `stage_dir`. Their isolated execution child is then created
-directly under the runner-owned `squash_dir`; that shared parent may be group-writable, but the child
-is mode 0700 and is still validated, marked, cross-node checked, and removed using the same contract.
-All other runners require the stricter dedicated `stage_dir` above.
+directly under the runner-owned `squash_dir`; that shared parent may be group-writable or use the
+sticky bit for shared writes, but a non-sticky world-writable parent is rejected. The child is mode
+0700 and is still validated, marked, cross-node checked, and removed using the same contract. All
+other runners require the stricter dedicated `stage_dir` above.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch

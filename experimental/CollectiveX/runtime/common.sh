@@ -1846,7 +1846,10 @@ try:
         reject("owner")
     if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP and fallback != "1":
         reject("group-writable")
-    if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
+    if (
+        stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH
+        and not (fallback == "1" and metadata.st_mode & stat.S_ISVTX)
+    ):
         reject("world-writable")
     if not os.access(base, os.W_OK | os.X_OK):
         reject("access")

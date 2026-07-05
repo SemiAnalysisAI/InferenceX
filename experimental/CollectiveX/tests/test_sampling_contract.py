@@ -2440,8 +2440,8 @@ class SamplingContractTest(unittest.TestCase):
             squash = root / "squash"
             source = repo / "experimental" / "CollectiveX"
             source.mkdir(parents=True)
-            squash.mkdir(mode=0o770)
-            squash.chmod(0o770)
+            squash.mkdir(mode=0o1777)
+            squash.chmod(0o1777)
             (source / "public.py").write_text("public\n")
             (source / "private-infra.md").write_text("private\n")
             command = r'''
