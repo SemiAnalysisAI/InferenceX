@@ -36,9 +36,11 @@ cx_set_failure_stage() {
 }
 
 cx_fail_stage() {
-  local stage="$1" log_path="${2:-}" diagnostic="unknown"
+  local stage="$1" log_path="${2:-}" diagnostic="unknown" probe_stage=""
   cx_set_failure_stage "$stage"
   if [ -n "$log_path" ] && [ -f "$log_path" ]; then
+    probe_stage="$(grep -aoE 'precision-probe-stage=(distributed-init|runtime-context|backend-construction|construction-consensus|native-operation|operation-consensus|evidence-aggregation)' "$log_path" \
+      | tail -n 1 | cut -d= -f2 || true)"
     if grep -aEqi 'no space left|disk quota|quota exceeded' "$log_path"; then
       diagnostic="storage-capacity"
     elif grep -aEqi 'permission denied|operation not permitted|read-only file system|source mount (creation|ownership validation|permission inspection|permission normalization|permission validation) failed' "$log_path"; then
@@ -71,6 +73,9 @@ cx_fail_stage() {
       diagnostic="missing-runtime"
     elif grep -aEqi 'too many requests|rate.?limit' "$log_path"; then
       diagnostic="registry-rate-limit"
+    elif [ -n "$probe_stage" ] \
+        && grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal' "$log_path"; then
+      diagnostic="${probe_stage}-timeout"
     elif grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal|connection reset|could not resolve|TLS|certificate' "$log_path"; then
       diagnostic="network-or-timeout"
     elif grep -aEqi 'salloc:|srun:.*(unable to create step|step creation|invalid partition|invalid account)|unable to create step|job allocation' "$log_path"; then

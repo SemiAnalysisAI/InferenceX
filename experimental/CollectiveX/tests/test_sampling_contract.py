@@ -2494,6 +2494,28 @@ class SamplingContractTest(unittest.TestCase):
             self.assertNotIn("diagnostic=network-or-timeout", result.stderr)
             self.assertIn("diagnostic=benchmark-case-failure", result.stderr)
 
+    def test_precision_probe_timeout_reports_only_the_last_closed_stage(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "runtime.log"
+            log.write_text(
+                "[collectivex] precision-probe-stage=distributed-init\n"
+                "[collectivex] precision-probe-stage=backend-construction\n"
+                "[collectivex] precision-probe-stage=native-operation\n"
+                "[collectivex] precision probe timed out rc=124 limit=900s\n"
+            )
+            result = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; cx_fail_stage execution "$2"',
+                    "_", str(ROOT / "runtime" / "common.sh"), str(log),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("diagnostic=native-operation-timeout", result.stderr)
+            self.assertNotIn("distributed-init", result.stderr)
+
     def test_private_runtime_failure_signatures_override_case_footer(self) -> None:
         signatures = {
             "DeepEP V2 no-GIN run is outside one realized LSA domain":
