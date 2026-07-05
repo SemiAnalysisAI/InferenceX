@@ -435,7 +435,6 @@ jobs:
         id: sweep_shard
         env:
           COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
-          COLLECTIVEX_OPERATOR_AUDIT_SALT: ${{ secrets.COLLECTIVEX_AUDIT_SALT_V1 }}
           COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
         run: |
           set -euo pipefail
