@@ -83,6 +83,9 @@ cx_fail_stage() {
       diagnostic="network-or-timeout"
     elif grep -aEqi 'salloc:|srun:.*(unable to create step|step creation|invalid partition|invalid account)|unable to create step|job allocation' "$log_path"; then
       diagnostic="scheduler"
+    elif [ -n "$probe_stage" ] \
+        && grep -aEqi 'Traceback \(most recent call last\)|[A-Za-z]+(Error|Exception):' "$log_path"; then
+      diagnostic="${probe_stage}-failed"
     elif grep -aEqi 'ModuleNotFoundError|ImportError:' "$log_path"; then
       diagnostic="python-import"
     elif grep -aEqi 'AttributeError:|TypeError:.*(unexpected|argument|operand)|has no attribute' "$log_path"; then
