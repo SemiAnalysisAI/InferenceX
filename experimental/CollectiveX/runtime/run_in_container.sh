@@ -923,6 +923,7 @@ cx_probe_scaleout_network() {
   if [ "${CX_NODES:-1}" -le 1 ] || [ "${CX_TRANSPORT:-}" = mnnvl ]; then
     return 0
   fi
+  cx_restore_exact_hca_selector || return 1
   [ -n "${GLOO_SOCKET_IFNAME:-}" ] && [ -n "${NCCL_IB_HCA:-}" ] \
     || { cx_log "ERROR: scale-out network selectors are unavailable"; return 1; }
   IFS=, read -r -a interfaces <<< "$GLOO_SOCKET_IFNAME"

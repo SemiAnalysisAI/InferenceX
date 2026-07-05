@@ -13,9 +13,9 @@ combine, and paired roundtrip latency across EP libraries and accelerator system
 > rankings, recommendations, or regression baselines.
 
 > Development status: the V1 precision, point-level publication, branch-only delivery, and frontend
-> contracts are implemented. Validated B200 EP8, H200 EP8, and GB200 EP8/EP16 probe outcomes are
-> recorded, together with seven completed H100 EP8 outcomes; 50 native precision cells remain
-> provisional, so V1 counts/digests are not frozen.
+> contracts are implemented. H100, H200, GB200, and GB300 are terminal; B200 and B300 EP8 are
+> terminal, and B300 EP16 has terminal native outcomes. Twelve B200/MI325X/MI355X precision cells
+> remain provisional, so V1 counts and digests are not frozen.
 
 ## Implemented Pre-V1 Execution Profile
 

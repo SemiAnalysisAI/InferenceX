@@ -703,6 +703,20 @@ cx_apply_network_profile() {
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER=gpu
 }
 
+# Slurm may remove NCCL's leading exact-match marker while propagating an
+# inherited environment. Reconstruct it from the validated private selector at
+# the container boundary instead of accepting a prefix-matched HCA list.
+cx_restore_exact_hca_selector() {
+  if [ "${CX_NODES:-1}" -le 1 ] || [ "${CX_TRANSPORT:-}" = mnnvl ]; then
+    return 0
+  fi
+  [ -n "${CX_RDMA_DEVICES:-}" ] \
+    || { cx_log "ERROR: scale-out RDMA selector is unavailable"; return 1; }
+  [[ "$CX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]] \
+    || { cx_log "ERROR: invalid scale-out RDMA selector"; return 1; }
+  export NCCL_IB_HCA="=$CX_RDMA_DEVICES"
+}
+
 # Prove that the operator-pinned scale-out fabric exists on every allocated
 # node before image import or backend initialization. Selector values and node
 # diagnostics stay in the runner-private log.

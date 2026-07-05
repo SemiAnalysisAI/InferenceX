@@ -620,6 +620,10 @@ class SamplingContractTest(unittest.TestCase):
           cx_apply_network_profile 2 nvlink-rdma
           test "$NCCL_SOCKET_IFNAME:$GLOO_SOCKET_IFNAME:$UCCL_SOCKET_IFNAME" = ib0:ib0:ib0
           test "$NCCL_NET:$NCCL_IB_HCA" = 'IB:=mlx5_0:1,mlx5_1:1'
+          NCCL_IB_HCA=mlx5_0:1,mlx5_1:1
+          export NCCL_IB_HCA CX_NODES=2 CX_TRANSPORT=nvlink-rdma
+          cx_restore_exact_hca_selector
+          test "$NCCL_IB_HCA" = '=mlx5_0:1,mlx5_1:1'
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$MORI_RDMA_DEVICES:$EP_NIC_NAME" = mlx5_0,mlx5_1:mlx5_0
