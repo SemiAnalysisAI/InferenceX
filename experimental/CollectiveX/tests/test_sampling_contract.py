@@ -1841,6 +1841,58 @@ class SamplingContractTest(unittest.TestCase):
         with self.assertRaises(contracts.ContractError):
             contracts._validate_oracle(tampered, "oracle")
 
+        for profile_id, expected in (
+            ("d-bf16.c-logfmt10-dynamic64", {"atol": 3e-2, "rtol": 6e-2}),
+            ("d-bf16.c-fp8-e4m3fn-direct-cast-noscale", {"atol": 4e-2, "rtol": 8e-2}),
+        ):
+            with self.subTest(profile_id=profile_id):
+                precision = identity.precision_profile(profile_id)
+                codec_oracle = copy.deepcopy(oracle)
+                codec_oracle.update(expected)
+                contracts._validate_oracle(
+                    codec_oracle, "oracle", communication_precision=precision
+                )
+                codec_oracle["rtol"] = 5e-2
+                with self.assertRaisesRegex(contracts.ContractError, "rtol"):
+                    contracts._validate_oracle(
+                        codec_oracle, "oracle", communication_precision=precision
+                    )
+
+    def test_precision_evidence_rejects_direct_cast_saturation(self) -> None:
+        profile_id = "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
+        communication_precision = identity.precision_profile(profile_id)
+        axis = {
+            "dequantized_semantics": True,
+            "encoded_payload_valid": True,
+            "max_abs_error": 0.0,
+            "max_rel_error": 0.0,
+            "passed": True,
+            "saturation_count": 0,
+            "saturation_rate": 0.0,
+            "scales_finite": None,
+            "scales_positive": None,
+        }
+        evidence = {
+            "combine": copy.deepcopy(axis),
+            "dispatch": copy.deepcopy(axis),
+            "passed": True,
+            "profile_id": profile_id,
+        }
+        contracts._validate_precision_evidence(
+            evidence, profile_id, communication_precision, "precision"
+        )
+        saturated = copy.deepcopy(evidence)
+        saturated["combine"].update({"saturation_count": 1, "saturation_rate": 0.01})
+        with self.assertRaisesRegex(contracts.ContractError, "passed differs"):
+            contracts._validate_precision_evidence(
+                saturated, profile_id, communication_precision, "precision"
+            )
+        saturated["combine"]["passed"] = False
+        saturated["passed"] = False
+        contracts._validate_precision_evidence(
+            saturated, profile_id, communication_precision, "precision"
+        )
+
     def test_oracle_stability_canonicalizes_native_receive_order(self) -> None:
         source = (HERE / "ep_harness.py").read_text()
         begin = source.index("canonical_order = torch.argsort")
@@ -2658,6 +2710,7 @@ class SamplingContractTest(unittest.TestCase):
                     **os.environ,
                     "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
                     "COLLECTIVEX_CANONICAL_GHA": "1",
+                    "COLLECTIVEX_EXECUTION_ID": f"test-{root.name}",
                     "CX_STAGE_DIR": str(base),
                     "RSYNC_CALLED": str(sentinel),
                 },

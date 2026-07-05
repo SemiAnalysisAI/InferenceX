@@ -514,7 +514,9 @@ def _aggregate_tensor_summaries(records: list[dict[str, Any]]) -> dict[str, Any]
     return {
         "finite": all(record["finite"] for record in records),
         "rank": ranks.pop(),
-        "shapes": sorted({tuple(record["shape"]) for record in records}),
+        "shapes": [
+            list(shape) for shape in sorted({tuple(record["shape"]) for record in records})
+        ],
         "storage_dtype": dtypes.pop(),
     }
 
@@ -549,9 +551,10 @@ def _aggregate_scale_contracts(records: list[dict[str, Any]]) -> dict[str, Any]:
     for field in ("finite", "positive"):
         values = [record[field] for record in records]
         result[field] = None if all(value is None for value in values) else all(value is True for value in values)
-    result["runtime_shapes"] = sorted({
-        tuple(record["runtime_shape"] or ()) for record in records
-    }) if any(record["runtime_shape"] is not None for record in records) else []
+    result["runtime_shapes"] = [
+        list(shape)
+        for shape in sorted({tuple(record["runtime_shape"] or ()) for record in records})
+    ] if any(record["runtime_shape"] is not None for record in records) else []
     return result
 
 

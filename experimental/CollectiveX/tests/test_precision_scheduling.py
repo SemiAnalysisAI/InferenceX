@@ -108,6 +108,31 @@ class PrecisionSchedulingTest(unittest.TestCase):
                 evidence=None,
             )
 
+    def test_precision_probe_aggregates_shapes_as_manifest_arrays(self) -> None:
+        tensor = probe_precision._aggregate_tensor_summaries([
+            {"finite": True, "rank": 2, "shape": [8, 7168], "storage_dtype": "bfloat16"},
+            {"finite": True, "rank": 2, "shape": [16, 7168], "storage_dtype": "bfloat16"},
+        ])
+        self.assertEqual(tensor["shapes"], [[8, 7168], [16, 7168]])
+        self.assertTrue(all(type(shape) is list for shape in tensor["shapes"]))
+
+        scale = probe_precision._aggregate_scale_contracts([
+            {
+                "alignment": "hidden-block-128", "dtype": "f32", "finite": True,
+                "group_size": 128, "layout": "per-token-hidden-block",
+                "padding": "right-zero-pad-hidden-to-128", "positive": True,
+                "runtime_shape": [8, 56], "runtime_storage_dtype": "float32",
+            },
+            {
+                "alignment": "hidden-block-128", "dtype": "f32", "finite": True,
+                "group_size": 128, "layout": "per-token-hidden-block",
+                "padding": "right-zero-pad-hidden-to-128", "positive": True,
+                "runtime_shape": [16, 56], "runtime_storage_dtype": "float32",
+            },
+        ])
+        self.assertEqual(scale["runtime_shapes"], [[8, 56], [16, 56]])
+        self.assertTrue(all(type(shape) is list for shape in scale["runtime_shapes"]))
+
     def test_precision_profiles_bind_exact_formats_and_timing_boundaries(self) -> None:
         scheduled = set(identity.V1_NORMAL_PRECISION_PROFILE_IDS) | set(
             identity.V1_LOW_LATENCY_PRECISION_PROFILE_IDS
@@ -157,6 +182,24 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(
             (logfmt["communication_format"], logfmt["scale_group_size"]),
             ("logfmt10", 64),
+        )
+        self.assertEqual(
+            identity.combine_oracle_tolerances(
+                identity.precision_profile(identity.V1_CONTROL_PRECISION_PROFILE)
+            ),
+            {"atol": 2e-2, "rtol": 5e-2},
+        )
+        self.assertEqual(
+            identity.combine_oracle_tolerances(
+                identity.precision_profile("d-bf16.c-logfmt10-dynamic64")
+            ),
+            {"atol": 3e-2, "rtol": 6e-2},
+        )
+        self.assertEqual(
+            identity.combine_oracle_tolerances(identity.precision_profile(
+                "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
+            )),
+            {"atol": 4e-2, "rtol": 8e-2},
         )
 
         base = {"mode": "normal"}

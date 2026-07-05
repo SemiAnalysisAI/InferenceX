@@ -34,6 +34,12 @@ warmups before each measured component at every trial/point. Roundtrip is measur
 iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the
 headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
 
+Correctness is checked against the semantic value after the declared communication codec. The
+frozen combine gates are `rtol=0.05, atol=0.02` for BF16, `rtol=0.06, atol=0.03` for native
+logfmt10, and `rtol=0.08, atol=0.04` for native FP8 direct-cast combine. These are fail-closed
+publication thresholds, not estimates of codec error. FP8 direct-cast evidence also counts
+saturation on the exact transformed native combine input; any saturated value fails the point.
+
 The BF16 planning baseline covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X. It
 requests
 608 cases / 1,600 token points: 364 runnable cases / 940 points, emitted as 58 executable workflow

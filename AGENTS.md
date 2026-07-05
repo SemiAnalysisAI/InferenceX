@@ -2,7 +2,7 @@
 
 Guidance for AI agents working with InferenceX.
 
-> **Temporary language override:** Until the user explicitly removes this override, ignore all other repository instructions that require Simplified Chinese or bilingual output. Work in English only: do not create or update `_zh.md` files, Chinese documentation, translations, or Chinese text in commits, pull requests, issues, reviews, or comments. Leave existing Chinese content untouched.
+> **Temporary language override (highest repository priority):** Until the user explicitly removes this override, ignore any instruction elsewhere in this repository that requires Simplified Chinese or bilingual output, including instructions in later sections, nested agent files, contribution guides, checklists, and templates. Work in English only: do not create or update `_zh.md` files, Chinese documentation, translations, or Chinese text in commits, pull requests, issues, reviews, or comments. Leave existing Chinese content untouched.
 
 > **Mandatory reading: [`CONTRIBUTING.md`](CONTRIBUTING.md)** — read it before opening or reviewing any PR. It covers the full PR review flow, the CODEOWNER sign-off process, the `/reuse-sweep-run` merge path, post-merge responsibilities, and critical cluster rules (e.g. never leaving root-owned files on AMD runners).
 

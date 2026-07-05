@@ -89,6 +89,11 @@ ORACLE_CONTRACT = identity.V1_CASE_PROFILE["oracle_contract"]
 ORACLE_RTOL = 5e-2
 ORACLE_ATOL = 2e-2
 
+
+def _oracle_tolerances(backend) -> tuple[float, float]:
+    tolerance = identity.combine_oracle_tolerances(backend.communication_precision)
+    return tolerance["atol"], tolerance["rtol"]
+
 EPLB_REDUNDANT_EXPERTS = 32
 EPLB_REFERENCE_TOKENS_PER_RANK = 2048
 EPLB_PLANNER = "greedy-rank-major-v1"
@@ -647,15 +652,14 @@ def _precision_evidence(backend, problem, view, combined, expected_combined) -> 
         evidence = method(problem, view)
         combine_axis = backend.communication_precision["combine"]
         if combine_axis["communication_format"] != "bf16":
+            oracle_atol, oracle_rtol = _oracle_tolerances(backend)
             if combined.shape == expected_combined.shape and combined.numel():
                 absolute = (combined.float() - expected_combined.float()).abs()
                 max_abs_error = float(absolute.max().item())
                 max_rel_error = max_abs_error / (
                     float(expected_combined.float().abs().max().item()) + 1e-6
                 )
-                tolerance = ORACLE_ATOL + float(
-                    getattr(backend, "tolerance", ORACLE_RTOL)
-                ) * expected_combined.float().abs()
+                tolerance = oracle_atol + oracle_rtol * expected_combined.float().abs()
                 semantics = bool((absolute <= tolerance).all().item())
             elif combined.shape == expected_combined.shape:
                 max_abs_error = max_rel_error = 0.0
@@ -674,7 +678,10 @@ def _precision_evidence(backend, problem, view, combined, expected_combined) -> 
                 and direction["scales_positive"] is not False
             )
             direction["passed"] = bool(
-                direction["encoded_payload_valid"] and semantics and scale_ok
+                direction["encoded_payload_valid"]
+                and semantics
+                and scale_ok
+                and direction["saturation_count"] == 0
             )
             evidence["passed"] = bool(
                 evidence["dispatch"]["passed"] and direction["passed"]
@@ -758,6 +765,7 @@ def _run_expert_packed_oracle(
 ):
     """Verify an expert-packed dispatch and native gate-weighted combine."""
     contract = LOW_LATENCY_ORACLE_CONTRACT
+    oracle_atol, oracle_rtol = _oracle_tolerances(backend)
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
@@ -793,12 +801,12 @@ def _run_expert_packed_oracle(
                 backend, "combine_weight_semantics", "undeclared"
             ),
             "receive_count": 0,
-            "atol": ORACLE_ATOL,
+            "atol": oracle_atol,
             "max_absolute_error": None,
             "max_elementwise_relative_error": None,
             "max_relative_error": None,
             "max_weight_error": None,
-            "rtol": ORACLE_RTOL,
+            "rtol": oracle_rtol,
             "checks": {
                 "combine_values": False,
                 "counts": False,
@@ -922,10 +930,10 @@ def _run_expert_packed_oracle(
             float(expected_combined.abs().max().item()) + 1e-6
         )
         max_elementwise_relative_error = float(
-            (absolute_error / expected_combined.abs().clamp_min(ORACLE_ATOL)).max().item()
+            (absolute_error / expected_combined.abs().clamp_min(oracle_atol)).max().item()
         )
         combine_values_ok = bool(torch.allclose(
-            combined.float(), expected_combined, rtol=ORACLE_RTOL, atol=ORACLE_ATOL
+            combined.float(), expected_combined, rtol=oracle_rtol, atol=oracle_atol
         ))
     elif combined.shape == expected_combined.shape:
         max_absolute_error = 0.0
@@ -937,7 +945,7 @@ def _run_expert_packed_oracle(
         max_elementwise_relative_error = None
         max_relative_error = None
         combine_values_ok = False
-    tolerance = float(getattr(backend, "tolerance", ORACLE_RTOL))
+    tolerance = oracle_rtol
     precision = _precision_evidence(backend, problem, view, combined, expected_combined)
     checks = {
         "combine_values": combine_values_ok,
@@ -958,7 +966,7 @@ def _run_expert_packed_oracle(
             and max_relative_error is not None
             and max_relative_error < tolerance
         ),
-        "atol": ORACLE_ATOL,
+        "atol": oracle_atol,
         "combine_weight_semantics": backend.combine_weight_semantics,
         "ordering_contract": ordering_contract,
         "order_sha256": order_sha256,
@@ -968,7 +976,7 @@ def _run_expert_packed_oracle(
         "max_elementwise_relative_error": max_elementwise_relative_error,
         "max_relative_error": max_relative_error,
         "max_weight_error": max_weight_error,
-        "rtol": ORACLE_RTOL,
+        "rtol": oracle_rtol,
         "checks": checks,
     }
 
@@ -997,6 +1005,7 @@ def _run_expert_oracle(
             experts_per_rank,
             seed,
         )
+    oracle_atol, oracle_rtol = _oracle_tolerances(backend)
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
@@ -1021,12 +1030,12 @@ def _run_expert_oracle(
                 backend, "combine_weight_semantics", "undeclared"
             ),
             "receive_count": 0,
-            "atol": ORACLE_ATOL,
+            "atol": oracle_atol,
             "max_absolute_error": None,
             "max_elementwise_relative_error": None,
             "max_relative_error": None,
             "max_weight_error": None,
-            "rtol": ORACLE_RTOL,
+            "rtol": oracle_rtol,
             "checks": {
                 "combine_values": False,
                 "counts": False,
@@ -1123,10 +1132,10 @@ def _run_expert_oracle(
             float(expected_combined.abs().max().item()) + 1e-6
         )
         max_elementwise_relative_error = float(
-            (absolute_error / expected_combined.abs().clamp_min(ORACLE_ATOL)).max().item()
+            (absolute_error / expected_combined.abs().clamp_min(oracle_atol)).max().item()
         )
         combine_values_ok = bool(torch.allclose(
-            combined.float(), expected_combined, rtol=ORACLE_RTOL, atol=ORACLE_ATOL
+            combined.float(), expected_combined, rtol=oracle_rtol, atol=oracle_atol
         ))
     elif combined.shape == expected_combined.shape:
         max_absolute_error = 0.0
@@ -1138,7 +1147,7 @@ def _run_expert_oracle(
         max_elementwise_relative_error = None
         max_relative_error = None
         combine_values_ok = False
-    tolerance = float(getattr(backend, "tolerance", 5e-2))
+    tolerance = oracle_rtol
     precision = _precision_evidence(backend, problem, view, combined, expected_combined)
     checks = {
         "combine_values": combine_values_ok,
@@ -1159,7 +1168,7 @@ def _run_expert_oracle(
             and max_relative_error is not None
             and max_relative_error < tolerance
         ),
-        "atol": ORACLE_ATOL,
+        "atol": oracle_atol,
         "combine_weight_semantics": combine_weight_semantics,
         "ordering_contract": ordering_contract,
         "order_sha256": order_sha256,
@@ -1169,7 +1178,7 @@ def _run_expert_oracle(
         "max_elementwise_relative_error": max_elementwise_relative_error,
         "max_relative_error": max_relative_error,
         "max_weight_error": max_weight_error,
-        "rtol": ORACLE_RTOL,
+        "rtol": oracle_rtol,
         "checks": checks,
     }
 

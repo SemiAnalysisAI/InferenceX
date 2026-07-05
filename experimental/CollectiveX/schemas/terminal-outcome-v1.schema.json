@@ -231,7 +231,7 @@
                     "eplb_reference_tokens_per_rank":{"const":2048},
                     "mode":{"enum":["normal","low-latency"]},
                     "oracle_contract":{"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
-                    "oracle_tolerances":{"const":"rtol=0.05,atol=0.02"},
+                    "oracle_tolerances":{"const":"codec-specific-combine-v1"},
                     "payload_unit":{"enum":["token-rank","token-expert"]},
                     "placement":{"const":"packed"},
                     "percentile_method":{"const":"nearest-rank"},

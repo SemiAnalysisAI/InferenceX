@@ -1453,9 +1453,16 @@ def _validate_component(
 
 
 def _validate_oracle(
-    value: Any, path: str, profile: dict[str, Any] | None = None
+    value: Any,
+    path: str,
+    profile: dict[str, Any] | None = None,
+    communication_precision: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     profile = profile or identity.V1_NORMAL_CASE_PROFILE
+    communication_precision = communication_precision or identity.precision_profile(
+        identity.V1_CONTROL_PRECISION_PROFILE
+    )
+    tolerance = identity.combine_oracle_tolerances(communication_precision)
     oracle = _keys(
         value,
         {"atol", "checks", "combine_weight_semantics", "contract", "dispatch_sha256",
@@ -1485,8 +1492,8 @@ def _validate_oracle(
     )
     if oracle["combine_weight_semantics"] != expected_weight_semantics:
         raise ContractError(f"{path}.combine_weight_semantics differs from v1")
-    _close(oracle["rtol"], 5e-2, f"{path}.rtol")
-    _close(oracle["atol"], 2e-2, f"{path}.atol")
+    _close(oracle["rtol"], tolerance["rtol"], f"{path}.rtol")
+    _close(oracle["atol"], tolerance["atol"], f"{path}.atol")
     for field in ("dispatch_sha256", "order_sha256"):
         digest = oracle[field]
         if digest is not None and (
@@ -1503,7 +1510,7 @@ def _validate_oracle(
     expected_pass = (
         all(checks.values())
         and oracle["max_relative_error"] is not None
-        and oracle["max_relative_error"] < 5e-2
+        and oracle["max_relative_error"] < tolerance["rtol"]
     )
     if oracle["passed"] != expected_pass:
         raise ContractError(f"{path}.passed differs from its evidence")
@@ -1549,7 +1556,7 @@ def _validate_precision_evidence(
             axis["encoded_payload_valid"]
             and axis["dequantized_semantics"]
             and (not expects_scales or (axis["scales_finite"] and axis["scales_positive"]))
-            and saturation_count >= 0
+            and saturation_count == 0
         )
         if axis["passed"] != bool(expected_pass):
             raise ContractError(f"{axis_path}.passed differs from its evidence")
@@ -1975,10 +1982,12 @@ def validate_raw_document(document: Any, samples_document: Any) -> dict[str, Any
             if type(evidence["input_unchanged"]) is not bool or type(evidence["order_stable"]) is not bool:
                 raise ContractError(f"{evidence_path} stability fields must be boolean")
             pre = _validate_oracle(
-                evidence["pre_timing"], f"{evidence_path}.pre_timing", profile
+                evidence["pre_timing"], f"{evidence_path}.pre_timing", profile,
+                communication_precision,
             )
             post = _validate_oracle(
-                evidence["post_timing"], f"{evidence_path}.post_timing", profile
+                evidence["post_timing"], f"{evidence_path}.post_timing", profile,
+                communication_precision,
             )
             if (
                 pre["receive_count"] != expected_payload_counts[evidence_rank]

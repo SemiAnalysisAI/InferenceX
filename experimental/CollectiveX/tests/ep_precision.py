@@ -345,6 +345,7 @@ def precision_evidence(
         count, rate = _direct_cast_saturation(torch_module, profile, view)
         combine["saturation_count"] = count
         combine["saturation_rate"] = rate
+        combine["passed"] = combine["passed"] and count == 0
     return {
         "profile_id": profile_id,
         "dispatch": dispatch,

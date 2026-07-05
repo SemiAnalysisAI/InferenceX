@@ -35,7 +35,7 @@ V1_NORMAL_CASE_PROFILE = {
     "eplb_reference_tokens_per_rank": 2048,
     "mode": "normal",
     "oracle_contract": "expert-specific-transform-v1",
-    "oracle_tolerances": "rtol=0.05,atol=0.02",
+    "oracle_tolerances": "codec-specific-combine-v1",
     "payload_unit": "token-rank",
     "placement": "packed",
     "percentile_method": "nearest-rank",
@@ -246,6 +246,30 @@ V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
         "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
     },
 }
+
+V1_COMBINE_ORACLE_TOLERANCES = {
+    "bf16": {"atol": 2e-2, "rtol": 5e-2},
+    "logfmt10": {"atol": 3e-2, "rtol": 6e-2},
+    "fp8-direct-cast": {"atol": 4e-2, "rtol": 8e-2},
+}
+
+
+def combine_oracle_tolerances(communication_precision: dict[str, Any]) -> dict[str, float]:
+    """Return the frozen combine-oracle gate for one exact native codec."""
+    combine = communication_precision["combine"]
+    communication_format = combine["communication_format"]
+    if communication_format == "bf16":
+        key = "bf16"
+    elif communication_format == "logfmt10":
+        key = "logfmt10"
+    elif (
+        communication_format in {"fp8-e4m3fn", "fp8-e4m3fnuz"}
+        and combine["quantization_origin"] == "backend-internal-direct-cast"
+    ):
+        key = "fp8-direct-cast"
+    else:
+        raise ValueError("precision profile has no frozen combine-oracle tolerance")
+    return dict(V1_COMBINE_ORACLE_TOLERANCES[key])
 
 
 def case_profile(mode: str) -> dict[str, Any]:

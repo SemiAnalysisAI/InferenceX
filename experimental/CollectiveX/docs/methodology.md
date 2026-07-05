@@ -142,8 +142,12 @@ Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracl
 gate-weighted expert aggregate before combine, independently derives `sum(gate * expert(token))`,
 and checks the dispatch metadata and transformed output. Low-latency adapters separately verify the
 expert-packed source/expert assignment, native gate weights, and gate-weighted combined output. Both
-contracts check every element with recorded `rtol=0.05` and `atol=0.02`. Any failed rank or point
-makes the case ineligible.
+contracts compare against the semantic value after the declared communication codec. The frozen
+combine gates are `rtol=0.05, atol=0.02` for BF16, `rtol=0.06, atol=0.03` for native logfmt10, and
+`rtol=0.08, atol=0.04` for native FP8 direct-cast combine. These thresholds are correctness gates,
+not estimates of codec error. Direct-cast saturation is measured on the exact transformed native
+combine input, and the required saturation count is zero. Any failed rank or point makes the case
+ineligible.
 Pre/post dispatch evidence is hashed in canonical source-token order. Native receive slots may be
 assigned nondeterministically, so physical receive order is not treated as a correctness property.
 
