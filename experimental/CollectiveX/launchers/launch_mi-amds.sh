@@ -73,8 +73,9 @@ else
   unset CX_SCALE_OUT_TRANSPORT
 fi
 export CX_RUN_TIMEOUT="${CX_RUN_TIMEOUT:-1800}"
-cx_apply_network_profile "$NODES" "$CX_TRANSPORT"
 cx_validate_shard_control "$CX_DIR"
+cx_load_network_control_mode "$CX_DIR" || cx_die "cannot resolve network control mode"
+cx_apply_network_profile "$NODES" "$CX_TRANSPORT"
 cx_require_vars CX_PARTITION CX_SQUASH_DIR CX_STAGE_DIR
 PARTITION="$CX_PARTITION"; SQUASH_DIR="$CX_SQUASH_DIR"
 

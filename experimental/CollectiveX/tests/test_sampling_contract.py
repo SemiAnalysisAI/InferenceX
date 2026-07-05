@@ -599,9 +599,11 @@ class SamplingContractTest(unittest.TestCase):
           ! (export CX_SOCKET_IFNAME=eth0; unset CX_RDMA_DEVICES; cx_apply_network_profile 2 nvlink-rdma)
           export CX_SOCKET_IFNAME=ib0 CX_RDMA_DEVICES=mlx5_0:1,mlx5_1:1
           export NCCL_NET=Socket NCCL_IB_HCA=stale NVSHMEM_HCA_LIST=stale
+          export NVSHMEM_HCA_PE_MAPPING=stale NVSHMEM_REMOTE_TRANSPORT=stale
           export CX_SHARD_SKU=b300
           cx_apply_network_profile 1 nvlink
           test "$NVSHMEM_DISABLE_IB" = 1
+          test -z "${NVSHMEM_HCA_PE_MAPPING+x}${NVSHMEM_REMOTE_TRANSPORT+x}"
           export CX_BENCH=deepep CX_MODE=low-latency CX_IB_GID_INDEX=3
           cx_apply_network_profile 1 nvlink
           test -z "${NVSHMEM_DISABLE_IB+x}${NCCL_NET+x}${NCCL_IB_HCA+x}"
@@ -639,6 +641,9 @@ class SamplingContractTest(unittest.TestCase):
           cx_export_gid_index_for_link_layer infiniband 1
           test -z "${NVSHMEM_IB_GID_INDEX+x}${NCCL_IB_GID_INDEX+x}${UCCL_IB_GID_INDEX+x}"
           test "$NVSHMEM_IB_SL:$NCCL_IB_SL:$UCCL_IB_SL" = 2:2:2
+          export CX_RDMA_LINK_LAYER=roce
+          cx_apply_network_profile 2 nvlink-rdma
+          test "$NVSHMEM_IB_GID_INDEX:$NCCL_IB_GID_INDEX:$UCCL_IB_GID_INDEX" = 3:3:3
         '''
         subprocess.run(
             ["bash", "-c", command, "_", str(ROOT / "runtime" / "common.sh")],
@@ -651,6 +656,43 @@ class SamplingContractTest(unittest.TestCase):
         for version in ("2.0.0+fa8a9b1", "2.0.0+local"):
             self.assertIn(version, v2_adapter)
             self.assertIn(version, container_runtime)
+
+    def test_network_mode_is_loaded_from_validated_control(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            mixed = root / "mixed.json"
+            mixed.write_text(json.dumps({"cases": [
+                {"mode": "normal"}, {"mode": "low-latency"},
+            ]}))
+            normal = root / "normal.json"
+            normal.write_text(json.dumps({"cases": [{"mode": "normal"}]}))
+            probe = root / "probe.json"
+            probe.write_text(json.dumps({
+                "id": "probe-id",
+                "target": {
+                    "backend": "deepep", "sku": "b300", "ep": 8,
+                    "mode": "low-latency", "precision_profile": "profile",
+                },
+            }))
+            command = r'''
+              set -euo pipefail
+              source "$1"
+              export CX_SHARD_FILE="$2" CX_PRECISION_PROBE="$3"
+              cx_load_network_control_mode "$4"
+              printf '%s' "$CX_MODE"
+            '''
+            for path, precision, expected in (
+                (mixed, "0", "low-latency"),
+                (normal, "0", "normal"),
+                (probe, "1", "low-latency"),
+            ):
+                result = subprocess.run(
+                    ["bash", "-c", command, "_", str(ROOT / "runtime" / "common.sh"),
+                     str(path), precision, str(ROOT)],
+                    text=True, capture_output=True, check=True,
+                    env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
+                )
+                self.assertEqual(result.stdout, expected)
 
     def test_network_profile_validation_is_private_and_all_node(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

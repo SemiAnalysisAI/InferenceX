@@ -1019,6 +1019,8 @@ run_precision_probe() {
 
 rc=0
 cx_validate_shard_control "$PWD"
+cx_load_network_control_mode "$PWD" || cx_die "cannot resolve network control mode"
+cx_apply_network_profile "${CX_NODES:-1}" "${CX_TRANSPORT:-}"
 # Build-only mode: rack launchers run the shared backend preparation hook once per
 # node inside a persistent named container, then direct rank processes reuse it.
 if [ -n "${CX_BUILD_ONLY:-}" ]; then
@@ -1089,6 +1091,7 @@ print("\n".join(lines))
 PY
 )"
     eval "$_exports"
+    cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT"
     # Each case has its OWN routing/dims -> its own canonical workload manifest. cx_stage_canonical
     # short-circuits when CX_WORKLOAD_DIR is already set, so without this unset the first case's
     # staged dir is reused for the rest and run_ep.py can't find the later cases' manifests

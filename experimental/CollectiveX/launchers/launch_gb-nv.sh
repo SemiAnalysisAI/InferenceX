@@ -48,6 +48,7 @@ case "$CX_BENCH" in
   *) cx_die "unsupported $PRODUCT EP backend: $CX_BENCH" ;;
 esac
 cx_validate_shard_control "$CX_DIR"
+cx_load_network_control_mode "$CX_DIR" || cx_die "cannot resolve network control mode"
 cx_require_vars CX_PARTITION CX_ACCOUNT CX_SQUASH_DIR CX_STAGE_DIR
 [ "$PRODUCT" != gb300 ] || cx_require_vars CX_ENROOT_CACHE_PATH
 PARTITION="$CX_PARTITION"; ACCOUNT="$CX_ACCOUNT"; SQUASH_DIR="$CX_SQUASH_DIR"
