@@ -608,6 +608,11 @@ cx_require_single_node() {
   [ "${CX_NODES:-1}" = "1" ] || cx_die "$1 supports one-node EP only"
 }
 
+cx_nccl_hca_device_name() {
+  local selector="${1#=}"
+  printf '%s' "${selector%%:*}"
+}
+
 # Convert private, runner-local network selectors into the public library
 # variables needed inside the container. Values are interface/HCA identifiers,
 # never addresses; the rendezvous hostname is derived from the allocation.
@@ -950,7 +955,7 @@ cx_cancel_job() {
   local job_id="$1" active delay
   [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
   scancel "$job_id" >/dev/null 2>&1 || true
-  for delay in 1 2 4 8 16 32; do
+  for delay in 1 2 4 8 16 32 64; do
     if ! active="$(squeue -h -j "$job_id" -o %A 2>/dev/null)"; then
       sleep "$delay"
       continue

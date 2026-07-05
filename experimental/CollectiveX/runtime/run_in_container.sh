@@ -677,7 +677,7 @@ cx_configure_deepep_hybrid_build() {
   done
   IFS=, read -r -a devices <<< "$NCCL_IB_HCA"
   for device in "${devices[@]}"; do
-    rdma_name="${device%%:*}"
+    rdma_name="$(cx_nccl_hca_device_name "$device")"
     [ -d "/sys/class/infiniband/$rdma_name" ] \
       || { cx_log "ERROR: configured hybrid-ep RDMA device is absent"; return 1; }
   done
@@ -924,7 +924,7 @@ cx_probe_scaleout_network() {
   done
   IFS=, read -r -a devices <<< "$NCCL_IB_HCA"
   for device in "${devices[@]}"; do
-    rdma_name="${device%%:*}"
+    rdma_name="$(cx_nccl_hca_device_name "$device")"
     [ -d "/sys/class/infiniband/$rdma_name" ] \
       || { cx_log "ERROR: configured scale-out RDMA device is absent"; return 1; }
   done

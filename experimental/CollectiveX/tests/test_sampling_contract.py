@@ -593,6 +593,8 @@ class SamplingContractTest(unittest.TestCase):
         command = r'''
           set -euo pipefail
           source "$1"
+          test "$(cx_nccl_hca_device_name '=mlx5_0:1')" = mlx5_0
+          test "$(cx_nccl_hca_device_name 'mlx5_1')" = mlx5_1
           ! (unset CX_SOCKET_IFNAME CX_RDMA_DEVICES; cx_apply_network_profile 2 nvlink-rdma)
           ! (export CX_SOCKET_IFNAME=eth0; unset CX_RDMA_DEVICES; cx_apply_network_profile 2 nvlink-rdma)
           export CX_SOCKET_IFNAME=ib0 CX_RDMA_DEVICES=mlx5_0:1,mlx5_1:1
@@ -1205,6 +1207,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertTrue(interrupted["cleanup_unsafe"])
 
     def test_allocation_cleanup_fails_closed_when_scheduler_queries_fail(self) -> None:
+        common = (ROOT / "runtime" / "common.sh").read_text()
+        self.assertIn("for delay in 1 2 4 8 16 32 64; do", common)
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary)
             for name, body in {
