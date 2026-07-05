@@ -333,14 +333,22 @@ try:
             key.encode() + b"\0" + str(value).encode() + b"\0"
         )
 except (KeyError, OSError, TypeError, UnicodeError, ValueError):
+    import traceback
+
+    location = traceback.extract_tb(sys.exc_info()[2])[-1].lineno
+    print(f"validation-line-{location}", file=sys.stderr)
     raise SystemExit(1)
 PY
   then
+    local validation_code
+    validation_code="$(head -n 1 "$config_log" 2>/dev/null || true)"
     rm -f -- "$parsed_path"
     [ "$generated" = 0 ] || rm -f -- "$config_path"
     unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
     unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
-    cx_die "runner-local configuration failed"
+    [[ "$validation_code" =~ ^validation-line-[0-9]+$ ]] \
+      || validation_code="validation-unknown"
+    cx_die "runner-local configuration failed ($validation_code)"
   fi
   while IFS= read -r -d '' key && IFS= read -r -d '' value; do
     printf -v "$key" '%s' "$value"

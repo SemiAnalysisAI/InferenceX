@@ -548,6 +548,7 @@ class SamplingContractTest(unittest.TestCase):
             del missing["audit_salt"]
             rejected = invoke(missing, canonical=True)
             self.assertNotEqual(rejected.returncode, 0)
+            self.assertRegex(rejected.stderr, r"validation-line-[0-9]+")
             self.assertNotIn(salt, rejected.stdout + rejected.stderr)
 
             manual = invoke(missing, canonical=False, expect_salt=False)
