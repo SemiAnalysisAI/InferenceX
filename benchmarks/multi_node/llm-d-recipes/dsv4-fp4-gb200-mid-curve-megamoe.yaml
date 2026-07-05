@@ -131,6 +131,12 @@ prefill:
     VLLM_USE_DEEP_GEMM: "1"
     NVIDIA_GDRCOPY: "enabled"
     VLLM_HTTP_TIMEOUT_KEEP_ALIVE: "120"
+    # Harden distributed coordination against transient gloo/NCCL connection
+    # resets under the conc4096 warmup burst. max-tpt in-sweep died with
+    # "gloo tcp Connection reset by peer" -> EngineDeadError (no OOM/CUDA/HW
+    # fault); a longer PG timeout keeps a momentarily-stalled peer from being
+    # dropped. Value matches srt-slurm (TORCH_DISTRIBUTED_DEFAULT_TIMEOUT 1800).
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
 
 decode:
   tp: 1
@@ -171,6 +177,9 @@ decode:
     VLLM_RANDOMIZE_DP_DUMMY_INPUTS: "0"
     VLLM_USE_DEEP_GEMM: "1"
     NVIDIA_GDRCOPY: "enabled"
+    # See prefill note: harden the decode's cross-node DP8/EP8 coordination
+    # against transient gloo resets under the conc4096 warmup burst.
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
 
 # ---- SLURM resource directives ----
 slurm:
