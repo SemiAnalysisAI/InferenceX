@@ -2285,12 +2285,12 @@ class SamplingContractTest(unittest.TestCase):
           test -z "${CX_PREPARED_BACKEND_CACHE+x}${CX_BACKEND_SOURCE_ROOT+x}"
           test -z "${CX_DRYRUN+x}"
 
+          cx_prepare_implicit_stage_base() { printf '%s' "$TEST_IMPLICIT_STAGE"; }
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_SHARD_SKU=b200-dgxc CX_NODES=1 CX_GPUS_PER_NODE=8
           unset CX_STAGE_DIR
           cx_lock_canonical_gha_env b200-dgxc
-          test "$CX_STAGE_DIR" = "$HOME/.cache/inferencex/collectivex-stage"
-          test "$(stat -c '%a' "$CX_STAGE_DIR" 2>/dev/null || stat -f '%Lp' "$CX_STAGE_DIR")" = 700
+          test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
 
           export CX_STAGE_DIR=/shared/gb-stage
           export CX_SHARD_SKU=gb300 CX_NODES=2 CX_GPUS_PER_NODE=4
@@ -2324,19 +2324,51 @@ class SamplingContractTest(unittest.TestCase):
             root = Path(temporary)
             home = root / "home"
             workspace = root / "workspace"
+            implicit_stage = root / "implicit-stage"
             home.mkdir(mode=0o700)
             workspace.mkdir(mode=0o720)
+            implicit_stage.mkdir(mode=0o700)
             subprocess.run(
                 ["bash", "-c", command, "_", str(common)],
                 check=True,
                 env={
                     **os.environ,
                     "HOME": str(home),
+                    "TEST_IMPLICIT_STAGE": str(implicit_stage),
                     "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
                     "GITHUB_WORKSPACE": str(workspace),
                 },
             )
-            self.assertEqual(list(Path(workspace).iterdir()), [])
+            self.assertEqual(list(workspace.iterdir()), [])
+
+    def test_implicit_stage_base_is_private_and_non_symlinked(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            safe_home = root / "safe-home"
+            unsafe_home = root / "unsafe-home"
+            linked_home = root / "linked-home"
+            safe_home.mkdir(mode=0o700)
+            unsafe_home.mkdir(mode=0o770)
+            unsafe_home.chmod(0o770)
+            linked_home.symlink_to(safe_home, target_is_directory=True)
+            command = r'''
+              set -euo pipefail
+              source "$1"
+              base="$(cx_prepare_implicit_stage_base "$2")"
+              test "$base" = "$2/.cache/inferencex/collectivex-stage"
+              test "$(stat -c '%a' "$base" 2>/dev/null || stat -f '%Lp' "$base")" = 700
+              ! cx_prepare_implicit_stage_base "$3"
+              ! cx_prepare_implicit_stage_base "$4"
+            '''
+            subprocess.run(
+                [
+                    "bash", "-c", command, "_",
+                    str(ROOT / "runtime" / "common.sh"), str(safe_home),
+                    str(unsafe_home), str(linked_home),
+                ],
+                check=True,
+                env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
+            )
 
     def test_canonical_amd_stage_uses_config_not_world_writable_workspace(self) -> None:
         common = ROOT / "runtime" / "common.sh"

@@ -1431,13 +1431,14 @@ cx_materialize_backend_source() {
 }
 
 cx_prepare_implicit_stage_base() {
-  python3 - "${HOME:-}" <<'PY'
+  python3 - "${1:-}" <<'PY'
 import os
 from pathlib import Path
+import pwd
 import stat
 import sys
 
-home = Path(sys.argv[1])
+home = Path(sys.argv[1] or pwd.getpwuid(os.getuid()).pw_dir)
 try:
     if not home.is_absolute() or Path(os.path.realpath(home)) != home:
         raise OSError
