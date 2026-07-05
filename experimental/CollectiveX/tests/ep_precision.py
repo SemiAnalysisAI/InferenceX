@@ -297,28 +297,10 @@ def dequantize_expert_prefixes(
 
 
 def _direct_cast_saturation(torch_module, profile: dict[str, Any], view) -> tuple[int, float]:
-    """Count values clipped by MoRI's unscaled BF16-to-FP8 combine cast."""
-    if not all(hasattr(view, field) for field in ("payload", "expert_ids", "weights")):
+    """Count values clipped in the exact native BF16-to-FP8 combine input."""
+    if not hasattr(view, "combine_input"):
         return 0, 0.0
-    expert_ids = view.expert_ids
-    weights = view.weights
-    if expert_ids.ndim != 2 or weights.shape != expert_ids.shape:
-        return 0, 0.0
-    valid = expert_ids >= 0
-    expert = expert_ids.clamp(min=0).to(torch_module.int64)
-    gate = weights.to(torch_module.float32).masked_fill(~valid, 0)
-    scale = ((expert * 17 + 5) % 31 + 1).to(torch_module.float32) / 32
-    offset_a = (((expert * 29 + 7) % 37) - 18).to(torch_module.float32) / 64
-    offset_b = (((expert * 43 + 11) % 41) - 20).to(torch_module.float32) / 128
-    columns = torch_module.arange(
-        view.payload.shape[1], device=view.payload.device, dtype=torch_module.int64
-    )
-    pattern = (((columns * 13) % 17) - 8).to(torch_module.float32) / 8
-    transformed = (
-        view.payload.float() * (gate * scale).sum(dim=1, keepdim=True)
-        + (gate * offset_a).sum(dim=1, keepdim=True)
-        + (gate * offset_b).sum(dim=1, keepdim=True) * pattern.unsqueeze(0)
-    )
+    transformed = view.combine_input.float()
     dtype = _fp8_dtype(torch_module, profile["combine"])
     fp8_max = float(torch_module.finfo(dtype).max)
     count = int((transformed.abs() > fp8_max).sum().item())

@@ -121,9 +121,13 @@ class NativeAdapterWiringTests(unittest.TestCase):
 
     def test_mori_wires_dispatch_scales_and_direct_cast_config(self):
         source = (TESTS / "ep_mori.py").read_text(encoding="utf-8")
+        harness = (TESTS / "ep_harness.py").read_text(encoding="utf-8")
+        precision = (TESTS / "ep_precision.py").read_text(encoding="utf-8")
         self.assertIn('"fp8_direct_cast" if self._direct_cast_combine', source)
         self.assertIn("p.scales,", source)
         self.assertIn("dispatch_scales=_scales", source)
+        self.assertEqual(harness.count("view.combine_input = transformed"), 2)
+        self.assertIn("transformed = view.combine_input.float()", precision)
 
 
 if __name__ == "__main__":

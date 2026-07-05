@@ -911,6 +911,7 @@ def _run_expert_packed_oracle(
     handle.oracle_packed_positions = view.packed_positions
     problem.recv_tokens = receive_count
     transformed = _expert_transform_expanded(torch, view.payload, view.expert_ids)
+    view.combine_input = transformed
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(torch, problem)
@@ -1111,6 +1112,7 @@ def _run_expert_oracle(
     transformed = _expert_transform(
         torch, view.payload, actual_ids, actual_weights, combine_weight_semantics
     )
+    view.combine_input = transformed
     combined = backend.combine_transformed(problem, handle, transformed)
     torch.cuda.synchronize()
     expected_combined = _expected_transformed_combine(torch, problem)

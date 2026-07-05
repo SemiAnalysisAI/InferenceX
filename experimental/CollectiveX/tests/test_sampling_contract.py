@@ -2221,7 +2221,11 @@ class SamplingContractTest(unittest.TestCase):
             "ValueError: probe completion contract differs": "probe-completion-value",
             "ValueError: probe image digest is invalid": "probe-identity-value",
             "ValueError: probe precision correctness did not pass":
-                "probe-correctness-value",
+                "probe-correctness-failed",
+            "ValueError: probe scale shapes are invalid": "probe-scale-shape",
+            "ValueError: probe precision dispatch input is not finite": "probe-nonfinite",
+            "ValueError: probe precision combine output shape is invalid":
+                "probe-tensor-shape",
             "ValueError: probe transport fallback is present": "probe-transport-value",
             "tests/probe_precision.py\nValueError: probe argument": "probe-manifest-value",
             "tests/ep_harness.py\nValueError: harness argument": "harness-value",

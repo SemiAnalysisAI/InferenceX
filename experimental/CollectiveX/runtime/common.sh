@@ -95,6 +95,14 @@ cx_fail_stage() {
       diagnostic="probe-completion-value"
     elif grep -aEqi 'ValueError:.*probe (source SHA|image digest|backend provenance|backend component)' "$log_path"; then
       diagnostic="probe-identity-value"
+    elif grep -aEqi 'ValueError:.*probe precision correctness did not pass' "$log_path"; then
+      diagnostic="probe-correctness-failed"
+    elif grep -aEqi 'ValueError:.*probe scale shapes are invalid' "$log_path"; then
+      diagnostic="probe-scale-shape"
+    elif grep -aEqi 'ValueError:.*probe precision .* is not finite' "$log_path"; then
+      diagnostic="probe-nonfinite"
+    elif grep -aEqi 'ValueError:.*probe precision .* shapes are empty|ValueError:.*probe precision .* shape is invalid' "$log_path"; then
+      diagnostic="probe-tensor-shape"
     elif grep -aEqi 'ValueError:.*probe (precision correctness|scale shapes|precision .* (input|output|semantic|scales))' "$log_path"; then
       diagnostic="probe-correctness-value"
     elif grep -aEqi 'ValueError:.*probe transport' "$log_path"; then
