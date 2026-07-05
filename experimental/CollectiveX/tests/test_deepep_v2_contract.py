@@ -1489,6 +1489,9 @@ class DeepEPV2ContractTests(unittest.TestCase):
         self.assertIn('EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"', runtime)
         reference = (HERE / "ep_nccl.py").read_text()
         self.assertIn("self.kernel_generation = contracts.collective_kernel_generation", reference)
+        self.assertIn("scale-out collective network mode is not IB", reference)
+        self.assertIn("scale-out collective HCA allowlist is invalid", reference)
+        self.assertNotIn("scale-out collective transport is not pinned to RDMA", reference)
 
     def test_deepep_v2_cache_recovers_from_an_unpublished_partial_build(self) -> None:
         runtime = ROOT / "runtime" / "run_in_container.sh"

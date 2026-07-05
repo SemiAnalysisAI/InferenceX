@@ -67,12 +67,14 @@ class NCCLBackend:
         _library, _version = _runtime_collective(args, torch)
         if args.scale_out_transport:
             hcas = os.environ.get("NCCL_IB_HCA", "")
-            if os.environ.get("NCCL_NET") != "IB" or not re.fullmatch(
+            if os.environ.get("NCCL_NET") != "IB":
+                raise RuntimeError("scale-out collective network mode is not IB")
+            if not re.fullmatch(
                 r"=[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?"
                 r"(?:,[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?)*",
                 hcas,
             ):
-                raise RuntimeError("scale-out collective transport is not pinned to RDMA")
+                raise RuntimeError("scale-out collective HCA allowlist is invalid")
         self.kernel_generation = contracts.collective_kernel_generation(_library)
         self.backend_provenance = {
             "backend": f"{_library}-all2all",
