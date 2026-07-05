@@ -600,6 +600,12 @@ class SamplingContractTest(unittest.TestCase):
           export CX_SHARD_SKU=b300
           cx_apply_network_profile 1 nvlink
           test "$NVSHMEM_DISABLE_IB" = 1
+          export CX_BENCH=deepep CX_MODE=low-latency CX_IB_GID_INDEX=3
+          cx_apply_network_profile 1 nvlink
+          test -z "${NVSHMEM_DISABLE_IB+x}${NCCL_NET+x}${NCCL_IB_HCA+x}"
+          test "$NVSHMEM_HCA_LIST:$NVSHMEM_IB_GID_INDEX" = mlx5_0:1,mlx5_1:1:3
+          test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
+          unset CX_BENCH CX_MODE CX_IB_GID_INDEX
           unset CX_SHARD_SKU
           cx_apply_network_profile 1 nvlink
           test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_DISABLE_IB+x}${NVSHMEM_HCA_LIST+x}"
@@ -685,6 +691,22 @@ class SamplingContractTest(unittest.TestCase):
                 env=environment,
             )
             self.assertFalse(arguments.exists())
+
+            single_node_command = (
+                'source "$1"; export COLLECTIVEX_EXECUTION_ID="network-test-$$"; '
+                "trap 'cx_cleanup_private_logs 0' EXIT; "
+                "export CX_SHARD_SKU=b300 CX_BENCH=deepep CX_MODE=low-latency; "
+                'cx_validate_network_profile_on_job 42 1 nvlink'
+            )
+            single_node = subprocess.run(
+                ["bash", "-c", single_node_command, "_", str(ROOT / "runtime" / "common.sh")],
+                text=True,
+                capture_output=True,
+                env={**environment, "CX_SOCKET_IFNAME": ""},
+            )
+            self.assertEqual(single_node.returncode, 0, single_node.stderr)
+            self.assertIn("--nodes=1", arguments.read_text())
+            self.assertIn("--ntasks=1", arguments.read_text())
 
     def test_allocation_preflight_proves_shared_write_visibility(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2439,7 +2461,7 @@ class SamplingContractTest(unittest.TestCase):
           cx_lock_canonical_gha_env b300
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
           test "$CX_STAGE_PARENT_OWNER_OK" = 1
-          test "$NVSHMEM_DISABLE_IB" = 1
+          test -z "${NVSHMEM_DISABLE_IB+x}"
 
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_STAGE_DIR=/legacy/group-writable-stage

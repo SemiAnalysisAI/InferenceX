@@ -613,6 +613,7 @@ cx_require_single_node() {
 # never addresses; the rendezvous hostname is derived from the allocation.
 cx_apply_network_profile() {
   local nodes="$1" transport="$2" selector rdma_name rdma_names="" ep_nic=""
+  local scaleout=0 single_node_rdma=0
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || cx_die "invalid network placement"
   unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
@@ -622,13 +623,22 @@ cx_apply_network_profile() {
   unset NVSHMEM_IB_ENABLE_IBGDA NVSHMEM_IBGDA_NIC_HANDLER
   unset EP_NIC_NAME EP_OVERRIDE_RDMA_SL
   unset UCCL_SOCKET_IFNAME UCCL_IB_GID_INDEX UCCL_IB_SL MORI_RDMA_DEVICES
-  if [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ]; then
+  if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
+    scaleout=1
+  elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ] \
+      && [ "${CX_BENCH:-}" = deepep ] && [ "${CX_MODE:-}" = low-latency ]; then
+    # DeepEP V1 low-latency kernels use pure RDMA even for EP8 within one
+    # NVLink domain. Keep NCCL on NVLink, but bind NVSHMEM to the private HCA.
+    single_node_rdma=1
+  elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ]; then
     export NVSHMEM_DISABLE_IB=1
   fi
-  [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ] || return 0
-  [ -n "${CX_SOCKET_IFNAME:-}" ] && [ -n "${CX_RDMA_DEVICES:-}" ] \
-    || cx_die "multi-node execution requires private socket and RDMA selectors"
-  if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
+  [ "$scaleout" = 1 ] || [ "$single_node_rdma" = 1 ] || return 0
+  [ -n "${CX_RDMA_DEVICES:-}" ] \
+    || cx_die "RDMA execution requires a private device selector"
+  if [ "$scaleout" = 1 ]; then
+    [ -n "${CX_SOCKET_IFNAME:-}" ] \
+      || cx_die "multi-node execution requires a private socket selector"
     [[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]] \
       || cx_die "invalid private socket interface selector"
     export NCCL_SOCKET_IFNAME="$CX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$CX_SOCKET_IFNAME"
@@ -643,22 +653,28 @@ cx_apply_network_profile() {
       rdma_names="${rdma_names}${rdma_names:+,}${rdma_name}"
       [ -n "$ep_nic" ] || ep_nic="$rdma_name"
     done
-    export NCCL_NET=IB NCCL_IB_HCA="=$CX_RDMA_DEVICES"
     export NVSHMEM_HCA_LIST="$CX_RDMA_DEVICES"
-    export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
+    if [ "$scaleout" = 1 ]; then
+      export NCCL_NET=IB NCCL_IB_HCA="=$CX_RDMA_DEVICES"
+      export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
+    fi
   fi
   if [ -n "${CX_IB_GID_INDEX:-}" ]; then
     [[ "$CX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$CX_IB_GID_INDEX" -le 255 ] \
       || cx_die "invalid private IB GID index"
-    export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX" NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
-    export UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
+    export NVSHMEM_IB_GID_INDEX="$CX_IB_GID_INDEX"
+    if [ "$scaleout" = 1 ]; then
+      export NCCL_IB_GID_INDEX="$CX_IB_GID_INDEX" UCCL_IB_GID_INDEX="$CX_IB_GID_INDEX"
+    fi
   fi
   if [ -n "${CX_RDMA_SERVICE_LEVEL:-}" ]; then
     [[ "$CX_RDMA_SERVICE_LEVEL" =~ ^[0-9]+$ ]] && [ "$CX_RDMA_SERVICE_LEVEL" -le 15 ] \
       || cx_die "invalid private RDMA service level"
-    export NCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL" NVSHMEM_IB_SL="$CX_RDMA_SERVICE_LEVEL"
-    export UCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL"
-    export EP_OVERRIDE_RDMA_SL="$CX_RDMA_SERVICE_LEVEL"
+    export NVSHMEM_IB_SL="$CX_RDMA_SERVICE_LEVEL"
+    if [ "$scaleout" = 1 ]; then
+      export NCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL" UCCL_IB_SL="$CX_RDMA_SERVICE_LEVEL"
+      export EP_OVERRIDE_RDMA_SL="$CX_RDMA_SERVICE_LEVEL"
+    fi
   fi
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER=gpu
 }
@@ -667,29 +683,40 @@ cx_apply_network_profile() {
 # node before image import or backend initialization. Selector values and node
 # diagnostics stay in the runner-private log.
 cx_validate_network_profile_on_job() {
-  local job_id="$1" nodes="$2" transport="$3" log rc=0
-  [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ] || return 0
+  local job_id="$1" nodes="$2" transport="$3" log rc=0 scaleout=0
+  local single_node_rdma=0
+  if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
+    scaleout=1
+  elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ] \
+      && [ "${CX_BENCH:-}" = deepep ] && [ "${CX_MODE:-}" = low-latency ]; then
+    single_node_rdma=1
+  fi
+  [ "$scaleout" = 1 ] || [ "$single_node_rdma" = 1 ] || return 0
   [[ "$job_id" =~ ^[1-9][0-9]*$ && "$nodes" =~ ^[1-9][0-9]*$ ]] \
     || return 1
-  [ -n "${CX_SOCKET_IFNAME:-}" ] && [ -n "${CX_RDMA_DEVICES:-}" ] \
-    || return 1
+  [ -n "${CX_RDMA_DEVICES:-}" ] || return 1
+  [ "$scaleout" = 0 ] || [ -n "${CX_SOCKET_IFNAME:-}" ] || return 1
   log="$(cx_private_log_path network-profile)" || return 1
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
     --chdir=/tmp --input=all \
     --export="$(cx_host_exports),CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX" \
     bash -s > "$log" 2>&1 <<'BASH' || rc=$?
 set -euo pipefail
-[[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]]
+if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
+  [[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]]
+fi
 [[ "$CX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]]
 if [ -n "${CX_IB_GID_INDEX:-}" ]; then
   [[ "$CX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$CX_IB_GID_INDEX" -le 255 ]
 fi
-IFS=, read -r -a interfaces <<< "$CX_SOCKET_IFNAME"
-for interface in "${interfaces[@]}"; do
-  [ -d "/sys/class/net/$interface" ]
-  state="$(cat "/sys/class/net/$interface/operstate")"
-  [ "$state" = up ] || [ "$state" = unknown ]
-done
+if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
+  IFS=, read -r -a interfaces <<< "$CX_SOCKET_IFNAME"
+  for interface in "${interfaces[@]}"; do
+    [ -d "/sys/class/net/$interface" ]
+    state="$(cat "/sys/class/net/$interface/operstate")"
+    [ "$state" = up ] || [ "$state" = unknown ]
+  done
+fi
 check_port() {
   local port_path="$1" state gid
   [ -d "$port_path" ] || return 1
@@ -1640,7 +1667,6 @@ cx_lock_canonical_gha_env() {
     || cx_die "canonical CollectiveX execution requires a private audit salt"
   if [ "$runner" = b300 ]; then
     CX_STAGE_PARENT_OWNER_OK=1
-    [ "${CX_NODES:-}" != 1 ] || export NVSHMEM_DISABLE_IB=1
   fi
 
   case "$runner" in
