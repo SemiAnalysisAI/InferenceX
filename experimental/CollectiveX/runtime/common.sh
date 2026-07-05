@@ -2409,7 +2409,8 @@ cx_launcher_cleanup() {
     cx_write_cleanup_guard unsafe || true
   fi
   [ "$allocation_stopped" = 1 ] || source_root="${REPO_ROOT:-$source_root}"
-  if [ "$rc" != 0 ] && [ -n "${REPO_ROOT:-}" ] && [ -n "${CX_BENCH:-}" ]; then
+  if [ "$rc" != 0 ] && [ "${CX_PRECISION_PROBE:-0}" != 1 ] \
+      && [ -n "${REPO_ROOT:-}" ] && [ -n "${CX_BENCH:-}" ]; then
     cx_log "ERROR: terminal-failure-class=${CX_FAILSAFE_MODE:-setup}"
     [ -d "$source_root/experimental/CollectiveX" ] || source_root="$REPO_ROOT"
     out_dir="$source_root/experimental/CollectiveX/results"

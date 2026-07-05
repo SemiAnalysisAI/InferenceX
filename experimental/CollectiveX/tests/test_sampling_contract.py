@@ -1169,6 +1169,12 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('python3 "$destination/source_archive.py"', workflow)
         artifact_validation = workflow[workflow.index("- name: Validate shard artifact safety"):]
         self.assertIn("steps.allocation_cleanup.outcome == 'success'", artifact_validation)
+        self.assertIn(
+            "inputs.operation != 'probe-precision' || steps.sweep_shard.outcome == 'success'",
+            artifact_validation,
+        )
+        cleanup_function = (ROOT / "runtime" / "common.sh").read_text()
+        self.assertIn('[ "${CX_PRECISION_PROBE:-0}" != 1 ]', cleanup_function)
         sweep_workflow = workflow[workflow.index("  sweep:"):]
         self.assertNotIn("GITHUB_WORKSPACE", sweep_workflow)
         self.assertNotIn("RUNNER_WORKSPACE", sweep_workflow)

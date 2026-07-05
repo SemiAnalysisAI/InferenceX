@@ -453,7 +453,7 @@ jobs:
             || { echo "CollectiveX allocation cleanup was not confirmed" >&2; exit 1; }
       - name: Validate shard artifact safety
         id: artifact_safety
-        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
+        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' && (inputs.operation != 'probe-precision' || steps.sweep_shard.outcome == 'success') }}
         run: |
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
