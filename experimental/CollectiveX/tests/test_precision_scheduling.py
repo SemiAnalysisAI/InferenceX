@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 5)
+        self.assertEqual(len(targets), 4)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -53,10 +53,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
 
     def test_precision_probe_workflow_plan_binds_exact_controls(self) -> None:
-        plan = probe_precision.workflow_plan(backend="mori", only_sku="mi355x")
+        plan = probe_precision.workflow_plan(backend="mori", only_sku="mi325x")
         self.assertTrue(plan["include"])
         self.assertTrue(all(
-            row["backend"] == "mori" and row["sku"] == "mi355x"
+            row["backend"] == "mori" and row["sku"] == "mi325x"
             for row in plan["include"]
         ))
         row = plan["include"][0]
@@ -84,7 +84,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(backend="mori", only_sku="b200-dgxc")
         ep16 = probe_precision.workflow_plan(
-            backend="mori", only_sku="mi355x", min_nodes=2,
+            backend="mori", only_sku="mi325x", min_nodes=2,
         )
         self.assertTrue(ep16["include"])
         self.assertEqual({row["ep"] for row in ep16["include"]}, {16})
@@ -228,15 +228,15 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 89
+            len(targets) - len(capability.provisional_precision_targets()), 90
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 59
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 30
+            sum(item["disposition"] == "unsupported" for item in targets), 31
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 5)
+        self.assertEqual(len(capability.provisional_precision_targets()), 4)
         keys = {
             (
                 item["precision_profile"],

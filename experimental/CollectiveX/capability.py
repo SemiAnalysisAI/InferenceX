@@ -394,6 +394,7 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28740154697", "h200-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28750823474", "mi355x", 8, "mori", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
+    ("28750825814", "mi355x", 16, "mori", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
     ("28740154697", "h200-dgxc", 16, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-setup-timeout"),
     ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
     ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),

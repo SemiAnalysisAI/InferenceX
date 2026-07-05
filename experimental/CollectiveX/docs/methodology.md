@@ -10,7 +10,7 @@ This document describes the implemented BF16 baseline. It is not yet the V1 qual
 Before any V1-tagged run, this English document must match the implemented precision, measurement,
 publication, and frontend contracts; counts and digests remain unfrozen. Chinese documentation
 synchronization is explicitly deferred for the V1 implementation phase.
-H100, H200, B200, B300, GB200, and GB300 precision cells are terminal. Five MI325X/MI355X
+H100, H200, B200, B300, GB200, GB300, and MI355X precision cells are terminal. Four MI325X
 precision cells remain provisional.
 
 ## Product Boundary
