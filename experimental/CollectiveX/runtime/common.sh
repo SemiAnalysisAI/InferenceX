@@ -81,6 +81,24 @@ cx_fail_stage() {
       diagnostic="python-assertion"
     elif grep -aEqi 'RuntimeError:' "$log_path"; then
       diagnostic="python-runtime"
+    elif grep -aEqi 'ValueError:.*(fields differ from collectivex[.]precision-probe|probe format, record type, schema, or contract differs)' "$log_path"; then
+      diagnostic="probe-schema-value"
+    elif grep -aEqi 'ValueError:.*probe target|ValueError:.*probe topology' "$log_path"; then
+      diagnostic="probe-target-value"
+    elif grep -aEqi 'ValueError:.*probe result|ValueError:.*statically promote the registry' "$log_path"; then
+      diagnostic="probe-result-value"
+    elif grep -aEqi 'ValueError:.*probe privacy' "$log_path"; then
+      diagnostic="probe-privacy-value"
+    elif grep -aEqi 'ValueError:.*probe API' "$log_path"; then
+      diagnostic="probe-api-value"
+    elif grep -aEqi 'ValueError:.*probe completion' "$log_path"; then
+      diagnostic="probe-completion-value"
+    elif grep -aEqi 'ValueError:.*probe (source SHA|image digest|backend provenance|backend component)' "$log_path"; then
+      diagnostic="probe-identity-value"
+    elif grep -aEqi 'ValueError:.*probe (precision correctness|scale shapes|precision .* (input|output|semantic|scales))' "$log_path"; then
+      diagnostic="probe-correctness-value"
+    elif grep -aEqi 'ValueError:.*probe transport' "$log_path"; then
+      diagnostic="probe-transport-value"
     elif grep -aEqi 'ValueError:' "$log_path" \
         && grep -aEqi 'probe_precision[.]py' "$log_path"; then
       diagnostic="probe-manifest-value"

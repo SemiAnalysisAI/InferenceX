@@ -2211,6 +2211,18 @@ class SamplingContractTest(unittest.TestCase):
             "PrecisionError: unsupported precision profile": "precision-contract",
             "AssertionError: probe invariant": "python-assertion",
             "RuntimeError: probe execution failed": "python-runtime",
+            "ValueError: probe fields differ from collectivex.precision-probe.v1":
+                "probe-schema-value",
+            "ValueError: probe target is not a provisional native adapter cell":
+                "probe-target-value",
+            "ValueError: probe result reason is invalid": "probe-result-value",
+            "ValueError: probe privacy contract differs": "probe-privacy-value",
+            "ValueError: probe API calls are empty": "probe-api-value",
+            "ValueError: probe completion contract differs": "probe-completion-value",
+            "ValueError: probe image digest is invalid": "probe-identity-value",
+            "ValueError: probe precision correctness did not pass":
+                "probe-correctness-value",
+            "ValueError: probe transport fallback is present": "probe-transport-value",
             "tests/probe_precision.py\nValueError: probe argument": "probe-manifest-value",
             "tests/ep_harness.py\nValueError: harness argument": "harness-value",
             "tests/workload.py\nValueError: workload argument": "workload-value",
