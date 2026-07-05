@@ -81,6 +81,24 @@ cx_fail_stage() {
       diagnostic="python-assertion"
     elif grep -aEqi 'RuntimeError:' "$log_path"; then
       diagnostic="python-runtime"
+    elif grep -aEqi 'ValueError:' "$log_path" \
+        && grep -aEqi 'probe_precision[.]py' "$log_path"; then
+      diagnostic="probe-manifest-value"
+    elif grep -aEqi 'ValueError:' "$log_path" \
+        && grep -aEqi 'ep_harness[.]py' "$log_path"; then
+      diagnostic="harness-value"
+    elif grep -aEqi 'ValueError:' "$log_path" \
+        && grep -aEqi 'workload[.]py|make_workloads[.]py' "$log_path"; then
+      diagnostic="workload-value"
+    elif grep -aEqi 'ValueError:' "$log_path" \
+        && grep -aEqi 'run_ep[.]py' "$log_path"; then
+      diagnostic="runner-value"
+    elif grep -aEqi 'ValueError:' "$log_path" \
+        && grep -aEqi 'ep_deepep[.]py' "$log_path"; then
+      diagnostic="deepep-adapter-value"
+    elif grep -aEqi 'ValueError:' "$log_path" \
+        && grep -aEqi '/(torch|numpy)/|site-packages/(torch|numpy)' "$log_path"; then
+      diagnostic="dependency-value"
     elif grep -aEqi 'ValueError:' "$log_path"; then
       diagnostic="python-value"
     elif grep -aEqi 'KeyError:' "$log_path"; then
