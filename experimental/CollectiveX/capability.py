@@ -370,6 +370,9 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28740154697", "h200-dgxc", 16, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-setup-timeout"),
     ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
     ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),
+    *(("28743235213", "b300", 8, "deepep", "low-latency", profile,
+       "supported", "native-probe-passed")
+      for profile in (_LL_FP8_PROFILE, _LL_LOGFMT_PROFILE, _LL_FP8_LOGFMT_PROFILE)),
 )
 PRECISION_CELL_OVERRIDES.update({
     (profile, backend, sku, ep, mode): {
