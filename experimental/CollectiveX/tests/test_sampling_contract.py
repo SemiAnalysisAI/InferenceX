@@ -2536,6 +2536,30 @@ class SamplingContractTest(unittest.TestCase):
             )
             self.assertEqual(list(workspace.iterdir()), [])
 
+    def test_slurm_rendezvous_uses_relative_node_zero(self) -> None:
+        common = ROOT / "runtime" / "common.sh"
+        command = r'''
+          set -euo pipefail
+          source "$1"
+          cx_host_exports() { printf '%s' HOME,PATH,USER; }
+          squeue() { return 91; }
+          scontrol() { return 92; }
+          srun() {
+            test "$*" = "--jobid=123 --nodes=1 --ntasks=1 --relative=0 --chdir=/tmp --export=HOME,PATH,USER hostname -s" \
+              || return 93
+            printf '%s\n' rank-zero-node
+          }
+          cx_resolve_slurm_rendezvous 123
+          test "$MASTER_ADDR:$MASTER_PORT" = rank-zero-node:29551
+          CX_MASTER_PORT=30444
+          cx_resolve_slurm_rendezvous 123
+          test "$MASTER_ADDR:$MASTER_PORT" = rank-zero-node:30444
+        '''
+        subprocess.run(
+            ["bash", "-c", command, "_", str(common)],
+            check=True,
+        )
+
     def test_implicit_stage_base_is_private_and_non_symlinked(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

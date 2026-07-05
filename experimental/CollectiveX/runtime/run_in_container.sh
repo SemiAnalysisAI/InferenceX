@@ -831,7 +831,7 @@ cx_build_uccl() {
     python3 -c "import torch; from uccl_deepep import Buffer" 2>/dev/null || return 1
     return 0
   fi
-  local version="0.1.1" tag="v0.1.1"
+  local version="0.1.1" tag="v0.1.1" node_id wrapper_root
   local wheel_sha256="390c1320918972206546e44d79b132988f2818ec07e23afcd0595f7183916cec"
   cx_log "UCCL EP: installing uccl==$version + cu12 runtime shim"
   export PIP_BREAK_SYSTEM_PACKAGES=1
@@ -860,16 +860,21 @@ cx_build_uccl() {
   # (uccl_deepep) so it doesn't shadow the container's real deep_ep. Its Buffer(group, num_nvl_bytes,
   # ...) takes a torch ProcessGroup (matching DeepEP + ep_uccl.py's calls) and runs the full
   # proxy/IPC-handle/runtime.sync bootstrap that the low-level uccl.ep.Buffer(rank,num_ranks) lacks.
-  rm -rf /tmp/uccl_src /tmp/uccl_deepep_pkg
+  case "${SLURM_NODEID:-0}" in ""|*[!0-9]*) return 1 ;; esac
+  node_id="${SLURM_NODEID:-0}"
+  wrapper_root="$PWD/.cx_backend/uccl-wrapper-node-$node_id"
+  case "$wrapper_root" in /ix/experimental/CollectiveX/.cx_backend/uccl-wrapper-node-*) ;; *) return 1 ;; esac
+  rm -rf /tmp/uccl_src "$wrapper_root"
   # Pin the wrapper to the SAME tag as the installed wheel (pkg-0.1.1 -> v0.1.1): the wrapper's
   # dispatch calls into uccl.ep (get_rdma_buffer etc.), so a main-branch wrapper vs a 0.1.1 wheel
   # mismatches signatures. Match them.
   if git clone --depth 1 --branch "$tag" https://github.com/uccl-project/uccl /tmp/uccl_src >&2 2>&1 \
      && [ "$(git -C /tmp/uccl_src rev-parse HEAD)" = "73ee4f12ba71717d6de34ba06806e1baaabe3f42" ] \
      && [ -d /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep ]; then
-    mkdir -p /tmp/uccl_deepep_pkg/uccl_deepep
-    cp /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep/*.py /tmp/uccl_deepep_pkg/uccl_deepep/ 2>/dev/null
-    export PYTHONPATH="/tmp/uccl_deepep_pkg:${PYTHONPATH:-}"
+    mkdir -p "$wrapper_root/uccl_deepep"
+    chmod 700 "$PWD/.cx_backend" "$wrapper_root" "$wrapper_root/uccl_deepep"
+    cp /tmp/uccl_src/ep/deep_ep_wrapper/deep_ep/*.py "$wrapper_root/uccl_deepep/" 2>/dev/null
+    export PYTHONPATH="$wrapper_root:${PYTHONPATH:-}"
     python3 -c "import torch; from uccl_deepep import Buffer; print('uccl_deepep wrapper ready')" >&2 \
       || { cx_log "ERROR: uccl_deepep wrapper import failed"; return 1; }
     export CX_UCCL_WRAPPER=1

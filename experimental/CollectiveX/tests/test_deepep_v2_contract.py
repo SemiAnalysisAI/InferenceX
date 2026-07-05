@@ -1407,6 +1407,9 @@ class DeepEPV2ContractTests(unittest.TestCase):
             runtime,
         )
         self.assertIn("--require-hashes", runtime)
+        self.assertIn('$PWD/.cx_backend/uccl-wrapper-node-$node_id', runtime)
+        self.assertNotIn("/tmp/uccl_deepep_pkg", runtime)
+        self.assertIn('export PYTHONPATH="$wrapper_root:${PYTHONPATH:-}"', runtime)
         self.assertIn("d77aeab7f1bb52b615666fe178d26ced41fae08e", common)
         self.assertIn("HEAD^{tree}", runtime)
         self.assertIn("$PWD/.cx_backend/deepep-hybrid-", runtime)

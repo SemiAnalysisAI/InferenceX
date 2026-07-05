@@ -766,10 +766,12 @@ BASH
 }
 
 cx_resolve_slurm_rendezvous() {
-  local job_id="$1" nodes master_addr master_port
+  local job_id="$1" master_addr master_port
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || cx_die "invalid rendezvous allocation"
-  nodes="$(squeue -j "$job_id" -h -o %N 2>/dev/null)"
-  master_addr="$(scontrol show hostnames "$nodes" 2>/dev/null | head -n1)"
+  # Expanded Slurm nodelists may be sorted differently from task placement.
+  # Query relative node zero directly so MASTER_ADDR always hosts global rank 0.
+  master_addr="$(srun --jobid="$job_id" --nodes=1 --ntasks=1 --relative=0 \
+    --chdir=/tmp --export="$(cx_host_exports)" hostname -s 2>/dev/null | head -n1)"
   master_port="${CX_MASTER_PORT:-29551}"
   [[ "$master_addr" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
     || cx_die "could not resolve the allocated primary node"
