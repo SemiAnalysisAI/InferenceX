@@ -71,6 +71,18 @@ cx_fail_stage() {
       diagnostic="network-or-timeout"
     elif grep -aEqi 'salloc:|srun:.*(unable to create step|step creation|invalid partition|invalid account)|unable to create step|job allocation' "$log_path"; then
       diagnostic="scheduler"
+    elif grep -aEqi 'ModuleNotFoundError|ImportError:' "$log_path"; then
+      diagnostic="python-import"
+    elif grep -aEqi 'AttributeError:|TypeError:.*(unexpected|argument|operand)|has no attribute' "$log_path"; then
+      diagnostic="backend-api"
+    elif grep -aEqi 'PrecisionError:|unsupported precision|precision profile.*(invalid|unsupported|differs)' "$log_path"; then
+      diagnostic="precision-contract"
+    elif grep -aEqi 'AssertionError:' "$log_path"; then
+      diagnostic="python-assertion"
+    elif grep -aEqi 'RuntimeError:' "$log_path"; then
+      diagnostic="python-runtime"
+    elif grep -aEqi 'Traceback \(most recent call last\)' "$log_path"; then
+      diagnostic="python-exception"
     elif grep -aEqi 'SHARD done: [0-9]+/[0-9]+ case\(s\) failed|WARN: .* run failed rc=|completed with invalid semantic evidence' "$log_path"; then
       diagnostic="benchmark-case-failure"
     elif [ -s "$log_path" ]; then

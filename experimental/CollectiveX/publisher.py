@@ -3359,16 +3359,15 @@ def _p99_top_tie_ids(
     )
     baseline_id = ordered[0]["series_id"]
     comparisons: dict[str, dict[str, Any]] = {}
-    tie_end = 0
-    for index, candidate in enumerate(ordered[1:], 1):
+    tie_ids = {baseline_id}
+    for candidate in ordered[1:]:
         candidate_id = candidate["series_id"]
         result = _hierarchical_p99_ratio(
             baseline_id, candidate_id, token, internals, dataset_binding
         )
         comparisons[candidate_id] = result
         if not result["baseline_wins"]:
-            tie_end = index
-    tie_ids = {member["series_id"] for member in ordered[:tie_end + 1]}
+            tie_ids.add(candidate_id)
     internals[baseline_id].setdefault("decision_statistics", {})[
         f"{cohort_id}:p99:{token}"
     ] = {
@@ -3540,6 +3539,8 @@ def build_decisions(
     sensitivities: list[dict[str, Any]] = []
     for cohort in cohorts:
         if not cohort["eligibility"]["decision_grade"]:
+            continue
+        if cohort["kind"] == "precision-pair":
             continue
         members = [series_by_id[series_id] for series_id in cohort["series_ids"]]
         tokens = sorted(set.intersection(*(

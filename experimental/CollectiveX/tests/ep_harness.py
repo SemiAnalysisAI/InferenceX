@@ -191,7 +191,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
         "--qualification-index",
         type=int,
         choices=range(1, QUALIFICATION_RUNS + 1),
-        default=os.environ.get("COLLECTIVEX_QUALIFICATION_INDEX", "1"),
+        default=os.environ.get("CX_QUALIFICATION_INDEX", "1"),
         help="one-based qualification repeat used for deterministic measurement ordering",
     )
     # 32: B300/Blackwell needs ~30 untimed iters to reach steady-state GPU clocks +

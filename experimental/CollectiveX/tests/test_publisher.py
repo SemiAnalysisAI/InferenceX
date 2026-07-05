@@ -2737,6 +2737,38 @@ class PublisherTest(unittest.TestCase):
         self.assertFalse(result["baseline_wins"])
         self.assertTrue(result["tie"])
 
+    def test_p99_tie_set_does_not_include_decisively_beaten_middle_series(self) -> None:
+        fast, fast_internal = _series("tie-fast", "deepep", decision_grade=True)
+        middle, middle_internal = _series("tie-middle", "uccl", decision_grade=True)
+        uncertain, uncertain_internal = _series(
+            "tie-uncertain", "nccl-ep", decision_grade=True
+        )
+        for index, item in enumerate((fast, middle, uncertain), 1):
+            item["points"][0]["components"]["roundtrip"]["latency_us"]["p99"] = float(index)
+        outcomes = {
+            middle["series_id"]: {"baseline_wins": True},
+            uncertain["series_id"]: {"baseline_wins": False},
+        }
+        with mock.patch.object(
+            publisher,
+            "_hierarchical_p99_ratio",
+            side_effect=lambda _baseline, candidate, *_args: outcomes[candidate],
+        ):
+            tie_ids = publisher._p99_top_tie_ids(
+                [fast, middle, uncertain],
+                {
+                    fast["series_id"]: fast_internal,
+                    middle["series_id"]: middle_internal,
+                    uncertain["series_id"]: uncertain_internal,
+                },
+                8,
+                "d" * 64,
+                publisher._derived_id(
+                    "cxcohort-v1-", {"fixture": "noncontiguous-tie"}
+                ),
+            )
+        self.assertEqual(tie_ids, {fast["series_id"], uncertain["series_id"]})
+
     def test_precision_cohorts_isolate_axes_and_never_recommend(self) -> None:
         profiles = (
             identity.V1_CONTROL_PRECISION_PROFILE,
@@ -2786,7 +2818,7 @@ class PublisherTest(unittest.TestCase):
             and cohort["eligibility"]["decision_grade"]
             for cohort in precision_cohorts
         ))
-        self.assertEqual(len(rankings), 30)
+        self.assertEqual(len(rankings), 24)
         self.assertEqual(len(sensitivities), 24)
         self.assertEqual(recommendations, [])
         pair = next(
@@ -2804,6 +2836,10 @@ class PublisherTest(unittest.TestCase):
         self.assertFalse(any(
             sensitivity["cohort_id"] == pair["cohort_id"]
             for sensitivity in sensitivities
+        ))
+        self.assertFalse(any(
+            ranking["cohort_id"] == pair["cohort_id"]
+            for ranking in rankings
         ))
 
     def test_private_trial_copy_is_component_extensible(self) -> None:

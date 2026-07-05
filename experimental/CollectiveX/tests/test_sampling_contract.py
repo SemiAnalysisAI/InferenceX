@@ -89,6 +89,17 @@ class SamplingContractTest(unittest.TestCase):
         )
         self.assertEqual((args.iters, args.trials, args.warmup), (8, 64, 32))
         self.assertEqual(args.qualification_index, 1)
+        with mock.patch.dict(os.environ, {"CX_QUALIFICATION_INDEX": "3"}):
+            parser = argparse.ArgumentParser()
+            ep_harness.add_common_args(parser)
+            env_args = parser.parse_args(
+                [
+                    "--runner", "test", "--topology-class", "test",
+                    "--scope", "scale-up", "--scale-up-transport", "nvlink",
+                    "--out", "result.json",
+                ]
+            )
+        self.assertEqual(env_args.qualification_index, 3)
         for profile in ((8, 64, 32), (128, 4, 32), (8, 1, 4), (0, 64, 32)):
             with self.subTest(profile=profile):
                 self.assertEqual(
@@ -2195,6 +2206,12 @@ class SamplingContractTest(unittest.TestCase):
             "NVCC compilation failed": "jit-toolchain",
             "CUDA out of memory": "accelerator-memory",
             "torch rendezvous timed out": "network-or-timeout",
+            "ModuleNotFoundError: missing module": "python-import",
+            "AttributeError: backend has no attribute 'probe'": "backend-api",
+            "PrecisionError: unsupported precision profile": "precision-contract",
+            "AssertionError: probe invariant": "python-assertion",
+            "RuntimeError: probe execution failed": "python-runtime",
+            "Traceback (most recent call last):": "python-exception",
         }
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / "runtime.log"
