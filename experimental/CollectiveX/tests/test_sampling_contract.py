@@ -2396,6 +2396,7 @@ class SamplingContractTest(unittest.TestCase):
 
           cx_prepare_implicit_stage_base() {
             if [ -n "${1:-}" ]; then test "$1" = "$TEST_SHARED_PARENT"; fi
+            if [ -n "${2:-}" ]; then test "$2" = 123; fi
             printf '%s' "$TEST_IMPLICIT_STAGE"
           }
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
@@ -2416,6 +2417,7 @@ class SamplingContractTest(unittest.TestCase):
           export CX_STAGE_DIR=/legacy/root-owned-stage
           cx_lock_canonical_gha_env b300
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
+          test "$CX_STAGE_PARENT_OWNER_OK" = 1
 
           export CX_STAGE_DIR=/shared/gb-stage
           export CX_SHARD_SKU=gb300 CX_NODES=2 CX_GPUS_PER_NODE=4
@@ -2427,6 +2429,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$CX_NGPUS:$CX_SEED:$CX_RUN_TIMEOUT" = 8:67:900
           test "$CX_NCCL_HOME:$CX_MASTER_PORT" = /usr:29551
           test "$CX_STAGE_DIR" = /shared/gb-stage
+          test -z "${CX_STAGE_PARENT_OWNER_OK+x}"
           test -z "${CX_MORI_KERNEL_TYPE+x}${MORI_ENABLE_SDMA+x}"
 
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
@@ -2490,6 +2493,9 @@ class SamplingContractTest(unittest.TestCase):
               test "$(stat -c '%a' "$base" 2>/dev/null || stat -f '%Lp' "$base")" = 700
               ! cx_prepare_implicit_stage_base "$3"
               test "$(cx_prepare_implicit_stage_base "$4")" = "$2/.inferencex-collectivex-stage"
+              isolated="$(cx_prepare_implicit_stage_base "$2" runner-a)"
+              test "$isolated" != "$2/.inferencex-collectivex-stage"
+              case "$isolated" in "$2"/.inferencex-collectivex-stage-*) ;; *) exit 1 ;; esac
               ! cx_prepare_implicit_stage_base "$5"
             '''
             subprocess.run(

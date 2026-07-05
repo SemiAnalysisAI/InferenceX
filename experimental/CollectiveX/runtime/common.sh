@@ -1496,7 +1496,8 @@ cx_materialize_backend_source() {
 }
 
 cx_prepare_implicit_stage_base() {
-  python3 - "${1:-}" <<'PY'
+  python3 - "${1:-}" "${2:-}" <<'PY'
+import hashlib
 import os
 from pathlib import Path
 import pwd
@@ -1526,8 +1527,13 @@ if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
     reject("home-group-writable")
 if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
     reject("home-world-writable")
+home_owner = metadata.st_uid
 try:
-    current = home / ".inferencex-collectivex-stage"
+    isolation_key = sys.argv[2]
+    suffix = ""
+    if isolation_key:
+        suffix = "-" + hashlib.sha256(isolation_key.encode("utf-8")).hexdigest()[:16]
+    current = home / f".inferencex-collectivex-stage{suffix}"
     try:
         os.mkdir(current, mode=0o700)
     except FileExistsError:
@@ -1535,7 +1541,7 @@ try:
     metadata = os.stat(current, follow_symlinks=False)
     if not stat.S_ISDIR(metadata.st_mode):
         reject("child-type")
-    if metadata.st_uid != os.getuid():
+    if metadata.st_uid not in {os.getuid(), home_owner}:
         reject("child-owner")
     if Path(os.path.realpath(current)) != current:
         reject("child-symlink")
@@ -1579,6 +1585,7 @@ cx_lock_canonical_gha_env() {
   # compute-visible account home is the canonical source for its private base.
   [ "$runner" != b300 ] || trusted_stage_dir=""
   unset CX_NCCL_HOME CX_MASTER_PORT CX_MORI_KERNEL_TYPE CX_LOCK_DIR CX_STAGE_DIR
+  unset CX_STAGE_PARENT_OWNER_OK
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
   unset CX_AUDIT_SALT
@@ -1603,7 +1610,12 @@ cx_lock_canonical_gha_env() {
         trusted_stage_dir="$(cx_prepare_implicit_stage_base "${CX_SQUASH_DIR%/*}")" \
           || cx_die "canonical CollectiveX execution cannot create an isolated shared stage directory"
         ;;
-      h200-dgxc|b200-dgxc|b300)
+      b300)
+        trusted_stage_dir="$(cx_prepare_implicit_stage_base "" \
+          "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
+          || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
+        ;;
+      h200-dgxc|b200-dgxc)
         trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
@@ -1612,6 +1624,9 @@ cx_lock_canonical_gha_env() {
   fi
   [[ "$trusted_audit_salt" =~ ^[0-9a-f]{64}$ ]] \
     || cx_die "canonical CollectiveX execution requires a private audit salt"
+  if [ "$runner" = b300 ]; then
+    CX_STAGE_PARENT_OWNER_OK=1
+  fi
 
   case "$runner" in
     h100-dgxc|h200-dgxc|b200-dgxc|b300)
@@ -1935,12 +1950,13 @@ cx_stage_path() {
     stage_path="${stage_base%/}/job_$safe_tag"
   fi
   python3 - "$repo_root" "$stage_base" "$stage_path" \
-    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" <<'PY'
+    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" \
+    "${CX_STAGE_PARENT_OWNER_OK:-0}" <<'PY'
 import os
 import stat
 import sys
 
-repo, base, child, job_root, workspace = sys.argv[1:]
+repo, base, child, job_root, workspace, allow_parent_owner = sys.argv[1:]
 def reject(reason):
     print(f"[collectivex] FATAL: stage-base-validation={reason}", file=sys.stderr)
     raise SystemExit(1)
@@ -1970,7 +1986,16 @@ try:
     if not stat.S_ISDIR(metadata.st_mode):
         reject("not-directory")
     if metadata.st_uid != os.getuid():
-        reject("owner")
+        if allow_parent_owner != "1":
+            reject("owner")
+        parent = os.path.dirname(base.rstrip("/"))
+        parent_metadata = os.stat(parent, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(parent_metadata.st_mode)
+            or parent_metadata.st_uid != metadata.st_uid
+            or stat.S_IMODE(parent_metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
+        ):
+            reject("parent-owner")
     if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
         reject("group-writable")
     if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:

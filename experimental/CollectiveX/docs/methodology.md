@@ -254,7 +254,10 @@ home when it is compute-visible. H100 instead derives a sibling of its shared co
 never a child of image storage. The launcher still proves cross-node visibility before any benchmark
 starts.
 Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
-from the validated shared account home.
+from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
+its owner matches the private parent owner; explicit stages and all other runners retain the strict
+effective-UID ownership rule. A hashed execution-ID suffix isolates parallel B300 workers without
+exposing private runner identity.
 
 ## Artifact Validation And JIT Delivery
 

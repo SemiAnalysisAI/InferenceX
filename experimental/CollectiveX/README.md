@@ -160,7 +160,10 @@ the same contract. H100 may also omit `stage_dir`; its private base is created b
 the configured shared container directory so it is compute-visible. All other runners require the
 dedicated `stage_dir` above; no canonical run stages source beneath shared container storage.
 Canonical B300 execution ignores any legacy configured `stage_dir` and always uses the validated
-compute-visible account-home base.
+compute-visible account-home base. Its UID-mapped Actions shell may accept that exact base when its
+owner matches the private parent owner; this exception is not available to configured stages or
+other runners. A hashed execution-ID suffix isolates parallel B300 workers without exposing private
+runner identity.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch
