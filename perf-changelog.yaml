@@ -4591,9 +4591,12 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1895
 
 - config-keys:
+    # max-tpt listed first so it dispatches first in the (serialized)
+    # multi-node matrix - its result lands early instead of last, and it
+    # is the longest leg. Ordering only; all three points still run.
+    - dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe
     - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
     - dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe
-    - dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe
   description:
     - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm disaggregated multinode benchmarks"
     - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
