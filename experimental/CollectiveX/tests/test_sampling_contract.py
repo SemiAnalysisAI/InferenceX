@@ -1195,6 +1195,13 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("Install pinned backend source seed", workflow)
         self.assertIn("CX_BACKEND_SOURCE_SEED_ROOT", workflow)
         self.assertIn("steps.gen.outputs.source_backends", workflow)
+        prepare_start = workflow.index("- name: Prepare pinned backend source archive")
+        source_archive_step = workflow[
+            prepare_start:workflow.index("- uses: actions/upload-artifact", prepare_start)
+        ]
+        self.assertIn('--no-recursion -C "$work/experimental/CollectiveX"', source_archive_step)
+        self.assertIn('members+=(".cx_sources/$source_basename")', source_archive_step)
+        self.assertIn('-rf "$archive" "$member"', source_archive_step)
         self.assertIn('python3 "$destination/source_archive.py"', workflow)
         install_source = workflow[workflow.index("- name: Install pinned backend source seed"):]
         self.assertIn('chmod 600 -- "$archive"', install_source)

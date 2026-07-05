@@ -171,12 +171,25 @@ jobs:
           mkdir -p "$work/experimental/CollectiveX"
           read -r -a backends <<< "$SOURCE_BACKENDS"
           [ "${#backends[@]}" -gt 0 ]
+          source_root="$work/experimental/CollectiveX/.cx_sources"
+          members=()
           for backend in "${backends[@]}"; do
             cx_prepare_backend_source "$work" "$backend"
+            source_path="$(cx_backend_source_path "$source_root" "$backend")"
+            source_basename="${source_path#"$source_root/"}"
+            [ -n "$source_basename" ] \
+              && [ "$source_path" = "$source_root/$source_basename" ] \
+              && [[ "$source_basename" != */* ]]
+            members+=(".cx_sources/$source_basename")
           done
           cx_cleanup_private_logs 0
           tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
-            -C "$work/experimental/CollectiveX" -cf "$archive" .cx_sources
+            --no-recursion -C "$work/experimental/CollectiveX" \
+            -cf "$archive" .cx_sources
+          for member in "${members[@]}"; do
+            tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
+              -C "$work/experimental/CollectiveX" -rf "$archive" "$member"
+          done
           sha256sum "$archive"
           rm -rf -- "$work"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
