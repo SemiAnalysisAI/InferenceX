@@ -122,6 +122,8 @@ jobs:
           if [ "$INPUT_OPERATION" = probe-precision ]; then
             args=(--workflow-plan --backend "$INPUT_BACKEND" --out matrix_full.json)
             [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+            [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
+            [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
             python3 tests/probe_precision.py "${args[@]}"
           else
             args=(--suites "$INPUT_SUITES" --max-cases "$INPUT_MAX_CASES")
@@ -435,6 +437,7 @@ jobs:
         id: sweep_shard
         env:
           COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
+          COLLECTIVEX_OPERATOR_AUDIT_SALT: ${{ secrets.COLLECTIVEX_AUDIT_SALT_V1 }}
           COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
         run: |
           set -euo pipefail

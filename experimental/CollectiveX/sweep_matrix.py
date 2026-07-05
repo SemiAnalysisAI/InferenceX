@@ -1306,16 +1306,31 @@ def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
         precision_profile = case.get(
             "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
         )
+        precision = identity.precision_profile(precision_profile)
         cases.append({
             "backend": case["backend"],
+            "backend_generation": None,
             "case_id": case["case_id"],
             "disposition": wrapper["disposition"],
+            "dispatch_precision": precision["dispatch"],
+            "combine_precision": precision["combine"],
             "eplb": case["eplb"],
+            "label": (
+                f"{wrapper['sku'].upper()} / {case['backend']} / EP{case['ep']} / "
+                f"{case['mode']} / {case['phase']} / {case['routing']}"
+            ),
             "mode": case["mode"],
             "phase": case["phase"],
             "precision_profile": precision_profile,
             "publication_tier": case["required_publication"],
             "reason": wrapper["reason"],
+            "required": True,
+            "resource": {
+                "mode": "fixed-profile",
+                "profile": None,
+                "comm_units_kind": None,
+                "configured_units": None,
+            },
             "routing": case["routing"],
             "sku": wrapper["sku"],
             "suite": case["suite"],

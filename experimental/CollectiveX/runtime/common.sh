@@ -90,6 +90,9 @@ cx_load_operator_config() {
   [ -n "${COLLECTIVEX_OPERATOR_CONFIG_LOADED:-}" ] \
     && [ "$COLLECTIVEX_OPERATOR_CONFIG_LOADED" = "$$" ] && return 0
   local config_path generated=0 parsed_path config_log key value
+  local audit_salt_override validation_code
+  audit_salt_override="${COLLECTIVEX_OPERATOR_AUDIT_SALT:-}"
+  unset COLLECTIVEX_OPERATOR_AUDIT_SALT
   unset CX_PARTITION CX_ACCOUNT CX_SQUASH_DIR CX_STAGE_DIR CX_ENROOT_CACHE_PATH
   unset ENROOT_CACHE_PATH
   unset CX_EXCLUDE_NODES CX_NODELIST CX_LOCK_DIR CX_MASTER_PORT
@@ -135,7 +138,7 @@ cx_load_operator_config() {
   }
   config_log="$(cx_private_log_path operator-config)"
   if ! python3 - "$config_path" "${CX_RUNNER:-${CX_SHARD_SKU:-${CX_PUBLIC_RUNNER:-}}}" \
-      "${COLLECTIVEX_CANONICAL_GHA:-0}" \
+      "${COLLECTIVEX_CANONICAL_GHA:-0}" "$audit_salt_override" \
       > "$parsed_path" 2> "$config_log" <<'PY'
 import json
 import os
@@ -209,7 +212,7 @@ def valid_path(value):
     )
 
 try:
-    path, runner, audit_required = sys.argv[1:]
+    path, runner, audit_required, audit_override = sys.argv[1:]
     if runner not in RUNNERS or audit_required not in {"0", "1"}:
         raise ValueError
     metadata = os.lstat(path)
@@ -251,8 +254,12 @@ try:
         (audit_salt is not None and (
             not isinstance(audit_salt, str) or not AUDIT_SALT.fullmatch(audit_salt)
         ))
-        or (audit_required == "1" and audit_salt is None)
+        or (audit_override and not AUDIT_SALT.fullmatch(audit_override))
+        or (audit_salt is not None and audit_override and audit_salt != audit_override)
     ):
+        raise ValueError
+    audit_salt = audit_salt or audit_override or None
+    if audit_required == "1" and audit_salt is None:
         raise ValueError
     runners = document["runners"]
     if (
@@ -340,7 +347,6 @@ except (KeyError, OSError, TypeError, UnicodeError, ValueError):
     raise SystemExit(1)
 PY
   then
-    local validation_code
     validation_code="$(head -n 1 "$config_log" 2>/dev/null || true)"
     rm -f -- "$parsed_path"
     [ "$generated" = 0 ] || rm -f -- "$config_path"

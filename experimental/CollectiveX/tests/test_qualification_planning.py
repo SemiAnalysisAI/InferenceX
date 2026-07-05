@@ -186,6 +186,16 @@ class QualificationPlanningTest(unittest.TestCase):
             {item["case_id"] for item in catalog["cases"]},
             {item["case"]["case_id"] for item in self.matrix["requested_cases"]},
         )
+        self.assertTrue(all(item["required"] for item in catalog["cases"]))
+        self.assertTrue(all(item["backend_generation"] is None for item in catalog["cases"]))
+        self.assertEqual(
+            {item["resource"]["mode"] for item in catalog["cases"]},
+            {"fixed-profile"},
+        )
+        for item in catalog["cases"]:
+            profile = identity.precision_profile(item["precision_profile"])
+            self.assertEqual(item["dispatch_precision"], profile["dispatch"])
+            self.assertEqual(item["combine_precision"], profile["combine"])
         self.assertLess(len(_canonical(catalog)) + 1, 1024 * 1024)
 
     def test_invalid_qualification_controls_are_rejected(self) -> None:

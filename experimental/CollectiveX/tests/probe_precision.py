@@ -318,11 +318,24 @@ def _workflow_row(target: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def workflow_plan(*, backend: str = "all", only_sku: str = "") -> dict[str, Any]:
+def workflow_plan(
+    *, backend: str = "all", only_sku: str = "", min_nodes: int = 0,
+    max_nodes: int = 0,
+) -> dict[str, Any]:
+    if min_nodes < 0 or max_nodes < 0 or (min_nodes and max_nodes and min_nodes > max_nodes):
+        raise ValueError("precision probe node filters are invalid")
     targets = [
         target for target in provisional_targets()
         if (backend == "all" or target["backend"] == backend)
         and (not only_sku or target["sku"] == only_sku)
+        and (
+            not min_nodes
+            or capability.topology_for(target["sku"], target["ep"])["nodes"] >= min_nodes
+        )
+        and (
+            not max_nodes
+            or capability.topology_for(target["sku"], target["ep"])["nodes"] <= max_nodes
+        )
     ]
     if backend != "all" and backend not in BACKENDS:
         raise ValueError("precision probe backend is not registered")
@@ -1096,6 +1109,8 @@ def main() -> int:
     parser.add_argument("--backend", choices=sorted(BACKENDS | {"all"}))
     parser.add_argument("--sku")
     parser.add_argument("--only-sku", default="")
+    parser.add_argument("--min-nodes", type=int, default=0)
+    parser.add_argument("--max-nodes", type=int, default=0)
     parser.add_argument("--expect-sku")
     parser.add_argument("--expect-backend")
     parser.add_argument("--expect-nodes", type=int)
@@ -1108,7 +1123,10 @@ def main() -> int:
         print(json.dumps(provisional_targets(), allow_nan=False, sort_keys=True, separators=(",", ":")))
         return 0
     if args.workflow_plan:
-        plan = workflow_plan(backend=args.backend or "all", only_sku=args.only_sku)
+        plan = workflow_plan(
+            backend=args.backend or "all", only_sku=args.only_sku,
+            min_nodes=args.min_nodes, max_nodes=args.max_nodes,
+        )
         if args.out is None:
             print(json.dumps(plan, allow_nan=False, sort_keys=True, separators=(",", ":")))
         else:

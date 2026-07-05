@@ -77,6 +77,13 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(backend="mori", only_sku="b200-dgxc")
+        ep8 = probe_precision.workflow_plan(
+            backend="deepep", only_sku="b200-dgxc", max_nodes=1,
+        )
+        self.assertTrue(ep8["include"])
+        self.assertEqual({row["ep"] for row in ep8["include"]}, {8})
+        with self.assertRaisesRegex(ValueError, "node filters"):
+            probe_precision.workflow_plan(min_nodes=2, max_nodes=1)
 
     def test_precision_probe_manifest_is_sanitized_and_runtime_evidence_is_required(self) -> None:
         target = probe_precision.provisional_targets()[0]
