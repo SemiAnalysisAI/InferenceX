@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 26)
+        self.assertEqual(len(targets), 18)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -228,15 +228,15 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 68
+            len(targets) - len(capability.provisional_precision_targets()), 76
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 52
+            sum(item["disposition"] == "supported" for item in targets), 59
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 16
+            sum(item["disposition"] == "unsupported" for item in targets), 17
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 26)
+        self.assertEqual(len(capability.provisional_precision_targets()), 18)
         keys = {
             (
                 item["precision_profile"],
@@ -261,7 +261,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             (("mi355x", "mori", 16, "normal", direct), "not-applicable"),
             (("mi325x", "mori", 8, "normal", fnuz_direct), "provisional"),
             (("h200-dgxc", "deepep", 8, "low-latency", low_latency), "supported"),
-            (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "provisional"),
+            (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "supported"),
             (("h200-dgxc", "deepep-hybrid", 8, "low-latency", low_latency),
              "not-applicable"),
         )

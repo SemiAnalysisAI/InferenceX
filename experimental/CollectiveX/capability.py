@@ -339,6 +339,14 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28738113606", "h100-dgxc", 8, "uccl", "low-latency", _LL_FP8_PROFILE, "unsupported", "native-operation-timeout"),
     ("28738113606", "h100-dgxc", 8, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28745208954", "h100-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
+    ("28745423523", "h100-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     *(("28738445591", "gb300", ep, "deepep", mode, profile, "supported", "native-probe-passed")
       for ep in (8, 16)
       for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
