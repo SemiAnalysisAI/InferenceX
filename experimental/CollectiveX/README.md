@@ -133,7 +133,7 @@ temporary copy before allocation. Required JSON fields are:
 | `b200-dgxc` | `partition`, `account`, `squash_dir` |
 | `b300` | `partition`, `account`, `squash_dir` |
 | `gb200` | `partition`, `account`, ordered `storage_roots` |
-| `gb300` | `partition`, `account`, `squash_dir`, `stage_dir`, `enroot_cache_path` |
+| `gb300` | `partition`, `account`, `squash_dir`, `enroot_cache_path` |
 | `mi325x`, `mi355x` | `partition`, `squash_dir`, `stage_dir` |
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices`
@@ -165,6 +165,8 @@ owner matches the private parent owner; this exception is not available to confi
 other runners. A hashed execution-ID suffix isolates parallel B300 workers without exposing private
 runner identity. On this NFS export, a newly created hashed base may realize as UID 0; only that
 creation path is accepted, while a pre-existing root-owned base is rejected.
+Canonical GB300 execution likewise ignores its legacy group-writable `stage_dir` and derives an
+execution-hashed private base beneath the validated compute-visible account home.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch

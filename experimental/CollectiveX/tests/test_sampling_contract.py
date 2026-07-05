@@ -2419,7 +2419,8 @@ class SamplingContractTest(unittest.TestCase):
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
           test "$CX_STAGE_PARENT_OWNER_OK" = 1
 
-          export CX_STAGE_DIR=/shared/gb-stage
+          export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
+          export CX_STAGE_DIR=/legacy/group-writable-stage
           export CX_SHARD_SKU=gb300 CX_NODES=2 CX_GPUS_PER_NODE=4
           export CX_IMAGE=untrusted CX_NGPUS=1 CX_MORI_KERNEL_TYPE=untrusted
           export MORI_ENABLE_SDMA=0 CX_NCCL_HOME=/untrusted CX_MASTER_PORT=1
@@ -2428,7 +2429,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$CX_IMAGE_DIGEST" = "$CX_IMAGE_MULTIARCH_DIGEST"
           test "$CX_NGPUS:$CX_SEED:$CX_RUN_TIMEOUT" = 8:67:900
           test "$CX_NCCL_HOME:$CX_MASTER_PORT" = /usr:29551
-          test "$CX_STAGE_DIR" = /shared/gb-stage
+          test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
           test -z "${CX_STAGE_PARENT_OWNER_OK+x}"
           test -z "${CX_MORI_KERNEL_TYPE+x}${MORI_ENABLE_SDMA+x}"
 

@@ -2065,6 +2065,8 @@ class DeepEPV2ContractTests(unittest.TestCase):
             del missing_h100_stage["runners"]["h100-dgxc"]["stage_dir"]
             missing_b300_stage = json.loads(json.dumps(document))
             del missing_b300_stage["runners"]["b300"]["stage_dir"]
+            missing_gb300_stage = json.loads(json.dumps(document))
+            del missing_gb300_stage["runners"]["gb300"]["stage_dir"]
             missing_nvidia_account = json.loads(json.dumps(document))
             del missing_nvidia_account["runners"]["h100-dgxc"]["account"]
             for invalid in (rejected, boolean_version, missing_nvidia_account):
@@ -2089,6 +2091,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 (missing_amd_stage, "h100-dgxc"),
                 (missing_h100_stage, "h100-dgxc"),
                 (missing_b300_stage, "b300"),
+                (missing_gb300_stage, "gb300"),
             ):
                 config.write_text(json.dumps(valid))
                 config.chmod(0o600)

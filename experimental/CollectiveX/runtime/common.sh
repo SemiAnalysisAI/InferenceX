@@ -240,7 +240,7 @@ REQUIRED = {
     "b200-dgxc": {"partition", "account", "squash_dir"},
     "b300": {"partition", "account", "squash_dir"},
     "gb200": {"partition", "account", "storage_roots"},
-    "gb300": {"partition", "account", "squash_dir", "stage_dir", "enroot_cache_path"},
+    "gb300": {"partition", "account", "squash_dir", "enroot_cache_path"},
     "mi325x": {"partition", "squash_dir", "stage_dir"},
     "mi355x": {"partition", "squash_dir", "stage_dir"},
 }
@@ -250,7 +250,7 @@ ALLOWED = {
     "b200-dgxc": REQUIRED["b200-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "gb200": REQUIRED["gb200"] | NETWORK_FIELDS,
-    "gb300": REQUIRED["gb300"] | NETWORK_FIELDS,
+    "gb300": REQUIRED["gb300"] | {"stage_dir"} | NETWORK_FIELDS,
     "mi325x": REQUIRED["mi325x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
     "mi355x": REQUIRED["mi355x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
 }
@@ -1587,7 +1587,7 @@ cx_lock_canonical_gha_env() {
   fi
   # The legacy B300 operator row contains a root-owned stage path. B300's
   # compute-visible account home is the canonical source for its private base.
-  [ "$runner" != b300 ] || trusted_stage_dir=""
+  case "$runner" in b300|gb300) trusted_stage_dir="" ;; esac
   unset CX_NCCL_HOME CX_MASTER_PORT CX_MORI_KERNEL_TYPE CX_LOCK_DIR CX_STAGE_DIR
   unset CX_STAGE_PARENT_OWNER_OK
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
@@ -1615,6 +1615,11 @@ cx_lock_canonical_gha_env() {
           || cx_die "canonical CollectiveX execution cannot create an isolated shared stage directory"
         ;;
       b300)
+        trusted_stage_dir="$(cx_prepare_implicit_stage_base "" \
+          "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
+          || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
+        ;;
+      gb300)
         trusted_stage_dir="$(cx_prepare_implicit_stage_base "" \
           "${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-}}")" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
