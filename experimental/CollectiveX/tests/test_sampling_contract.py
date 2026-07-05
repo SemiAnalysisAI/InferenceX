@@ -516,7 +516,8 @@ class SamplingContractTest(unittest.TestCase):
             )
 
             def invoke(
-                value: dict, *, canonical: bool, expect_salt: bool = True
+                value: dict, *, canonical: bool, expect_salt: bool = True,
+                audit_override: str | None = None,
             ) -> subprocess.CompletedProcess[str]:
                 config.write_text(json.dumps(value))
                 config.chmod(0o600)
@@ -528,6 +529,8 @@ class SamplingContractTest(unittest.TestCase):
                 }
                 if canonical:
                     environment["COLLECTIVEX_CANONICAL_GHA"] = "1"
+                if audit_override is not None:
+                    environment["COLLECTIVEX_OPERATOR_AUDIT_SALT"] = audit_override
                 invocation = command if expect_salt else (
                     'source "$1"; export COLLECTIVEX_EXECUTION_ID="audit-config-$$"; '
                     "trap 'cx_cleanup_private_logs 0' EXIT; cx_load_operator_config; "
@@ -549,6 +552,18 @@ class SamplingContractTest(unittest.TestCase):
             rejected = invoke(missing, canonical=True)
             self.assertNotEqual(rejected.returncode, 0)
             self.assertNotIn(salt, rejected.stdout + rejected.stderr)
+
+            separate = invoke(missing, canonical=True, audit_override=salt)
+            self.assertEqual(separate.returncode, 0, separate.stderr)
+            self.assertNotIn(salt, separate.stdout + separate.stderr)
+
+            conflicting = invoke(document, canonical=True, audit_override="b" * 64)
+            self.assertNotEqual(conflicting.returncode, 0)
+            self.assertNotIn(salt, conflicting.stdout + conflicting.stderr)
+
+            malformed_override = invoke(missing, canonical=True, audit_override="A" * 64)
+            self.assertNotEqual(malformed_override.returncode, 0)
+            self.assertNotIn("A" * 64, malformed_override.stdout + malformed_override.stderr)
 
             manual = invoke(missing, canonical=False, expect_salt=False)
             self.assertEqual(manual.returncode, 0, manual.stderr)
