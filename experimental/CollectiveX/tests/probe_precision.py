@@ -1043,14 +1043,27 @@ def run_target(target: dict[str, Any], output: Path) -> int:
         "scale_out_transport": None, "scope": "scale-out",
         "topology_class": "unknown", "transport": "unknown", "world_size": target["ep"],
     }
+    os.environ.pop("NCCL_ASYNC_ERROR_HANDLING", None)
+    os.environ.setdefault("TORCH_NCCL_ASYNC_ERROR_HANDLING", "1")
+    os.environ.setdefault("NCCL_DEBUG", "INFO")
+    os.environ.setdefault("NCCL_DEBUG_SUBSYS", "ENV,INIT,NET")
+
+    def stage(name: str) -> None:
+        nonlocal diagnostic_stage
+        diagnostic_stage = name
+        if rank == 0:
+            print(f"[collectivex] precision-probe-stage={name}", file=sys.stderr, flush=True)
+
     try:
+        stage("distributed-init")
         _init_distributed(torch, dist, target["backend"], device, rank, world_size)
-        diagnostic_stage = "runtime-context"
+        stage("runtime-context")
         topology, placement, fingerprint = _runtime_context(
             torch, dist, target, device, local_rank
         )
         topology_record = _topology_record(topology, bool(placement["valid"]))
         args = _runtime_args(target, topology, fingerprint)
+        stage("backend-construction")
         try:
             backend = _backend_class(target["backend"])(
                 args, rank, world_size, local_rank, device
@@ -1059,7 +1072,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
         except Exception:
             construction = {"ok": False, "reason": "backend-construction-failed"}
         gathered: list[Any] = [None] * world_size
-        diagnostic_stage = "construction-consensus"
+        stage("construction-consensus")
         dist.all_gather_object(gathered, construction)
         if not all(record.get("ok") is True for record in gathered):
             manifest = build_manifest(
@@ -1067,6 +1080,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
                 reason="backend-construction-failed", runtime_executed=True, evidence=None,
             )
         else:
+            stage("native-operation")
             try:
                 local = {"ok": True, "evidence": _local_probe(
                     torch, dist, target, backend, args, rank
@@ -1076,7 +1090,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
             except Exception:
                 local = {"ok": False, "reason": "native-operation-failed"}
             gathered = [None] * world_size
-            diagnostic_stage = "operation-consensus"
+            stage("operation-consensus")
             dist.all_gather_object(gathered, local)
             if not all(record.get("ok") is True for record in gathered):
                 reasons = {record.get("reason") for record in gathered}
@@ -1086,7 +1100,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
                     reason=reason, runtime_executed=True, evidence=None,
                 )
             else:
-                diagnostic_stage = "evidence-aggregation"
+                stage("evidence-aggregation")
                 evidence = _aggregate_local([record["evidence"] for record in gathered])
                 manifest = build_manifest(
                     target=target, topology=topology_record, disposition="supported",

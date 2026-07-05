@@ -852,6 +852,7 @@ if [ "${CX_NODES:-1}" -gt 1 ] && [ "${CX_TRANSPORT:-}" != mnnvl ]; then
   . /ix/experimental/CollectiveX/runtime/common.sh || exit 68
   cx_restore_exact_hca_selector || exit 68
 fi
+cx_write_runtime_stage execution || exit 68
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$CX_GPUS_PER_NODE"
 case "${CX_PRECISION_PROBE:-0}" in
@@ -2678,6 +2679,10 @@ cx_run_distributed_shard() {
       </dev/null >"$runtime_log" 2>&1
     run_rc=$?
     set -e
+    if [ "$run_rc" = 124 ] || [ "$run_rc" = 137 ]; then
+      printf '[collectivex] precision probe timed out rc=%s limit=%ss\n' \
+        "$run_rc" "${CX_RUN_TIMEOUT:-900}" >> "$runtime_log"
+    fi
     if [ "$run_rc" != 0 ] || ! python3 "$CX_DIR/tests/probe_precision.py" \
         --validate-manifest "$expected_out" >/dev/null 2>&1; then
       [ "$run_rc" != 0 ] || run_rc=1

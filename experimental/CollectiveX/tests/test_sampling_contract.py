@@ -630,6 +630,7 @@ class SamplingContractTest(unittest.TestCase):
           bash -n <<< "$wrapper"
           grep -Fq '. /ix/experimental/CollectiveX/runtime/common.sh' <<< "$wrapper"
           grep -Fq 'cx_restore_exact_hca_selector || exit 68' <<< "$wrapper"
+          grep -Fq 'cx_write_runtime_stage execution || exit 68' <<< "$wrapper"
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$MORI_RDMA_DEVICES:$EP_NIC_NAME" = mlx5_0,mlx5_1:mlx5_0
@@ -2441,6 +2442,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("cx_private_log_path shard-summary", distributed)
         self.assertIn("cx_fail_stage execution", distributed)
         self.assertIn('cx_fail_stage execution "$runtime_log"', distributed)
+        self.assertIn("precision probe timed out rc=%s limit=%ss", distributed)
 
     def test_case_failure_diagnostic_precedes_normal_srun_footer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
