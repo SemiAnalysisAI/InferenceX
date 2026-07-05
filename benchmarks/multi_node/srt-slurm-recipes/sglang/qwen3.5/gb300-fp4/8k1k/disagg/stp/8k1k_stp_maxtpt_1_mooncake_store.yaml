@@ -39,8 +39,7 @@ backend:
     env:
       MOONCAKE_PROTOCOL: "rdma"
       MOONCAKE_DEVICE: ""
-      MOONCAKE_GLOBAL_SEGMENT_SIZE: "4gb"
-      MOONCAKE_LOCAL_BUFFER_SIZE: "67108864"
+      MOONCAKE_GLOBAL_SEGMENT_SIZE: "800gb"
       MC_FORCE_MNNVL: "1"
 
   prefill_environment:
