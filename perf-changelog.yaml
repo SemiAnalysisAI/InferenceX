@@ -4530,3 +4530,9 @@
   description:
     - "Update vLLM ROCm image from vllm/vllm-openai-rocm:nightly-b8336c3c7c298e0878f22a7bf70f4e295b2f4e01 to vllm/vllm-openai-rocm:v0.24.0"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2077
+
+- config-keys:
+    - dsr1-fp8-b300-cw-sglang
+  description:
+    - "Add DeepSeek-R1-0528 FP8 sglang single-node benchmark on the CoreWeave B300 cluster (runner cluster:b300-cw), on lmsysorg/sglang:v0.5.12-cu130; validates the single-node pipeline on the CoreWeave B300 fleet"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2086

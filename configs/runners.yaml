@@ -306,6 +306,9 @@ hardware:
   cluster:b300-nv:
     available-cpu-dram-mib: 2_964_436
     gpus-per-node: 8
+  cluster:b300-cw:
+    available-cpu-dram-mib: 3_774_464
+    gpus-per-node: 8
   cluster:gb200-nv:
     available-cpu-dram-mib: 860_160
     gpus-per-node: 4
