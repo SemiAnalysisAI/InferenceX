@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 6)
+        self.assertEqual(len(targets), 5)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -83,11 +83,11 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(backend="mori", only_sku="b200-dgxc")
-        ep8 = probe_precision.workflow_plan(
-            backend="mori", only_sku="mi355x", max_nodes=1,
+        ep16 = probe_precision.workflow_plan(
+            backend="mori", only_sku="mi355x", min_nodes=2,
         )
-        self.assertTrue(ep8["include"])
-        self.assertEqual({row["ep"] for row in ep8["include"]}, {8})
+        self.assertTrue(ep16["include"])
+        self.assertEqual({row["ep"] for row in ep16["include"]}, {16})
         with self.assertRaisesRegex(ValueError, "node filters"):
             probe_precision.workflow_plan(min_nodes=2, max_nodes=1)
 
@@ -228,15 +228,15 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 88
+            len(targets) - len(capability.provisional_precision_targets()), 89
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 59
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 29
+            sum(item["disposition"] == "unsupported" for item in targets), 30
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 6)
+        self.assertEqual(len(capability.provisional_precision_targets()), 5)
         keys = {
             (
                 item["precision_profile"],
