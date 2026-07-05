@@ -159,6 +159,8 @@ node before launch. The execution child is validated, marked, cross-node checked
 the same contract. H100 may also omit `stage_dir`; its private base is created beside, never beneath,
 the configured shared container directory so it is compute-visible. All other runners require the
 dedicated `stage_dir` above; no canonical run stages source beneath shared container storage.
+Canonical B300 execution ignores any legacy configured `stage_dir` and always uses the validated
+compute-visible account-home base.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch

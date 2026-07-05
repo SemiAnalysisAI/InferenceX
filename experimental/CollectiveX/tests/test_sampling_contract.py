@@ -2413,7 +2413,7 @@ class SamplingContractTest(unittest.TestCase):
 
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_SHARD_SKU=b300 CX_NODES=1 CX_GPUS_PER_NODE=8
-          unset CX_STAGE_DIR
+          export CX_STAGE_DIR=/legacy/root-owned-stage
           cx_lock_canonical_gha_env b300
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
 

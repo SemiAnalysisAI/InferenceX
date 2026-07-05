@@ -251,6 +251,8 @@ H200, B200, and B300 may derive that private base beneath the validated operatin
 home when it is compute-visible. H100 instead derives a sibling of its shared container directory,
 never a child of image storage. The launcher still proves cross-node visibility before any benchmark
 starts.
+Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
+from the validated shared account home.
 
 ## Artifact Validation And JIT Delivery
 

@@ -1575,6 +1575,9 @@ cx_lock_canonical_gha_env() {
     trusted_rdma_service_level="${CX_RDMA_SERVICE_LEVEL:-}"
     trusted_audit_salt="${CX_AUDIT_SALT:-}"
   fi
+  # The legacy B300 operator row contains a root-owned stage path. B300's
+  # compute-visible account home is the canonical source for its private base.
+  [ "$runner" != b300 ] || trusted_stage_dir=""
   unset CX_NCCL_HOME CX_MASTER_PORT CX_MORI_KERNEL_TYPE CX_LOCK_DIR CX_STAGE_DIR
   unset MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK LOCAL_WORLD_SIZE
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
