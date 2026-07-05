@@ -30,6 +30,7 @@ PRIVATE_FABRIC_ENV = {
     "ib_gid_index": "CX_IB_GID_INDEX",
     "rdma_devices": "CX_RDMA_DEVICES",
     "rdma_service_level": "CX_RDMA_SERVICE_LEVEL",
+    "rdma_traffic_class": "CX_RDMA_TRAFFIC_CLASS",
     "socket_ifname": "CX_SOCKET_IFNAME",
 }
 

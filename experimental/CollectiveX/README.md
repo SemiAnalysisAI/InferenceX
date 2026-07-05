@@ -141,7 +141,8 @@ temporary copy before allocation. Required JSON fields are:
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices`
 for its operator-approved fabric; optional
-`ib_gid_index` and `rdma_service_level` are also allowlisted. CollectiveX does not heuristically
+`ib_gid_index`, `rdma_service_level`, and `rdma_traffic_class` are also allowlisted. Service level
+and traffic class are mapped into MoRI's RDMA/IO QoS environment. CollectiveX does not heuristically
 select a management route or HCA. After allocation, every non-MNNVL scale-out node must prove that
 all configured interfaces and active HCA ports exist before backend setup. Scale-up and MNNVL jobs
 clear these overrides. Scale-out NCCL/RCCL is pinned to `IB` with exact-match HCA selectors so a

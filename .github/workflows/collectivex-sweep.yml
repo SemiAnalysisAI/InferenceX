@@ -498,6 +498,7 @@ jobs:
               overlay = load(overlay_name)
               private_fields = {
                   "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
+                  "rdma_traffic_class",
               }
               if set(overlay) != {"schema_version", "runners"} or overlay["schema_version"] != 1:
                   raise ValueError("invalid network overlay envelope")

@@ -517,6 +517,7 @@ class SamplingContractTest(unittest.TestCase):
                     "h100-dgxc": {
                         "partition": "test", "account": "test",
                         "squash_dir": str(root), "stage_dir": str(root),
+                        "rdma_traffic_class": 104,
                     },
                 },
             }
@@ -618,7 +619,7 @@ class SamplingContractTest(unittest.TestCase):
           test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_DISABLE_IB+x}${NVSHMEM_HCA_LIST+x}"
           cx_apply_network_profile 4 mnnvl
           test -z "${NCCL_NET+x}${NCCL_IB_HCA+x}${NVSHMEM_HCA_LIST+x}"
-          export CX_IB_GID_INDEX=3 CX_RDMA_SERVICE_LEVEL=2
+          export CX_IB_GID_INDEX=3 CX_RDMA_SERVICE_LEVEL=2 CX_RDMA_TRAFFIC_CLASS=104
           cx_apply_network_profile 2 nvlink-rdma
           test "$NCCL_SOCKET_IFNAME:$GLOO_SOCKET_IFNAME:$UCCL_SOCKET_IFNAME" = ib0:ib0:ib0
           test "$NCCL_NET:$NCCL_IB_HCA" = 'IB:=mlx5_0:1,mlx5_1:1'
@@ -634,6 +635,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$MORI_RDMA_DEVICES:$EP_NIC_NAME" = mlx5_0,mlx5_1:mlx5_0
+          test "$MORI_RDMA_TC:$MORI_IO_TC:$MORI_RDMA_SL:$MORI_IO_SL" = 104:104:2:2
           test -z "${NCCL_IB_GID_INDEX+x}${NVSHMEM_IB_GID_INDEX+x}${UCCL_IB_GID_INDEX+x}"
           cx_export_gid_index_for_link_layer roce 1
           test "$NCCL_IB_GID_INDEX:$NCCL_IB_SL" = 3:2
@@ -1804,6 +1806,7 @@ class SamplingContractTest(unittest.TestCase):
             "ib_gid_index": "3",
             "rdma_devices": "private-hca0:1,private-hca1:1",
             "rdma_service_level": "2",
+            "rdma_traffic_class": "104",
             "socket_ifname": "private-if0",
         }
         digest = run_ep._allocation_stratum_sha256(
