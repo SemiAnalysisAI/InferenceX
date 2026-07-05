@@ -2430,6 +2430,9 @@ cx_launcher_cleanup() {
     cx_write_cleanup_guard unsafe || true
   fi
   [ "$allocation_stopped" = 1 ] || source_root="${REPO_ROOT:-$source_root}"
+  if [ "$rc" != 0 ] && [ "${CX_PRECISION_PROBE:-0}" = 1 ]; then
+    cx_log "ERROR: precision-probe-failure-class=${CX_FAILSAFE_MODE:-setup}"
+  fi
   if [ "$rc" != 0 ] && [ "${CX_PRECISION_PROBE:-0}" != 1 ] \
       && [ -n "${REPO_ROOT:-}" ] && [ -n "${CX_BENCH:-}" ]; then
     cx_log "ERROR: terminal-failure-class=${CX_FAILSAFE_MODE:-setup}"

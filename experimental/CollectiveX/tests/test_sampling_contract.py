@@ -1193,6 +1193,7 @@ class SamplingContractTest(unittest.TestCase):
         )
         cleanup_function = (ROOT / "runtime" / "common.sh").read_text()
         self.assertIn('[ "${CX_PRECISION_PROBE:-0}" != 1 ]', cleanup_function)
+        self.assertIn("precision-probe-failure-class=", cleanup_function)
         sweep_workflow = workflow[workflow.index("  sweep:"):]
         self.assertNotIn("GITHUB_WORKSPACE", sweep_workflow)
         self.assertNotIn("RUNNER_WORKSPACE", sweep_workflow)
