@@ -36,9 +36,9 @@ normal `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v
 - `ep-precision-normal-v1`: nonbaseline native dispatch/combine profiles at decode T=128 and prefill
   T=512; BF16/BF16 endpoint controls are referenced rather than duplicated.
 - `ep-precision-low-latency-v1`: nonbaseline native low-latency profiles at decode T=128.
-- BF16 planning baseline: 608 requested cases / 1,600 token points; 364 runnable cases / 940
+- BF16 planning baseline: 608 requested cases / 1,600 token points; 338 runnable cases / 868
   points in
-  58 executable workflow shards/allocation cells; 244 unsupported cases / 660 points.
+  54 executable workflow shards/allocation cells; 270 unsupported cases / 732 points.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -60,6 +60,9 @@ declared unsupported combination in v1 because NCCL 2.30.4 reports no Device API
 support for its EP8 communicator; that pool can return only after all-rank CUDA P2P/LSA support is
 restored. This baseline omits `[cl]`, `[rv]`, quantization, alternate activation/routing profiles,
 uneven allocation, placement permutations, model envelopes, and scaling.
+H100 EP16 is also planned unsupported on the current runner pool because allocated compute nodes
+expose no active RDMA device. H100 EP8 remains in scope with an operator-selected compute-visible
+shared stage; unlike the B300 runner account home, the H100 account home is not compute-visible.
 FlashInfer is excluded from v1 after repeatable intermittent execution failures; those failures are
 not converted into planned-unsupported coverage.
 MoRI EP8 uses MI325X AsyncLL or MI355X IntraNode in normal mode. EP16 uses pinned InterNodeV1 over
@@ -243,6 +246,9 @@ including a safely identified partial claim. The same-run V2/Hybrid source archi
 under fixed member and expanded-size bounds, and only the selected pinned root is extracted; a
 symlink is accepted only when it is a relative leaf pointing to a regular member inside the same
 backend root, followed by exact Git tree/submodule validation.
+H200, B200, and B300 may derive that private base beneath the validated operating-system account
+home when it is compute-visible. H100 requires an explicit shared `stage_dir`; the launcher still
+proves cross-node visibility before any benchmark starts.
 
 ## Artifact Validation And JIT Delivery
 

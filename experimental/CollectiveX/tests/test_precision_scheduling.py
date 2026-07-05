@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 94)
+        self.assertEqual(len(targets), 85)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -217,8 +217,16 @@ class PrecisionSchedulingTest(unittest.TestCase):
     def test_capability_registry_uses_exact_native_targets(self) -> None:
         targets = capability.precision_targets()
         self.assertTrue(targets)
-        self.assertTrue(all(item["disposition"] == "provisional" for item in targets))
-        self.assertEqual(targets, capability.provisional_precision_targets())
+        self.assertEqual(
+            {item["disposition"] for item in targets}, {"provisional", "unsupported"}
+        )
+        self.assertEqual(
+            len(targets) - len(capability.provisional_precision_targets()), 9
+        )
+        self.assertTrue(all(
+            item["sku"] == "h100-dgxc" and item["ep"] == 16
+            for item in targets if item["disposition"] == "unsupported"
+        ))
         keys = {
             (
                 item["precision_profile"],
@@ -243,6 +251,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             (("mi355x", "mori", 16, "normal", direct), "not-applicable"),
             (("mi325x", "mori", 8, "normal", fnuz_direct), "provisional"),
             (("h200-dgxc", "deepep", 8, "low-latency", low_latency), "provisional"),
+            (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "unsupported"),
             (("h200-dgxc", "deepep-hybrid", 8, "low-latency", low_latency),
              "not-applicable"),
         )
@@ -268,6 +277,12 @@ class PrecisionSchedulingTest(unittest.TestCase):
             precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
         )
         self.assertEqual(control, "supported")
+        h100_ep16, reason = capability.resolve_disposition(
+            "h100-dgxc", "nccl-ep", ep=16, nodes=2,
+            precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+        )
+        self.assertEqual(h100_ep16, "unsupported")
+        self.assertEqual(reason, capability._H100_EP16_NO_RDMA_BASIS)
 
     def test_split_suites_are_provisional_and_do_not_duplicate_bf16(self) -> None:
         suites = sweep_matrix._load("suites.yaml")
@@ -347,10 +362,6 @@ class PrecisionSchedulingTest(unittest.TestCase):
             ]["phases"])
             for target in capability.precision_targets()
         )
-        unsupported_targets = [
-            target for target in capability.precision_targets([normal_profile])
-            if target["backend"] == "deepep"
-        ]
         with mock.patch.object(capability, "PRECISION_CAPABILITIES", promoted):
             with self.assertRaisesRegex(SystemExit, "must track unresolved"):
                 sweep_matrix.validate_config_documents(suites, workloads)
@@ -358,6 +369,19 @@ class PrecisionSchedulingTest(unittest.TestCase):
                 matrix = sweep_matrix.validate_matrix_document(
                     sweep_matrix.resolve_matrix(suites=suite_names, backends="all")
                 )
+            expected_unsupported_cases = sum(
+                len(resolved_suites["suites"][
+                    "ep-precision-normal-v1"
+                    if target["mode"] == "normal"
+                    else "ep-precision-low-latency-v1"
+                ]["phases"])
+                for target in capability.precision_targets()
+                if capability.resolve_disposition(
+                    target["sku"], target["backend"], ep=target["ep"],
+                    nodes=capability.topology_for(target["sku"], target["ep"])["nodes"],
+                    mode=target["mode"], precision_profile=target["precision_profile"],
+                )[0] != "supported"
+            )
 
         unsupported = [
             item for item in matrix["requested_cases"]
@@ -365,8 +389,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         ]
         self.assertEqual(
             len(unsupported),
-            len(unsupported_targets)
-            * len(resolved_suites["suites"]["ep-precision-normal-v1"]["phases"]),
+            expected_unsupported_cases,
         )
         self.assertTrue(all(
             item["reason"] == "precision-profile-unsupported" for item in unsupported

@@ -302,6 +302,17 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
     ),
 }
 
+_H100_EP16_NO_RDMA_BASIS = "current-runner-has-no-active-rdma-device"
+PRECISION_CELL_OVERRIDES = {
+    (profile, rule["backend"], "h100-dgxc", 16, rule["mode"]): {
+        "basis": _H100_EP16_NO_RDMA_BASIS,
+        "disposition": "unsupported",
+    }
+    for profile, rules in PRECISION_CAPABILITIES.items()
+    for rule in rules
+    if "h100-dgxc" in rule["skus"] and 16 in rule["ep_degrees"]
+}
+
 
 def runtime_identity_issues(
     sku: str, *, vendor: str, arch: str, machine: str, device_name: str,
@@ -369,6 +380,8 @@ def _resolve_base(
     topology = topology_for(sku, ep)
     if topology is None or (nodes is not None and nodes != topology["nodes"]):
         return False, f"{sku} does not register EP{ep} on {nodes} nodes"
+    if sku == "h100-dgxc" and ep == 16:
+        return False, _H100_EP16_NO_RDMA_BASIS
     if routing not in {"uniform", "zipf"} or (eplb and routing != "zipf"):
         return False, "v1 routing is uniform or zipf, with EPLB only on zipf"
     if platform["vendor"] not in implementation["vendors"]:
@@ -401,14 +414,15 @@ def precision_targets(
                     if key in seen:
                         raise RuntimeError(f"duplicate precision capability target {key}")
                     seen.add(key)
+                    override = PRECISION_CELL_OVERRIDES.get(key, rule)
                     targets.append({
                         "precision_profile": profile_name,
                         "backend": rule["backend"],
                         "sku": sku,
                         "ep": ep,
                         "mode": rule["mode"],
-                        "disposition": rule["disposition"],
-                        "basis": rule["basis"],
+                        "disposition": override["disposition"],
+                        "basis": override["basis"],
                     })
     return targets
 
@@ -541,6 +555,15 @@ def _validate_precision_capabilities() -> None:
     )
     if empty:
         raise RuntimeError(f"precision profiles have no native targets: {empty}")
+    declared_keys = {
+        (
+            target["precision_profile"], target["backend"], target["sku"],
+            target["ep"], target["mode"],
+        )
+        for target in precision_targets()
+    }
+    if not set(PRECISION_CELL_OVERRIDES) <= declared_keys:
+        raise RuntimeError("precision cell override has no declared native target")
     for target in precision_targets():
         if target["backend"] not in BACKENDS or target["sku"] not in PLATFORMS:
             raise RuntimeError(f"unknown precision target: {target}")

@@ -208,7 +208,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (58, 608, 364, 244, 1600, 940, 660),
+            (54, 608, 338, 270, 1600, 868, 732),
         )
         expected_topologies = {}
         for sku, product in (
@@ -263,7 +263,7 @@ class SamplingContractTest(unittest.TestCase):
             {shard["n"] for shard in matrix["include"]}, {6, 7}
         )
         self.assertEqual(
-            sum(shard["n"] == 7 for shard in matrix["include"]), 16
+            sum(shard["n"] == 7 for shard in matrix["include"]), 14
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
@@ -2399,6 +2399,12 @@ class SamplingContractTest(unittest.TestCase):
           export CX_SHARD_SKU=b200-dgxc CX_NODES=1 CX_GPUS_PER_NODE=8
           unset CX_STAGE_DIR
           cx_lock_canonical_gha_env b200-dgxc
+          test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
+
+          export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
+          export CX_SHARD_SKU=b300 CX_NODES=1 CX_GPUS_PER_NODE=8
+          unset CX_STAGE_DIR
+          cx_lock_canonical_gha_env b300
           test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
 
           export CX_STAGE_DIR=/shared/gb-stage

@@ -1598,7 +1598,7 @@ cx_lock_canonical_gha_env() {
     || cx_die "canonical CollectiveX execution requires shared container storage"
   if [ -z "$trusted_stage_dir" ]; then
     case "$runner" in
-      h100-dgxc|h200-dgxc|b200-dgxc)
+      h100-dgxc|h200-dgxc|b200-dgxc|b300)
         trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;

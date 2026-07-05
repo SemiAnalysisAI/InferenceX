@@ -42,8 +42,8 @@ saturation on the exact transformed native combine input; any saturated value fa
 
 The BF16 planning baseline covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X. It
 requests
-608 cases / 1,600 token points: 364 runnable cases / 940 points, emitted as 58 executable workflow
-shards/allocation cells, plus 244 explicit unsupported cases / 660 points. `sweep_matrix.py`
+608 cases / 1,600 token points: 338 runnable cases / 868 points, emitted as 54 executable workflow
+shards/allocation cells, plus 270 explicit unsupported cases / 732 points. `sweep_matrix.py`
 materializes every token ladder and rejects missing, stale, malformed, or altered shard controls.
 Shards are emitted round-robin by SKU so the bounded GHA matrix uses every runner pool early.
 
@@ -81,6 +81,10 @@ diagnostics. The current H100 runner pool is explicitly unsupported for V2 becau
 reports that its EP8 communicator lacks Device API symmetric-memory support; re-enabling that pool
 requires an all-rank CUDA P2P/LSA-capable runtime. Other NVIDIA SKUs remain unvalidated until their
 GPU outcomes pass the native correctness and publication gates.
+
+H100 EP16 is planned unsupported on the current runner pool because allocated compute nodes expose
+no active RDMA device. EP8 remains in scope, but requires a runner-owned shared `stage_dir` because
+the runner account home is not mounted on compute nodes.
 
 Axes not implemented in this baseline include cached-layout `[cl]`, runtime-visible `[rv]`, FP8,
 quantized combine,
@@ -124,9 +128,10 @@ temporary copy before allocation. Required JSON fields are:
 
 | SKU | Variables |
 |---|---|
-| `h100-dgxc`, `b200-dgxc` | `partition`, `account`, `squash_dir` |
+| `h100-dgxc` | `partition`, `account`, `squash_dir`, `stage_dir` |
 | `h200-dgxc` | `partition`, `squash_dir` |
-| `b300` | `partition`, `account`, `squash_dir`, `stage_dir` |
+| `b200-dgxc` | `partition`, `account`, `squash_dir` |
+| `b300` | `partition`, `account`, `squash_dir` |
 | `gb200` | `partition`, `account`, ordered `storage_roots` |
 | `gb300` | `partition`, `account`, `squash_dir`, `stage_dir`, `enroot_cache_path` |
 | `mi325x`, `mi355x` | `partition`, `squash_dir`, `stage_dir` |
@@ -145,13 +150,13 @@ allocated node. Jobs create only a marked mode-0700 execution child, prove cross
 visibility, and remove that exact child after allocation teardown; they never mount the runner
 checkout or create a stage beneath image storage on AMD.
 
-H100, H200, and B200 runners may omit `stage_dir`. Their isolated execution child is then created
+H200, B200, and B300 runners may omit `stage_dir`. Their isolated execution child is then created
 under a runner-owned mode-0700 base in the validated operating-system account home, independent of
 the workflow's temporary `HOME`. A symlinked account-home entry is resolved once to its canonical,
 runner-owned target; the single hidden staging base directly beneath it must itself be non-symlinked
 and not writable by other users. The workflow still proves that base is visible from every allocated
 node before launch. The execution child is validated, marked, cross-node checked, and removed using
-the same contract. All other runners require the dedicated `stage_dir` above; no canonical run
+the same contract. H100 and all other runners require the dedicated `stage_dir` above; no canonical run
 stages source beneath shared container storage.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
