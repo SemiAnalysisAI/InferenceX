@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 18)
+        self.assertEqual(len(targets), 27)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -228,15 +228,15 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 76
+            len(targets) - len(capability.provisional_precision_targets()), 67
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 51
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 25
+            sum(item["disposition"] == "unsupported" for item in targets), 16
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 18)
+        self.assertEqual(len(capability.provisional_precision_targets()), 27)
         keys = {
             (
                 item["precision_profile"],
@@ -261,7 +261,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             (("mi355x", "mori", 16, "normal", direct), "not-applicable"),
             (("mi325x", "mori", 8, "normal", fnuz_direct), "provisional"),
             (("h200-dgxc", "deepep", 8, "low-latency", low_latency), "supported"),
-            (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "unsupported"),
+            (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "provisional"),
             (("h200-dgxc", "deepep-hybrid", 8, "low-latency", low_latency),
              "not-applicable"),
         )
@@ -291,8 +291,8 @@ class PrecisionSchedulingTest(unittest.TestCase):
             "h100-dgxc", "nccl-ep", ep=16, nodes=2,
             precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
         )
-        self.assertEqual(h100_ep16, "unsupported")
-        self.assertEqual(reason, capability._H100_EP16_NO_RDMA_BASIS)
+        self.assertEqual(h100_ep16, "supported")
+        self.assertEqual(reason, "ok")
 
     def test_split_suites_are_provisional_and_do_not_duplicate_bf16(self) -> None:
         suites = sweep_matrix._load("suites.yaml")

@@ -302,16 +302,7 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
     ),
 }
 
-_H100_EP16_NO_RDMA_BASIS = "current-runner-has-no-active-rdma-device"
-PRECISION_CELL_OVERRIDES = {
-    (profile, rule["backend"], "h100-dgxc", 16, rule["mode"]): {
-        "basis": _H100_EP16_NO_RDMA_BASIS,
-        "disposition": "unsupported",
-    }
-    for profile, rules in PRECISION_CAPABILITIES.items()
-    for rule in rules
-    if "h100-dgxc" in rule["skus"] and 16 in rule["ep_degrees"]
-}
+PRECISION_CELL_OVERRIDES: dict[tuple[str, str, str, int, str], dict[str, str]] = {}
 
 _VALIDATED_NATIVE_PROBE_CELLS = (
     # run, SKU, EP, backend, mode, profile, disposition, result
@@ -450,8 +441,6 @@ def _resolve_base(
     topology = topology_for(sku, ep)
     if topology is None or (nodes is not None and nodes != topology["nodes"]):
         return False, f"{sku} does not register EP{ep} on {nodes} nodes"
-    if sku == "h100-dgxc" and ep == 16:
-        return False, _H100_EP16_NO_RDMA_BASIS
     if routing not in {"uniform", "zipf"} or (eplb and routing != "zipf"):
         return False, "v1 routing is uniform or zipf, with EPLB only on zipf"
     if platform["vendor"] not in implementation["vendors"]:

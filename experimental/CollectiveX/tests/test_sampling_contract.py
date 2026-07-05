@@ -208,7 +208,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (54, 608, 338, 270, 1600, 868, 732),
+            (58, 608, 364, 244, 1600, 940, 660),
         )
         expected_topologies = {}
         for sku, product in (
@@ -263,7 +263,7 @@ class SamplingContractTest(unittest.TestCase):
             {shard["n"] for shard in matrix["include"]}, {6, 7}
         )
         self.assertEqual(
-            sum(shard["n"] == 7 for shard in matrix["include"]), 14
+            sum(shard["n"] == 7 for shard in matrix["include"]), 16
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
@@ -1367,6 +1367,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("secrets.COLLECTIVEX_B200_CONFIG_V1", workflow)
         self.assertIn('set(overlay["runners"]) != {"b200-dgxc"}', workflow)
         self.assertIn("set(fields) - private_fields", workflow)
+        self.assertIn('private_fields.add("exclude_nodes")', workflow)
+        self.assertIn('invalid H100 overlay runner', workflow)
         self.assertIn('private_fields.update({"nodelist", "qos"})', workflow)
         self.assertIn('[ -z "${CX_QOS:-}" ] || allocation+=(--qos="$CX_QOS")', (
             ROOT / "launchers" / "launch_single-slurm.sh"
