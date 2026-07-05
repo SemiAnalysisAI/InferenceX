@@ -1212,6 +1212,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("network_fields = {", workflow)
         self.assertIn("set(fields) - network_fields", workflow)
         self.assertIn("COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1", workflow)
+        self.assertLess(
+            workflow.index("unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED"),
+            workflow.index('export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"'),
+        )
         prepare_start = workflow.index("- name: Prepare pinned backend source archive")
         source_archive_step = workflow[
             prepare_start:workflow.index("- uses: actions/upload-artifact", prepare_start)

@@ -504,6 +504,7 @@ jobs:
               stream.write(payload)
           PY
           unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
+          unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
           export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
           export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
           : > "$CX_JOB_ROOT/cleanup-unsafe"
