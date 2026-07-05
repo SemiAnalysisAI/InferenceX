@@ -235,22 +235,20 @@ NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
 }
 REQUIRED = {
-    "h100-dgxc": {"partition", "account", "squash_dir"},
+    "h100-dgxc": {"partition", "account", "squash_dir", "stage_dir"},
     "h200-dgxc": {"partition", "squash_dir"},
     "b200-dgxc": {"partition", "account", "squash_dir"},
-    "b300": {
-        "partition", "account", "squash_dir", "stage_dir",
-    },
+    "b300": {"partition", "account", "squash_dir"},
     "gb200": {"partition", "account", "storage_roots"},
     "gb300": {"partition", "account", "squash_dir", "stage_dir", "enroot_cache_path"},
     "mi325x": {"partition", "squash_dir", "stage_dir"},
     "mi355x": {"partition", "squash_dir", "stage_dir"},
 }
 ALLOWED = {
-    "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
+    "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes"} | NETWORK_FIELDS,
     "h200-dgxc": REQUIRED["h200-dgxc"] | {"account", "exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "b200-dgxc": REQUIRED["b200-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
-    "b300": REQUIRED["b300"] | {"exclude_nodes"} | NETWORK_FIELDS,
+    "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "gb200": REQUIRED["gb200"] | NETWORK_FIELDS,
     "gb300": REQUIRED["gb300"] | NETWORK_FIELDS,
     "mi325x": REQUIRED["mi325x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
