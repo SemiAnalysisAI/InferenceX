@@ -37,7 +37,7 @@ backend:
   # Dedicated mooncake master configuration for kvcache-enabled runs.
   mooncake_kv_store:
     env:
-      MOONCAKE_PROTOCOL: "rdma"
+      MOONCAKE_PROTOCOL: "rdma" # remain this even in MNNVL-only
       MOONCAKE_DEVICE: ""
       MOONCAKE_GLOBAL_SEGMENT_SIZE: "800gb"
       MC_FORCE_MNNVL: "1"

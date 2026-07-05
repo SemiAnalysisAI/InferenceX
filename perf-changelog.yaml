@@ -4438,6 +4438,7 @@
     - dsv4-fp4-gb300-dynamo-sglang-mooncake-store
     - qwen3.5-fp4-gb300-dynamo-sglang-mooncake-store
   description:
-    - "Add mooncake store dedicated gb300 dynamo-sglang variants using new _mooncake_store recipe files, while preserving existing config keys and recipe execution paths unchanged."
-    - "Wire launcher routing so only CONFIG_FILE values ending with _mooncake_store.yaml use the srt-slurm main branch path; legacy recipes continue on their previous branch flow."
-  pr-link: XXX
+    - "Add mooncake store-enabled variants for DeepSeek V4 and Qwen 3.5 on GB300, using dedicated _mooncake_store.yaml recipe files with mooncake_kv_store backend (RDMA protocol, 800GB global segment size, MNNVL forced)."
+    - "Configure mooncake-specific environment variables."
+    - "Wire launcher routing so CONFIG_FILE values ending with _mooncake_store.yaml use the srt-slurm main branch; legacy recipes continue on their previous branch flow."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
