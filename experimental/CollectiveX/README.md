@@ -142,11 +142,11 @@ checkout or create a stage beneath image storage on AMD.
 H100, H200, and B200 runners may omit `stage_dir`. Their isolated execution child is then created
 under a runner-owned mode-0700 base in the validated operating-system account home, independent of
 the workflow's temporary `HOME`. A symlinked account-home entry is resolved once to its canonical,
-runner-owned target; every created staging component must itself be non-symlinked and not writable by
-other users. The workflow still proves that base is visible from every allocated node before launch.
-The execution child is validated, marked, cross-node checked, and removed using the same contract.
-All other runners require the dedicated `stage_dir` above; no canonical run stages source beneath
-shared container storage.
+runner-owned target; the single hidden staging base directly beneath it must itself be non-symlinked
+and not writable by other users. The workflow still proves that base is visible from every allocated
+node before launch. The execution child is validated, marked, cross-node checked, and removed using
+the same contract. All other runners require the dedicated `stage_dir` above; no canonical run
+stages source beneath shared container storage.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch

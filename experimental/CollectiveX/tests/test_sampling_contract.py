@@ -2353,15 +2353,17 @@ class SamplingContractTest(unittest.TestCase):
             unsafe_home.chmod(0o770)
             linked_home.symlink_to(safe_home, target_is_directory=True)
             linked_child_home.mkdir(mode=0o700)
-            (linked_child_home / ".cache").symlink_to(safe_home, target_is_directory=True)
+            (linked_child_home / ".inferencex-collectivex-stage").symlink_to(
+                safe_home, target_is_directory=True
+            )
             command = r'''
               set -euo pipefail
               source "$1"
               base="$(cx_prepare_implicit_stage_base "$2")"
-              test "$base" = "$2/.cache/inferencex/collectivex-stage"
+              test "$base" = "$2/.inferencex-collectivex-stage"
               test "$(stat -c '%a' "$base" 2>/dev/null || stat -f '%Lp' "$base")" = 700
               ! cx_prepare_implicit_stage_base "$3"
-              test "$(cx_prepare_implicit_stage_base "$4")" = "$2/.cache/inferencex/collectivex-stage"
+              test "$(cx_prepare_implicit_stage_base "$4")" = "$2/.inferencex-collectivex-stage"
               ! cx_prepare_implicit_stage_base "$5"
             '''
             subprocess.run(

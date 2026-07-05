@@ -1462,22 +1462,20 @@ if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
 if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
     reject("home-world-writable")
 try:
-    current = home
-    for component in (".cache", "inferencex", "collectivex-stage"):
-        current /= component
-        try:
-            os.mkdir(current, mode=0o700)
-        except FileExistsError:
-            pass
-        metadata = os.stat(current, follow_symlinks=False)
-        if not stat.S_ISDIR(metadata.st_mode):
-            reject("child-type")
-        if metadata.st_uid != os.getuid():
-            reject("child-owner")
-        if Path(os.path.realpath(current)) != current:
-            reject("child-symlink")
-        if stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH):
-            reject("child-writable")
+    current = home / ".inferencex-collectivex-stage"
+    try:
+        os.mkdir(current, mode=0o700)
+    except FileExistsError:
+        pass
+    metadata = os.stat(current, follow_symlinks=False)
+    if not stat.S_ISDIR(metadata.st_mode):
+        reject("child-type")
+    if metadata.st_uid != os.getuid():
+        reject("child-owner")
+    if Path(os.path.realpath(current)) != current:
+        reject("child-symlink")
+    if stat.S_IMODE(metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH):
+        reject("child-writable")
     os.chmod(current, 0o700)
 except OSError:
     reject("child-access")
