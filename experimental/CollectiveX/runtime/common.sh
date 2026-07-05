@@ -852,7 +852,7 @@ esac
 [ "$SLURM_LOCALID" -lt "$CX_GPUS_PER_NODE" ] || exit 67
 if [ "${CX_NODES:-1}" -gt 1 ] && [ "${CX_TRANSPORT:-}" != mnnvl ]; then
   . /ix/experimental/CollectiveX/runtime/common.sh || exit 68
-  cx_restore_exact_hca_selector || exit 68
+  cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT" || exit 68
 fi
 cx_write_runtime_stage execution || exit 68
 export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"

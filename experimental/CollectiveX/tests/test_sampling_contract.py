@@ -629,7 +629,7 @@ class SamplingContractTest(unittest.TestCase):
           wrapper="$(cx_slurm_rank_wrapper)"
           bash -n <<< "$wrapper"
           grep -Fq '. /ix/experimental/CollectiveX/runtime/common.sh' <<< "$wrapper"
-          grep -Fq 'cx_restore_exact_hca_selector || exit 68' <<< "$wrapper"
+          grep -Fq 'cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT" || exit 68' <<< "$wrapper"
           grep -Fq 'cx_write_runtime_stage execution || exit 68' <<< "$wrapper"
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
           test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
