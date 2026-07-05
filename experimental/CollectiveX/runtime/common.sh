@@ -1534,14 +1534,18 @@ try:
     if isolation_key:
         suffix = "-" + hashlib.sha256(isolation_key.encode("utf-8")).hexdigest()[:16]
     current = home / f".inferencex-collectivex-stage{suffix}"
+    created = False
     try:
         os.mkdir(current, mode=0o700)
+        created = True
     except FileExistsError:
         pass
     metadata = os.stat(current, follow_symlinks=False)
     if not stat.S_ISDIR(metadata.st_mode):
         reject("child-type")
-    if metadata.st_uid not in {os.getuid(), home_owner}:
+    if metadata.st_uid not in {os.getuid(), home_owner} and not (
+        isolation_key and created and metadata.st_uid == 0
+    ):
         reject("child-owner")
     if Path(os.path.realpath(current)) != current:
         reject("child-symlink")
@@ -1992,7 +1996,7 @@ try:
         parent_metadata = os.stat(parent, follow_symlinks=False)
         if (
             not stat.S_ISDIR(parent_metadata.st_mode)
-            or parent_metadata.st_uid != metadata.st_uid
+            or metadata.st_uid not in {parent_metadata.st_uid, 0}
             or stat.S_IMODE(parent_metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
         ):
             reject("parent-owner")

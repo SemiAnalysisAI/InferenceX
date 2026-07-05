@@ -163,7 +163,8 @@ Canonical B300 execution ignores any legacy configured `stage_dir` and always us
 compute-visible account-home base. Its UID-mapped Actions shell may accept that exact base when its
 owner matches the private parent owner; this exception is not available to configured stages or
 other runners. A hashed execution-ID suffix isolates parallel B300 workers without exposing private
-runner identity.
+runner identity. On this NFS export, a newly created hashed base may realize as UID 0; only that
+creation path is accepted, while a pre-existing root-owned base is rejected.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch

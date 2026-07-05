@@ -257,7 +257,8 @@ Canonical B300 execution ignores the legacy operator `stage_dir` field and alway
 from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
 its owner matches the private parent owner; explicit stages and all other runners retain the strict
 effective-UID ownership rule. A hashed execution-ID suffix isolates parallel B300 workers without
-exposing private runner identity.
+exposing private runner identity. The current NFS export may realize a newly created hashed base as
+UID 0; only that creation path is accepted, while a pre-existing root-owned base is rejected.
 
 ## Artifact Validation And JIT Delivery
 
