@@ -1108,6 +1108,7 @@ class SamplingContractTest(unittest.TestCase):
               if [ "$3" = cleanup ]; then
                 export CX_JOB_ROOT="$2" REPO_ROOT="$2/repo" MOUNT_SRC="$2/repo"
                 export COLLECTIVEX_CANONICAL_GHA=1
+                cx_clear_allocation_jobid() { rm -f -- "$CX_JOB_ROOT/allocation-job-id"; }
                 cx_write_cleanup_guard() {
                   rm -f -- "$CX_JOB_ROOT/cleanup-safe" "$CX_JOB_ROOT/cleanup-unsafe"
                   : > "$CX_JOB_ROOT/cleanup-$1"
@@ -1282,6 +1283,7 @@ class SamplingContractTest(unittest.TestCase):
               source "$1"
               export JOB_ID=5151 CX_JOB_ROOT="$2" REPO_ROOT="$2/repo" MOUNT_SRC="$2/repo"
               export COLLECTIVEX_CANONICAL_GHA=1
+              cx_clear_allocation_jobid() { rm -f -- "$CX_JOB_ROOT/allocation-job-id"; }
               cx_write_cleanup_guard() {
                 rm -f -- "$CX_JOB_ROOT/cleanup-safe" "$CX_JOB_ROOT/cleanup-unsafe"
                 : > "$CX_JOB_ROOT/cleanup-$1"
@@ -1308,7 +1310,12 @@ class SamplingContractTest(unittest.TestCase):
         workflow = (ROOT.parent.parent / ".github" / "workflows" / "collectivex-sweep.yml").read_text()
         self.assertIn("cleanup-unsafe", workflow)
         self.assertIn("cleanup-safe", workflow)
+        self.assertIn("Reconcile allocation cleanup", workflow)
         self.assertIn("Confirm allocation cleanup", workflow)
+        self.assertLess(
+            workflow.index("Reconcile allocation cleanup"),
+            workflow.index("Confirm allocation cleanup"),
+        )
         self.assertIn("Prepare pinned backend source archive", workflow)
         self.assertIn("Install pinned backend source seed", workflow)
         self.assertIn("CX_BACKEND_SOURCE_SEED_ROOT", workflow)
@@ -1321,6 +1328,52 @@ class SamplingContractTest(unittest.TestCase):
             workflow.index("unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED"),
             workflow.index('export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"'),
         )
+
+    def test_workflow_reconciles_a_recorded_allocation_after_launcher_loss(self) -> None:
+        workflow = (
+            ROOT.parent.parent / ".github" / "workflows" / "collectivex-sweep.yml"
+        ).read_text()
+        prefix = f"inferencex-collectivex-{os.getpid()}-1-"
+        with tempfile.TemporaryDirectory(prefix=prefix, dir="/tmp") as temporary:
+            root = Path(temporary)
+            binary = root / "bin"
+            calls = root / "scancel-calls"
+            binary.mkdir()
+            for name, body in {
+                "scancel": 'printf "%s\\n" "$*" >> "$CX_TEST_SCANCEL_CALLS"',
+                "squeue": "exit 0",
+                "stat": (
+                    'case "$3" in */allocation-job-id) mode=600 ;; *) mode=700 ;; esac\n'
+                    'printf "%s:%s\\n" "$CX_TEST_UID" "$mode"'
+                ),
+            }.items():
+                path = binary / name
+                path.write_text(f"#!/usr/bin/env bash\n{body}\n")
+                path.chmod(0o700)
+            command = r'''
+              set -euo pipefail
+              source "$1"
+              export CX_JOB_ROOT="$2"
+              : > "$CX_JOB_ROOT/cleanup-unsafe"
+              cx_record_allocation_jobid 6262
+              cx_reconcile_recorded_allocation "$CX_JOB_ROOT"
+            '''
+            result = subprocess.run(
+                ["bash", "-c", command, "_", str(ROOT / "runtime" / "common.sh"), str(root)],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{binary}:{os.environ['PATH']}",
+                    "CX_TEST_SCANCEL_CALLS": str(calls),
+                    "CX_TEST_UID": str(os.getuid()),
+                },
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(calls.read_text().splitlines(), ["6262"])
+            self.assertTrue((root / "cleanup-safe").is_file())
+            self.assertFalse((root / "cleanup-unsafe").exists())
+            self.assertFalse((root / "allocation-job-id").exists())
         prepare_start = workflow.index("- name: Prepare pinned backend source archive")
         source_archive_step = workflow[
             prepare_start:workflow.index("- uses: actions/upload-artifact", prepare_start)

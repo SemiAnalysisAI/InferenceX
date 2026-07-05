@@ -512,6 +512,14 @@ jobs:
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
+      - name: Reconcile allocation cleanup
+        if: ${{ always() && steps.source.outputs.prepared == 'true' }}
+        run: |
+          set -euo pipefail
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          source experimental/CollectiveX/runtime/common.sh
+          cx_reconcile_recorded_allocation "$CX_JOB_ROOT"
       - name: Confirm allocation cleanup
         id: allocation_cleanup
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}

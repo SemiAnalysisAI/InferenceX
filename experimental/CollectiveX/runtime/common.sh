@@ -1001,6 +1001,7 @@ cx_salloc_jobid() {
       return 1
     fi
     [ -n "$JOB_ID" ] || cx_reconcile_salloc_jobid "$job_name" || true
+    [ -z "$JOB_ID" ] || cx_record_allocation_jobid "$JOB_ID" || true
     cx_fail_stage scheduler-allocation "$log"
     return 1
   fi
@@ -1009,6 +1010,36 @@ cx_salloc_jobid() {
     cx_fail_stage scheduler-allocation "$log"
     return 1
   fi
+  cx_record_allocation_jobid "$JOB_ID" || return 1
+}
+
+cx_record_allocation_jobid() {
+  local job_id="$1" root="${CX_JOB_ROOT:-}" path temporary
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  [ -n "$root" ] || return 0
+  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+    && [ -d "$root" ] && [ ! -L "$root" ] \
+    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 1
+  path="$root/allocation-job-id"
+  temporary="$(mktemp "$root/.allocation-job-id.XXXXXX")" || return 1
+  chmod 600 "$temporary" || { rm -f -- "$temporary"; return 1; }
+  printf '%s\n' "$job_id" > "$temporary" \
+    || { rm -f -- "$temporary"; return 1; }
+  mv -f -- "$temporary" "$path" || { rm -f -- "$temporary"; return 1; }
+}
+
+cx_clear_allocation_jobid() {
+  local root="${CX_JOB_ROOT:-}" path
+  [ -n "$root" ] || return 0
+  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+    && [ -d "$root" ] && [ ! -L "$root" ] \
+    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 1
+  path="$root/allocation-job-id"
+  [ ! -e "$path" ] || {
+    [ -f "$path" ] && [ ! -L "$path" ] \
+      && [ "$(stat -c '%u:%a' "$path" 2>/dev/null)" = "$(id -u):600" ] || return 1
+    rm -f -- "$path"
+  }
 }
 
 cx_cancel_job() {
@@ -1040,6 +1071,39 @@ cx_write_cleanup_guard() {
     unsafe) rm -f -- "$safe" && : > "$unsafe" ;;
     *) return 1 ;;
   esac
+}
+
+# A workflow cancellation may kill a foreground Slurm step before Bash can run
+# the launcher trap. Reconcile the mode-0600 allocation record from an always()
+# workflow step before isolated source cleanup is allowed.
+cx_reconcile_recorded_allocation() {
+  local root="$1" path job_id
+  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+    && [ -d "$root" ] && [ ! -L "$root" ] \
+    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 1
+  export CX_JOB_ROOT="$root"
+  path="$root/allocation-job-id"
+  if [ ! -e "$path" ]; then
+    [ -f "$root/cleanup-safe" ] && [ ! -e "$root/cleanup-unsafe" ]
+    return
+  fi
+  [ -f "$path" ] && [ ! -L "$path" ] \
+    && [ "$(stat -c '%u:%a' "$path" 2>/dev/null)" = "$(id -u):600" ] \
+    || { cx_write_cleanup_guard unsafe || true; return 1; }
+  IFS= read -r job_id < "$path" || {
+    cx_write_cleanup_guard unsafe || true
+    return 1
+  }
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || {
+    cx_write_cleanup_guard unsafe || true
+    return 1
+  }
+  if cx_cancel_job "$job_id" && cx_clear_allocation_jobid; then
+    cx_write_cleanup_guard safe
+    return
+  fi
+  cx_write_cleanup_guard unsafe || true
+  return 1
 }
 
 # Single multi-arch container for ALL NVIDIA SKUs: tag `v0.5.11-cu130` is an OCI
@@ -2754,6 +2818,9 @@ cx_launcher_cleanup() {
   fi
   if [ -n "${JOB_ID:-}" ]; then
     if ! cx_cancel_job "$JOB_ID"; then
+      allocation_stopped=0
+      [ "$rc" != 0 ] || rc=1
+    elif ! cx_clear_allocation_jobid; then
       allocation_stopped=0
       [ "$rc" != 0 ] || rc=1
     fi
