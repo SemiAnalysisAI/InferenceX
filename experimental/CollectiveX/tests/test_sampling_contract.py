@@ -606,6 +606,7 @@ class SamplingContractTest(unittest.TestCase):
           cx_apply_network_profile 1 nvlink
           test -z "${NVSHMEM_DISABLE_IB+x}${NCCL_NET+x}${NCCL_IB_HCA+x}"
           test "$NVSHMEM_HCA_LIST:$NVSHMEM_IB_GID_INDEX" = mlx5_0:1,mlx5_1:1:3
+          test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
           unset CX_BENCH CX_MODE CX_IB_GID_INDEX
           unset CX_SHARD_SKU
@@ -618,6 +619,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$NCCL_SOCKET_IFNAME:$GLOO_SOCKET_IFNAME:$UCCL_SOCKET_IFNAME" = ib0:ib0:ib0
           test "$NCCL_NET:$NCCL_IB_HCA" = 'IB:=mlx5_0:1,mlx5_1:1'
           test "$NVSHMEM_HCA_LIST" = mlx5_0:1,mlx5_1:1
+          test "$NVSHMEM_ENABLE_NIC_PE_MAPPING" = 1
           test "$MORI_RDMA_DEVICES:$EP_NIC_NAME" = mlx5_0,mlx5_1:mlx5_0
           test "$NCCL_IB_GID_INDEX:$NCCL_IB_SL" = 3:2
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
