@@ -1793,7 +1793,7 @@ BASH
 # EXIT trap can remove an interrupted partial stage. The configured base must
 # already exist on compute-visible storage and must not traverse symlinks.
 cx_stage_path() {
-  local repo_root="$1" stage_base="${2:-}" tag safe_tag stage_path
+  local repo_root="$1" stage_base="${2:-}" tag safe_tag stage_path stage_fallback=0
   tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
   [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
     || cx_die "invalid staging execution identity"
@@ -1803,16 +1803,17 @@ cx_stage_path() {
       || cx_die "CollectiveX staging requires CX_STAGE_DIR or CX_SQUASH_DIR"
     stage_base="$CX_SQUASH_DIR"
     stage_path="${stage_base%/}/.collectivex-stage-$safe_tag"
+    stage_fallback=1
   else
     stage_path="${stage_base%/}/job_$safe_tag"
   fi
   python3 - "$repo_root" "$stage_base" "$stage_path" \
-    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" <<'PY'
+    "${CX_JOB_ROOT:-}" "${GITHUB_WORKSPACE:-}" "$stage_fallback" <<'PY'
 import os
 import stat
 import sys
 
-repo, base, child, job_root, workspace = sys.argv[1:]
+repo, base, child, job_root, workspace, fallback = sys.argv[1:]
 def reject(reason):
     print(f"[collectivex] FATAL: stage-base-validation={reason}", file=sys.stderr)
     raise SystemExit(1)
@@ -1843,7 +1844,7 @@ try:
         reject("not-directory")
     if metadata.st_uid != os.getuid():
         reject("owner")
-    if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP:
+    if stat.S_IMODE(metadata.st_mode) & stat.S_IWGRP and fallback != "1":
         reject("group-writable")
     if stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
         reject("world-writable")
