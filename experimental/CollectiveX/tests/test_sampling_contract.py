@@ -856,6 +856,15 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('distribution.read_text("direct_url.json")', runtime)
         self.assertIn("6548e9c504a12b2471af4b7f4d9546321210a57a456b5dc55bd4a8dad0f932ac", runtime)
         self.assertIn("2671cff7baf8c2c214ff4bac721af875d513130670bec57601998bd1aae82882", runtime)
+        stage_cleanup = common[
+            common.index("cx_cleanup_stage()"):
+            common.index("cx_has_result_doc()")
+        ]
+        self.assertIn('allow_uid_mapped_root = sys.argv[3] == "1"', stage_cleanup)
+        self.assertIn("base_metadata.st_uid == 0", stage_cleanup)
+        self.assertIn("stat.S_IMODE(base_metadata.st_mode) == 0o700", stage_cleanup)
+        self.assertIn("parent_metadata.st_uid != 0", stage_cleanup)
+        self.assertIn("stat.S_IWGRP | stat.S_IWOTH", stage_cleanup)
 
     def test_deferred_backend_provenance_resolves_before_measurement(self) -> None:
         harness = (ROOT / "tests" / "ep_harness.py").read_text()

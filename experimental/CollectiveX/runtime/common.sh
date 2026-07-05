@@ -2095,7 +2095,7 @@ cx_cleanup_stage() {
     cx_log "ERROR: refusing to remove an unrecognized stage directory"
     return 1
   fi
-  if ! python3 - "$mount_src" "$tag" <<'PY'
+  if ! python3 - "$mount_src" "$tag" "${CX_STAGE_PARENT_OWNER_OK:-0}" <<'PY'
 import os
 from pathlib import Path
 import stat
@@ -2103,12 +2103,27 @@ import sys
 
 root = Path(sys.argv[1])
 expected = f"collectivex-stage-v1\n{sys.argv[2]}\n"
+allow_uid_mapped_root = sys.argv[3] == "1"
 try:
     metadata = os.stat(root, follow_symlinks=False)
     marker = root / ".collectivex-stage-v1"
+    owner_ok = metadata.st_uid == os.getuid()
+    if not owner_ok and allow_uid_mapped_root and metadata.st_uid == 0:
+        base = root.parent
+        private_parent = base.parent
+        base_metadata = os.stat(base, follow_symlinks=False)
+        parent_metadata = os.stat(private_parent, follow_symlinks=False)
+        owner_ok = (
+            stat.S_ISDIR(base_metadata.st_mode)
+            and base_metadata.st_uid == 0
+            and stat.S_IMODE(base_metadata.st_mode) == 0o700
+            and stat.S_ISDIR(parent_metadata.st_mode)
+            and parent_metadata.st_uid != 0
+            and not stat.S_IMODE(parent_metadata.st_mode) & (stat.S_IWGRP | stat.S_IWOTH)
+        )
     if (
         not stat.S_ISDIR(metadata.st_mode)
-        or metadata.st_uid != os.getuid()
+        or not owner_ok
         or (stat.S_IMODE(metadata.st_mode) & 0o777) != 0o700
     ):
         raise OSError
@@ -2117,7 +2132,7 @@ try:
         marker_metadata = os.stat(marker, follow_symlinks=False)
         if (
             not stat.S_ISREG(marker_metadata.st_mode)
-            or marker_metadata.st_uid != os.getuid()
+            or marker_metadata.st_uid != metadata.st_uid
             or stat.S_IMODE(marker_metadata.st_mode) != 0o600
         ):
             raise OSError
