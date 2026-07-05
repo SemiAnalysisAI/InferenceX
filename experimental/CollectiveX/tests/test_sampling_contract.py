@@ -2394,7 +2394,17 @@ class SamplingContractTest(unittest.TestCase):
           test -z "${CX_PREPARED_BACKEND_CACHE+x}${CX_BACKEND_SOURCE_ROOT+x}"
           test -z "${CX_DRYRUN+x}"
 
-          cx_prepare_implicit_stage_base() { printf '%s' "$TEST_IMPLICIT_STAGE"; }
+          cx_prepare_implicit_stage_base() {
+            if [ -n "${1:-}" ]; then test "$1" = "$TEST_SHARED_PARENT"; fi
+            printf '%s' "$TEST_IMPLICIT_STAGE"
+          }
+          export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
+          export CX_SHARD_SKU=h100-dgxc CX_NODES=1 CX_GPUS_PER_NODE=8
+          export CX_SQUASH_DIR="$TEST_SHARED_PARENT/containers"
+          unset CX_STAGE_DIR
+          cx_lock_canonical_gha_env h100-dgxc
+          test "$CX_STAGE_DIR" = "$TEST_IMPLICIT_STAGE"
+
           export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
           export CX_SHARD_SKU=b200-dgxc CX_NODES=1 CX_GPUS_PER_NODE=8
           unset CX_STAGE_DIR
@@ -2450,6 +2460,7 @@ class SamplingContractTest(unittest.TestCase):
                     **os.environ,
                     "HOME": str(home),
                     "TEST_IMPLICIT_STAGE": str(implicit_stage),
+                    "TEST_SHARED_PARENT": str(root),
                     "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
                     "GITHUB_WORKSPACE": str(workspace),
                 },

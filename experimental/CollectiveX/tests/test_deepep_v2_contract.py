@@ -2067,9 +2067,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
             del missing_b300_stage["runners"]["b300"]["stage_dir"]
             missing_nvidia_account = json.loads(json.dumps(document))
             del missing_nvidia_account["runners"]["h100-dgxc"]["account"]
-            for invalid in (
-                rejected, boolean_version, missing_h100_stage, missing_nvidia_account,
-            ):
+            for invalid in (rejected, boolean_version, missing_nvidia_account):
                 config.write_text(json.dumps(invalid))
                 config.chmod(0o600)
                 result = subprocess.run(
@@ -2089,6 +2087,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 (missing_socket, "h100-dgxc"),
                 (missing_rdma, "h100-dgxc"),
                 (missing_amd_stage, "h100-dgxc"),
+                (missing_h100_stage, "h100-dgxc"),
                 (missing_b300_stage, "b300"),
             ):
                 config.write_text(json.dumps(valid))

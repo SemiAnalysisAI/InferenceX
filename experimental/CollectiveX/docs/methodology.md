@@ -61,8 +61,9 @@ support for its EP8 communicator; that pool can return only after all-rank CUDA 
 restored. This baseline omits `[cl]`, `[rv]`, quantization, alternate activation/routing profiles,
 uneven allocation, placement permutations, model envelopes, and scaling.
 H100 EP16 is also planned unsupported on the current runner pool because allocated compute nodes
-expose no active RDMA device. H100 EP8 remains in scope with an operator-selected compute-visible
-shared stage; unlike the B300 runner account home, the H100 account home is not compute-visible.
+expose no active RDMA device. H100 EP8 remains in scope with a private stage beside its configured
+shared container directory; unlike the B300 runner account home, the H100 account home is not
+compute-visible.
 FlashInfer is excluded from v1 after repeatable intermittent execution failures; those failures are
 not converted into planned-unsupported coverage.
 MoRI EP8 uses MI325X AsyncLL or MI355X IntraNode in normal mode. EP16 uses pinned InterNodeV1 over
@@ -247,8 +248,9 @@ under fixed member and expanded-size bounds, and only the selected pinned root i
 symlink is accepted only when it is a relative leaf pointing to a regular member inside the same
 backend root, followed by exact Git tree/submodule validation.
 H200, B200, and B300 may derive that private base beneath the validated operating-system account
-home when it is compute-visible. H100 requires an explicit shared `stage_dir`; the launcher still
-proves cross-node visibility before any benchmark starts.
+home when it is compute-visible. H100 instead derives a sibling of its shared container directory,
+never a child of image storage. The launcher still proves cross-node visibility before any benchmark
+starts.
 
 ## Artifact Validation And JIT Delivery
 

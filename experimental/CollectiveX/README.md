@@ -83,8 +83,8 @@ requires an all-rank CUDA P2P/LSA-capable runtime. Other NVIDIA SKUs remain unva
 GPU outcomes pass the native correctness and publication gates.
 
 H100 EP16 is planned unsupported on the current runner pool because allocated compute nodes expose
-no active RDMA device. EP8 remains in scope, but requires a runner-owned shared `stage_dir` because
-the runner account home is not mounted on compute nodes.
+no active RDMA device. EP8 remains in scope and derives its private stage beside the existing shared
+container directory because the runner account home is not mounted on compute nodes.
 
 Axes not implemented in this baseline include cached-layout `[cl]`, runtime-visible `[rv]`, FP8,
 quantized combine,
@@ -128,7 +128,7 @@ temporary copy before allocation. Required JSON fields are:
 
 | SKU | Variables |
 |---|---|
-| `h100-dgxc` | `partition`, `account`, `squash_dir`, `stage_dir` |
+| `h100-dgxc` | `partition`, `account`, `squash_dir` |
 | `h200-dgxc` | `partition`, `squash_dir` |
 | `b200-dgxc` | `partition`, `account`, `squash_dir` |
 | `b300` | `partition`, `account`, `squash_dir` |
@@ -156,8 +156,9 @@ the workflow's temporary `HOME`. A symlinked account-home entry is resolved once
 runner-owned target; the single hidden staging base directly beneath it must itself be non-symlinked
 and not writable by other users. The workflow still proves that base is visible from every allocated
 node before launch. The execution child is validated, marked, cross-node checked, and removed using
-the same contract. H100 and all other runners require the dedicated `stage_dir` above; no canonical run
-stages source beneath shared container storage.
+the same contract. H100 may also omit `stage_dir`; its private base is created beside, never beneath,
+the configured shared container directory so it is compute-visible. All other runners require the
+dedicated `stage_dir` above; no canonical run stages source beneath shared container storage.
 
 Before import, each Docker Hub tag is resolved with bounded registry requests and must match its
 pinned digest; digest-qualified overrides are rejected. Enroot imports use a fixed filesystem epoch

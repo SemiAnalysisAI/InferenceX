@@ -235,7 +235,7 @@ NETWORK_FIELDS = {
     "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
 }
 REQUIRED = {
-    "h100-dgxc": {"partition", "account", "squash_dir", "stage_dir"},
+    "h100-dgxc": {"partition", "account", "squash_dir"},
     "h200-dgxc": {"partition", "squash_dir"},
     "b200-dgxc": {"partition", "account", "squash_dir"},
     "b300": {"partition", "account", "squash_dir"},
@@ -245,7 +245,7 @@ REQUIRED = {
     "mi355x": {"partition", "squash_dir", "stage_dir"},
 }
 ALLOWED = {
-    "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes"} | NETWORK_FIELDS,
+    "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "h200-dgxc": REQUIRED["h200-dgxc"] | {"account", "exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "b200-dgxc": REQUIRED["b200-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
@@ -1596,7 +1596,11 @@ cx_lock_canonical_gha_env() {
     || cx_die "canonical CollectiveX execution requires shared container storage"
   if [ -z "$trusted_stage_dir" ]; then
     case "$runner" in
-      h100-dgxc|h200-dgxc|b200-dgxc|b300)
+      h100-dgxc)
+        trusted_stage_dir="$(cx_prepare_implicit_stage_base "${CX_SQUASH_DIR%/*}")" \
+          || cx_die "canonical CollectiveX execution cannot create an isolated shared stage directory"
+        ;;
+      h200-dgxc|b200-dgxc|b300)
         trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
