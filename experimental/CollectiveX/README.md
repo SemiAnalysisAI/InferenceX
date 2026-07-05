@@ -13,9 +13,8 @@ combine, and paired roundtrip latency across EP libraries and accelerator system
 > rankings, recommendations, or regression baselines.
 
 > Development status: the V1 precision, point-level publication, branch-only delivery, and frontend
-> contracts are implemented. H100, H200, GB200, and GB300 are terminal; B200 and B300 EP8 are
-> terminal, and B300 EP16 has terminal native outcomes. Twelve B200/MI325X/MI355X precision cells
-> remain provisional, so V1 counts and digests are not frozen.
+> contracts are implemented. Every NVIDIA and MI355X precision cell is terminal. Four MI325X
+> precision cells remain provisional, so V1 counts and digests are not frozen.
 
 ## Implemented Pre-V1 Execution Profile
 
@@ -41,12 +40,13 @@ logfmt10, and `rtol=0.08, atol=0.04` for native FP8 direct-cast combine. These a
 publication thresholds, not estimates of codec error. FP8 direct-cast evidence also counts
 saturation on the exact transformed native combine input; any saturated value fails the point.
 
-The BF16 planning baseline covers H100, H200, B200, B300, GB200, GB300, MI325X, and MI355X. It
-requests
-608 cases / 1,600 token points: 338 runnable cases / 868 points, emitted as 54 executable workflow
-shards/allocation cells, plus 270 explicit unsupported cases / 732 points. `sweep_matrix.py`
-materializes every token ladder and rejects missing, stale, malformed, or altered shard controls.
-Shards are emitted round-robin by SKU so the bounded GHA matrix uses every runner pool early.
+The current unfrozen planning graph covers H100, H200, B200, B300, GB200, GB300, MI325X, and
+MI355X. It requests 656 cases / 1,648 token points: 379 runnable cases / 916 points, emitted as 54
+executable workflow shards/allocation cells, plus 277 explicit unsupported cases / 732 points. The
+final normal-precision cases remain probe-gated and these counts will change when the four MI325X
+cells become terminal. `sweep_matrix.py` materializes every token ladder and rejects missing, stale,
+malformed, or altered shard controls. Shards are emitted round-robin by SKU so the bounded GHA
+matrix uses every runner pool early.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -80,19 +80,21 @@ unless the realized LSA team covers the full EP world. x86 EP16 scale-out cases 
 hybrid path with GIN, two logical scale-out domains represented by two physical RDMA ranks, and eight
 scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. The isolated build
 records the API, source, loaded libraries, generated JIT source, executable SASS, and raw CUBIN
-diagnostics. The current H100 runner pool is explicitly unsupported for V2 because NCCL 2.30.4
+diagnostics. H100 is explicitly unsupported for V2 because NCCL 2.30.4
 reports that its EP8 communicator lacks Device API symmetric-memory support; re-enabling that pool
-requires an all-rank CUDA P2P/LSA-capable runtime. Other NVIDIA SKUs remain unvalidated until their
-GPU outcomes pass the native correctness and publication gates.
+requires an all-rank CUDA P2P/LSA-capable runtime. Every other NVIDIA precision cell now records an
+exact native supported or unsupported outcome from the pinned runtime.
 
-H100 EP16 is planned unsupported on the current runner pool because allocated compute nodes expose
-no active RDMA device. EP8 remains in scope and derives its private stage beside the existing shared
-container directory because the runner account home is not mounted on compute nodes.
+H100 EP16 is supported on the healthy runner subset. The private overlay excludes pods whose network
+namespaces lack the host RDMA devices, and every allocation must validate the complete pinned RoCE
+profile before image import. EP8 remains in scope and derives its private stage beside the existing
+shared container directory because the runner account home is not mounted on compute nodes. B300
+EP16 is terminal unsupported for V1 publication because its functional fallback HCAs are not the
+GPU-adjacent product fabric; this is an operational topology decision, not a library limitation.
 
-Axes not implemented in this baseline include cached-layout `[cl]`, runtime-visible `[rv]`, FP8,
-quantized combine,
-extra routing distributions, activation profiles, uneven allocation, placement permutations, model
-envelopes, and scaling studies.
+Axes not implemented in this baseline include cached-layout `[cl]`, runtime-visible `[rv]`, precision
+formats outside the exact native allowlist, extra routing distributions, activation profiles, uneven
+allocation, placement permutations, model envelopes, and scaling studies.
 
 ## Workflow And Artifacts
 
