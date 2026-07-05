@@ -1301,19 +1301,22 @@ def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
     document = validate_matrix_document(matrix)
     matrix_bytes = contracts.canonical_json_bytes(document) + b"\n"
     cases = []
+    precision_profiles: dict[str, dict[str, Any]] = {}
     for wrapper in document["requested_cases"]:
         case = wrapper["case"]
         precision_profile = case.get(
             "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
         )
         precision = identity.precision_profile(precision_profile)
+        precision_profiles[precision_profile] = {
+            "dispatch": precision["dispatch"],
+            "combine": precision["combine"],
+        }
         cases.append({
             "backend": case["backend"],
             "backend_generation": None,
             "case_id": case["case_id"],
             "disposition": wrapper["disposition"],
-            "dispatch_precision": precision["dispatch"],
-            "combine_precision": precision["combine"],
             "eplb": case["eplb"],
             "label": (
                 f"{wrapper['sku'].upper()} / {case['backend']} / EP{case['ep']} / "
@@ -1352,6 +1355,7 @@ def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
         "format": "collectivex.frontend-catalog.v1",
         "matrix_sha256": hashlib.sha256(matrix_bytes).hexdigest(),
         "point_count": sum(len(case["points"]) for case in cases),
+        "precision_profiles": dict(sorted(precision_profiles.items())),
         "schema_version": 1,
         "cases": cases,
     }

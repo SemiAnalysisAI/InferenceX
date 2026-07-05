@@ -269,11 +269,10 @@ try:
         raise ValueError
     selected = None
     for name, config in runners.items():
-        if (
-            not isinstance(config, dict)
-            or (name == runner and not REQUIRED[name].issubset(config))
-        ):
+        if not isinstance(config, dict):
             raise ValueError
+        if name == runner and not REQUIRED[name].issubset(config):
+            raise KeyError("selected-runner-missing-required-fields")
         if set(config) - ALLOWED[name]:
             raise ValueError
         for field, value in config.items():
