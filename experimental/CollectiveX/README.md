@@ -13,8 +13,8 @@ combine, and paired roundtrip latency across EP libraries and accelerator system
 > rankings, recommendations, or regression baselines.
 
 > Development status: the V1 precision, point-level publication, branch-only delivery, and frontend
-> contracts are implemented. Native precision capability probes are still resolving provisional
-> cells, so the BF16 counts below remain a planning baseline and V1 counts/digests are not frozen.
+> contracts are implemented. Validated B200 EP8, H200 EP8, and GB200 EP8/EP16 probe outcomes are
+> recorded; 57 native precision cells remain provisional, so V1 counts/digests are not frozen.
 
 ## Implemented Pre-V1 Execution Profile
 

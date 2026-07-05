@@ -10,6 +10,8 @@ This document describes the implemented BF16 baseline. It is not yet the V1 qual
 Before any V1-tagged run, this English document must match the implemented precision, measurement,
 publication, and frontend contracts; counts and digests remain unfrozen. Chinese documentation
 synchronization is explicitly deferred for the V1 implementation phase.
+Validated B200 EP8, H200 EP8, and GB200 EP8/EP16 native probe outcomes are recorded in the
+capability registry; 57 native precision cells remain provisional.
 
 ## Product Boundary
 

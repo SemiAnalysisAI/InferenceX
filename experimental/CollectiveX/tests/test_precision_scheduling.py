@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 85)
+        self.assertEqual(len(targets), 57)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -53,10 +53,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
 
     def test_precision_probe_workflow_plan_binds_exact_controls(self) -> None:
-        plan = probe_precision.workflow_plan(backend="deepep", only_sku="b200-dgxc")
+        plan = probe_precision.workflow_plan(backend="deepep", only_sku="b300")
         self.assertTrue(plan["include"])
         self.assertTrue(all(
-            row["backend"] == "deepep" and row["sku"] == "b200-dgxc"
+            row["backend"] == "deepep" and row["sku"] == "b300"
             for row in plan["include"]
         ))
         row = plan["include"][0]
@@ -78,7 +78,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(backend="mori", only_sku="b200-dgxc")
         ep8 = probe_precision.workflow_plan(
-            backend="deepep", only_sku="b200-dgxc", max_nodes=1,
+            backend="deepep", only_sku="b300", max_nodes=1,
         )
         self.assertTrue(ep8["include"])
         self.assertEqual({row["ep"] for row in ep8["include"]}, {8})
@@ -218,15 +218,18 @@ class PrecisionSchedulingTest(unittest.TestCase):
         targets = capability.precision_targets()
         self.assertTrue(targets)
         self.assertEqual(
-            {item["disposition"] for item in targets}, {"provisional", "unsupported"}
+            {item["disposition"] for item in targets},
+            {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 9
+            len(targets) - len(capability.provisional_precision_targets()), 37
         )
-        self.assertTrue(all(
-            item["sku"] == "h100-dgxc" and item["ep"] == 16
-            for item in targets if item["disposition"] == "unsupported"
-        ))
+        self.assertEqual(
+            sum(item["disposition"] == "supported" for item in targets), 22
+        )
+        self.assertEqual(
+            sum(item["disposition"] == "unsupported" for item in targets), 15
+        )
         keys = {
             (
                 item["precision_profile"],
@@ -244,13 +247,13 @@ class PrecisionSchedulingTest(unittest.TestCase):
         fnuz_direct = "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale"
         low_latency = "d-bf16.c-logfmt10-dynamic64"
         cases = (
-            (("h200-dgxc", "deepep-v2", 8, "normal", normal), "provisional"),
+            (("h200-dgxc", "deepep-v2", 8, "normal", normal), "unsupported"),
             (("h100-dgxc", "deepep-v2", 8, "normal", normal), "not-applicable"),
             (("h200-dgxc", "nccl-ep", 8, "normal", normal), "not-applicable"),
             (("mi355x", "mori", 8, "normal", direct), "provisional"),
             (("mi355x", "mori", 16, "normal", direct), "not-applicable"),
             (("mi325x", "mori", 8, "normal", fnuz_direct), "provisional"),
-            (("h200-dgxc", "deepep", 8, "low-latency", low_latency), "provisional"),
+            (("h200-dgxc", "deepep", 8, "low-latency", low_latency), "supported"),
             (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "unsupported"),
             (("h200-dgxc", "deepep-hybrid", 8, "low-latency", low_latency),
              "not-applicable"),

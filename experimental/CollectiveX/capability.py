@@ -313,6 +313,41 @@ PRECISION_CELL_OVERRIDES = {
     if "h100-dgxc" in rule["skus"] and 16 in rule["ep_degrees"]
 }
 
+_VALIDATED_NATIVE_PROBE_CELLS = (
+    # run, SKU, EP, backend, mode, profile, disposition, result
+    ("28737315879", "b200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
+    ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28737315879", "b200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
+    ("28737315879", "b200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
+    ("28737422303", "h200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
+    ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28737422303", "h200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
+    ("28737422303", "h200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
+    *(("28737422303", "h200-dgxc", 8, "uccl", mode, profile, "supported", "native-probe-passed")
+      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
+                            (_LL_LOGFMT_PROFILE, "low-latency"), (_LL_FP8_LOGFMT_PROFILE, "low-latency"))),
+    *(("28737422902", "gb200", ep, "deepep", mode, profile, "supported", "native-probe-passed")
+      for ep in (8, 16)
+      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
+                            (_LL_LOGFMT_PROFILE, "low-latency"), (_LL_FP8_LOGFMT_PROFILE, "low-latency"))),
+    *(("28737422902", "gb200", ep, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed")
+      for ep in (8, 16)),
+    *(("28737422902", "gb200", ep, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed")
+      for ep in (8, 16)),
+)
+PRECISION_CELL_OVERRIDES.update({
+    (profile, backend, sku, ep, mode): {
+        "basis": f"native-probe-v1-run-{run_id}-{result}",
+        "disposition": disposition,
+    }
+    for run_id, sku, ep, backend, mode, profile, disposition, result
+    in _VALIDATED_NATIVE_PROBE_CELLS
+})
+
 
 def runtime_identity_issues(
     sku: str, *, vendor: str, arch: str, machine: str, device_name: str,
