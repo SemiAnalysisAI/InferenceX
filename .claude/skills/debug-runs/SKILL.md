@@ -46,11 +46,11 @@ and the benchmark command.
 
 ### 1. Trigger (or reuse) the sweep
 
-A PR's sweep is kicked by labels or a `/sweep` comment:
+A PR's sweep is kicked by labels (the `/sweep` comment trigger was removed — use the label):
 
 - **`full-sweep-fail-fast`** — full sweep that bails on first failure per matrix (faster signal while debugging; **strongly recommended default**, and what `/nuke` attaches).
 - **`full-sweep-enabled`** — full GPU sweep that runs every job to completion despite failures; use only when a flaky job killing its matrix's in-flight results is unacceptable.
-- **`/sweep …`** PR comment (Slash Command Sweep) — re-trigger / reuse a sweep run without a new commit.
+- To re-trigger a sweep without a new commit, remove and re-add the sweep label.
 
 For a **single config** (tightest CI loop, skips the rest of the matrix), dispatch e2e directly:
 
