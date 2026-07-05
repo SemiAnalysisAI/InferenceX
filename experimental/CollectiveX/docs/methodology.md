@@ -10,9 +10,8 @@ This document describes the implemented BF16 baseline. It is not yet the V1 qual
 Before any V1-tagged run, this English document must match the implemented precision, measurement,
 publication, and frontend contracts; counts and digests remain unfrozen. Chinese documentation
 synchronization is explicitly deferred for the V1 implementation phase.
-H100, H200, GB200, and GB300 precision cells are terminal. B200 and B300 EP8 are terminal, and
-B300 EP16 has terminal native outcomes. Twelve B200/MI325X/MI355X precision cells remain
-provisional.
+H100, H200, B200, B300, GB200, and GB300 precision cells are terminal. Five MI325X/MI355X
+precision cells remain provisional.
 
 ## Product Boundary
 
@@ -39,9 +38,8 @@ normal `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v
 - `ep-precision-normal-v1`: nonbaseline native dispatch/combine profiles at decode T=128 and prefill
   T=512; BF16/BF16 endpoint controls are referenced rather than duplicated.
 - `ep-precision-low-latency-v1`: nonbaseline native low-latency profiles at decode T=128.
-- BF16 planning baseline: 608 requested cases / 1,600 token points; 338 runnable cases / 868
-  points in
-  54 executable workflow shards/allocation cells; 270 unsupported cases / 732 points.
+- Current planning matrix: 656 requested cases / 1,648 token points; 379 runnable cases / 916
+  points in 54 executable workflow shards/allocation cells; 277 unsupported cases / 732 points.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -64,10 +62,13 @@ declared unsupported combination in v1 because NCCL 2.30.4 reports no Device API
 support for its EP8 communicator; that pool can return only after all-rank CUDA P2P/LSA support is
 restored. This baseline omits `[cl]`, `[rv]`, quantization, alternate activation/routing profiles,
 uneven allocation, placement permutations, model envelopes, and scaling.
-H100 EP16 is also planned unsupported on the current runner pool because allocated compute nodes
-expose no active RDMA device. H100 EP8 remains in scope with a private stage beside its configured
-shared container directory; unlike the B300 runner account home, the H100 account home is not
-compute-visible.
+H100 EP16 is supported on the healthy runner subset. The private runner overlay excludes pods that
+do not expose the host RDMA devices in their network namespace, and allocation validation requires
+the complete operator-pinned RoCE profile on every selected node before image import. H100 EP8
+remains in scope with a private stage beside its configured shared container directory; unlike the
+B300 runner account home, the H100 account home is not compute-visible. B300 EP16 is terminal
+unsupported for V1 publication because its currently functional fallback HCAs are not the
+GPU-adjacent product fabric; this is an operational topology decision, not a library limitation.
 FlashInfer is excluded from v1 after repeatable intermittent execution failures; those failures are
 not converted into planned-unsupported coverage.
 MoRI EP8 uses MI325X AsyncLL or MI355X IntraNode in normal mode. EP16 uses pinned InterNodeV1 over

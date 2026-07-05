@@ -294,6 +294,22 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(h100_ep16, "supported")
         self.assertEqual(reason, "ok")
 
+        for backend in ("deepep", "deepep-v2", "deepep-hybrid", "nccl-ep"):
+            disposition, reason = capability.resolve_disposition(
+                "b300", backend, ep=16, nodes=2,
+                precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+            )
+            self.assertEqual(disposition, "unsupported")
+            self.assertEqual(
+                reason, "v1 publication fabric unavailable for B300 EP16"
+            )
+        b300_ep8, reason = capability.resolve_disposition(
+            "b300", "nccl-ep", ep=8, nodes=1,
+            precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+        )
+        self.assertEqual(b300_ep8, "supported")
+        self.assertEqual(reason, "ok")
+
     def test_split_suites_track_provisional_state_and_do_not_duplicate_bf16(self) -> None:
         suites = sweep_matrix._load("suites.yaml")
         workloads = sweep_matrix._load("workloads.yaml")

@@ -160,6 +160,13 @@ BACKENDS = {
 }
 SWEEP_BACKENDS = tuple(BACKENDS)
 
+# Publication-quality topology exceptions apply after ordinary backend support
+# checks. They describe the currently usable benchmark fabric, not a library
+# implementation limit, and can be removed when the named topology is repaired.
+TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {
+    ("b300", 16): "v1 publication fabric unavailable for B300 EP16",
+}
+
 PRECISION_DISPOSITIONS = {
     "supported", "unsupported", "not-applicable", "provisional",
 }
@@ -481,6 +488,9 @@ def _resolve_base(
         return False, f"{backend} does not support {platform['machine']}"
     if sku in implementation.get("excluded_skus", set()):
         return False, f"{backend} is unavailable on {sku}"
+    topology_override = TOPOLOGY_CELL_OVERRIDES.get((sku, ep))
+    if topology_override is not None:
+        return False, topology_override
     return True, "ok"
 
 
