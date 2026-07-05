@@ -11,7 +11,8 @@ Before any V1-tagged run, this English document must match the implemented preci
 publication, and frontend contracts; counts and digests remain unfrozen. Chinese documentation
 synchronization is explicitly deferred for the V1 implementation phase.
 Validated B200 EP8, H200 EP8, and GB200 EP8/EP16 native probe outcomes are recorded in the
-capability registry; 57 native precision cells remain provisional.
+capability registry, together with seven completed H100 EP8 outcomes; 50 native precision cells
+remain provisional.
 
 ## Product Boundary
 

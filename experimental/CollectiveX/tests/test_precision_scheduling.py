@@ -28,7 +28,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 57)
+        self.assertEqual(len(targets), 50)
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -222,13 +222,13 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"provisional", "supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 37
+            len(targets) - len(capability.provisional_precision_targets()), 44
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 22
+            sum(item["disposition"] == "supported" for item in targets), 28
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 15
+            sum(item["disposition"] == "unsupported" for item in targets), 16
         )
         keys = {
             (
