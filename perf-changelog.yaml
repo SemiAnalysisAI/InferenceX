@@ -4519,4 +4519,4 @@
     - "Add mooncake store-enabled variants for DeepSeek V4 and Qwen 3.5 on GB300, using dedicated _mooncake_store.yaml recipe files with mooncake_kv_store backend (RDMA protocol, 800GB global segment size, MNNVL forced)."
     - "Configure mooncake-specific environment variables."
     - "Wire launcher routing so CONFIG_FILE values ending with _mooncake_store.yaml use the srt-slurm main branch; legacy recipes continue on their previous branch flow."
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2085
