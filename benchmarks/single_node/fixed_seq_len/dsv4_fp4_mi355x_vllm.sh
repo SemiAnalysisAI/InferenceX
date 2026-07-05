@@ -12,15 +12,6 @@ set -eo pipefail
 # same ROCm recipe while switching parallelism to vLLM's DP+EP form.
 # Image-pin details live in amd-master.yaml.
 #
-# --moe-backend aiter selects the AITER AITER_MXFP4_BF16 (a16w4) MoE
-# kernel, which is ~21% faster on decode than triton_unfused
-# (1105 vs 915 output tok/s at c64 1k/1k, TP=8) while staying numerically
-# stable. It requires VLLM_ROCM_USE_AITER=1 and VLLM_ROCM_USE_AITER_MOE=1
-# (both exported below).
-# Do NOT let --moe-backend default to auto: auto picks a backend that
-# doesn't register the FP4 scale parameters (w13_weight_scale /
-# w2_weight_scale), so safetensors loading raises KeyError.
-#
 # --compilation-config mode=3 with FULL_AND_PIECEWISE cudagraph mode
 # enables full CUDA graph capture for improved throughput on MI355X.
 
@@ -48,7 +39,8 @@ if [ -n "$ROCR_VISIBLE_DEVICES" ]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_USE_AITER_MOE=1
+export ATOM_MOE_GU_ITLV=1
+export AITER_BF16_FP8_MOE_BOUND=0
 
 SERVER_LOG=/workspace/server.log
 
@@ -79,7 +71,6 @@ vllm serve $MODEL --port $PORT \
     --gpu-memory-utilization 0.8 \
     --kv-cache-dtype fp8 \
     --trust-remote-code \
-    --moe-backend aiter \
     --tokenizer-mode deepseek_v4 \
     --reasoning-parser deepseek_v4 \
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}' > $SERVER_LOG 2>&1 &
