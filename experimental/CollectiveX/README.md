@@ -60,7 +60,7 @@ scale-up domain.
 | Backend | Current scope |
 |---|---|
 | DeepEP V1 | Image-pinned `deep_ep.Buffer`: normal and native low-latency APIs; upstream v1.2.1 on x86 and the image's GB fork on arm64 |
-| DeepEP V2 | PR #605 `ElasticBuffer` plus #630: LSA for scale-up and GIN for x86 EP16 scale-out; source/SASS-bound reproducible JIT |
+| DeepEP V2 | PR #605 `ElasticBuffer` plus exact upstream #630 and #640 fixes: LSA for scale-up and GIN for x86 EP16 scale-out; source/SASS-bound reproducible JIT |
 | DeepEP Hybrid | Pinned `HybridEPBuffer`: x86 EP16 multi-domain RDMA/DOCA; GB EP8/EP16 in one MNNVL communication domain |
 | UCCL | Pinned 0.1.1 wheel and wrapper with normal and native low-latency APIs on Hopper; Blackwell is explicitly unsupported |
 | NCCL/RCCL A2A | Portable rank-deduplicated payload plus expert/routing-metadata reference |
@@ -71,9 +71,11 @@ misreported as a platform capability limitation and can return after a stable pi
 
 DeepEP V2 means the `ElasticBuffer` implementation introduced by
 [DeepEP PR #605](https://github.com/deepseek-ai/DeepEP/pull/605), not a newer legacy `Buffer` build.
-The pinned source is the minimal upstream [PR #630](https://github.com/deepseek-ai/DeepEP/pull/630)
-follow-up: its parent is the #605 merge tree and its only source change fixes pure scale-up
-initialization when GIN is unavailable. Scale-up cases request NCCL Device API LSA and fail closed
+The pinned source is the [PR #630](https://github.com/deepseek-ai/DeepEP/pull/630) head, whose parent
+is the #605 merge tree, plus the exact one-line library matcher from upstream
+[PR #640](https://github.com/deepseek-ai/DeepEP/pull/640). The first fixes pure scale-up
+initialization when GIN is unavailable; the second prevents NCCL shared-memory mappings from being
+misclassified as duplicate NCCL libraries. Scale-up cases request NCCL Device API LSA and fail closed
 unless the realized LSA team covers the full EP world. x86 EP16 scale-out cases instead require the
 hybrid path with GIN, two logical scale-out domains represented by two physical RDMA ranks, and eight
 scale-up ranks per domain; GB EP16 remains MNNVL scale-up and therefore uses LSA. The isolated build

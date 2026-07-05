@@ -142,7 +142,7 @@ BACKENDS = {
     "deepep-v2": {
         "vendors": {"nvidia"},
         "implementation": "deep_ep.ElasticBuffer",
-        "source": "deepseek-ai/DeepEP#605+#630",
+        "source": "deepseek-ai/DeepEP#605+#630+#640",
         "commit": DEEPEP_V2_COMMIT,
         "communication_backend": "nccl-device-lsa",
         "torch": "2.10.0+cu130",
@@ -357,6 +357,9 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
       for ep in (8, 16)),
     ("28738738793", "b300", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28738738793", "b300", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
+    ("28739555164", "h200-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
+    ("28739555164", "h200-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28739555164", "h200-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
 )
 PRECISION_CELL_OVERRIDES.update({
     (profile, backend, sku, ep, mode): {

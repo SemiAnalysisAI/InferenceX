@@ -311,8 +311,8 @@ PY
 }
 
 # DeepEP V2 is PR #605's ElasticBuffer implementation with upstream PR #630's pure scale-up
-# initialization fix. Canonical launchers stage the pinned source and mount a private cluster-local
-# build cache at /cx-cache.
+# initialization fix and PR #640's exact libnccl mapping check. Canonical launchers stage the
+# pinned source and mount a private cluster-local build cache at /cx-cache.
 cx_deepep_v2_root() {
   local arch cpu base identity key image_digest
   arch="$(cx_cuda_arch)" || return 1
@@ -325,7 +325,7 @@ cx_deepep_v2_root() {
     || return 1
   # Bump the recipe generation whenever the build procedure changes. Benchmark-only
   # source revisions must reuse the same immutable environment instead of leaking GBs.
-  identity="deepep-v2-cache-v2|$cpu|sm${arch/./}|image=$image_digest|recipe=aot-persistent-nvshmem-active-cuda-maxjobs16-v2|$CX_DEEPEP_V2_COMMIT|$CX_DEEPEP_V2_TREE|$CX_DEEPEP_V2_FMT_COMMIT|pip=26.1.2|setuptools=82.0.1|wheel=0.47.0|ninja=1.13.0|numpy=2.2.6|torch=2.10.0+cu130|nccl=2.30.4|nvshmem=3.3.9|max-jobs=16"
+  identity="deepep-v2-cache-v3|$cpu|sm${arch/./}|image=$image_digest|recipe=aot-persistent-nvshmem-active-cuda-maxjobs16-v3|$CX_DEEPEP_V2_COMMIT|$CX_DEEPEP_V2_TREE|$CX_DEEPEP_V2_FMT_COMMIT|$CX_DEEPEP_V2_NCCL_CHECK_COMMIT|pip=26.1.2|setuptools=82.0.1|wheel=0.47.0|ninja=1.13.0|numpy=2.2.6|torch=2.10.0+cu130|nccl=2.30.4|nvshmem=3.3.9|max-jobs=16"
   key="$(printf '%s' "$identity" | sha256sum | awk '{print $1}')"
   [[ "$key" =~ ^[0-9a-f]{64}$ ]] || return 1
   printf '%s/deepep-v2-%s' "$base" "$key"
@@ -356,11 +356,13 @@ cx_activate_deepep_v2() {
   # from seeding a later run; all ranks and cases in this shard still share one cold build.
   export EP_JIT_CACHE_DIR="$stage_root/.cx_backend/deepep-v2-jit"
   export EP_REUSE_NCCL_COMM=1
-  export DEEPEP_V2_PR=605 DEEPEP_V2_FIX_PR=630
+  export DEEPEP_V2_PR=605 DEEPEP_V2_FIX_PR=630 DEEPEP_V2_NCCL_CHECK_FIX_PR=640
   DEEPEP_V2_COMMIT="$CX_DEEPEP_V2_COMMIT"
   DEEPEP_V2_TREE="$CX_DEEPEP_V2_TREE"
   DEEPEP_V2_FMT_COMMIT="$CX_DEEPEP_V2_FMT_COMMIT"
+  DEEPEP_V2_NCCL_CHECK_COMMIT="$CX_DEEPEP_V2_NCCL_CHECK_COMMIT"
   export DEEPEP_V2_COMMIT DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT
+  export DEEPEP_V2_NCCL_CHECK_COMMIT
   [ ! -L "$stage_root/.cx_backend" ] && [ ! -L "$EP_JIT_CACHE_DIR" ] \
     || { cx_log "ERROR: DeepEP V2 JIT cache path is unsafe"; return 1; }
   if ! mkdir -p "$EP_JIT_CACHE_DIR" \
@@ -571,7 +573,7 @@ cx_build_deepep_v2() {
   lock_path="${root}.lock"
   command -v flock >/dev/null || { cx_log "ERROR: flock is required for DeepEP V2"; return 1; }
   mkdir -p "${root%/*}" || return 1
-  cx_log "DeepEP V2: preparing PR #605 implementation with upstream PR #630 fix ($revision)"
+  cx_log "DeepEP V2: preparing PR #605 with upstream PR #630 and #640 fixes ($revision)"
   if ! (
     [ ! -L "$lock_path" ] \
       || { cx_log "ERROR: DeepEP V2 cache lock is unsafe"; exit 1; }
@@ -888,7 +890,8 @@ cx_persist_backend_env() {
     NVSHMEM_DIR DEEPEP_COMMIT DEEPEP_TREE
     EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR EP_JIT_CACHE_DIR EP_REUSE_NCCL_COMM
     EP_JIT_DUMP_SASS
-    DEEPEP_V2_PR DEEPEP_V2_FIX_PR DEEPEP_V2_COMMIT DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT
+    DEEPEP_V2_PR DEEPEP_V2_FIX_PR DEEPEP_V2_NCCL_CHECK_FIX_PR DEEPEP_V2_COMMIT
+    DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT DEEPEP_V2_NCCL_CHECK_COMMIT
     DEEPEP_V2_JIT_RANDOM_SEED
     HYBRID_EP_MULTINODE USE_NIXL RDMA_CORE_HOME DEEPEP_HYBRID_BUILD_MODE
     UCCL_COMMIT UCCL_WRAPPER_COMMIT CX_UCCL_WRAPPER)

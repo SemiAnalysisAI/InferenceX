@@ -53,7 +53,8 @@ Physical host count does not define scope. Both GB cells remain inside one 72-GP
 domain.
 
 Unsupported combinations are terminal outcomes, not silently skipped coverage. DeepEP V2 is the
-`ElasticBuffer` introduced by PR #605, pinned with upstream PR #630's minimal pure-scale-up fix.
+`ElasticBuffer` introduced by PR #605, pinned with upstream PR #630's minimal pure-scale-up fix and
+the exact upstream PR #640 library matcher that excludes NCCL shared-memory mappings.
 Scale-up cases request NCCL Device API LSA and fail closed unless the realized LSA team covers the
 full EP world. x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out
 domains represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16

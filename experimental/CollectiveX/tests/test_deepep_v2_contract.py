@@ -33,6 +33,7 @@ import run_ep  # noqa: E402
 COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 TREE = "29809e75c5874e6609dac4804e7b651d5226959f"
 FMT_COMMIT = "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
+NCCL_CHECK_COMMIT = "93d0564188f7a0a6288c6e316484861b0efa042e"
 
 
 def deepep_v2_jit_provenance() -> list[dict[str, str]]:
@@ -127,7 +128,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
             (backend["implementation"], backend["commit"], backend["torch"], backend["nccl"]),
             ("deep_ep.ElasticBuffer", COMMIT, "2.10.0+cu130", "2.30.4"),
         )
-        self.assertEqual(backend["source"], "deepseek-ai/DeepEP#605+#630")
+        self.assertEqual(backend["source"], "deepseek-ai/DeepEP#605+#630+#640")
         self.assertEqual(backend["communication_backend"], "nccl-device-lsa")
         self.assertEqual(set(backend["sku_capabilities"]), set(capability.PLATFORMS))
         for sku, platform in capability.PLATFORMS.items():
@@ -165,6 +166,8 @@ class DeepEPV2ContractTests(unittest.TestCase):
         self.assertEqual(constants["DEEPEP_V2_FMT_COMMIT"], FMT_COMMIT)
         self.assertEqual(constants["DEEPEP_V2_PR"], 605)
         self.assertEqual(constants["DEEPEP_V2_FIX_PR"], 630)
+        self.assertEqual(constants["DEEPEP_V2_NCCL_CHECK_FIX_PR"], 640)
+        self.assertEqual(constants["DEEPEP_V2_NCCL_CHECK_COMMIT"], NCCL_CHECK_COMMIT)
         self.assertEqual(
             constants["DEEPEP_V2_JIT_RANDOM_SEED"],
             "collectivex-deepep-v2-fa8a9b1",
@@ -346,6 +349,13 @@ class DeepEPV2ContractTests(unittest.TestCase):
         self.assertEqual(provenance["properties"]["gin_enabled"], {"type": "boolean"})
         self.assertEqual(provenance["properties"]["deepep_pr"], {"const": 605})
         self.assertEqual(provenance["properties"]["deepep_fix_pr"], {"const": 630})
+        self.assertEqual(
+            provenance["properties"]["deepep_nccl_check_fix_pr"], {"const": 640}
+        )
+        self.assertEqual(
+            provenance["properties"]["deepep_nccl_check_commit"],
+            {"const": NCCL_CHECK_COMMIT},
+        )
         self.assertEqual(
             provenance["properties"]["communication_backend"],
             {"enum": ["nccl-device-lsa", "nccl-gin"]},
@@ -1444,12 +1454,12 @@ class DeepEPV2ContractTests(unittest.TestCase):
         ]
         self.assertIn('cccl="${CX_CUDA_CCCL:-}"', jit)
         self.assertNotIn("/usr/local/cuda*", jit)
-        self.assertIn("deepep-v2-cache-v2|$cpu|sm${arch/./}", runtime)
+        self.assertIn("deepep-v2-cache-v3|$cpu|sm${arch/./}", runtime)
         self.assertNotIn("deepep-v2-cache-v1|", runtime)
         self.assertIn('base="${CX_BACKEND_CACHE_ROOT:-}"', runtime)
         self.assertNotIn("${CX_BACKEND_CACHE_ROOT:-$PWD/.cx_backend}", runtime)
         self.assertIn(
-            "recipe=aot-persistent-nvshmem-active-cuda-maxjobs16-v2", runtime
+            "recipe=aot-persistent-nvshmem-active-cuda-maxjobs16-v3", runtime
         )
         self.assertNotIn("recipe=aot-source-date-epoch-arch-maxjobs16-v1", runtime)
         self.assertNotIn("recipe=$source_sha", runtime)
@@ -2092,6 +2102,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 (missing_h100_stage, "h100-dgxc"),
                 (missing_b300_stage, "b300"),
                 (missing_gb300_stage, "gb300"),
+                (missing_amd_stage, "mi325x"),
             ):
                 config.write_text(json.dumps(valid))
                 config.chmod(0o600)
@@ -2139,7 +2150,9 @@ class DeepEPV2ContractTests(unittest.TestCase):
                     "COLLECTIVEX_OPERATOR_CONFIG": str(config),
                 },
             )
-            self.assertNotEqual(selected_missing_stage.returncode, 0)
+            self.assertEqual(
+                selected_missing_stage.returncode, 0, selected_missing_stage.stderr
+            )
 
             config.write_text(json.dumps(document))
             config.chmod(0o644)

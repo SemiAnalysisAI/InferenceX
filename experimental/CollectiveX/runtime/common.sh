@@ -11,6 +11,10 @@ CX_SQUASH_SOURCE_DATE_EPOCH=1
 CX_DEEPEP_V2_COMMIT="fa8a9b16898204afd347c663b89e65ef87dc6ce6" # pragma: allowlist secret
 CX_DEEPEP_V2_TREE="29809e75c5874e6609dac4804e7b651d5226959f" # pragma: allowlist secret
 CX_DEEPEP_V2_FMT_COMMIT="a4c7e17133ee9cb6a2f45545f6e974dd3c393efa" # pragma: allowlist secret
+# Consumed by run_in_container.sh after this helper is sourced.
+# shellcheck disable=SC2034
+CX_DEEPEP_V2_NCCL_CHECK_COMMIT="93d0564188f7a0a6288c6e316484861b0efa042e" # pragma: allowlist secret
+CX_DEEPEP_V2_INIT_SHA256="f090bbacc38c7d5dba29f07fd38a918eb820b6adac6f76903fe56273060e4870"
 CX_DEEPEP_HYBRID_COMMIT="e0a5b1d9848ab3e7b4a67842bf06f067bfac67f8" # pragma: allowlist secret
 CX_DEEPEP_HYBRID_TREE="d77aeab7f1bb52b615666fe178d26ced41fae08e" # pragma: allowlist secret
 CX_DEEPEP_HYBRID_NCCL_COMMIT="1e0c869c39bb33f1034cb9920bd2a8a8406f04a3" # pragma: allowlist secret
@@ -241,8 +245,8 @@ REQUIRED = {
     "b300": {"partition", "account", "squash_dir"},
     "gb200": {"partition", "account", "storage_roots"},
     "gb300": {"partition", "account", "squash_dir", "enroot_cache_path"},
-    "mi325x": {"partition", "squash_dir", "stage_dir"},
-    "mi355x": {"partition", "squash_dir", "stage_dir"},
+    "mi325x": {"partition", "squash_dir"},
+    "mi355x": {"partition", "squash_dir"},
 }
 ALLOWED = {
     "h100-dgxc": REQUIRED["h100-dgxc"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
@@ -1350,7 +1354,14 @@ cx_backend_source_is_valid() {
   status="$(GIT_OPTIONAL_LOCKS=0 cx_git_in_tree "$source" \
     status --porcelain --untracked-files=all --ignore-submodules=none \
     2>/dev/null)" || return 1
-  [ -z "$status" ] || return 1
+  if [ "$backend" = deepep-v2 ]; then
+    [ "$status" = " M deep_ep/__init__.py" ] \
+      && [ "$(sha256sum "$source/deep_ep/__init__.py" | awk '{print $1}')" = \
+        "$CX_DEEPEP_V2_INIT_SHA256" ] \
+      || return 1
+  else
+    [ -z "$status" ] || return 1
+  fi
   ignored="$(cx_git_in_tree "$source" ls-files --others --ignored --exclude-standard \
     2>/dev/null)" || return 1
   [ -z "$ignored" ] || return 1
@@ -1359,6 +1370,26 @@ cx_backend_source_is_valid() {
     || return 1
   [ -z "$nccl" ] \
     || [ "$(cx_git_in_tree "$source/third-party/nccl" rev-parse HEAD 2>/dev/null)" = "$nccl" ]
+}
+
+cx_apply_deepep_v2_nccl_check_fix() {
+  local source="$1"
+  python3 - "$source/deep_ep/__init__.py" "$CX_DEEPEP_V2_INIT_SHA256" <<'PY'
+import hashlib
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+expected = sys.argv[2]
+old = "for so in [line.strip().split(' ')[-1] for line in f if 'nccl' in line]:"
+new = "for so in [line.strip().split(' ')[-1] for line in f if 'libnccl' in line]:"
+payload = path.read_text(encoding="utf-8")
+if payload.count(old) != 1 or new in payload:
+    raise SystemExit(1)
+path.write_text(payload.replace(old, new), encoding="utf-8")
+if hashlib.sha256(path.read_bytes()).hexdigest() != expected:
+    raise SystemExit(1)
+PY
 }
 
 cx_extension_pair_sha256() {
@@ -1487,6 +1518,13 @@ _cx_prepare_backend_source() {
       submodule update -q --init --depth 1 third-party/nccl; then
     rm -rf -- "$temporary"
     return 1
+  fi
+  if [ "$backend" = deepep-v2 ]; then
+    CX_BACKEND_SOURCE_STEP="upstream NCCL check fix"
+    cx_apply_deepep_v2_nccl_check_fix "$temporary" || {
+      rm -rf -- "$temporary"
+      return 1
+    }
   fi
   CX_BACKEND_SOURCE_STEP="source publication validation"
   if ! cx_backend_source_is_valid "$backend" "$temporary" \
@@ -1665,6 +1703,12 @@ cx_lock_canonical_gha_env() {
       h200-dgxc|b200-dgxc)
         trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
+        ;;
+      mi325x|mi355x)
+        # AMD Slurm jobs already consume the configured squash directory from
+        # compute-visible shared storage. Use it as the isolated staging base
+        # when the private row does not provide a separate location.
+        trusted_stage_dir="$CX_SQUASH_DIR"
         ;;
       *) cx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
     esac

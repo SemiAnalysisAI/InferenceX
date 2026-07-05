@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DeepEP PR #605 adapter with PR #630's pure scale-up initialization fix."""
+"""DeepEP PR #605 adapter with the exact upstream PR #630 and #640 fixes."""
 
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ except Exception as exc:  # pragma: no cover - requires the benchmark image
 
 DEEPEP_V2_PR = 605
 DEEPEP_V2_FIX_PR = 630
+DEEPEP_V2_NCCL_CHECK_FIX_PR = 640
+DEEPEP_V2_NCCL_CHECK_COMMIT = "93d0564188f7a0a6288c6e316484861b0efa042e"
 DEEPEP_V2_COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 DEEPEP_V2_TREE = "29809e75c5874e6609dac4804e7b651d5226959f"
 DEEPEP_V2_FMT_COMMIT = "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
@@ -254,9 +256,11 @@ def _require_runtime() -> tuple[str, str]:
     expected = {
         "DEEPEP_V2_PR": str(DEEPEP_V2_PR),
         "DEEPEP_V2_FIX_PR": str(DEEPEP_V2_FIX_PR),
+        "DEEPEP_V2_NCCL_CHECK_FIX_PR": str(DEEPEP_V2_NCCL_CHECK_FIX_PR),
         "DEEPEP_V2_COMMIT": DEEPEP_V2_COMMIT,
         "DEEPEP_V2_TREE": DEEPEP_V2_TREE,
         "DEEPEP_V2_FMT_COMMIT": DEEPEP_V2_FMT_COMMIT,
+        "DEEPEP_V2_NCCL_CHECK_COMMIT": DEEPEP_V2_NCCL_CHECK_COMMIT,
         "DEEPEP_V2_JIT_RANDOM_SEED": DEEPEP_V2_JIT_RANDOM_SEED,
         "EP_JIT_DUMP_SASS": "1",
     }
@@ -423,6 +427,8 @@ class DeepEPV2Backend:
             "deepep_tree": DEEPEP_V2_TREE,
             "deepep_pr": DEEPEP_V2_PR,
             "deepep_fix_pr": DEEPEP_V2_FIX_PR,
+            "deepep_nccl_check_fix_pr": DEEPEP_V2_NCCL_CHECK_FIX_PR,
+            "deepep_nccl_check_commit": DEEPEP_V2_NCCL_CHECK_COMMIT,
             "fmt_commit": DEEPEP_V2_FMT_COMMIT,
             "api": "deep_ep.ElasticBuffer",
             "api_signature_sha256": _api_sha256(),

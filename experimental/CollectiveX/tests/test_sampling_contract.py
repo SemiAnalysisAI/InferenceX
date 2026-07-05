@@ -2499,6 +2499,14 @@ class SamplingContractTest(unittest.TestCase):
           test "$CX_STAGE_DIR" = /validated/amd-stage
           test "$MORI_COMMIT" = "$CX_MORI_COMMIT_MI355"
 
+          export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
+          export CX_SHARD_SKU=mi355x CX_NODES=1 CX_GPUS_PER_NODE=8
+          export CX_SQUASH_DIR=/validated/amd-shared
+          export CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
+          unset CX_STAGE_DIR
+          cx_lock_canonical_gha_env mi355x
+          test "$CX_STAGE_DIR" = /validated/amd-shared
+
           unset COLLECTIVEX_CANONICAL_GHA
           unset COLLECTIVEX_OPERATOR_CONFIG_LOADED
           CX_IMAGE=manual CX_IMAGE_DIGEST=manual CX_NGPUS=3
@@ -3296,6 +3304,32 @@ PY
               ! cx_backend_source_is_valid backend "$2"
               mode=clean
               cx_backend_source_is_valid backend "$2"
+            '''
+            subprocess.run(
+                ["bash", "-c", command, "_", str(common), temporary],
+                check=True,
+            )
+
+    def test_deepep_v2_applies_only_the_pinned_upstream_nccl_check_fix(self) -> None:
+        common = ROOT / "runtime" / "common.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            source = Path(temporary)
+            init = source / "deep_ep" / "__init__.py"
+            init.parent.mkdir()
+            init.write_text(
+                "for so in [line.strip().split(' ')[-1] for line in f if 'nccl' in line]:\n"
+            )
+            command = r'''
+              set -euo pipefail
+              source "$1"
+              expected_file="$2/expected"
+              sed "s/if 'nccl' in line/if 'libnccl' in line/" \
+                "$2/deep_ep/__init__.py" > "$expected_file"
+              CX_DEEPEP_V2_INIT_SHA256="$(sha256sum "$expected_file" | awk '{print $1}')"
+              rm -f "$expected_file"
+              cx_apply_deepep_v2_nccl_check_fix "$2"
+              grep -Fq "if 'libnccl' in line" "$2/deep_ep/__init__.py"
+              ! cx_apply_deepep_v2_nccl_check_fix "$2"
             '''
             subprocess.run(
                 ["bash", "-c", command, "_", str(common), temporary],
