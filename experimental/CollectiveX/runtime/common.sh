@@ -271,8 +271,14 @@ try:
     for name, config in runners.items():
         if not isinstance(config, dict):
             raise ValueError
-        if name == runner and not REQUIRED[name].issubset(config):
-            raise KeyError("selected-runner-missing-required-fields")
+        if name == runner:
+            missing = sorted(REQUIRED[name] - set(config))
+            if missing:
+                print(
+                    "validation-missing-required-" + "-".join(missing),
+                    file=sys.stderr,
+                )
+                raise SystemExit(1)
         if set(config) - ALLOWED[name]:
             raise ValueError
         for field, value in config.items():
@@ -351,7 +357,7 @@ PY
     [ "$generated" = 0 ] || rm -f -- "$config_path"
     unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
     unset COLLECTIVEX_OPERATOR_CONFIG COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL
-    [[ "$validation_code" =~ ^validation-line-[0-9]+$ ]] \
+    [[ "$validation_code" =~ ^validation-(line-[0-9]+|missing-required-[a-z0-9_-]+)$ ]] \
       || validation_code="validation-unknown"
     cx_die "runner-local configuration failed ($validation_code)"
   fi

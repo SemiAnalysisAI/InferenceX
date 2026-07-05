@@ -572,6 +572,12 @@ class SamplingContractTest(unittest.TestCase):
             self.assertNotEqual(rejected.returncode, 0)
             self.assertNotIn("A" * 64, rejected.stdout + rejected.stderr)
 
+            missing_field = copy.deepcopy(document)
+            del missing_field["runners"]["h100-dgxc"]["stage_dir"]
+            rejected = invoke(missing_field, canonical=True)
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertIn("validation-missing-required-stage_dir", rejected.stderr)
+
     def test_scaleout_network_profile_is_explicit_and_allowlisted(self) -> None:
         command = r'''
           set -euo pipefail
