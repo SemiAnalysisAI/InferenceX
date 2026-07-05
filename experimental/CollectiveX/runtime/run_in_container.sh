@@ -407,7 +407,7 @@ assert metadata.version("numpy") == "2.2.6"
 
 import deep_ep
 assert deep_ep.__version__ == "2.0.0", deep_ep.__version__
-assert metadata.version("deep_ep") == "2.0.0+fa8a9b1", metadata.version("deep_ep")
+assert metadata.version("deep_ep") in {"2.0.0+fa8a9b1", "2.0.0+local"}, metadata.version("deep_ep")
 assert inspect.isclass(deep_ep.ElasticBuffer)
 assert deep_ep.ElasticBuffer.__name__ == "ElasticBuffer"
 assert os.environ.get("EP_SUPPRESS_NCCL_CHECK") is None

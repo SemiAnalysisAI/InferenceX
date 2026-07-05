@@ -626,6 +626,12 @@ class SamplingContractTest(unittest.TestCase):
             env={**os.environ, "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null"},
         )
 
+        v2_adapter = (ROOT / "tests" / "ep_deepep_v2.py").read_text()
+        container_runtime = (ROOT / "runtime" / "run_in_container.sh").read_text()
+        for version in ("2.0.0+fa8a9b1", "2.0.0+local"):
+            self.assertIn(version, v2_adapter)
+            self.assertIn(version, container_runtime)
+
     def test_network_profile_validation_is_private_and_all_node(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

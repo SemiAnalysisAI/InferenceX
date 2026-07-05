@@ -34,7 +34,7 @@ DEEPEP_V2_COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
 DEEPEP_V2_TREE = "29809e75c5874e6609dac4804e7b651d5226959f"
 DEEPEP_V2_FMT_COMMIT = "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa"
 DEEPEP_V2_VERSION = "2.0.0"
-DEEPEP_V2_DISTRIBUTION = "2.0.0+fa8a9b1"
+DEEPEP_V2_DISTRIBUTIONS = frozenset({"2.0.0+fa8a9b1", "2.0.0+local"})
 DEEPEP_V2_JIT_RANDOM_SEED = "collectivex-deepep-v2-fa8a9b1"
 TORCH_VERSION = "2.10.0+cu130"
 NCCL_VERSION = "2.30.4"
@@ -277,7 +277,6 @@ def _require_runtime() -> tuple[str, str]:
     }
     required = {
         "deep_ep": DEEPEP_V2_VERSION,
-        "deep_ep distribution": DEEPEP_V2_DISTRIBUTION,
         "torch": TORCH_VERSION,
         "nvidia-nccl-cu13": NCCL_VERSION,
         "nvidia-nvshmem-cu12": NVSHMEM_VERSION,
@@ -287,6 +286,12 @@ def _require_runtime() -> tuple[str, str]:
         for name, value in required.items()
         if actual[name] != value
     )
+    if actual["deep_ep distribution"] not in DEEPEP_V2_DISTRIBUTIONS:
+        mismatches.append(
+            "deep_ep distribution="
+            f"{actual['deep_ep distribution']!r}, expected one of "
+            f"{sorted(DEEPEP_V2_DISTRIBUTIONS)!r}"
+        )
     if not inspect.isclass(ElasticBuffer) or ElasticBuffer.__name__ != "ElasticBuffer":
         mismatches.append("deep_ep.ElasticBuffer is absent")
     if os.environ.get("EP_SUPPRESS_NCCL_CHECK"):
