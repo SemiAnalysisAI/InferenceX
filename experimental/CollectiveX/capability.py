@@ -313,6 +313,7 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28737315879", "b200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28737315879", "b200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
     ("28745114766", "b200-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-timeout"),
+    ("28746354426", "b200-dgxc", 16, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28737422303", "h200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
     ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
