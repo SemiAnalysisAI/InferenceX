@@ -440,11 +440,12 @@ def main() -> int:
     else:
         from ep_deepep import DeepEPBackend as Backend
 
-    # MoRI uses the gloo+NCCL group shape from its reference; other adapters use NCCL/RCCL.
+    # MoRI registers the default GPU process group with its SHMEM runtime. Keep that
+    # group device-only so scale-out does not also depend on a host Gloo fabric.
     if not dist.is_initialized():
         if args.backend == "mori":
             dist.init_process_group(
-                backend="cpu:gloo,cuda:nccl",
+                backend="nccl",
                 rank=rank,
                 world_size=world_size,
                 device_id=device,

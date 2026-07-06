@@ -821,7 +821,7 @@ def _init_distributed(torch_module, dist, backend_name: str, device, rank: int, 
         return
     if backend_name == "mori":
         dist.init_process_group(
-            backend="cpu:gloo,cuda:nccl", rank=rank, world_size=world_size, device_id=device
+            backend="nccl", rank=rank, world_size=world_size, device_id=device
         )
     elif backend_name == "deepep-v2":
         dist.init_process_group("nccl", device_id=device)

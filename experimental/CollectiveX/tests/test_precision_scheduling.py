@@ -518,6 +518,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
 
     def test_probe_runtime_diagnostics_are_closed_stage_codes(self) -> None:
         probe = (ROOT / "tests" / "probe_precision.py").read_text()
+        run_ep = (ROOT / "tests" / "run_ep.py").read_text()
         for stage in (
             "distributed-init", "runtime-context", "construction-consensus",
             "operation-consensus", "evidence-aggregation",
@@ -525,6 +526,9 @@ class PrecisionSchedulingTest(unittest.TestCase):
             self.assertIn(f'"{stage}"', probe)
         self.assertIn("precision-probe-diagnostic={diagnostic_stage}-exception", probe)
         self.assertNotIn("precision-probe-diagnostic={exc}", probe)
+        self.assertNotIn("cpu:gloo,cuda:nccl", probe + run_ep)
+        self.assertIn('backend="nccl", rank=rank, world_size=world_size, device_id=device', probe)
+        self.assertIn('backend="nccl",', run_ep)
 
 
 if __name__ == "__main__":
