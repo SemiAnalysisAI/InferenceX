@@ -115,6 +115,16 @@ class CollectiveXV1SchemaContractTest(unittest.TestCase):
         self.assertNotIn("dispatch_dtype", workload["properties"])
         self.assertNotIn("combine_dtype", workload["properties"])
 
+        oracle = self.raw["$defs"]["oracle"]["properties"]
+        tolerances = {
+            tuple(identity.combine_oracle_tolerances(profile).values())
+            for profile in (
+                identity.precision_profile(name) for name in sorted(expected)
+            )
+        }
+        self.assertEqual(set(oracle["atol"]["enum"]), {value[0] for value in tolerances})
+        self.assertEqual(set(oracle["rtol"]["enum"]), {value[1] for value in tolerances})
+
         profile = self.raw["$defs"]["case_profile"]
         self.assertEqual(
             profile["properties"]["activation_generator"]["const"],

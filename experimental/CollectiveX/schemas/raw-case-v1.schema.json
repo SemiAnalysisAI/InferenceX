@@ -249,7 +249,7 @@
           "required": ["combine_values","counts","metadata","multiplicity","payload","source_set","weights"],
           "type": "object"
         },
-        "atol": {"const":0.02},
+        "atol": {"enum":[0.02,0.03,0.04]},
         "combine_weight_semantics": {"enum":["unweighted-rank-sum","gate-weighted-sum"]},
         "contract": {"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
         "dispatch_sha256": {"$ref":"#/$defs/nullable_sha256"},
@@ -261,7 +261,7 @@
         "ordering_contract": {"minLength":1,"type":"string"},
         "passed": {"type":"boolean"},
         "receive_count": {"minimum":0,"type":"integer"},
-        "rtol": {"const":0.05}
+        "rtol": {"enum":[0.05,0.06,0.08]}
       },
       "required": [
         "atol",
