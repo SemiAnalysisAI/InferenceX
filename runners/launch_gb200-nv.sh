@@ -470,6 +470,11 @@ fi
 # Keep the Slurm job name aligned with the GitHub runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+# Optionally inject synthetic acceptance into the recipe's speculative-config
+# when SYNTHETIC_ACCEPTANCE=true (no-op otherwise). Must run after the name
+# override and before srtctl apply so the rendered job picks it up.
+python3 "$GITHUB_WORKSPACE/runners/inject_synthetic_acceptance.py" "$CONFIG_PATH" "$FRAMEWORK"
+
 # Don't leak the login-node venv to the compute-node orchestrator. sbatch's
 # default --export=ALL propagates VIRTUAL_ENV (set by `source
 # .venv/bin/activate` above) into job_script_minimal.j2, whose
