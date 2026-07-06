@@ -526,6 +526,31 @@ tag, label = sys.argv[1:]
 if not all(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", value) for value in (tag, label)):
     raise SystemExit(1)
 root = f"/tmp/inferencex-collectivex-{os.getuid()}"
+job_root = os.environ.get("CX_JOB_ROOT", "")
+job_parent = os.environ.get("CX_JOB_PARENT", "")
+if (
+    os.environ.get("COLLECTIVEX_CANONICAL_GHA") == "1"
+    and job_parent
+    and job_parent != "/tmp"
+):
+    if (
+        not os.path.isabs(job_root)
+        or os.path.dirname(job_root) != job_parent
+        or not re.fullmatch(
+            r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+",
+            os.path.basename(job_root),
+        )
+    ):
+        raise SystemExit(1)
+    control = os.path.join(job_root, "control")
+    control_metadata = os.stat(control, follow_symlinks=False)
+    if (
+        not stat.S_ISDIR(control_metadata.st_mode)
+        or control_metadata.st_uid != os.getuid()
+        or stat.S_IMODE(control_metadata.st_mode) != 0o700
+    ):
+        raise SystemExit(1)
+    root = os.path.join(control, "private-logs")
 old_umask = os.umask(0o077)
 flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 try:
@@ -589,6 +614,31 @@ tag = sys.argv[1]
 if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", tag):
     raise SystemExit(1)
 root = f"/tmp/inferencex-collectivex-{os.getuid()}"
+job_root = os.environ.get("CX_JOB_ROOT", "")
+job_parent = os.environ.get("CX_JOB_PARENT", "")
+if (
+    os.environ.get("COLLECTIVEX_CANONICAL_GHA") == "1"
+    and job_parent
+    and job_parent != "/tmp"
+):
+    if (
+        not os.path.isabs(job_root)
+        or os.path.dirname(job_root) != job_parent
+        or not re.fullmatch(
+            r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+",
+            os.path.basename(job_root),
+        )
+    ):
+        raise SystemExit(1)
+    control = os.path.join(job_root, "control")
+    control_metadata = os.stat(control, follow_symlinks=False)
+    if (
+        not stat.S_ISDIR(control_metadata.st_mode)
+        or control_metadata.st_uid != os.getuid()
+        or stat.S_IMODE(control_metadata.st_mode) != 0o700
+    ):
+        raise SystemExit(1)
+    root = os.path.join(control, "private-logs")
 flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
 root_fd = os.open(root, flags)
 try:

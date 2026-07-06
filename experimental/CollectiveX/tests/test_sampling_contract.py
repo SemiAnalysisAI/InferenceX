@@ -1617,6 +1617,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('[ "${CX_JOB_ROOT%/*}" = "$CX_JOB_PARENT" ]', cleanup)
         self.assertIn('^inferencex-collectivex-', cleanup)
         self.assertIn('rm -f -- "$CX_JOB_PARENT"', cleanup)
+        self.assertIn("steps.sweep_shard.outcome }}' != success", cleanup)
+        self.assertIn('[ "$CX_JOB_PARENT" != /tmp ]', cleanup)
         for step in (
             "sweep_shard", "allocation_cleanup", "artifact_safety",
             "delivery_contracts", "stage_artifact", "upload_artifact",

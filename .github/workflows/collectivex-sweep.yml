@@ -675,6 +675,11 @@ jobs:
               cx_cleanup_private_logs 0
             fi
           fi
+          if [ '${{ steps.sweep_shard.outcome }}' != success ] \
+              && [ "$CX_JOB_PARENT" != /tmp ]; then
+            rm -f -- "$CX_JOB_PARENT"
+            exit 0
+          fi
           rm -rf -- "$CX_JOB_ROOT"
           [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"
 

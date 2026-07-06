@@ -1915,6 +1915,36 @@ class DeepEPV2ContractTests(unittest.TestCase):
         finally:
             shutil.rmtree(Path(path).parent, ignore_errors=True)
 
+    def test_canonical_amd_runtime_logs_use_the_isolated_control_tree(self) -> None:
+        common = str(ROOT / "runtime" / "common.sh")
+        with tempfile.TemporaryDirectory() as temporary:
+            parent = Path(temporary) / "parent"
+            parent.mkdir(mode=0o700)
+            job = parent / f"inferencex-collectivex-123-1-test-{os.getpid()}"
+            control = job / "control"
+            control.mkdir(parents=True, mode=0o700)
+            environment = {
+                **os.environ,
+                "COLLECTIVEX_CANONICAL_GHA": "1",
+                "COLLECTIVEX_EXECUTION_ID": f"canonical-amd-{os.getpid()}",
+                "CX_JOB_PARENT": str(parent),
+                "CX_JOB_ROOT": str(job),
+            }
+            path = subprocess.check_output(
+                ["bash", "-c", 'source "$1"; cx_private_log_path test', "_", common],
+                text=True,
+                env=environment,
+            ).strip()
+            log = Path(path)
+            self.assertTrue(log.is_relative_to(control / "private-logs"))
+            self.assertEqual(stat.S_IMODE(log.stat().st_mode), 0o600)
+            subprocess.run(
+                ["bash", "-c", 'source "$1"; cx_cleanup_private_logs 0', "_", common],
+                check=True,
+                env=environment,
+            )
+            self.assertFalse(log.parent.exists())
+
     def test_private_runtime_logs_reject_traversal_and_symlinks(self) -> None:
         common = str(ROOT / "runtime" / "common.sh")
         for variable, value in (
