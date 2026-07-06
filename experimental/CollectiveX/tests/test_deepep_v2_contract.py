@@ -1945,6 +1945,32 @@ class DeepEPV2ContractTests(unittest.TestCase):
             )
             self.assertFalse(log.parent.exists())
 
+    def test_private_scheduler_diagnostic_is_value_free(self) -> None:
+        common = str(ROOT / "runtime" / "common.sh")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "inferencex-collectivex-123-1-test"
+            tag = "scheduler-diagnostic"
+            directory = root / "control" / "private-logs" / tag
+            directory.mkdir(parents=True, mode=0o700)
+            log = directory / "scheduler-allocation.log"
+            private_value = "private-node-123"
+            log.write_text(f"salloc: Pending job allocation on {private_value}\n")
+            log.chmod(0o600)
+            result = subprocess.run(
+                ["bash", "-c", 'source "$1"; cx_report_private_scheduler_failure', "_", common],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "COLLECTIVEX_CANONICAL_GHA": "1",
+                    "COLLECTIVEX_EXECUTION_ID": tag,
+                    "CX_JOB_ROOT": str(root),
+                },
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("scheduler-diagnostic=pending", result.stderr)
+            self.assertNotIn(private_value, result.stderr)
+
     def test_private_runtime_logs_reject_traversal_and_symlinks(self) -> None:
         common = str(ROOT / "runtime" / "common.sh")
         for variable, value in (

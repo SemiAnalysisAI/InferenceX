@@ -595,6 +595,14 @@ jobs:
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           source experimental/CollectiveX/runtime/common.sh
           cx_reconcile_recorded_allocation "$CX_JOB_ROOT"
+      - name: Classify private scheduler failure
+        if: ${{ always() && steps.source.outputs.prepared == 'true' && steps.sweep_shard.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          source experimental/CollectiveX/runtime/common.sh
+          cx_report_private_scheduler_failure
       - name: Confirm allocation cleanup
         id: allocation_cleanup
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}

@@ -653,6 +653,75 @@ if os.path.isdir(path) and not os.path.islink(path):
 PY
 }
 
+cx_report_private_scheduler_failure() {
+  local root="${CX_JOB_ROOT:-}" tag="${COLLECTIVEX_EXECUTION_ID:-}" diagnostic
+  [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ] \
+    && [ -n "$root" ] && [ -n "$tag" ] \
+    && [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+    || return 0
+  diagnostic="$(python3 - "$root" "$tag" <<'PY' 2>/dev/null || true
+import os
+import re
+import stat
+import sys
+
+root, tag = sys.argv[1:]
+directory = os.path.join(root, "control", "private-logs", tag)
+try:
+    metadata = os.stat(directory, follow_symlinks=False)
+except OSError:
+    print("missing")
+    raise SystemExit
+if (
+    not stat.S_ISDIR(metadata.st_mode)
+    or metadata.st_uid != os.getuid()
+    or stat.S_IMODE(metadata.st_mode) != 0o700
+):
+    print("unsafe")
+    raise SystemExit
+payload = b""
+for name in sorted(os.listdir(directory)):
+    if not re.fullmatch(r"scheduler-allocation(?:-a[23])?[.]log", name):
+        continue
+    path = os.path.join(directory, name)
+    item = os.stat(path, follow_symlinks=False)
+    if (
+        not stat.S_ISREG(item.st_mode)
+        or item.st_uid != os.getuid()
+        or stat.S_IMODE(item.st_mode) != 0o600
+        or item.st_size > 65536
+    ):
+        print("unsafe")
+        raise SystemExit
+    with open(path, "rb") as stream:
+        payload += stream.read(65537)
+text = payload.decode("utf-8", "replace")
+if not text:
+    result = "empty"
+elif re.search(r"invalid (?:account|partition|qos|reservation)|association.*not permitted|access denied", text, re.I):
+    result = "policy"
+elif re.search(r"pending job allocation|job .* pending|waiting for resource", text, re.I):
+    result = "pending"
+elif re.search(r"requested node configuration is not available|nodes required.*not available|resources? unavailable", text, re.I):
+    result = "capacity"
+elif re.search(r"allocation (?:revoked|cancelled)|job .* cancelled", text, re.I):
+    result = "revoked"
+elif re.search(r"timed out|timeout", text, re.I):
+    result = "timeout"
+elif re.search(r"no space left|disk quota|quota exceeded", text, re.I):
+    result = "storage-capacity"
+else:
+    result = "unclassified"
+print(result)
+PY
+)"
+  case "$diagnostic" in
+    missing|unsafe|empty|policy|pending|capacity|revoked|timeout|storage-capacity|unclassified) ;;
+    *) diagnostic=unclassified ;;
+  esac
+  cx_log "ERROR: scheduler-diagnostic=$diagnostic"
+}
+
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
 cx_container_exports() {

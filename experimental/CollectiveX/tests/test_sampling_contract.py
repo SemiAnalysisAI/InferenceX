@@ -1659,6 +1659,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('rm -f -- "$CX_JOB_PARENT"', cleanup)
         self.assertIn("steps.sweep_shard.outcome }}' != success", cleanup)
         self.assertIn('[ "$CX_JOB_PARENT" != /tmp ]', cleanup)
+        self.assertIn("- name: Classify private scheduler failure", workflow)
+        self.assertIn("cx_report_private_scheduler_failure", workflow)
         for step in (
             "sweep_shard", "allocation_cleanup", "artifact_safety",
             "delivery_contracts", "stage_artifact", "upload_artifact",
