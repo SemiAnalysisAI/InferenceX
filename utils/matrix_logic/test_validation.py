@@ -321,6 +321,12 @@ class TestSingleNodeMatrixEntry:
         with pytest.raises(Exception):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
+    def test_disagg_requires_multinode(self, valid_single_node_matrix_entry):
+        """Single-node matrix entries cannot enable disaggregation."""
+        valid_single_node_matrix_entry["disagg"] = True
+        with pytest.raises(Exception, match="disagg"):
+            SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
+
 
 # =============================================================================
 # Test Agentic Matrix Entries
@@ -865,6 +871,12 @@ class TestMasterConfigEntries:
         """Disagg should default to False."""
         config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
         assert config.disagg is False
+
+    def test_disagg_requires_multinode(self, valid_single_node_master_config):
+        """Single-node master configs cannot enable disaggregation."""
+        valid_single_node_master_config["disagg"] = True
+        with pytest.raises(Exception, match="disagg"):
+            SingleNodeMasterConfigEntry(**valid_single_node_master_config)
 
     def test_single_node_agentic_master_config_requires_cluster_runner(self):
         """Single-node agentic configs must pin an exact cluster label."""

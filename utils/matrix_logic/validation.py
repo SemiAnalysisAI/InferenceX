@@ -108,7 +108,7 @@ class SingleNodeMatrixEntry(BaseModel):
     conc: Union[int, List[int]]
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
-    disagg: bool
+    disagg: Literal[False]
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
 
@@ -511,7 +511,7 @@ class SingleNodeMasterConfigEntry(BaseModel):
     framework: str
     runner: str
     multinode: Literal[False]
-    disagg: bool = Field(default=False)
+    disagg: Literal[False] = Field(default=False)
     scenarios: SingleNodeScenarios
 
     @model_validator(mode='after')

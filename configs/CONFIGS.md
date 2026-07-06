@@ -46,6 +46,8 @@ The below list describes what each field is:
   fleet.
 - `precision`: The precision to run the benchmark. Again, this is used to find which script to run in `benchmarks/`.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
+- `disagg`: Enables disaggregated serving and may only be `true` when
+  `multinode` is also `true`.
 - `hardware`: Optional metadata for heterogeneous disaggregated deployments.
   When present, both `prefill` and `decode` are required and identify the GPU
   SKU used by each worker pool (for example, `b200` and `h100`). Omit this block
