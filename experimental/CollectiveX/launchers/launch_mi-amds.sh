@@ -90,8 +90,11 @@ cx_verify_registry_image "$IMAGE"
 cx_set_failure_stage scheduler-allocation
 command -v salloc >/dev/null || cx_die "salloc not found on this runner"
 
-allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN" --exclusive
+allocation=(--partition="$PARTITION" --nodes="$NODES" --gres=gpu:"$GPN"
   --time="$TIME_MIN")
+if [ "$RUNNER" = mi355x ]; then
+  allocation+=(--exclusive)
+fi
 if [ "$NODES" = 1 ]; then
   allocation+=(--cpus-per-task="$CPUS_PER_TASK")
 else

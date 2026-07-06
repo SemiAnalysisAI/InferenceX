@@ -521,6 +521,9 @@ class SamplingContractTest(unittest.TestCase):
 
         common = (ROOT / "runtime" / "common.sh").read_text()
         workflow = (ROOT.parent.parent / ".github" / "workflows" / "collectivex-sweep.yml").read_text()
+        amd_launcher = (ROOT / "launchers" / "launch_mi-amds.sh").read_text()
+        self.assertIn('if [ "$RUNNER" = mi355x ]; then\n  allocation+=(--exclusive)', amd_launcher)
+        self.assertNotIn('--gres=gpu:"$GPN" --exclusive', amd_launcher)
         self.assertNotIn("RUNNER_NAME", common)
         self.assertNotIn("RUNNER_NAME:", workflow)
         self.assertNotIn("flashinfer", capability.BACKENDS)
