@@ -51,6 +51,8 @@ cx_fail_stage() {
       diagnostic="accelerator-topology"
     elif grep -aEqi 'cuda driver version is insufficient|call requires newer driver|cudaErrorCallRequiresNewerDriver|CUDA_ERROR_SYSTEM_DRIVER_MISMATCH|unsupported toolchain' "$log_path"; then
       diagnostic="accelerator-driver"
+    elif grep -aEqi 'cudaErrorDevicesUnavailable|CUDA_ERROR_DEVICE_UNAVAILABLE|CUDA-capable device\(s\) is/are busy or unavailable|primary context retain failed' "$log_path"; then
+      diagnostic="accelerator-unavailable"
     elif grep -aEqi 'ncclDevCommCreate|ncclCommWindowRegister|ncclGetLsa(Device)?Pointer|Communicator does not support symmetric memory|Symmetric memory is not supported' "$log_path" \
         || { [ "${CX_BENCH:-}" = deepep-v2 ] \
           && grep -aEqi 'nccl[.]cu:(106|127|128|129|135)([^0-9]|$)' "$log_path"; }; then
@@ -2358,6 +2360,75 @@ BASH
     *) cx_fail_stage container-launch "$log" ;;
   esac
   return 1
+}
+
+# A clean nvidia-smi inventory does not prove that a prior cancelled workload
+# released every CUDA context. Retaining each primary context catches poisoned
+# allocations before a full shard spends time failing every case.
+cx_validate_cuda_context_on_job() {
+  local job_id="$1" nodes="$2" gpus_per_node="$3" log_label=cuda-context log
+  case "${CX_SALLOC_ATTEMPT:-1}" in
+    1) ;;
+    2|3) log_label+="-a${CX_SALLOC_ATTEMPT}" ;;
+    *) return 1 ;;
+  esac
+  log="$(cx_private_log_path "$log_label")"
+  CX_CUDA_CONTEXT_LOG="$log"
+  srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
+    --gres=gpu:"$gpus_per_node" --chdir=/tmp --input=all \
+    --export="$(cx_host_exports)" python3 - "$gpus_per_node" \
+    >"$log" 2>&1 <<'PY'
+import ctypes
+import socket
+import sys
+
+expected = int(sys.argv[1])
+cuda = ctypes.CDLL("libcuda.so.1")
+cuda.cuInit.argtypes = [ctypes.c_uint]
+cuda.cuInit.restype = ctypes.c_int
+cuda.cuDeviceGetCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
+cuda.cuDeviceGetCount.restype = ctypes.c_int
+cuda.cuDeviceGet.argtypes = [ctypes.POINTER(ctypes.c_int), ctypes.c_int]
+cuda.cuDeviceGet.restype = ctypes.c_int
+cuda.cuDevicePrimaryCtxRetain.argtypes = [
+    ctypes.POINTER(ctypes.c_void_p), ctypes.c_int,
+]
+cuda.cuDevicePrimaryCtxRetain.restype = ctypes.c_int
+cuda.cuDevicePrimaryCtxRelease.argtypes = [ctypes.c_int]
+cuda.cuDevicePrimaryCtxRelease.restype = ctypes.c_int
+
+
+def check(result: int, operation: str) -> None:
+    if result != 0:
+        raise RuntimeError(f"{operation} failed with CUDA result {result}")
+
+
+check(cuda.cuInit(0), "CUDA initialization")
+count = ctypes.c_int()
+check(cuda.cuDeviceGetCount(ctypes.byref(count)), "CUDA device count")
+if count.value != expected:
+    raise RuntimeError(
+        f"CUDA device count mismatch on {socket.gethostname()}: "
+        f"expected {expected}, found {count.value}"
+    )
+
+devices: list[int] = []
+try:
+    for ordinal in range(expected):
+        device = ctypes.c_int()
+        context = ctypes.c_void_p()
+        check(cuda.cuDeviceGet(ctypes.byref(device), ordinal), "CUDA device lookup")
+        result = cuda.cuDevicePrimaryCtxRetain(ctypes.byref(context), device.value)
+        if result != 0:
+            raise RuntimeError(
+                f"CUDA primary context retain failed on {socket.gethostname()} "
+                f"device {ordinal} with CUDA result {result}"
+            )
+        devices.append(device.value)
+finally:
+    for device in reversed(devices):
+        check(cuda.cuDevicePrimaryCtxRelease(device), "CUDA primary context release")
+PY
 }
 
 # Resolve the exact per-execution child before any copy starts, so the parent

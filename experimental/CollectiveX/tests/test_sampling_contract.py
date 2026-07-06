@@ -2599,7 +2599,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("rdma-device-%s=missing", common)
         single_slurm = (ROOT / "launchers" / "launch_single-slurm.sh").read_text()
         self.assertIn("for allocation_attempt in 1 2 3", single_slurm)
-        self.assertIn('if [ "$RUNNER" != h100-dgxc ]', single_slurm)
+        self.assertIn('RUNNER:$validation_failure', single_slurm)
+        self.assertIn('h100-dgxc:network', single_slurm)
+        self.assertIn('b300:cuda-context', single_slurm)
+        self.assertIn('cx_validate_cuda_context_on_job "$JOB_ID" "$NODES" "$GPN"', single_slurm)
         self.assertIn('rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")"', single_slurm)
         self.assertIn('export CX_SALLOC_ATTEMPT="$allocation_attempt"', single_slurm)
         self.assertIn('export CX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"', single_slurm)
@@ -2611,6 +2614,9 @@ class SamplingContractTest(unittest.TestCase):
         )
         self.assertIn('log_label+="-a${CX_SALLOC_ATTEMPT}"', common)
         self.assertIn('log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}"', common)
+        self.assertIn('cx_validate_cuda_context_on_job()', common)
+        self.assertIn('cuDevicePrimaryCtxRetain', common)
+        self.assertIn('diagnostic="accelerator-unavailable"', common)
 
     def test_case_failure_diagnostic_precedes_normal_srun_footer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

@@ -107,6 +107,7 @@ allocation=(--partition="$CX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN" --exc
 [ -z "${CX_NODELIST:-}" ] || allocation+=(--nodelist="$CX_NODELIST")
 excluded_nodes="${CX_EXCLUDE_NODES:-}"
 for allocation_attempt in 1 2 3; do
+  validation_failure=""
   attempt_allocation=("${allocation[@]}")
   [ -z "$excluded_nodes" ] || attempt_allocation+=(--exclude="$excluded_nodes")
   export CX_SALLOC_ATTEMPT="$allocation_attempt"
@@ -114,16 +115,28 @@ for allocation_attempt in 1 2 3; do
   cx_salloc_jobid "${attempt_allocation[@]}"
   [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
   cx_set_failure_stage setup
-  if cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT" 0; then
+  if ! cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT" 0; then
+    validation_failure=network
+  elif [ "$RUNNER" = b300 ] \
+      && ! cx_validate_cuda_context_on_job "$JOB_ID" "$NODES" "$GPN"; then
+    validation_failure=cuda-context
+  else
     break
   fi
-  if [ "$RUNNER" != h100-dgxc ] || [ "$allocation_attempt" = 3 ]; then
-    cx_fail_stage setup "$CX_NETWORK_PROFILE_LOG" || true
-    cx_die "allocated nodes failed the network profile"
+  retryable=0
+  [ "$RUNNER:$validation_failure" != h100-dgxc:network ] || retryable=1
+  [ "$RUNNER:$validation_failure" != b300:cuda-context ] || retryable=1
+  if [ "$retryable" = 0 ] || [ "$allocation_attempt" = 3 ]; then
+    if [ "$validation_failure" = network ]; then
+      cx_fail_stage setup "$CX_NETWORK_PROFILE_LOG" || true
+      cx_die "allocated nodes failed the network profile"
+    fi
+    cx_fail_stage setup "$CX_CUDA_CONTEXT_LOG" || true
+    cx_die "allocated nodes failed accelerator context validation"
   fi
   rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
     || cx_die "cannot identify nodes from a rejected allocation"
-  cx_log "allocated H100 nodes failed network validation; retrying elsewhere"
+  cx_log "allocated nodes failed $validation_failure validation; retrying elsewhere"
   cx_cancel_job "$JOB_ID" || cx_die "cannot release a rejected allocation"
   cx_clear_allocation_jobid || cx_die "cannot reset rejected allocation state"
   JOB_ID=""
