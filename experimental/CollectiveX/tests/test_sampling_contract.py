@@ -2494,6 +2494,15 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('cx_fail_stage execution "$runtime_log"', distributed)
         self.assertIn("precision probe timed out rc=%s limit=%ss", distributed)
         self.assertIn('export CX_MODE="$mode" CX_PHASE="$ph"', distributed)
+        rank_wrapper = common[
+            common.index("cx_slurm_rank_wrapper()") : common.index(
+                "cx_validate_shard_control()"
+            )
+        ]
+        self.assertLess(
+            rank_wrapper.index(". /ix/experimental/CollectiveX/runtime/common.sh"),
+            rank_wrapper.index('if [ "${CX_NODES:-1}" -gt 1 ]'),
+        )
         self.assertEqual(
             distributed.count(
                 '--container-name="$container_name" --container-image="$SQUASH_FILE"'

@@ -894,8 +894,8 @@ case "${SLURM_PROCID:-}:${SLURM_NTASKS:-}:${SLURM_LOCALID:-}:${SLURM_NODEID:-}" 
 esac
 [ "$SLURM_NTASKS" = "$CX_NGPUS" ] || exit 67
 [ "$SLURM_LOCALID" -lt "$CX_GPUS_PER_NODE" ] || exit 67
+. /ix/experimental/CollectiveX/runtime/common.sh || exit 68
 if [ "${CX_NODES:-1}" -gt 1 ] && [ "${CX_TRANSPORT:-}" != mnnvl ]; then
-  . /ix/experimental/CollectiveX/runtime/common.sh || exit 68
   cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT" || exit 68
 fi
 cx_write_runtime_stage execution || exit 68
