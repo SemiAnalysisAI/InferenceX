@@ -65,6 +65,10 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 source $ATOM_WS_PATH/setup_deps.sh
 source $ATOM_WS_PATH/env_atom.sh
 
+# Raise FD limit — lm-eval with high num_concurrent can exhaust the default 1024
+ulimit -n 65536 2>/dev/null || ulimit -n 8192 2>/dev/null || true
+echo "ulimit -n (open files): $(ulimit -n)"
+
 host_ip=$(ip route get 1.1.1.1 2>/dev/null | awk '/src/ {print $7}')
 if [[ -z "$host_ip" ]]; then
     host_ip=$(hostname -I 2>/dev/null | awk '{print $1}')

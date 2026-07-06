@@ -4306,14 +4306,10 @@
 
 - config-keys:
     - minimaxm3-fp4-mi355x-atom-disagg
-    - minimaxm3-fp4-mi355x-atom-disagg-mtp
     - minimaxm3-fp8-mi355x-atom-disagg
-    - minimaxm3-fp8-mi355x-atom-disagg-mtp
   description:
     - "Refactor ATOM disagg server_atom.sh and models_atom.yaml: split MODEL_TP_DP_FLAGS and MODEL_EP_DP_FLAGS into per-role prefill/decode variants, move BLOCK_SIZE (128), MEM_FRAC_STATIC (0.8), MAX_MODEL_LEN (32768), MAX_NUM_SEQS (256), MAX_NUM_BATCHED_TOKENS (32768) from launch scripts into models_atom.yaml with env-var override support."
-    - "Add hf_overrides and online_quant_config (with DPA-specific variant) to models_atom.yaml. FP8 uses different online_quant_config exclude patterns when DPA is enabled (*.gate.*, *.block_sparse_moe.experts*) vs disabled (*block_sparse_moe)."
-    - "Add minimaxm3-fp4/fp8-mi355x-atom-disagg-mtp recipes with EAGLE3 speculative decoding (DECODE_MTP_SIZE=3) at 1P1D and 2P1D DPA TP4 search spaces for 8k1k and 1k1k."
-    - "Fix YAML server-tuning defaults precedence (env var > YAML > shell default) and remove redundant SPEC_DECODING gating in favor of MODEL_MTP_FLAGS + DECODE_MTP_SIZE > 0."
+    - "Add online_quant_config (with DPA-specific variant) to models_atom.yaml. FP8 uses different online_quant_config exclude patterns when DPA is enabled (*.gate.*, *.block_sparse_moe.experts*) vs disabled (*block_sparse_moe)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2000
 
 - config-keys:
