@@ -113,18 +113,22 @@ for allocation_attempt in 1 2 3; do
   cx_set_failure_stage setup
   cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT"
   cx_set_failure_stage container-import
-  if SQUASH_FILE="$(cx_ensure_squash_on_job \
-      "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${CX_LOCK_DIR:-}")"; then
+  import_succeeded=0
+  for ((import_node = 0; import_node < NODES; import_node++)); do
+    if SQUASH_FILE="$(cx_ensure_squash_on_job \
+        "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${CX_LOCK_DIR:-}" "$import_node")"; then
+      import_succeeded=1
+      break
+    fi
+  done
+  if [ "$import_succeeded" = 1 ]; then
     break
   fi
   if [ -n "$NODELIST" ] || [ "$allocation_attempt" = 3 ]; then
     cx_die "allocated nodes failed container import"
   fi
-  allocation_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
+  rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
     || cx_die "cannot identify nodes from a rejected allocation"
-  rejected_nodes="${allocation_nodes%%,*}"
-  [ -n "$rejected_nodes" ] \
-    || cx_die "cannot identify the failed container-import node"
   cx_log "allocated nodes failed container import; retrying elsewhere"
   cx_cancel_job "$JOB_ID" || cx_die "cannot release a rejected allocation"
   cx_clear_allocation_jobid || cx_die "cannot reset rejected allocation state"
