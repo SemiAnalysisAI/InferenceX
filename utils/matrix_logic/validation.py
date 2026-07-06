@@ -121,16 +121,19 @@ class WorkerConfig(BaseModel):
     tp: int
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
+    hardware: Optional[str] = Field(default=None, min_length=1)
     additional_settings: Optional[List[str]] = Field(
         default=[], alias=Fields.ADDITIONAL_SETTINGS.value)
 
 
-class DisaggregatedHardwareConfig(BaseModel):
-    """Hardware SKUs assigned to each side of a disaggregated deployment."""
-    model_config = ConfigDict(extra='forbid', populate_by_name=True)
-
-    prefill: str = Field(min_length=1)
-    decode: str = Field(min_length=1)
+def _validate_worker_hardware_pair(self):
+    """Require prefill and decode workers to declare hardware together."""
+    if bool(self.prefill.hardware) != bool(self.decode.hardware):
+        raise ValueError(
+            f"'{Fields.HARDWARE.value}' must be specified for both "
+            f"'{Fields.PREFILL.value}' and '{Fields.DECODE.value}', or neither"
+        )
+    return self
 
 
 class MultiNodeMatrixEntry(BaseModel):
@@ -155,13 +158,16 @@ class MultiNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
-    hardware: Optional[DisaggregatedHardwareConfig] = None
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
+
+    @model_validator(mode='after')
+    def validate_worker_hardware_pair(self):
+        return _validate_worker_hardware_pair(self)
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
@@ -214,8 +220,11 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
-    hardware: Optional[DisaggregatedHardwareConfig] = None
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+    @model_validator(mode='after')
+    def validate_worker_hardware_pair(self):
+        return _validate_worker_hardware_pair(self)
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
@@ -378,6 +387,10 @@ class MultiNodeSearchSpaceEntry(BaseModel):
     def validate_conc_fields(self):
         return _validate_conc_fields(self)
 
+    @model_validator(mode='after')
+    def validate_worker_hardware_pair(self):
+        return _validate_worker_hardware_pair(self)
+
 
 class SingleNodeSeqLenConfig(BaseModel):
     """Single node sequence length configuration."""
@@ -444,6 +457,8 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
                 f"Single-node agentic search-space entries must specify "
                 f"{Fields.KV_OFFLOADING.value}"
             )
+        if has_complete_multinode:
+            _validate_worker_hardware_pair(self)
         return self
 
 class AgenticCodingConfig(BaseModel):
@@ -532,7 +547,6 @@ class MultiNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[True]
     disagg: bool = Field(default=False)
-    hardware: Optional[DisaggregatedHardwareConfig] = None
     scenarios: MultiNodeScenarios
 
     @model_validator(mode='after')

@@ -12,11 +12,6 @@ entry-name:
   runner: string
   precision: string
   framework: string
-  multinode: true
-  disagg: true
-  hardware:  # optional; omit for homogeneous hardware
-    prefill: string
-    decode: string
   scenarios:
     fixed-seq-len:
     - isl: int
@@ -33,6 +28,33 @@ entry-name:
       - { tp: int, conc-start: int, conc-end: int }
       - ...
 ```
+
+Heterogeneous disaggregated search-space entries declare hardware on each
+worker pool. Omit both `hardware` fields for homogeneous hardware:
+
+```yaml
+multinode: true
+disagg: true
+scenarios:
+  fixed-seq-len:
+  - isl: 1024
+    osl: 1024
+    search-space:
+    - conc-list: [64]
+      prefill:
+        hardware: b200
+        num-worker: 1
+        tp: 8
+        ep: 8
+        dp-attn: false
+      decode:
+        hardware: h100
+        num-worker: 2
+        tp: 8
+        ep: 8
+        dp-attn: false
+```
+
 Note: while not required, `entry-name` typically takes the format `<INFMAX_MODEL_PREFIX>-<PRECISION>-<GPU>-<FRAMEWORK>`.
 
 The below list describes what each field is:
@@ -48,11 +70,11 @@ The below list describes what each field is:
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
 - `disagg`: Enables disaggregated serving and may only be `true` when
   `multinode` is also `true`.
-- `hardware`: Optional metadata for heterogeneous disaggregated deployments.
-  When present, both `prefill` and `decode` are required and identify the GPU
-  SKU used by each worker pool (for example, `b200` and `h100`). Omit this block
-  for homogeneous hardware. These values flow into generated matrix entries
-  and aggregate results, but do not affect runner scheduling.
+- `hardware`: Optional metadata within each `prefill` and `decode` worker block
+  for heterogeneous disaggregated deployments. If one worker declares a GPU
+  SKU, the other must also declare one. Omit both fields for homogeneous
+  hardware. These values flow into aggregate results but do not affect runner
+  scheduling.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
   - `fixed-seq-len`: Fixed input/output sequence length benchmarks. Each entry must have:
     - `isl`: An integer representing the input sequence length, e.g., `1024`

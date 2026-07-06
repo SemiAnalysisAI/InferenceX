@@ -257,11 +257,12 @@ class TestProcessResultScript:
         assert "prefill_hw" not in output_data
         assert "decode_hw" not in output_data
 
+    @pytest.mark.parametrize("missing_var", ["PREFILL_HARDWARE", "DECODE_HARDWARE"])
     def test_partial_hardware_metadata_fails(
-        self, tmp_path, sample_benchmark_result, multinode_env_vars
+        self, tmp_path, sample_benchmark_result, multinode_env_vars, missing_var
     ):
         """Prefill and decode hardware must always be provided together."""
-        multinode_env_vars.pop("DECODE_HARDWARE")
+        multinode_env_vars.pop(missing_var)
 
         result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)
 
