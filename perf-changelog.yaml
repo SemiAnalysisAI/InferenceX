@@ -4556,3 +4556,12 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - dsv4-fp4-mi355x-sglang
+  description:
+    - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
+    - "Clean the export envs"
+    - "Enable two batch overlap"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
+

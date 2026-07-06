@@ -26,27 +26,9 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 export SGLANG_DEFAULT_THINKING=1
 export SGLANG_DSV4_REASONING_EFFORT=max
-export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
-export SGLANG_USE_AITER=1
 export SGLANG_USE_ROCM700A=0
-export SGLANG_DP_USE_GATHERV=1
-export SGLANG_OPT_USE_FUSED_COMPRESS=true
 export SGLANG_HACK_FLASHMLA_BACKEND=unified_kv_triton
-export SGLANG_OPT_FP8_WO_A_GEMM=false
-export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
-export SGLANG_OPT_USE_TOPK_V2=false
-export SGLANG_OPT_USE_AITER_INDEXER=true
-export SGLANG_OPT_USE_TILELANG_INDEXER=false
-export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
-export SGLANG_OPT_USE_TILELANG_MHC_POST=false
-export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
-export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
 export AITER_BF16_FP8_MOE_BOUND=0
-export SGLANG_EAGER_INPUT_NO_COPY=true
-
-# multi-stream
-export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
-export SGLANG_ROCM_USE_MULTI_STREAM=false
 
 SERVER_LOG=/workspace/server.log
 
@@ -63,12 +45,19 @@ PARALLEL_ARGS=(
 )
 CHUNKED_PREFILL_SIZE=$ISL
 if [ "${DP_ATTENTION}" = "true" ]; then
+    export GPU_MAX_HW_QUEUES=5
+    export SGLANG_SHARED_EXPERT_TP1=1
+    export SGLANG_DP_SHARED_EXPERT_LOCAL=1
+    export SGLANG_DP_USE_GATHERV=1
+    export SGLANG_DP_USE_REDUCE_SCATTER=1
+
     CHUNKED_PREFILL_SIZE=$((ISL * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
 	--prefill-delayer-max-delay-ms 5000
+	--enable-two-batch-overlap
     )
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
