@@ -2147,7 +2147,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # comparability. Offload sweep is none-only (SGLang has no equivalent of
 # vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:v0.22.0
+  image: vllm/vllm-openai-rocm:nightly-34b560b725b401f33477464163244b4744d1c40f
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds
@@ -2162,6 +2162,8 @@ dsv4-fp4-mi355x-vllm-agentic:
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [32, 48] }
       - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 48] }
       - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 48] }
+      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 48] }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: native, conc-list: [32, 48] }
 
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the

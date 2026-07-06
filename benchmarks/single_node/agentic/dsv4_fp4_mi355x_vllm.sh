@@ -14,27 +14,30 @@ set -x
 #       Highest aggregate throughput at large CONC.
 #
 # Serving flags follow the validated MI355X recipe from
-# vllm-project/recipes#433: AITER+AITER_LINEAR, mp executor,
-# triton_unfused MoE (required for the FP4 expert format),
-# async scheduling, FULL_AND_PIECEWISE cudagraph capture.
+# https://recipes.vllm.ai/deepseek-ai/DeepSeek-V4-Pro?hardware=mi355x
+# https://github.com/SemiAnalysisAI/InferenceX/blob/main/benchmarks/single_node/fixed_seq_len/dsv4_fp4_mi355x_vllm.sh
 # Image is configured in amd-master.yaml.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# OFFLOADING values:
-#   none - vLLM GPU KV only.
-#   cpu  - MooncakeStoreConnector with a configured host-memory KV tier.
-#   lmcache - LMCache MP server + vLLM LMCacheMPConnector.
+# KV_OFFLOADING=dram requires one of these. 
+#   KV_OFFLOAD_BACKEND=native.
+#   KV_OFFLOAD_BACKEND=mooncake.
+#   KV_OFFLOAD_BACKEND=lmcache.
+#   KV_OFFLOAD_BACKEND=hicache.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
 
+# `hf download` creates the target dir if missing and is itself idempotent.
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
     if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
@@ -52,15 +55,18 @@ fi
 resolve_trace_source
 install_agentic_deps
 
-# (srok)
-#export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
-export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=60
-export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=1200
-# (srok)
+# default
+export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
+# tune
+#export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=60
+#export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=1200
+# tune
 export AIPERF_HTTP_TCP_USER_TIMEOUT=900000
 
-# vLLM router for DEP runs: expands one HTTP backend into one logical worker
-# per DP rank and routes by X-Session-ID (aliased from X-Correlation-ID).
+# vllm-project/router expands the one HTTP backend into one logical worker per
+# DP rank and sends X-data-parallel-rank on forwarded requests. aiperf's
+# X-Correlation-ID is stable for every turn of a conversation; alias it to the
+# router's preferred X-Session-ID header.
 USE_VLLM_ROUTER=false
 VLLM_BACKEND_PORT="$PORT"
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -91,75 +97,37 @@ MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
+SERVER_PID=""
+ROUTER_PID=""
+MOONCAKE_MASTER_PID=""
+
 OFFLOAD_ARGS=()
 
-# ---- Lmcache config ----------------------------------------------------------
-LMCACHE_PID=""
+if require_agentic_kv_offload_backend native; then
+    # ---- vLLM native config ----------------------------------------------------------
+    unset VLLM_USE_SIMPLE_KV_OFFLOAD
+    # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
+    # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
+    # worker RSS / page cache / slurm cgroup).
+    TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
+    # Use vLLM's regular native KV-offload path (OffloadingConnector),
+    # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
+    # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
+    # would switch it to SimpleCPUOffloadConnector. We intentionally leave
+    # that env var UNSET here so the regular OffloadingConnector path is
+    # used. The shortcut --kv_offloading_backend native + --kv_offloading_size
+    # form constructs the KVTransferConfig at engine startup
+    # (vllm/config/vllm.py:662).
 
-cleanup_lmcache_server() {
-    if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
-        kill "$LMCACHE_PID" 2>/dev/null || true
-        wait "$LMCACHE_PID" 2>/dev/null || true
-    fi
-}
+    # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
+    # This gives extra cache hit than disabling hybrid kv cache manager
+    OFFLOAD_ARGS=(
+        --kv_offloading_backend native
+        --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
+    )
 
-trap cleanup_lmcache_server EXIT
-
-cleanup_agentic_services() {
-    local exit_code=$?
-    trap - EXIT INT TERM
-    set +e
-    stop_background_process_tree "$ROUTER_PID" "vLLM router"
-    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
-    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
-    exit "$exit_code"
-}
-trap cleanup_agentic_services EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-
-wait_for_lmcache_ready() {
-    { set +x; } 2>/dev/null
-    local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
-    local tail_pid=""
-
-    while [ ! -f "$LMCACHE_LOG" ]; do
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before creating log file. Exiting." >&2
-            exit 1
-        fi
-        sleep 1
-    done
-
-    tail -f -n +1 "$LMCACHE_LOG" &
-    tail_pid=$!
-
-    for ((i = 1; i <= attempts; i++)); do
-        if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
-            kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
-            return 0
-        fi
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before becoming healthy. Log follows:" >&2
-            kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
-            cat "$LMCACHE_LOG" >&2 || true
-            exit 1
-        fi
-        sleep 1
-    done
-
-    echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
-    kill "$tail_pid" 2>/dev/null || true
-    wait "$tail_pid" 2>/dev/null || true
-    cat "$LMCACHE_LOG" >&2 || true
-    exit 1
-}
-
-case "$OFFLOADING" in
-    none) ;;
-    cpu)
+elif require_agentic_kv_offload_backend mooncake; then
+    # ---- Mooncake config ----------------------------------------------------------
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
         PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
@@ -234,8 +202,71 @@ EOF
             --kv-transfer-config
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
-        ;;
-    lmcache)
+
+elif require_agentic_kv_offload_backend lmcache; then
+    # ---- Lmcache config ----------------------------------------------------------
+    LMCACHE_PID=""
+
+    cleanup_lmcache_server() {
+        if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
+            kill "$LMCACHE_PID" 2>/dev/null || true
+            wait "$LMCACHE_PID" 2>/dev/null || true
+        fi
+    }
+
+    trap cleanup_lmcache_server EXIT
+
+    cleanup_agentic_services() {
+        local exit_code=$?
+        trap - EXIT INT TERM
+        set +e
+        stop_background_process_tree "$ROUTER_PID" "vLLM router"
+        stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+        stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
+        exit "$exit_code"
+    }
+    trap cleanup_agentic_services EXIT
+    trap 'exit 130' INT
+    trap 'exit 143' TERM
+
+    wait_for_lmcache_ready() {
+        { set +x; } 2>/dev/null
+        local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
+        local tail_pid=""
+
+        while [ ! -f "$LMCACHE_LOG" ]; do
+            if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+                echo "LMCache server died before creating log file. Exiting." >&2
+                exit 1
+            fi
+            sleep 1
+        done
+
+        tail -f -n +1 "$LMCACHE_LOG" &
+        tail_pid=$!
+
+        for ((i = 1; i <= attempts; i++)); do
+            if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
+                kill "$tail_pid" 2>/dev/null || true
+                wait "$tail_pid" 2>/dev/null || true
+                return 0
+            fi
+            if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
+                echo "LMCache server died before becoming healthy. Log follows:" >&2
+                kill "$tail_pid" 2>/dev/null || true
+                wait "$tail_pid" 2>/dev/null || true
+                cat "$LMCACHE_LOG" >&2 || true
+                exit 1
+            fi
+            sleep 1
+        done
+
+        echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
+        kill "$tail_pid" 2>/dev/null || true
+        wait "$tail_pid" 2>/dev/null || true
+        cat "$LMCACHE_LOG" >&2 || true
+        exit 1
+    }
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
@@ -247,6 +278,7 @@ EOF
 
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
+        TOTAL_CPU_DRAM_PARTITION_GB="$((TOTAL_CPU_DRAM_GB / (8 / TP)))"
         # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
         # pool, but let the external MP server own that pool so vLLM does not
         # split --kv-offloading-size across TP ranks through the integrated
@@ -258,7 +290,7 @@ EOF
         # ZMQ endpoint. Bind the server to a raw host, but pass the connector a
         # ZMQ-style host string.
         LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
+        LMCACHE_L1_SIZE_GB="${TOTAL_CPU_DRAM_PARTITION_GB}"
         if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
             echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
             exit 1
@@ -302,12 +334,8 @@ EOF
             --kv-transfer-config
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
         )
-        ;;
-    *)
-        echo "Error: unsupported OFFLOADING value '$OFFLOADING' (expected one of: none, cpu)" >&2
-        exit 1
-        ;;
-esac
+
+fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
 if [ "$DP_ATTENTION" = "true" ]; then
@@ -328,6 +356,7 @@ echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_USE_AITER_MOE=1
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
@@ -340,7 +369,6 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --gpu-memory-utilization 0.95
     --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --tokenizer-mode deepseek_v4
