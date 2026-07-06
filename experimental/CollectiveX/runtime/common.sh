@@ -767,7 +767,8 @@ cx_restore_exact_hca_selector() {
 # node before image import or backend initialization. Selector values and node
 # diagnostics stay in the runner-private log.
 cx_validate_network_profile_on_job() {
-  local job_id="$1" nodes="$2" transport="$3" log rc=0 scaleout=0 marker_count link_layer
+  local job_id="$1" nodes="$2" transport="$3" report_failure="${4:-1}"
+  local log rc=0 scaleout=0 marker_count link_layer
   local single_node_rdma=0
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
@@ -854,7 +855,7 @@ done
 printf '[collectivex-private] rdma-link-layer=%s\n' "$profile"
 BASH
   if [ "$rc" != 0 ]; then
-    cx_fail_stage setup "$log" || true
+    [ "$report_failure" = 0 ] || cx_fail_stage setup "$log" || true
     return "$rc"
   fi
   link_layer="$(
@@ -864,10 +865,25 @@ BASH
   marker_count="$(grep -Ec '^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$' "$log")"
   case "$marker_count:$link_layer" in
     "$nodes":roce|"$nodes":infiniband) ;;
-    *) cx_fail_stage setup "$log" || true; return 1 ;;
+    *) [ "$report_failure" = 0 ] || cx_fail_stage setup "$log" || true; return 1 ;;
   esac
   export CX_RDMA_LINK_LAYER="$link_layer"
   cx_export_gid_index_for_link_layer "$link_layer" "$scaleout"
+}
+
+cx_allocation_nodes_csv() {
+  local job_id="$1" nodelist node output=""
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  nodelist="$(squeue -h -j "$job_id" -o %N 2>/dev/null)" || return 1
+  [[ "$nodelist" =~ ^[][A-Za-z0-9._,-]+$ ]] || return 1
+  while IFS= read -r node; do
+    [ -n "$node" ] || continue
+    [[ "$node" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 1
+    [ -z "$output" ] || output+=,
+    output+="$node"
+  done < <(scontrol show hostnames "$nodelist" 2>/dev/null)
+  [ -n "$output" ] || return 1
+  printf '%s' "$output"
 }
 
 cx_resolve_slurm_rendezvous() {

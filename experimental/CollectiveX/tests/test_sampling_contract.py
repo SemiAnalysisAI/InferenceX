@@ -795,6 +795,19 @@ class SamplingContractTest(unittest.TestCase):
             self.assertNotIn("privateif0", failed.stdout + failed.stderr)
             self.assertNotIn("privatehca0", failed.stdout + failed.stderr)
 
+            quiet_failed = subprocess.run(
+                [
+                    "bash", "-c",
+                    command + " 0",
+                    "_", str(ROOT / "runtime" / "common.sh"),
+                ],
+                text=True,
+                capture_output=True,
+                env={**environment, "SRUN_RC": "9"},
+            )
+            self.assertNotEqual(quiet_failed.returncode, 0)
+            self.assertNotIn("failure-class=", quiet_failed.stderr)
+
             arguments.unlink()
             subprocess.run(
                 [
@@ -822,6 +835,49 @@ class SamplingContractTest(unittest.TestCase):
             self.assertEqual(single_node.returncode, 0, single_node.stderr)
             self.assertIn("--nodes=1", arguments.read_text())
             self.assertIn("--ntasks=1", arguments.read_text())
+
+    def test_rejected_allocation_nodes_are_expanded_safely(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            for name, payload in (
+                ("squeue", "#!/bin/sh\nprintf '%s\\n' 'rack-[1,3]'\n"),
+                ("scontrol", "#!/bin/sh\nprintf '%s\\n' rack-1 rack-3\n"),
+            ):
+                binary = root / name
+                binary.write_text(payload)
+                binary.chmod(0o700)
+            result = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; cx_allocation_nodes_csv 42',
+                    "_", str(ROOT / "runtime" / "common.sh"),
+                ],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
+                },
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "rack-1,rack-3")
+
+            (root / "squeue").write_text("#!/bin/sh\nprintf 'rack;unsafe\\n'\n")
+            (root / "squeue").chmod(0o700)
+            rejected = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; cx_allocation_nodes_csv 42',
+                    "_", str(ROOT / "runtime" / "common.sh"),
+                ],
+                env={
+                    **os.environ,
+                    "PATH": f"{root}:{os.environ['PATH']}",
+                    "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
+                },
+            )
+            self.assertNotEqual(rejected.returncode, 0)
 
     def test_allocation_preflight_proves_shared_write_visibility(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
@@ -2513,6 +2569,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('"CX_PRECISION_PROFILE": g("precision_profile")', shard_runtime)
         self.assertIn("rdma-port-%s=inactive", common)
         self.assertIn("rdma-device-%s=missing", common)
+        single_slurm = (ROOT / "launchers" / "launch_single-slurm.sh").read_text()
+        self.assertIn("for allocation_attempt in 1 2 3", single_slurm)
+        self.assertIn('if [ "$RUNNER" != h100-dgxc ]', single_slurm)
+        self.assertIn('rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")"', single_slurm)
 
     def test_case_failure_diagnostic_precedes_normal_srun_footer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

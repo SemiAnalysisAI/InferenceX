@@ -105,11 +105,29 @@ allocation=(--partition="$CX_PARTITION" --nodes="$NODES" --gres=gpu:"$GPN" --exc
 [ -z "${CX_ACCOUNT:-}" ] || allocation+=(--account="$CX_ACCOUNT")
 [ -z "${CX_QOS:-}" ] || allocation+=(--qos="$CX_QOS")
 [ -z "${CX_NODELIST:-}" ] || allocation+=(--nodelist="$CX_NODELIST")
-[ -z "${CX_EXCLUDE_NODES:-}" ] || allocation+=(--exclude="$CX_EXCLUDE_NODES")
-cx_salloc_jobid "${allocation[@]}"
-[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
-cx_set_failure_stage setup
-cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT"
+excluded_nodes="${CX_EXCLUDE_NODES:-}"
+for allocation_attempt in 1 2 3; do
+  attempt_allocation=("${allocation[@]}")
+  [ -z "$excluded_nodes" ] || attempt_allocation+=(--exclude="$excluded_nodes")
+  cx_salloc_jobid "${attempt_allocation[@]}"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
+  cx_set_failure_stage setup
+  if cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT" 0; then
+    break
+  fi
+  if [ "$RUNNER" != h100-dgxc ] || [ "$allocation_attempt" = 3 ]; then
+    cx_fail_stage setup "$(cx_private_log_path network-profile)" || true
+    cx_die "allocated nodes failed the network profile"
+  fi
+  rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
+    || cx_die "cannot identify nodes from a rejected allocation"
+  cx_log "allocated H100 nodes failed network validation; retrying elsewhere"
+  cx_cancel_job "$JOB_ID" || cx_die "cannot release a rejected allocation"
+  cx_clear_allocation_jobid || cx_die "cannot reset rejected allocation state"
+  JOB_ID=""
+  [ -z "$excluded_nodes" ] || excluded_nodes+=,
+  excluded_nodes+="$rejected_nodes"
+done
 if [ "$LOCAL_IMPORT" = 1 ]; then
   cx_set_failure_stage container-import
   SQUASH_FILE="$(CX_ENROOT_LOCAL_IMPORT=1 cx_ensure_squash "$CX_SQUASH_DIR" "$IMAGE")"
