@@ -4541,3 +4541,29 @@
     - "vLLM a8w4 opt: hybrid CDNA4 MX-scale swizzle gate (swizzle ON for TP<=2, OFF for TP4/8)"
     - "Extend the concurrency sweep: TP1 to 256, add TP2 (conc 4/8/16/32), and TP4 at conc 4/16 (both isl 1024 and 8192)"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2051
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm
+  description:
+    - "Refresh DSV4 8k/1k vLLM GB300 recipes with new w4a4 container and updated configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2010
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-mtp
+  description:
+    - "Update image tag to nightly"
+    - "Update B200 MTP search space"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2007
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-mtp
+  description:
+    - "Update image tag to nightly"
+    - "Update B300 MTP search space"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2006
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Add high concurrency configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
