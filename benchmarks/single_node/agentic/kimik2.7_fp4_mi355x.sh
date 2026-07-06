@@ -75,6 +75,11 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
+# Agentic cache warmup duration (seconds). Overridable via env; short default
+# here keeps the offload-mode diagnostics fast (the offload path exercises the
+# same code as a full run, just over a shorter window).
+export AIPERF_AGENTIC_CACHE_WARMUP_DURATION="${AIPERF_AGENTIC_CACHE_WARMUP_DURATION:-60}"
+
 # Install amd-quark for MXFP4 (manual install due to ROCm vLLM bug)
 pip install amd-quark
 
