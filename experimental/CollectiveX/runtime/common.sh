@@ -1271,10 +1271,15 @@ cx_salloc_jobid() {
   # site wrappers.
   cx_log "scheduler-request=submit"
   salloc "$@" --job-name="$job_name" --no-shell > "$log" 2>&1 || salloc_rc=$?
-  job_id="$(sed -nE \
-    -e 's/^([0-9]+)(;[^[:space:]]+)?$/\1/p' \
-    -e 's/.*Granted job allocation ([0-9]+).*/\1/p' \
-    "$log" | head -n1)"
+  if ! job_id="$(sed -nE \
+      -e 's/^([0-9]+)(;[^[:space:]]+)?$/\1/p; t found' \
+      -e 's/.*Granted job allocation ([0-9]+).*/\1/p; t found' \
+      -e 'b' -e ':found' -e 'q' "$log")"; then
+    cx_log "ERROR: failure-class=scheduler-allocation diagnostic=grant-parse"
+    cx_reconcile_salloc_jobid "$job_name" || true
+    [ -z "$JOB_ID" ] || cx_record_allocation_jobid "$JOB_ID" || true
+    return 1
+  fi
   if [ -n "$job_id" ]; then
     [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
     JOB_ID="$job_id"

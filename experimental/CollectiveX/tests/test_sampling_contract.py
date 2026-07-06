@@ -1352,6 +1352,18 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("scheduler-request=submit", result.stderr)
         self.assertEqual(scenario["squeue_calls"], [])
 
+    def test_salloc_job_id_parser_ignores_duplicate_wrapper_output(self) -> None:
+        scenario = self._run_salloc_scenario(
+            "for _ in {1..10000}; do "
+            "printf 'salloc: Granted job allocation 4242\\n' >&2; done",
+            "exit 2",
+            cleanup=False,
+        )
+        result = scenario["result"]
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "0:4242:0\n")
+        self.assertNotIn("grant-parse", result.stderr)
+
     def test_salloc_verified_rejection_is_cleanup_safe(self) -> None:
         scenario = self._run_salloc_scenario("exit 1", "exit 0", cleanup=True)
         result = scenario["result"]
