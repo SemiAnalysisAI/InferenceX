@@ -808,10 +808,14 @@ if [ -n "${CX_IB_GID_INDEX:-}" ]; then
 fi
 if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
   IFS=, read -r -a interfaces <<< "$CX_SOCKET_IFNAME"
+  socket_ordinal=0
   for interface in "${interfaces[@]}"; do
-    [ -d "/sys/class/net/$interface" ]
+    socket_ordinal=$((socket_ordinal + 1))
+    [ -d "/sys/class/net/$interface" ] \
+      || { printf '[collectivex-private] socket-interface-%s=missing\n' "$socket_ordinal"; exit 1; }
     state="$(cat "/sys/class/net/$interface/operstate")"
-    [ "$state" = up ] || [ "$state" = unknown ]
+    [ "$state" = up ] || [ "$state" = unknown ] \
+      || { printf '[collectivex-private] socket-interface-%s=down\n' "$socket_ordinal"; exit 1; }
   done
 fi
 check_port() {
@@ -867,6 +871,9 @@ done
 printf '[collectivex-private] rdma-link-layer=%s\n' "$profile"
 BASH
   if [ "$rc" != 0 ]; then
+    marker="$(grep -aoE '(socket-interface|rdma-(device|port))-[0-9]+=(missing|down|inactive|gid-missing|gid-empty|link-layer-missing|link-layer-invalid|link-layer-mixed)' "$log" \
+      | tail -n 1 || true)"
+    [ -z "$marker" ] || cx_log "ERROR: network-profile-$marker"
     [ "$report_failure" = 0 ] || cx_fail_stage setup "$log" || true
     return "$rc"
   fi
