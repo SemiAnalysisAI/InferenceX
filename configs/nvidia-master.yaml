@@ -2966,7 +2966,7 @@ dsr1-fp8-b300-sglang-mtp:
 
 kimik2.5-fp4-b300-vllm-agentic:
   image: vllm/vllm-openai:nightly-09663abde0f50944a8d5ea30120666024b503faa
-  model: nvidia/Kimi-K2.5-NVFP4
+  model: Kimi-K2.6-NVFP4
   model-prefix: kimik2.5
   runner: cluster:b300-nv
   precision: fp4
