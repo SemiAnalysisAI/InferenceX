@@ -316,11 +316,10 @@ jobs:
       COLLECTIVEX_CANONICAL_GHA: '1'
       COLLECTIVEX_SOURCE_SHA: ${{ github.sha }}
       COLLECTIVEX_ARTIFACT_NAME: ${{ inputs.operation == 'probe-precision' && format('cxprobe-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) || format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}
-      # Consolidated shards run one bounded build-group in one Slurm allocation, so
-      # the launcher's default 45-min --time is too short. 300 min covers a cold
-      # compute-node image import plus the shard. The allocation releases early
-      # when the shard finishes, so short shards don't waste it.
-      CX_TIME: ${{ inputs.operation == 'probe-precision' && '90' || '300' }}
+      # Consolidated shards run one bounded build-group in one Slurm allocation.
+      # MI300X's compute partition has a 180-minute ceiling; the other production
+      # pools accept 300 minutes. Allocations release as soon as the shard finishes.
+      CX_TIME: ${{ inputs.operation == 'probe-precision' && '90' || (matrix.sku == 'mi300x' && '180' || '300') }}
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
       CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
       CX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}

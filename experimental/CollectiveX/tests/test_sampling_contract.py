@@ -1539,6 +1539,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("secrets.COLLECTIVEX_MI300_CONFIG_V1", workflow)
         self.assertIn('set(overlay["runners"]) != {"b200-dgxc"}', workflow)
         self.assertIn('set(overlay["runners"]) != {"mi300x"}', workflow)
+        self.assertIn("matrix.sku == 'mi300x' && '180' || '300'", workflow)
         self.assertIn('overlay_name != "COLLECTIVEX_MI300_CONFIG_CONTENT"', workflow)
         self.assertIn('"partition", "squash_dir", "stage_dir", "exclude_nodes"', workflow)
         self.assertIn("set(fields) - private_fields", workflow)

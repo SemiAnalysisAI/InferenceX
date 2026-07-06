@@ -1986,6 +1986,23 @@ class DeepEPV2ContractTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertIn("scheduler-diagnostic=controller", result.stderr)
 
+            log.write_text(
+                "salloc: error: Job submit/allocate failed: Requested time limit is invalid\n"
+            )
+            result = subprocess.run(
+                ["bash", "-c", 'source "$1"; cx_report_private_scheduler_failure', "_", common],
+                text=True,
+                capture_output=True,
+                env={
+                    **os.environ,
+                    "COLLECTIVEX_CANONICAL_GHA": "1",
+                    "COLLECTIVEX_EXECUTION_ID": tag,
+                    "CX_JOB_ROOT": str(root),
+                },
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("scheduler-diagnostic=resource-request", result.stderr)
+
     def test_private_runtime_logs_reject_traversal_and_symlinks(self) -> None:
         common = str(ROOT / "runtime" / "common.sh")
         for variable, value in (

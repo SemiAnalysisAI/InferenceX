@@ -706,7 +706,7 @@ elif re.search(r"requested node configuration is not available|nodes required.*n
     result = "capacity"
 elif re.search(r"unable to contact slurm controller|communication connection failure|socket timed out|slurmctld.*(?:down|unreachable)", text, re.I):
     result = "controller"
-elif re.search(r"invalid generic resource|invalid gres|invalid node count|invalid cpu count|memory specification can not be satisfied|requested.*configuration.*invalid", text, re.I):
+elif re.search(r"invalid generic resource|invalid gres|invalid node count|invalid cpu count|memory specification can not be satisfied|requested.*configuration.*invalid|requested time limit is invalid|time limit.*(?:invalid|exceed)", text, re.I):
     result = "resource-request"
 elif re.search(r"job violates accounting[/ ]qos policy|maximum.*jobs|association.*limit|qos.*limit", text, re.I):
     result = "account-limit"
