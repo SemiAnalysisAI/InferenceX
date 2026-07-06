@@ -10,7 +10,7 @@ set -x
 #   TP+EP   (DP_ATTENTION=false, EP_SIZE>1):  attention TP-sharded, MoE
 #       experts EP-sharded within the TP group.
 #   DEP     (DP_ATTENTION=true, EP_SIZE>1):   per-DP-rank attention with
-#       experts EP-sharded across DP ranks.
+#       experts EP-sharded across DP ranks (per the vLLM blog recipe).
 #       Highest aggregate throughput at large CONC.
 #
 # Serving flags follow the validated MI355X recipe from
