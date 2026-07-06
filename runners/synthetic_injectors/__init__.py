@@ -19,9 +19,8 @@ A backend is any object exposing:
 """
 
 # framework value passed by the runner (e.g. "dynamo-vllm") -> backend module.
-# Populated by backend modules registering themselves (see e.g. vllm.py, added
-# in the framework-support PR). Empty here: the generic layer alone injects
-# nothing, so merging it changes no behavior.
+# Populated by backend modules registering themselves at import time (see the
+# `from . import` block below).
 _INJECTORS = {}
 
 
@@ -32,3 +31,8 @@ def register(framework, backend):
 def get_injector(framework):
     """Return the backend for ``framework`` (as passed by the runner), or None."""
     return _INJECTORS.get(framework)
+
+
+# Import backends after register/get_injector are defined so each module can
+# call register() at import time. Add new frameworks (sglang, trtllm, ...) here.
+from . import vllm  # noqa: E402,F401
