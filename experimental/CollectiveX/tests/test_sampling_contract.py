@@ -2556,6 +2556,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('bash -s -- "$sq" "$lock" "$image"', common)
         self.assertIn("> \"$log\" 2>&1 <<'BASH'", common)
         self.assertIn("cx_fail_stage container-import", common)
+        run_ep = (ROOT / "tests" / "run_ep.py").read_text()
+        self.assertIn("def _all_gather_json(", run_ep)
+        self.assertIn("dist_module.all_gather(gathered, encoded)", run_ep)
+        self.assertNotIn("dist.all_gather_object", run_ep)
         runtime = (ROOT / "runtime" / "run_in_container.sh").read_text()
         export_start = common.index("\ncx_container_exports() {")
         exports = common[export_start:common.index("\n}", export_start)]

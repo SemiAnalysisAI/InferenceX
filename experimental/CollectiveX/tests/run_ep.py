@@ -167,6 +167,44 @@ def _common_runtime_fingerprint(records: list[dict]) -> dict:
     return records[0]
 
 
+def _all_gather_json(
+    value,
+    *,
+    torch_module,
+    dist_module,
+    device,
+    world_size: int,
+) -> list:
+    """Gather bounded JSON values using device tensors, not Python object collectives."""
+    payload = json.dumps(
+        value,
+        allow_nan=False,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    if not payload or len(payload) > 1_048_576:
+        raise ValueError("distributed consensus payload size is invalid")
+    size = torch_module.tensor([len(payload)], dtype=torch_module.int64, device=device)
+    sizes = [torch_module.zeros_like(size) for _ in range(world_size)]
+    dist_module.all_gather(sizes, size)
+    lengths = [int(item.item()) for item in sizes]
+    if any(length < 1 or length > 1_048_576 for length in lengths):
+        raise ValueError("distributed consensus size evidence is invalid")
+    width = max(lengths)
+    encoded = torch_module.zeros(width, dtype=torch_module.uint8, device=device)
+    encoded[: len(payload)] = torch_module.tensor(
+        list(payload), dtype=torch_module.uint8, device=device
+    )
+    gathered = [torch_module.empty_like(encoded) for _ in range(world_size)]
+    dist_module.all_gather(gathered, encoded)
+    records = []
+    for tensor, length in zip(gathered, lengths, strict=True):
+        raw = bytes(tensor[:length].cpu().tolist())
+        records.append(json.loads(raw.decode("utf-8")))
+    return records
+
+
 def _allocation_stratum_sha256(
     physical_hosts: list[str],
     *,
@@ -468,24 +506,25 @@ def main() -> int:
         )
     except ValueError as exc:
         raise ValueError("SLURM_NNODES must be a positive integer") from exc
-    realized_records: list[tuple[str, int, dict] | None] = [None] * world_size
-    dist.all_gather_object(
-        realized_records,
-        (socket.gethostname(), local_rank, args.runtime_fingerprint),
+    realized_records = _all_gather_json(
+        [socket.gethostname(), local_rank, args.runtime_fingerprint],
+        torch_module=torch,
+        dist_module=dist,
+        device=device,
+        world_size=world_size,
     )
-    complete_records = [record for record in realized_records if record is not None]
     args.realized_placement = _summarize_realized_placement(
-        [(record[0], record[1]) for record in complete_records],
+        [(record[0], record[1]) for record in realized_records],
         expected_nodes=expected_nodes,
         expected_gpus_per_node=gpus_per_node,
         expected_world_size=world_size,
     )
     args.runtime_fingerprint = _common_runtime_fingerprint(
-        [record[2] for record in complete_records]
+        [record[2] for record in realized_records]
     )
     canonical = bool(args.workload_dir)
     local_stratum = _allocation_stratum_sha256(
-        [record[0] for record in complete_records],
+        [record[0] for record in realized_records],
         audit_salt=os.environ.get("CX_AUDIT_SALT"),
         fabric_selectors={
             field: os.environ.get(environment) or None
@@ -493,8 +532,13 @@ def main() -> int:
         },
         required=canonical,
     )
-    stratum_records: list[str | None] = [None] * world_size
-    dist.all_gather_object(stratum_records, local_stratum)
+    stratum_records = _all_gather_json(
+        local_stratum,
+        torch_module=torch,
+        dist_module=dist,
+        device=device,
+        world_size=world_size,
+    )
     args.allocation_stratum_sha256 = _common_allocation_stratum(
         stratum_records, required=canonical
     )
