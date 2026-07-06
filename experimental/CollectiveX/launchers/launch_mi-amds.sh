@@ -167,7 +167,11 @@ else
   SOURCE_BACKEND_ENV='case "${SLURM_NODEID:-}" in ""|*[!0-9]*) exit 66;; esac; env_file="/ix/experimental/CollectiveX/.cx_backend/env/node-${SLURM_NODEID}.sh"; env_root="${env_file%/*}"; [ -d "$env_root" ] && [ ! -L "$env_root" ] || exit 66; case "$(stat -c "%a" "$env_root")" in 700|[1-7]700) ;; *) exit 66;; esac; [ -f "$env_file" ] && [ -r "$env_file" ] && [ ! -L "$env_file" ] && [ "$(stat -c "%u:%a" "$env_file")" = "$(stat -c "%u" "$env_root"):600" ] || exit 66; . "$env_file" || exit 66'
   BACKEND_PROBE="$SOURCE_BACKEND_ENV"'; case "$CX_BENCH" in mori) python3 -c "import mori";; nccl-ep) python3 -c "import torch";; esac'
   WRAP="${SOURCE_BACKEND_ENV}"$'\n'"$(cx_slurm_rank_wrapper)"
-  CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
+  if [ "$CX_BENCH" = nccl-ep ]; then
+    CX_DISTRIBUTED_CONTAINER_ARGS=()
+  else
+    CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)
+  fi
   run_rc=0
   cx_set_failure_stage container-launch
   cx_run_distributed_shard || run_rc=$?

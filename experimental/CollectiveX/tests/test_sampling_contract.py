@@ -1044,9 +1044,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("mi325x) CPUS_PER_TASK=256", amd)
         self.assertIn("/dev/kfd:/dev/kfd,/dev/dri:/dev/dri", amd)
         self.assertIn("--container-writable --container-remap-root", amd)
+        self.assertIn('if [ "$CX_BENCH" = nccl-ep ]', amd)
+        self.assertIn("CX_DISTRIBUTED_CONTAINER_ARGS=()", amd)
         self.assertIn(
-            "CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)",
-            amd,
+            "CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)", amd
         )
         collect = common[common.index("cx_collect_results()"):
                          common.index("cx_cleanup_stage()")]
