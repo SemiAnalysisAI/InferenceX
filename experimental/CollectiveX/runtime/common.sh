@@ -88,7 +88,15 @@ cx_fail_stage() {
     elif grep -aEqi 'ncclInternalError|internal check failed' "$log_path"; then
       diagnostic="collective-internal"
     elif grep -aEqi 'ncclInvalidUsage|invalid usage' "$log_path"; then
-      diagnostic="collective-invalid-usage"
+      if grep -aEqi 'dist[.]init_process_group|init_process_group[(]' "$log_path"; then
+        diagnostic="collective-init-invalid-usage"
+      elif grep -aEqi 'dist[.]all_gather_object|all_gather_object[(]' "$log_path"; then
+        diagnostic="collective-consensus-invalid-usage"
+      elif grep -aEqi 'dist[.]all_to_all_single|all_to_all_single[(]' "$log_path"; then
+        diagnostic="collective-alltoall-invalid-usage"
+      else
+        diagnostic="collective-invalid-usage"
+      fi
     elif grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal|connection reset|could not resolve|TLS|certificate' "$log_path"; then
       diagnostic="network-or-timeout"
     elif grep -aEqi 'salloc:|srun:.*(unable to create step|step creation|invalid partition|invalid account)|unable to create step|job allocation' "$log_path"; then

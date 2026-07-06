@@ -2787,6 +2787,12 @@ class SamplingContractTest(unittest.TestCase):
             "torch.distributed.DistBackendError: ncclInternalError": "collective-internal",
             "torch.distributed.DistBackendError: ncclInvalidUsage":
                 "collective-invalid-usage",
+            "dist.init_process_group('nccl')\nDistBackendError: ncclInvalidUsage":
+                "collective-init-invalid-usage",
+            "dist.all_gather_object(records, local)\nDistBackendError: ncclInvalidUsage":
+                "collective-consensus-invalid-usage",
+            "dist.all_to_all_single(output, input)\nDistBackendError: ncclInvalidUsage":
+                "collective-alltoall-invalid-usage",
             "torch.distributed.DistBackendError: unknown collective failure":
                 "collective-backend",
             "ModuleNotFoundError: missing module": "python-import",
