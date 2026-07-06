@@ -1177,6 +1177,40 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIsNone(profile["comm_units_kind"])
         self.assertIsNone(profile["configured_units"])
 
+    def test_mori_zipf_capacity_covers_worst_rank_skew(self) -> None:
+        path = HERE / "ep_mori.py"
+        tree = ast.parse(path.read_text(), str(path))
+        helper = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_mori_input_capacity"
+        )
+        namespace: dict[str, object] = {}
+        exec(
+            compile(ast.Module(body=[helper], type_ignores=[]), str(path), "exec"),
+            namespace,
+        )
+        capacity = namespace["_mori_input_capacity"]
+        self.assertEqual(capacity(types.SimpleNamespace(routing="uniform"), 8), 512)
+        self.assertEqual(
+            capacity(
+                types.SimpleNamespace(
+                    routing="zipf", tokens_ladder="512", phase="prefill"
+                ),
+                8,
+            ),
+            4096,
+        )
+        self.assertEqual(
+            capacity(
+                types.SimpleNamespace(
+                    routing="zipf", tokens_ladder="128", phase="decode"
+                ),
+                8,
+            ),
+            1024,
+        )
+
     def test_squash_identity_rehashes_instead_of_trusting_a_sidecar(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             image = Path(temporary) / "image.sqsh"

@@ -47,6 +47,19 @@ def _mori_source_commit() -> str:
     raise RuntimeError("MoRI image source revision is unavailable")
 
 
+def _mori_input_capacity(args, world_size: int) -> int:
+    """Reserve enough rows for the worst legal Zipf destination rank."""
+    base = 512
+    if getattr(args, "routing", "uniform") != "zipf":
+        return base
+    spec = str(getattr(args, "tokens_ladder", "")).replace(",", " ").split()
+    if spec:
+        largest = max(int(token) for token in spec)
+    else:
+        largest = 128 if getattr(args, "phase", "decode") == "decode" else 4096
+    return max(base, largest * world_size)
+
+
 class MoRIBackend:
     name = "mori"
     stage_device_work = False
@@ -352,7 +365,7 @@ class MoRIBackend:
         }
 
     def buffer_cap(self, args):
-        return 512
+        return _mori_input_capacity(args, self.world_size)
 
     def make_problem(self, T, idx, weights, x):
         encoding = ep_precision.encode_dispatch(
