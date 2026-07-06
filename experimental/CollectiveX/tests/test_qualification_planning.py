@@ -186,6 +186,44 @@ class QualificationPlanningTest(unittest.TestCase):
             ],
         )
 
+    def test_full_v1_matrix_emits_every_unsupported_terminal_outcome(self) -> None:
+        matrix = sweep_matrix.validate_matrix_document(
+            sweep_matrix.resolve_matrix(suites="all", backends="all", max_cases=128)
+        )
+        expected = [
+            item for item in matrix["requested_cases"]
+            if item["disposition"] == "unsupported"
+        ]
+        environment = {
+            "COLLECTIVEX_ARTIFACT_NAME": "cxunsupported-123-1",
+            "COLLECTIVEX_EXECUTION_ID": "123_1_unsupported",
+            "COLLECTIVEX_SOURCE_SHA": "a" * 40,
+            "CX_QUALIFICATION_INDEX": "1",
+            "GITHUB_JOB": "setup",
+            "GITHUB_REF_NAME": "collectivex",
+            "GITHUB_REPOSITORY": "SemiAnalysisAI/InferenceX",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_RUN_ID": "123",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            matrix_path = root / "matrix.json"
+            matrix_path.write_bytes(_canonical(matrix))
+            with mock.patch.dict(os.environ, environment, clear=False):
+                written = sweep_matrix.emit_unsupported(matrix_path, root / "unsupported")
+            documents = [json.loads(path.read_text()) for path in written]
+
+        self.assertEqual(len(documents), len(expected))
+        self.assertEqual(len(documents), 271)
+        self.assertEqual(
+            {document["outcome"]["reason"] for document in documents},
+            {item["reason"] for item in expected},
+        )
+        self.assertEqual(
+            {document["identity"]["case_id"] for document in documents},
+            {item["case"]["case_id"] for item in expected},
+        )
+
     def test_frontend_catalog_covers_every_requested_case_and_point(self) -> None:
         catalog = sweep_matrix.frontend_catalog(self.matrix)
         self.assertEqual(catalog["format"], "collectivex.frontend-catalog.v1")

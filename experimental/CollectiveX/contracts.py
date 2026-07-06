@@ -66,6 +66,7 @@ POST_EMIT_FAILURE_REASONS = {
 CAPABILITY_FAILURE_REASONS = frozenset({
     "backend-platform-unsupported",
     "backend-token-capacity",
+    "precision-profile-unsupported",
 })
 RETURN_CODE_FAILURE_MODES = {
     5: "runtime-identity",
