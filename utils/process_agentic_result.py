@@ -61,6 +61,22 @@ def env_int(name: str, default: int = 0) -> int:
     return int(value)
 
 
+def env_int_any(names: list[str], default: int = 0) -> int:
+    """Return the first non-empty int env var among ``names``.
+
+    The agentic benchmark path only forwards the server launcher's
+    ``*_TP_SIZE`` / ``xP`` / ``yD`` env vars into the container (the unsuffixed
+    ``PREFILL_TP`` / ``PREFILL_NUM_WORKERS`` names are exported only in the
+    RUN_EVAL branch of server_sglang.sh). Falling back across the aliases keeps
+    the recorded topology (tp, num_prefill_gpu, ...) correct for both paths.
+    """
+    for name in names:
+        value = os.environ.get(name)
+        if value not in (None, ""):
+            return int(value)
+    return default
+
+
 def env_bool(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value in (None, ""):
@@ -696,12 +712,12 @@ def build_agg(
     num_gpus = tp
 
     if is_multinode:
-        prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
-        prefill_tp = env_int("PREFILL_TP")
+        prefill_num_workers = env_int_any(["PREFILL_NUM_WORKERS", "xP"], 1)
+        prefill_tp = env_int_any(["PREFILL_TP", "PREFILL_TP_SIZE"])
         prefill_ep = env_int("PREFILL_EP", 1)
         prefill_dp_attention = os.environ.get("PREFILL_DP_ATTN", "false")
-        decode_num_workers = env_int("DECODE_NUM_WORKERS")
-        decode_tp = env_int("DECODE_TP")
+        decode_num_workers = env_int_any(["DECODE_NUM_WORKERS", "yD"], 1)
+        decode_tp = env_int_any(["DECODE_TP", "DECODE_TP_SIZE"])
         decode_ep = env_int("DECODE_EP", 1)
         decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
         num_prefill_gpu = prefill_num_workers * prefill_tp
