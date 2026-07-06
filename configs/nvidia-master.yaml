@@ -11115,10 +11115,10 @@ kimik2.5-fp4-b200-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1] }
-      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [1] }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4] }
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 2, 4, 8, 16, 32] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [1, 2, 4, 8, 16, 32] }
 
 # CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
 # subagents corpus. hicache arm capped at conc 16 since high-conc + hicache
