@@ -704,6 +704,18 @@ elif re.search(r"pending job allocation|job .* pending|waiting for resource", te
     result = "pending"
 elif re.search(r"requested node configuration is not available|nodes required.*not available|resources? unavailable", text, re.I):
     result = "capacity"
+elif re.search(r"unable to contact slurm controller|communication connection failure|socket timed out|slurmctld.*(?:down|unreachable)", text, re.I):
+    result = "controller"
+elif re.search(r"invalid generic resource|invalid gres|invalid node count|invalid cpu count|memory specification can not be satisfied|requested.*configuration.*invalid", text, re.I):
+    result = "resource-request"
+elif re.search(r"job violates accounting[/ ]qos policy|maximum.*jobs|association.*limit|qos.*limit", text, re.I):
+    result = "account-limit"
+elif re.search(r"invalid credential|authentication failure|authentication error", text, re.I):
+    result = "authentication"
+elif re.search(r"job submit plugin|job_submit", text, re.I):
+    result = "submit-plugin"
+elif re.search(r"unrecognized option|unknown option|invalid option", text, re.I):
+    result = "option"
 elif re.search(r"allocation (?:revoked|cancelled)|job .* cancelled", text, re.I):
     result = "revoked"
 elif re.search(r"timed out|timeout", text, re.I):
@@ -716,7 +728,8 @@ print(result)
 PY
 )"
   case "$diagnostic" in
-    missing|unsafe|empty|policy|pending|capacity|revoked|timeout|storage-capacity|unclassified) ;;
+    missing|unsafe|empty|policy|pending|capacity|controller|resource-request|account-limit) ;;
+    authentication|submit-plugin|option|revoked|timeout|storage-capacity|unclassified) ;;
     *) diagnostic=unclassified ;;
   esac
   cx_log "ERROR: scheduler-diagnostic=$diagnostic"
