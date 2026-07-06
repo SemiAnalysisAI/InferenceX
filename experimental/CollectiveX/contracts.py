@@ -1539,7 +1539,8 @@ def _validate_precision_evidence(
         for field in ("dequantized_semantics", "encoded_payload_valid", "passed"):
             if type(axis[field]) is not bool:
                 raise ContractError(f"{axis_path}.{field} must be boolean")
-        expects_scales = communication_precision[direction]["scale_dtype"] is not None
+        scale_dtype = communication_precision[direction]["scale_dtype"]
+        expects_scales = scale_dtype not in (None, "implicit-logfmt10")
         for field in ("scales_finite", "scales_positive"):
             if expects_scales:
                 if type(axis[field]) is not bool:

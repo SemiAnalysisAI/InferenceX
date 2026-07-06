@@ -2234,6 +2234,23 @@ class SamplingContractTest(unittest.TestCase):
             saturated, profile_id, communication_precision, "precision"
         )
 
+        logfmt_profile_id = "d-bf16.c-logfmt10-dynamic64"
+        logfmt_precision = identity.precision_profile(logfmt_profile_id)
+        logfmt_evidence = copy.deepcopy(evidence)
+        logfmt_evidence["profile_id"] = logfmt_profile_id
+        contracts._validate_precision_evidence(
+            logfmt_evidence, logfmt_profile_id, logfmt_precision, "precision"
+        )
+        invented_scales = copy.deepcopy(logfmt_evidence)
+        invented_scales["combine"].update({
+            "scales_finite": True,
+            "scales_positive": True,
+        })
+        with self.assertRaisesRegex(contracts.ContractError, "must be null"):
+            contracts._validate_precision_evidence(
+                invented_scales, logfmt_profile_id, logfmt_precision, "precision"
+            )
+
     def test_oracle_stability_canonicalizes_native_receive_order(self) -> None:
         source = (HERE / "ep_harness.py").read_text()
         begin = source.index("canonical_order = torch.argsort")
