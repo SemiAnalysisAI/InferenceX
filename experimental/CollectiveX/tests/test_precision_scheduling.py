@@ -332,6 +332,29 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(b300_ep8, "supported")
         self.assertEqual(reason, "ok")
 
+        for backend, expected_reason in (
+            (
+                "deepep",
+                "DeepEP V1 EP16 native operations time out on the B200 publication fabric",
+            ),
+            (
+                "deepep-hybrid",
+                "DeepEP Hybrid EP16 cannot map the DOCA UAR into GPU memory on B200",
+            ),
+        ):
+            disposition, reason = capability.resolve_disposition(
+                "b200-dgxc", backend, ep=16, nodes=2,
+                precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+            )
+            self.assertEqual(disposition, "unsupported")
+            self.assertEqual(reason, expected_reason)
+        b200_reference, reason = capability.resolve_disposition(
+            "b200-dgxc", "nccl-ep", ep=16, nodes=2,
+            precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+        )
+        self.assertEqual(b200_reference, "supported")
+        self.assertEqual(reason, "ok")
+
     def test_split_suites_track_provisional_state_and_do_not_duplicate_bf16(self) -> None:
         suites = sweep_matrix._load("suites.yaml")
         workloads = sweep_matrix._load("workloads.yaml")
