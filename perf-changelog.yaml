@@ -4579,4 +4579,4 @@
     - kimik2.5-fp4-b200-vllm-agentic
   description:
     - "Update kimi k2.5 agentx B200"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2106
