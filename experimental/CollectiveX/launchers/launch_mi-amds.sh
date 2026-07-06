@@ -97,20 +97,39 @@ if [ "$NODES" = 1 ]; then
 else
   allocation+=(--ntasks-per-node="$GPN" --cpus-per-task="$((CPUS_PER_TASK / GPN))")
 fi
-if [ -n "$NODELIST" ]; then
-  cx_log "using configured node pin"
-  allocation+=(--nodelist="$NODELIST")
-elif [ -n "$EXCLUDE_NODES" ]; then
-  allocation+=(--exclude="$EXCLUDE_NODES")
-fi
-cx_salloc_jobid "${allocation[@]}"
-[ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
-cx_set_failure_stage setup
-cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT"
-
-cx_set_failure_stage container-import
-SQUASH_FILE="$(cx_ensure_squash_on_job \
-  "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${CX_LOCK_DIR:-}")"
+excluded_nodes="$EXCLUDE_NODES"
+for allocation_attempt in 1 2 3; do
+  attempt_allocation=("${allocation[@]}")
+  if [ -n "$NODELIST" ]; then
+    cx_log "using configured node pin"
+    attempt_allocation+=(--nodelist="$NODELIST")
+  elif [ -n "$excluded_nodes" ]; then
+    attempt_allocation+=(--exclude="$excluded_nodes")
+  fi
+  export CX_SALLOC_ATTEMPT="$allocation_attempt"
+  export CX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"
+  cx_salloc_jobid "${attempt_allocation[@]}"
+  [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
+  cx_set_failure_stage setup
+  cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT"
+  cx_set_failure_stage container-import
+  if SQUASH_FILE="$(cx_ensure_squash_on_job \
+      "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${CX_LOCK_DIR:-}")"; then
+    break
+  fi
+  if [ -n "$NODELIST" ] || [ "$allocation_attempt" = 3 ]; then
+    cx_die "allocated nodes failed container import"
+  fi
+  rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
+    || cx_die "cannot identify nodes from a rejected allocation"
+  cx_log "allocated nodes failed container import; retrying elsewhere"
+  cx_cancel_job "$JOB_ID" || cx_die "cannot release a rejected allocation"
+  cx_clear_allocation_jobid || cx_die "cannot reset rejected allocation state"
+  JOB_ID=""
+  [ -z "$excluded_nodes" ] || excluded_nodes+=,
+  excluded_nodes+="$rejected_nodes"
+done
+unset CX_SALLOC_ATTEMPT CX_NETWORK_VALIDATION_ATTEMPT
 cx_set_failure_stage container-hash
 import_log="$(cx_private_log_path image-hash)"
 if ! COLLECTIVEX_SQUASH_SHA256="$(

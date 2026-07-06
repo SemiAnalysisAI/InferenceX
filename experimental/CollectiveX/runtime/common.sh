@@ -2282,14 +2282,20 @@ cx_ensure_squash() {
 # Import on an allocated compute node so multiarch tags resolve for the target
 # architecture. The squash directory must be shared with the submit host.
 cx_ensure_squash_on_job() {
-  local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock log
+  local job_id="$1" squash_dir="$2" image="$3" lock_dir="${4:-}" sq key lock
+  local log_label=container-import log
   [[ "$job_id" =~ ^[0-9]+$ ]] || return 1
+  case "${CX_SALLOC_ATTEMPT:-1}" in
+    1) ;;
+    2|3) log_label+="-a${CX_SALLOC_ATTEMPT}" ;;
+    *) return 1 ;;
+  esac
   sq="$(cx_squash_path "$squash_dir" "$image")" || return 1
   key="${sq##*/}"
   key="${key%.sqsh}"
   [ -n "$lock_dir" ] || lock_dir="$squash_dir/.locks"
   lock="$lock_dir/${key}.lock"
-  log="$(cx_private_log_path container-import)"
+  log="$(cx_private_log_path "$log_label")"
   if ! srun --jobid="$job_id" --nodes=1 --ntasks=1 --chdir=/tmp \
       --export="$(cx_host_exports)" \
       bash -s -- "$sq" "$lock" "$image" "$CX_SQUASH_SOURCE_DATE_EPOCH" \
