@@ -212,6 +212,24 @@ def _require_cross_rank_equal(value, label: str) -> None:
         raise RuntimeError(f"DeepEP V2 {label} differs across ranks")
 
 
+# GIN/GDAKI allocates num_allocated_qps device QPs per peer rank on the local NIC
+# (contexts x world_size QPs, before NCCL's own connection QPs). Upstream's hybrid
+# default (129, or 65 with fast RDMA atomics) exhausts the per-NIC QP budget at
+# EP16: construction dies in ncclDevCommCreate with ibv_create_qp ENOMEM once
+# NCCL's regular QPs land on top (identical on H200 bare-metal and B200 pods; on
+# CX-7 the budget sits between 784 and 1040 QPs — 49x16 initializes, 65x16 does
+# not). Spending a fixed ~512-QP budget keeps every EP size inside that limit
+# with headroom: EP8 resolves to 65 (the allocation CX-8 racks already run
+# successfully), EP16 to 33 and EP32 to 17 (33 and 49 verified on the failing
+# H200 pair). An explicit value also skips upstream's rank-local ibstat probe,
+# which is not guaranteed to resolve identically across ranks.
+_GIN_QP_BUDGET = 512
+
+
+def _hybrid_num_allocated_qps(world_size: int) -> int:
+    return max(9, 1 + _GIN_QP_BUDGET // world_size)
+
+
 def _configure_gin_mode(args, world_size: int) -> bool:
     scale_up_domain = int(
         getattr(args, "scale_up_domain", None)
@@ -369,6 +387,11 @@ class DeepEPV2Backend:
             prefer_overlap_with_compute=True,
             num_gpu_timeout_secs=100,
             explicitly_destroy=True,
+            # 0 is upstream's use-the-default sentinel; only hybrid (GIN) mode
+            # needs the explicit budget-derived allocation.
+            num_allocated_qps=(
+                _hybrid_num_allocated_qps(world_size) if allow_hybrid_mode else 0
+            ),
         )
         tuning_num_experts = int(getattr(args, "num_logical_experts", args.experts))
         self.num_sms = int(
