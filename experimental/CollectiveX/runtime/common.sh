@@ -215,7 +215,7 @@ cx_load_operator_config() {
   audit_salt_override="${COLLECTIVEX_OPERATOR_AUDIT_SALT:-}"
   unset COLLECTIVEX_OPERATOR_AUDIT_SALT
   unset CX_PARTITION CX_ACCOUNT CX_QOS CX_SQUASH_DIR CX_STAGE_DIR CX_ENROOT_CACHE_PATH
-  unset ENROOT_CACHE_PATH
+  unset ENROOT_TEMP_PATH ENROOT_CACHE_PATH ENROOT_DATA_PATH ENROOT_RUNTIME_PATH
   unset CX_EXCLUDE_NODES CX_NODELIST CX_LOCK_DIR CX_MASTER_PORT
   unset CX_SOCKET_IFNAME CX_RDMA_DEVICES CX_IB_GID_INDEX CX_RDMA_SERVICE_LEVEL
   unset CX_RDMA_TRAFFIC_CLASS
@@ -608,12 +608,13 @@ PY
 cx_container_exports() {
   printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_CONTROL_SHA256,COLLECTIVEX_IMAGE,COLLECTIVEX_IMAGE_DIGEST,COLLECTIVEX_IMAGE_DIGEST_VERIFIED,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_PRECISION_PROBE,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_EPLB,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_REQUIRED_PUBLICATION,CX_PRECISION_PROFILE,CX_QUALIFICATION_INDEX,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_CACHE_SENTINEL_SHA256,CX_BACKEND_SOURCE_ROOT,CX_AUDIT_SALT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,UCCL_SOCKET_IFNAME,UCCL_IB_GID_INDEX,UCCL_IB_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL'
   printf '%s' ',MORI_COMMIT'
+  printf '%s' ',ENROOT_TEMP_PATH,ENROOT_CACHE_PATH,ENROOT_DATA_PATH,ENROOT_RUNTIME_PATH'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
 # the complete Actions or runner environment.
 cx_host_exports() {
-  printf '%s' 'HOME,PATH,USER,XDG_CACHE_HOME,ENROOT_CACHE_PATH'
+  printf '%s' 'HOME,PATH,USER,XDG_CACHE_HOME,ENROOT_TEMP_PATH,ENROOT_CACHE_PATH,ENROOT_DATA_PATH,ENROOT_RUNTIME_PATH'
 }
 
 cx_prepare_runtime_marker() {
@@ -2409,6 +2410,52 @@ BASH
   return 1
 }
 
+cx_prepare_enroot_scratch_on_job() {
+  local job_id="$1" nodes="$2" tag root log
+  [[ "$job_id" =~ ^[0-9]+$ ]] && [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || return 1
+  tag="${COLLECTIVEX_EXECUTION_ID:-${GITHUB_RUN_ID:-manual-$$}}"
+  [[ "$tag" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || return 1
+  root="/dev/shm/inferencex-collectivex-enroot-$(id -u)-$tag"
+  log="$(cx_private_log_path enroot-scratch)"
+  if ! srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
+      --chdir=/tmp --input=all --export="$(cx_host_exports)" \
+      bash -s -- "$root" >"$log" 2>&1 <<'BASH'
+set -euo pipefail
+root="$1"
+[ ! -e "$root" ] && [ ! -L "$root" ]
+umask 077
+mkdir -m 700 "$root"
+for name in temp cache data runtime; do
+  mkdir -m 700 "$root/$name"
+done
+[ "$(stat -c '%u:%a' "$root")" = "$(id -u):700" ]
+BASH
+  then
+    cx_fail_stage container-launch "$log"
+    return 1
+  fi
+  export CX_ENROOT_SCRATCH_ROOT="$root"
+  export ENROOT_TEMP_PATH="$root/temp" ENROOT_CACHE_PATH="$root/cache"
+  export ENROOT_DATA_PATH="$root/data" ENROOT_RUNTIME_PATH="$root/runtime"
+}
+
+cx_cleanup_enroot_scratch_on_job() {
+  local job_id="${1:-}" nodes="${2:-}" root="${CX_ENROOT_SCRATCH_ROOT:-}"
+  [ -n "$root" ] || return 0
+  [[ "$job_id" =~ ^[0-9]+$ ]] && [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || return 1
+  [[ "$root" =~ ^/dev/shm/inferencex-collectivex-enroot-[0-9]+-[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+    || return 1
+  srun --overlap --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
+    --chdir=/tmp --input=all --export="HOME,PATH,USER" \
+    bash -s -- "$root" >/dev/null 2>&1 <<'BASH'
+set -euo pipefail
+root="$1"
+[ -d "$root" ] && [ ! -L "$root" ]
+[ "$(stat -c '%u:%a' "$root")" = "$(id -u):700" ]
+rm -rf -- "$root"
+BASH
+}
+
 # A clean nvidia-smi inventory does not prove that a prior cancelled workload
 # released every CUDA context. Retaining each primary context catches poisoned
 # allocations before a full shard spends time failing every case.
@@ -3198,6 +3245,13 @@ cx_launcher_cleanup() {
   if [ -n "${COLLECTIVEX_EPHEMERAL_CONFIG_PATH:-}" ]; then
     rm -f -- "$COLLECTIVEX_EPHEMERAL_CONFIG_PATH" >/dev/null 2>&1 || true
     unset COLLECTIVEX_EPHEMERAL_CONFIG_PATH
+  fi
+  if [ -n "${JOB_ID:-}" ] && [ -n "${CX_ENROOT_SCRATCH_ROOT:-}" ]; then
+    if ! cx_cleanup_enroot_scratch_on_job "$JOB_ID" "${NODES:-${CX_NODES:-}}"; then
+      [ "$rc" != 0 ] || rc=1
+    fi
+    unset CX_ENROOT_SCRATCH_ROOT ENROOT_TEMP_PATH ENROOT_CACHE_PATH
+    unset ENROOT_DATA_PATH ENROOT_RUNTIME_PATH
   fi
   if [ -n "${JOB_ID:-}" ]; then
     if ! cx_cancel_job "$JOB_ID"; then

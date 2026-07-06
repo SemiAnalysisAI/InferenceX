@@ -151,6 +151,10 @@ fi
 export COLLECTIVEX_SQUASH_SHA256
 cx_preflight_allocation "$JOB_ID" "$NODES" "$MOUNT_SRC" "$SQUASH_FILE" \
   "${CX_SHARD_FILE:-}"
+if [ "$CX_BENCH" = nccl-ep ] && [ "$NODES" -gt 1 ]; then
+  cx_prepare_enroot_scratch_on_job "$JOB_ID" "$NODES" \
+    || cx_die "cannot prepare isolated Enroot runtime scratch"
+fi
 CONTAINER_MOUNTS="$MOUNT_SRC:$MOUNT_DIR$DEVICE_MOUNTS"
 
 if [ "$NODES" = 1 ]; then
@@ -179,6 +183,13 @@ else
   run_rc=0
   cx_set_failure_stage container-launch
   cx_run_distributed_shard || run_rc=$?
+fi
+
+if [ -n "${CX_ENROOT_SCRATCH_ROOT:-}" ]; then
+  cx_cleanup_enroot_scratch_on_job "$JOB_ID" "$NODES" \
+    || { cx_log "ERROR: cannot remove Enroot runtime scratch"; [ "$run_rc" != 0 ] || run_rc=1; }
+  unset CX_ENROOT_SCRATCH_ROOT ENROOT_TEMP_PATH ENROOT_CACHE_PATH
+  unset ENROOT_DATA_PATH ENROOT_RUNTIME_PATH
 fi
 
 cx_adopt_runtime_stage "$MOUNT_SRC"

@@ -2588,6 +2588,8 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("import_node < NODES", amd)
         self.assertIn('"${CX_LOCK_DIR:-}" "$import_node"', amd)
         self.assertIn('rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")"', amd)
+        self.assertIn('cx_prepare_enroot_scratch_on_job "$JOB_ID" "$NODES"', amd)
+        self.assertIn('cx_cleanup_enroot_scratch_on_job "$JOB_ID" "$NODES"', amd)
         self.assertIn("cx_fail_stage container-hash", amd)
         self.assertNotIn('cat "$import_log"', amd)
         self.assertIn('bash -s -- "$sq" "$lock" "$image"', common)
@@ -2664,6 +2666,9 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('--relative="$relative"', common)
         self.assertIn('log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}"', common)
         self.assertIn('cx_validate_cuda_context_on_job()', common)
+        self.assertIn('cx_prepare_enroot_scratch_on_job()', common)
+        self.assertIn('/dev/shm/inferencex-collectivex-enroot-', common)
+        self.assertIn('cx_cleanup_enroot_scratch_on_job()', common)
         self.assertIn('cuDevicePrimaryCtxRetain', common)
         self.assertIn('diagnostic="accelerator-unavailable"', common)
 
