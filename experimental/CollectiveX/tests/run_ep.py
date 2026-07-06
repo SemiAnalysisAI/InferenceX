@@ -488,9 +488,10 @@ def main() -> int:
                 world_size=world_size,
                 device_id=device,
             )
-        elif args.backend == "deepep-v2":
+        elif args.backend in {"deepep-v2", "nccl-ep"}:
             # PR #605 reuses PyTorch's NCCL communicator through ``_comm_ptr``. Supplying
-            # device_id eagerly forms it before ElasticBuffer construction.
+            # device_id eagerly forms it before ElasticBuffer construction. The reference
+            # backend uses the same eager binding so RCCL never infers rank devices lazily.
             dist.init_process_group("nccl", device_id=device)
         else:
             dist.init_process_group("nccl")
