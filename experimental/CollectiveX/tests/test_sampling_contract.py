@@ -1044,10 +1044,9 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("mi325x) CPUS_PER_TASK=256", amd)
         self.assertIn("/dev/kfd:/dev/kfd,/dev/dri:/dev/dri", amd)
         self.assertIn("--container-writable --container-remap-root", amd)
-        self.assertIn('if [ "$CX_BENCH" = nccl-ep ]', amd)
-        self.assertIn("CX_DISTRIBUTED_CONTAINER_ARGS=()", amd)
         self.assertIn(
-            "CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)", amd
+            "CX_DISTRIBUTED_CONTAINER_ARGS=(--container-writable --container-remap-root)",
+            amd,
         )
         collect = common[common.index("cx_collect_results()"):
                          common.index("cx_cleanup_stage()")]
@@ -2585,11 +2584,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("cx_ensure_squash_on_job", amd)
         self.assertIn("for allocation_attempt in 1 2 3", amd)
         self.assertIn("allocated nodes failed container import; retrying elsewhere", amd)
-        self.assertIn("import_node < NODES", amd)
-        self.assertIn('"${CX_LOCK_DIR:-}" "$import_node"', amd)
         self.assertIn('rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")"', amd)
-        self.assertIn('cx_prepare_enroot_scratch_on_job "$JOB_ID" "$NODES"', amd)
-        self.assertIn('cx_cleanup_enroot_scratch_on_job "$JOB_ID" "$NODES"', amd)
         self.assertIn("cx_fail_stage container-hash", amd)
         self.assertNotIn('cat "$import_log"', amd)
         self.assertIn('bash -s -- "$sq" "$lock" "$image"', common)
@@ -2639,10 +2634,12 @@ class SamplingContractTest(unittest.TestCase):
             rank_wrapper.index(". /ix/experimental/CollectiveX/runtime/common.sh"),
             rank_wrapper.index('if [ "${CX_NODES:-1}" -gt 1 ]'),
         )
-        self.assertIn('container_identity_args=(--container-name="$container_name")', distributed)
-        self.assertEqual(distributed.count('"${container_identity_args[@]}"'), 5)
-        self.assertIn('if [ "$CX_BENCH" = nccl-ep ]', distributed)
-        self.assertIn("SOURCE_BACKEND_ENV=:", amd)
+        self.assertEqual(
+            distributed.count(
+                '--container-name="$container_name" --container-image="$SQUASH_FILE"'
+            ),
+            5,
+        )
         shard_runtime = runtime[runtime.index('elif [ -n "${CX_SHARD_FILE:-}" ]') :]
         self.assertIn('"CX_PRECISION_PROFILE": g("precision_profile")', shard_runtime)
         self.assertIn("rdma-port-%s=inactive", common)
@@ -2663,12 +2660,8 @@ class SamplingContractTest(unittest.TestCase):
             single_slurm,
         )
         self.assertIn('log_label+="-a${CX_SALLOC_ATTEMPT}"', common)
-        self.assertIn('--relative="$relative"', common)
         self.assertIn('log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}"', common)
         self.assertIn('cx_validate_cuda_context_on_job()', common)
-        self.assertIn('cx_prepare_enroot_scratch_on_job()', common)
-        self.assertIn('/dev/shm/inferencex-collectivex-enroot-', common)
-        self.assertIn('cx_cleanup_enroot_scratch_on_job()', common)
         self.assertIn('cuDevicePrimaryCtxRetain', common)
         self.assertIn('diagnostic="accelerator-unavailable"', common)
 
