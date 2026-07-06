@@ -1041,6 +1041,7 @@ class SamplingContractTest(unittest.TestCase):
             common.index("workload_log=", common.index("workload_args=("))
         ]
         self.assertNotIn("--workload", workload_stage)
+        self.assertIn('cd -P -- "$(dirname "${BASH_SOURCE[0]}")"', amd)
         self.assertIn("mi325x) CPUS_PER_TASK=256", amd)
         self.assertIn("/dev/kfd:/dev/kfd,/dev/dri:/dev/dri", amd)
         self.assertIn("--container-writable --container-remap-root", amd)

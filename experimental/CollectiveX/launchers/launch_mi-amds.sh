@@ -3,7 +3,7 @@
 # shellcheck disable=SC2016,SC2034
 set -euo pipefail
 
-HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HERE="$(cd -P -- "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 CX_DIR="$(cd "$HERE/.." && pwd)"
 REPO_ROOT="$(cd "$CX_DIR/../.." && pwd)"
 # shellcheck source=../runtime/common.sh
