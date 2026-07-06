@@ -2394,7 +2394,7 @@ cx_stage_repo() {
     || cx_die "cannot create the configured stage directory"
   cx_log "staging CollectiveX on compute-visible storage"
   log="$(cx_private_log_path repository-stage)"
-  if ! rsync -rlp --delete --delete-excluded \
+  if ! rsync -rl --delete --delete-excluded \
       --exclude='__pycache__/' --exclude='results/' --exclude='.cx_workloads/' \
       --exclude='.cx_backend/' --exclude='.cx_sources/' \
       --exclude='configs/platforms.yaml' --exclude='private-infra.md' \
