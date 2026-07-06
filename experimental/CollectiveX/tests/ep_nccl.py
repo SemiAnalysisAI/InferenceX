@@ -96,9 +96,6 @@ class NCCLBackend:
             "collective_library": _library,
             "nccl_version": _version,
             "transport": f"{_library}-all_to_all_single",
-            "network_selection": (
-                "forced-ib" if _library == "nccl" else "auto-hca-pinned"
-            ),
             "resource_mode": "fixed-profile",
             "num_sms": None,
             "device_sms": torch.cuda.get_device_properties(device).multi_processor_count,

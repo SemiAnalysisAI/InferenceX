@@ -2600,7 +2600,6 @@ class SamplingContractTest(unittest.TestCase):
         nccl = (ROOT / "tests" / "ep_nccl.py").read_text()
         self.assertIn('if _library == "nccl" and network_selection != "IB"', nccl)
         self.assertIn('if _library == "rccl" and network_selection:', nccl)
-        self.assertIn('"auto-hca-pinned"', nccl)
         runtime = (ROOT / "runtime" / "run_in_container.sh").read_text()
         export_start = common.index("\ncx_container_exports() {")
         exports = common[export_start:common.index("\n}", export_start)]
