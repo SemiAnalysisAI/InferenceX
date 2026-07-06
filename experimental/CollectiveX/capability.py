@@ -241,12 +241,6 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
             basis="mori-gfx950-normal-prequantized-ocp-e4m3fn-block128-f32-scale",
         ),
     ),
-    _NORMAL_E4M3FNUZ_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi325x",), ep_degrees=(8, 16), mode="normal",
-            basis="mori-gfx942-normal-prequantized-e4m3fnuz-block128-f32-scale",
-        ),
-    ),
     _LL_FP8_PROFILE: (
         _precision_rule(
             backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
@@ -293,18 +287,6 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
         _precision_rule(
             backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
             basis="mori-gfx950-ep8-intranode-e4m3fn-dispatch-and-direct-cast-combine",
-        ),
-    ),
-    _MORI_E4M3FNUZ_DIRECT_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi325x",), ep_degrees=(8,), mode="normal",
-            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-direct-cast-combine",
-        ),
-    ),
-    _MORI_E4M3FNUZ_BOTH_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi325x",), ep_degrees=(8,), mode="normal",
-            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-dispatch-and-direct-cast-combine",
         ),
     ),
 }

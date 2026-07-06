@@ -69,11 +69,8 @@ V1_CASE_PROFILES = {
 V1_CONTROL_PRECISION_PROFILE = "d-bf16.c-bf16"
 V1_NORMAL_PRECISION_PROFILE_IDS = (
     "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
     "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
     "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
-    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
-    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale",
 )
 V1_LOW_LATENCY_PRECISION_PROFILE_IDS = (
     "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
@@ -205,11 +202,6 @@ V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
         "dispatch": _FP8_E4M3FN_PREQUANTIZED_DISPATCH,
         "combine": _BF16_AXIS,
     },
-    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16": {
-        "modes": ["normal"],
-        "dispatch": _FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH,
-        "combine": _BF16_AXIS,
-    },
     "d-fp8-e4m3fn-b128-f32-fused.c-bf16": {
         "modes": ["low-latency"],
         "dispatch": _FP8_E4M3FN_FUSED_DISPATCH,
@@ -234,16 +226,6 @@ V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
         "modes": ["normal"],
         "dispatch": _FP8_E4M3FN_PREQUANTIZED_DISPATCH,
         "combine": _FP8_E4M3FN_DIRECT_CAST_COMBINE,
-    },
-    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale": {
-        "modes": ["normal"],
-        "dispatch": _BF16_AXIS,
-        "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
-    },
-    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale": {
-        "modes": ["normal"],
-        "dispatch": _FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH,
-        "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
     },
 }
 

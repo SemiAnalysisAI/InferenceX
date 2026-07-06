@@ -12,9 +12,9 @@ combine, and paired roundtrip latency across EP libraries and accelerator system
 > Publication hold: historical schema 3-5 data is diagnostic. No current dataset is approved for
 > rankings, recommendations, or regression baselines.
 
-> Development status: the V1 precision, point-level publication, branch-only delivery, and frontend
-> contracts are implemented. Every NVIDIA and MI355X precision cell is terminal. Four MI325X
-> precision cells remain provisional, so V1 counts and digests are not frozen.
+> Development status: the seven-SKU V1 matrix, precision, point-level publication, branch-only
+> delivery, and frontend contracts are frozen and ready for qualification. MI325X is deferred to a
+> later version because its intended two-node runner pool is unavailable.
 
 ## Implemented Pre-V1 Execution Profile
 
@@ -40,18 +40,16 @@ logfmt10, and `rtol=0.08, atol=0.04` for native FP8 direct-cast combine. These a
 publication thresholds, not estimates of codec error. FP8 direct-cast evidence also counts
 saturation on the exact transformed native combine input; any saturated value fails the point.
 
-The current unfrozen planning graph covers H100, H200, B200, B300, GB200, GB300, MI325X, and
-MI355X. It requests 656 cases / 1,648 token points: 379 runnable cases / 916 points, emitted as 54
-executable workflow shards/allocation cells, plus 277 explicit unsupported cases / 732 points. The
-final normal-precision cases remain probe-gated and these counts will change when the four MI325X
-cells become terminal. `sweep_matrix.py` materializes every token ladder and rejects missing, stale,
-malformed, or altered shard controls. Shards are emitted round-robin by SKU so the bounded GHA
-matrix uses every runner pool early.
+The frozen V1 graph covers H100, H200, B200, B300, GB200, GB300, and MI355X. It requests 664 cases /
+1,532 token points: 393 runnable cases / 898 points, emitted as 50 executable workflow
+shards/allocation cells, plus 271 explicit unsupported cases / 634 points. `sweep_matrix.py`
+materializes every token ladder and rejects missing, stale, malformed, or altered shard controls.
+Shards are emitted round-robin by SKU so the bounded GHA matrix uses every runner pool early.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
 | H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
-| MI325X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
+| MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not determine scope: both GB topologies stay inside one 72-GPU MNNVL
@@ -64,7 +62,7 @@ scale-up domain.
 | DeepEP Hybrid | Pinned `HybridEPBuffer`: x86 EP16 multi-domain RDMA/DOCA; GB EP8/EP16 in one MNNVL communication domain |
 | UCCL | Pinned 0.1.1 wheel and wrapper with normal and native low-latency APIs on Hopper; Blackwell is explicitly unsupported |
 | NCCL/RCCL A2A | Portable rank-deduplicated payload plus expert/routing-metadata reference |
-| MoRI | EP8 uses MI325X AsyncLL or MI355X IntraNode; EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
+| MoRI | MI355X EP8 uses IntraNode; EP16 pins InterNodeV1 over 2x8 XGMI + RDMA |
 
 FlashInfer is outside v1 because its exercised EP path failed intermittently at runtime. It is not
 misreported as a platform capability limitation and can return after a stable pinned path is proven.
@@ -140,6 +138,9 @@ temporary copy before allocation. Required JSON fields are:
 | `gb200` | `partition`, `account`, ordered `storage_roots` |
 | `gb300` | `partition`, `account`, `squash_dir`, `enroot_cache_path` |
 | `mi325x`, `mi355x` | `partition`, `squash_dir`, `stage_dir` |
+
+The MI325X launcher/configuration path is retained for future versions but is not referenced by any
+V1 suite, capability target, workflow shard, or publication cohort.
 
 Every selected non-MNNVL EP16 placement additionally requires `socket_ifname` and `rdma_devices`
 for its operator-approved fabric; optional

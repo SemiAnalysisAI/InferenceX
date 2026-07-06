@@ -20,6 +20,19 @@ import sweep_matrix  # noqa: E402
 
 
 class PrecisionSchedulingTest(unittest.TestCase):
+    @staticmethod
+    def _synthetic_provisional_targets() -> list[dict[str, object]]:
+        targets = []
+        for ep in (8, 16):
+            target = next(
+                item for item in capability.precision_targets()
+                if item["sku"] == "h100-dgxc" and item["backend"] == "deepep"
+                and item["ep"] == ep and item["mode"] == "normal"
+            ).copy()
+            target.update(disposition="provisional", basis="test-provisional-cell")
+            targets.append(target)
+        return targets
+
     def test_precision_probe_inventory_is_exact_and_non_mutating(self) -> None:
         before = copy.deepcopy(capability.PRECISION_CAPABILITIES)
         targets = probe_precision.provisional_targets()
@@ -28,7 +41,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(len(targets), 4)
+        self.assertEqual(targets, [])
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -40,11 +53,12 @@ class PrecisionSchedulingTest(unittest.TestCase):
         )
 
     def test_precision_probe_selects_only_one_exact_provisional_cell(self) -> None:
-        target = probe_precision.provisional_targets()[0]
-        selected = probe_precision.select_target(
-            backend=target["backend"], sku=target["sku"], ep=target["ep"],
-            mode=target["mode"], precision_profile=target["precision_profile"],
-        )
+        target = self._synthetic_provisional_targets()[0]
+        with mock.patch.object(probe_precision, "provisional_targets", return_value=[target]):
+            selected = probe_precision.select_target(
+                backend=target["backend"], sku=target["sku"], ep=target["ep"],
+                mode=target["mode"], precision_profile=target["precision_profile"],
+            )
         self.assertEqual(selected, target)
         with self.assertRaisesRegex(probe_precision.ProbeError, "target-not-provisional"):
             probe_precision.select_target(
@@ -53,46 +67,52 @@ class PrecisionSchedulingTest(unittest.TestCase):
             )
 
     def test_precision_probe_workflow_plan_binds_exact_controls(self) -> None:
-        plan = probe_precision.workflow_plan(backend="mori", only_sku="mi325x")
+        targets = self._synthetic_provisional_targets()
+        with mock.patch.object(probe_precision, "provisional_targets", return_value=targets):
+            plan = probe_precision.workflow_plan(backend="deepep", only_sku="h100-dgxc")
         self.assertTrue(plan["include"])
         self.assertTrue(all(
-            row["backend"] == "mori" and row["sku"] == "mi325x"
+            row["backend"] == "deepep" and row["sku"] == "h100-dgxc"
             for row in plan["include"]
         ))
         row = plan["include"][0]
-        exact = probe_precision.workflow_plan(probe_id=row["id"])
+        with mock.patch.object(probe_precision, "provisional_targets", return_value=targets):
+            exact = probe_precision.workflow_plan(probe_id=row["id"])
         self.assertEqual(exact["include"], [row])
         with self.assertRaisesRegex(ValueError, "ID is invalid"):
             probe_precision.workflow_plan(probe_id="probe-invalid")
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(probe_id="probe-00000000000000000000")
-        control = probe_precision.extract_control(
-            plan, probe_id=row["id"], sku=row["sku"], backend=row["backend"],
-            nodes=row["nodes"],
-        )
-        self.assertEqual(
-            probe_precision.validate_control(
-                control, sku=row["sku"], backend=row["backend"], nodes=row["nodes"],
-            ),
-            control,
-        )
-        with self.assertRaisesRegex(ValueError, "workflow matrix"):
+        with mock.patch.object(probe_precision, "provisional_targets", return_value=targets):
+            control = probe_precision.extract_control(
+                plan, probe_id=row["id"], sku=row["sku"], backend=row["backend"],
+                nodes=row["nodes"],
+            )
+            self.assertEqual(
+                probe_precision.validate_control(
+                    control, sku=row["sku"], backend=row["backend"], nodes=row["nodes"],
+                ),
+                control,
+            )
+        with mock.patch.object(probe_precision, "provisional_targets", return_value=targets), \
+                self.assertRaisesRegex(ValueError, "workflow matrix"):
             probe_precision.extract_control(
                 plan, probe_id=row["id"], sku=row["sku"], backend=row["backend"],
                 nodes=row["nodes"] + 1,
             )
         with self.assertRaisesRegex(ValueError, "select no provisional"):
             probe_precision.workflow_plan(backend="mori", only_sku="b200-dgxc")
-        ep16 = probe_precision.workflow_plan(
-            backend="mori", only_sku="mi325x", min_nodes=2,
-        )
+        with mock.patch.object(probe_precision, "provisional_targets", return_value=targets):
+            ep16 = probe_precision.workflow_plan(
+                backend="deepep", only_sku="h100-dgxc", min_nodes=2,
+            )
         self.assertTrue(ep16["include"])
         self.assertEqual({row["ep"] for row in ep16["include"]}, {16})
         with self.assertRaisesRegex(ValueError, "node filters"):
             probe_precision.workflow_plan(min_nodes=2, max_nodes=1)
 
     def test_precision_probe_manifest_is_sanitized_and_runtime_evidence_is_required(self) -> None:
-        target = probe_precision.provisional_targets()[0]
+        target = self._synthetic_provisional_targets()[0]
         topology = capability.topology_for(target["sku"], target["ep"])
         self.assertIsNotNone(topology)
         topology_record = probe_precision._topology_record(topology, False)
@@ -180,10 +200,6 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(fused["conversion_boundary"], "inside-dispatch-timing")
         self.assertEqual(prequantized["scale_group_size"], 128)
 
-        mi325 = identity.precision_profile(
-            "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"
-        )["dispatch"]
-        self.assertEqual(mi325["communication_format"], "fp8-e4m3fnuz")
         logfmt = identity.precision_profile("d-bf16.c-logfmt10-dynamic64")["combine"]
         self.assertEqual(
             (logfmt["communication_format"], logfmt["scale_group_size"]),
@@ -225,10 +241,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertTrue(targets)
         self.assertEqual(
             {item["disposition"] for item in targets},
-            {"provisional", "supported", "unsupported"},
+            {"supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets) - len(capability.provisional_precision_targets()), 90
+            len(targets), 90
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 59
@@ -236,7 +252,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(
             sum(item["disposition"] == "unsupported" for item in targets), 31
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 4)
+        self.assertEqual(len(capability.provisional_precision_targets()), 0)
         keys = {
             (
                 item["precision_profile"],
@@ -251,7 +267,6 @@ class PrecisionSchedulingTest(unittest.TestCase):
 
         normal = "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16"
         direct = "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
-        fnuz_direct = "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale"
         low_latency = "d-bf16.c-logfmt10-dynamic64"
         cases = (
             (("h200-dgxc", "deepep-v2", 8, "normal", normal), "unsupported"),
@@ -259,7 +274,6 @@ class PrecisionSchedulingTest(unittest.TestCase):
             (("h200-dgxc", "nccl-ep", 8, "normal", normal), "not-applicable"),
             (("mi355x", "mori", 8, "normal", direct), "unsupported"),
             (("mi355x", "mori", 16, "normal", direct), "not-applicable"),
-            (("mi325x", "mori", 8, "normal", fnuz_direct), "provisional"),
             (("h200-dgxc", "deepep", 8, "low-latency", low_latency), "supported"),
             (("h100-dgxc", "deepep", 16, "low-latency", low_latency), "supported"),
             (("h200-dgxc", "deepep-hybrid", 8, "low-latency", low_latency),
@@ -333,7 +347,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             ),
             ("low-latency", ["decode"], [128]),
         )
-        self.assertTrue(normal["provisional"])
+        self.assertFalse(normal["provisional"])
         self.assertFalse(low_latency["provisional"])
         self.assertEqual(
             normal["required_publication"], "comparable-experimental"
@@ -353,14 +367,13 @@ class PrecisionSchedulingTest(unittest.TestCase):
             for item in matrix["requested_cases"]
             if "precision_profile" in item["case"]
         }
-        self.assertEqual(scheduled_profiles, set(low_latency["precision_profiles"]))
-        with self.assertRaisesRegex(SystemExit, "provisional precision suites"):
-            sweep_matrix.resolve_matrix(
-                suites="ep-precision-normal-v1", backends="all"
-            )
+        self.assertEqual(
+            scheduled_profiles,
+            set(normal["precision_profiles"]) | set(low_latency["precision_profiles"]),
+        )
 
         stale = copy.deepcopy(suites)
-        stale["suites"]["ep-precision-normal-v1"]["provisional"] = False
+        stale["suites"]["ep-precision-normal-v1"]["provisional"] = True
         with self.assertRaisesRegex(SystemExit, "must track unresolved"):
             sweep_matrix.validate_config_documents(stale, workloads)
 
@@ -394,8 +407,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             for target in capability.precision_targets()
         )
         with mock.patch.object(capability, "PRECISION_CAPABILITIES", promoted):
-            with self.assertRaisesRegex(SystemExit, "must track unresolved"):
-                sweep_matrix.validate_config_documents(suites, workloads)
+            sweep_matrix.validate_config_documents(suites, workloads)
             with mock.patch.object(sweep_matrix, "_load", side_effect=load_config):
                 matrix = sweep_matrix.validate_matrix_document(
                     sweep_matrix.resolve_matrix(suites=suite_names, backends="all")

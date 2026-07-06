@@ -1,4 +1,4 @@
-# CollectiveX EP Pre-V1 Baseline
+# CollectiveX EP V1 Methodology
 
 <div align="center">
 
@@ -6,12 +6,10 @@
 
 </div>
 
-This document describes the implemented BF16 baseline. It is not yet the V1 qualification contract.
-Before any V1-tagged run, this English document must match the implemented precision, measurement,
-publication, and frontend contracts; counts and digests remain unfrozen. Chinese documentation
-synchronization is explicitly deferred for the V1 implementation phase.
-H100, H200, B200, B300, GB200, GB300, and MI355X precision cells are terminal. Four MI325X
-precision cells remain provisional.
+This document is the frozen V1 qualification contract. No V1 dataset is approved until three
+complete first-attempt executions pass publication and frontend audit. Chinese documentation
+synchronization is explicitly deferred for the V1 implementation phase. MI325X is deferred to a
+later version because its intended two-node runner pool is unavailable.
 
 ## Product Boundary
 
@@ -38,13 +36,22 @@ normal `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v
 - `ep-precision-normal-v1`: nonbaseline native dispatch/combine profiles at decode T=128 and prefill
   T=512; BF16/BF16 endpoint controls are referenced rather than duplicated.
 - `ep-precision-low-latency-v1`: nonbaseline native low-latency profiles at decode T=128.
-- Current planning matrix: 656 requested cases / 1,648 token points; 379 runnable cases / 916
-  points in 54 executable workflow shards/allocation cells; 277 unsupported cases / 732 points.
+- Frozen V1 matrix: 664 requested cases / 1,532 token points; 393 runnable cases / 898 points in 50
+  executable workflow shards/allocation cells; 271 unsupported cases / 634 points.
+- Canonical matrix SHA-256: `c6988c5e81239ace699541322a88a37bfd80819d8bc1a2446f928665cd3ebba0`.
+- Case/disposition catalog SHA-256: `98b0c5e85c223a2edcbf9ea580a48bea115294c83691650bb25cb85904ed8be4`.
+- Qualification execution-plan SHA-256 values for repeats 1/2/3 are respectively
+  `dd35bee6909a85761e069ebe83444a6f982eb571a4e61ad604a845ea7e4d10dc`,
+  `fbc7262b3399225493f6c025c3bd2ceca52e90762bda1b6f6002683037094caf`, and
+  `5edc837858df2d7498229db30ec0d364f5b6cd7ca703790a8c83aabb09e6aff4`.
+- The backend-produced frontend catalog is 601,970 bytes with SHA-256
+  `86ac7bb3f9f6310385db52f6f77554d705985bd99e387ecb5fedd627c11994d7`, below the 1 MiB fixture
+  budget and the 32 MiB publication limit.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
 | H100/H200/B200/B300 | 1x8 NVLink, scale-up | 2x8 NVLink + RDMA, scale-out |
-| MI325X/MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
+| MI355X | 1x8 XGMI, scale-up | 2x8 XGMI + RDMA, scale-out |
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
@@ -71,7 +78,7 @@ unsupported for V1 publication because its currently functional fallback HCAs ar
 GPU-adjacent product fabric; this is an operational topology decision, not a library limitation.
 FlashInfer is excluded from v1 after repeatable intermittent execution failures; those failures are
 not converted into planned-unsupported coverage.
-MoRI EP8 uses MI325X AsyncLL or MI355X IntraNode in normal mode. EP16 uses pinned InterNodeV1 over
+MoRI EP8 uses MI355X IntraNode in normal mode. EP16 uses pinned InterNodeV1 over
 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external input. MoRI's
 AsyncLL transport is not the genuine low-latency suite contract and is never labeled as such.
 

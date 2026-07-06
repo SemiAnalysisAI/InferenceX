@@ -171,6 +171,21 @@ class QualificationPlanningTest(unittest.TestCase):
         ):
             sweep_matrix.qualification_execution_plan_sha256(tampered, 1)
 
+    def test_full_v1_execution_plans_match_the_frozen_digests(self) -> None:
+        matrix = sweep_matrix.validate_matrix_document(
+            sweep_matrix.resolve_matrix(suites="all", backends="all", max_cases=128)
+        )
+        self.assertEqual(
+            [
+                sweep_matrix.qualification_execution_plan_sha256(matrix, index)
+                for index in (1, 2, 3)
+            ],
+            [
+                sweep_matrix.CANONICAL_V1_EXECUTION_PLAN_SHA256[index]
+                for index in (1, 2, 3)
+            ],
+        )
+
     def test_frontend_catalog_covers_every_requested_case_and_point(self) -> None:
         catalog = sweep_matrix.frontend_catalog(self.matrix)
         self.assertEqual(catalog["format"], "collectivex.frontend-catalog.v1")

@@ -209,7 +209,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (54, 656, 379, 277, 1648, 916, 732),
+            (50, 664, 393, 271, 1532, 898, 634),
         )
         b300_ep16 = [
             item for item in unsupported_cases
@@ -244,7 +244,7 @@ class SamplingContractTest(unittest.TestCase):
             expected_topologies[sku, 16] = (
                 4, 4, 72, "scale-up", "mnnvl", None, "mnnvl", topology_class,
             )
-        for sku in ("mi325x", "mi355x"):
+        for sku in ("mi355x",):
             expected_topologies[sku, 8] = (
                 1, 8, 8, "scale-up", "xgmi", None, "xgmi", f"{sku}-xgmi",
             )
@@ -268,19 +268,21 @@ class SamplingContractTest(unittest.TestCase):
             {
                 (sku, ep): tuple(topology[field] for field in topology_fields)
                 for sku, platform in capability.PLATFORMS.items()
+                if sku != "mi325x"
                 for ep, topology in platform["topologies"].items()
             },
             expected_topologies,
         )
+        self.assertIsNotNone(capability.topology_for("mi325x", 8))
         self.assertEqual(
             Counter(shard["n"] for shard in matrix["include"]),
-            Counter({6: 39, 7: 1, 8: 1, 10: 13}),
+            Counter({6: 30, 7: 1, 8: 5, 10: 1, 12: 13}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
             if item["case"]["mode"] == "low-latency"
         ]
-        self.assertEqual(len(ll_cases), 80)
+        self.assertEqual(len(ll_cases), 76)
         self.assertTrue(all(
             item["case"]["backend"] in {"deepep", "uccl"}
             and item["case"]["phase"] == "decode"

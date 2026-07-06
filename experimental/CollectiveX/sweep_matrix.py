@@ -104,6 +104,11 @@ TOPOLOGY_FIELDS = (
     "scale_out_transport", "transport", "topology_class",
 )
 QUALIFICATION_INDICES = range(1, 4)
+CANONICAL_V1_EXECUTION_PLAN_SHA256 = {
+    1: "dd35bee6909a85761e069ebe83444a6f982eb571a4e61ad604a845ea7e4d10dc",
+    2: "fbc7262b3399225493f6c025c3bd2ceca52e90762bda1b6f6002683037094caf",
+    3: "5edc837858df2d7498229db30ec0d364f5b6cd7ca703790a8c83aabb09e6aff4",
+}
 
 
 class MatrixError(ValueError):

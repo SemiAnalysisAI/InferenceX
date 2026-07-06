@@ -25,7 +25,7 @@ on:
         type: string
         default: all
       only_sku:
-        description: Restrict to one GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi325x|mi355x); blank = all
+        description: Restrict to one V1 GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi355x); blank = all
         type: string
         default: ''
       probe_id:
@@ -215,7 +215,7 @@ jobs:
       - name: Create V1 release marker
         if: ${{ inputs.operation == 'sweep' && inputs.release_tag == 'v1' }}
         env:
-          EXPECTED_MATRIX_SHA256: f1ca85f9689922b90edd5767b9ff2a902f6b896f32f68b2ca086dde3fd2157d0
+          EXPECTED_MATRIX_SHA256: c6988c5e81239ace699541322a88a37bfd80819d8bc1a2446f928665cd3ebba0
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           SOURCE_SHA: ${{ github.sha }}
@@ -242,6 +242,10 @@ jobs:
           execution_plan_sha256 = sweep_matrix.qualification_execution_plan_sha256(
               json.loads(matrix), qualification_index
           )
+          if execution_plan_sha256 != sweep_matrix.CANONICAL_V1_EXECUTION_PLAN_SHA256.get(
+              qualification_index
+          ):
+              raise SystemExit("V1 release tag requires the locked execution plan")
           marker = {
               "execution_plan_sha256": execution_plan_sha256,
               "format": "collectivex.release-tag.v1",
