@@ -3023,7 +3023,7 @@ class SamplingContractTest(unittest.TestCase):
             )
             self.assertEqual(list(workspace.iterdir()), [])
 
-    def test_slurm_rendezvous_uses_relative_node_zero(self) -> None:
+    def test_slurm_rendezvous_uses_relative_node_zero_and_validated_interface(self) -> None:
         common = ROOT / "runtime" / "common.sh"
         command = r'''
           set -euo pipefail
@@ -3032,12 +3032,16 @@ class SamplingContractTest(unittest.TestCase):
           squeue() { return 91; }
           scontrol() { return 92; }
           srun() {
-            test "$*" = "--jobid=123 --nodes=1 --ntasks=1 --relative=0 --chdir=/tmp --export=HOME,PATH,USER hostname -s" \
-              || return 93
-            printf '%s\n' rank-zero-node
+            case "$*" in
+              *" bash -s -- eth0") printf '%s\n' 192.0.2.7 ;;
+              *" hostname -s") printf '%s\n' rank-zero-node ;;
+              *) return 93 ;;
+            esac
           }
+          CX_SOCKET_IFNAME=eth0
           cx_resolve_slurm_rendezvous 123
-          test "$MASTER_ADDR:$MASTER_PORT" = rank-zero-node:29551
+          test "$MASTER_ADDR:$MASTER_PORT" = 192.0.2.7:29551
+          unset CX_SOCKET_IFNAME
           CX_MASTER_PORT=30444
           cx_resolve_slurm_rendezvous 123
           test "$MASTER_ADDR:$MASTER_PORT" = rank-zero-node:30444

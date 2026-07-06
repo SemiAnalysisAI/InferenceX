@@ -961,15 +961,29 @@ cx_allocation_nodes_csv() {
 }
 
 cx_resolve_slurm_rendezvous() {
-  local job_id="$1" master_addr master_port
+  local job_id="$1" master_addr master_port socket_ifname="${CX_SOCKET_IFNAME:-}"
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || cx_die "invalid rendezvous allocation"
-  # Expanded Slurm nodelists may be sorted differently from task placement.
   # Query relative node zero directly so MASTER_ADDR always hosts global rank 0.
-  master_addr="$(srun --jobid="$job_id" --nodes=1 --ntasks=1 --relative=0 \
-    --chdir=/tmp --export="$(cx_host_exports)" hostname -s 2>/dev/null | head -n1)"
+  # Prefer the address on the already validated cross-node socket interface;
+  # a short hostname may resolve onto a management network that ranks cannot use.
+  if [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]]; then
+    master_addr="$(srun --jobid="$job_id" --nodes=1 --ntasks=1 --relative=0 \
+      --chdir=/tmp --export="$(cx_host_exports)" bash -s -- "$socket_ifname" \
+      2>/dev/null <<'BASH' | head -n1
+set -euo pipefail
+ip -o -4 address show dev "$1" scope global \
+  | awk 'NR == 1 {split($4, address, "/"); print address[1]}'
+BASH
+)"
+    [[ "$master_addr" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] \
+      || cx_die "could not resolve the allocated primary interface"
+  else
+    master_addr="$(srun --jobid="$job_id" --nodes=1 --ntasks=1 --relative=0 \
+      --chdir=/tmp --export="$(cx_host_exports)" hostname -s 2>/dev/null | head -n1)"
+    [[ "$master_addr" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
+      || cx_die "could not resolve the allocated primary node"
+  fi
   master_port="${CX_MASTER_PORT:-29551}"
-  [[ "$master_addr" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
-    || cx_die "could not resolve the allocated primary node"
   [[ "$master_port" =~ ^[1-9][0-9]*$ ]] && [ "$master_port" -le 65535 ] \
     || cx_die "invalid distributed rendezvous port"
   export MASTER_ADDR="$master_addr" MASTER_PORT="$master_port"
