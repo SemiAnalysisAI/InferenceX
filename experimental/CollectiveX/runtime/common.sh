@@ -2394,12 +2394,13 @@ cx_stage_repo() {
     || cx_die "cannot create the configured stage directory"
   cx_log "staging CollectiveX on compute-visible storage"
   log="$(cx_private_log_path repository-stage)"
-  if ! rsync -rl --delete --delete-excluded \
-      --exclude='__pycache__/' --exclude='results/' --exclude='.cx_workloads/' \
-      --exclude='.cx_backend/' --exclude='.cx_sources/' \
-      --exclude='configs/platforms.yaml' --exclude='private-infra.md' \
-      --exclude='goal.md' --exclude='notes.md' \
-      "$repo_root/experimental/CollectiveX" "$stage_dir/experimental/" > "$log" 2>&1; then
+  if ! tar -C "$repo_root/experimental" \
+      --exclude='CollectiveX/__pycache__' --exclude='CollectiveX/results' \
+      --exclude='CollectiveX/.cx_workloads' --exclude='CollectiveX/.cx_backend' \
+      --exclude='CollectiveX/.cx_sources' --exclude='CollectiveX/configs/platforms.yaml' \
+      --exclude='CollectiveX/private-infra.md' --exclude='CollectiveX/goal.md' \
+      --exclude='CollectiveX/notes.md' -cf - CollectiveX 2> "$log" \
+      | tar -C "$stage_dir/experimental" -xf - 2>> "$log"; then
     rm -rf -- "$stage_dir" >/dev/null 2>&1 \
       || cx_log "ERROR: cannot remove the incomplete execution stage"
     cx_fail_stage repository-stage "$log" || true

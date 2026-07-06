@@ -3235,7 +3235,7 @@ class SamplingContractTest(unittest.TestCase):
             )
             self.assertEqual(sentinel.read_text(), "keep")
 
-    def test_stage_removes_its_execution_child_when_rsync_fails(self) -> None:
+    def test_stage_removes_its_execution_child_when_tar_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             repo = root / "repo"
@@ -3244,10 +3244,10 @@ class SamplingContractTest(unittest.TestCase):
             (source / "public.py").write_text("public\n")
             base = root / "stage"
             base.mkdir(mode=0o700)
-            sentinel = root / "rsync-called"
+            sentinel = root / "tar-called"
             command = r'''
               source "$1"
-              rsync() { : > "$RSYNC_CALLED"; return 1; }
+              tar() { : > "$TAR_CALLED"; return 1; }
               staged="$(cx_stage_path "$2" "$3")"
               ! cx_stage_repo "$2" "$staged"
             '''
@@ -3263,7 +3263,7 @@ class SamplingContractTest(unittest.TestCase):
                     "COLLECTIVEX_CANONICAL_GHA": "1",
                     "COLLECTIVEX_EXECUTION_ID": f"test-{root.name}",
                     "CX_STAGE_DIR": str(base),
-                    "RSYNC_CALLED": str(sentinel),
+                    "TAR_CALLED": str(sentinel),
                 },
             )
             self.assertTrue(sentinel.is_file())
