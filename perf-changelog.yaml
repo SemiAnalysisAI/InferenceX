@@ -4446,6 +4446,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2001
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM image to nightly-09663abde0f50944a8d5ea30120666024b503faa"
+    - "Use --linear-backend emulation for the MXFP8 dense-linear path (beats the stock nightly native MXFP8 linear: ~+26% tput / -21% TPOT at 8k1k conc1, ~+2-3% at high concurrency)"
+    - "Add --max-num-batched-tokens 32768 (env MAX_NUM_BATCHED_TOKENS) to enlarge the per-step prefill budget and improve TP4 throughput at high concurrency"
+    - "Enable the AITER master switch for TP-only (no-EP) runs via --moe-backend aiter: the earlier degenerate-output issue that forced it off for TP-only is fixed by vllm-project/vllm#47158, so TP4 uses the AITER_MXFP8 MoE path (verified GSM8K 0.9613 flex / 0.9621 strict on this nightly)"
+    - "Simplify both search spaces to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8 and TP4/EP4: TP8 has poor throughput/GPU and plain TP4 matches or beats TP4/EP4 at high concurrency)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2003
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM MTP (EAGLE3) image to nightly-09663abde0f50944a8d5ea30120666024b503faa, which natively supports SupportsEagle3 (the in-place EAGLE3 patch is now a no-op) and carries vllm-project/vllm#47158"
+    - "Port the non-MTP serve-command tuning to the MTP recipe: --moe-backend aiter, --linear-backend emulation, --max-num-batched-tokens 32768, and the AITER master switch on for TP-only runs (kept --speculative-config eagle3 with 3 draft tokens)"
+    - "Simplify both search spaces to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8 and TP4/EP4, matching the non-MTP entry; verified locally on this nightly at TP4 conc512, 5120/5120 completed)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2003
+
+- config-keys:
     - dsv4-fp4-mi355x-atom
   description:
     - "Remove --hf-overrides use_index_cache/index_topk_freq indexer-skipping override from the ATOM serve command (not allowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)"
