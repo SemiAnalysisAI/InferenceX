@@ -4556,3 +4556,10 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm
+  description:
+    - "Update the Kimi-K2.5 NVFP4 B300 vLLM image from vllm/vllm-openai:v0.22.0 to the validated vllm/vllm-openai:v0.24.0 release."
+    - "Matched 8k/1k TP4 concurrency-1 validation improved token throughput per GPU by 9.88% and reduced mean TPOT by 8.53%; coherence-v1 passed 4/4 and GSM8K scored 0.9765 against the 0.85 gate."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

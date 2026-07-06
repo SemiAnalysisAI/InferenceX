@@ -2897,12 +2897,11 @@ kimik2.5-fp4-b200-vllm:
       - { tp: 8, ep: 1, conc-start: 1, conc-end: 4 }
       - { tp: 4, ep: 1, conc-start: 1, conc-end: 128 }
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this config reuses the existing
-# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+# Validated on 8x B300 with the v0.24.0 release while retaining the existing
+# serving configuration.
 
 kimik2.5-fp4-b300-vllm:
-  image: vllm/vllm-openai:v0.22.0
+  image: vllm/vllm-openai:v0.24.0
   model: nvidia/Kimi-K2.5-NVFP4
   model-prefix: kimik2.5
   runner: b300

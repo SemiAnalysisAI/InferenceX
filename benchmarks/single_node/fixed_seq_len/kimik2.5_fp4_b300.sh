@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-# NOTE: At the time of submission, https://docs.vllm.ai/projects/recipes/en/latest/moonshotai/Kimi-K2.5.html
-# does not have a B300-specific recipe, so this script reuses the existing
-# Kimi-K2.5 FP4 B200 vLLM recipe as-is until B300-specific tuning is available.
+# Validated on 8x B300 with vLLM v0.24.0 while retaining the existing serve
+# flags.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
