@@ -13,6 +13,23 @@ ENGINE="${ENGINE:-sglang-disagg}"
 export PYTHONDONTWRITEBYTECODE=1
 
 # =============================================================================
+# HiCache / Mooncake settings from job.slurm
+# =============================================================================
+# job.slurm writes the recipe-provided HiCache/Mooncake tunables to
+# hicache_mc_<JID>.env and mounts it read-only at /config/hicache_mc.env. Source
+# it here (auto-export) so values like HICACHE_PAGE_SIZE=256 reach the container
+# before server_sglang.sh applies its "${VAR:-default}" fallbacks. Without this
+# the vars arrive unset and server_sglang.sh defaults HICACHE_PAGE_SIZE to 1,
+# overriding the recipe's --page-size. Empty values in the file are harmless:
+# the "${VAR:-default}" fallbacks still treat "" as unset.
+if [[ -f /config/hicache_mc.env ]]; then
+    set -a
+    source /config/hicache_mc.env
+    set +a
+    echo "[env.sh] sourced HiCache config from /config/hicache_mc.env (HICACHE_PAGE_SIZE=${HICACHE_PAGE_SIZE:-unset})"
+fi
+
+# =============================================================================
 # Shared: IBDEVICES detection
 # =============================================================================
 
@@ -66,8 +83,12 @@ elif command -v nicctl &> /dev/null; then
 $1 == "DSCP" && $2 == ":" && $NF == p {
     print $3; exit
 }')
+    # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
+    # arithmetic can't choke and unparseable output falls back to hostname detection.
+    ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
+    ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
 
-    if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
+    if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
         TC=$(( 4 * ND_DSCP ))
         export MORI_RDMA_SL=$ND_PRIO
         export MORI_IO_SL=$ND_PRIO
@@ -149,7 +170,11 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
 $1 == "DSCP" && $2 == ":" && $NF == p {
     print $3; exit
 }')
-        if [[ -n "$ND_DSCP" ]] && [[ -n "$ND_PRIO" ]]; then
+        # nicctl may emit trailing commas (e.g. "24,"); keep the leading integer so the
+        # arithmetic can't choke and unparseable output falls back to hostname detection.
+        ND_PRIO="${ND_PRIO%%,*}"; ND_PRIO="${ND_PRIO//[!0-9]/}"
+        ND_DSCP="${ND_DSCP%%,*}"; ND_DSCP="${ND_DSCP//[!0-9]/}"
+        if [[ "$ND_DSCP" =~ ^[0-9]+$ ]] && [[ "$ND_PRIO" =~ ^[0-9]+$ ]]; then
             export UCX_IB_TRAFFIC_CLASS=$(( 4 * ND_DSCP ))
             export UCX_IB_SL=$ND_PRIO
             echo "[INFO] Detected QoS from nicctl: UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS, UCX_IB_SL=$UCX_IB_SL"
@@ -193,6 +218,15 @@ else
     export MORI_COMBINE_DTYPE_DECODE=fp8
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
+    # Keep these as overridable defaults (not hard assignments), otherwise
+    # later tuning blocks cannot raise them for high-concurrency runs.
+    export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+
+    export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
+    export MORI_IO_QP_MAX_CQE=32768
+    export MORI_IO_QP_MAX_SGE=1
+
+    export MORI_IO_TC_DISABLE=0
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
@@ -238,5 +272,65 @@ else
 
     # FIXME: WA for latest upstream 0305 image
     export PYTHONPATH=/sgl-workspace/aiter:${PYTHONPATH}
+
+    # =========================================================================
+    # DeepSeek-V4-Pro PD recipe overrides
+    # Placed at the end of the SGLang env block so it wins over the global
+    # MoRI/SGLang defaults set above. Mirrors the validated DSv4 manual PD
+    # commands (ported from InferenceX amd/dsv4_sgl_di). These SGLANG_OPT_* /
+    # AITER_* kernel-routing knobs steer DSv4 away from the default aiter CK
+    # fused-MoE path, which raises "Unsupported kernel config for moe heuristic
+    # dispatch" at decode time on this fp4 model (job 19034 crash). Only the
+    # SGLang/MoRI env knobs are pinned here; CLI flags live in models.yaml and
+    # the cluster NIC/socket vars stay runner-derived.
+    # =========================================================================
+    if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
+        # MoRI RDMA send-queue depth for DSv4 (overrides the global default above).
+        export MORI_IO_QP_MAX_SEND_WR=32767
+
+        # MoRI dispatch/combine dtypes: auto for both roles (not the fp8 split default)
+        export SGLANG_MORI_DISPATCH_DTYPE=auto
+        export MORI_COMBINE_DTYPE_PREFILL=auto
+        export MORI_COMBINE_DTYPE_DECODE=auto
+
+        # Per-role MoRI dispatch sizing (used by the harness chunked/MoE math)
+        export MORI_MAX_DISPATCH_TOKENS_PREFILL=8192
+        export MORI_MAX_DISPATCH_TOKENS_DECODE=64
+        unset MORI_MOE_MAX_INPUT_TOKENS_PREFILL
+        unset MORI_MOE_MAX_INPUT_TOKENS_DECODE
+
+        # PER_RANK dispatch tokens pinned independently (16384 prefill / 128
+        # decode); server_sglang.sh prefers these over the MORI_MAX_DISPATCH_*
+        # coupling when set.
+        export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_PREFILL=16384
+        export MORI_NUM_MAX_DISPATCH_TOKENS_PER_RANK_DECODE=128
+
+        # Fixed inter-kernel switch threshold (not derived).
+        export SGLANG_MORI_DISPATCH_INTER_KERNEL_SWITCH_THRESHOLD=4096
+
+        # Overlap plan stream on for DSv4 (global default is 0)
+        export SGLANG_ENABLE_OVERLAP_PLAN_STREAM=0
+
+        # DSv4 model kernel routing (mirrors the single-node / manual PD recipe)
+        export SGLANG_DEFAULT_THINKING=1
+        export SGLANG_DSV4_REASONING_EFFORT=max
+        export SGLANG_USE_ROCM700A=0
+        export SGLANG_HACK_FLASHMLA_BACKEND=triton
+        export SGLANG_OPT_DEEPGEMM_HC_PRENORM=false
+        export SGLANG_OPT_USE_FUSED_COMPRESS=true
+        export SGLANG_OPT_USE_FUSED_COMPRESS_TRITON=true
+        export SGLANG_OPT_FP8_WO_A_GEMM=false
+        export SGLANG_OPT_USE_JIT_INDEXER_METADATA=false
+        export SGLANG_OPT_USE_TOPK_V2=false
+        export SGLANG_OPT_USE_AITER_INDEXER=true
+        export SGLANG_OPT_USE_TILELANG_INDEXER=false
+        export SGLANG_OPT_USE_TILELANG_MHC_PRE=false
+        export SGLANG_OPT_USE_TILELANG_MHC_POST=false
+        export SGLANG_FP8_PAGED_MQA_LOGITS_TORCH=1
+        export SGLANG_OPT_USE_MULTI_STREAM_OVERLAP=false
+        export SGLANG_ROCM_USE_MULTI_STREAM=false
+        export AITER_BF16_FP8_MOE_BOUND=0
+        export SGLANG_EAGER_INPUT_NO_COPY=true
+    fi
 
 fi

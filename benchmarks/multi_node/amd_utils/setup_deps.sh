@@ -368,10 +368,10 @@ PYEOF
 # must be strictly larger than the device pool, which kills startup when the
 # host pool is sized smaller. Turn the hard assert into a warning so the server
 # starts (lower L2 hit rate is acceptable).
-# Gated by MC_PATCH_HOSTPOOL=1 and OFFLOADING=hicache.
+# Gated by MC_PATCH_HOSTPOOL=1 and KV_OFFLOADING=dram/KV_OFFLOAD_BACKEND=hicache.
 # ---------------------------------------------------------------------------
 patch_memory_pool_host_assert() {
-    if [[ "${MC_PATCH_HOSTPOOL:-0}" != "1" || "${OFFLOADING:-none}" != "hicache" ]]; then
+    if [[ "${MC_PATCH_HOSTPOOL:-0}" != "1" || "${KV_OFFLOADING:-none}" == "none" || "${KV_OFFLOAD_BACKEND:-}" != "hicache" ]]; then
         return 0
     fi
     echo "[SETUP] Patching memory_pool_host.py host>device assert -> warning ..."
