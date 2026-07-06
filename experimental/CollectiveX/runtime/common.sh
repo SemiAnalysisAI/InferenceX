@@ -298,6 +298,17 @@ def valid_path(value):
         and posixpath.normpath(value) == value and not IPV4.search(value)
     )
 
+def bounded_integer(value, maximum):
+    if type(value) is int:
+        result = value
+    elif isinstance(value, str) and re.fullmatch(r"0|[1-9][0-9]{0,2}", value):
+        result = int(value)
+    else:
+        raise ValueError
+    if not 0 <= result <= maximum:
+        raise ValueError
+    return result
+
 try:
     path, runner, audit_required, audit_override = sys.argv[1:]
     if runner not in RUNNERS or audit_required not in {"0", "1"}:
@@ -382,14 +393,11 @@ try:
                 if not isinstance(value, str) or not RDMA_DEVICES.fullmatch(value):
                     raise ValueError
             elif field == "ib_gid_index":
-                if type(value) is not int or not 0 <= value <= 255:
-                    raise ValueError
+                config[field] = bounded_integer(value, 255)
             elif field == "rdma_service_level":
-                if type(value) is not int or not 0 <= value <= 15:
-                    raise ValueError
+                config[field] = bounded_integer(value, 15)
             elif field == "rdma_traffic_class":
-                if type(value) is not int or not 0 <= value <= 255:
-                    raise ValueError
+                config[field] = bounded_integer(value, 255)
             elif field.endswith(("_dir", "_path")):
                 if not valid_path(value):
                     raise ValueError

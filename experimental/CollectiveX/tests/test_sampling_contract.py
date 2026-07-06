@@ -538,14 +538,16 @@ class SamplingContractTest(unittest.TestCase):
                     "h100-dgxc": {
                         "partition": "test", "account": "test",
                         "squash_dir": str(root), "stage_dir": str(root),
-                        "rdma_traffic_class": 104,
+                        "ib_gid_index": "3", "rdma_service_level": "2",
+                        "rdma_traffic_class": "104",
                     },
                 },
             }
             command = (
                 'source "$1"; export COLLECTIVEX_EXECUTION_ID="audit-config-$$"; '
                 "trap 'cx_cleanup_private_logs 0' EXIT; cx_load_operator_config; "
-                'test "$CX_AUDIT_SALT" = "$EXPECTED_AUDIT_SALT"'
+                'test "$CX_AUDIT_SALT" = "$EXPECTED_AUDIT_SALT"; '
+                'test "$CX_IB_GID_INDEX:$CX_RDMA_SERVICE_LEVEL:$CX_RDMA_TRAFFIC_CLASS" = 3:2:104'
             )
 
             def invoke(
@@ -610,6 +612,16 @@ class SamplingContractTest(unittest.TestCase):
             rejected = invoke(missing_field, canonical=True)
             self.assertNotEqual(rejected.returncode, 0)
             self.assertIn("validation-missing-required-account", rejected.stderr)
+
+            for field, value in (
+                ("ib_gid_index", "03"),
+                ("rdma_service_level", "16"),
+                ("rdma_traffic_class", "256"),
+            ):
+                invalid_selector = copy.deepcopy(document)
+                invalid_selector["runners"]["h100-dgxc"][field] = value
+                rejected = invoke(invalid_selector, canonical=True)
+                self.assertNotEqual(rejected.returncode, 0)
 
     def test_scaleout_network_profile_is_explicit_and_allowlisted(self) -> None:
         command = r'''
