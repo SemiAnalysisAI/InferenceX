@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K2.5 FP4 on MI355X using vLLM.
+# Agentic trace replay benchmark for Kimi-K2.7 FP4 on MI355X using vLLM.
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
@@ -71,6 +71,9 @@ if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MLA=0
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
+export VLLM_ROCM_USE_AITER_FP4BMM=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 # ---- Server config ----------------------------------------------------------
@@ -254,6 +257,9 @@ if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
 fi
 
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_MLA=0
+export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=0
+export VLLM_ROCM_USE_AITER_FP4BMM=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 
 { set +x; } 2>/dev/null
