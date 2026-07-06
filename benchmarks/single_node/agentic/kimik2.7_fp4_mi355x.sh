@@ -218,7 +218,7 @@ print('lmcache', lmcache.__version__, '| cupy', cupy.__version__, '| is_hip =', 
     # long-context agentic queue can spend minutes between lookup and retrieve
     # while GPU KV is saturated, which otherwise expires the lease.
     LMCACHE_L1_READ_TTL_SECONDS="${LMCACHE_L1_READ_TTL_SECONDS:-7200}"
-    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
+    LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-32}"
     LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
     export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
     export LMCACHE_BLOCKING_TIMEOUT_SECS=120
