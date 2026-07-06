@@ -209,7 +209,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (47, 748, 380, 368, 1740, 854, 886),
+            (49, 748, 392, 356, 1740, 882, 858),
         )
         b300_ep16 = [
             item for item in unsupported_cases
@@ -276,7 +276,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIsNotNone(capability.topology_for("mi325x", 8))
         self.assertEqual(
             Counter(shard["n"] for shard in matrix["include"]),
-            Counter({6: 27, 8: 5, 10: 1, 12: 14}),
+            Counter({6: 29, 8: 5, 10: 1, 12: 14}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]

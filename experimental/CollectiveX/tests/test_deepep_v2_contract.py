@@ -388,11 +388,12 @@ class DeepEPV2ContractTests(unittest.TestCase):
         functions = {
             node.name: node for node in self.tree.body if isinstance(node, ast.FunctionDef)
         }
-        namespace = {"os": os}
+        namespace = {"os": os, "_GIN_QP_BUDGET": 512}
         exec(
             compile(
                 ast.Module(
                     body=[
+                        functions["_hybrid_num_allocated_qps"],
                         functions["_configure_gin_mode"],
                         functions["_lsa_topology_is_valid"],
                     ],
@@ -403,8 +404,13 @@ class DeepEPV2ContractTests(unittest.TestCase):
             ),
             namespace,
         )
+        allocate_qps = namespace["_hybrid_num_allocated_qps"]
         configure = namespace["_configure_gin_mode"]
         topology_is_valid = namespace["_lsa_topology_is_valid"]
+        self.assertEqual(
+            [allocate_qps(world_size) for world_size in (8, 16, 32, 64)],
+            [65, 33, 17, 9],
+        )
         original = os.environ.get("EP_DISABLE_GIN")
         try:
             args = types.SimpleNamespace(scale_up_domain=72, gpus_per_node=4)

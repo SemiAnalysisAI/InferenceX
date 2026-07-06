@@ -187,12 +187,6 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ("b200-dgxc", "deepep-hybrid", 16): (
         "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200"
     ),
-    ("b200-dgxc", "deepep-v2", 16): (
-        "DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the B200 fabric"
-    ),
-    ("h200-dgxc", "deepep-v2", 16): (
-        "DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the H200 fabric"
-    ),
     ("mi355x", "mori", 8): (
         "Pinned MoRI backend construction does not complete on MI355X EP8"
     ),

@@ -227,7 +227,7 @@ class QualificationPlanningTest(unittest.TestCase):
             documents = [json.loads(path.read_text()) for path in written]
 
         self.assertEqual(len(documents), len(expected))
-        self.assertEqual(len(documents), 368)
+        self.assertEqual(len(documents), 356)
         self.assertEqual(
             {document["outcome"]["reason"] for document in documents},
             {item["reason"] for item in expected},
