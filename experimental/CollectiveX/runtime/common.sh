@@ -1261,11 +1261,15 @@ cx_salloc_jobid() {
         ;;
     esac
   done
-  job_name="$(cx_scheduler_job_name)" || return 1
+  if ! job_name="$(cx_scheduler_job_name)"; then
+    cx_log "ERROR: failure-class=scheduler-allocation diagnostic=job-name"
+    return 1
+  fi
   CX_ALLOCATION_UNCERTAIN=1
   # salloc has no portable --parsable option. Parse the stable grant message
   # used by the production launchers, while also accepting a bare ID from
   # site wrappers.
+  cx_log "scheduler-request=submit"
   salloc "$@" --job-name="$job_name" --no-shell > "$log" 2>&1 || salloc_rc=$?
   job_id="$(sed -nE \
     -e 's/^([0-9]+)(;[^[:space:]]+)?$/\1/p' \

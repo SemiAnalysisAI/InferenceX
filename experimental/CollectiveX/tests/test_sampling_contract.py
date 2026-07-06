@@ -1349,6 +1349,7 @@ class SamplingContractTest(unittest.TestCase):
                 "--no-shell",
             ],
         )
+        self.assertIn("scheduler-request=submit", result.stderr)
         self.assertEqual(scenario["squeue_calls"], [])
 
     def test_salloc_verified_rejection_is_cleanup_safe(self) -> None:
