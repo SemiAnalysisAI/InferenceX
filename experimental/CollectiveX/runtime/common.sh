@@ -68,10 +68,10 @@ cx_fail_stage() {
       diagnostic="backend-dependency"
     elif grep -aEqi 'revision fetch failed|submodule fetch failed|package installation failed|staged source is invalid|source (pin resolution|seed validation|seed copy|checkout creation|publication validation|existing source validation) failed' "$log_path"; then
       diagnostic="backend-source"
+    elif grep -aEqi 'backend preparation failed|backend import failed|build (failed|is incomplete)|cache (mount identity )?validation failed|import failed' "$log_path"; then
+      diagnostic="backend-build"
     elif grep -aEqi 'failed to mount|squashfs|enroot|pyxis|mount.*invalid argument|invalid argument.*mount' "$log_path"; then
       diagnostic="container-runtime"
-    elif grep -aEqi 'backend preparation failed|build (failed|is incomplete)|cache (mount identity )?validation failed|import failed' "$log_path"; then
-      diagnostic="backend-build"
     elif grep -aEqi 'command not found|not found on this runner|git lookup failed' "$log_path"; then
       diagnostic="missing-runtime"
     elif grep -aEqi 'too many requests|rate.?limit' "$log_path"; then

@@ -957,7 +957,8 @@ cx_prepare_backend() {
       cx_build_uccl || return 1
       ;;
     mori)
-      python3 -c "import mori" 2>/dev/null || return 1
+      python3 -c "import mori" \
+        || { cx_log "ERROR: MoRI backend import failed"; return 1; }
       ;;
     nccl-ep)
       ;;

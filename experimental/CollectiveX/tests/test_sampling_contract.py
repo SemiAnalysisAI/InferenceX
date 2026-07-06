@@ -2643,6 +2643,26 @@ class SamplingContractTest(unittest.TestCase):
             self.assertNotIn("diagnostic=network-or-timeout", result.stderr)
             self.assertIn("diagnostic=benchmark-case-failure", result.stderr)
 
+    def test_backend_import_failure_precedes_container_cleanup_noise(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "runtime.log"
+            log.write_text(
+                "ERROR: MoRI backend import failed\n"
+                "pyxis: failed to mount container cleanup path: invalid argument\n"
+            )
+            result = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; cx_fail_stage backend-setup "$2"',
+                    "_", str(ROOT / "runtime" / "common.sh"), str(log),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("diagnostic=backend-build", result.stderr)
+            self.assertNotIn("diagnostic=container-runtime", result.stderr)
+
     def test_precision_probe_timeout_reports_only_the_last_closed_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             log = Path(temporary) / "runtime.log"
