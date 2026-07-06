@@ -26,6 +26,7 @@ from utils.agentic.aggregation.request_metrics import (
     load_aggregate,
     load_records,
 )
+from utils.agentic.aggregation.process_agentic_result import _gpu_shape
 from utils.agentic.aggregation.server_metrics import (
     compute_server_metrics,
     load_server_metrics,
@@ -308,6 +309,8 @@ def _run_processor(
     env_overrides: dict[str, str] | None = None,
 ) -> dict:
     env = os.environ.copy()
+    env.pop("PREFILL_HARDWARE", None)
+    env.pop("DECODE_HARDWARE", None)
     env.update(
         {
             "RESULT_DIR": str(result_dir),
@@ -451,6 +454,70 @@ def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
     )
 
     assert agg["allocated_cpu_dram_gb"] == 2400
+
+
+def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "PREFILL_EP": "8",
+            "PREFILL_DP_ATTN": "false",
+            "PREFILL_HARDWARE": "b200",
+            "DECODE_NUM_WORKERS": "2",
+            "DECODE_TP": "8",
+            "DECODE_EP": "8",
+            "DECODE_DP_ATTN": "false",
+            "DECODE_HARDWARE": "h100",
+        },
+    )
+
+    assert agg["prefill_hw"] == "b200"
+    assert agg["decode_hw"] == "h100"
+
+
+def test_multinode_processor_omits_homogeneous_hardware(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "DECODE_NUM_WORKERS": "2",
+            "DECODE_TP": "8",
+        },
+    )
+
+    assert "prefill_hw" not in agg
+    assert "decode_hw" not in agg
+
+
+@pytest.mark.parametrize(
+    ("present_var", "missing_var"),
+    [
+        ("PREFILL_HARDWARE", "DECODE_HARDWARE"),
+        ("DECODE_HARDWARE", "PREFILL_HARDWARE"),
+    ],
+)
+def test_multinode_processor_rejects_one_sided_hardware(
+    monkeypatch: pytest.MonkeyPatch,
+    present_var: str,
+    missing_var: str,
+):
+    monkeypatch.setenv("IS_MULTINODE", "true")
+    monkeypatch.setenv(present_var, "b200")
+    monkeypatch.delenv(missing_var, raising=False)
+
+    with pytest.raises(SystemExit, match="must be specified together"):
+        _gpu_shape()
 
 
 def test_processor_surfaces_request_accounting(tmp_path: Path):

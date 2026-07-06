@@ -106,6 +106,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
@@ -145,6 +147,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
@@ -221,6 +225,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
