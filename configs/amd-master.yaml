@@ -2149,7 +2149,7 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
 # comparability. Offload sweep is none-only (SGLang has no equivalent of
 # vLLM's SimpleCPUOffloadConnector path that we exercise on b200).
 dsv4-fp4-mi355x-vllm-agentic:
-  image: vllm/vllm-openai-rocm:nightly-34b560b725b401f33477464163244b4744d1c40f
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: cluster:mi355x-amds

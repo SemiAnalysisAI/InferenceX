@@ -316,7 +316,7 @@ EOF
         LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
-        export LMCACHE_BLOCKING_TIMEOUT_SECS=120
+        export LMCACHE_BLOCKING_TIMEOUT_SECS=600
 
         echo "Starting LMCache MP server..."
         LMCACHE_CMD=(
@@ -342,7 +342,7 @@ EOF
         PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
+            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT,\"lmcache.mp.mq_timeout\":600.0}}"
         )
     ;;
   *)
@@ -370,7 +370,7 @@ MAX_NUM_SEQS=$((2 * CONC))
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+#export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
 
 { set +x; } 2>/dev/null
@@ -384,6 +384,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
+    --gpu-memory-utilization 0.8 
     --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --tokenizer-mode deepseek_v4
