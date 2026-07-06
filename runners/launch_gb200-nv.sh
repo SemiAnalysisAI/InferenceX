@@ -57,7 +57,11 @@ elif [[ $FRAMEWORK == "dynamo-vllm" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/kimi-k2.5-nvfp4"
         export SRT_SLURM_MODEL_PREFIX="kimi-k2.5-nvfp4"
     elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
+        # The FP4 checkpoint is staged on compute-visible Lustre. The former
+        # /mnt/numa1 path is no longer present on watchtower compute nodes;
+        # the lowercase Lustre sibling is the FP8 checkpoint, so keep the
+        # NVFP4 path explicit here.
+        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4/"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
     elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/MiniMax-M2.5-NVFP4"
@@ -271,8 +275,21 @@ fi
 
 # TODO(CJQ): make first class upon srt-slurm upstream refactor
 if [[ "$IS_AGENTIC" == "1" ]]; then
-    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
+    # Agentic multi-node uses the same pinned cquil11/srt-slurm-nv commit as
+    # launch_gb300-nv.sh — everything the agentic recipes need is there:
+    #   - BenchmarkType.CUSTOM + benchmark.command + benchmark.env
+    #     (the hook that hands off to benchmarks/multi_node/agentic_srt.sh)
+    #   - DynamoConfig.wheel (recipes pin the ai-dynamo wheel)
+    #   - srtctl apply --no-preflight (model path /mnt/numa1 is compute-node
+    #     local NVMe, invisible to the login-node runner)
+    #   - benchmark_stage srun_options propagation (container-remap-root
+    #     must reach the agentic_srt.sh srun)
+    git clone https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
+    git checkout de59739b172e507e15ebf145bfe305f606e82fbf
+    mkdir -p recipes/vllm/deepseek-v4/agentic
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4/agentic" \
+        recipes/vllm/deepseek-v4/agentic
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
@@ -301,20 +318,6 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm2.5" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout main || exit 1
-    if [[ $PRECISION == "fp8" ]]; then
-        mkdir -p recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200-fp8" recipes/vllm/minimax-m2.5-gb200-fp8 || exit 1
-    elif [[ $PRECISION == "fp4" ]]; then
-        mkdir -p recipes/vllm/minimax-m2.5-gb200 || exit 1
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m2.5-gb200" recipes/vllm/minimax-m2.5-gb200 || exit 1
-    else
-        echo "Unsupported minimaxm2.5 precision for GB200 dynamo-vllm: $PRECISION" >&2
-        exit 1
-    fi
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
@@ -377,6 +380,24 @@ SRTCTL_ROOT="${GITHUB_WORKSPACE}/srt-slurm"
 if uses_watchtower_shared_fs; then
     SRTCTL_ROOT="$SRT_REPO_DIR"
 fi
+
+# Agentic runs bind-mount two persistent caches into every worker container
+# (Lustre, shared across nodes): aiperf's content-addressed dataset mmap
+# cache (~65 GB per corpus, re-tokenized from scratch without it) and the
+# HF hub cache holding the trace dataset download. The container-side paths
+# are referenced by the agentic recipes' benchmark.env
+# (AIPERF_DATASET_MMAP_CACHE_DIR=/aiperf_mmap_cache, HF_HUB_CACHE=/hf_hub_cache).
+DEFAULT_MOUNTS_BLOCK=""
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    AIPERF_MMAP_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/ai-perf-cache"
+    HF_HUB_CACHE_HOST_PATH="/mnt/lustre01/users-public/sa-shared/hf-hub-cache"
+    mkdir -p "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH"
+    chmod 777 "$AIPERF_MMAP_CACHE_HOST_PATH" "$HF_HUB_CACHE_HOST_PATH" 2>/dev/null || true
+    DEFAULT_MOUNTS_BLOCK="default_mounts:
+  ${AIPERF_MMAP_CACHE_HOST_PATH}: /aiperf_mmap_cache
+  ${HF_HUB_CACHE_HOST_PATH}: /hf_hub_cache"
+fi
+
 echo "Creating srtslurm.yaml configuration..."
 cat > srtslurm.yaml <<EOF
 # SRT SLURM Configuration for GB200
@@ -401,6 +422,15 @@ containers:
   dynamo-sglang: ${SQUASH_FILE}
   "${IMAGE}": ${SQUASH_FILE}
   nginx-sqsh: ${NGINX_SQUASH_FILE}
+# srtctl defaults this to true, which adds #SBATCH --segment=<total_nodes>.
+# On watchtower the whole batch partition (blue-cn01-18) is a single NVL72
+# rack, so segment contiguity buys nothing for MNNVL — but it DOES make
+# jobs unschedulable when the partition is fragmented: Slurm backfills a
+# non-contiguous node set, fails segment placement at start, and the job
+# dies with "CANCELLED Reason=Resources" at RunTime=0 (hit by the first
+# gb200 agentic run, job 18582). Mirror launch_gb300-nv.sh and disable.
+use_segment_sbatch_directive: false
+${DEFAULT_MOUNTS_BLOCK}
 EOF
 
 echo "Generated srtslurm.yaml:"
@@ -432,16 +462,36 @@ fi
 
 echo "Submitting job with srtctl..."
 
-# Override the job name in the config file with the runner name
+# Resolve the recipe path before editing or submitting it.
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 if [[ ! -f "$CONFIG_PATH" ]]; then
     echo "Error: CONFIG_FILE does not exist after srt-slurm setup: $CONFIG_PATH" >&2
     echo "Current directory: $(pwd)" >&2
     exit 1
 fi
+
+# Keep the Slurm job name aligned with the GitHub runner name.
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
+# Don't leak the login-node venv to the compute-node orchestrator. sbatch's
+# default --export=ALL propagates VIRTUAL_ENV (set by `source
+# .venv/bin/activate` above) into job_script_minimal.j2, whose
+# `uv run` step then tries to inspect the *active* venv — and dies with
+# "Broken symlink at .venv/bin/python3" because the login-node interpreter
+# path doesn't exist on compute nodes (gb200 agentic R2, job 18587).
+# srtctl itself still resolves through PATH (.venv/bin is on it).
+unset VIRTUAL_ENV
+
+# --no-preflight is only used on the agentic path, where the recipe resolves
+# model.path to /mnt/numa1 (compute-node-only NVMe) that the login-node
+# runner can't see. Fixed-seq-len recipes keep enforcement on.
+PREFLIGHT_ARGS=()
+if [[ "$IS_AGENTIC" == "1" ]]; then
+    PREFLIGHT_ARGS=(--no-preflight)
+fi
+
 SRTCTL_APPLY_ARGS=(
+    "${PREFLIGHT_ARGS[@]}"
     -f "$CONFIG_PATH"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
