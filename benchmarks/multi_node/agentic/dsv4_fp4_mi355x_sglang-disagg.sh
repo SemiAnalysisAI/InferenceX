@@ -30,7 +30,7 @@ check_env_vars \
     DECODE_NODES \
     RANDOM_RANGE_RATIO \
     DURATION \
-    OFFLOADING \
+    KV_OFFLOADING \
     IS_AGENTIC \
     FRAMEWORK
 
@@ -69,11 +69,16 @@ export MORI_CONN_PATCH="${MORI_CONN_PATCH:-skip}"
 export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-0}"
 
 # ── KV cache offloading (HiCache) ──
-# OFFLOADING=hicache | none (passed from YAML; default none for disagg).
+# KV_OFFLOADING=none | dram (passed from YAML; default none for disagg).
+# KV_OFFLOAD_BACKEND selects the backend when offloading is on; this recipe
+# only implements HiCache, so "hicache" is the only supported value.
 # HICACHE_TIER: L2 -> GPU + CPU-DRAM host pool. L3 -> + Mooncake store.
-export OFFLOADING="${OFFLOADING:-none}"
+export KV_OFFLOADING="${KV_OFFLOADING:-none}"
+if [[ "$KV_OFFLOADING" != "none" ]]; then
+  export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-hicache}"
+fi
 # HiCache/Mooncake tunables only matter when KV offloading is enabled.
-if [[ "$OFFLOADING" == "hicache" ]]; then
+if [[ "$KV_OFFLOADING" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" ]]; then
   export HICACHE_TIER="${HICACHE_TIER:-L2}"
   export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
   # DSV4 uses page-size 256 (set in models.yaml); HiCache must match.

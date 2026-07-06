@@ -413,13 +413,15 @@ if [[ -n "$MODEL_NAME" ]]; then
 fi
 
 # =============================================================================
-# Optional KV cache offloading (HiCache) — enabled when OFFLOADING=hicache
+# Optional KV cache offloading (HiCache) — enabled when
+# KV_OFFLOADING != none AND KV_OFFLOAD_BACKEND == hicache.
 # HiCache extends RadixAttention, so radix cache MUST stay on (drop
 # --disable-radix-cache). The --hicache-* flags are appended to BOTH the
 # prefill and decode server configs.
 # =============================================================================
-OFFLOADING="${OFFLOADING:-none}"
-if [[ "$OFFLOADING" == "hicache" ]]; then
+KV_OFFLOADING="${KV_OFFLOADING:-none}"
+KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-}"
+if [[ "$KV_OFFLOADING" != "none" && "$KV_OFFLOAD_BACKEND" == "hicache" ]]; then
     HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-2000}"
     HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
     HICACHE_PAGE_SIZE="${HICACHE_PAGE_SIZE:-1}"
@@ -486,13 +488,13 @@ if [[ "$OFFLOADING" == "hicache" ]]; then
 
 
     DECODE_SERVER_CONFIG="$DECODE_SERVER_CONFIG --page-size ${HICACHE_PAGE_SIZE}"
-    echo "[HiCache] OFFLOADING=hicache applied to prefill only; decode mirrors --page-size ${HICACHE_PAGE_SIZE} for transfer compatibility (chunk cache under the mori transfer backend)"
+    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND} applied to prefill only; decode mirrors --page-size ${HICACHE_PAGE_SIZE} for transfer compatibility (chunk cache under the mori transfer backend)"
     echo "[HiCache] params: io_backend=${HICACHE_IO_BACKEND}, mem_layout=${HICACHE_MEM_LAYOUT}, page_size=${HICACHE_PAGE_SIZE}, write_policy=${HICACHE_WRITE_POLICY}, prefetch_policy=${HICACHE_PREFETCH_POLICY}, storage_backend=${HICACHE_STORAGE_BACKEND:-none}"
     if [[ "$HICACHE_STORAGE_BACKEND" == "mooncake" ]]; then
         echo "[HiCache] Mooncake store: master=${MC_MASTER_ADDR} metadata=${MC_METADATA_SERVER} protocol=${MC_PROTOCOL} device=${MC_DEVICE} segment=${MC_GLOBAL_SEG} threads=${MC_MASTER_THREADS} eviction_watermark=${MC_EVICTION_HIGH_WATERMARK}"
     fi
 else
-    echo "[HiCache] OFFLOADING=${OFFLOADING} (HiCache disabled)"
+    echo "[HiCache] KV_OFFLOADING=${KV_OFFLOADING} backend=${KV_OFFLOAD_BACKEND:-none} (HiCache disabled)"
 fi
 
 if [[ "${EVAL_ONLY:-false}" == "true" ]] || [[ "${RUN_EVAL:-false}" == "true" ]]; then
@@ -552,7 +554,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     # Start the Mooncake store master (L3 HiCache backend) on node 0 only.
     # All prefill/decode servers connect to it via NODE0_ADDR:MC_MASTER_PORT.
-    if [[ "${OFFLOADING:-none}" == "hicache" && "${HICACHE_STORAGE_BACKEND:-}" == "mooncake" ]]; then
+    if [[ "${KV_OFFLOADING:-none}" != "none" && "${KV_OFFLOAD_BACKEND:-}" == "hicache" && "${HICACHE_STORAGE_BACKEND:-}" == "mooncake" ]]; then
         echo "Starting Mooncake master on ${host_ip}:${MC_MASTER_PORT} (metadata :${MC_METADATA_PORT}, metrics :${MC_METRICS_PORT})"
         MC_MASTER_CMD="mooncake_master \
         --enable_http_metadata_server=true \
@@ -748,7 +750,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
         # trace_replay.sh signature: model_path model_name concurrency_list log_path
         BENCH_CMD="bash $SGLANG_WS_PATH/trace_replay.sh \
             $MODEL_DIR $MODEL_NAME $BENCH_MAX_CONCURRENCY /run_logs/slurm_job-${SLURM_JOB_ID}"
-        echo "Benchmark runner: trace_replay.sh (agentic, OFFLOADING=${OFFLOADING:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
+        echo "Benchmark runner: trace_replay.sh (agentic, KV_OFFLOADING=${KV_OFFLOADING:-none}, backend=${KV_OFFLOAD_BACKEND:-none}, CONC=${BENCH_MAX_CONCURRENCY})"
     else
         # bench.sh signature:
         # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path

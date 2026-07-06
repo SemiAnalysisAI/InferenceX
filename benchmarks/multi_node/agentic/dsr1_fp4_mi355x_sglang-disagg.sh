@@ -30,7 +30,7 @@ check_env_vars \
     DECODE_NODES \
     RANDOM_RANGE_RATIO \
     DURATION \
-    OFFLOADING \
+    KV_OFFLOADING \
     IS_AGENTIC \
     FRAMEWORK
 
@@ -82,9 +82,14 @@ export DISABLE_CUSTOM_ALL_REDUCE="${DISABLE_CUSTOM_ALL_REDUCE:-1}"
 export MORI_CONN_PATCH="${MORI_CONN_PATCH:-skip}"
 
 # ── KV cache offloading (HiCache) ──
-# OFFLOADING=hicache (default for this recipe) | none. HICACHE_TIER:
+# KV_OFFLOADING=dram (default for this recipe) | none. KV_OFFLOAD_BACKEND
+# selects the backend when offloading is on; this recipe only implements
+# HiCache. HICACHE_TIER:
 #   L2 -> GPU + CPU-DRAM host pool only.   L3 -> + Mooncake distributed KV store.
-export OFFLOADING="${OFFLOADING:-hicache}"
+export KV_OFFLOADING="${KV_OFFLOADING:-dram}"
+if [[ "$KV_OFFLOADING" != "none" ]]; then
+  export KV_OFFLOAD_BACKEND="${KV_OFFLOAD_BACKEND:-hicache}"
+fi
 export HICACHE_TIER="${HICACHE_TIER:-L3}"
 export HICACHE_TOTAL_CPU_DRAM_GB="${HICACHE_TOTAL_CPU_DRAM_GB:-64}"
 export HICACHE_HOST_POOL_COUNT="${HICACHE_HOST_POOL_COUNT:-1}"
