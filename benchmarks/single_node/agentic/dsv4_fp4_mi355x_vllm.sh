@@ -324,12 +324,6 @@ fi
 # leave 2x headroom rather than clipping those bursts at the scheduler.
 MAX_NUM_SEQS=$((2 * CONC))
 
-# Workaround for MEC FW <177 RCCL memory reclaim issue
-version=$(rocm-smi --showfw 2>/dev/null | grep MEC | head -n 1 | awk '{print $NF}')
-if [[ "$version" == "" || ${version:-0} -lt 177 ]]; then
-    export HSA_NO_SCRATCH_RECLAIM=1
-fi
-
 echo "Starting vllm server..."
 set -x
 export VLLM_ROCM_USE_AITER=1
@@ -346,12 +340,13 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     "${PARALLEL_ARGS[@]}"
     "${EP_ARGS[@]}"
-    --moe-backend triton_unfused
+    --gpu-memory-utilization 0.95
+    --moe-backend aiter
     --compilation-config '{"mode":3,"cudagraph_mode":"FULL_AND_PIECEWISE"}'
     --tokenizer-mode deepseek_v4
     --tool-call-parser deepseek_v4
-    --enable-auto-tool-choice
     --reasoning-parser deepseek_v4
+    --enable-auto-tool-choice
     --enable-prefix-caching
     --no-disable-hybrid-kv-cache-manager
     --max-num-seqs "$MAX_NUM_SEQS"
