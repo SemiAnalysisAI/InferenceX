@@ -333,9 +333,6 @@ minimaxm2.5-fp4-gb300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: gb300
-    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -510,9 +507,6 @@ minimaxm2.5-fp8-gb200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: gb200
-    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -649,9 +643,6 @@ minimaxm2.5-fp8-b200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: b200
-    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -800,9 +791,6 @@ minimaxm2.5-fp4-gb200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: gb200
-    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1042,9 +1030,6 @@ minimaxm2.5-fp4-b200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: b200
-    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1284,9 +1269,6 @@ minimaxm2.5-fp4-b300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: b300
-    decode: b300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1500,9 +1482,6 @@ minimaxm2.5-fp8-b300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: b300
-    decode: b300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1716,9 +1695,6 @@ minimaxm2.5-fp8-gb300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
-  hardware:
-    prefill: gb300
-    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024

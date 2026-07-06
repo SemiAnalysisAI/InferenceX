@@ -358,9 +358,6 @@ qwen3.5-fp8-mi355x-sglang-disagg:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -488,9 +485,6 @@ qwen3.5-fp4-mi355x-sglang-disagg:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -604,9 +598,6 @@ glm5-fp8-mi355x-sglang-disagg:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -982,9 +973,6 @@ dsr1-fp8-mi355x-sglang-disagg:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1139,9 +1127,6 @@ dsr1-fp8-mi355x-sglang-disagg-mtp:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1296,9 +1281,6 @@ kimik2.5-fp4-mi355x-vllm-disagg:
   framework: vllm-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1353,9 +1335,6 @@ dsr1-fp4-mi355x-sglang-disagg:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1584,9 +1563,6 @@ dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1698,9 +1674,6 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -2188,9 +2161,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
   framework: sglang-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -2443,9 +2413,6 @@ dsv4-fp4-mi355x-atom-disagg:
   framework: atom-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
       # 1P1D DPA+TP8
@@ -2565,9 +2532,6 @@ minimaxm3-fp4-mi355x-vllm-disagg:
   framework: vllm-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -2756,9 +2720,6 @@ minimaxm3-fp8-mi355x-atom-disagg:
   framework: atom-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -2810,9 +2771,6 @@ minimaxm3-fp4-mi355x-atom-disagg:
   framework: atom-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -2988,9 +2946,6 @@ minimaxm3-fp8-mi355x-vllm-disagg:
   framework: vllm-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024

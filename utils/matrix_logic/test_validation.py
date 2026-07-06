@@ -472,16 +472,16 @@ class TestMultiNodeMatrixEntry:
         assert entry.hardware.prefill == "gb200"
         assert entry.hardware.decode == "h100"
 
-    def test_disagg_requires_hardware(self, valid_multinode_matrix_entry):
-        """Disaggregated matrix entries must identify both hardware pools."""
+    def test_disagg_allows_omitted_hardware(self, valid_multinode_matrix_entry):
+        """Homogeneous disaggregated entries may omit hardware metadata."""
         del valid_multinode_matrix_entry["hardware"]
-        with pytest.raises(Exception, match="hardware.*required"):
-            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+        assert entry.hardware is None
 
-    def test_non_disagg_rejects_hardware(self, valid_multinode_matrix_entry):
-        """Hardware pool metadata is scoped to disaggregated entries."""
-        valid_multinode_matrix_entry["disagg"] = False
-        with pytest.raises(Exception, match="hardware.*only be set"):
+    def test_hardware_requires_prefill_and_decode(self, valid_multinode_matrix_entry):
+        """Heterogeneous hardware metadata must identify both worker pools."""
+        del valid_multinode_matrix_entry["hardware"]["decode"]
+        with pytest.raises(Exception, match="decode"):
             MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
@@ -837,10 +837,16 @@ class TestMasterConfigEntries:
         assert config.hardware.prefill == "gb200"
         assert config.hardware.decode == "h100"
 
-    def test_disagg_master_config_requires_hardware(self, valid_multinode_master_config):
-        """Disaggregated master configs must identify prefill and decode hardware."""
+    def test_disagg_master_config_allows_omitted_hardware(self, valid_multinode_master_config):
+        """Homogeneous disaggregated master configs may omit hardware metadata."""
         del valid_multinode_master_config["hardware"]
-        with pytest.raises(Exception, match="hardware.*required"):
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+        assert config.hardware is None
+
+    def test_master_hardware_requires_prefill_and_decode(self, valid_multinode_master_config):
+        """Heterogeneous master configs must identify both worker pools."""
+        del valid_multinode_master_config["hardware"]["decode"]
+        with pytest.raises(Exception, match="decode"):
             MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_single_node_cannot_have_multinode_true(self, valid_single_node_master_config):

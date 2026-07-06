@@ -219,9 +219,6 @@ minimaxm2.5-fp8-mi355x-vllm-disagg:
   framework: vllm-disagg
   multinode: true
   disagg: true
-  hardware:
-    prefill: mi355x
-    decode: mi355x
   scenarios:
     fixed-seq-len:
     - isl: 1024

@@ -133,21 +133,6 @@ class DisaggregatedHardwareConfig(BaseModel):
     decode: str = Field(min_length=1)
 
 
-def _validate_disaggregated_hardware(self):
-    """Require explicit prefill/decode hardware exactly when disaggregation is enabled."""
-    if self.disagg and self.hardware is None:
-        raise ValueError(
-            f"'{Fields.HARDWARE.value}' is required when "
-            f"'{Fields.DISAGG.value}' is true"
-        )
-    if not self.disagg and self.hardware is not None:
-        raise ValueError(
-            f"'{Fields.HARDWARE.value}' can only be set when "
-            f"'{Fields.DISAGG.value}' is true"
-        )
-    return self
-
-
 class MultiNodeMatrixEntry(BaseModel):
     """Pydantic model for validating multinode matrix entry structure.
     This validates the input that should be expected to .github/workflows/benchmark-multinode-tmpl.yml"""
@@ -177,10 +162,6 @@ class MultiNodeMatrixEntry(BaseModel):
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
-
-    @model_validator(mode='after')
-    def validate_disaggregated_hardware(self):
-        return _validate_disaggregated_hardware(self)
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
@@ -235,10 +216,6 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     disagg: bool
     hardware: Optional[DisaggregatedHardwareConfig] = None
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
-
-    @model_validator(mode='after')
-    def validate_disaggregated_hardware(self):
-        return _validate_disaggregated_hardware(self)
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
@@ -557,10 +534,6 @@ class MultiNodeMasterConfigEntry(BaseModel):
     disagg: bool = Field(default=False)
     hardware: Optional[DisaggregatedHardwareConfig] = None
     scenarios: MultiNodeScenarios
-
-    @model_validator(mode='after')
-    def validate_disaggregated_hardware(self):
-        return _validate_disaggregated_hardware(self)
 
     @model_validator(mode='after')
     def validate_agentic_runner(self):
