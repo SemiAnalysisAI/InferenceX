@@ -323,9 +323,10 @@ jobs:
       CX_TIME: ${{ inputs.operation == 'probe-precision' && '90' || '300' }}
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
       CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
-      CX_JOB_ROOT: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}
-      CX_SOURCE_ROOT: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}/source
-      HOME: /tmp/inferencex-collectivex-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.id }}/home
+      CX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs', github.workspace) || '/tmp' }}
+      CX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs/inferencex-collectivex-{1}-{2}-{3}', github.workspace, github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
+      CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs/inferencex-collectivex-{1}-{2}-{3}/source', github.workspace, github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
+      HOME: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs/inferencex-collectivex-{1}-{2}-{3}/home', github.workspace, github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
       - name: Prepare isolated source
         id: source
@@ -333,6 +334,19 @@ jobs:
           COLLECTIVEX_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
+          [ "$CX_JOB_PARENT" = /tmp ] || {
+            [ "$CX_JOB_PARENT" = '${{ github.workspace }}/.collectivex-jobs' ] \
+              || { echo "CollectiveX isolated parent is invalid" >&2; exit 1; }
+            if [ ! -e "$CX_JOB_PARENT" ] && [ ! -L "$CX_JOB_PARENT" ]; then
+              umask 077
+              mkdir -m 700 -- "$CX_JOB_PARENT"
+            fi
+            [ ! -L "$CX_JOB_PARENT" ] \
+              && [ -d "$CX_JOB_PARENT" ] \
+              && [ -O "$CX_JOB_PARENT" ] \
+              && [ "$(stat -c '%a' "$CX_JOB_PARENT")" = 700 ] \
+              || { echo "CollectiveX isolated parent is unsafe" >&2; exit 1; }
+          }
           python3 - <<'PY'
           import os
           import re
@@ -342,7 +356,7 @@ jobs:
 
           pattern = re.compile(r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+")
           cutoff = time.time() - 86400
-          for entry in os.scandir("/tmp"):
+          for entry in os.scandir(os.environ["CX_JOB_PARENT"]):
               if not pattern.fullmatch(entry.name):
                   continue
               try:
@@ -374,7 +388,8 @@ jobs:
               if marked:
                   shutil.rmtree(entry.path)
           PY
-          [[ "$CX_JOB_ROOT" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+          [ "${CX_JOB_ROOT%/*}" = "$CX_JOB_PARENT" ] \
+            && [[ "${CX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
             || { echo "CollectiveX isolated root is invalid" >&2; exit 1; }
           [ "$CX_SOURCE_ROOT" = "$CX_JOB_ROOT/source" ] \
             || { echo "CollectiveX source root is invalid" >&2; exit 1; }
@@ -626,7 +641,11 @@ jobs:
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
           set -euo pipefail
-          [[ "$CX_JOB_ROOT" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+          [ "$CX_JOB_PARENT" = /tmp ] \
+            || [ "$CX_JOB_PARENT" = '${{ github.workspace }}/.collectivex-jobs' ] \
+            || { echo "CollectiveX cleanup parent is invalid" >&2; exit 1; }
+          [ "${CX_JOB_ROOT%/*}" = "$CX_JOB_PARENT" ] \
+            && [[ "${CX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
             || { echo "CollectiveX cleanup root is invalid" >&2; exit 1; }
           [ "$CX_SOURCE_ROOT" = "$CX_JOB_ROOT/source" ] \
             || { echo "CollectiveX cleanup source is invalid" >&2; exit 1; }
