@@ -31,7 +31,7 @@ if [ "$DP_ATTENTION" = "true" ]; then
 fi 
 
 SPEC_ARGS=()
-OPT_ARGS=(--online_quant_config '{"global_quant_config": "ptpc_fp8", "exclude_layer": ["lm_head", "model.embed_tokens", "vision_tower", "multi_modal_projector", "patch_merge_mlp", "*block_sparse_moe"]}' --hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}')
+OPT_ARGS=(--online_quant_config '{"global_quant_config": "ptpc_fp8", "exclude_layer": ["lm_head", "model.embed_tokens", "vision_tower", "multi_modal_projector", "patch_merge_mlp", "*block_sparse_moe"]}')
 
 # Start GPU monitoring (power, temperature, clocks every second)
 start_gpu_monitor
