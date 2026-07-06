@@ -697,9 +697,7 @@ cx_apply_network_profile() {
   [ "$scaleout" = 1 ] || [ "$single_node_rdma" = 1 ] || return 0
   [ -n "${CX_RDMA_DEVICES:-}" ] \
     || cx_die "RDMA execution requires a private device selector"
-  if [ "$scaleout" = 1 ]; then
-    [ -n "${CX_SOCKET_IFNAME:-}" ] \
-      || cx_die "multi-node execution requires a private socket selector"
+  if [ "$scaleout" = 1 ] && [ -n "${CX_SOCKET_IFNAME:-}" ]; then
     [[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]] \
       || cx_die "invalid private socket interface selector"
     export NCCL_SOCKET_IFNAME="$CX_SOCKET_IFNAME" GLOO_SOCKET_IFNAME="$CX_SOCKET_IFNAME"
@@ -786,7 +784,6 @@ cx_validate_network_profile_on_job() {
   [[ "$job_id" =~ ^[1-9][0-9]*$ && "$nodes" =~ ^[1-9][0-9]*$ ]] \
     || return 1
   [ -n "${CX_RDMA_DEVICES:-}" ] || return 1
-  [ "$scaleout" = 0 ] || [ -n "${CX_SOCKET_IFNAME:-}" ] || return 1
   case "${CX_NETWORK_VALIDATION_ATTEMPT:-1}" in
     1) ;;
     2|3) log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}" ;;
@@ -799,9 +796,22 @@ cx_validate_network_profile_on_job() {
     --export="$(cx_host_exports),CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX" \
     bash -s > "$log" 2>&1 <<'BASH' || rc=$?
 set -euo pipefail
-if [ -n "${CX_SOCKET_IFNAME:-}" ]; then
-  [[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]]
+if [ -z "${CX_SOCKET_IFNAME:-}" ]; then
+  CX_SOCKET_IFNAME="$(python3 - <<'PY'
+from pathlib import Path
+
+for line in Path('/proc/net/route').read_text().splitlines()[1:]:
+    fields = line.split()
+    if len(fields) >= 4 and fields[1] == '00000000' and int(fields[3], 16) & 1:
+        print(fields[0], end='')
+        break
+PY
+)"
+  [ -n "$CX_SOCKET_IFNAME" ] \
+    || { printf '[collectivex-private] socket-interface-1=default-route-missing\n'; exit 1; }
 fi
+[[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(,[A-Za-z][A-Za-z0-9_.-]{0,31})*$ ]]
+printf '[collectivex-private] socket-interface-selected=%s\n' "$CX_SOCKET_IFNAME"
 [[ "$CX_RDMA_DEVICES" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?(,[A-Za-z][A-Za-z0-9_.-]{0,31}(:[1-9][0-9]*)?)*$ ]]
 if [ -n "${CX_IB_GID_INDEX:-}" ]; then
   [[ "$CX_IB_GID_INDEX" =~ ^[0-9]+$ ]] && [ "$CX_IB_GID_INDEX" -le 255 ]
@@ -871,12 +881,20 @@ done
 printf '[collectivex-private] rdma-link-layer=%s\n' "$profile"
 BASH
   if [ "$rc" != 0 ]; then
-    marker="$(grep -aoE '(socket-interface|rdma-(device|port))-[0-9]+=(missing|down|inactive|gid-missing|gid-empty|link-layer-missing|link-layer-invalid|link-layer-mixed)' "$log" \
+    marker="$(grep -aoE '(socket-interface|rdma-(device|port))-[0-9]+=(missing|down|inactive|default-route-missing|gid-missing|gid-empty|link-layer-missing|link-layer-invalid|link-layer-mixed)' "$log" \
       | tail -n 1 || true)"
     [ -z "$marker" ] || cx_log "ERROR: network-profile-$marker"
     [ "$report_failure" = 0 ] || cx_fail_stage setup "$log" || true
     return "$rc"
   fi
+  socket_ifname="$(
+    sed -nE 's/^\[collectivex-private\] socket-interface-selected=([A-Za-z][A-Za-z0-9_.-]{0,31})$/\1/p' "$log" \
+      | sort -u
+  )"
+  marker_count="$(grep -Ec '^\[collectivex-private\] socket-interface-selected=' "$log")"
+  [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
+    && [ "$marker_count" = "$nodes" ] || return 1
+  export CX_SOCKET_IFNAME="$socket_ifname"
   link_layer="$(
     sed -nE 's/^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$/\1/p' "$log" \
       | sort -u

@@ -2162,7 +2162,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
                     "COLLECTIVEX_OPERATOR_CONFIG": str(config),
                 },
             )
-            self.assertNotEqual(scaleout.returncode, 0)
+            self.assertEqual(scaleout.returncode, 0, scaleout.stderr)
 
             config.write_text(json.dumps(missing_amd_stage))
             config.chmod(0o600)

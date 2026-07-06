@@ -750,6 +750,7 @@ class SamplingContractTest(unittest.TestCase):
                 "done\n"
                 "if [ \"${SRUN_RC:-0}\" = 0 ]; then\n"
                 "  for ((task=0; task<tasks; task++)); do\n"
+                "    printf '[collectivex-private] socket-interface-selected=privateif0\\n'\n"
                 "    printf '[collectivex-private] rdma-link-layer=roce\\n'\n"
                 "  done\n"
                 "fi\n"
