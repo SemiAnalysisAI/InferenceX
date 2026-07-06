@@ -68,6 +68,7 @@ def sample_multinode_config():
             "runner": "gb200",
             "multinode": True,
             "disagg": True,
+            "hardware": {"prefill": "gb200", "decode": "h100"},
             "scenarios": {
                 "fixed-seq-len": [
 
@@ -981,6 +982,7 @@ class TestGenerateFullSweepMultiNode:
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
+        assert entry["hardware"] == {"prefill": "gb200", "decode": "h100"}
 
     def test_multinode_conc_as_list(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
         """Multinode conc should be passed as list."""
@@ -1998,6 +2000,7 @@ class TestGenerateTestConfigSweep:
                 "runner": "gb200",
                 "multinode": True,
                 "disagg": True,
+                "hardware": {"prefill": "gb200", "decode": "h100"},
                 "scenarios": {
                     "agentic-coding": [
                         {
@@ -2146,6 +2149,7 @@ class TestGenerateFullSweepMixed:
                 "runner": "cluster:gb200-nv",
                 "multinode": True,
                 "disagg": True,
+                "hardware": {"prefill": "gb200", "decode": "h100"},
                 "scenarios": {
                     "agentic-coding": [{
                         "search-space": [

@@ -90,6 +90,7 @@ def valid_multinode_matrix_entry():
         "max-model-len": 2248,
         "exp-name": "dsr1_1k1k",
         "disagg": True,
+        "hardware": {"prefill": "gb200", "decode": "h100"},
         "run-eval": False,
     }
 
@@ -132,6 +133,7 @@ def valid_multinode_master_config():
         "runner": "gb200",
         "multinode": True,
         "disagg": True,
+        "hardware": {"prefill": "gb200", "decode": "h100"},
         "scenarios": {
             "fixed-seq-len": [
 
@@ -213,6 +215,7 @@ class TestFieldsEnum:
         assert Fields.SPEC_DECODING.value == "spec-decoding"
         assert Fields.PREFILL.value == "prefill"
         assert Fields.DECODE.value == "decode"
+        assert Fields.HARDWARE.value == "hardware"
 
 
 # =============================================================================
@@ -466,6 +469,20 @@ class TestMultiNodeMatrixEntry:
         assert entry.model == "deepseek-r1-fp4"
         assert entry.conc == [2150]
         assert entry.disagg is True
+        assert entry.hardware.prefill == "gb200"
+        assert entry.hardware.decode == "h100"
+
+    def test_disagg_requires_hardware(self, valid_multinode_matrix_entry):
+        """Disaggregated matrix entries must identify both hardware pools."""
+        del valid_multinode_matrix_entry["hardware"]
+        with pytest.raises(Exception, match="hardware.*required"):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+
+    def test_non_disagg_rejects_hardware(self, valid_multinode_matrix_entry):
+        """Hardware pool metadata is scoped to disaggregated entries."""
+        valid_multinode_matrix_entry["disagg"] = False
+        with pytest.raises(Exception, match="hardware.*only be set"):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
         """Prefill and decode should be WorkerConfig objects."""
@@ -817,6 +834,14 @@ class TestMasterConfigEntries:
         assert config.model_prefix == "dsr1"
         assert config.runner == "gb200"
         assert config.disagg is True
+        assert config.hardware.prefill == "gb200"
+        assert config.hardware.decode == "h100"
+
+    def test_disagg_master_config_requires_hardware(self, valid_multinode_master_config):
+        """Disaggregated master configs must identify prefill and decode hardware."""
+        del valid_multinode_master_config["hardware"]
+        with pytest.raises(Exception, match="hardware.*required"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_single_node_cannot_have_multinode_true(self, valid_single_node_master_config):
         """Single node config must have multinode=False."""
@@ -873,6 +898,7 @@ class TestMasterConfigEntries:
             "runner": "b200-multinode",
             "multinode": True,
             "disagg": True,
+            "hardware": {"prefill": "b200", "decode": "b200"},
             "scenarios": {
                 "agentic-coding": [
                     {

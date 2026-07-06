@@ -12,6 +12,11 @@ entry-name:
   runner: string
   precision: string
   framework: string
+  multinode: true
+  disagg: true
+  hardware:
+    prefill: string
+    decode: string
   scenarios:
     fixed-seq-len:
     - isl: int
@@ -41,6 +46,10 @@ The below list describes what each field is:
   fleet.
 - `precision`: The precision to run the benchmark. Again, this is used to find which script to run in `benchmarks/`.
 - `framework`: The framework (serving runtime) to serve the benchmark, e.g., `vllm`, `sglang`, `trt`.
+- `hardware`: Required when `multinode: true` and `disagg: true`. `prefill` and
+  `decode` identify the GPU SKU used by each worker pool (for example, `b200`
+  and `h100`). These values are benchmark metadata: they flow into generated
+  matrix entries and aggregate results, but do not affect runner scheduling.
 - `scenarios`: A dictionary of benchmark scenario types. At least one must be specified. Currently supported:
   - `fixed-seq-len`: Fixed input/output sequence length benchmarks. Each entry must have:
     - `isl`: An integer representing the input sequence length, e.g., `1024`

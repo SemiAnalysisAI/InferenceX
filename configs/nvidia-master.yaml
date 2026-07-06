@@ -7,6 +7,9 @@ dsr1-fp4-b200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -394,6 +397,9 @@ dsr1-fp8-b200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -844,6 +850,9 @@ dsr1-fp4-b300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: b300
+    decode: b300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -1257,6 +1266,9 @@ dsr1-fp8-b300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: b300
+    decode: b300
   scenarios:
     fixed-seq-len:
     # 1k1k MTP configs
@@ -2342,6 +2354,9 @@ glm5-fp4-gb300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -3440,6 +3455,9 @@ dsr1-fp8-h200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: h200
+    decode: h200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -3984,6 +4002,9 @@ dsr1-fp8-h100-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: h100
+    decode: h100
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -4540,6 +4561,9 @@ dsr1-fp8-h100-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: h100
+    decode: h100
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -4758,6 +4782,9 @@ dsr1-fp4-gb200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -5115,6 +5142,9 @@ dsr1-fp8-gb200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     # 1k1k MTP configs
@@ -5543,6 +5573,9 @@ dsr1-fp8-gb200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -5672,6 +5705,9 @@ dsr1-fp8-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -5785,6 +5821,9 @@ dsr1-fp4-gb200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     # 1k1k configurations
@@ -5900,6 +5939,9 @@ dsr1-fp4-gb300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -6327,6 +6369,9 @@ dsr1-fp4-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     # 1k1k configurations
@@ -6442,6 +6487,9 @@ dsr1-fp8-gb300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -6854,6 +6902,9 @@ gptoss-fp4-gb200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -7125,6 +7176,9 @@ dsr1-fp8-h200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: h200
+    decode: h200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -7382,6 +7436,9 @@ dsr1-fp4-b200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -7518,6 +7575,9 @@ dsr1-fp8-b200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -7689,6 +7749,9 @@ dsr1-fp8-b200-dynamo-sglang-mtp:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -7889,6 +7952,9 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -8054,6 +8120,9 @@ kimik2.5-fp4-gb200-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -8425,6 +8494,9 @@ kimik2.5-fp4-gb300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -8768,6 +8840,9 @@ kimik2.5-fp4-gb200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -8890,6 +8965,9 @@ dsv4-fp4-b200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -8972,6 +9050,9 @@ dsv4-fp4-gb200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -9072,6 +9153,9 @@ dsv4-fp4-gb200-dynamo-vllm-mtp2:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -9152,6 +9236,9 @@ dsv4-fp4-gb200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -9279,6 +9366,9 @@ qwen3.5-fp8-gb200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -9389,6 +9479,9 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -9524,6 +9617,9 @@ dsv4-fp4-b300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: b300
+    decode: b300
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -9580,6 +9676,9 @@ dsv4-fp4-gb300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -9673,6 +9772,9 @@ dsv4-fp4-gb300-dynamo-trt:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -10069,6 +10171,9 @@ dsv4-fp4-gb300-dynamo-trt-mtp:
   framework: dynamo-trt
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -10492,6 +10597,9 @@ dsv4-fp4-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -10606,6 +10714,9 @@ glm5-fp8-b200-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: b200
+    decode: b200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -10820,6 +10931,9 @@ dsv4-fp4-gb300-dynamo-sglang-mtp:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -11015,6 +11129,9 @@ qwen3.5-fp4-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 8192
@@ -11095,6 +11212,9 @@ glm5-fp4-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     # ---------- 8k1k high-throughput (wide-EP TP=32 decode) ----------
@@ -11305,6 +11425,9 @@ glm5-fp8-gb300-dynamo-sglang:
   framework: dynamo-sglang
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     # ---------- 8k1k high-throughput (wide-EP decode) ----------
@@ -11560,6 +11683,9 @@ dsv4-fp4-gb300-dynamo-vllm-agentic:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     agentic-coding:
     - search-space:
@@ -11645,6 +11771,9 @@ minimaxm3-fp8-b300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: b300
+    decode: b300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -11861,6 +11990,9 @@ minimaxm3-fp4-b300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: b300
+    decode: b300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -12077,6 +12209,9 @@ minimaxm3-fp8-gb300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -12350,6 +12485,9 @@ minimaxm3-fp8-gb200-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -12916,6 +13054,9 @@ kimik2.5-fp4-gb300-dynamo-vllm:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb300
+    decode: gb300
   scenarios:
     fixed-seq-len:
     - isl: 1024
@@ -13168,6 +13309,9 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-3p2d-tep8-tp8:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     agentic-coding:
     - search-space:
@@ -13224,6 +13368,9 @@ dsv4-fp4-gb200-dynamo-vllm-agentic-2p1d-dep8-dep8:
   framework: dynamo-vllm
   multinode: true
   disagg: true
+  hardware:
+    prefill: gb200
+    decode: gb200
   scenarios:
     agentic-coding:
     - search-space:

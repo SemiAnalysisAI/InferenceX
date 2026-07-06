@@ -349,6 +349,7 @@ def generate_full_sweep(args, all_config_data, runner_data):
         is_multinode = val.get(Fields.MULTINODE.value, False)
         # Get disagg value, defaulting to False if not specified
         disagg = val.get(Fields.DISAGG.value, False)
+        hardware = val.get(Fields.HARDWARE.value)
 
         scenarios = val[Fields.SCENARIOS.value]
         scenario_filter = set(args.scenario_type) if getattr(args, 'scenario_type', None) else None
@@ -457,6 +458,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,  # Default, may be overridden by mark_eval_entries
                         }
+                        if hardware is not None:
+                            entry[Fields.HARDWARE.value] = hardware
 
                         validate_matrix_entry(entry, is_multinode)
                         matrix_values.append(entry)
@@ -654,6 +657,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
+                            if hardware is not None:
+                                entry[Fields.HARDWARE.value] = hardware
                             validate_agentic_matrix_entry(entry)
                             matrix_values.append(entry)
                 else:
@@ -731,6 +736,7 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
         if not runners_for_entry:
             continue
         disagg = val.get(Fields.DISAGG.value, False)
+        hardware = val.get(Fields.HARDWARE.value)
 
         # Build seq-len filter if --seq-lens was provided
         seq_lens_filter = None
@@ -797,6 +803,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                             Fields.DISAGG.value: disagg,
                             Fields.RUN_EVAL.value: False,
                         }
+                        if hardware is not None:
+                            entry[Fields.HARDWARE.value] = hardware
                         matrix_values.append(validate_matrix_entry(entry, is_multinode=True))
                 else:
                     # Single-node config
@@ -921,6 +929,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.DISAGG.value: disagg,
                                 Fields.SCENARIO_TYPE.value: "agentic-coding",
                             }
+                            if hardware is not None:
+                                entry[Fields.HARDWARE.value] = hardware
                             matrix_values.append(validate_agentic_matrix_entry(entry))
                 else:
                     for conc in conc_values:

@@ -82,6 +82,8 @@ def multinode_env_vars(base_env_vars):
         "DECODE_TP": "8",
         "DECODE_EP": "8",
         "DECODE_DP_ATTN": "true",
+        "PREFILL_HARDWARE": "gb200",
+        "DECODE_HARDWARE": "h100",
     }
 
 
@@ -232,6 +234,8 @@ class TestProcessResultScript:
         assert output_data["decode_num_workers"] == 1
         assert output_data["num_prefill_gpu"] == 20
         assert output_data["num_decode_gpu"] == 8
+        assert output_data["prefill_hw"] == "gb200"
+        assert output_data["decode_hw"] == "h100"
 
         # Verify throughput calculations
         total_gpus = 20 + 8  # prefill + decode

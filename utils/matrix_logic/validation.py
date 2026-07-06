@@ -23,6 +23,7 @@ class Fields(Enum):
     PRECISION = 'precision'
     FRAMEWORK = 'framework'
     RUNNER = 'runner'
+    HARDWARE = 'hardware'
     SCENARIOS = 'scenarios'
     MULTINODE = 'multinode'
 
@@ -124,6 +125,29 @@ class WorkerConfig(BaseModel):
         default=[], alias=Fields.ADDITIONAL_SETTINGS.value)
 
 
+class DisaggregatedHardwareConfig(BaseModel):
+    """Hardware SKUs assigned to each side of a disaggregated deployment."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    prefill: str = Field(min_length=1)
+    decode: str = Field(min_length=1)
+
+
+def _validate_disaggregated_hardware(self):
+    """Require explicit prefill/decode hardware exactly when disaggregation is enabled."""
+    if self.disagg and self.hardware is None:
+        raise ValueError(
+            f"'{Fields.HARDWARE.value}' is required when "
+            f"'{Fields.DISAGG.value}' is true"
+        )
+    if not self.disagg and self.hardware is not None:
+        raise ValueError(
+            f"'{Fields.HARDWARE.value}' can only be set when "
+            f"'{Fields.DISAGG.value}' is true"
+        )
+    return self
+
+
 class MultiNodeMatrixEntry(BaseModel):
     """Pydantic model for validating multinode matrix entry structure.
     This validates the input that should be expected to .github/workflows/benchmark-multinode-tmpl.yml"""
@@ -146,12 +170,17 @@ class MultiNodeMatrixEntry(BaseModel):
     max_model_len: int = Field(alias=Fields.MAX_MODEL_LEN.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
+    hardware: Optional[DisaggregatedHardwareConfig] = None
     run_eval: bool = Field(alias=Fields.RUN_EVAL.value)
     eval_only: bool = Field(alias=Fields.EVAL_ONLY.value, default=False)
     eval_conc: Optional[int] = Field(default=None, alias=Fields.EVAL_CONC.value)
     eval_all_concs: bool = Field(
         default=False, alias=Fields.EVAL_ALL_CONCS.value
     )
+
+    @model_validator(mode='after')
+    def validate_disaggregated_hardware(self):
+        return _validate_disaggregated_hardware(self)
 
 
 class SingleNodeAgenticMatrixEntry(BaseModel):
@@ -204,7 +233,12 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
+    hardware: Optional[DisaggregatedHardwareConfig] = None
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+    @model_validator(mode='after')
+    def validate_disaggregated_hardware(self):
+        return _validate_disaggregated_hardware(self)
 
 
 AgenticMatrixEntry = Union[SingleNodeAgenticMatrixEntry, MultiNodeAgenticMatrixEntry]
@@ -521,7 +555,12 @@ class MultiNodeMasterConfigEntry(BaseModel):
     runner: str
     multinode: Literal[True]
     disagg: bool = Field(default=False)
+    hardware: Optional[DisaggregatedHardwareConfig] = None
     scenarios: MultiNodeScenarios
+
+    @model_validator(mode='after')
+    def validate_disaggregated_hardware(self):
+        return _validate_disaggregated_hardware(self)
 
     @model_validator(mode='after')
     def validate_agentic_runner(self):
