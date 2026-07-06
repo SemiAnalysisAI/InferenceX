@@ -14,6 +14,18 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
+# CI exports KV_OFFLOADING (none/dram); this recipe's case statement keys off
+# OFFLOADING (none/cpu/lmcache). Map the sweep's dram -> cpu native offload
+# path when OFFLOADING isn't set directly (standalone runs still pass it).
+if [[ -z "${OFFLOADING:-}" && -n "${KV_OFFLOADING:-}" ]]; then
+    case "$KV_OFFLOADING" in
+        none) OFFLOADING=none ;;
+        dram) OFFLOADING=cpu ;;
+        *) OFFLOADING="$KV_OFFLOADING" ;;
+    esac
+    export OFFLOADING
+fi
+
 check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR EP_SIZE DP_ATTENTION
 
 PORT=${PORT:-8888}
