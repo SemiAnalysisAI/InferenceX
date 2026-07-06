@@ -209,7 +209,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (50, 656, 354, 302, 1648, 852, 796),
+            (51, 656, 364, 292, 1648, 877, 771),
         )
         b300_ep16 = [
             item for item in unsupported_cases
@@ -276,7 +276,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIsNotNone(capability.topology_for("mi325x", 8))
         self.assertEqual(
             Counter(shard["n"] for shard in matrix["include"]),
-            Counter({6: 36, 8: 1, 10: 13}),
+            Counter({6: 36, 8: 1, 10: 14}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
@@ -673,6 +673,10 @@ class SamplingContractTest(unittest.TestCase):
           cx_export_gid_index_for_link_layer roce 1
           test "$NCCL_IB_GID_INDEX:$NCCL_IB_SL" = 3:2
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
+          export CX_SHARD_SKU=b200-dgxc CX_BENCH=deepep
+          cx_apply_network_profile 2 nvlink-rdma
+          test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:cpu
+          unset CX_SHARD_SKU CX_BENCH
           cx_apply_network_profile 2 nvlink-rdma
           cx_export_gid_index_for_link_layer infiniband 1
           test -z "${NVSHMEM_IB_GID_INDEX+x}${NCCL_IB_GID_INDEX+x}${UCCL_IB_GID_INDEX+x}"
@@ -3235,7 +3239,7 @@ class SamplingContractTest(unittest.TestCase):
             )
             self.assertEqual(sentinel.read_text(), "keep")
 
-    def test_stage_removes_its_execution_child_when_tar_fails(self) -> None:
+    def test_stage_removes_its_execution_child_when_copy_fails(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()
             repo = root / "repo"
@@ -3244,10 +3248,16 @@ class SamplingContractTest(unittest.TestCase):
             (source / "public.py").write_text("public\n")
             base = root / "stage"
             base.mkdir(mode=0o700)
-            sentinel = root / "tar-called"
+            sentinel = root / "python-called"
             command = r'''
               source "$1"
-              tar() { : > "$TAR_CALLED"; return 1; }
+              python3() {
+                if [[ "${2:-}" == */experimental/CollectiveX ]]; then
+                  : > "$PYTHON_CALLED"
+                  return 1
+                fi
+                command python3 "$@"
+              }
               staged="$(cx_stage_path "$2" "$3")"
               ! cx_stage_repo "$2" "$staged"
             '''
@@ -3263,7 +3273,7 @@ class SamplingContractTest(unittest.TestCase):
                     "COLLECTIVEX_CANONICAL_GHA": "1",
                     "COLLECTIVEX_EXECUTION_ID": f"test-{root.name}",
                     "CX_STAGE_DIR": str(base),
-                    "TAR_CALLED": str(sentinel),
+                    "PYTHON_CALLED": str(sentinel),
                 },
             )
             self.assertTrue(sentinel.is_file())

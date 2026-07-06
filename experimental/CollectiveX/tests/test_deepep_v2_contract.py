@@ -1144,6 +1144,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
             "deepep_version": "1.1.0", "deepep_commit": "a" * 40,
             "backend_lineage": "deepep-v1", "allow_mnnvl": False,
             "mnnvl_comm": "not-requested", "mode": "normal",
+            "nvshmem_ibgda_nic_handler": "not-active",
             "num_nvl_bytes": 1024, "num_rdma_bytes": 0,
         }
         hybrid = {

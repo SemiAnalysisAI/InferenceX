@@ -255,10 +255,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
             len(targets), 94
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 62
+            sum(item["disposition"] == "supported" for item in targets), 66
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 31
+            sum(item["disposition"] == "unsupported" for item in targets), 27
         )
         self.assertEqual(len(capability.provisional_precision_targets()), 1)
         keys = {
@@ -332,22 +332,23 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(b300_ep8, "supported")
         self.assertEqual(reason, "ok")
 
-        for backend, expected_reason in (
-            (
-                "deepep",
-                "DeepEP V1 EP16 native operations time out on the B200 publication fabric",
-            ),
-            (
-                "deepep-hybrid",
-                "DeepEP Hybrid EP16 cannot map the DOCA UAR into GPU memory on B200",
-            ),
-        ):
-            disposition, reason = capability.resolve_disposition(
-                "b200-dgxc", backend, ep=16, nodes=2,
-                precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
-            )
-            self.assertEqual(disposition, "unsupported")
-            self.assertEqual(reason, expected_reason)
+        disposition, reason = capability.resolve_disposition(
+            "b200-dgxc", "deepep", ep=16, nodes=2,
+            precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+        )
+        self.assertEqual(disposition, "supported")
+        self.assertEqual(reason, "ok")
+        self.assertEqual(capability.DEEPEP_V1_IBGDA_NIC_HANDLERS["b200-dgxc"], "cpu")
+
+        disposition, reason = capability.resolve_disposition(
+            "b200-dgxc", "deepep-hybrid", ep=16, nodes=2,
+            precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+        )
+        self.assertEqual(disposition, "unsupported")
+        self.assertEqual(
+            reason,
+            "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200",
+        )
         b200_reference, reason = capability.resolve_disposition(
             "b200-dgxc", "nccl-ep", ep=16, nodes=2,
             precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,

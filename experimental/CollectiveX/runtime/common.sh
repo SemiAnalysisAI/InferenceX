@@ -741,7 +741,11 @@ cx_apply_network_profile() {
     [ "$scaleout" = 1 ] \
       && export MORI_RDMA_TC="$CX_RDMA_TRAFFIC_CLASS" MORI_IO_TC="$CX_RDMA_TRAFFIC_CLASS"
   fi
-  export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER=gpu
+  local nic_handler=gpu
+  if [ "${CX_SHARD_SKU:-}" = b200-dgxc ] && [ "${CX_BENCH:-}" = deepep ]; then
+    nic_handler=cpu
+  fi
+  export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
   if [ -n "${CX_RDMA_LINK_LAYER:-}" ]; then
     case "$CX_RDMA_LINK_LAYER" in
       roce|infiniband) ;;
@@ -2394,13 +2398,39 @@ cx_stage_repo() {
     || cx_die "cannot create the configured stage directory"
   cx_log "staging CollectiveX on compute-visible storage"
   log="$(cx_private_log_path repository-stage)"
-  if ! tar -C "$repo_root/experimental" \
-      --exclude='CollectiveX/__pycache__' --exclude='CollectiveX/results' \
-      --exclude='CollectiveX/.cx_workloads' --exclude='CollectiveX/.cx_backend' \
-      --exclude='CollectiveX/.cx_sources' --exclude='CollectiveX/configs/platforms.yaml' \
-      --exclude='CollectiveX/private-infra.md' --exclude='CollectiveX/goal.md' \
-      --exclude='CollectiveX/notes.md' -cf - CollectiveX 2> "$log" \
-      | tar -C "$stage_dir/experimental" -xf - 2>> "$log"; then
+  if ! python3 - "$repo_root/experimental/CollectiveX" \
+      "$stage_dir/experimental/CollectiveX" > "$log" 2>&1 <<'PY'
+import os
+from pathlib import Path
+import shutil
+import sys
+
+source, target = map(Path, sys.argv[1:])
+excluded = {
+    Path("__pycache__"), Path("results"), Path(".cx_workloads"),
+    Path(".cx_backend"), Path(".cx_sources"), Path("configs/platforms.yaml"),
+    Path("private-infra.md"), Path("goal.md"), Path("notes.md"),
+}
+for root, directories, files in os.walk(source, followlinks=False):
+    root_path = Path(root)
+    relative_root = root_path.relative_to(source)
+    directories[:] = [
+        name for name in directories
+        if relative_root / name not in excluded and not (root_path / name).is_symlink()
+    ]
+    destination = target / relative_root
+    destination.mkdir(mode=0o700, parents=True, exist_ok=True)
+    for name in files:
+        relative = relative_root / name
+        if relative in excluded:
+            continue
+        source_file = root_path / name
+        if source_file.is_symlink() or not source_file.is_file():
+            raise RuntimeError("unsupported source entry")
+        with source_file.open("rb") as input_file, (destination / name).open("xb") as output_file:
+            shutil.copyfileobj(input_file, output_file)
+PY
+  then
     rm -rf -- "$stage_dir" >/dev/null 2>&1 \
       || cx_log "ERROR: cannot remove the incomplete execution stage"
     cx_fail_stage repository-stage "$log" || true

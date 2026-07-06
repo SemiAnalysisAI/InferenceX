@@ -217,6 +217,9 @@ class DeepEPBackend:
             "device_sms": device_sms,
             "allow_mnnvl": bool(mnnvl_kwargs),
             "mnnvl_comm": mnnvl_comm,
+            "nvshmem_ibgda_nic_handler": os.environ.get(
+                "NVSHMEM_IBGDA_NIC_HANDLER", "not-active"
+            ),
             **resource_provenance,
         }
 

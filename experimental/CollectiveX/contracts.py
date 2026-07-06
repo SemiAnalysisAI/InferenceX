@@ -112,6 +112,7 @@ REQUIRED_BACKEND_PROVENANCE = {
     "deepep": (
         "deepep_version", "deepep_commit", "backend_lineage", "allow_mnnvl",
         "mnnvl_comm", "mode", "num_nvl_bytes", "num_rdma_bytes",
+        "nvshmem_ibgda_nic_handler",
     ),
     "deepep-v2": (
         *DEEPEP_V2_V1_PROVENANCE, "api_signature_sha256", "loaded_libraries",
@@ -149,7 +150,7 @@ PROVENANCE_KEYS = {
     "logical_scaleup_ranks", "mapping_variant", "max_num_inp_token_per_rank",
     "max_num_tokens", "max_total_recv_tokens", "mnnvl_comm", "mode", "mori_commit",
     "nccl_communicator", "nccl_package_version", "nccl_version", "num_experts",
-    "nvshmem_package_version",
+    "nvshmem_ibgda_nic_handler", "nvshmem_package_version",
     "num_max_tokens_per_rank", "num_nvl_bytes", "num_qps", "num_qps_per_rank",
     "num_rdma_bytes", "num_sms", "path",
     "physical_nvlink_ranks", "physical_rdma_ranks", "prefer_overlap_with_compute",
@@ -541,6 +542,10 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
             unresolved.append("mnnvl_comm")
         if provenance.get("backend_lineage") != "deepep-v1":
             unresolved.append("backend_lineage")
+        if provenance.get("nvshmem_ibgda_nic_handler") not in {
+            "cpu", "gpu", "not-active",
+        }:
+            unresolved.append("nvshmem_ibgda_nic_handler")
     if backend in {"deepep", "uccl"}:
         mode = provenance.get("mode")
         num_nvl_bytes = provenance.get("num_nvl_bytes")

@@ -25,6 +25,10 @@ DEEPEP_V2_SKU_CAPABILITIES = {
     "mi355x": {"schedulable": False, "basis": "nvidia-only"},
 }
 
+# B200's publication pods cannot map NIC doorbells into GPU address space.
+# DeepEP V1 scale-out therefore uses NVSHMEM's CPU-proxied IBGDA handler.
+DEEPEP_V1_IBGDA_NIC_HANDLERS = {"b200-dgxc": "cpu"}
+
 
 def _topologies(
     product: str, *, gpus_per_node: int, scale_up_domain: int, scale_up_transport: str
@@ -177,11 +181,8 @@ TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {
 # Keep these narrower than platform overrides so working reference paths remain
 # measurable on the same fabric.
 BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
-    ("b200-dgxc", "deepep", 16): (
-        "DeepEP V1 EP16 native operations time out on the B200 publication fabric"
-    ),
     ("b200-dgxc", "deepep-hybrid", 16): (
-        "DeepEP Hybrid EP16 cannot map the DOCA UAR into GPU memory on B200"
+        "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200"
     ),
     ("b200-dgxc", "deepep-v2", 16): (
         "DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the B200 fabric"
@@ -437,6 +438,16 @@ PRECISION_CELL_OVERRIDES.update({
     for run_id, sku, ep, backend, mode, profile, disposition, result
     in _VALIDATED_NATIVE_PROBE_CELLS
 })
+for _profile, _mode in (
+    (_NORMAL_E4M3FN_PROFILE, "normal"),
+    (_LL_FP8_PROFILE, "low-latency"),
+    (_LL_LOGFMT_PROFILE, "low-latency"),
+    (_LL_FP8_LOGFMT_PROFILE, "low-latency"),
+):
+    PRECISION_CELL_OVERRIDES[(_profile, "deepep", "b200-dgxc", 16, _mode)] = {
+        "basis": "b200-cpu-proxied-ibgda-handler-production-shape-passed",
+        "disposition": "supported",
+    }
 
 
 def runtime_identity_issues(
