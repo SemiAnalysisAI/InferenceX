@@ -14,13 +14,20 @@ set -x
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-# CI exports KV_OFFLOADING (none/dram); this recipe's case statement keys off
-# OFFLOADING (none/cpu/lmcache). Map the sweep's dram -> cpu native offload
-# path when OFFLOADING isn't set directly (standalone runs still pass it).
+# CI exports KV_OFFLOADING (none/dram) plus KV_OFFLOAD_BACKEND (native/lmcache);
+# this recipe's case statement keys off OFFLOADING (none/cpu/lmcache). Map the
+# sweep's (dram, backend) pair onto OFFLOADING when it isn't set directly
+# (standalone runs still pass OFFLOADING). native -> cpu (vLLM OffloadingConnector).
 if [[ -z "${OFFLOADING:-}" && -n "${KV_OFFLOADING:-}" ]]; then
     case "$KV_OFFLOADING" in
         none) OFFLOADING=none ;;
-        dram) OFFLOADING=cpu ;;
+        dram)
+            case "${KV_OFFLOAD_BACKEND:-native}" in
+                native) OFFLOADING=cpu ;;
+                lmcache) OFFLOADING=lmcache ;;
+                *) echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected native or lmcache)" >&2; exit 1 ;;
+            esac
+            ;;
         *) OFFLOADING="$KV_OFFLOADING" ;;
     esac
     export OFFLOADING
@@ -175,12 +182,38 @@ case "$OFFLOADING" in
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        git clone https://github.com/LMCache/LMCache.git
-        cd LMCache
-        pip install -r requirements/build.txt 
-        CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
-        cd ..
+        # LMCache on ROCm must be built from source with BUILD_WITH_HIP=1 — the
+        # PyPI wheel is CUDA-only and silently falls back to a slow copy path
+        # (no warm-pass win). Pin a release tag and verify the HIP c_ops import
+        # plus the ROCm CuPy build, per the AMD LMCache workshop recipe.
+        LMCACHE_VERSION="${LMCACHE_VERSION:-v0.5.0}"
+        if ! python3 -c "from lmcache import c_ops" 2>/dev/null; then
+            command -v hipcc >/dev/null || { echo "ERROR: hipcc not found — need the ROCm toolchain to build LMCache" >&2; exit 1; }
+            pip uninstall -y lmcache >/dev/null 2>&1 || true
+            rm -rf LMCache
+            git clone --depth 1 --branch "$LMCACHE_VERSION" https://github.com/LMCache/LMCache.git
+            cd LMCache
+            pip install -r requirements/build.txt
+            CXX=hipcc BUILD_WITH_HIP=1 pip install -e . --no-build-isolation
+            cd ..
+        fi
 
+        # ROCm CuPy (force-reinstall so a half-removed CUDA build can't linger)
+        # and re-pin deps the source build / cupy pull can disturb.
+        pip uninstall -y cupy cupy-cuda12x cupy-cuda13x nixl nixl-cu12 nixl-cu13 nixl_ep >/dev/null 2>&1 || true
+        pip install --force-reinstall --no-cache-dir cupy-rocm-7-0
+        pip install -q "numpy==2.1.3" "grpcio==1.78.0" || true
+
+        # Fail loudly if we're on the slow CUDA-wheel fallback (c_ops missing or
+        # CuPy not the ROCm build) — otherwise the run silently loses the offload.
+        python3 -c "
+import lmcache
+from lmcache import c_ops
+import cupy
+from cupy_backends.cuda.api import runtime as r
+assert getattr(r, 'is_hip', False), 'CuPy is not the ROCm build (is_hip=False)'
+print('lmcache', lmcache.__version__, '| cupy', cupy.__version__, '| is_hip =', r.is_hip)
+"
         python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
 
         # Match the B200 Kimi LMCache setup: keep a 2.5 TB semantic CPU KV
