@@ -1,25 +1,18 @@
 # How to Test Workflows
 
-In order to test configurations described in `.github/configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
+In order to test configurations described in `configs`, the primary workflow file used is `.github/workflows/e2e-tests.yml`. As input, this workflow takes in the CLI arguments for the `utils/matrix_logic/generate_sweep_configs.py` script. The usage for this script is shown below:
 
 ```
-usage: generate_sweep_configs.py [-h] {full-sweep,runner-model-sweep,test-config} ...
+usage: generate_sweep_configs.py [-h] {full-sweep,test-config} ...
 
 Generate benchmark configurations from YAML config files
 
 positional arguments:
-  {full-sweep,runner-model-sweep,test-config}
+  {full-sweep,test-config}
                         Available commands
     full-sweep          Generate full sweep configurations with optional
                         filtering by model, precision, framework, runner type,
                         and sequence lengths
-    runner-model-sweep  Given a runner type, find all configurations matching
-                        the type, and run that configuration on all individual
-                        runner nodes for the specified runner type. This is
-                        meant to validate that all runner nodes work on all
-                        configurations for a runner type. For instance, to
-                        validate that all configs that specify an h200 runner
-                        successfully run across all h200 runner nodes.
     test-config         Generate full sweep for specific config keys.
                         Supports wildcard patterns (* and ?) for matching
                         multiple keys at once.
@@ -59,79 +52,43 @@ By default, throughput runs for every generated config and eval-only jobs run fo
 
 **Generate all single-node and multi-node configurations (default):**
 ```
-full-sweep --config-files .github/configs/nvidia-master.yaml
+full-sweep --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node gptoss configurations on B200 with 1k1k sequence lengths:**
 ```
-full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix gptoss --runner-type b200 --seq-lens 1k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Test all single-node fp8 precision configs for 8k1k workloads:**
 ```
-full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+full-sweep --single-node --precision fp8 --seq-lens 8k1k --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 **Test all single-node TRT configs on H200 runners:**
 ```
-full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --framework trt --runner-type h200 b200-trt --config-files configs/nvidia-master.yaml
 ```
 
 **Test specific single-node model on specific hardware with specific sequence lengths:**
 ```
-full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --model-prefix dsr1 --runner-type b200 --precision fp4 --framework sglang --seq-lens 1k1k 8k1k --config-files configs/nvidia-master.yaml
 ```
 
 **Limit concurrency and parallelism for faster testing:**
 ```
-full-sweep --single-node --max-conc 64 --max-tp 4 --config-files .github/configs/nvidia-master.yaml
+full-sweep --single-node --max-conc 64 --max-tp 4 --config-files configs/nvidia-master.yaml
 ```
 
 **Test all multi-node configurations:**
 ```
-full-sweep --multi-node --config-files .github/configs/nvidia-master.yaml
+full-sweep --multi-node --config-files configs/nvidia-master.yaml
 ```
 
-## `runner-model-sweep` Command
-
-The `runner-model-sweep` command validates that all runner nodes of a specific type work with all model configurations. You can specify `--single-node`, `--multi-node`, or both. If neither is specified, both types are generated.
-
+**Test agentic configurations:**
 ```
-usage: generate_sweep_configs.py runner-model-sweep
-    --config-files CONFIG_FILES [CONFIG_FILES ...]
-    [--runner-config RUNNER_CONFIG]
-    [--no-evals | --evals-only] [--all-evals]
-    --runner-type RUNNER_TYPE
-    [--runner-node-filter RUNNER_NODE_FILTER]
-    [--single-node] [--multi-node]
+full-sweep --scenario-type agentic-coding --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
-
-### Scenario: Validating Runner Infrastructure
-
-I just upgraded the CUDA drivers on all H200 runners and need to verify that all models that use H200 still work correctly across all H200 nodes.
-
-Go to the GitHub Actions UI, click on the `End-to-End Tests` workflow, and enter the following command as the text input:
-```
-runner-model-sweep --single-node --runner-type h200 --config-files .github/configs/amd-master.yaml .github/configs/nvidia-master.yaml
-```
-
-This will run a test (just the highest available parallelism and lowest available concurrency) for each configuration that specifies the `h200` runner type, across all H200 runner nodes defined in `.github/configs/runners.yaml`.
-
-For example, if you have configs `dsr1-fp8-h200-sglang`, `dsr1-fp8-h200-trt`, and `gptoss-fp4-h200-vllm` that all use `runner: h200`, and you have 8 H200 nodes (`h200-cw_0`, `h200-cw_1`, etc.), this will run all 3 configs on all 8 nodes (24 total test runs).
-
-This is particularly useful when:
-- You've made infrastructure changes to a specific runner type (driver updates, system configuration, Docker setup)
-- You've added new runner nodes and want to validate they work with all existing model configurations
-- You want to verify that all models remain compatible with a specific GPU type after system updates
-
-### Filtering Runner Nodes
-
-Use `--runner-node-filter` to only test a subset of runner nodes:
-```
-runner-model-sweep --single-node --runner-type mi300x --runner-node-filter mi300x-amd --config-files .github/configs/amd-master.yaml
-```
-
-This will only include runner nodes whose names contain "mi300x-amd"
 
 ## `test-config` Command
 
@@ -152,47 +109,47 @@ Config keys support **wildcard patterns** using `*` (matches any characters) and
 
 **Test a single config by exact name:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang --config-files configs/nvidia-master.yaml
 ```
 
 **Test multiple exact configs:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang dsr1-fp8-h200-trt --config-files configs/nvidia-master.yaml
 ```
 
 **Use wildcard to test all B200 configs:**
 ```
-test-config --config-keys *-b200-* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys *-b200-* --config-files configs/nvidia-master.yaml
 ```
 
 **Use wildcard to test all sglang configs:**
 ```
-test-config --config-keys *-sglang --config-files .github/configs/nvidia-master.yaml .github/configs/amd-master.yaml
+test-config --config-keys *-sglang --config-files configs/nvidia-master.yaml configs/amd-master.yaml
 ```
 
 **Use wildcard to test all dsr1 model configs:**
 ```
-test-config --config-keys dsr1* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1* --config-files configs/nvidia-master.yaml
 ```
 
 **Mix exact keys and patterns:**
 ```
-test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp4-b200-sglang gptoss* --config-files configs/nvidia-master.yaml
 ```
 
 **Override concurrency for targeted testing:**
 ```
-test-config --config-keys *-b200-* --conc 4 8 --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys *-b200-* --conc 4 8 --config-files configs/nvidia-master.yaml
 ```
 
 **Run eval-only jobs for every generated fixed-sequence config:**
 ```
-test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files .github/configs/nvidia-master.yaml
+test-config --config-keys dsr1-fp8-h200-sglang --evals-only --all-evals --config-files configs/nvidia-master.yaml
 ```
 
 ## PR Eval Modifiers
 
-Use `all-evals` and/or `evals-only` with one primary sweep label. `all-evals`
+Use `all-evals` and/or `evals-only` with one primary sweep label (`full-sweep-fail-fast` is the strongly recommended primary for full sweeps; use `full-sweep-enabled` only when jobs must keep running past a failure). `all-evals`
 covers every fixed-sequence config; each multi-node topology runs all
 `conc-list` values on one engine. `evals-only` suppresses throughput; together
 they run all evals only. The primary label still controls canary/fail-fast.
@@ -247,7 +204,7 @@ The benchmarking system uses a strict validation methodology to ensure correctne
 
 The system validates **both ends** of the configuration pipeline:
 
-1. **Input Validation (Master Configs)**: Validates the structure of `.github/configs/*.yaml` files before any processing occurs
+1. **Input Validation (Master Configs)**: Validates the structure of `configs/*.yaml` files before any processing occurs
 2. **Output Validation (Matrix Entries)**: Validates the generated matrix entries that are passed to workflow templates
 
 This dual-validation approach ensures:
@@ -303,7 +260,7 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
 ### Validation Flow
 
 ```
-.github/configs/*.yaml
+configs/*.yaml
         │
         ▼
 ┌─────────────────────────┐
@@ -324,16 +281,3 @@ The corresponding `SingleNodeMatrixEntry` enforces these same fields with approp
   benchmark-tmpl.yml or
   benchmark-multinode-tmpl.yml
 ```
-
-## Utility Scripts
-
-### `utils/summarize.py`
-
-Aggregates benchmark results from a directory of JSON files and outputs a markdown summary table. Used after `collect-results.yml` downloads all artifacts.
-
-Usage:
-```bash
-python utils/summarize.py <results_directory>
-```
-
-Outputs GitHub-flavored markdown tables with metrics including TTFT, TPOT, interactivity, E2EL, and throughput per GPU for both single-node and multi-node results.

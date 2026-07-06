@@ -48,7 +48,7 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
 # sglang ships in the image at the SHA encoded in the image tag (built
 # from the amd/deepseek_v4 branch in sgl-project/sglang). To bump sglang,
-# bump the image tag in .github/configs/amd-master.yaml.
+# bump the image tag in configs/amd-master.yaml.
 
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this

@@ -54,13 +54,13 @@ jobs:
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                 ref: ${{ inputs.ref }}
 
             - name: Checkout code (default)
               if: ${{ !inputs.ref || inputs.ref == '' }}
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                 ref: ${{ github.sha }}
 
@@ -184,7 +184,9 @@ jobs:
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
-            offloading: ${{ matrix.config.offloading }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
+            total-cpu-dram-gb: ${{ matrix.config.total-cpu-dram-gb }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             isl: '0'
             osl: '0'
@@ -216,7 +218,7 @@ jobs:
             model-prefix: ${{ matrix.config.model-prefix }}
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
-            conc-list: '[${{ matrix.config.conc }}]'
+            conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
@@ -229,7 +231,9 @@ jobs:
             decode-ep: ${{ matrix.config.decode.ep }}
             decode-dp-attn: ${{ matrix.config.decode.dp-attn }}
             decode-additional-settings: ${{ toJson(matrix.config.decode.additional-settings) }}
-            conc: ${{ matrix.config.conc }}
+            conc: ${{ matrix.config.conc[0] }}
+            kv-offloading: ${{ matrix.config.kv-offloading }}
+            kv-offload-backend: ${{ matrix.config.kv-offload-backend }}
             duration: ${{ inputs.duration-override != '' && inputs.duration-override || matrix.config.duration }}
             run-eval: false
             scenario-type: agentic-coding
@@ -310,42 +314,8 @@ jobs:
         uses: ./.github/workflows/collect-evals.yml
         secrets: inherit
 
-    collect-agentic-results:
-        needs: [test-sweep-agentic, test-sweep-multi-node-agentic]
-        if: ${{ always() && (needs.test-sweep-agentic.result != 'skipped' || needs.test-sweep-multi-node-agentic.result != 'skipped') }}
-        runs-on: ubuntu-latest
-        steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-              with:
-                  submodules: true
-
-            - uses: actions/setup-python@v6
-              with:
-                  python-version: '3.11'
-
-            - name: Install dependencies
-              run: pip install pandas matplotlib numpy
-
-            - name: Download agentic artifacts
-              uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-              with:
-                  pattern: 'agentic_*'
-                  path: results/
-
-            - name: Run aggregation
-              env:
-                  PYTHONPATH: utils/agentic-benchmark/scripts:utils/agentic-benchmark/analysis
-              run: |
-                  python utils/agentic-benchmark/scripts/collect_sweep_results.py results/ aggregated/
-
-            - name: Upload aggregated results
-              uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-              with:
-                  name: agentic_aggregated
-                  path: aggregated/
-
     calc-success-rate:
-        needs: [collect-results, collect-evals, collect-agentic-results]
+        needs: [collect-results, collect-evals]
         if: ${{ always() }}
         runs-on: ubuntu-latest
 
@@ -355,7 +325,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
@@ -376,3 +346,43 @@ jobs:
               with:
                   name: "run-stats"
                   path: ${{ env.STATS_FILENAME }}.json
+
+    trigger-agentic-ingest:
+        needs:
+            [
+                test-sweep-agentic,
+                test-sweep-multi-node-agentic,
+                calc-success-rate,
+            ]
+        if: >-
+            always() &&
+            github.event_name == 'workflow_dispatch' &&
+            needs.calc-success-rate.result == 'success' &&
+            (
+              needs.test-sweep-agentic.result == 'success' ||
+              needs.test-sweep-multi-node-agentic.result == 'success'
+            ) &&
+            (
+              needs.test-sweep-agentic.result == 'success' ||
+              needs.test-sweep-agentic.result == 'skipped'
+            ) &&
+            (
+              needs.test-sweep-multi-node-agentic.result == 'success' ||
+              needs.test-sweep-multi-node-agentic.result == 'skipped'
+            )
+        runs-on: ubuntu-latest
+        steps:
+            - name: Trigger agentic database ingest
+              run: |
+                  curl -sSf -X POST \
+                    -H "Authorization: Bearer ${{ secrets.INFX_FRONTEND_PAT }}" \
+                    -H "Accept: application/vnd.github+v3+json" \
+                    https://api.github.com/repos/SemiAnalysisAI/InferenceX-app/actions/workflows/ingest-agentic-results.yml/dispatches \
+                    -d '{
+                      "ref": "feat/agentx",
+                      "inputs": {
+                        "run-id": "${{ github.run_id }}",
+                        "run-attempt": "${{ github.run_attempt }}",
+                        "database-target": "production"
+                      }
+                    }'

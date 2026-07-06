@@ -148,9 +148,9 @@ key off that name:
    For a brand-new cluster, add a `runners/launch_<BASE_RUNNER_NAME>.sh` first.
    Corollary: `BASE_RUNNER_NAME` itself must not contain `_` (use hyphens).
 
-2. **Sweep scheduling looks runners up by exact name.** Jobs are distributed across the
-   runner names listed per SKU in
-   [`.github/configs/runners.yaml`](../../.github/configs/runners.yaml). New runners do
+2. **Sweep scheduling looks runner nodes up by label.** Jobs are distributed across the
+   runner names listed under each `labels` entry in
+   [`configs/runners.yaml`](../../configs/runners.yaml). New runners do
    **not** receive sweep jobs until they are added there, and the entries must match the
    registered names exactly — including zero-padding. (Some older fleets predate the
    padded convention, e.g. `h200-dgxc-slurm_0`; `setup.sh` always zero-pads, so new
@@ -163,15 +163,19 @@ key off that name:
 
 - `slurm` — the runner submits work through Slurm.
 - The SKU name (`b200`, `b300`, `h200`, `gb300`, …) — coarse hardware targeting.
-- Optional sub-fleet tags, e.g. `b200-dgxc`, `b200-dsv4` — used to carve out dedicated
-  capacity.
+- Exactly one `cluster:<name>` label, e.g. `cluster:b200-dgxc` — required exact
+  hardware/fleet identity for success-rate reporting and hardware-specific config.
+  Every runner in the same physical cluster with identical hardware should use the same
+  cluster label.
+- Optional capacity tags, e.g. `b200-dsv4`, `b300-p1` — used to carve out dedicated
+  benchmark subsets.
 
 The per-runner name label (`b300-nv_07`) is what `runs-on` resolves for sweep jobs, so
 always keep it (the script appends it automatically). A typical registered runner ends
 up with labels like:
 
 ```
-self-hosted, Linux, X64, slurm, b200, b200-dsv4, b200-dgxc, b200-dgxc_00
+self-hosted, Linux, X64, slurm, b200, b200-dsv4, cluster:b200-dgxc, b200-dgxc_00
 ```
 
 Labels can be edited later on the runners settings page without re-registering.
@@ -226,7 +230,7 @@ the new `runners/launch_<cluster>.sh`.
   `SESSION_NAME` argument.
 - **Removing runners:** from the runner directory, stop the process and run
   `./config.sh remove --token <removal-token>` (token from the runners settings page).
-  Remember to also delete the name from `.github/configs/runners.yaml`.
+  Remember to also delete the name from the matching `labels` entry in `configs/runners.yaml`.
 
 ## Record the cluster in the team canvas (SemiAnalysis only)
 
@@ -239,7 +243,7 @@ ask the user for the Slack link to the InferenceX Clusters canvas.**
 information to it** after provisioning —
 a new row in the Clusters table (and the Host-RAM table), plus any access notes (jumpbox,
 non-Slurm/bare-metal, Tailscale, etc.). Keep the canvas consistent with
-[`.github/configs/runners.yaml`](../../.github/configs/runners.yaml) and the live
+[`configs/runners.yaml`](../../configs/runners.yaml) and the live
 [runners settings page](https://github.com/SemiAnalysisAI/InferenceX/settings/actions/runners),
 which remain the sources of truth.
 

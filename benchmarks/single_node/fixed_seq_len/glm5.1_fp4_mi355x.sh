@@ -52,6 +52,7 @@ python3 -m sglang.launch_server \
     --nsa-decode-backend tilelang $EVAL_CONTEXT_ARGS  \
     --kv-cache-dtype fp8_e4m3 \
     --tokenizer-worker-num $((TP*2)) \
+    --enable-aiter-allreduce-fusion \
     --disable-radix-cache> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!

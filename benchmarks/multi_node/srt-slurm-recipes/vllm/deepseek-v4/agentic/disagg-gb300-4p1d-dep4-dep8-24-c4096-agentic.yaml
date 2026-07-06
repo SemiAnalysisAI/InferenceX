@@ -86,8 +86,10 @@ backend:
       data-parallel-size: 4
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      enforce-eager: true
-      max-num-seqs: 16
+      # enforce-eager: true
+      # Inherited from fixed-sequence recipes; let vLLM select the scheduler
+      # sequence limit until this is tuned explicitly for the agentic trace.
+      # max-num-seqs: 16
       max-num-batched-tokens: 16384
       trust-remote-code: true
       no-enable-flashinfer-autotune: true
@@ -95,7 +97,6 @@ backend:
       block-size: 256
       gpu-memory-utilization: 0.9
       no-disable-hybrid-kv-cache-manager: true
-      no-async-scheduling: true
       tokenizer-mode: deepseek_v4
       enable-ep-weight-filter: true
       enable-sleep-mode: true
@@ -110,13 +111,12 @@ backend:
       data-parallel-size: 8
       data-parallel-rpc-port: 13345
       enable-expert-parallel: true
-      max-num-seqs: 512
-      max-cudagraph-capture-size: 512
+      # max-num-seqs: 512
       trust-remote-code: true
       block-size: 256
       compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
       gpu-memory-utilization: 0.9
-      stream-interval: 50
+      stream-interval: 10
       no-disable-hybrid-kv-cache-manager: true
       tokenizer-mode: deepseek_v4
       enable-ep-weight-filter: true
@@ -173,3 +173,7 @@ benchmark:
     # Without this, aiperf re-tokenizes + re-writes ~65 GB of mmap files
     # per dataset on every run.
     AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    # Persistent HF hub cache (also wired via default_mounts) so the trace
+    # dataset isn't re-downloaded on every run. Overrides the workflow-level
+    # HF_HUB_CACHE=/mnt/hf_hub_cache, which doesn't exist on these nodes.
+    HF_HUB_CACHE: "/hf_hub_cache"

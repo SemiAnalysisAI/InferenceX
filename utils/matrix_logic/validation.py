@@ -1,9 +1,12 @@
 from pydantic import BaseModel, Field, ValidationError, ConfigDict, model_validator
-from typing import List, Optional, Union, Literal
+from typing import List, Optional, Union, Literal, Dict
 from enum import Enum
 
 import pprint
 import yaml
+
+CLUSTER_LABEL_PREFIX = "cluster:"
+DEFAULT_AGENTIC_DURATION_SECONDS = 3600
 
 """
     The below class defines the field names expected to be present in the JSON entries
@@ -50,7 +53,12 @@ class Fields(Enum):
     ADDITIONAL_SETTINGS = 'additional-settings'
 
     # Agentic coding fields
-    OFFLOADING = 'offloading'
+    KV_OFFLOADING = 'kv-offloading'
+    KV_OFFLOAD_BACKEND = 'kv-offload-backend'
+    TOTAL_CPU_DRAM_GB = 'total-cpu-dram-gb'
+    AVAILABLE_CPU_DRAM_MIB = 'available-cpu-dram-mib'
+    DRAM_UTILIZATION = 'dram-utilization'
+    GPUS_PER_NODE = 'gpus-per-node'
     DURATION = 'duration'
 
     # Matrix entry fields
@@ -160,12 +168,20 @@ class SingleNodeAgenticMatrixEntry(BaseModel):
     ep: int
     dp_attn: bool = Field(alias=Fields.DP_ATTN.value)
     conc: int
-    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
-        alias=Fields.OFFLOADING.value
+    kv_offloading: Literal["none", "dram"] = Field(
+        alias=Fields.KV_OFFLOADING.value
     )
-    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
+    )
+    total_cpu_dram_gb: int = Field(alias=Fields.TOTAL_CPU_DRAM_GB.value, ge=0)
+    duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
 
 class MultiNodeAgenticMatrixEntry(BaseModel):
@@ -183,8 +199,9 @@ class MultiNodeAgenticMatrixEntry(BaseModel):
     runner: str
     prefill: WorkerConfig
     decode: WorkerConfig
-    conc: int
-    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    conc: list[int]
+    kv_offloading: Literal["none"] = Field(alias=Fields.KV_OFFLOADING.value)
+    duration: int = Field(alias=Fields.DURATION.value)
     exp_name: str = Field(alias=Fields.EXP_NAME.value)
     disagg: bool
     scenario_type: str = Field(alias=Fields.SCENARIO_TYPE.value)
@@ -225,7 +242,7 @@ def validate_matrix_entry(entry: dict, is_multinode: bool) -> dict:
 
 """
     Below is the validation logic for the INPUT to utils/matrix_logic/generate_sweep_configs.py, i.e., 
-    the master configuration files found in .github/configs. The validation enforces a strict set of 
+    the master configuration files found in configs. The validation enforces a strict set of
     rules on the structure of the master configuration files to ensure correctness before proceeding 
     with matrix generation.
 """
@@ -274,6 +291,38 @@ def _validate_conc_fields(self):
                 f"Input '{Fields.CONC_LIST.value}' entries must be greater than 0."
             )
 
+    return self
+
+
+def _validate_agentic_runner_is_cluster(runner: str, scenarios) -> None:
+    if scenarios.agentic_coding and not runner.startswith(CLUSTER_LABEL_PREFIX):
+        raise ValueError(
+            f"Agentic master configs must use a '{CLUSTER_LABEL_PREFIX}<name>' runner "
+            "so every point runs on one exact hardware fleet."
+        )
+
+
+def _validate_kv_offload_fields(self):
+    backend = getattr(self, "kv_offload_backend", None)
+    if self.kv_offloading is None:
+        if backend not in (None, ""):
+            raise ValueError(
+                f"{Fields.KV_OFFLOAD_BACKEND.value} requires "
+                f"{Fields.KV_OFFLOADING.value}"
+            )
+        return self
+    if self.kv_offloading == "none":
+        if backend not in (None, ""):
+            raise ValueError(
+                f"{Fields.KV_OFFLOAD_BACKEND.value} can only be set when "
+                f"{Fields.KV_OFFLOADING.value} is not 'none'"
+            )
+        return self
+    if backend is None or not backend.strip():
+        raise ValueError(
+            f"{Fields.KV_OFFLOAD_BACKEND.value} is required when "
+            f"{Fields.KV_OFFLOADING.value} is '{self.kv_offloading}'"
+        )
     return self
 
 
@@ -350,8 +399,11 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
         default="none", alias=Fields.SPEC_DECODING.value)
     prefill: Optional[WorkerConfig] = None
     decode: Optional[WorkerConfig] = None
-    offloading: Literal["none", "cpu", "ssd", "lmcache", "lmcache-mp", "hicache"] = Field(
-        default="none", alias=Fields.OFFLOADING.value
+    kv_offloading: Optional[Literal["none", "dram"]] = Field(
+        default=None, alias=Fields.KV_OFFLOADING.value
+    )
+    kv_offload_backend: Optional[str] = Field(
+        default=None, alias=Fields.KV_OFFLOAD_BACKEND.value
     )
     conc_start: Optional[int] = Field(default=None, alias=Fields.CONC_START.value)
     conc_end: Optional[int] = Field(default=None, alias=Fields.CONC_END.value)
@@ -360,6 +412,10 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
     @model_validator(mode='after')
     def validate_conc_fields(self):
         return _validate_conc_fields(self)
+
+    @model_validator(mode='after')
+    def validate_kv_offload_fields(self):
+        return _validate_kv_offload_fields(self)
 
     @model_validator(mode='after')
     def validate_topology_fields(self):
@@ -372,15 +428,33 @@ class AgenticCodingSearchSpaceEntry(BaseModel):
             valid = has_complete_multinode
         if not valid:
             raise ValueError("Agentic search-space entries must specify either tp or both prefill and decode")
+        if has_single_node and self.kv_offloading is None:
+            raise ValueError(
+                f"Single-node agentic search-space entries must specify "
+                f"{Fields.KV_OFFLOADING.value}"
+            )
         return self
-
 
 class AgenticCodingConfig(BaseModel):
     """Agentic coding scenario configuration for trace replay benchmarks."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     search_space: List[AgenticCodingSearchSpaceEntry] = Field(alias=Fields.SEARCH_SPACE.value)
-    duration: int = Field(default=1800, alias=Fields.DURATION.value)
+    dram_utilization: Optional[float] = Field(
+        default=None, alias=Fields.DRAM_UTILIZATION.value, gt=0, le=1
+    )
+
+    @model_validator(mode='after')
+    def validate_dram_offload_capacity(self):
+        for entry in self.search_space:
+            if entry.kv_offloading != "dram":
+                continue
+            if self.dram_utilization is None:
+                raise ValueError(
+                    f"{Fields.KV_OFFLOADING.value}='dram' requires "
+                    f"{Fields.DRAM_UTILIZATION.value} with runner hardware metadata"
+                )
+        return self
 
 
 class SingleNodeScenarios(BaseModel):
@@ -429,6 +503,11 @@ class SingleNodeMasterConfigEntry(BaseModel):
     disagg: bool = Field(default=False)
     scenarios: SingleNodeScenarios
 
+    @model_validator(mode='after')
+    def validate_agentic_runner(self):
+        _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
+        return self
+
 
 class MultiNodeMasterConfigEntry(BaseModel):
     """Top-level multinode master configuration entry."""
@@ -443,6 +522,11 @@ class MultiNodeMasterConfigEntry(BaseModel):
     multinode: Literal[True]
     disagg: bool = Field(default=False)
     scenarios: MultiNodeScenarios
+
+    @model_validator(mode='after')
+    def validate_agentic_runner(self):
+        _validate_agentic_runner_is_cluster(self.runner, self.scenarios)
+        return self
 
 
 def validate_master_config(master_configs: dict) -> List[dict]:
@@ -463,9 +547,8 @@ def validate_master_config(master_configs: dict) -> List[dict]:
 # Runner Config Validation
 
 
-def validate_runner_config(runner_configs: dict) -> List[dict]:
-    """Validate input master configuration structure."""
-    for key, value in runner_configs.items():
+def _validate_runner_labels(labels: dict) -> None:
+    for key, value in labels.items():
         if not isinstance(value, list):
             raise ValueError(
                 f"Runner config entry '{key}' must be a list, got {type(value).__name__}")
@@ -478,6 +561,37 @@ def validate_runner_config(runner_configs: dict) -> List[dict]:
             raise ValueError(
                 f"Runner config entry '{key}' cannot be an empty list")
 
+
+class RunnerHardwareConfig(BaseModel):
+    """Per-hardware runner facts used when generating benchmark matrices."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    available_cpu_dram_mib: int = Field(
+        alias=Fields.AVAILABLE_CPU_DRAM_MIB.value, gt=0
+    )
+    gpus_per_node: int = Field(
+        alias=Fields.GPUS_PER_NODE.value, gt=0
+    )
+
+
+class RunnerConfig(BaseModel):
+    """Top-level runner configuration file."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    labels: Dict[str, List[str]]
+    hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
+
+
+def validate_runner_config(runner_configs: dict) -> dict:
+    """Validate runner labels and hardware metadata."""
+    labels = runner_configs.get("labels")
+    if not isinstance(labels, dict):
+        raise ValueError("Runner config must define a labels mapping")
+    _validate_runner_labels(labels)
+    try:
+        RunnerConfig(**runner_configs)
+    except ValidationError as e:
+        raise ValueError(f"Runner config failed validation:\n{e}")
     return runner_configs
 
 

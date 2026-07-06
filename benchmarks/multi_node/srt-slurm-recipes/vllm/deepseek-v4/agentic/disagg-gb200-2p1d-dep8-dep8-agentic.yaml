@@ -1,0 +1,161 @@
+name: "svf-vllm-disagg-gb200-2p1d-dep8-dep8-agentic"
+
+# High-throughput topology: two DEP8 prefill workers and one
+# DEP8 decode worker. All three workers use attention DP8 / expert EP8, for
+# 24 inference GPUs total. This makes the previously manual-only DEP/DEP
+# experiment reproducible while the June 21 AgentX frontier is retuned.
+
+model:
+  path: "deepseek-v4-pro"
+  container: "vllm/vllm-openai:v0.23.0"
+  precision: "fp4"
+
+dynamo:
+  install: true
+  wheel: "1.3.0.dev20260618"
+
+setup_script: vllm-container-deps.sh
+
+slurm:
+  time_limit: "8:00:00"
+
+health_check:
+  max_attempts: 1440
+  interval_seconds: 10
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  prefill_nodes: 4
+  decode_nodes: 2
+  prefill_workers: 2
+  decode_workers: 1
+  gpus_per_prefill: 8
+  gpus_per_decode: 8
+
+infra:
+  etcd_nats_dedicated_node: false
+  nats_max_payload_mb: 32
+
+frontend:
+  type: dynamo
+  enable_multiple_frontends: false
+  env:
+    DYN_REQUEST_PLANE: "tcp"
+    # Dynamo's 10-second default can expire during brief etcd stalls while
+    # many long-loading DEP ranks initialize. Slurm still detects hard exits.
+    ETCD_LEASE_TTL: "120"
+  args:
+    router-mode: "kv"
+    router-reset-states: true
+
+backend:
+  type: vllm
+  connector: null
+  prefill_environment:
+    DYN_REQUEST_PLANE: "tcp"
+    ETCD_LEASE_TTL: "120"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    # Long AgentX requests can make one DEP rank hold the EP step beyond
+    # vLLM's 300-second model-execution timeout.
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    VLLM_SPARSE_INDEXER_MAX_LOGITS_MB: "1024"
+    VLLM_MAX_TOKENS_PER_EXPERT_FP4_MOE: "2048"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
+    UCX_TLS: "cuda_copy,rc"
+    NCCL_P2P_LEVEL: NVL
+  decode_environment:
+    DYN_REQUEST_PLANE: "tcp"
+    ETCD_LEASE_TTL: "120"
+    TILELANG_CLEANUP_TEMP_FILES: "1"
+    VLLM_USE_NCCL_SYMM_MEM: "1"
+    TORCH_SYMMMEM: "NVSHMEM"
+    NCCL_CUMEM_ENABLE: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_NVLS_ENABLE: "1"
+    VLLM_SERVER_DEV_MODE: "1"
+    VLLM_USE_V2_MODEL_RUNNER: "1"
+    VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS: "1800"
+    VLLM_PREFIX_CACHE_RETENTION_INTERVAL: "32768"
+    UCX_MEMTYPE_CACHE: "n"
+    UCX_MEMTYPE_REG_WHOLE: "n"
+    UCX_RCACHE_MAX_UNRELEASED: "1024"
+    UCX_TLS: "cuda_copy,rc"
+    NCCL_P2P_LEVEL: NVL
+
+  vllm_config:
+    prefill:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      kv-events-config: '{"publisher":"zmq","topic":"kv-events","endpoint":"tcp://*:20080","enable_kv_cache_events":true}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_prefill_query_quantization": true, "use_fp4_indexer_cache": true}'
+      # Let vLLM select max-num-seqs for the long-context AgentX trace.
+      # max-num-seqs: 256
+      # DEP8 holds a full model replica per GPU. A 16K prefill step requires
+      # a 9.84 GiB FP4 MoE intermediate and OOMs before serving traffic.
+      max-num-batched-tokens: 8192
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"PIECEWISE"}'
+      gpu-memory-utilization: 0.9
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+    decode:
+      kv-transfer-config: '{"kv_connector": "NixlConnector", "kv_role": "kv_both"}'
+      served-model-name: "deepseek-ai/DeepSeek-V4-Pro"
+      kv-cache-dtype: "fp8"
+      tensor-parallel-size: 1
+      pipeline-parallel-size: 1
+      data-parallel-size: 8
+      data-parallel-rpc-port: 13345
+      enable-expert-parallel: true
+      enable-ep-weight-filter: true
+      attention-config: '{"backend": "FLASHINFER_MLA_SPARSE_DSV4", "use_fp4_indexer_cache": true}'
+      # Let vLLM select max-num-seqs and max-num-batched-tokens.
+      # max-num-seqs: 512
+      trust-remote-code: true
+      no-enable-flashinfer-autotune: true
+      block-size: 256
+      compilation-config: '{"cudagraph_mode":"FULL_DECODE_ONLY","mode":0}'
+      gpu-memory-utilization: 0.9
+      stream-interval: 10
+      no-disable-hybrid-kv-cache-manager: true
+      tokenizer-mode: deepseek_v4
+
+sbatch_directives:
+  cpus-per-task: "72"
+
+srun_options:
+  container-remap-root: ""
+
+benchmark:
+  type: custom
+  aiperf_server_metrics: true
+  command: bash /infmax-workspace/benchmarks/multi_node/agentic_srt.sh
+  env:
+    INFMAX_CONTAINER_WORKSPACE: /infmax-workspace
+    RESULT_DIR: /logs/agentic
+    PORT: "8000"
+    IS_MULTINODE: "true"
+    AIPERF_DYNAMO_SESSION_TIMEOUT_SECONDS: "14400"
+    AIPERF_DATASET_MMAP_CACHE_DIR: "/aiperf_mmap_cache"
+    HF_HUB_CACHE: "/hf_hub_cache"
+    WEKA_LOADER_OVERRIDE: "semianalysis_cc_traces_weka_062126"

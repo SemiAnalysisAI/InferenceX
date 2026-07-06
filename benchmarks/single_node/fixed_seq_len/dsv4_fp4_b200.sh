@@ -21,12 +21,7 @@ if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 nvidia-smi
 
 # Common SGLANG env vars (apply to every config).
-export SGLANG_JIT_DEEPGEMM_PRECOMPILE=0
 export SGLANG_OPT_SWA_SPLIT_LEAF_ON_INSERT=1
-export SGLANG_OPT_USE_JIT_NORM=1
-export SGLANG_OPT_USE_JIT_INDEXER_METADATA=1
-export SGLANG_OPT_USE_TOPK_V2=1
-export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 
 # TODO(Cam): the lmsysorg/sglang:deepseek-v4-blackwell image installs sglang
 # editable at /workspace/sglang/python; prior sglang tags used /sgl-workspace/sglang.
@@ -35,6 +30,7 @@ export SGLANG_OPT_USE_CUSTOM_ALL_REDUCE_V2=1
 # Drop the runner conditional once lmsys moves sglang back out of /workspace.
 
 SERVER_LOG="$PWD/server.log"
+PORT=${PORT:-8888}
 
 echo "TP: $TP, DP_ATTENTION: $DP_ATTENTION, CONC: $CONC, ISL: $ISL, OSL: $OSL"
 
@@ -46,31 +42,61 @@ fi
 
 start_gpu_monitor --output "$PWD/gpu_metrics.csv"
 
-# Pick the parallelism + MoE backend based on DP_ATTENTION (mirrors the vllm
-# script's pattern). DP-attention turns on EP-MoE (deepep) and the related
-# mega_moe optimizations; single-instance uses flashinfer_mxfp4.
-DEEPEP_CONFIG='{"normal_dispatch":{"num_sms":96},"normal_combine":{"num_sms":96}}'
+# 1k inputs need more SWA cache headroom than 8k inputs do.
+if [[ "$ISL" == "1024" ]]; then
+    SWA_FULL_TOKENS_RATIO=0.5
+else
+    SWA_FULL_TOKENS_RATIO=0.1
+fi
 
+# Pick the parallelism + MoE backend based on DP_ATTENTION. DP-attention turns on
+# EP-MoE (megamoe) + the mega_moe / mixed-chunk optimizations; single-instance
+# uses flashinfer_mxfp4.
 if [ "${DP_ATTENTION}" = "true" ]; then
-    export SGLANG_OPT_USE_DEEPGEMM_MEGA_MOE=1
-    export SGLANG_OPT_FIX_HASH_MEGA_MOE=1
+    export SGLANG_CLIP_MAX_NEW_TOKENS_ESTIMATION=8
+    export SGLANG_OPT_SWA_EVICT_DROP_PAGE_MARGIN=1
     export SGLANG_OPT_USE_FAST_MASK_EP=1
     export SGLANG_OPT_FIX_MEGA_MOE_MEMORY=1
-    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=4096
     export SGLANG_OPT_FIX_NEXTN_MEGA_MOE=1
-    export SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK=0
+    export NVSHMEM_DISABLE_IB=1
+    export SGLANG_OPT_SWA_RELEASE_LEAF_LOCK_AFTER_WINDOW=1
+    export SGLANG_OPT_USE_ONLINE_COMPRESS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_NUM_MAX_TOKENS_PER_RANK=2048
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_FP4_ACTS=1
+    export SGLANG_OPT_DEEPGEMM_MEGA_MOE_USE_MXF4_KIND=1
+    export SGLANG_EXPERIMENTAL_ENABLE_PIECEWISE_CUDA_GRAPH_MOE_A2A=1
+    export NCCL_MNNVL_ENABLE=1
+    export NCCL_CUMEM_ENABLE=1
+    export MC_FORCE_MNNVL=1
+    export SGLANG_MOONCAKE_CUSTOM_MEM_POOL=True
+
+    MEM_FRACTION_STATIC=0.835
+    MAX_RUNNING_REQUESTS=4352
+    SWA_FULL_TOKENS_RATIO=0.12
+
     PARALLEL_ARGS=(
         --dp-size "$TP"
         --enable-dp-attention
-        --moe-a2a-backend deepep
-        --deepep-config "$DEEPEP_CONFIG"
-        --chunked-prefill-size 32768
+        --moe-a2a-backend megamoe
+        --cuda-graph-max-bs 544
+        --enable-mixed-chunk
+        --chunked-prefill-size 16384
+        --max-prefill-tokens 16384
+        --tokenizer-worker-num 8
+        --stream-interval 30
+        --enable-prefill-delayer
     )
 else
+    MEM_FRACTION_STATIC=0.90
+    MAX_RUNNING_REQUESTS=512
     PARALLEL_ARGS=(
         --moe-runner-backend flashinfer_mxfp4
         --chunked-prefill-size 8192
         --disable-flashinfer-autotune
+        --cuda-graph-max-bs 512
+        --tokenizer-worker-num 8
+        --stream-interval 30
+        --enable-prefill-delayer
     )
 fi
 
@@ -90,9 +116,9 @@ PYTHONNOUSERSITE=1 sglang serve \
     --trust-remote-code \
     --tp $TP \
     --disable-radix-cache \
-    --max-running-requests "$((CONC * 3 / 2))" \
-    --mem-fraction-static 0.90 \
-    --swa-full-tokens-ratio 0.1 \
+    --max-running-requests "$MAX_RUNNING_REQUESTS" \
+    --mem-fraction-static "$MEM_FRACTION_STATIC" \
+    --swa-full-tokens-ratio "$SWA_FULL_TOKENS_RATIO" \
     "${PARALLEL_ARGS[@]}" $EVAL_CONTEXT_ARGS >> $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
