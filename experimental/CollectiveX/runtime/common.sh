@@ -1969,6 +1969,14 @@ cx_lock_canonical_gha_env() {
         ;;
       *) cx_die "canonical CollectiveX execution requires a configured shared stage directory" ;;
     esac
+  elif [ "$runner" = mi300x ]; then
+    # The MI300X runner home is a shared-filesystem symlink. Resolve the
+    # operator-selected base once; cx_stage_path still validates the canonical
+    # directory's ownership, permissions, overlap, and per-run child path.
+    trusted_stage_dir="$(python3 -c \
+      'import os,sys; p=os.path.realpath(sys.argv[1]); assert os.path.isdir(p); print(p,end="")' \
+      "$trusted_stage_dir")" \
+      || cx_die "canonical MI300X execution cannot resolve the shared stage directory"
   fi
   [[ "$trusted_audit_salt" =~ ^[0-9a-f]{64}$ ]] \
     || cx_die "canonical CollectiveX execution requires a private audit salt"

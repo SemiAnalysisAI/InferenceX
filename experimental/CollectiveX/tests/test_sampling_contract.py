@@ -2861,6 +2861,12 @@ class SamplingContractTest(unittest.TestCase):
           test -z "${CX_PREPARED_BACKEND_CACHE+x}${CX_BACKEND_SOURCE_ROOT+x}"
           test -z "${CX_DRYRUN+x}"
 
+          export COLLECTIVEX_OPERATOR_CONFIG_LOADED=$$
+          export CX_SHARD_SKU=mi300x CX_NODES=2 CX_GPUS_PER_NODE=8
+          export CX_STAGE_DIR="$TEST_STAGE_ALIAS" CX_AUDIT_SALT="$(printf 'a%.0s' {1..64})"
+          cx_lock_canonical_gha_env mi300x
+          test "$CX_STAGE_DIR" = "$TEST_STAGE_TARGET"
+
           cx_prepare_implicit_stage_base() {
             if [ -n "${1:-}" ]; then test "$1" = "$TEST_SHARED_PARENT"; fi
             if [ -n "${2:-}" ]; then test "$2" = 123; fi
@@ -2932,9 +2938,13 @@ class SamplingContractTest(unittest.TestCase):
             home = root / "home"
             workspace = root / "workspace"
             implicit_stage = root / "implicit-stage"
+            stage_target = root / "stage-target"
+            stage_alias = root / "stage-alias"
             home.mkdir(mode=0o700)
             workspace.mkdir(mode=0o720)
             implicit_stage.mkdir(mode=0o700)
+            stage_target.mkdir(mode=0o700)
+            stage_alias.symlink_to(stage_target, target_is_directory=True)
             subprocess.run(
                 ["bash", "-c", command, "_", str(common)],
                 check=True,
@@ -2942,6 +2952,8 @@ class SamplingContractTest(unittest.TestCase):
                     **os.environ,
                     "HOME": str(home),
                     "TEST_IMPLICIT_STAGE": str(implicit_stage),
+                    "TEST_STAGE_ALIAS": str(stage_alias),
+                    "TEST_STAGE_TARGET": str(stage_target),
                     "TEST_SHARED_PARENT": str(root),
                     "COLLECTIVEX_OPERATOR_CONFIG": "/dev/null",
                     "GITHUB_WORKSPACE": str(workspace),
