@@ -2405,6 +2405,11 @@ from pathlib import Path
 import shutil
 import sys
 
+def report_error(kind, value, trace):
+    error_number = getattr(value, "errno", 0)
+    print(f"collectivex-stage-copy-error={kind.__name__}:{error_number or 0}", file=sys.stderr)
+
+sys.excepthook = report_error
 source, target = map(Path, sys.argv[1:])
 excluded = {
     Path("__pycache__"), Path("results"), Path(".cx_workloads"),
@@ -2431,6 +2436,9 @@ for root, directories, files in os.walk(source, followlinks=False):
             shutil.copyfileobj(input_file, output_file)
 PY
   then
+    copy_error="$(grep -aoE 'collectivex-stage-copy-error=[A-Za-z]+:[0-9]+' "$log" \
+      | tail -n 1 || true)"
+    [ -z "$copy_error" ] || cx_log "ERROR: repository-stage-$copy_error"
     rm -rf -- "$stage_dir" >/dev/null 2>&1 \
       || cx_log "ERROR: cannot remove the incomplete execution stage"
     cx_fail_stage repository-stage "$log" || true
