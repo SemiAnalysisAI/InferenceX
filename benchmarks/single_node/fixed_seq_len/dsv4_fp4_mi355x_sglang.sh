@@ -56,8 +56,8 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
-	--prefill-delayer-max-delay-ms 5000
-	--enable-two-batch-overlap
+        --prefill-delayer-max-delay-ms 5000
+        --enable-two-batch-overlap
     )
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
