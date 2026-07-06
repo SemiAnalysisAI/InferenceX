@@ -55,6 +55,9 @@ fi
 resolve_trace_source
 install_agentic_deps
 
+# Nightly ROCm image may be missing runtime deps; ensure they are present.
+agentic_pip_install --quiet Pillow fastapi uvicorn
+
 # default
 export AIPERF_AGENTIC_CACHE_WARMUP_DURATION=600
 # tune
