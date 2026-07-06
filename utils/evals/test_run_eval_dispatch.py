@@ -24,9 +24,19 @@ run_eval ${CLI_FW:+--framework "$CLI_FW"} --port 8888
 
 
 def _dispatch(*, is_agentic: str = "0", cli_fw=None, env_fw=None) -> str:
-    env = {**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "IS_AGENTIC": is_agentic}
+    # AgentX v1.0 added a source-time guard in benchmark_lib.sh that requires
+    # KV_OFFLOADING to be set whenever the scenario is agentic (IS_AGENTIC=1 /
+    # SCENARIO_TYPE=agentic-coding). KV_OFFLOADING=none satisfies it without
+    # affecting framework dispatch, which only reads scenario + framework knobs.
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "IS_AGENTIC": is_agentic,
+        "KV_OFFLOADING": "none",
+    }
     env.pop("EVAL_FRAMEWORK", None)
     env.pop("CLI_FW", None)
+    env.pop("KV_OFFLOAD_BACKEND", None)
     if cli_fw is not None:
         env["CLI_FW"] = cli_fw
     if env_fw is not None:

@@ -241,6 +241,13 @@ if [ "${#METRICS_ARGS[@]}" -gt 0 ]; then
     trap capture_cache_metrics EXIT
 fi
 
-build_replay_cmd "$RESULT_DIR"
-REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
-run_agentic_replay_and_write_outputs "$RESULT_DIR"
+if [ "${EVAL_ONLY}" = "true" ]; then
+    # Eval-only: skip the multi-turn agentic replay and run the eval against the
+    # live server. run_eval auto-selects swebench for agentic-coding scenario.
+    maybe_run_eval "$PORT"
+else
+    # ---- Run benchmark ------------------------------------------------------
+    build_replay_cmd "$RESULT_DIR"
+    REPLAY_CMD+=" --server-metrics http://localhost:$SGLANG_BACKEND_PORT/metrics"
+    run_agentic_replay_and_write_outputs "$RESULT_DIR"
+fi
