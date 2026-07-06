@@ -29,11 +29,11 @@ backend:
 
   prefill_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: "cuda_copy,rc"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
 
   decode_environment:
     VLLM_FLOAT32_MATMUL_PRECISION: high
-    UCX_TLS: "cuda_copy,rc"
+    UCX_TLS: "cuda_copy,cuda_ipc,tcp"
 
   vllm_config:
     prefill:
