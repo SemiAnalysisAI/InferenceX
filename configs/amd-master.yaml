@@ -2576,7 +2576,7 @@ minimaxm3-fp4-mi355x-vllm-disagg:
 # language-model path and mirror the MXFP8 MI355X search space for a direct
 # precision comparison.
 minimaxm3-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
   model: amd/MiniMax-M3-MXFP4
   model-prefix: minimaxm3
   runner: mi355x
