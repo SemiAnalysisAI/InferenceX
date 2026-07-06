@@ -882,8 +882,8 @@ gptoss-fp4-mi325x-vllm:
       - { tp: 8, conc-start: 4, conc-end: 16 }
 
 gptoss-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
-  model: openai/gpt-oss-120b
+  image: vllm/vllm-openai-rocm:nightly-34b560b725b401f33477464163244b4744d1c40f
+  model: amd/gpt-oss-120b-w-mxfp4-a-fp8
   model-prefix: gptoss
   runner: mi355x
   precision: fp4
@@ -895,13 +895,15 @@ gptoss-fp4-mi355x-vllm:
       osl: 1024
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
+      - { tp: 2, conc-start: 4, conc-end: 32 }
+      - { tp: 4, conc-list: [4, 16] }
       - { tp: 8, conc-start: 4, conc-end: 16 }
     - isl: 8192
       osl: 1024
       search-space:
       - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 4 }
+      - { tp: 2, conc-start: 4, conc-end: 32 }
+      - { tp: 4, conc-list: [4, 16] }
       - { tp: 8, conc-start: 4, conc-end: 8 }
 
 gptoss-fp4-mi355x-atom:
