@@ -47,6 +47,7 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 if [ "${DP_ATTENTION}" = "true" ]; then
   PARALLEL_ARGS="--tensor-parallel-size=1 --data-parallel-size=$TP --enable-expert-parallel"
@@ -56,8 +57,36 @@ else
   PARALLEL_ARGS="--tensor-parallel-size=$TP"
 fi
 
-# use 3 speculative tokens for all configs for now
-NUM_SPEC_TOKENS=3
+# Speculative-token count is picked per operating point to trace the
+# Total-TPS/GPU vs median-interactivity Pareto frontier of the EAGLE3 offline
+# sweep (bench_results_b200.json). The best num_speculative_tokens is not
+# constant: fewer tokens win at the throughput end (high concurrency), more
+# tokens win at the latency end (low concurrency). 3 is the default and the
+# table below overrides the non-3 operating points.
+# Key: ISL:TP:EP_SIZE:DP_ATTENTION:CONC  (exactly the env vars the launcher sets;
+# for dp-attn configs TP holds the data-parallel size, as in PARALLEL_ARGS below).
+declare -A NUM_SPEC_TOKENS_MAP=(
+  # --- ISL=1024 / OSL=1024 ---
+  [1024:4:4:false:4]=4
+  [1024:8:1:false:2]=6
+  [1024:8:1:false:4]=4
+  # --- ISL=8192 / OSL=1024 ---
+  [8192:2:1:false:1]=4
+  [8192:2:1:false:256]=4
+  [8192:2:2:false:1]=4
+  [8192:2:2:false:16]=4
+  [8192:2:2:false:32]=2
+  [8192:2:2:false:64]=4
+  [8192:2:2:false:128]=4
+  [8192:2:2:false:256]=4
+  [8192:2:2:false:512]=2
+  [8192:4:1:false:256]=2
+  [8192:4:4:false:256]=4
+  [8192:8:1:false:1]=4
+  [8192:8:1:false:2]=4
+)
+NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS_MAP[${ISL}:${TP}:${EP_SIZE}:${DP_ATTENTION}:${CONC}]:-3}"
+echo "Selected NUM_SPEC_TOKENS=$NUM_SPEC_TOKENS for ISL=$ISL TP=$TP EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION CONC=$CONC"
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
@@ -68,7 +97,7 @@ start_gpu_monitor
 set -x
 vllm serve $MODEL --port $PORT \
 $PARALLEL_ARGS \
---gpu-memory-utilization 0.90 \
+--gpu-memory-utilization 0.9 \
 --max-model-len $MAX_MODEL_LEN \
 --block-size 128 \
 --language-model-only \

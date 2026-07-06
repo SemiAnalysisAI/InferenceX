@@ -7,20 +7,14 @@ set -x
 # sibling) with the agentic harness (build_replay_cmd / write_agentic_result_json
 # / analyze_benchmark_distributions) swapped in for run_benchmark_serving.
 #
-# This launcher does NOT support CPU offload. SGLang's KV offload paths are
-# different from vLLM's SimpleCPUOffloadConnector, and the matching agentic
-# config (dsv4-fp4-mi355x-sglang-agentic) only sweeps offloading=none.
+# This launcher only supports on-device KV cache.
 #
 # Required env vars:
-#   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
+#   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
-check_env_vars MODEL TP CONC OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
-
-if [ -z "${MAX_MODEL_LEN:-}" ] || [ "$MAX_MODEL_LEN" = "0" ]; then
-    MAX_MODEL_LEN=1000000
-fi
+check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
@@ -31,7 +25,17 @@ if [ -n "${ROCR_VISIBLE_DEVICES:-}" ]; then
     export HIP_VISIBLE_DEVICES="$ROCR_VISIBLE_DEVICES"
 fi
 
-if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
+# `hf download` creates the target dir if missing and is itself idempotent.
+# When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
+# Either way, MODEL_PATH is what the server is launched with.
+if [[ -n "${MODEL_PATH:-}" ]]; then
+    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+        hf download "$MODEL" --local-dir "$MODEL_PATH"
+    fi
+else
+    hf download "$MODEL"
+    export MODEL_PATH="$MODEL"
+fi
 rocm-smi || true
 amd-smi || true
 
@@ -39,15 +43,7 @@ amd-smi || true
 resolve_trace_source
 install_agentic_deps
 
-# Reject anything other than none: this launcher has no SGLang CPU-offload
-# wiring (different surface than vLLM's SimpleCPUOffloadConnector).
-case "$OFFLOADING" in
-    none) ;;
-    *)
-        echo "Error: dsv4_fp4_mi355x_sglang.sh only supports OFFLOADING=none (got '$OFFLOADING')" >&2
-        exit 1
-        ;;
-esac
+require_agentic_kv_offload_none
 
 # Transformers in the container doesn't recognize the `deepseek_v4` model_type.
 # PR #23608's fallback in hf_transformers_utils.get_config tries to handle this
@@ -135,7 +131,7 @@ fi
 
 echo "Starting sglang server..."
 python3 -m sglang.launch_server \
-    --model-path "$MODEL" \
+    --model-path "$MODEL_PATH" --served-model-name "$MODEL" \
     --host=0.0.0.0 \
     --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
@@ -144,7 +140,6 @@ python3 -m sglang.launch_server \
     --max-running-requests "$PER_ENGINE_MAX_RUNNING" \
     --cuda-graph-max-bs "$PER_ENGINE_MAX_RUNNING" \
     --page-size 256 \
-    --context-length "$MAX_MODEL_LEN" \
     --chunked-prefill-size 8192 \
     --disable-shared-experts-fusion \
     --tool-call-parser deepseekv4 \

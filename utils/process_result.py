@@ -62,8 +62,16 @@ if is_multinode:
     # TODO: Eventually will have to have a separate condition in here for multinode disagg and
     # multinode agg. For now, just assume that multinode implies disagg.
 
-    multinode_env = get_required_env_vars(['PREFILL_GPUS', 'DECODE_GPUS', 'PREFILL_NUM_WORKERS', 'PREFILL_TP',
-                                          'PREFILL_EP', 'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP', 'DECODE_EP', 'DECODE_DP_ATTN'])
+    multinode_vars = ['PREFILL_GPUS', 'DECODE_GPUS', 'PREFILL_NUM_WORKERS', 'PREFILL_TP',
+                      'PREFILL_EP', 'PREFILL_DP_ATTN', 'DECODE_NUM_WORKERS', 'DECODE_TP',
+                      'DECODE_EP', 'DECODE_DP_ATTN']
+    multinode_env = get_required_env_vars(multinode_vars)
+    prefill_hardware = os.environ.get('PREFILL_HARDWARE', '')
+    decode_hardware = os.environ.get('DECODE_HARDWARE', '')
+    if bool(prefill_hardware) != bool(decode_hardware):
+        raise ValueError(
+            "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
+        )
     prefill_gpus = int(multinode_env['PREFILL_GPUS'])
     decode_gpus = int(multinode_env['DECODE_GPUS'])
     prefill_num_workers = int(multinode_env['PREFILL_NUM_WORKERS'])
@@ -101,6 +109,9 @@ if is_multinode:
         'output_tput_per_gpu': float(bmk_result['output_throughput']) / output_tput_denominator,
         'input_tput_per_gpu': (float(bmk_result['total_token_throughput']) - float(bmk_result['output_throughput'])) / prefill_gpus,
     }
+    if prefill_hardware:
+        multi_node_data['prefill_hw'] = prefill_hardware
+        multi_node_data['decode_hw'] = decode_hardware
 
     data = data | multi_node_data
 else:
