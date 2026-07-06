@@ -2637,12 +2637,10 @@ class SamplingContractTest(unittest.TestCase):
             rank_wrapper.index(". /ix/experimental/CollectiveX/runtime/common.sh"),
             rank_wrapper.index('if [ "${CX_NODES:-1}" -gt 1 ]'),
         )
-        self.assertEqual(
-            distributed.count(
-                '--container-name="$container_name" --container-image="$SQUASH_FILE"'
-            ),
-            5,
-        )
+        self.assertIn('container_identity_args=(--container-name="$container_name")', distributed)
+        self.assertEqual(distributed.count('"${container_identity_args[@]}"'), 5)
+        self.assertIn('if [ "$CX_BENCH" = nccl-ep ]', distributed)
+        self.assertIn("SOURCE_BACKEND_ENV=:", amd)
         shard_runtime = runtime[runtime.index('elif [ -n "${CX_SHARD_FILE:-}" ]') :]
         self.assertIn('"CX_PRECISION_PROFILE": g("precision_profile")', shard_runtime)
         self.assertIn("rdma-port-%s=inactive", common)

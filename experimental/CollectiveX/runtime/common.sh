@@ -2927,7 +2927,7 @@ cx_run_distributed_shard() {
   local precision_profile
   local workload_dir workload_ladder workload_log stage_rc attempt_tag out failure_out
   local runtime_log run_rc expected_out case_ok summary_log
-  local -a container_args workload_args ep_args
+  local -a container_args container_identity_args workload_args ep_args
   [ "${NODES:-0}" -gt 1 ] && [ "${NGPUS:-0}" = "$((NODES * GPN))" ] \
     || cx_die "invalid distributed launcher placement"
   [ -n "${JOB_ID:-}" ] && [ -n "${SQUASH_FILE:-}" ] \
@@ -2943,24 +2943,38 @@ cx_run_distributed_shard() {
     container_args+=("${CX_DISTRIBUTED_CONTAINER_ARGS[@]}")
   fi
   local container_name="cxep_${JOB_ID}"
+  if [ "$CX_BENCH" = nccl-ep ]; then
+    container_identity_args=()
+  else
+    container_identity_args=(--container-name="$container_name")
+  fi
 
   cx_log "distributed backend preparation: bench=$CX_BENCH nodes=$NODES"
   cx_set_failure_stage backend-setup
   build_log="$(cx_private_log_path backend-prepare)"
   set +e
-  srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
-    --container-name="$container_name" --container-image="$SQUASH_FILE" \
-    "${container_args[@]}" --export="$(cx_container_exports),CX_BUILD_ONLY=1" \
-    bash /ix/experimental/CollectiveX/runtime/run_in_container.sh \
-    </dev/null >"$build_log" 2>&1
-  build_rc=$?
-  if [ "$build_rc" = 0 ]; then
+  if [ "$CX_BENCH" = nccl-ep ]; then
     srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
-      --container-name="$container_name" --container-image="$SQUASH_FILE" \
+      --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export="$(cx_container_exports)" bash -c "$BACKEND_PROBE" \
-      </dev/null >>"$build_log" 2>&1
+      </dev/null >"$build_log" 2>&1
     build_rc=$?
+  else
+    srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
+      "${container_identity_args[@]}" --container-image="$SQUASH_FILE" \
+      "${container_args[@]}" --export="$(cx_container_exports),CX_BUILD_ONLY=1" \
+      bash /ix/experimental/CollectiveX/runtime/run_in_container.sh \
+      </dev/null >"$build_log" 2>&1
+    build_rc=$?
+    if [ "$build_rc" = 0 ]; then
+      srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
+        "${container_identity_args[@]}" --container-image="$SQUASH_FILE" \
+        "${container_args[@]}" \
+        --export="$(cx_container_exports)" bash -c "$BACKEND_PROBE" \
+        </dev/null >>"$build_log" 2>&1
+      build_rc=$?
+    fi
   fi
   set -e
   if [ "$build_rc" != 0 ]; then
@@ -2984,7 +2998,7 @@ cx_run_distributed_shard() {
     set +e
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
-      --container-name="$container_name" --container-image="$SQUASH_FILE" \
+      "${container_identity_args[@]}" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export="$(cx_container_exports)" \
       bash -c "$WRAP" _ --backend "$backend" --sku "$sku" --ep "$ep" \
@@ -3101,7 +3115,7 @@ PY
       workload_log="$(cx_private_log_path "workload-c$(printf '%03d' "$ci")")"
       set +e
       srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --chdir=/tmp \
-        --container-name="$container_name" --container-image="$SQUASH_FILE" \
+        "${container_identity_args[@]}" --container-image="$SQUASH_FILE" \
         "${container_args[@]}" \
         --export="$(cx_container_exports)" "${workload_args[@]}" \
         </dev/null >"$workload_log" 2>&1
@@ -3136,7 +3150,7 @@ PY
     set +e
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
-      --container-name="$container_name" --container-image="$SQUASH_FILE" \
+      "${container_identity_args[@]}" --container-image="$SQUASH_FILE" \
       "${container_args[@]}" \
       --export="$(cx_container_exports)" \
       bash -c "$WRAP" _ "${ep_args[@]}" --out "$out" \
