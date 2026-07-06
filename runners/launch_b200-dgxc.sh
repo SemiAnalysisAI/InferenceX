@@ -54,7 +54,7 @@ elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
 elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
-elif [[ $MODEL_PREFIX == "kimik2.6" && $PRECISION == "fp4" ]]; then
+elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH="/lustre/fsw/models/Kimi-K2.6-NVFP4"
     export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
