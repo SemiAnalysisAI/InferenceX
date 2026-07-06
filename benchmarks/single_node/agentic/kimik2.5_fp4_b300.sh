@@ -94,10 +94,6 @@ EOF
         export WITH_NVIDIA_PEERMEM=0
         export MC_ENABLE_DEST_DEVICE_AFFINITY=1
 
-        MOONCAKE_EVICTION_HIGH_WATERMARK_RATIO=0.80
-        MOONCAKE_EVICTION_RATIO=0.10
-        MOONCAKE_KV_LEASE_TTL=60s
-
         echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
         mooncake_master --port "$MOONCAKE_MASTER_PORT" \
             --default_kv_lease_ttl=1h \
