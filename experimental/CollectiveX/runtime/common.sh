@@ -2697,7 +2697,8 @@ cx_run_distributed_shard() {
   build_rc=$?
   if [ "$build_rc" = 0 ]; then
     srun --jobid="$JOB_ID" --nodes="$NODES" --ntasks-per-node=1 --chdir=/tmp \
-      --container-name="$container_name" "${container_args[@]}" \
+      --container-name="$container_name" --container-image="$SQUASH_FILE" \
+      "${container_args[@]}" \
       --export="$(cx_container_exports)" bash -c "$BACKEND_PROBE" \
       </dev/null >>"$build_log" 2>&1
     build_rc=$?
@@ -2724,7 +2725,8 @@ cx_run_distributed_shard() {
     set +e
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
-      --container-name="$container_name" "${container_args[@]}" \
+      --container-name="$container_name" --container-image="$SQUASH_FILE" \
+      "${container_args[@]}" \
       --export="$(cx_container_exports)" \
       bash -c "$WRAP" _ --backend "$backend" --sku "$sku" --ep "$ep" \
       --mode "$mode" --precision-profile "$profile" --out "$out" \
@@ -2804,7 +2806,8 @@ PY
     case_trials="${case_trials:-64}"
     case_warmup="${case_warmup:-32}"
     ep="${ep:-$NGPUS}"
-    export CX_MODE="$mode" CX_CASE_ID="$case_id" CX_SUITE="$suite" CX_WORKLOAD_NAME="$workload"
+    export CX_MODE="$mode" CX_PHASE="$ph" CX_CASE_ID="$case_id" CX_SUITE="$suite"
+    export CX_WORKLOAD_NAME="$workload"
     export CX_REQUIRED_PUBLICATION="$required_pub" CX_CANONICAL="$canonical" CX_EP="$ep"
     export CX_PRECISION_PROFILE="$precision_profile"
     export CX_ROUTING="$routing" CX_EPLB="$eplb" CX_TOKENS_LADDER="$ladder"
@@ -2839,7 +2842,8 @@ PY
       workload_log="$(cx_private_log_path "workload-c$(printf '%03d' "$ci")")"
       set +e
       srun --jobid="$JOB_ID" --nodes=1 --ntasks=1 --chdir=/tmp \
-        --container-name="$container_name" "${container_args[@]}" \
+        --container-name="$container_name" --container-image="$SQUASH_FILE" \
+        "${container_args[@]}" \
         --export="$(cx_container_exports)" "${workload_args[@]}" \
         </dev/null >"$workload_log" 2>&1
       stage_rc=$?
@@ -2873,7 +2877,8 @@ PY
     set +e
     timeout -k 30 "${CX_RUN_TIMEOUT:-900}" srun --jobid="$JOB_ID" --nodes="$NODES" \
       --ntasks="$NGPUS" --ntasks-per-node="$GPN" --chdir=/tmp \
-      --container-name="$container_name" "${container_args[@]}" \
+      --container-name="$container_name" --container-image="$SQUASH_FILE" \
+      "${container_args[@]}" \
       --export="$(cx_container_exports)" \
       bash -c "$WRAP" _ "${ep_args[@]}" --out "$out" \
       </dev/null >"$runtime_log" 2>&1

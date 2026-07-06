@@ -2493,6 +2493,15 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("cx_fail_stage execution", distributed)
         self.assertIn('cx_fail_stage execution "$runtime_log"', distributed)
         self.assertIn("precision probe timed out rc=%s limit=%ss", distributed)
+        self.assertIn('export CX_MODE="$mode" CX_PHASE="$ph"', distributed)
+        self.assertEqual(
+            distributed.count(
+                '--container-name="$container_name" --container-image="$SQUASH_FILE"'
+            ),
+            5,
+        )
+        shard_runtime = runtime[runtime.index('elif [ -n "${CX_SHARD_FILE:-}" ]') :]
+        self.assertIn('"CX_PRECISION_PROFILE": g("precision_profile")', shard_runtime)
         self.assertIn("rdma-port-%s=inactive", common)
         self.assertIn("rdma-device-%s=missing", common)
 

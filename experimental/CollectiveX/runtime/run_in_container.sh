@@ -1064,6 +1064,7 @@ env = {
   "CX_EPLB": "1" if c.get("eplb") else "",
   "CX_CASE_ID": g("case_id"), "CX_SUITE": g("suite"), "CX_WORKLOAD_NAME": g("workload"),
   "CX_REQUIRED_PUBLICATION": g("required_publication"),
+  "CX_PRECISION_PROFILE": g("precision_profile"),
   "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
   "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
   "CX_NODES": g("nodes"), "CX_GPUS_PER_NODE": g("gpus_per_node"),
