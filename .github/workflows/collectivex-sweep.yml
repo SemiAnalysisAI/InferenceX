@@ -525,7 +525,10 @@ jobs:
               elif overlay_name == "COLLECTIVEX_MI300_CONFIG_CONTENT":
                   if set(overlay["runners"]) != {"mi300x"}:
                       raise ValueError("invalid MI300 overlay runner")
-                  private_fields.update({"partition", "squash_dir", "exclude_nodes", "nodelist", "lock_dir"})
+                  private_fields.update({
+                      "partition", "squash_dir", "stage_dir", "exclude_nodes",
+                      "nodelist", "lock_dir",
+                  })
               for runner, fields in overlay["runners"].items():
                   if not isinstance(fields, dict) or not fields:
                       raise ValueError("invalid network overlay runner")

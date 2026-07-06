@@ -1460,6 +1460,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('set(overlay["runners"]) != {"b200-dgxc"}', workflow)
         self.assertIn('set(overlay["runners"]) != {"mi300x"}', workflow)
         self.assertIn('overlay_name != "COLLECTIVEX_MI300_CONFIG_CONTENT"', workflow)
+        self.assertIn('"partition", "squash_dir", "stage_dir", "exclude_nodes"', workflow)
         self.assertIn("set(fields) - private_fields", workflow)
         self.assertIn('private_fields.add("exclude_nodes")', workflow)
         self.assertIn('invalid H100 overlay runner', workflow)
