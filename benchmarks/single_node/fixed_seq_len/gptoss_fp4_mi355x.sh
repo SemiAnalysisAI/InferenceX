@@ -38,7 +38,7 @@ export VLLM_ROCM_USE_AITER=1
 export VLLM_ROCM_USE_AITER_TRITON_ROPE=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 ATTN_BACKEND="--attention-backend ROCM_AITER_UNIFIED_ATTN"
-FUSE_ROPE_KVCACHE="-cc.pass_config.fuse_rope_kvcache=True -cc.use_inductor_graph_partition=True"
+FUSE_ROPE_KVCACHE="-cc.pass_config.fuse_rope_kvcache=True"
 
 SERVER_LOG=/workspace/server.log
 
