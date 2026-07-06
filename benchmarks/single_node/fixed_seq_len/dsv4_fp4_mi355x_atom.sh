@@ -54,7 +54,6 @@ export ATOM_DISABLE_MMAP=true
 export AITER_BF16_FP8_MOE_BOUND=0
 export ATOM_MOE_GU_ITLV=1
 MEM_FRAC_STATIC=0.9
-OPT_ARGS=(--hf-overrides '{"use_index_cache": true, "index_topk_freq": 4}')
 
 python3 -m atom.entrypoints.openai_server \
     --model $MODEL \
@@ -65,7 +64,6 @@ python3 -m atom.entrypoints.openai_server \
     --gpu-memory-utilization $MEM_FRAC_STATIC \
     --no-enable_prefix_caching \
     --cudagraph-capture-sizes "${CUDAGRAPH_SIZES}" \
-    "${OPT_ARGS[@]}" \
     > "$SERVER_LOG" 2>&1 &
 
 SERVER_PID=$!

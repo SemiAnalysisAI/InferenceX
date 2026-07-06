@@ -228,7 +228,7 @@ RECOVERY_PR=$(gh pr view "$RECOVERY_PR_URL" \
 
 gh pr edit "$RECOVERY_PR" \
   --repo SemiAnalysisAI/InferenceX \
-  --add-label full-sweep-enabled
+  --add-label full-sweep-fail-fast
 gh pr comment "$RECOVERY_PR" \
   --repo SemiAnalysisAI/InferenceX \
   --body "/reuse-sweep-run $SOURCE_RUN_ID"
@@ -323,6 +323,12 @@ Validate the source artifacts:
 python3 utils/validate_reusable_sweep_artifacts.py \
   --artifacts-dir /tmp/source-artifacts
 ```
+
+The validator first collapses reran (flaky) eval duplicates in place — keeping
+the latest result per eval identity when a retried eval left duplicate raw dirs
+/ aggregate rows — so a legitimate rerun does not fail validation. It only
+collapses identities with a clear latest result; genuinely ambiguous duplicates
+are still rejected.
 
 The validator does not compare source coverage with
 `/tmp/recovery-full-config.json`. It rejects duplicate fixed rows, missing run
