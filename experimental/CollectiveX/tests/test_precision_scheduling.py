@@ -253,10 +253,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
             len(targets), 94
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 66
+            sum(item["disposition"] == "supported" for item in targets), 62
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 28
+            sum(item["disposition"] == "unsupported" for item in targets), 32
         )
         self.assertEqual(len(capability.provisional_precision_targets()), 0)
         keys = {
@@ -334,8 +334,11 @@ class PrecisionSchedulingTest(unittest.TestCase):
             "b200-dgxc", "deepep", ep=16, nodes=2,
             precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
         )
-        self.assertEqual(disposition, "supported")
-        self.assertEqual(reason, "ok")
+        self.assertEqual(disposition, "unsupported")
+        self.assertEqual(
+            reason,
+            "DeepEP V1 EP16 requires unavailable GPU doorbell mapping or GDRCopy on B200",
+        )
         self.assertEqual(
             capability.DEEPEP_V1_IBGDA_NIC_HANDLERS["b200-dgxc"],
             "cpu",

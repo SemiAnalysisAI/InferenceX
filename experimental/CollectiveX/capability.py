@@ -181,6 +181,9 @@ TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {
 # Keep these narrower than platform overrides so working reference paths remain
 # measurable on the same fabric.
 BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
+    ("b200-dgxc", "deepep", 16): (
+        "DeepEP V1 EP16 requires unavailable GPU doorbell mapping or GDRCopy on B200"
+    ),
     ("b200-dgxc", "deepep-hybrid", 16): (
         "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200"
     ),
@@ -448,18 +451,6 @@ PRECISION_CELL_OVERRIDES.update({
     for run_id, sku, ep, backend, mode, profile, disposition, result
     in _VALIDATED_NATIVE_PROBE_CELLS
 })
-for _profile, _mode in (
-    (_NORMAL_E4M3FN_PROFILE, "normal"),
-    (_LL_FP8_PROFILE, "low-latency"),
-    (_LL_LOGFMT_PROFILE, "low-latency"),
-    (_LL_FP8_LOGFMT_PROFILE, "low-latency"),
-):
-    PRECISION_CELL_OVERRIDES[(_profile, "deepep", "b200-dgxc", 16, _mode)] = {
-        "basis": "b200-cpu-proxied-ibgda-handler-production-shape-passed",
-        "disposition": "supported",
-    }
-
-
 def runtime_identity_issues(
     sku: str, *, vendor: str, arch: str, machine: str, device_name: str,
     device_count: int, world_size: int,
