@@ -207,13 +207,11 @@ def test_artifact_names_excludes_expired_artifacts(monkeypatch) -> None:
         "paginated_github_api",
         lambda *args, **kwargs: [
             {"name": "results_bmk", "expired": True},
-            {"name": "agentic_aggregated", "expired": False},
+            {"name": "run-stats", "expired": False},
         ],
     )
 
-    assert reuse.artifact_names("repo", 123, "token") == {
-        "agentic_aggregated"
-    }
+    assert reuse.artifact_names("repo", 123, "token") == {"run-stats"}
 
 
 def test_main_skips_pr_synchronize_with_reuse_authorization(
