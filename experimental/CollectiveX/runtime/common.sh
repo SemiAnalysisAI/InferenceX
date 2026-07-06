@@ -81,6 +81,14 @@ cx_fail_stage() {
     elif [ -n "$probe_stage" ] \
         && grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal' "$log_path"; then
       diagnostic="${probe_stage}-timeout"
+    elif grep -aEqi 'ncclRemoteError|remote process exited|connection closed by peer' "$log_path"; then
+      diagnostic="collective-remote"
+    elif grep -aEqi 'ncclSystemError|unhandled system error' "$log_path"; then
+      diagnostic="collective-system"
+    elif grep -aEqi 'ncclInternalError|internal check failed' "$log_path"; then
+      diagnostic="collective-internal"
+    elif grep -aEqi 'ncclInvalidUsage|invalid usage' "$log_path"; then
+      diagnostic="collective-invalid-usage"
     elif grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal|connection reset|could not resolve|TLS|certificate' "$log_path"; then
       diagnostic="network-or-timeout"
     elif grep -aEqi 'salloc:|srun:.*(unable to create step|step creation|invalid partition|invalid account)|unable to create step|job allocation' "$log_path"; then
@@ -168,6 +176,8 @@ cx_fail_stage() {
       diagnostic="python-os"
     elif grep -aEqi '(NotImplemented|System)Error:' "$log_path"; then
       diagnostic="python-system"
+    elif grep -aEqi 'DistBackendError:' "$log_path"; then
+      diagnostic="collective-backend"
     elif grep -aEqi 'CalledProcessError:' "$log_path"; then
       diagnostic="python-subprocess"
     elif grep -aEqi 'Traceback \(most recent call last\)' "$log_path"; then

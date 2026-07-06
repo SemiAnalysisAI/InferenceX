@@ -2782,6 +2782,13 @@ class SamplingContractTest(unittest.TestCase):
             "NVCC compilation failed": "jit-toolchain",
             "CUDA out of memory": "accelerator-memory",
             "torch rendezvous timed out": "network-or-timeout",
+            "torch.distributed.DistBackendError: ncclRemoteError": "collective-remote",
+            "torch.distributed.DistBackendError: ncclSystemError": "collective-system",
+            "torch.distributed.DistBackendError: ncclInternalError": "collective-internal",
+            "torch.distributed.DistBackendError: ncclInvalidUsage":
+                "collective-invalid-usage",
+            "torch.distributed.DistBackendError: unknown collective failure":
+                "collective-backend",
             "ModuleNotFoundError: missing module": "python-import",
             "AttributeError: backend has no attribute 'probe'": "backend-api",
             "PrecisionError: FP8 dispatch payload is missing block-128 scales":
