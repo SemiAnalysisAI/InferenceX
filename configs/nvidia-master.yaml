@@ -9572,7 +9572,7 @@ dsv4-fp4-b300-dynamo-vllm:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-vllm:
-  image: vllm/vllm-openai:v0.20.0-ubuntu2404
+  image: vllm/vllm-openai:dsv4-megamoe-mxfp4-arm64-cu130-4ba0a72
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300-nv
@@ -9605,9 +9605,9 @@ dsv4-fp4-gb300-dynamo-vllm:
           ep: 4
           dp-attn: false
           additional-settings:
-          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p17d-tep4-tp4.yaml"
+          - "CONFIG_FILE=recipes/vllm/deepseek-v4/8k1k/disagg-gb300-1p9d-tep4-tp4.yaml"
         decode:
-          num-worker: 17
+          num-worker: 9
           tp: 4
           ep: 1
           dp-attn: false
@@ -12609,11 +12609,11 @@ minimaxm3-fp4-b300-vllm:
       osl: 1024
       search-space:
       - { tp: 8, conc-start: 1, conc-end: 2 }
-      - { tp: 4, conc-start: 1, conc-end: 2 }
+      - { tp: 4, conc-start: 1, conc-end: 64 }
       - { tp: 2, conc-start: 4, conc-end: 256 }
-      - { tp: 4, conc-start: 64, conc-end: 64 }
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
       - { tp: 2, ep: 2, dp-attn: true, conc-start: 512, conc-end: 512 }
+      - { tp: 2, ep: 2, dp-attn: true, conc-start: 4096, conc-end: 4096 }
     - isl: 8192
       osl: 1024
       search-space:
@@ -12631,7 +12631,7 @@ minimaxm3-fp4-b300-vllm:
 # /scratch/models/MiniMax-M3-NVFP4 (added to the STAGED_MODELS allow-list in
 # launch_b300-nv.sh); the EAGLE3 draft is downloaded to the writable models dir.
 minimaxm3-fp4-b300-vllm-mtp:
-  image: vllm/vllm-openai:vllm-minimax-m3-perf-x86_64-13.0.1-8b00f41
+  image: vllm/vllm-openai:nightly-93d8f834dd8acf33eb0e2a75b2711b628cb6e226
   model: nvidia/MiniMax-M3-NVFP4
   model-prefix: minimaxm3
   runner: b300
@@ -12640,24 +12640,32 @@ minimaxm3-fp4-b300-vllm-mtp:
   multinode: false
   scenarios:
     fixed-seq-len:
+    # Search space trimmed to the (parallelism, concurrency) points that lie on
+    # the Total-TPS/GPU vs median-interactivity Pareto frontier of the EAGLE3
+    # offline sweep (bench_results.json). The best num_speculative_tokens varies
+    # along the frontier (1 at the throughput end, up to 4 at the latency end);
+    # the recipe shell (minimaxm3_fp4_b300_mtp.sh) selects it per point from the
+    # same ISL:TP:EP_SIZE:DP_ATTENTION:CONC key. TP2 (plain / EP / DP-attention)
+    # carries the throughput-to-mid front; TP4/TP8 only survive at the
+    # low-concurrency, high-interactivity tail.
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 128, conc-end: 512, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 2, 4, 8, 16, 32, 64, 512], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [1, 2, 4, 8, 16, 128, 512], spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-list: [256, 512], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8, 16, 32], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 32], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, ep: 4, dp-attn: true, conc-start: 64, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, ep: 8, dp-attn: true, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 2, 4, 8, 16, 32, 128, 256], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [1, 2, 4, 8, 32, 64, 128], spec-decoding: mtp }
+      - { tp: 2, ep: 2, dp-attn: true, conc-list: [128], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
 
 # MiniMax-M3 day-zero (https://recipes.vllm.ai/MiniMaxAI/MiniMax-M3).
 # 427B total / 26B active MoE with MSA sparse attention; MXFP8 checkpoint
@@ -12787,17 +12795,19 @@ minimaxm3-fp4-b200-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 2, 4, 8, 16, 64, 128, 256, 512], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [8, 256, 512], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8, 16, 32, 64, 256], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8, 256], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8, 16], spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 2, conc-list: [1, 8, 16, 32, 256], spec-decoding: mtp }
+      - { tp: 2, ep: 2, conc-list: [1, 2, 4, 16, 32, 64, 128, 256, 512], spec-decoding: mtp }
+      - { tp: 4, conc-list: [1, 2, 4, 8, 16, 256], spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-list: [1, 2, 4, 8, 256], spec-decoding: mtp }
+      - { tp: 8, conc-list: [1, 2, 4, 8], spec-decoding: mtp }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-b300-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
