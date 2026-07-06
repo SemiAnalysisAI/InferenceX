@@ -120,8 +120,11 @@ for allocation_attempt in 1 2 3; do
   if [ -n "$NODELIST" ] || [ "$allocation_attempt" = 3 ]; then
     cx_die "allocated nodes failed container import"
   fi
-  rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
+  allocation_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
     || cx_die "cannot identify nodes from a rejected allocation"
+  rejected_nodes="${allocation_nodes%%,*}"
+  [ -n "$rejected_nodes" ] \
+    || cx_die "cannot identify the failed container-import node"
   cx_log "allocated nodes failed container import; retrying elsewhere"
   cx_cancel_job "$JOB_ID" || cx_die "cannot release a rejected allocation"
   cx_clear_allocation_jobid || cx_die "cannot reset rejected allocation state"
