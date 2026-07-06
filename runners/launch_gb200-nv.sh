@@ -21,9 +21,9 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # DSV4 sglang recipes.
         export MODEL_PATH="/mnt/lustre01/models/deepseek-v4-pro"
         export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
-        # in our GLM-5 sglang recipes.
+        # in our GLM-5.1 sglang recipes.
         export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
@@ -290,7 +290,7 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsv4" ]]; then
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/deepseek-v4
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/deepseek-v4" recipes/sglang/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
     git checkout sa-submission-q2-2026
