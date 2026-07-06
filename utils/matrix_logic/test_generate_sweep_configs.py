@@ -1,13 +1,13 @@
 """Comprehensive tests for generate_sweep_configs.py"""
 import pytest
 import argparse
+import copy
 from generate_sweep_configs import (
     MIN_EVAL_CONC,
     seq_len_stoi,
     seq_len_itos,
     seq_len_to_str,
     generate_full_sweep,
-    generate_runner_model_sweep_config,
     generate_test_config_sweep,
     mark_eval_entries,
     mark_all_eval_entries,
@@ -108,13 +108,25 @@ def sample_multinode_config():
 
 @pytest.fixture
 def sample_runner_config():
-    """Runner config based on .github/configs/runners.yaml."""
+    """Runner config based on configs/runners.yaml."""
     return {
-        "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-        "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
-        "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
-        "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
-        "gb200": ["gb200-nv_0"],
+        "labels": {
+            "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
+            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "b300": ["b300-nv_0", "b300-nv_1"],
+            "cluster:b300-nv": ["b300-nv_0", "b300-nv_1"],
+            "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
+            "gb200": ["gb200-nv_0"],
+        },
+        "hardware": {
+            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
+            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
+            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:b300-nv": {"available-cpu-dram-mib": 2964436, "gpus-per-node": 8},
+            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        },
     }
 
 
@@ -1046,212 +1058,6 @@ class TestGenerateFullSweepMultiNode:
 
 
 # =============================================================================
-# Test generate_runner_model_sweep_config
-# =============================================================================
-
-class TestGenerateRunnerModelSweepConfig:
-    """Tests for generate_runner_model_sweep_config function."""
-
-    @pytest.fixture
-    def runner_sweep_args(self):
-        """Args for runner-model-sweep command (single-node)."""
-        args = argparse.Namespace()
-        args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = False
-        return args
-
-    def test_basic_runner_sweep(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Basic runner sweep should generate entries for each node."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # 3 mi300x nodes
-        assert len(result) == 3
-
-    def test_runner_sweep_entry_structure(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Runner sweep entries should use 1k1k config."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        for entry in result:
-            assert entry["isl"] == 1024
-            assert entry["osl"] == 1024
-            assert entry["max-model-len"] == 2048
-            assert "_test" in entry["exp-name"]
-
-    def test_each_node_gets_entry(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Each runner node should get its own entry."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        runners = [entry["runner"] for entry in result]
-        assert "mi300x-amd_0" in runners
-        assert "mi300x-amd_1" in runners
-        assert "mi300x-cr_0" in runners
-
-    def test_invalid_runner_type(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Invalid runner type should raise error."""
-        runner_sweep_args.runner_type = "nonexistent"
-        with pytest.raises(ValueError) as exc_info:
-            generate_runner_model_sweep_config(
-                runner_sweep_args,
-                sample_single_node_config,
-                sample_runner_config
-            )
-        assert "does not exist" in str(exc_info.value)
-
-    def test_runner_node_filter(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Runner node filter should limit nodes."""
-        runner_sweep_args.runner_node_filter = "amd"
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Only mi300x-amd_0 and mi300x-amd_1 match
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
-    def test_runner_node_filter_no_match(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Runner node filter with no matches should raise error."""
-        runner_sweep_args.runner_node_filter = "nonexistent"
-        with pytest.raises(ValueError) as exc_info:
-            generate_runner_model_sweep_config(
-                runner_sweep_args,
-                sample_single_node_config,
-                sample_runner_config
-            )
-        assert "No runner nodes found" in str(exc_info.value)
-
-    def test_uses_highest_tp(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Should use highest TP from search space."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has tp=8
-        assert all(entry["tp"] == 8 for entry in result)
-
-    def test_uses_lowest_conc(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Should use lowest concurrency from search space."""
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has conc-start=4
-        assert all(entry["conc"] == 4 for entry in result)
-
-    def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Model prefix filter should limit configs."""
-        runner_sweep_args.model_prefix = ["dsr1"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config key starts with "dsr1", so should match
-        assert len(result) == 3  # 3 mi300x nodes
-
-        # Non-matching prefix should return empty
-        runner_sweep_args.model_prefix = ["nonexistent"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
-
-    def test_filter_by_precision(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Precision filter should limit configs."""
-        runner_sweep_args.precision = ["fp8"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has precision=fp8, so should match
-        assert len(result) == 3
-
-        # Non-matching precision should return empty
-        runner_sweep_args.precision = ["fp4"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
-
-    def test_filter_by_framework(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Framework filter should limit configs."""
-        runner_sweep_args.framework = ["sglang"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # Config has framework=sglang, so should match
-        assert len(result) == 3
-
-        # Non-matching framework should return empty
-        runner_sweep_args.framework = ["vllm"]
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert len(result) == 0
-
-    def test_combined_filters(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """Multiple filters should all apply."""
-        runner_sweep_args.model_prefix = ["dsr1"]
-        runner_sweep_args.precision = ["fp8"]
-        runner_sweep_args.framework = ["sglang"]
-        runner_sweep_args.runner_node_filter = "amd"
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        # All filters match, but only 2 amd nodes
-        assert len(result) == 2
-        assert all("amd" in entry["runner"] for entry in result)
-
-    def test_conc_override(self, sample_single_node_config, sample_runner_config, runner_sweep_args):
-        """--conc should override concurrency for all runs."""
-        # Without override, uses lowest conc from config (conc-start=4)
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["conc"] == 4 for entry in result)
-
-        # With override, uses specified value
-        runner_sweep_args.conc = 16
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args,
-            sample_single_node_config,
-            sample_runner_config
-        )
-        assert all(entry["conc"] == 16 for entry in result)
-
-
-# =============================================================================
 # Test edge cases and special configurations
 # =============================================================================
 
@@ -1724,7 +1530,7 @@ class TestArgumentDefaults:
     """Tests for command-line argument parsing and default values."""
 
     def test_runner_config_default_value(self):
-        """Verify --runner-config defaults to .github/configs/runners.yaml."""
+        """Verify --runner-config defaults to configs/runners.yaml."""
         import sys
         from generate_sweep_configs import main
 
@@ -1755,8 +1561,8 @@ class TestArgumentDefaults:
             )
             parent_parser.add_argument(
                 '--runner-config',
-                default='.github/configs/runners.yaml',
-                help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+                default='configs/runners.yaml',
+                help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
             )
 
             # Create main parser
@@ -1785,7 +1591,7 @@ class TestArgumentDefaults:
             args = parser.parse_args(['full-sweep', '--config-files', 'dummy.yaml', '--single-node'])
 
             # Verify the default value
-            assert args.runner_config == '.github/configs/runners.yaml'
+            assert args.runner_config == 'configs/runners.yaml'
 
         finally:
             # Restore original sys.argv
@@ -1805,8 +1611,8 @@ class TestArgumentDefaults:
         )
         parent_parser.add_argument(
             '--runner-config',
-            default='.github/configs/runners.yaml',
-            help='Configuration file holding runner information (YAML format, defaults to .github/configs/runners.yaml)'
+            default='configs/runners.yaml',
+            help='Configuration file holding runner information (YAML format, defaults to configs/runners.yaml)'
         )
 
         # Create main parser
@@ -2067,17 +1873,18 @@ class TestGenerateTestConfigSweep:
                 "model-prefix": "qwen3.5",
                 "precision": "fp8",
                 "framework": "sglang",
-                "runner": "mi300x",
+                "runner": "cluster:b300-nv",
                 "multinode": False,
                 "scenarios": {
                     "agentic-coding": [
                         {
-                            "duration": 1800,
+                            "dram-utilization": 0.80,
                             "search-space": [
                                 {
                                     "tp": 8,
                                     "ep": 1,
-                                    "offloading": "hicache",
+                                    "kv-offloading": "dram",
+                                    "kv-offload-backend": "hicache",
                                     "conc-list": [64],
                                 }
                             ],
@@ -2091,14 +1898,136 @@ class TestGenerateTestConfigSweep:
             seq_lens=None,
             conc=None,
             scenario_type=["agentic-coding"],
-            runner_node_filter="mi300x-amd_1",
+            runner_node_filter="b300-nv_1",
         )
 
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
         assert len(result) == 1
-        assert result[0]["runner"] == "mi300x-amd_1"
+        assert result[0]["runner"] == "b300-nv_1"
         assert result[0]["scenario-type"] == "agentic-coding"
+        assert result[0]["total-cpu-dram-gb"] == 2399
+        assert result[0]["duration"] == 3600
+
+    def test_agentic_node_dram_uses_explicit_gpu_count(self, sample_runner_config):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "cluster:b300-nv",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [
+                            {
+                                "tp": 4,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
+                        ],
+                    }],
+                },
+            },
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-b300-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config, sample_runner_config)
+
+        budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
+        assert budgets == {4: 1199}
+        assert result[0]["duration"] == 3600
+
+    def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
+        config = {
+            "dsv4-b300-agentic": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "vllm",
+                "runner": "cluster:b300-nv",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "dram-utilization": 0.80,
+                        "search-space": [
+                            {
+                                "tp": 4,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
+                        ],
+                    }],
+                },
+            },
+        }
+        runner_config = copy.deepcopy(sample_runner_config)
+        runner_config["hardware"]["cluster:b300-nv"]["gpus-per-node"] = 2
+        args = argparse.Namespace(
+            config_keys=["dsv4-b300-agentic"],
+            seq_lens=None,
+            conc=None,
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        with pytest.raises(ValueError, match="exceeds gpus-per-node"):
+            generate_test_config_sweep(args, config, runner_config)
+
+    def test_multinode_agentic_groups_concurrencies_per_search_entry(self):
+        """One server allocation should run the selected concurrency batch."""
+        config = {
+            "dsv4-agentic-2p1d": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "dynamo-vllm",
+                "runner": "gb200",
+                "multinode": True,
+                "disagg": True,
+                "scenarios": {
+                    "agentic-coding": [
+                        {
+                            "search-space": [
+                                {
+                                    "conc-list": [16, 32, 64, 128, 256],
+                                    "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                    "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                                }
+                            ],
+                        }
+                    ]
+                },
+            }
+        }
+        args = argparse.Namespace(
+            config_keys=["dsv4-agentic-2p1d"],
+            seq_lens=None,
+            conc=[16, 32, 64, 128, 256],
+            scenario_type=["agentic-coding"],
+            runner_node_filter=None,
+        )
+
+        result = generate_test_config_sweep(args, config)
+
+        assert len(result) == 2
+        assert result[0]["conc"] == [16, 32, 64, 128]
+        assert result[0]["exp-name"] == "dsv4_p2x8_d1x8_conc16x32x64x128"
+        assert result[1]["conc"] == [256]
+        assert result[1]["exp-name"] == "dsv4_p2x8_d1x8_conc256"
 
 
 # =============================================================================
@@ -2184,99 +2113,70 @@ class TestGenerateFullSweepMixed:
         assert len(result) > 0
         assert all("prefill" in entry for entry in result), "All entries should be multinode"
 
+    def test_node_type_filters_apply_to_agentic_configs(
+        self,
+        sample_runner_config,
+        full_sweep_args_single_node,
+        full_sweep_args_multi_node,
+    ):
+        """--single-node and --multi-node should split agentic configs too."""
+        config = {
+            "qwen-agentic": {
+                "image": "sglang",
+                "model": "Qwen/Qwen3.5-397B-A17B-FP8",
+                "model-prefix": "qwen3.5",
+                "precision": "fp8",
+                "framework": "sglang",
+                "runner": "cluster:b300-nv",
+                "multinode": False,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "search-space": [
+                            {"tp": 8, "kv-offloading": "none", "conc-list": [16]},
+                        ],
+                    }],
+                },
+            },
+            "dsv4-agentic-multinode": {
+                "image": "vllm/vllm-openai:v0.23.0",
+                "model": "deepseek-ai/DeepSeek-V4-Pro",
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "framework": "dynamo-vllm",
+                "runner": "cluster:gb200-nv",
+                "multinode": True,
+                "disagg": True,
+                "scenarios": {
+                    "agentic-coding": [{
+                        "search-space": [
+                            {
+                                "conc-list": [16, 32],
+                                "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                            },
+                        ],
+                    }],
+                },
+            },
+        }
 
-# =============================================================================
-# Test runner-model-sweep with both flags (regression for filtering bug)
-# =============================================================================
-
-class TestRunnerModelSweepMixed:
-    """Tests for runner-model-sweep with both node types enabled."""
-
-    @pytest.fixture
-    def runner_sweep_args_both(self):
-        """Args for runner-model-sweep with both single_node and multi_node True."""
-        args = argparse.Namespace()
-        args.runner_type = "gb200"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = True
-        return args
-
-    def test_both_flags_with_mixed_config(self, sample_mixed_config, sample_runner_config, runner_sweep_args_both):
-        """Both flags should produce multinode entries for gb200 runner."""
-        # gb200 runner has multinode config (dsr1-fp4-gb200-dynamo-trt)
-        result = generate_runner_model_sweep_config(
-            runner_sweep_args_both,
-            sample_mixed_config,
-            sample_runner_config
+        single_result = generate_full_sweep(
+            full_sweep_args_single_node,
+            config,
+            sample_runner_config,
         )
-        assert len(result) > 0
-        assert all("prefill" in entry for entry in result), "gb200 configs are multinode"
-
-    def test_both_flags_single_node_runner(self, sample_mixed_config, sample_runner_config):
-        """Both flags with mi300x runner should produce single-node entries."""
-        args = argparse.Namespace()
-        args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = True
-        result = generate_runner_model_sweep_config(
-            args,
-            sample_mixed_config,
-            sample_runner_config
+        multi_result = generate_full_sweep(
+            full_sweep_args_multi_node,
+            config,
+            sample_runner_config,
         )
-        assert len(result) > 0
-        assert all("tp" in entry and "prefill" not in entry for entry in result), "mi300x configs are single-node"
 
-    def test_single_only_skips_multinode(self, sample_mixed_config, sample_runner_config):
-        """--single-node only should skip multinode configs in runner-model-sweep."""
-        args = argparse.Namespace()
-        args.runner_type = "gb200"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = True
-        args.multi_node = False
-        result = generate_runner_model_sweep_config(
-            args,
-            sample_mixed_config,
-            sample_runner_config
-        )
-        # gb200 only has multinode configs, so single-node filter should produce empty
-        assert len(result) == 0
-
-    def test_multi_only_skips_singlenode(self, sample_mixed_config, sample_runner_config):
-        """--multi-node only should skip single-node configs in runner-model-sweep."""
-        args = argparse.Namespace()
-        args.runner_type = "mi300x"
-        args.runner_config = "runners.yaml"
-        args.runner_node_filter = None
-        args.model_prefix = None
-        args.precision = None
-        args.framework = None
-        args.conc = None
-        args.single_node = False
-        args.multi_node = True
-        result = generate_runner_model_sweep_config(
-            args,
-            sample_mixed_config,
-            sample_runner_config
-        )
-        # mi300x only has single-node configs, so multi-node filter should produce empty
-        assert len(result) == 0
+        assert len(single_result) == 1
+        assert "prefill" not in single_result[0]
+        assert single_result[0]["runner"] == "cluster:b300-nv"
+        assert len(multi_result) == 1
+        assert "prefill" in multi_result[0]
+        assert multi_result[0]["runner"] == "cluster:gb200-nv"
 
 
 # =============================================================================

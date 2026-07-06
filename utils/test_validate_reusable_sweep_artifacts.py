@@ -197,8 +197,6 @@ def test_multinode_agentic_identity_fields_match() -> None:
 def write_agentic_artifacts(
     root: Path,
     conc: int = 16,
-    *,
-    aggregate: bool = True,
 ) -> None:
     result_name = f"dsv4_tp8_conc{conc}_offloadcpu_result"
     point_dir = root / f"bmk_agentic_{result_name}"
@@ -207,12 +205,6 @@ def write_agentic_artifacts(
         json.dumps(agentic_result(conc))
     )
     (root / f"agentic_{result_name}").mkdir()
-    if aggregate:
-        aggregate_dir = root / "agentic_aggregated"
-        aggregate_dir.mkdir()
-        (aggregate_dir / "summary.csv").write_text(
-            f"exp_name,status\nagentic_{result_name},SUCCESS\n"
-        )
 
 
 def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
@@ -398,7 +390,7 @@ def test_fixed_sequence_validation_rejects_duplicate_identity(
     assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
 
 
-def test_agentic_validation_checks_points_raw_and_aggregate(tmp_path: Path) -> None:
+def test_agentic_validation_checks_points_and_raw_artifacts(tmp_path: Path) -> None:
     write_agentic_artifacts(tmp_path)
 
     assert validate_agentic_artifacts(tmp_path) == []
@@ -407,7 +399,7 @@ def test_agentic_validation_checks_points_raw_and_aggregate(tmp_path: Path) -> N
 def test_agentic_validation_accepts_run_sweep_point_artifacts(
     tmp_path: Path,
 ) -> None:
-    write_agentic_artifacts(tmp_path, aggregate=False)
+    write_agentic_artifacts(tmp_path)
 
     assert validate_agentic_artifacts(tmp_path) == []
 
@@ -420,8 +412,6 @@ def test_agentic_validation_accepts_additional_source_identity(
     extra_dir.mkdir()
     (extra_dir / "extra.json").write_text(json.dumps(agentic_result(32)))
     (tmp_path / "agentic_extra").mkdir()
-    summary = tmp_path / "agentic_aggregated" / "summary.csv"
-    summary.write_text(summary.read_text() + "agentic_extra,SUCCESS\n")
 
     assert validate_agentic_artifacts(tmp_path) == []
 
@@ -443,7 +433,7 @@ def test_agentic_validation_requires_point_and_raw_artifacts(
 def test_agentic_validation_rejects_duplicate_point_identity(
     tmp_path: Path,
 ) -> None:
-    write_agentic_artifacts(tmp_path, aggregate=False)
+    write_agentic_artifacts(tmp_path)
     point_dir = (
         tmp_path / "bmk_agentic_dsv4_tp8_conc16_offloadcpu_result"
     )
