@@ -430,8 +430,8 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
     ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),
     ("28782309414", "mi300x", 8, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "supported", "native-probe-passed"),
-    ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_DIRECT_PROFILE, "supported", "native-probe-passed"),
-    ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_BOTH_PROFILE, "supported", "native-probe-passed"),
+    ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),
+    ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
     ("28788599713", "mi300x", 16, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "unsupported", "distributed-init-timeout"),
     *(("28743235213", "b300", 8, "deepep", "low-latency", profile,
        "supported", "native-probe-passed")

@@ -253,10 +253,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
             len(targets), 94
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 62
+            sum(item["disposition"] == "supported" for item in targets), 60
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 32
+            sum(item["disposition"] == "unsupported" for item in targets), 34
         )
         self.assertEqual(len(capability.provisional_precision_targets()), 0)
         keys = {
