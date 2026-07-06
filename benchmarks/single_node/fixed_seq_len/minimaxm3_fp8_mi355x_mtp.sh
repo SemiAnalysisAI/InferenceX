@@ -38,7 +38,7 @@ check_env_vars \
     RANDOM_RANGE_RATIO \
     RESULT_FILENAME
 
-DRAFT_MODEL="Inferact/MiniMax-M3-EAGLE3"
+DRAFT_MODEL="${DRAFT_MODEL:-Inferact/MiniMax-M3-EAGLE3}"
 
 if [[ -n "$SLURM_JOB_ID" ]]; then
   echo "JOB $SLURM_JOB_ID running on $SLURMD_NODENAME"
@@ -62,11 +62,7 @@ export VLLM_ENGINE_READY_TIMEOUT_S=3600
 # avoids the M3-decode breakable-cudagraph path that previously forced eager.
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # MI355X mxfp8 recipe (vllm-project/recipes#581): INT6 quick all-reduce plus
-# the router-append shared-experts MoE fusion (vllm-project/vllm#46545). The
-# fusion checks this env directly and runs on both the aiter and native MXFP8
-# MoE paths (it is independent of the AITER master switch, and self-disables
-# under expert parallelism inside the model), so enable it unconditionally.
-# (The AITER master switch itself is set below, gated on expert parallelism.)
+# the router-append shared-experts MoE fusion (vllm-project/vllm#46545).
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
 
@@ -85,19 +81,21 @@ elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
-# Gate the AITER master switch on expert parallelism. With EP, the aiter fused
-# MoE path is the auto-selected backend (no --moe-backend override). With EP
-# disabled (TP-only) the AITER master switch produces degenerate MiniMax-M3
-# output, so leave it off and fall back to the native MXFP8 path (the
-# shared-experts fusion set above still applies — it is master-independent).
+# Gate the AITER master switch on expert parallelism. With EP, 
+# the AITER master switch produces degenerate MiniMax-M3
+# output, so leave it off.
 if printf '%s\n' "${PARALLEL_ARGS[@]}" | grep -qxF -- '--enable-expert-parallel'; then
-    export VLLM_ROCM_USE_AITER=1
-else
     export VLLM_ROCM_USE_AITER=0
+else
+    export VLLM_ROCM_USE_AITER=1
 fi
 
 # use 3 speculative tokens for all configs for now
 NUM_SPEC_TOKENS=3
+
+# Larger per-step prefill token budget to improve TP4 throughput at high
+# concurrency. Overridable via env.
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
 # [AI generated draft test] Patch the installed AMD MiniMax-M3 model to add the
 # SupportsEagle3 interface (functionstackx/vllm#1). Mirrors nvidia/model.py:
@@ -193,9 +191,12 @@ vllm serve "$MODEL" --port "$PORT" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
+    --moe-backend aiter \
     --max-model-len "$MAX_MODEL_LEN" \
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
+    --linear-backend emulation \
     --speculative-config "{\"method\": \"eagle3\", \"model\": \"$DRAFT_MODEL\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS}" \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
