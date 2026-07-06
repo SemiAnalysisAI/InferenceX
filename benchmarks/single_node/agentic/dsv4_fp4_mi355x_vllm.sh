@@ -103,7 +103,10 @@ MOONCAKE_MASTER_PID=""
 
 OFFLOAD_ARGS=()
 
-if require_agentic_kv_offload_backend native; then
+if agentic_kv_offload_enabled; then
+case "${KV_OFFLOAD_BACKEND:-}" in
+  native)
+    require_agentic_kv_offload_backend native
     # ---- vLLM native config ----------------------------------------------------------
     unset VLLM_USE_SIMPLE_KV_OFFLOAD
     # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
@@ -126,7 +129,9 @@ if require_agentic_kv_offload_backend native; then
         --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
     )
 
-elif require_agentic_kv_offload_backend mooncake; then
+    ;;
+  mooncake)
+    require_agentic_kv_offload_backend mooncake
     # ---- Mooncake config ----------------------------------------------------------
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
@@ -203,7 +208,9 @@ EOF
             '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both","kv_connector_extra_config":{"load_async":true}}'
         )
 
-elif require_agentic_kv_offload_backend lmcache; then
+    ;;
+  lmcache)
+    require_agentic_kv_offload_backend lmcache
     # ---- Lmcache config ----------------------------------------------------------
     LMCACHE_PID=""
 
@@ -334,7 +341,12 @@ elif require_agentic_kv_offload_backend lmcache; then
             --kv-transfer-config
             "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
         )
-
+    ;;
+  *)
+    echo "Error: unsupported KV_OFFLOAD_BACKEND '${KV_OFFLOAD_BACKEND:-}' (expected: native, mooncake, lmcache)" >&2
+    exit 1
+    ;;
+esac
 fi
 
 PARALLEL_ARGS=(--tensor-parallel-size "$TP" --data-parallel-size 1)
