@@ -675,7 +675,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
           export CX_SHARD_SKU=b200-dgxc CX_BENCH=deepep
           cx_apply_network_profile 2 nvlink-rdma
-          test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:cpu
+          test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:cpu_host_memory
           unset CX_SHARD_SKU CX_BENCH
           cx_apply_network_profile 2 nvlink-rdma
           cx_export_gid_index_for_link_layer infiniband 1
@@ -2662,6 +2662,13 @@ class SamplingContractTest(unittest.TestCase):
             self.assertEqual(result.returncode, 1)
             self.assertIn("diagnostic=backend-build", result.stderr)
             self.assertNotIn("diagnostic=container-runtime", result.stderr)
+
+    def test_all_ranks_validate_raw_evidence_before_rank_zero_writes(self) -> None:
+        harness = (ROOT / "tests" / "ep_harness.py").read_text()
+        validation = harness.index("contracts.validate_raw_document(doc, samples_document)")
+        rank_zero_write = harness.index("if rank == 0:", validation)
+        self.assertLess(validation, rank_zero_write)
+        self.assertNotIn("if rank != 0:", harness[harness.index("def run_sweep("):validation])
 
     def test_precision_probe_timeout_reports_only_the_last_closed_stage(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

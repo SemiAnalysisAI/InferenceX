@@ -338,7 +338,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
         )
         self.assertEqual(disposition, "supported")
         self.assertEqual(reason, "ok")
-        self.assertEqual(capability.DEEPEP_V1_IBGDA_NIC_HANDLERS["b200-dgxc"], "cpu")
+        self.assertEqual(
+            capability.DEEPEP_V1_IBGDA_NIC_HANDLERS["b200-dgxc"],
+            "cpu_host_memory",
+        )
 
         disposition, reason = capability.resolve_disposition(
             "b200-dgxc", "deepep-hybrid", ep=16, nodes=2,

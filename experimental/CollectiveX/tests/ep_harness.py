@@ -1787,9 +1787,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     if capture_deferred_provenance is not None:
         capture_deferred_provenance()
 
-    if rank != 0:
-        return 0
-
     # status=valid requires correctness AND a proven-identical routing trace across ranks.
     all_ok = bool(rows) and all(r["correctness"]["passed"] for r in rows) and routing_consistent
 
@@ -2162,17 +2159,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
     }
     contracts.validate_raw_document(doc, samples_document)
-    _write_bytes_atomic(samples_path, samples_payload)
-    _write_json_atomic(args.out, doc)
-    dispatch_percentiles = headline["components"]["dispatch"]["percentiles_us"]
-    dispatch_p99 = dispatch_percentiles["p99"] if dispatch_percentiles else None
-    component_summary = (f"disp_p99={dispatch_p99:.1f}us "
-                         if dispatch_p99 is not None
-                         else "components=unavailable ")
-    print(f"{backend.name} ep-dispatch-combine [{args.phase}/{mode}/{case_profile['contract']}]: "
-          f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
-          f"headline T={headline['tokens_per_rank']} {component_summary}"
-          f"-> {args.out}")
+    if rank == 0:
+        _write_bytes_atomic(samples_path, samples_payload)
+        _write_json_atomic(args.out, doc)
+        dispatch_percentiles = headline["components"]["dispatch"]["percentiles_us"]
+        dispatch_p99 = dispatch_percentiles["p99"] if dispatch_percentiles else None
+        component_summary = (f"disp_p99={dispatch_p99:.1f}us "
+                             if dispatch_p99 is not None
+                             else "components=unavailable ")
+        print(f"{backend.name} ep-dispatch-combine [{args.phase}/{mode}/{case_profile['contract']}]: "
+              f"status={doc['outcome']['status']} {len(rows)} pts, routing_consistent={routing_consistent}, "
+              f"headline T={headline['tokens_per_rank']} {component_summary}"
+              f"-> {args.out}")
     # A complete invalid document is still a successfully captured terminal outcome. Launchers
     # inspect its status to fail the case without conflating it with an execution failure.
     return 0

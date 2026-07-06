@@ -27,7 +27,7 @@ DEEPEP_V2_SKU_CAPABILITIES = {
 
 # B200's publication pods cannot map NIC doorbells into GPU address space.
 # DeepEP V1 scale-out therefore uses NVSHMEM's CPU-proxied IBGDA handler.
-DEEPEP_V1_IBGDA_NIC_HANDLERS = {"b200-dgxc": "cpu"}
+DEEPEP_V1_IBGDA_NIC_HANDLERS = {"b200-dgxc": "cpu_host_memory"}
 
 
 def _topologies(

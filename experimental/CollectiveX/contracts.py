@@ -543,7 +543,7 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
         if provenance.get("backend_lineage") != "deepep-v1":
             unresolved.append("backend_lineage")
         if provenance.get("nvshmem_ibgda_nic_handler") not in {
-            "cpu", "gpu", "not-active",
+            "cpu_host_memory", "gpu", "not-active",
         }:
             unresolved.append("nvshmem_ibgda_nic_handler")
     if backend in {"deepep", "uccl"}:

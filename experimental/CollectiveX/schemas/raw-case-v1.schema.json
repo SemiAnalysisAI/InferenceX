@@ -773,6 +773,7 @@
               "num_qps_per_rank",
               "num_rdma_bytes",
               "num_sms",
+              "nvshmem_ibgda_nic_handler",
               "nvshmem_package_version",
               "path",
               "physical_nvlink_ranks",

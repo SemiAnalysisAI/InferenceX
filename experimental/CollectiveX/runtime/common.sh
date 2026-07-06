@@ -741,7 +741,7 @@ cx_apply_network_profile() {
   fi
   local nic_handler=gpu
   if [ "${CX_SHARD_SKU:-}" = b200-dgxc ] && [ "${CX_BENCH:-}" = deepep ]; then
-    nic_handler=cpu
+    nic_handler=cpu_host_memory
   fi
   export NVSHMEM_IB_ENABLE_IBGDA=1 NVSHMEM_IBGDA_NIC_HANDLER="$nic_handler"
   if [ -n "${CX_RDMA_LINK_LAYER:-}" ]; then

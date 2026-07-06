@@ -15,6 +15,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 import identity  # noqa: E402
+import contracts  # noqa: E402
 
 
 def _load(name: str) -> dict:
@@ -46,6 +47,15 @@ class CollectiveXV1SchemaContractTest(unittest.TestCase):
                 schema = json.loads(path.read_text())
                 jsonschema.Draft202012Validator.check_schema(schema)
                 self.assertFalse(schema["additionalProperties"])
+
+    def test_raw_backend_provenance_schema_matches_runtime_vocabulary(self) -> None:
+        provenance = self.raw["properties"]["implementation"]["properties"][
+            "provenance"
+        ]
+        self.assertEqual(
+            set(provenance["propertyNames"]["enum"]),
+            contracts.PROVENANCE_KEYS,
+        )
 
     def test_precision_catalog_and_axes_are_exact_and_strict(self) -> None:
         expected = set(identity.V1_PRECISION_PROFILES)
