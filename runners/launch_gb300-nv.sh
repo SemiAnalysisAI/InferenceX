@@ -69,6 +69,11 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     # Qwen3.5 sglang recipes (qwen3.5-fp4).
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
+    # The mooncake_store variant's weights are staged at /scratch (the standard
+    # /scratch/models location isn't writable by the runner user on this cluster).
+    if [[ "${CONFIG_FILE:-}" == *"_mooncake_store.yaml" ]]; then
+        export MODEL_PATH=/scratch/Qwen3.5-397B-A17B-NVFP4
+    fi
 else
     echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
     exit 1
