@@ -47,9 +47,6 @@ class PrecisionSchedulingTest(unittest.TestCase):
                 for item in targets
             ],
             [
-                ("mi300x", "mori", 8, "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale"),
-                ("mi300x", "mori", 8, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"),
-                ("mi300x", "mori", 8, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"),
                 ("mi300x", "mori", 16, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"),
             ],
         )
@@ -258,12 +255,12 @@ class PrecisionSchedulingTest(unittest.TestCase):
             len(targets), 94
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 59
+            sum(item["disposition"] == "supported" for item in targets), 62
         )
         self.assertEqual(
             sum(item["disposition"] == "unsupported" for item in targets), 31
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 4)
+        self.assertEqual(len(capability.provisional_precision_targets()), 1)
         keys = {
             (
                 item["precision_profile"],
@@ -381,11 +378,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(scheduled_profiles, set(low_latency["precision_profiles"]))
         self.assertEqual(
             {item["precision_profile"] for item in capability.provisional_precision_targets()},
-            set(normal["precision_profiles"]) - {
-                "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-                "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
-                "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
-            },
+            {"d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"},
         )
 
         stale = copy.deepcopy(suites)
