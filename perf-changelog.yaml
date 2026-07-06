@@ -4574,3 +4574,10 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override (the draft does not inherit the server's TRITON_ATTN on ROCm and otherwise falls to a slow default backend)"
+    - "Speeds up the draft forward without changing acceptance (~2.4-2.5): measured on MI355X TP4 MXFP8 1k1k, +2-19% throughput/GPU and -1 to -16% mean TPOT across conc 1-128 vs no override (largest gains at low concurrency)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
