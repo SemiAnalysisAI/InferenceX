@@ -4323,3 +4323,12 @@
     - "Enable AITER MoE on MiniMax-M3 MXFP4 MI355X single-node vLLM STP: export VLLM_ROCM_USE_AITER=1, VLLM_ROCM_USE_AITER_MOE=1, and VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1; pass --moe-backend aiter."
     - "Pin vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1 (from nightly-3f5a1e1733200760169ff31ebe60a271072b199e) for AITER MoE and shared-expert fusion support (vllm-project/vllm#46419, vllm-project/vllm#46545)."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1954
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang-disagg
+  description:
+    - "Bump Qwen3.5-FP8 MI355X SGLang disagg image from lmsysorg/sglang-rocm:v0.5.11-rocm700-mi35x-20260511 to lmsysorg/sglang:v0.5.14-rocm720-mi35x (ROCm 7.0 → 7.2, sglang v0.5.11 → v0.5.14)."
+    - "Fix disagg SLURM exclude list: add mia1-p01-g09 (broken pyxis) to submit.sh — was missing from multi-node path, causing prefill worker 503 failures."
+    - "Expand mi355x-disagg runner pool from 3 to 9 nodes."
+    - "8K1K concurrency sweep: [ 1, 2, 4, 8, 16, 32, 64, 128 ]; 1K1K commented out for this tuning round."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2092
