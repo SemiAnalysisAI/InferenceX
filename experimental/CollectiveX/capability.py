@@ -398,7 +398,7 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28745208954", "h100-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
     ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
+    ("28796549762", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28745423523", "h100-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28745423523", "h100-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
