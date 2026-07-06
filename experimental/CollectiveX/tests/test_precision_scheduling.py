@@ -355,6 +355,17 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(b200_reference, "supported")
         self.assertEqual(reason, "ok")
 
+        for sku, product in (("b200-dgxc", "B200"), ("h200-dgxc", "H200")):
+            disposition, reason = capability.resolve_disposition(
+                sku, "deepep-v2", ep=16, nodes=2,
+                precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+            )
+            self.assertEqual(disposition, "unsupported")
+            self.assertEqual(
+                reason,
+                f"DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the {product} fabric",
+            )
+
     def test_split_suites_track_provisional_state_and_do_not_duplicate_bf16(self) -> None:
         suites = sweep_matrix._load("suites.yaml")
         workloads = sweep_matrix._load("workloads.yaml")

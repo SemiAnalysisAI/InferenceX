@@ -183,6 +183,12 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ("b200-dgxc", "deepep-hybrid", 16): (
         "DeepEP Hybrid EP16 cannot map the DOCA UAR into GPU memory on B200"
     ),
+    ("b200-dgxc", "deepep-v2", 16): (
+        "DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the B200 fabric"
+    ),
+    ("h200-dgxc", "deepep-v2", 16): (
+        "DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the H200 fabric"
+    ),
 }
 
 PRECISION_DISPOSITIONS = {
