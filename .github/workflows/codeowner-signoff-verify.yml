@@ -17,11 +17,24 @@ name: CODEOWNER Sign-off Verify
 #   2. Evals pass on that same green run.
 #   3. The single-node recipe(s) are linked in the sign-off AND the linked
 #      recipe PR/commit contains all of the reproduction information that is in
-#      this InferenceX PR.
+#      this InferenceX PR. Single-node submissions only — disaggregated /
+#      multi-node PRs (dynamo, ATOM/ATOMesh, sglang/vllm disagg) are N/A.
 #   4. An authorized maintainer has explicitly posted a `/reuse-sweep-run`
 #      command on the PR (the reuse-merge path requires it).
+#   5. The sign-off uses the latest docs/PR_REVIEW_CHECKLIST.md template.
+#   6. vLLM/SGLang configs run upstream images (hub.docker.com/u/vllm,
+#      hub.docker.com/u/lmsysorg) on established hardware, and vLLM/SGLang
+#      submissions land before additional frameworks (TRT-LLM, ATOM, ...).
+#   7. No benchmark hacks that change the model architecture / cut FLOPs.
+#   8. Speculative-decoding configs benchmark through chat templates.
 # If any of those are not to standard, Claude posts a single comment that
 # @-mentions the reviewer who signed off and explains exactly what is wrong.
+#
+# The verdict is also published as a `codeowner-signoff-verify` commit status
+# on the PR head SHA (success only on "Verdict: PASS"). That status context is
+# a REQUIRED check in the "Protect main" ruleset, so a PR cannot be merged
+# (without org-admin bypass) until a sign-off has been posted AND independently
+# verified as passing on the current head commit.
 #
 # It can also be run manually via workflow_dispatch by passing the URL of the
 # sign-off comment/review to verify.
@@ -177,6 +190,7 @@ jobs:
       pull-requests: write
       issues: write
       actions: read
+      statuses: write
     steps:
       # SECURITY: this is a privileged job (write perms + secrets) triggered by
       # comment events, so it must NOT check out untrusted PR head code — the
@@ -184,7 +198,7 @@ jobs:
       # files. Check out the trusted default branch; all PR content is read
       # read-only via the GitHub API (gh / MCP), never from the working tree.
       - name: Checkout repository (trusted default branch only)
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           ref: ${{ github.event.repository.default_branch }}
@@ -229,9 +243,11 @@ jobs:
             A CODEOWNER (`${{ needs.gate.outputs.signoff-author }}`) just posted the reviewer
             sign-off checklist (as a ${{ needs.gate.outputs.signoff-kind }}) that marks
             PR #${{ needs.gate.outputs.pr-number }} as ready to merge. Your job is to
-            INDEPENDENTLY verify the checks below (0-3). Do not trust the reviewer's checkmarks
-            — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, and the linked
-            recipe yourself. Be rigorous and specific.
+            INDEPENDENTLY verify the checks below (0-8). Do not trust the reviewer's checkmarks
+            — re-derive every conclusion from CODEOWNERS, CI runs, the PR diff, the master
+            configs, and the linked recipe yourself. Be rigorous and specific. The checks encode
+            the merge standard in `docs/PR_REVIEW_CHECKLIST.md` (read it in the checked-out
+            default branch — it is the source of truth if wording here and there ever drifts).
 
             Read the exact sign-off body first (especially its "Additional detail section").
             The sign-off was posted as a ${{ needs.gate.outputs.signoff-kind }}, so fetch it with:
@@ -257,7 +273,7 @@ jobs:
             The sign-off must come from a CODEOWNER for what the PR changes. Read
             `.github/CODEOWNERS` (in the checked-out default branch) and, for each changed file,
             find its owners via last-matching-pattern-wins (the LAST matching line wins; owners do
-            not accumulate, so `.github/configs/nvidia-master.yaml @a @b` overrides `* @org/team`).
+            not accumulate, so `configs/nvidia-master.yaml @a @b` overrides `* @org/team`).
             Then decide:
             - A path whose most-specific owner is a SPECIFIC line (named users/team): the signer
               `@${{ needs.gate.outputs.signoff-author }}` must be one of those owners (listed
@@ -329,11 +345,25 @@ jobs:
               the same inference-engine image as this PR's config. FAIL if evals are
               skipped/failed/empty/below bar, or the image differs — say exactly which.
 
-            ## Check 3 — Recipe linked AND complete
-            The InferenceX "recipe" for this PR = the files it changes under `benchmarks/`
-            (especially `benchmarks/single_node/**/*.sh`) plus its entry in
-            `.github/configs/*-master.yaml`. The merge standard is: the community must be able to
-            reproduce this benchmark from a public recipe.
+            ## Check 3 — Recipe linked AND complete (SINGLE-NODE recipes only)
+            APPLICABILITY — read this first: the recipe-link requirement covers SINGLE-NODE
+            recipes only, because the official upstream recipe sources (vLLM recipes, SGLang
+            cookbook) publish single-node serve commands. Disaggregated / multi-node
+            submissions have NO recipe-link requirement. If the PR's benchmark changes are
+            exclusively multi-node/disagg — files under `benchmarks/multi_node/**` (including
+            `srt-slurm-recipes/**`), and/or master-config entries with `multinode: true` or
+            `disagg: true`, and/or disagg frameworks (`dynamo-trt`, `dynamo-sglang`,
+            `sglang-disagg`, vLLM disagg, ATOM/ATOMesh disagg) — report this check as
+            `N/A — disaggregated/multi-node submission; the recipe-link requirement applies to
+            single-node recipes only` and DO NOT fail it. A sign-off note like "this is a
+            disagg submission, no recipe update required" is a legitimate statement of that
+            fact, not a violation. If the PR touches BOTH single-node and multi-node recipes,
+            apply (a)/(b) below to the single-node portion only.
+
+            The InferenceX "recipe" for this PR = the files it changes under
+            `benchmarks/single_node/**` plus its entry in `configs/*-master.yaml`. The merge
+            standard is: the community must be able to reproduce this benchmark from a public
+            recipe.
             - (a) LINK PRESENT: The sign-off's "Additional detail section" MUST contain a link to
               the corresponding recipe — a PR/commit in
               `https://github.com/vllm-project/recipes` or
@@ -389,8 +419,76 @@ jobs:
               command has been posted on this PR" and remind the reviewer that an authorized
               maintainer must comment `/reuse-sweep-run` before this PR can be merged via reuse.
 
+            ## Check 5 — Sign-off uses the LATEST checklist template
+            The first item of the checklist has the reviewer affirm they used the latest version
+            of `docs/PR_REVIEW_CHECKLIST.md`. Verify it instead of trusting it: read the template
+            in `docs/PR_REVIEW_CHECKLIST.md` (checked-out default branch) and compare its items
+            against the sign-off body.
+            - PASS if every item in the current template has a corresponding checked (`[x]`) item
+              in the sign-off. Match items semantically — minor wording drift is fine; a missing
+              ITEM is not.
+            - FAIL if the sign-off is missing current-template items (stale copy) or left items
+              unchecked without an explanation in the additional detail section. Name the
+              missing/unchecked items and link the current template.
+
+            ## Check 6 — Upstream vLLM/SGLang images, and engine-first ordering
+            The checklist makes upstream engine images a HARD guideline: on established hardware,
+            vLLM/SGLang submissions must run images published by the upstream projects, not
+            vendor forks. Established (NOT "new hardware") SKUs: NVIDIA H100, H200, B200, B300,
+            GB200, GB300; AMD MI300X, MI325X, MI355X.
+            Identify each master-config entry this PR adds/changes (in `configs/*-master.yaml`)
+            and read its `framework:`, `runner:`, and `image:` fields.
+            - (a) UPSTREAM IMAGE: for entries with `framework: vllm`, the image must come from the
+              upstream vLLM Docker Hub org (https://hub.docker.com/u/vllm) — in the master configs
+              that looks like `vllm/vllm-openai:<tag>` or `vllm/vllm-openai-rocm:<tag>`. For
+              `framework: sglang`, it must come from the upstream org
+              (https://hub.docker.com/u/lmsysorg) — `lmsysorg/sglang:<tag>` or
+              `lmsysorg/sglang-rocm:<tag>` (digest-pinned `@sha256:...` variants are fine).
+              Vendor/private forks — e.g. `rocm/sgl-dev`, `rocm/vllm-dev`, `ghcr.io#...`, or any
+              non-`vllm/`/non-`lmsysorg/` repo — FAIL on the established SKUs above unless the
+              sign-off's additional detail section documents a genuine exception: truly new
+              hardware (e.g. MI455X UALoE72, Vera Rubin NVL72, Rubin NVL8) or a new model
+              architecture that upstream vLLM/SGLang does not fundamentally support yet (as
+              backed by vLLM/SGLang community maintainers). Name the offending image and the
+              missing justification when you FAIL. (Note: some entries write the registry
+              separator as `#`, e.g. `nvcr.io#nvidia/...` — treat `#` as `/`.)
+            - (b) ENGINE-FIRST ORDERING: if this PR adds a config entry for a NON-vLLM/SGLang
+              framework (`framework:` of `trtllm`, `atom`, dynamo variants, etc. — images like
+              `rocm/atom*`, `nvcr.io...tensorrt-llm...`), check whether `configs/*-master.yaml`
+              already contains a vLLM or SGLang entry for the same model (`model-prefix`) and SKU
+              (`runner`). If none exists and no exception is documented in the sign-off, FAIL —
+              vLLM/SGLang submissions must land before additional frameworks. Otherwise PASS with
+              the matching entry named.
+            - N/A if the PR changes no master-config entries (state that in one line).
+
+            ## Check 7 — No benchmark hacks that change the model architecture
+            Verify from the PR diff (server args in `benchmarks/**` and master-config changes)
+            that nothing alters the model architecture or reduces its FLOPs — e.g. `--hf-overrides`
+            that skip the indexer every N layers on a model that doesn't natively support it,
+            trimming layers/experts/heads, or otherwise skipping computation. The rule: making the
+            SAME computation run faster is fair game; FLOPs at lower precision is fine when evals
+            pass; REMOVING model-architecture FLOPs is not. Optimizations should be ones used in
+            production by accuracy-sensitive customers.
+            - Scan for architecture-override knobs: `--hf-overrides`, `hf_overrides`,
+              `--json-model-override-args`, config-editing `sed`/`jq` on the model files, etc. If
+              present, determine whether the override changes computed FLOPs vs the model's native
+              config and whether the model natively supports that mode.
+            - FAIL with the exact flag/value if architecture FLOPs are reduced without native
+              model support. PASS in one line otherwise; N/A if the PR touches no server args.
+
+            ## Check 8 — Speculative-decoding configs benchmark through chat templates
+            If this PR adds or changes a speculative-decoding config (MTP / EAGLE / draft-model
+            flags such as `--speculative-config`, `--speculative-algorithm`, `spec-decode`, config
+            names ending in `-mtp`), verify the benchmark client exercises the model through its
+            chat template (e.g. chat-completions style endpoint/backend rather than raw
+            completions) so the acceptance-length distribution matches real-world traffic.
+            - FAIL if a spec-decode benchmark drives raw completions with no chat template —
+              name the config and script line.
+            - N/A if the PR has no speculative-decoding changes.
+
             ## Verdict and output
-            Decide PASS only if Checks 0, 1, 2, 3, and 4 ALL pass. Post EXACTLY ONE summary comment on
+            Decide PASS only if Checks 0-8 ALL pass (a check reported as `N/A` counts as a pass —
+            keep the `N/A — <reason>` row so the reviewer sees it was considered). Post EXACTLY ONE summary comment on
             PR #${{ needs.gate.outputs.pr-number }} using `gh pr comment`. Start the comment with
             the hidden marker so reruns are identifiable:
             `<!-- codeowner-signoff-verify sha=${{ needs.gate.outputs.head-sha }} -->`
@@ -401,20 +499,75 @@ jobs:
 
             KEEP IT TIGHT — a busy reviewer should get it in ~15 seconds. Not a novel, not a
             single terse line either. Rules:
-            - First line after the marker: the overall verdict (PASS, or one line naming what
-              blocks merge).
-            - Then ONE short line per check. For a passing check write `PASS — <brief reason>`;
-              spend words only on the checks that fail.
+            - First line after the marker: the overall verdict as a markdown header, with the
+              verdict word in bold and flanked by three status emojis on each side — EXACTLY:
+                on pass: `## ✅✅✅ **Verdict: PASS** ✅✅✅`
+                on fail: `## ❌❌❌ **REJECTED** ❌❌❌`
+            - Then ONE short line per check, each STARTING with its status emoji so pass/fail is
+              scannable at a glance:
+                `✅ Check N (<name>): PASS — <brief reason>`
+                `❌ Check N (<name>): FAIL — <root issue>`
+                `➖ Check N (<name>): N/A — <reason>`
+              Spend words only on the checks that fail.
             - State conclusions, don't narrate your process. No multi-paragraph explanations, no
               restating the checklist, no hedging ("if X then maybe Y" — make the call). Link the
               run/recipe instead of describing it.
 
-            - If everything is to standard: post the verdict line + the five one-line PASS rows
+            - If everything is to standard: post the verdict header + the nine one-line rows
               (with the green run URL). Do NOT @-mention anyone on a pass.
-            - If anything is NOT to standard: the FIRST line (after the marker) must @-mention the
-              sign-off author as `@${{ needs.gate.outputs.signoff-author }}` with the blocking
-              summary. Then the per-check lines, each failing one led by its root issue (e.g.
-              "No passing sweep/eval on any commit in this PR") with the supporting link after.
+            - If anything is NOT to standard: the verdict header must be immediately followed by a
+              line that @-mentions the sign-off author as `@${{ needs.gate.outputs.signoff-author }}`
+              with the blocking summary. Then the per-check lines, each failing one led by its root
+              issue (e.g. "No passing sweep/eval on any commit in this PR") with the supporting
+              link after.
 
-            Do not use emojis anywhere in the comment. Use only facts you verified. If a required
-            artifact or run is inaccessible, say so explicitly rather than assuming pass.
+            Use no emojis anywhere in the comment other than the ✅ / ❌ / ➖ status emojis
+            specified above. Use only facts you verified. If a required artifact or run is
+            inaccessible, say so explicitly rather than assuming pass.
+
+      # Publish the verdict as a commit status on the PR head SHA so it can act
+      # as a required check. Deterministic: reads the verdict comment posted
+      # above (matched by the sha-pinned marker) and maps "Verdict: PASS" to
+      # success, anything else — including a missing verdict — to failure.
+      # Runs on always() so a crashed verify step still reports failure rather
+      # than leaving the status stuck at "expected".
+      - name: Publish verdict as commit status on PR head
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          HEAD_SHA: ${{ needs.gate.outputs.head-sha }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr-number }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headSha = process.env.HEAD_SHA;
+            const prNumber = parseInt(process.env.PR_NUMBER, 10);
+            const marker = `<!-- codeowner-signoff-verify sha=${headSha} -->`;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number: prNumber, per_page: 100,
+            });
+            const verdicts = comments.filter(c => c.body && c.body.includes(marker));
+            const latest = verdicts[verdicts.length - 1];
+
+            let state, description, target_url;
+            if (!latest) {
+              state = 'failure';
+              description = 'No verification verdict was posted for this commit';
+              target_url = `https://github.com/${owner}/${repo}/actions/runs/${context.runId}`;
+            } else if (latest.body.includes('**Verdict: PASS**')) {
+              state = 'success';
+              description = 'CODEOWNER sign-off independently verified';
+              target_url = latest.html_url;
+            } else {
+              state = 'failure';
+              description = 'Sign-off verification rejected - see verdict comment';
+              target_url = latest.html_url;
+            }
+
+            await github.rest.repos.createCommitStatus({
+              owner, repo, sha: headSha, state, description,
+              context: 'codeowner-signoff-verify', target_url,
+            });
+            core.info(`codeowner-signoff-verify=${state} on ${headSha}`);
