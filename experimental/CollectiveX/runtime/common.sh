@@ -753,7 +753,13 @@ cx_apply_network_profile() {
     export NVSHMEM_HCA_LIST="$CX_RDMA_DEVICES"
     export NVSHMEM_ENABLE_NIC_PE_MAPPING=1
     if [ "$scaleout" = 1 ]; then
-      export NCCL_NET=IB NCCL_IB_HCA="=$CX_RDMA_DEVICES"
+      if [ "${CX_SHARD_SKU:-}" = mi300x ] || [ "${CX_SHARD_SKU:-}" = mi325x ] \
+          || [ "${CX_SHARD_SKU:-}" = mi355x ]; then
+        unset NCCL_NET
+      else
+        export NCCL_NET=IB
+      fi
+      export NCCL_IB_HCA="=$CX_RDMA_DEVICES"
       export MORI_RDMA_DEVICES="$rdma_names" EP_NIC_NAME="$ep_nic"
     fi
   fi

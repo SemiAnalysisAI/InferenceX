@@ -67,8 +67,11 @@ class NCCLBackend:
         _library, _version = _runtime_collective(args, torch)
         if args.scale_out_transport:
             hcas = os.environ.get("NCCL_IB_HCA", "")
-            if os.environ.get("NCCL_NET") != "IB":
-                raise RuntimeError("scale-out collective network mode is not IB")
+            network_selection = os.environ.get("NCCL_NET")
+            if _library == "nccl" and network_selection != "IB":
+                raise RuntimeError("scale-out NCCL network mode is not IB")
+            if _library == "rccl" and network_selection:
+                raise RuntimeError("scale-out RCCL must auto-select its HCA-pinned network")
             if not re.fullmatch(
                 r"=[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?"
                 r"(?:,[A-Za-z][A-Za-z0-9_.-]{0,31}(?::[1-9][0-9]*)?)*",
@@ -93,6 +96,9 @@ class NCCLBackend:
             "collective_library": _library,
             "nccl_version": _version,
             "transport": f"{_library}-all_to_all_single",
+            "network_selection": (
+                "forced-ib" if _library == "nccl" else "auto-hca-pinned"
+            ),
             "resource_mode": "fixed-profile",
             "num_sms": None,
             "device_sms": torch.cuda.get_device_properties(device).multi_processor_count,
