@@ -810,6 +810,21 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 24, 32, 40] }
 
 
+kimik2.7-fp4-mi355x-vllm-agentic:
+  image: vllm/vllm-openai-rocm:v0.22.0
+  model: amd/Kimi-K2.7-Code-MXFP4
+  model-prefix: kimik2.7
+  runner: cluster:mi355x-amds
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    agentic-coding:
+    - dram-utilization: 0.80
+      search-space:
+      - { tp: 8, kv-offloading: none, conc-list: [32, 64] }
+
+
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/Kimi-K2.5-MXFP4
