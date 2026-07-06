@@ -98,6 +98,9 @@ DEEPEP_V2_V1_PROVENANCE = {
     "nccl_version": "2.30.4",
     "nvshmem_package_version": "3.3.9",
 }
+DEEPEP_V2_DISTRIBUTION_VERSIONS = frozenset({
+    "2.0.0+fa8a9b1", "2.0.0+local",
+})
 UCCL_DEPENDENCY_VERSIONS = {
     "intervaltree": "3.1.0",
     "nvidia-cuda-runtime-cu12": "12.9.79",
@@ -575,8 +578,13 @@ def backend_provenance_issues(backend: str, provenance: dict[str, Any]) -> list[
             unresolved.append("jit_random_seed")
         unresolved.extend(
             field for field, expected in DEEPEP_V2_V1_PROVENANCE.items()
-            if provenance.get(field) != expected
+            if field != "deepep_distribution_version"
+            and provenance.get(field) != expected
         )
+        if provenance.get("deepep_distribution_version") not in (
+            DEEPEP_V2_DISTRIBUTION_VERSIONS
+        ):
+            unresolved.append("deepep_distribution_version")
         policy = (
             provenance.get("allow_hybrid_mode"),
             provenance.get("gin_enabled"),

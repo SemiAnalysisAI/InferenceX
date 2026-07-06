@@ -1188,6 +1188,19 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 expected = "backend_lineage"
             self.assertIn(expected, contracts.backend_provenance_issues(backend, changed))
 
+        for distribution_version in contracts.DEEPEP_V2_DISTRIBUTION_VERSIONS:
+            changed = copy.deepcopy(v2)
+            changed["deepep_distribution_version"] = distribution_version
+            self.assertEqual(
+                contracts.backend_provenance_issues("deepep-v2", changed), []
+            )
+        changed = copy.deepcopy(v2)
+        changed["deepep_distribution_version"] = "2.0.0+unverified"
+        self.assertIn(
+            "deepep_distribution_version",
+            contracts.backend_provenance_issues("deepep-v2", changed),
+        )
+
         changed = copy.deepcopy(uccl)
         changed["uccl_dependency_versions"]["intervaltree"] = "3.2.0"
         self.assertIn(
