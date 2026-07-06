@@ -11103,9 +11103,9 @@ qwen3.5-fp8-b300-sglang-agentic-hicache:
       - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
 
-kimik2.5-fp4-b200-vllm-agentic-lmcache:
-  image: vllm/vllm-openai:v0.22.0
-  model: nvidia/Kimi-K2.5-NVFP4
+kimik2.5-fp4-b200-vllm-agentic:
+  image: vllm/vllm-openai:nightly-09663abde0f50944a8d5ea30120666024b503faa
+  model: Kimi-K2.6-NVFP4
   model-prefix: kimik2.5
   runner: cluster:b200-dgxc
   precision: fp4
@@ -11115,10 +11115,10 @@ kimik2.5-fp4-b200-vllm-agentic-lmcache:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 24] }
-      - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [16, 24, 32, 36] }
-      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [8, 12, 14, 16, 18, 20] }
-      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [12, 14, 16, 18, 20, 22, 24, 32] }
+      - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, ep: 1, kv-offloading: none, conc-list: [1] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: native, conc-list: [1] }
+      - { tp: 4, ep: 1, kv-offloading: dram, kv-offload-backend: mooncake, conc-list: [1] }
 
 # CONC range conservative for H100's 80 GB HBM3 under the long-ISL with-
 # subagents corpus. hicache arm capped at conc 16 since high-conc + hicache

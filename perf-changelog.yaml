@@ -4574,3 +4574,9 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - kimik2.5-fp4-b200-vllm-agentic
+  description:
+    - "Update kimi k2.5 agentx B200"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX

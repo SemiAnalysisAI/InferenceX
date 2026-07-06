@@ -7,7 +7,7 @@ set -x
 # Required env vars:
 #   MODEL, TP, CONC, KV_OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
 #
-# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=lmcache.
+# KV_OFFLOADING=dram requires KV_OFFLOAD_BACKEND=native or KV_OFFLOAD_BACKEND=mooncake.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -37,149 +37,116 @@ install_agentic_deps
 
 # ---- Server config ----------------------------------------------------------
 SERVER_LOG="$RESULT_DIR/server.log"
-LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
+MOONCAKE_MASTER_LOG="$RESULT_DIR/mooncake_master.log"
 mkdir -p "$RESULT_DIR"
 
+SERVER_PID=""
+MOONCAKE_MASTER_PID=""
+
+cleanup_agentic_services() {
+    local exit_code=$?
+    trap - EXIT INT TERM
+    set +e
+    stop_background_process_tree "$SERVER_PID" "vLLM server" 60
+    stop_background_process_tree "$MOONCAKE_MASTER_PID" "Mooncake master"
+    exit "$exit_code"
+}
+trap cleanup_agentic_services EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
 OFFLOAD_ARGS=()
-PREFIX_CACHE_ARGS=()
-LMCACHE_PID=""
 
-cleanup_lmcache_server() {
-    if [[ -n "$LMCACHE_PID" ]] && kill -0 "$LMCACHE_PID" 2>/dev/null; then
-        kill "$LMCACHE_PID" 2>/dev/null || true
-        wait "$LMCACHE_PID" 2>/dev/null || true
-    fi
-}
-
-trap cleanup_lmcache_server EXIT
-
-wait_for_lmcache_ready() {
-    { set +x; } 2>/dev/null
-    local attempts="${LMCACHE_READY_ATTEMPTS:-120}"
-    local tail_pid=""
-
-    while [ ! -f "$LMCACHE_LOG" ]; do
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before creating log file. Exiting." >&2
-            exit 1
-        fi
-        sleep 1
-    done
-
-    tail -f -n +1 "$LMCACHE_LOG" &
-    tail_pid=$!
-
-    for ((i = 1; i <= attempts; i++)); do
-        if curl --output /dev/null --silent --fail "http://127.0.0.1:${LMCACHE_HTTP_PORT}/healthcheck"; then
-            kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
-            return 0
-        fi
-        if [[ -n "$LMCACHE_PID" ]] && ! kill -0 "$LMCACHE_PID" 2>/dev/null; then
-            echo "LMCache server died before becoming healthy. Log follows:" >&2
-            kill "$tail_pid" 2>/dev/null || true
-            wait "$tail_pid" 2>/dev/null || true
-            cat "$LMCACHE_LOG" >&2 || true
-            exit 1
-        fi
-        sleep 1
-    done
-
-    echo "Timed out waiting for LMCache server healthcheck. Log follows:" >&2
-    kill "$tail_pid" 2>/dev/null || true
-    wait "$tail_pid" 2>/dev/null || true
-    cat "$LMCACHE_LOG" >&2 || true
-    exit 1
-}
-
-if require_agentic_kv_offload_backend lmcache; then
+if agentic_kv_offload_enabled; then
+    case "$KV_OFFLOAD_BACKEND" in
+    native)
+        export VLLM_USE_SIMPLE_KV_OFFLOAD=1
+        OFFLOAD_ARGS=(
+            --kv_offloading_backend native
+            --kv_offloading_size "$TOTAL_CPU_DRAM_GB"
+            --disable-hybrid-kv-cache-manager
+        )
+        ;;
+    mooncake)
         { set +x; } 2>/dev/null
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
-        agentic_pip_install --quiet --no-cache-dir lmcache
-        python3 -c "import lmcache.integration.vllm.lmcache_mp_connector" >/dev/null
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
 
-        # MP mode owns the configured CPU pool in the external LMCache
-        # server instead of passing
-        # --kv-offloading-size through vLLM's integrated LMCache convenience
-        # path, which divides the value by TP and then hits a large single-shot
-        # cudaHostAlloc in LMCache 0.4.5's single-process local CPU backend.
-        LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
-        LMCACHE_PORT="${LMCACHE_PORT:-5555}"
-        LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
-        # LMCacheMPConnector builds its ZMQ endpoint by concatenating
-        # lmcache.mp.host and lmcache.mp.port, and its default host already
-        # includes the tcp:// scheme. Keep the server bind host raw, but pass
-        # a ZMQ-style host string to the connector.
-        LMCACHE_CONNECT_HOST="${LMCACHE_CONNECT_HOST:-tcp://$LMCACHE_HOST}"
-        LMCACHE_L1_SIZE_GB="${LMCACHE_L1_SIZE_GB:-$TOTAL_CPU_DRAM_GB}"
-        if [ "$LMCACHE_L1_SIZE_GB" -gt "$TOTAL_CPU_DRAM_GB" ]; then
-            echo "Error: LMCACHE_L1_SIZE_GB=$LMCACHE_L1_SIZE_GB exceeds configured capacity $TOTAL_CPU_DRAM_GB" >&2
+        MOONCAKE_VERSION=0.3.11.post1
+        agentic_pip_install --quiet --no-cache-dir --no-deps \
+            --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
+
+        MOONCAKE_MASTER_PORT=$((PORT + 12000))
+        MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
+        cat > "$MOONCAKE_CONFIG_PATH" <<EOF
+{
+  "mode": "embedded",
+  "metadata_server": "P2PHANDSHAKE",
+  "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
+  "global_segment_size": "${PER_RANK_GB}GB",
+  "local_buffer_size": "4GB",
+  "protocol": "rdma",
+  "device_name": ""
+}
+EOF
+        export MOONCAKE_CONFIG_PATH
+        export WITH_NVIDIA_PEERMEM=0
+        export MC_ENABLE_DEST_DEVICE_AFFINITY=1
+
+        echo "Starting Mooncake master on port $MOONCAKE_MASTER_PORT..."
+        mooncake_master --port "$MOONCAKE_MASTER_PORT" \
+            --default_kv_lease_ttl=1h \
+            > "$MOONCAKE_MASTER_LOG" 2>&1 &
+        MOONCAKE_MASTER_PID=$!
+        sleep 2
+        if ! kill -0 "$MOONCAKE_MASTER_PID" 2>/dev/null; then
+            echo "Mooncake master died during startup." >&2
+            cat "$MOONCAKE_MASTER_LOG" >&2
             exit 1
         fi
-        # Initial allocation is deliberately small; --l1-size-gb above is the
-        # actual pool capacity and grows lazily as the run fills the cache.
-        LMCACHE_L1_INIT_SIZE_GB="${LMCACHE_L1_INIT_SIZE_GB:-20}"
-        LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
-        LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
-        export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
-
-        echo "Starting LMCache MP server..."
-        LMCACHE_CMD=(
-            lmcache server
-            --host "$LMCACHE_HOST"
-            --port "$LMCACHE_PORT"
-            --http-host "$LMCACHE_HOST"
-            --http-port "$LMCACHE_HTTP_PORT"
-            --l1-size-gb "$LMCACHE_L1_SIZE_GB"
-            --l1-init-size-gb "$LMCACHE_L1_INIT_SIZE_GB"
-            --chunk-size "$LMCACHE_CHUNK_SIZE"
-            --max-workers "$LMCACHE_MAX_WORKERS"
-            --eviction-policy LRU
-        )
-        printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
-        printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
-        "${LMCACHE_CMD[@]}" > "$LMCACHE_LOG" 2>&1 &
-        LMCACHE_PID=$!
-        echo "LMCache server PID: $LMCACHE_PID"
-        wait_for_lmcache_ready
-
-        PREFIX_CACHE_ARGS=(--enable-prefix-caching)
         OFFLOAD_ARGS=(
             --kv-transfer-config
-            "{\"kv_connector\":\"LMCacheMPConnector\",\"kv_connector_module_path\":\"lmcache.integration.vllm.lmcache_mp_connector\",\"kv_role\":\"kv_both\",\"kv_connector_extra_config\":{\"lmcache.mp.host\":\"$LMCACHE_CONNECT_HOST\",\"lmcache.mp.port\":$LMCACHE_PORT}}"
-            --disable-hybrid-kv-cache-manager
+            '{"kv_connector":"MooncakeStoreConnector","kv_role":"kv_both"}'
         )
+        ;;
+    *) echo "Error: unsupported KV_OFFLOAD_BACKEND value '$KV_OFFLOAD_BACKEND' (expected one of: native, mooncake)" >&2; exit 1 ;;
+    esac
 fi
 
 echo "Starting vllm server..."
 export TORCH_CUDA_ARCH_LIST="10.0"
 export PYTHONNOUSERSITE=1
 # Disable vLLM v0.21+ CUDA-graph memory estimator. Its pre-reservation
-# eats ~32% of HBM upfront which, combined with FP4 weights at TP=4
-# (~62 GB/GPU), leaves no room for KV blocks -- _check_enough_kv_cache_memory
-# trips before the engine starts. Our --gpu-memory-utilization=0.90 already
-# leaves ~18 GB/GPU slack outside vLLM's budget, which is the same safety
-# net the estimator provides, so disabling it is redundant rather than
-# unsafe.
+# can over-budget FP4 Kimi weights at TP=4 before KV sizing completes; the
+# explicit CUDA graph settings below define the capture behavior for this
+# recipe.
 export VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0
+
+DCP_ARGS=()
+if [[ "$CONC" -ge 16 ]]; then
+    DCP_ARGS=(--decode-context-parallel-size "$TP")
+fi
+
+export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
-    --tensor-parallel-size="$TP"
-    --gpu-memory-utilization 0.90
-    --max-num-seqs "$CONC"
-    --reasoning-parser kimi_k2
-    --tool-call-parser kimi_k2
-    --compilation_config.pass_config.fuse_allreduce_rms true
     --kv-cache-dtype fp8
-    --max-cudagraph-capture-size 2048
-    --stream-interval 20
     --trust-remote-code
-    "${PREFIX_CACHE_ARGS[@]}"
+    --block-size 64
+    --language-model-only
+    --attention-config '{"mla_prefill_backend":"TRTLLM_RAGGED","use_prefill_query_quantization":true}'
+    --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
+    --max-cudagraph-capture-size 2048
+    --max-num-batched-tokens 16384
+    --stream-interval 10
+    --enable-prefix-caching
+    --tensor-parallel-size "$TP"
+    "${DCP_ARGS[@]}"
     "${OFFLOAD_ARGS[@]}"
 )
 printf '%q ' "${VLLM_CMD[@]}" | tee "$RESULT_DIR/vllm_command.txt"
