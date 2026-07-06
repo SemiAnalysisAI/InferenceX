@@ -1076,8 +1076,13 @@ cx_reconcile_salloc_jobid() {
 # Allocate via salloc's stable grant message and assign JOB_ID in this shell.
 # Raw scheduler output remains in the bounded private execution log.
 cx_salloc_jobid() {
-  local log job_id job_name argument salloc_rc=0
-  log="$(cx_private_log_path scheduler-allocation)"
+  local log_label=scheduler-allocation log job_id job_name argument salloc_rc=0
+  case "${CX_SALLOC_ATTEMPT:-1}" in
+    1) ;;
+    2|3) log_label+="-a${CX_SALLOC_ATTEMPT}" ;;
+    *) return 1 ;;
+  esac
+  log="$(cx_private_log_path "$log_label")"
   for argument in "$@"; do
     case "$argument" in
       --job-name|--job-name=*|-J|-J*)

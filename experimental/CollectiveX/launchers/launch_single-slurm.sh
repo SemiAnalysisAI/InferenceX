@@ -109,6 +109,7 @@ excluded_nodes="${CX_EXCLUDE_NODES:-}"
 for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")
   [ -z "$excluded_nodes" ] || attempt_allocation+=(--exclude="$excluded_nodes")
+  export CX_SALLOC_ATTEMPT="$allocation_attempt"
   cx_salloc_jobid "${attempt_allocation[@]}"
   [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
   cx_set_failure_stage setup
@@ -128,6 +129,7 @@ for allocation_attempt in 1 2 3; do
   [ -z "$excluded_nodes" ] || excluded_nodes+=,
   excluded_nodes+="$rejected_nodes"
 done
+unset CX_SALLOC_ATTEMPT
 if [ "$LOCAL_IMPORT" = 1 ]; then
   cx_set_failure_stage container-import
   SQUASH_FILE="$(CX_ENROOT_LOCAL_IMPORT=1 cx_ensure_squash "$CX_SQUASH_DIR" "$IMAGE")"
