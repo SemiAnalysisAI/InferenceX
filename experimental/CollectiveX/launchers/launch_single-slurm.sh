@@ -110,6 +110,7 @@ for allocation_attempt in 1 2 3; do
   attempt_allocation=("${allocation[@]}")
   [ -z "$excluded_nodes" ] || attempt_allocation+=(--exclude="$excluded_nodes")
   export CX_SALLOC_ATTEMPT="$allocation_attempt"
+  export CX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"
   cx_salloc_jobid "${attempt_allocation[@]}"
   [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
   cx_set_failure_stage setup
@@ -117,7 +118,7 @@ for allocation_attempt in 1 2 3; do
     break
   fi
   if [ "$RUNNER" != h100-dgxc ] || [ "$allocation_attempt" = 3 ]; then
-    cx_fail_stage setup "$(cx_private_log_path network-profile)" || true
+    cx_fail_stage setup "$CX_NETWORK_PROFILE_LOG" || true
     cx_die "allocated nodes failed the network profile"
   fi
   rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
@@ -129,7 +130,7 @@ for allocation_attempt in 1 2 3; do
   [ -z "$excluded_nodes" ] || excluded_nodes+=,
   excluded_nodes+="$rejected_nodes"
 done
-unset CX_SALLOC_ATTEMPT
+unset CX_SALLOC_ATTEMPT CX_NETWORK_VALIDATION_ATTEMPT
 if [ "$LOCAL_IMPORT" = 1 ]; then
   cx_set_failure_stage container-import
   SQUASH_FILE="$(CX_ENROOT_LOCAL_IMPORT=1 cx_ensure_squash "$CX_SQUASH_DIR" "$IMAGE")"

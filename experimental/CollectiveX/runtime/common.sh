@@ -768,7 +768,7 @@ cx_restore_exact_hca_selector() {
 # diagnostics stay in the runner-private log.
 cx_validate_network_profile_on_job() {
   local job_id="$1" nodes="$2" transport="$3" report_failure="${4:-1}"
-  local log rc=0 scaleout=0 marker_count link_layer
+  local log_label=network-profile log rc=0 scaleout=0 marker_count link_layer
   local single_node_rdma=0
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
@@ -781,7 +781,13 @@ cx_validate_network_profile_on_job() {
     || return 1
   [ -n "${CX_RDMA_DEVICES:-}" ] || return 1
   [ "$scaleout" = 0 ] || [ -n "${CX_SOCKET_IFNAME:-}" ] || return 1
-  log="$(cx_private_log_path network-profile)" || return 1
+  case "${CX_NETWORK_VALIDATION_ATTEMPT:-1}" in
+    1) ;;
+    2|3) log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}" ;;
+    *) return 1 ;;
+  esac
+  log="$(cx_private_log_path "$log_label")" || return 1
+  CX_NETWORK_PROFILE_LOG="$log"
   srun --jobid="$job_id" --nodes="$nodes" --ntasks="$nodes" --ntasks-per-node=1 \
     --chdir=/tmp --input=all \
     --export="$(cx_host_exports),CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX" \

@@ -2591,7 +2591,9 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('if [ "$RUNNER" != h100-dgxc ]', single_slurm)
         self.assertIn('rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")"', single_slurm)
         self.assertIn('export CX_SALLOC_ATTEMPT="$allocation_attempt"', single_slurm)
+        self.assertIn('export CX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"', single_slurm)
         self.assertIn('log_label+="-a${CX_SALLOC_ATTEMPT}"', common)
+        self.assertIn('log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}"', common)
 
     def test_case_failure_diagnostic_precedes_normal_srun_footer(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
