@@ -1356,6 +1356,11 @@ class SamplingContractTest(unittest.TestCase):
         result = scenario["result"]
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, "1::0\n")
+        self.assertIn("scheduler-request=rejected", result.stderr)
+        self.assertIn(
+            "failure-class=scheduler-allocation diagnostic=empty-log",
+            result.stderr,
+        )
         self.assertEqual(len(scenario["squeue_calls"]), 3)
         scheduler_user = subprocess.check_output(["id", "-un"], text=True).strip()
         self.assertTrue(all(

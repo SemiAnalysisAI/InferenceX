@@ -1249,7 +1249,10 @@ cx_salloc_jobid() {
     2|3) log_label+="-a${CX_SALLOC_ATTEMPT}" ;;
     *) return 1 ;;
   esac
-  log="$(cx_private_log_path "$log_label")"
+  if ! log="$(cx_private_log_path "$log_label")"; then
+    cx_log "ERROR: failure-class=scheduler-allocation diagnostic=private-log"
+    return 1
+  fi
   for argument in "$@"; do
     case "$argument" in
       --job-name|--job-name=*|-J|-J*)
@@ -1274,6 +1277,7 @@ cx_salloc_jobid() {
     CX_ALLOCATION_UNCERTAIN=0
   fi
   if [ "$salloc_rc" != 0 ]; then
+    cx_log "ERROR: scheduler-request=rejected"
     if [ "$salloc_rc" -ge 128 ] && [ -z "$JOB_ID" ]; then
       cx_fail_stage scheduler-allocation "$log"
       return 1
@@ -1284,6 +1288,7 @@ cx_salloc_jobid() {
     return 1
   fi
   if [ -z "$JOB_ID" ]; then
+    cx_log "ERROR: scheduler-request=missing-grant"
     cx_reconcile_salloc_jobid "$job_name" || true
     cx_fail_stage scheduler-allocation "$log"
     return 1
