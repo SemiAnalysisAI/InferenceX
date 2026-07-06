@@ -196,6 +196,9 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ("mi355x", "mori", 16): (
         "Pinned MoRI backend construction does not complete on MI355X EP16"
     ),
+    ("mi300x", "mori", 16): (
+        "Pinned MoRI distributed initialization does not complete on MI300X EP16"
+    ),
 }
 
 PRECISION_DISPOSITIONS = {
@@ -432,6 +435,7 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28782309414", "mi300x", 8, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "supported", "native-probe-passed"),
     ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_DIRECT_PROFILE, "supported", "native-probe-passed"),
     ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_BOTH_PROFILE, "supported", "native-probe-passed"),
+    ("28788599713", "mi300x", 16, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "unsupported", "distributed-init-timeout"),
     *(("28743235213", "b300", 8, "deepep", "low-latency", profile,
        "supported", "native-probe-passed")
       for profile in (_LL_FP8_PROFILE, _LL_LOGFMT_PROFILE, _LL_FP8_LOGFMT_PROFILE)),

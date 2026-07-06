@@ -46,9 +46,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
                 (item["sku"], item["backend"], item["ep"], item["precision_profile"])
                 for item in targets
             ],
-            [
-                ("mi300x", "mori", 16, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"),
-            ],
+            [],
         )
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
@@ -249,7 +247,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertTrue(targets)
         self.assertEqual(
             {item["disposition"] for item in targets},
-            {"supported", "unsupported", "provisional"},
+            {"supported", "unsupported"},
         )
         self.assertEqual(
             len(targets), 94
@@ -258,9 +256,9 @@ class PrecisionSchedulingTest(unittest.TestCase):
             sum(item["disposition"] == "supported" for item in targets), 66
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 27
+            sum(item["disposition"] == "unsupported" for item in targets), 28
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 1)
+        self.assertEqual(len(capability.provisional_precision_targets()), 0)
         keys = {
             (
                 item["precision_profile"],
@@ -370,6 +368,16 @@ class PrecisionSchedulingTest(unittest.TestCase):
                 f"Pinned MoRI backend construction does not complete on MI355X EP{ep}",
             )
 
+        disposition, reason = capability.resolve_disposition(
+            "mi300x", "mori", ep=16, nodes=2,
+            precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+        )
+        self.assertEqual(disposition, "unsupported")
+        self.assertEqual(
+            reason,
+            "Pinned MoRI distributed initialization does not complete on MI300X EP16",
+        )
+
         for sku, product in (("b200-dgxc", "B200"), ("h200-dgxc", "H200")):
             disposition, reason = capability.resolve_disposition(
                 sku, "deepep-v2", ep=16, nodes=2,
@@ -404,7 +412,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             ),
             ("low-latency", ["decode"], [128]),
         )
-        self.assertTrue(normal["provisional"])
+        self.assertFalse(normal["provisional"])
         self.assertFalse(low_latency["provisional"])
         self.assertEqual(
             normal["required_publication"], "comparable-experimental"
@@ -424,14 +432,17 @@ class PrecisionSchedulingTest(unittest.TestCase):
             for item in matrix["requested_cases"]
             if "precision_profile" in item["case"]
         }
-        self.assertEqual(scheduled_profiles, set(low_latency["precision_profiles"]))
+        self.assertEqual(
+            scheduled_profiles,
+            set(normal["precision_profiles"]) | set(low_latency["precision_profiles"]),
+        )
         self.assertEqual(
             {item["precision_profile"] for item in capability.provisional_precision_targets()},
-            {"d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"},
+            set(),
         )
 
         stale = copy.deepcopy(suites)
-        stale["suites"]["ep-precision-normal-v1"]["provisional"] = False
+        stale["suites"]["ep-precision-normal-v1"]["provisional"] = True
         with self.assertRaisesRegex(SystemExit, "must track unresolved"):
             sweep_matrix.validate_config_documents(stale, workloads)
 

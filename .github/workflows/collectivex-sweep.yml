@@ -215,7 +215,7 @@ jobs:
       - name: Create V1 release marker
         if: ${{ inputs.operation == 'sweep' && inputs.release_tag == 'v1' }}
         env:
-          EXPECTED_MATRIX_SHA256: c6988c5e81239ace699541322a88a37bfd80819d8bc1a2446f928665cd3ebba0
+          EXPECTED_MATRIX_SHA256: 63d566a594f464c8c6cd8f36c37790fe40c7a6bb715037246dd7cbb36b151ed5
           RUN_ID: ${{ github.run_id }}
           RUN_ATTEMPT: ${{ github.run_attempt }}
           SOURCE_SHA: ${{ github.sha }}

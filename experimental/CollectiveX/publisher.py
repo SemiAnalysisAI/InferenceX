@@ -44,12 +44,12 @@ REQUIRED_COHORT_KINDS = ("library", "chip", "system", "routing")
 PRECISION_COHORT_KINDS = (
     "dispatch-precision", "combine-precision", "precision-pair",
 )
-REQUIRED_PROMOTION_COHORT_COUNTS = {"library": 70, "system": 12, "routing": 62}
+REQUIRED_PROMOTION_COHORT_COUNTS = {"library": 64, "system": 12, "routing": 54}
 CANONICAL_FULL_V1_MATRIX_SHA256 = (
-    "c6988c5e81239ace699541322a88a37bfd80819d8bc1a2446f928665cd3ebba0"
+    "63d566a594f464c8c6cd8f36c37790fe40c7a6bb715037246dd7cbb36b151ed5"
 )
 CANONICAL_FULL_V1_CASE_CATALOG_SHA256 = (
-    "98b0c5e85c223a2edcbf9ea580a48bea115294c83691650bb25cb85904ed8be4"
+    "c02fa9151ba2802d24e2f51af056f9b3e45e8e8d2706a3641d09e1e93705f695"
 )
 P50_STABILITY_LIMIT = 1.10
 P99_STABILITY_LIMIT = 1.25

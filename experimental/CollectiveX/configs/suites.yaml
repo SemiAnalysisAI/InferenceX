@@ -52,7 +52,7 @@ suites:
       - d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16
       - d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale
       - d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale
-    provisional: true
+    provisional: false
     required_publication: comparable-experimental
 
   ep-precision-low-latency-v1:
