@@ -1268,9 +1268,10 @@ cx_salloc_jobid() {
   CX_ALLOCATION_UNCERTAIN=1
   # salloc has no portable --parsable option. Parse the stable grant message
   # used by the production launchers, while also accepting a bare ID from
-  # site wrappers.
+  # site wrappers. Contain shell-function wrappers that call exit so the
+  # launcher can still reconcile and cancel an allocation.
   cx_log "scheduler-request=submit"
-  salloc "$@" --job-name="$job_name" --no-shell > "$log" 2>&1 || salloc_rc=$?
+  (salloc "$@" --job-name="$job_name" --no-shell) > "$log" 2>&1 || salloc_rc=$?
   if ! job_id="$(sed -nE \
       -e 's/^([0-9]+)(;[^[:space:]]+)?$/\1/p; t found' \
       -e 's/.*Granted job allocation ([0-9]+).*/\1/p; t found' \

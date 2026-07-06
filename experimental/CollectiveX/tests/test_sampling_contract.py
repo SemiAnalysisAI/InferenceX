@@ -1364,6 +1364,28 @@ class SamplingContractTest(unittest.TestCase):
         self.assertEqual(result.stdout, "0:4242:0\n")
         self.assertNotIn("grant-parse", result.stderr)
 
+    def test_salloc_contains_a_shell_wrapper_that_calls_exit(self) -> None:
+        common = ROOT / "runtime" / "common.sh"
+        with tempfile.TemporaryDirectory() as temporary:
+            log = Path(temporary) / "scheduler.log"
+            command = r'''
+              set -euo pipefail
+              source "$1"
+              cx_private_log_path() { : > "$CX_TEST_LOG"; printf '%s' "$CX_TEST_LOG"; }
+              salloc() { printf 'salloc: Granted job allocation 4242\n' >&2; exit 0; }
+              export COLLECTIVEX_EXECUTION_ID=wrapper-exit
+              JOB_ID=""
+              cx_salloc_jobid --partition=compute
+              test "$JOB_ID" = 4242
+            '''
+            result = subprocess.run(
+                ["bash", "-c", command, "_", str(common), str(log)],
+                text=True,
+                capture_output=True,
+                env={**os.environ, "CX_TEST_LOG": str(log)},
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_salloc_verified_rejection_is_cleanup_safe(self) -> None:
         scenario = self._run_salloc_scenario("exit 1", "exit 0", cleanup=True)
         result = scenario["result"]
