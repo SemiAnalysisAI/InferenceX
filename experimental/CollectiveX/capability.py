@@ -21,6 +21,7 @@ DEEPEP_V2_SKU_CAPABILITIES = {
     "b300": {"schedulable": True, "basis": "pinned-pr605-pr630-sm103-maps-sm100f"},
     "gb300": {"schedulable": True, "basis": "pinned-pr605-pr630-sm103-maps-sm100f"},
     "mi325x": {"schedulable": False, "basis": "nvidia-only"},
+    "mi300x": {"schedulable": False, "basis": "nvidia-only"},
     "mi355x": {"schedulable": False, "basis": "nvidia-only"},
 }
 
@@ -127,6 +128,11 @@ PLATFORMS = {
     ),
     "mi325x": _platform(
         vendor="amd", arch="gfx942", machine="amd64", product="mi325x",
+        gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
+        launcher="mi-amds",
+    ),
+    "mi300x": _platform(
+        vendor="amd", arch="gfx942", machine="amd64", product="mi300x",
         gpus_per_node=8, scale_up_domain=8, scale_up_transport="xgmi",
         launcher="mi-amds",
     ),
@@ -287,6 +293,24 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
         _precision_rule(
             backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
             basis="mori-gfx950-ep8-intranode-e4m3fn-dispatch-and-direct-cast-combine",
+        ),
+    ),
+    _NORMAL_E4M3FNUZ_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi300x",), ep_degrees=(8, 16), mode="normal",
+            basis="mori-gfx942-normal-prequantized-ocp-e4m3fnuz-block128-f32-scale",
+        ),
+    ),
+    _MORI_E4M3FNUZ_DIRECT_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi300x",), ep_degrees=(8,), mode="normal",
+            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-direct-cast-combine",
+        ),
+    ),
+    _MORI_E4M3FNUZ_BOTH_PROFILE: (
+        _precision_rule(
+            backend="mori", skus=("mi300x",), ep_degrees=(8,), mode="normal",
+            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-dispatch-and-direct-cast-combine",
         ),
     ),
 }

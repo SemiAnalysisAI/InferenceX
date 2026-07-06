@@ -650,7 +650,7 @@ def _transport_evidence(backend_name: str, backend, args) -> dict[str, Any]:
         route = str(backend.kernel_generation)
         expected_kernel = (
             "inter-node-v1" if args.scope == "scale-out"
-            else "async-ll" if args.runner == "mi325x" else "intranode"
+            else "async-ll" if args.runner in {"mi300x", "mi325x"} else "intranode"
         )
         fallback = route != expected_kernel
         facts = [

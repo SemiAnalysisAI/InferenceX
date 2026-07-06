@@ -5,7 +5,7 @@ suites:
   ep-core-v1:
     mode: normal
     workloads: [deepseek-v3-v1]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode, prefill]
@@ -15,7 +15,7 @@ suites:
   ep-routing-v1:
     mode: normal
     workloads: [deepseek-v3-v1]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [zipf]
     eplb: [false, true]
@@ -28,7 +28,7 @@ suites:
     mode: low-latency
     backends: [deepep, uccl]
     workloads: [deepseek-v3-v1]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode]
@@ -39,7 +39,7 @@ suites:
     mode: normal
     backends: [deepep, deepep-v2, uccl, deepep-hybrid, mori]
     workloads: [deepseek-v3-v1]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode, prefill]
@@ -49,14 +49,17 @@ suites:
       - d-fp8-e4m3fn-b128-f32-prequantized.c-bf16
       - d-bf16.c-fp8-e4m3fn-direct-cast-noscale
       - d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale
-    provisional: false
+      - d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16
+      - d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale
+      - d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale
+    provisional: true
     required_publication: comparable-experimental
 
   ep-precision-low-latency-v1:
     mode: low-latency
     backends: [deepep, uccl]
     workloads: [deepseek-v3-v1]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi355x]
+    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode]

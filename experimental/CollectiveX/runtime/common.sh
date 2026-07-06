@@ -233,7 +233,7 @@ import sys
 
 RUNNERS = {
     "h100-dgxc", "h200-dgxc", "b200-dgxc", "b300",
-    "gb200", "gb300", "mi325x", "mi355x",
+    "gb200", "gb300", "mi300x", "mi325x", "mi355x",
 }
 FIELDS = {
     "partition": "CX_PARTITION",
@@ -262,6 +262,7 @@ REQUIRED = {
     "b300": {"partition", "account", "squash_dir"},
     "gb200": {"partition", "account", "storage_roots"},
     "gb300": {"partition", "account", "squash_dir", "enroot_cache_path"},
+    "mi300x": {"partition", "squash_dir"},
     "mi325x": {"partition", "squash_dir"},
     "mi355x": {"partition", "squash_dir"},
 }
@@ -274,6 +275,7 @@ ALLOWED = {
     "b300": REQUIRED["b300"] | {"exclude_nodes", "stage_dir"} | NETWORK_FIELDS,
     "gb200": REQUIRED["gb200"] | NETWORK_FIELDS,
     "gb300": REQUIRED["gb300"] | {"stage_dir"} | NETWORK_FIELDS,
+    "mi300x": REQUIRED["mi300x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
     "mi325x": REQUIRED["mi325x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
     "mi355x": REQUIRED["mi355x"] | {"exclude_nodes", "nodelist", "stage_dir", "lock_dir"} | NETWORK_FIELDS,
 }
@@ -1245,7 +1247,7 @@ CX_IMAGE_AMD_MORI_MI325_DIGEST="sha256:ea42375343c2ef8f73b3bdb9e1b7b435556e3ca92
 CX_MORI_COMMIT_MI325="bf99bdf18fc69887a346913ca01c315c2aa9bd4c" # pragma: allowlist secret
 cx_default_image() {
   case "$1" in
-    mi325x*) echo "$CX_IMAGE_AMD_MORI_MI325" ;;
+    mi300x*|mi325x*) echo "$CX_IMAGE_AMD_MORI_MI325" ;;
     mi355x*) echo "$CX_IMAGE_AMD_MORI" ;;
     b200*|gb200*|b300*|gb300*|h100*|h200*) echo "$CX_IMAGE_MULTIARCH" ;;
     *) cx_die "no default image for runner prefix: $1" ;;
@@ -1958,7 +1960,7 @@ cx_lock_canonical_gha_env() {
         trusted_stage_dir="$(cx_prepare_implicit_stage_base)" \
           || cx_die "canonical CollectiveX execution cannot create an isolated stage directory"
         ;;
-      mi325x|mi355x)
+      mi300x|mi325x|mi355x)
         # AMD self-hosted runners and compute nodes share the runner filesystem,
         # while the image cache may be root-owned. Derive a runner-owned base
         # outside _work instead of weakening stage ownership validation.
@@ -1992,7 +1994,7 @@ cx_lock_canonical_gha_env() {
       CX_NCCL_HOME=/usr
       CX_MASTER_PORT=29551
       ;;
-    mi325x)
+    mi300x|mi325x)
       expected_nodes="${CX_NODES:-}"; expected_gpn=8
       [ "$expected_nodes" = 1 ] || [ "$expected_nodes" = 2 ] \
         || cx_die "canonical AMD execution requires one or two nodes"
@@ -2026,7 +2028,7 @@ cx_lock_canonical_gha_env() {
     *) cx_die "canonical CollectiveX runner is not registered" ;;
   esac
   case "$runner:$trusted_lock_dir" in
-    mi325x:?*|mi355x:?*) export CX_LOCK_DIR="$trusted_lock_dir" ;;
+    mi300x:?*|mi325x:?*|mi355x:?*) export CX_LOCK_DIR="$trusted_lock_dir" ;;
   esac
   CX_STAGE_DIR="$trusted_stage_dir"
   [ -z "$trusted_qos" ] || export CX_QOS="$trusted_qos"
@@ -2048,7 +2050,7 @@ cx_lock_canonical_gha_env() {
   expected_world=$((expected_nodes * expected_gpn))
   CX_NGPUS="$expected_world"
   CX_SEED=67
-  case "$runner" in mi325x|mi355x) CX_RUN_TIMEOUT=1800 ;; *) CX_RUN_TIMEOUT=900 ;; esac
+  case "$runner" in mi300x|mi325x|mi355x) CX_RUN_TIMEOUT=1800 ;; *) CX_RUN_TIMEOUT=900 ;; esac
   unset CX_PUBLIC_RUNNER CX_GB_PRODUCT CX_DRYRUN CX_TIMING CX_ALLOW_MNNVL
   unset CX_ENROOT_LOCAL_IMPORT COLLECTIVEX_IMAGE COLLECTIVEX_IMAGE_DIGEST
   unset COLLECTIVEX_IMAGE_DIGEST_VERIFIED COLLECTIVEX_SQUASH_SHA256
@@ -2056,7 +2058,7 @@ cx_lock_canonical_gha_env() {
   case "$runner" in
     h100-dgxc|h200-dgxc|b200-dgxc|b300) export CX_NCCL_HOME ;;
     gb200|gb300) export CX_NCCL_HOME CX_MASTER_PORT ;;
-    mi325x)
+    mi300x|mi325x)
       export CX_MORI_KERNEL_TYPE MORI_COMMIT MORI_DISABLE_AUTO_XGMI MORI_ENABLE_SDMA
       export MORI_APP_LOG_LEVEL MORI_SHMEM_LOG_LEVEL MORI_IO_LOG_LEVEL
       ;;

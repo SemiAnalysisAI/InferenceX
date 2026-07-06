@@ -148,7 +148,10 @@
                     "d-bf16.c-logfmt10-dynamic64",
                     "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
                     "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
-                    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale"
+        "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+        "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+        "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+        "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
                   ]
           },
       "caseId": {"type": "string","pattern": "^cxcase-v1-[0-9a-f]{64}$"},

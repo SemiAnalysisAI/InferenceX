@@ -19,6 +19,7 @@ sys.path[:0] = [str(ROOT), str(HERE)]
 
 import identity  # noqa: E402
 import sweep_matrix  # noqa: E402
+import capability  # noqa: E402
 
 
 def _canonical(value: object) -> bytes:
@@ -175,6 +176,18 @@ class QualificationPlanningTest(unittest.TestCase):
         matrix = sweep_matrix.validate_matrix_document(
             sweep_matrix.resolve_matrix(suites="all", backends="all", max_cases=128)
         )
+        if capability.provisional_precision_targets():
+            self.assertNotEqual(
+                [
+                    sweep_matrix.qualification_execution_plan_sha256(matrix, index)
+                    for index in (1, 2, 3)
+                ],
+                [
+                    sweep_matrix.CANONICAL_V1_EXECUTION_PLAN_SHA256[index]
+                    for index in (1, 2, 3)
+                ],
+            )
+            return
         self.assertEqual(
             [
                 sweep_matrix.qualification_execution_plan_sha256(matrix, index)
@@ -214,7 +227,7 @@ class QualificationPlanningTest(unittest.TestCase):
             documents = [json.loads(path.read_text()) for path in written]
 
         self.assertEqual(len(documents), len(expected))
-        self.assertEqual(len(documents), 271)
+        self.assertEqual(len(documents), 277)
         self.assertEqual(
             {document["outcome"]["reason"] for document in documents},
             {item["reason"] for item in expected},

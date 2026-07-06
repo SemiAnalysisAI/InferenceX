@@ -71,7 +71,7 @@ class MoRIBackend:
                     "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
                     "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
                 })
-        elif runner.startswith("mi325x"):
+        elif runner.startswith(("mi300x", "mi325x")):
             fp8_format = "fp8-e4m3fnuz"
             supported_profiles = {
                 "d-bf16.c-bf16",

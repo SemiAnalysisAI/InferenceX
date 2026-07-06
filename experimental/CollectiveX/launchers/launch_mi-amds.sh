@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# CollectiveX shared MI325X/MI355X AMD Slurm launcher (one or two nodes).
+# CollectiveX shared AMD Slurm launcher (one or two nodes).
 # shellcheck disable=SC2016,SC2034
 set -euo pipefail
 
@@ -11,9 +11,9 @@ source "$HERE/../runtime/common.sh"
 
 RUNNER="${CX_SHARD_SKU:-${CX_PUBLIC_RUNNER:-}}"
 case "$RUNNER" in
-  mi325x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
+  mi300x|mi325x) CPUS_PER_TASK=256; DEVICE_MOUNTS=",/dev/kfd:/dev/kfd,/dev/dri:/dev/dri" ;;
   mi355x) CPUS_PER_TASK=128; DEVICE_MOUNTS="" ;;
-  *) cx_die "set CX_SHARD_SKU or CX_PUBLIC_RUNNER to mi325x or mi355x" ;;
+  *) cx_die "set CX_SHARD_SKU or CX_PUBLIC_RUNNER to a registered AMD SKU" ;;
 esac
 export CX_RUNNER="$RUNNER" CX_BENCH="${CX_BENCH:-mori}"
 export CX_IMAGE_PLATFORM=linux/amd64
@@ -43,7 +43,7 @@ case "$CX_BENCH" in
   *) cx_die "unsupported AMD EP backend: $CX_BENCH" ;;
 esac
 
-if [ "$RUNNER" = mi325x ]; then
+if [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
   export MORI_DISABLE_AUTO_XGMI="${MORI_DISABLE_AUTO_XGMI:-0}"
   export MORI_ENABLE_SDMA="${MORI_ENABLE_SDMA:-1}"
   export MORI_APP_LOG_LEVEL="${MORI_APP_LOG_LEVEL:-info}"
@@ -55,7 +55,7 @@ fi
 if [ "$CX_BENCH" = mori ]; then
   if [ "$NODES" -gt 1 ]; then
     export CX_MORI_KERNEL_TYPE=internode-v1
-  elif [ "$RUNNER" = mi325x ]; then
+  elif [ "$RUNNER" = mi300x ] || [ "$RUNNER" = mi325x ]; then
     export CX_MORI_KERNEL_TYPE="${CX_MORI_KERNEL_TYPE:-asyncll}"
   else
     export CX_MORI_KERNEL_TYPE="${CX_MORI_KERNEL_TYPE:-intranode}"

@@ -109,6 +109,9 @@ def operator_config(root: Path) -> dict[str, object]:
         "mi325x": {
             "partition": "test", "squash_dir": path, "stage_dir": path, **network,
         },
+        "mi300x": {
+            "partition": "test", "squash_dir": path, "stage_dir": path, **network,
+        },
         "mi355x": {
             "partition": "test", "squash_dir": path, "stage_dir": path, **network,
         },

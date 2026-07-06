@@ -41,7 +41,18 @@ class PrecisionSchedulingTest(unittest.TestCase):
             item["precision_profile"],
         )
         self.assertEqual(targets, sorted(capability.provisional_precision_targets(), key=key))
-        self.assertEqual(targets, [])
+        self.assertEqual(
+            [
+                (item["sku"], item["backend"], item["ep"], item["precision_profile"])
+                for item in targets
+            ],
+            [
+                ("mi300x", "mori", 8, "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale"),
+                ("mi300x", "mori", 8, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"),
+                ("mi300x", "mori", 8, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"),
+                ("mi300x", "mori", 16, "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"),
+            ],
+        )
         self.assertEqual(capability.PRECISION_CAPABILITIES, before)
         self.assertEqual(
             len({
@@ -241,10 +252,10 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertTrue(targets)
         self.assertEqual(
             {item["disposition"] for item in targets},
-            {"supported", "unsupported"},
+            {"supported", "unsupported", "provisional"},
         )
         self.assertEqual(
-            len(targets), 90
+            len(targets), 94
         )
         self.assertEqual(
             sum(item["disposition"] == "supported" for item in targets), 59
@@ -252,7 +263,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(
             sum(item["disposition"] == "unsupported" for item in targets), 31
         )
-        self.assertEqual(len(capability.provisional_precision_targets()), 0)
+        self.assertEqual(len(capability.provisional_precision_targets()), 4)
         keys = {
             (
                 item["precision_profile"],
@@ -347,7 +358,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             ),
             ("low-latency", ["decode"], [128]),
         )
-        self.assertFalse(normal["provisional"])
+        self.assertTrue(normal["provisional"])
         self.assertFalse(low_latency["provisional"])
         self.assertEqual(
             normal["required_publication"], "comparable-experimental"
@@ -367,13 +378,18 @@ class PrecisionSchedulingTest(unittest.TestCase):
             for item in matrix["requested_cases"]
             if "precision_profile" in item["case"]
         }
+        self.assertEqual(scheduled_profiles, set(low_latency["precision_profiles"]))
         self.assertEqual(
-            scheduled_profiles,
-            set(normal["precision_profiles"]) | set(low_latency["precision_profiles"]),
+            {item["precision_profile"] for item in capability.provisional_precision_targets()},
+            set(normal["precision_profiles"]) - {
+                "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+                "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+                "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+            },
         )
 
         stale = copy.deepcopy(suites)
-        stale["suites"]["ep-precision-normal-v1"]["provisional"] = True
+        stale["suites"]["ep-precision-normal-v1"]["provisional"] = False
         with self.assertRaisesRegex(SystemExit, "must track unresolved"):
             sweep_matrix.validate_config_documents(stale, workloads)
 
@@ -407,7 +423,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
             for target in capability.precision_targets()
         )
         with mock.patch.object(capability, "PRECISION_CAPABILITIES", promoted):
-            sweep_matrix.validate_config_documents(suites, workloads)
+            sweep_matrix.validate_config_documents(resolved_suites, workloads)
             with mock.patch.object(sweep_matrix, "_load", side_effect=load_config):
                 matrix = sweep_matrix.validate_matrix_document(
                     sweep_matrix.resolve_matrix(suites=suite_names, backends="all")

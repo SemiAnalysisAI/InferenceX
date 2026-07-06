@@ -25,7 +25,7 @@ on:
         type: string
         default: all
       only_sku:
-        description: Restrict to one V1 GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi355x); blank = all
+        description: Restrict to one V1 GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi300x|mi355x); blank = all
         type: string
         default: ''
       probe_id:
@@ -465,6 +465,7 @@ jobs:
           COLLECTIVEX_NETWORK_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_NETWORK_CONFIG_V1 }}
           COLLECTIVEX_H100_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_H100_CONFIG_V1 }}
           COLLECTIVEX_B200_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B200_CONFIG_V1 }}
+          COLLECTIVEX_MI300_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI300_CONFIG_V1 }}
           COLLECTIVEX_MI355_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI355_CONFIG_V1 }}
           COLLECTIVEX_OPERATOR_AUDIT_SALT: ${{ secrets.COLLECTIVEX_AUDIT_SALT_V1 }}
           COLLECTIVEX_OPERATOR_CONFIG_REQUIRED: '1'
@@ -495,7 +496,8 @@ jobs:
           base = load("COLLECTIVEX_OPERATOR_CONFIG_CONTENT")
           for overlay_name in (
               "COLLECTIVEX_NETWORK_CONFIG_CONTENT", "COLLECTIVEX_H100_CONFIG_CONTENT",
-              "COLLECTIVEX_B200_CONFIG_CONTENT", "COLLECTIVEX_MI355_CONFIG_CONTENT",
+              "COLLECTIVEX_B200_CONFIG_CONTENT", "COLLECTIVEX_MI300_CONFIG_CONTENT",
+              "COLLECTIVEX_MI355_CONFIG_CONTENT",
           ):
               overlay_raw = os.environ.get(overlay_name, "")
               if not overlay_raw:
@@ -520,9 +522,17 @@ jobs:
               elif overlay_name == "COLLECTIVEX_MI355_CONFIG_CONTENT":
                   if set(overlay["runners"]) != {"mi355x"}:
                       raise ValueError("invalid MI355 overlay runner")
+              elif overlay_name == "COLLECTIVEX_MI300_CONFIG_CONTENT":
+                  if set(overlay["runners"]) != {"mi300x"}:
+                      raise ValueError("invalid MI300 overlay runner")
+                  private_fields.update({"partition", "squash_dir", "exclude_nodes", "nodelist", "lock_dir"})
               for runner, fields in overlay["runners"].items():
-                  if runner not in base.get("runners", {}) or not isinstance(fields, dict) or not fields:
+                  if not isinstance(fields, dict) or not fields:
                       raise ValueError("invalid network overlay runner")
+                  if runner not in base.get("runners", {}):
+                      if overlay_name != "COLLECTIVEX_MI300_CONFIG_CONTENT":
+                          raise ValueError("invalid network overlay runner")
+                      base.setdefault("runners", {})[runner] = {}
                   if set(fields) - private_fields:
                       raise ValueError("private overlay contains a disallowed field")
                   base["runners"][runner].update(fields)
@@ -537,6 +547,7 @@ jobs:
           unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
           unset COLLECTIVEX_H100_CONFIG_CONTENT
           unset COLLECTIVEX_B200_CONFIG_CONTENT
+          unset COLLECTIVEX_MI300_CONFIG_CONTENT COLLECTIVEX_MI355_CONFIG_CONTENT
           unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
           export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
           export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
