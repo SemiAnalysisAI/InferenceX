@@ -126,8 +126,6 @@ if [[ "$CONC" -ge 16 ]]; then
     DCP_ARGS=(--decode-context-parallel-size "$TP")
 fi
 
-export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
-
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
