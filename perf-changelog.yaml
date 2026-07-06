@@ -4532,12 +4532,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2077
 
 - config-keys:
-<<<<<<< wzhao/kimi-agentx-b300
-    - kimik2.5-fp4-b300-vllm-agentic
-  description:
-    - "Update kimi k2.5 agentx B300"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1998
-=======
     - dsv4-fp4-gb300-dynamo-vllm
   description:
     - "Refresh DSV4 8k/1k vLLM GB300 recipes with new w4a4 container and updated configs"
@@ -4562,4 +4556,9 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
->>>>>>> main
+
+- config-keys:
+    - kimik2.5-fp4-b300-vllm-agentic
+  description:
+    - "Update kimi k2.5 agentx B300"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1998
