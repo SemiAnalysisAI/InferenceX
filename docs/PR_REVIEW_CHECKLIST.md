@@ -1,11 +1,21 @@
 # PR Review Checklist
 
+<div align="center">
+
+**English** | [中文](./PR_REVIEW_CHECKLIST_zh.md)
+
+</div>
+
 When [CODEOWNER](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/CODEOWNERS) from the respective hardware AI chip company is reviewing & approving their respective PRs, please fill in the following form in your approval comment before pinging an core maintainer for final approval
 
-## Template
+We welcome InferenceX partners & the community to submit PRs for reasonable additions to this checklist — or deletions — that follow the principles of InferenceX, and the general principle that deleting a guideline should be as easy a process as adding a new one.
 
+We also welcome InferenceX partners & the ML community to improve [codeowner-signoff-verify.yml](https://github.com/SemiAnalysisAI/InferenceX/blob/main/.github/workflows/codeowner-signoff-verify.yml) — the CI bot that independently verifies these sign-offs — and make it more rigorous too.
+
+## Template
+```
 As a PR reviewer and CODEOWNER, I have reviewed this and have:
-- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/edit/main/docs/PR_REVIEW_CHECKLIST.md)
+- [ ] Verified that as of the moment of typing this, this is the latest version of [PR_REVIEW_CHECKLIST.md](https://github.com/SemiAnalysisAI/InferenceX/blob/main/docs/PR_REVIEW_CHECKLIST.md)
 - [ ] Verified that the general code quality meets the InferenceX standard and does not make the code quality any worse.
 - [ ] Verified that this PR has passed PR validation. Please link to GitHub Action workflow that shows this.
 - [ ] Verified that this PR passes evals.  Please link to GitHub Action workflow that shows this.
@@ -21,6 +31,7 @@ As a PR reviewer and CODEOWNER, I have reviewed this and have:
 - insert any additional info here
 
 Signed: `FILL_IN_GITHUB_USERNAME`
+```
 
 ## Example
 
