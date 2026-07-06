@@ -367,14 +367,15 @@ def _write_json_atomic(path: str, value) -> tuple[str, int]:
     return _write_bytes_atomic(path, payload)
 
 
-def time_us(torch, fn, warmup: int, iters: int, pre=None) -> list[float]:
+def time_us(torch, fn, warmup: int, iters: int, pre=None, post=None) -> list[float]:
     """Per-iteration CUDA-event latencies (µs) for THIS rank.
 
     Without `pre`: times `fn()`. With `pre`: runs `pre()` UNTIMED each iteration (sync
-    before the start event so its GPU work can't bleed in), then times `fn(pre_result)`
-    — how combine is isolated when it consumes the dispatch state and needs a fresh
-    untimed dispatch+stage before every sample. Returns the raw per-iteration series;
-    the caller reduces across ranks per iteration before percentiling.
+    before the start event so its GPU work can't bleed in), then times `fn(pre_result)`.
+    `post(result)` runs after the end event and synchronization, so stateful backends can
+    consume/reset a timed operation without charging that cleanup to its latency. Returns
+    the raw per-iteration series; the caller reduces across ranks per iteration before
+    percentiling.
     """
     def sample():
         arg = pre() if pre is not None else None
@@ -383,10 +384,14 @@ def time_us(torch, fn, warmup: int, iters: int, pre=None) -> list[float]:
         s = torch.cuda.Event(enable_timing=True)
         e = torch.cuda.Event(enable_timing=True)
         s.record()
-        fn(arg) if pre is not None else fn()
+        result = fn(arg) if pre is not None else fn()
         e.record()
         torch.cuda.synchronize()
-        return s.elapsed_time(e) * 1000.0  # ms -> us
+        elapsed = s.elapsed_time(e) * 1000.0  # ms -> us
+        if post is not None:
+            post(result)
+            torch.cuda.synchronize()
+        return elapsed
 
     for _ in range(max(0, warmup)):
         if pre is not None:
@@ -1458,6 +1463,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_device_work = getattr(backend, "stage_device_work", False)
     if type(stage_device_work) is not bool:
         raise ValueError("backend.stage_device_work must be a boolean")
+    dispatch_needs_cleanup = getattr(backend, "dispatch_needs_combine_cleanup", False)
+    if type(dispatch_needs_cleanup) is not bool:
+        raise ValueError("backend.dispatch_needs_combine_cleanup must be a boolean")
     order_identity = args.case_id or _sha256_json({
         "backend": backend.name,
         "ep_size": ep_size,
@@ -1510,6 +1518,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 backend.stage(p, hh)
                 return hh
 
+            def finish_dispatch(hh, p=problem):
+                backend.stage(p, hh)
+                backend.combine(p, hh)
+
             for component_name in component_order:
                 # Every measured component receives the same 32 synchronized full-roundtrip
                 # warmups immediately before its timed trial.
@@ -1520,7 +1532,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                     )
                 elif component_name == "dispatch":
                     measured[component_name] = time_us(
-                        torch, lambda p=problem: backend.dispatch(p), 0, args.iters
+                        torch, lambda p=problem: backend.dispatch(p), 0, args.iters,
+                        post=finish_dispatch if dispatch_needs_cleanup else None,
                     )
                 elif component_name == "stage":
                     measured[component_name] = time_us(

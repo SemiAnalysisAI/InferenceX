@@ -126,6 +126,8 @@ class NativeAdapterWiringTests(unittest.TestCase):
         self.assertIn('"fp8_direct_cast" if self._direct_cast_combine', source)
         self.assertIn("p.scales,", source)
         self.assertIn("dispatch_scales=_scales", source)
+        self.assertIn("dispatch_needs_combine_cleanup = True", source)
+        self.assertIn("post=finish_dispatch if dispatch_needs_cleanup else None", harness)
         self.assertEqual(harness.count("view.combine_input = transformed"), 2)
         self.assertIn("transformed = view.combine_input.float()", precision)
 

@@ -125,6 +125,29 @@ class DeepEPV2ContractTests(unittest.TestCase):
         cls.path = HERE / "ep_deepep_v2.py"
         cls.tree = ast.parse(cls.path.read_text(), str(cls.path))
 
+    def test_timing_post_hook_runs_after_each_isolated_sample(self) -> None:
+        class Event:
+            def record(self) -> None:
+                pass
+
+            def elapsed_time(self, _other) -> float:
+                return 0.125
+
+        cuda = types.SimpleNamespace(
+            Event=lambda **_kwargs: Event(),
+            synchronize=lambda: None,
+        )
+        handles: list[str] = []
+        samples = ep_harness.time_us(
+            types.SimpleNamespace(cuda=cuda),
+            lambda: "dispatch-handle",
+            warmup=0,
+            iters=3,
+            post=handles.append,
+        )
+        self.assertEqual(samples, [125.0, 125.0, 125.0])
+        self.assertEqual(handles, ["dispatch-handle"] * 3)
+
     def test_capability_is_explicit_for_every_sku(self) -> None:
         backend = capability.BACKENDS["deepep-v2"]
         self.assertEqual(

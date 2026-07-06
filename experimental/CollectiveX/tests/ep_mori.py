@@ -51,6 +51,7 @@ class MoRIBackend:
     name = "mori"
     stage_device_work = False
     combine_needs_redispatch = True
+    dispatch_needs_combine_cleanup = True
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
