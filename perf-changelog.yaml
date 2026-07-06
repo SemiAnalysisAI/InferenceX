@@ -4581,5 +4581,4 @@
     - "Add MiniMax-M3 NVFP4 B200 Dynamo-vLLM disaggregated 8k1k configuration at concurrency 2048."
     - "Port the B300 4P2D DEP2/DEP8 recipe to a B200 2P1D topology using one prefill node and one decode node."
     - "Use the b200-multinode runner and vllm/vllm-openai:nightly-69715823df89b11ee684b84066390cbb9092d5c1; omit max-cudagraph-capture-size and max-num-batched-tokens from prefill."
-    - "Use UCX TCP/self transport for NIXL KV transfer because RDMA rc cannot register CUDA memory on the B200 DGXC cluster."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1982
