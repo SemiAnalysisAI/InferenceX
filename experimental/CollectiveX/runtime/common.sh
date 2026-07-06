@@ -892,8 +892,12 @@ BASH
       | sort -u
   )"
   marker_count="$(grep -Ec '^\[collectivex-private\] socket-interface-selected=' "$log")"
-  [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
-    && [ "$marker_count" = "$nodes" ] || return 1
+  socket_unique_count="$(printf '%s\n' "$socket_ifname" | sed '/^$/d' | wc -l | tr -d ' ')"
+  if ! [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
+      || [ "$marker_count" != "$nodes" ]; then
+    cx_log "ERROR: network-profile-socket-markers=$marker_count/$nodes unique=$socket_unique_count"
+    return 1
+  fi
   export CX_SOCKET_IFNAME="$socket_ifname"
   link_layer="$(
     sed -nE 's/^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$/\1/p' "$log" \
