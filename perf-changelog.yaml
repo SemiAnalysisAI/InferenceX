@@ -4550,3 +4550,9 @@
     - "Update image tag to nightly"
     - "Update B300 MTP search space"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2006
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Add high concurrency configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
