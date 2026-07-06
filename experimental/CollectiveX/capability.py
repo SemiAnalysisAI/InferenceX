@@ -190,6 +190,12 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ("h200-dgxc", "deepep-v2", 16): (
         "DeepEP V2 EP16 exhausts pinned NCCL Gin QP resources on the H200 fabric"
     ),
+    ("mi355x", "mori", 8): (
+        "Pinned MoRI backend construction does not complete on MI355X EP8"
+    ),
+    ("mi355x", "mori", 16): (
+        "Pinned MoRI backend construction does not complete on MI355X EP16"
+    ),
 }
 
 PRECISION_DISPOSITIONS = {

@@ -356,6 +356,17 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(b200_reference, "supported")
         self.assertEqual(reason, "ok")
 
+        for ep in (8, 16):
+            disposition, reason = capability.resolve_disposition(
+                "mi355x", "mori", ep=ep, nodes=ep // 8,
+                precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+            )
+            self.assertEqual(disposition, "unsupported")
+            self.assertEqual(
+                reason,
+                f"Pinned MoRI backend construction does not complete on MI355X EP{ep}",
+            )
+
         for sku, product in (("b200-dgxc", "B200"), ("h200-dgxc", "H200")):
             disposition, reason = capability.resolve_disposition(
                 sku, "deepep-v2", ep=16, nodes=2,
