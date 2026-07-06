@@ -90,6 +90,24 @@ cx_fail_stage() {
       diagnostic="python-import"
     elif grep -aEqi 'AttributeError:|TypeError:.*(unexpected|argument|operand)|has no attribute' "$log_path"; then
       diagnostic="backend-api"
+    elif grep -aEqi 'FP8 dispatch payload is missing block-128 scales' "$log_path"; then
+      diagnostic="precision-dispatch-scales-missing"
+    elif grep -aEqi 'native FP8 dispatch payload has an invalid dtype or shape' "$log_path"; then
+      diagnostic="precision-dispatch-payload-shape"
+    elif grep -aEqi 'native FP8 dispatch scales have an invalid dtype or shape' "$log_path"; then
+      diagnostic="precision-dispatch-scale-shape"
+    elif grep -aEqi 'expert-packed FP8 receive count exceeds capacity' "$log_path"; then
+      diagnostic="precision-receive-capacity"
+    elif grep -aEqi 'expert-packed (FP8 receive counts|BF16 stage workspace) has an invalid shape' "$log_path"; then
+      diagnostic="precision-receive-shape"
+    elif grep -aEqi 'active torch build does not expose (torch[.])?float8|active torch build does not expose fp8-' "$log_path"; then
+      diagnostic="precision-runtime-dtype"
+    elif grep -aEqi 'omits EpDispatchCombineQuantType[.]Fp8DirectCast' "$log_path"; then
+      diagnostic="precision-combine-api"
+    elif grep -aEqi 'dispatch FP8 format differs from the pinned GPU architecture' "$log_path"; then
+      diagnostic="precision-architecture-format"
+    elif grep -aEqi 'native FP8 dispatch requires hidden divisible by 128' "$log_path"; then
+      diagnostic="precision-hidden-alignment"
     elif grep -aEqi 'PrecisionError:|unsupported precision|precision profile.*(invalid|unsupported|differs)' "$log_path"; then
       diagnostic="precision-contract"
     elif grep -aEqi 'AssertionError:' "$log_path"; then

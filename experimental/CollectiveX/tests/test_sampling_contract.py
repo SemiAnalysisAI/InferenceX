@@ -2778,6 +2778,24 @@ class SamplingContractTest(unittest.TestCase):
             "torch rendezvous timed out": "network-or-timeout",
             "ModuleNotFoundError: missing module": "python-import",
             "AttributeError: backend has no attribute 'probe'": "backend-api",
+            "PrecisionError: FP8 dispatch payload is missing block-128 scales":
+                "precision-dispatch-scales-missing",
+            "PrecisionError: native FP8 dispatch payload has an invalid dtype or shape":
+                "precision-dispatch-payload-shape",
+            "PrecisionError: native FP8 dispatch scales have an invalid dtype or shape":
+                "precision-dispatch-scale-shape",
+            "PrecisionError: expert-packed FP8 receive count exceeds capacity":
+                "precision-receive-capacity",
+            "PrecisionError: expert-packed FP8 receive counts has an invalid shape":
+                "precision-receive-shape",
+            "PrecisionError: active torch build does not expose torch.float8_e4m3fnuz":
+                "precision-runtime-dtype",
+            "PrecisionError: pinned MoRI API omits EpDispatchCombineQuantType.Fp8DirectCast":
+                "precision-combine-api",
+            "PrecisionError: MoRI dispatch FP8 format differs from the pinned GPU architecture":
+                "precision-architecture-format",
+            "PrecisionError: MoRI native FP8 dispatch requires hidden divisible by 128":
+                "precision-hidden-alignment",
             "PrecisionError: unsupported precision profile": "precision-contract",
             "AssertionError: probe invariant": "python-assertion",
             "RuntimeError: probe execution failed": "python-runtime",
