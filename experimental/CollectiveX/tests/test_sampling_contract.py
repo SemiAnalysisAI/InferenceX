@@ -1587,17 +1587,17 @@ class SamplingContractTest(unittest.TestCase):
         sweep_workflow = workflow[workflow.index("  sweep:"):]
         self.assertNotIn("GITHUB_WORKSPACE", sweep_workflow)
         self.assertNotIn("RUNNER_WORKSPACE", sweep_workflow)
+        self.assertNotIn("github.workspace", sweep_workflow)
         self.assertIn("matrix.launcher == 'mi-amds'", sweep_workflow)
-        self.assertIn("github.workspace, github.run_id", sweep_workflow)
         self.assertIn("CX_JOB_PARENT:", sweep_workflow)
-        self.assertIn("/.collectivex-jobs", sweep_workflow)
+        self.assertIn("/tmp/inferencex-collectivex-parent-", sweep_workflow)
         self.assertIn("|| '/tmp'", sweep_workflow)
         source_step = sweep_workflow[:sweep_workflow.index("- uses: actions/download-artifact")]
         self.assertNotIn("unsafe_guards=", source_step)
-        self.assertIn('os.scandir(os.environ["CX_JOB_PARENT"])', source_step)
-        self.assertIn('[ ! -L "$CX_JOB_PARENT" ]', source_step)
-        self.assertIn('[ -O "$CX_JOB_PARENT" ]', source_step)
-        self.assertIn('stat -c \'%a\' "$CX_JOB_PARENT"', source_step)
+        self.assertIn('shared_parent = os.path.join(os.getcwd(), ".collectivex-jobs")', source_step)
+        self.assertIn("os.lstat(shared_parent)", source_step)
+        self.assertIn("os.symlink(shared_parent, parent)", source_step)
+        self.assertIn("for entry in os.scandir(scan_parent)", source_step)
         self.assertIn("cutoff = time.time() - 86400", source_step)
         self.assertIn("stat.S_IMODE(metadata.st_mode) != 0o700", source_step)
         self.assertIn('for marker_name in ("cleanup-safe", "cleanup-unsafe")', source_step)
@@ -1615,6 +1615,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("CollectiveX cleanup parent is invalid", cleanup)
         self.assertIn('[ "${CX_JOB_ROOT%/*}" = "$CX_JOB_PARENT" ]', cleanup)
         self.assertIn('^inferencex-collectivex-', cleanup)
+        self.assertIn('rm -f -- "$CX_JOB_PARENT"', cleanup)
         for step in (
             "sweep_shard", "allocation_cleanup", "artifact_safety",
             "delivery_contracts", "stage_artifact", "upload_artifact",

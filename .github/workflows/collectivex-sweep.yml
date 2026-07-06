@@ -323,10 +323,10 @@ jobs:
       CX_TIME: ${{ inputs.operation == 'probe-precision' && '90' || '300' }}
       COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_${{ matrix.id }}
       CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
-      CX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs', github.workspace) || '/tmp' }}
-      CX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs/inferencex-collectivex-{1}-{2}-{3}', github.workspace, github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
-      CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs/inferencex-collectivex-{1}-{2}-{3}/source', github.workspace, github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
-      HOME: ${{ matrix.launcher == 'mi-amds' && format('{0}/.collectivex-jobs/inferencex-collectivex-{1}-{2}-{3}/home', github.workspace, github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
+      CX_JOB_PARENT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || '/tmp' }}
+      CX_JOB_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}', github.run_id, github.run_attempt, matrix.id) }}
+      CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
+      HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
       - name: Prepare isolated source
         id: source
@@ -334,19 +334,6 @@ jobs:
           COLLECTIVEX_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          [ "$CX_JOB_PARENT" = /tmp ] || {
-            [ "$CX_JOB_PARENT" = '${{ github.workspace }}/.collectivex-jobs' ] \
-              || { echo "CollectiveX isolated parent is invalid" >&2; exit 1; }
-            if [ ! -e "$CX_JOB_PARENT" ] && [ ! -L "$CX_JOB_PARENT" ]; then
-              umask 077
-              mkdir -m 700 -- "$CX_JOB_PARENT"
-            fi
-            [ ! -L "$CX_JOB_PARENT" ] \
-              && [ -d "$CX_JOB_PARENT" ] \
-              && [ -O "$CX_JOB_PARENT" ] \
-              && [ "$(stat -c '%a' "$CX_JOB_PARENT")" = 700 ] \
-              || { echo "CollectiveX isolated parent is unsafe" >&2; exit 1; }
-          }
           python3 - <<'PY'
           import os
           import re
@@ -355,8 +342,32 @@ jobs:
           import time
 
           pattern = re.compile(r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+")
+          link_pattern = re.compile(
+              r"/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+"
+          )
+          parent = os.environ["CX_JOB_PARENT"]
+          scan_parent = parent
+          if parent != "/tmp":
+              if not link_pattern.fullmatch(parent):
+                  raise SystemExit("CollectiveX isolated parent is invalid")
+              shared_parent = os.path.join(os.getcwd(), ".collectivex-jobs")
+              try:
+                  shared_metadata = os.lstat(shared_parent)
+              except FileNotFoundError:
+                  os.mkdir(shared_parent, mode=0o700)
+                  shared_metadata = os.lstat(shared_parent)
+              if (
+                  not stat.S_ISDIR(shared_metadata.st_mode)
+                  or shared_metadata.st_uid != os.getuid()
+                  or stat.S_IMODE(shared_metadata.st_mode) != 0o700
+              ):
+                  raise SystemExit("CollectiveX shared parent is unsafe")
+              if os.path.lexists(parent):
+                  raise SystemExit("CollectiveX isolated parent already exists")
+              os.symlink(shared_parent, parent)
+              scan_parent = shared_parent
           cutoff = time.time() - 86400
-          for entry in os.scandir(os.environ["CX_JOB_PARENT"]):
+          for entry in os.scandir(scan_parent):
               if not pattern.fullmatch(entry.name):
                   continue
               try:
@@ -399,7 +410,7 @@ jobs:
           fi
           umask 077
           mkdir -m 700 -- "$CX_JOB_ROOT"
-          trap 'rc=$?; [ "$rc" = 0 ] || rm -rf -- "$CX_JOB_ROOT"; exit "$rc"' EXIT
+          trap 'rc=$?; if [ "$rc" != 0 ]; then rm -rf -- "$CX_JOB_ROOT"; [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"; fi; exit "$rc"' EXIT
           mkdir -m 700 -- "$HOME" "$CX_JOB_ROOT/control" "$CX_JOB_ROOT/artifact" "$CX_SOURCE_ROOT"
           : > "$CX_JOB_ROOT/cleanup-safe"
           if ! {
@@ -642,7 +653,7 @@ jobs:
         run: |
           set -euo pipefail
           [ "$CX_JOB_PARENT" = /tmp ] \
-            || [ "$CX_JOB_PARENT" = '${{ github.workspace }}/.collectivex-jobs' ] \
+            || [[ "$CX_JOB_PARENT" =~ ^/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
             || { echo "CollectiveX cleanup parent is invalid" >&2; exit 1; }
           [ "${CX_JOB_ROOT%/*}" = "$CX_JOB_PARENT" ] \
             && [[ "${CX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
@@ -665,6 +676,7 @@ jobs:
             fi
           fi
           rm -rf -- "$CX_JOB_ROOT"
+          [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"
 
   probe-summary:
     needs: [setup, sweep]
