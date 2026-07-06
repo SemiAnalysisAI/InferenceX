@@ -675,7 +675,7 @@ class SamplingContractTest(unittest.TestCase):
           test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:gpu
           export CX_SHARD_SKU=b200-dgxc CX_BENCH=deepep
           cx_apply_network_profile 2 nvlink-rdma
-          test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:cpu_host_memory
+          test "$NVSHMEM_IB_ENABLE_IBGDA:$NVSHMEM_IBGDA_NIC_HANDLER" = 1:cpu
           unset CX_SHARD_SKU CX_BENCH
           cx_apply_network_profile 2 nvlink-rdma
           cx_export_gid_index_for_link_layer infiniband 1
@@ -2603,6 +2603,12 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")"', single_slurm)
         self.assertIn('export CX_SALLOC_ATTEMPT="$allocation_attempt"', single_slurm)
         self.assertIn('export CX_NETWORK_VALIDATION_ATTEMPT="$allocation_attempt"', single_slurm)
+        self.assertIn('test -c /dev/gdrdrv', single_slurm)
+        self.assertIn('/dev/gdrdrv:/dev/gdrdrv', single_slurm)
+        self.assertIn(
+            '[ "$RUNNER" = b200-dgxc ] && [ "$CX_BENCH" = deepep ] && [ "$NODES" -gt 1 ]',
+            single_slurm,
+        )
         self.assertIn('log_label+="-a${CX_SALLOC_ATTEMPT}"', common)
         self.assertIn('log_label+="-a${CX_NETWORK_VALIDATION_ATTEMPT}"', common)
 
