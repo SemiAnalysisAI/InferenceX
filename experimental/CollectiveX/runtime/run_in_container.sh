@@ -332,7 +332,7 @@ cx_deepep_v2_root() {
 }
 
 cx_activate_deepep_v2() {
-  local root venv stage_root
+  local root venv execution_id
   root="$(cx_deepep_v2_root)" || return 1
   venv="$root/venv"
   [ -x "$venv/bin/python" ] \
@@ -345,16 +345,13 @@ cx_activate_deepep_v2() {
     || { cx_log "ERROR: DeepEP V2 NVSHMEM package root is unavailable"; return 1; }
   export EP_NCCL_ROOT_DIR EP_NVSHMEM_ROOT_DIR
   export LD_LIBRARY_PATH="$EP_NCCL_ROOT_DIR/lib:$EP_NVSHMEM_ROOT_DIR/lib:${LD_LIBRARY_PATH:-}"
-  case "${CX_BACKEND_SOURCE_ROOT:-}" in
-    /*/.cx_sources) stage_root="${CX_BACKEND_SOURCE_ROOT%/.cx_sources}" ;;
-    *) cx_log "ERROR: DeepEP V2 job-local source root is unavailable"; return 1 ;;
-  esac
-  [ -d "$stage_root" ] && [ ! -L "$stage_root" ] \
-    || { cx_log "ERROR: DeepEP V2 job-local stage is invalid"; return 1; }
-  # JIT CUBINs are evidence from this shard, not part of the persistent AOT environment.
-  # Keeping them on the isolated staged tree prevents a prior driver/topology attempt
-  # from seeding a later run; all ranks and cases in this shard still share one cold build.
-  export EP_JIT_CACHE_DIR="$stage_root/.cx_backend/deepep-v2-jit"
+  execution_id="${COLLECTIVEX_EXECUTION_ID:-manual}"
+  [[ "$execution_id" =~ ^[A-Za-z0-9._-]+$ ]] \
+    || { cx_log "ERROR: DeepEP V2 execution identity is invalid"; return 1; }
+  # JIT CUBINs are per-execution evidence and must be node-local. A shared NFS cache lets
+  # ranks on different nodes race the same compiler output and can trip compiler.hpp asserts.
+  # The identical absolute path still lets ranks on one node share their cold build.
+  export EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id"
   export EP_REUSE_NCCL_COMM=1
   export DEEPEP_V2_PR=605 DEEPEP_V2_FIX_PR=630 DEEPEP_V2_NCCL_CHECK_FIX_PR=640
   DEEPEP_V2_COMMIT="$CX_DEEPEP_V2_COMMIT"
@@ -363,10 +360,9 @@ cx_activate_deepep_v2() {
   DEEPEP_V2_NCCL_CHECK_COMMIT="$CX_DEEPEP_V2_NCCL_CHECK_COMMIT"
   export DEEPEP_V2_COMMIT DEEPEP_V2_TREE DEEPEP_V2_FMT_COMMIT
   export DEEPEP_V2_NCCL_CHECK_COMMIT
-  [ ! -L "$stage_root/.cx_backend" ] && [ ! -L "$EP_JIT_CACHE_DIR" ] \
+  [ ! -L "$EP_JIT_CACHE_DIR" ] \
     || { cx_log "ERROR: DeepEP V2 JIT cache path is unsafe"; return 1; }
-  if ! mkdir -p "$EP_JIT_CACHE_DIR" \
-      || ! chmod 700 "$stage_root/.cx_backend" "$EP_JIT_CACHE_DIR"; then
+  if ! mkdir -p "$EP_JIT_CACHE_DIR" || ! chmod 700 "$EP_JIT_CACHE_DIR"; then
     cx_log "ERROR: DeepEP V2 JIT cache is unavailable"
     return 1
   fi

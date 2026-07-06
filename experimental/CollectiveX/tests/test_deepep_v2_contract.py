@@ -1505,9 +1505,11 @@ class DeepEPV2ContractTests(unittest.TestCase):
         self.assertNotIn("import os,nvidia.nccl", runtime)
         self.assertNotIn("import os,nvidia.nvshmem", runtime)
         self.assertIn(
-            'export EP_JIT_CACHE_DIR="$stage_root/.cx_backend/deepep-v2-jit"', runtime
+            'export EP_JIT_CACHE_DIR="/tmp/collectivex-deepep-v2-jit-$execution_id"',
+            runtime,
         )
-        self.assertIn('stage_root="${CX_BACKEND_SOURCE_ROOT%/.cx_sources}"', runtime)
+        self.assertIn('execution_id="${COLLECTIVEX_EXECUTION_ID:-manual}"', runtime)
+        self.assertNotIn('stage_root="${CX_BACKEND_SOURCE_ROOT%/.cx_sources}"', runtime)
         self.assertNotIn('export EP_JIT_CACHE_DIR="$root/jit"', runtime)
         self.assertIn('EP_NVSHMEM_ROOT_DIR="$NVSHMEM_DIR"', runtime)
         reference = (HERE / "ep_nccl.py").read_text()
