@@ -282,8 +282,7 @@ VLLM_CMD=(
     --tensor-parallel-size="$TP"
     "${EP_ARGS[@]}"
     --gpu-memory-utilization 0.90
-    --kv-cache-dtype fp8 \
-    --block-size=1
+    --kv-cache-dtype fp8
     --trust-remote-code
     --max-num-seqs "$CONC"
     --mm-encoder-tp-mode data
