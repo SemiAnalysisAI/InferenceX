@@ -202,15 +202,17 @@ jobs:
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ steps.gen.outputs.source_backends != '' }}
         with:
-          name: cxbackend-sources-${{ github.run_id }}-${{ github.run_attempt }}
+          name: cxbackend-sources-${{ github.run_id }}
           path: ${{ runner.temp }}/collectivex-backend-sources.tar
           if-no-files-found: error
+          overwrite: true
           retention-days: ${{ inputs.release_tag == 'v1' && 90 || 3 }}
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          name: cxsweep-matrix-${{ github.run_id }}
           path: experimental/CollectiveX/matrix_full.json
           if-no-files-found: error
+          overwrite: true
           retention-days: ${{ inputs.release_tag == 'v1' && 90 || 3 }}
       - name: Create V1 release marker
         if: ${{ inputs.operation == 'sweep' && inputs.release_tag == 'v1' }}
@@ -407,13 +409,13 @@ jobs:
           trap - EXIT
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          name: cxsweep-matrix-${{ github.run_id }}
           path: ${{ env.CX_JOB_ROOT }}/control
       - name: Download pinned backend source archive
         if: ${{ matrix.backend == 'deepep-v2' || matrix.backend == 'deepep-hybrid' }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: cxbackend-sources-${{ github.run_id }}-${{ github.run_attempt }}
+          name: cxbackend-sources-${{ github.run_id }}
           path: ${{ env.CX_JOB_ROOT }}/control
       - name: Install pinned backend source seed
         if: ${{ matrix.backend == 'deepep-v2' || matrix.backend == 'deepep-hybrid' }}
@@ -655,7 +657,7 @@ jobs:
         with: { clean: true, persist-credentials: false }
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          name: cxsweep-matrix-${{ github.run_id }}-${{ github.run_attempt }}
+          name: cxsweep-matrix-${{ github.run_id }}
           path: ${{ runner.temp }}/collectivex-probes/control
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
@@ -771,7 +773,7 @@ jobs:
             run_dir="$downloads/$run_id"
             mkdir -m 750 "$run_dir"
             gh run download "$run_id" --repo "$REPOSITORY" --dir "$run_dir"
-            matrix="$run_dir/cxsweep-matrix-$run_id-$attempt/matrix_full.json"
+            matrix="$run_dir/cxsweep-matrix-$run_id/matrix_full.json"
             marker="$run_dir/cxrelease-v1-$run_id-$attempt/release.json"
             [ -f "$matrix" ] || {
               echo "run $run_id is missing its exact matrix artifact" >&2
