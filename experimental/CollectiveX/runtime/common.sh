@@ -767,6 +767,16 @@ cx_restore_exact_hca_selector() {
   export NCCL_IB_HCA="=$CX_RDMA_DEVICES"
 }
 
+cx_default_route_interface() {
+  python3 - <<'PY'
+from pathlib import Path
+for line in Path('/proc/net/route').read_text().splitlines()[1:]:
+    fields = line.split()
+    if len(fields) >= 4 and fields[1] == '00000000' and int(fields[3], 16) & 1:
+        print(fields[0], end=''); break
+PY
+}
+
 # Prove that the operator-pinned scale-out fabric exists on every allocated
 # node before image import or backend initialization. Selector values and node
 # diagnostics stay in the runner-private log.
@@ -893,12 +903,15 @@ BASH
   )"
   marker_count="$(grep -Ec '^\[collectivex-private\] socket-interface-selected=' "$log")"
   socket_unique_count="$(printf '%s\n' "$socket_ifname" | sed '/^$/d' | wc -l | tr -d ' ')"
-  if ! [[ "$socket_ifname" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] \
-      || [ "$marker_count" != "$nodes" ]; then
+  if [ "$socket_unique_count" -lt 1 ] || [ "$marker_count" != "$nodes" ]; then
     cx_log "ERROR: network-profile-socket-markers=$marker_count/$nodes unique=$socket_unique_count"
     return 1
   fi
-  export CX_SOCKET_IFNAME="$socket_ifname"
+  if [ "$socket_unique_count" = 1 ]; then
+    export CX_SOCKET_IFNAME="$socket_ifname"
+  else
+    unset CX_SOCKET_IFNAME
+  fi
   link_layer="$(
     sed -nE 's/^\[collectivex-private\] rdma-link-layer=(roce|infiniband)$/\1/p' "$log" \
       | sort -u
@@ -953,6 +966,11 @@ esac
 [ "$SLURM_LOCALID" -lt "$CX_GPUS_PER_NODE" ] || exit 67
 . /ix/experimental/CollectiveX/runtime/common.sh || exit 68
 if [ "${CX_NODES:-1}" -gt 1 ] && [ "${CX_TRANSPORT:-}" != mnnvl ]; then
+  if [ -z "${CX_SOCKET_IFNAME:-}" ]; then
+    CX_SOCKET_IFNAME="$(cx_default_route_interface)" || exit 68
+    [[ "$CX_SOCKET_IFNAME" =~ ^[A-Za-z][A-Za-z0-9_.-]{0,31}$ ]] || exit 68
+    export CX_SOCKET_IFNAME
+  fi
   cx_apply_network_profile "$CX_NODES" "$CX_TRANSPORT" || exit 68
 fi
 cx_write_runtime_stage execution || exit 68
