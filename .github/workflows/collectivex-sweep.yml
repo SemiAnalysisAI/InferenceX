@@ -28,6 +28,10 @@ on:
         description: Restrict to one V1 GHA runner pool (h100-dgxc|h200-dgxc|b300|b200-dgxc|gb200|gb300|mi300x|mi355x); blank = all
         type: string
         default: ''
+      exclude_skus:
+        description: Comma-list of runner pools to drop from the matrix (partial run, e.g. b300); disjoint from only_sku; blank = none
+        type: string
+        default: ''
       probe_id:
         description: Optional exact provisional probe ID; valid only for probe-precision
         type: string
@@ -90,6 +94,7 @@ jobs:
           INPUT_OPERATION: ${{ inputs.operation }}
           INPUT_SUITES: ${{ inputs.suites }}
           INPUT_ONLY_SKU: ${{ inputs.only_sku }}
+          INPUT_EXCLUDE_SKUS: ${{ inputs.exclude_skus }}
           INPUT_PROBE_ID: ${{ inputs.probe_id }}
           INPUT_MIN_NODES: ${{ inputs.min_nodes }}
           INPUT_MAX_NODES: ${{ inputs.max_nodes }}
@@ -143,6 +148,7 @@ jobs:
               *) args+=(--backend "$INPUT_BACKEND") ;;
             esac
             [ -n "$INPUT_ONLY_SKU" ] && args+=(--only-sku "$INPUT_ONLY_SKU")
+            [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
             [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
             [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
             python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null

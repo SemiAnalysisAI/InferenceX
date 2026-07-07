@@ -451,6 +451,7 @@ def resolve_matrix(
     backend: str = "",
     backends: str = "",
     only_sku: str = "",
+    exclude_skus: str = "",
     min_nodes: int = 0,
     max_nodes: int = 0,
     max_cases: int = 128,
@@ -462,6 +463,19 @@ def resolve_matrix(
         raise SystemExit("invalid node bounds")
     if only_sku and only_sku not in cap.PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(cap.PLATFORMS)}")
+    # --exclude-skus narrows the matrix to a partial (still publishable) subset by
+    # dropping whole runner pools — e.g. exclude a SKU whose cluster is unavailable
+    # so a versioned "tagged + success" run covers only the SKUs it can actually
+    # exercise. The publisher binds every promoted case to the canonical catalog,
+    # so a narrowed matrix cannot invent or reclassify cases; it only omits them.
+    excluded = {value.strip() for value in exclude_skus.split(",") if value.strip()}
+    unknown_excluded = sorted(excluded - set(cap.PLATFORMS))
+    if unknown_excluded:
+        raise SystemExit(
+            f"unknown --exclude-skus {unknown_excluded}; have {sorted(cap.PLATFORMS)}"
+        )
+    if only_sku and only_sku in excluded:
+        raise SystemExit("--only-sku and --exclude-skus select disjoint pools")
 
     workloads = _load("workloads.yaml")
     suites_document = _load("suites.yaml")
@@ -506,6 +520,8 @@ def resolve_matrix(
             continue
         for platform_name in suite["platforms"]:
             if only_sku and platform_name != only_sku:
+                continue
+            if platform_name in excluded:
                 continue
             ep_degrees = suite["ep_degrees"]
             for workload, ep, phase, routing, eplb, target, precision_profile in itertools.product(
@@ -1361,6 +1377,11 @@ def main() -> int:
     parser.add_argument("--backend", default="", help="select one EP backend")
     parser.add_argument("--backends", default="", help="'all' or comma-list of EP backends")
     parser.add_argument("--only-sku", default="")
+    parser.add_argument(
+        "--exclude-skus",
+        default="",
+        help="comma-list of runner pools to drop (partial matrix); disjoint from --only-sku",
+    )
     parser.add_argument("--min-nodes", type=int, default=0)
     parser.add_argument("--max-nodes", type=int, default=0)
     parser.add_argument("--max-cases", type=int, default=128)
@@ -1436,6 +1457,7 @@ def main() -> int:
         backend=args.backend,
         backends=args.backends,
         only_sku=args.only_sku,
+        exclude_skus=args.exclude_skus,
         min_nodes=args.min_nodes,
         max_nodes=args.max_nodes,
         max_cases=args.max_cases,

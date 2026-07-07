@@ -237,6 +237,39 @@ class QualificationPlanningTest(unittest.TestCase):
             {item["case"]["case_id"] for item in expected},
         )
 
+    def test_exclude_skus_narrows_matrix_to_a_publishable_subset(self) -> None:
+        full = sweep_matrix.validate_matrix_document(
+            sweep_matrix.resolve_matrix(suites="all", backends="all", max_cases=128)
+        )
+        partial = sweep_matrix.validate_matrix_document(
+            sweep_matrix.resolve_matrix(
+                suites="all", backends="all", max_cases=128, exclude_skus="b300"
+            )
+        )
+        full_skus = {item["sku"] for item in full["include"]}
+        partial_skus = {item["sku"] for item in partial["include"]}
+        self.assertIn("b300", full_skus)
+        self.assertNotIn("b300", partial_skus)
+        self.assertEqual(full_skus - {"b300"}, partial_skus)
+        # Excluding a pool only omits its cells; every surviving cell is byte-identical
+        # to the full matrix (a partial run cannot invent or reclassify cases).
+        def by_id(matrix: dict[str, object]) -> dict[str, object]:
+            return {
+                item["case"]["case_id"]: item
+                for item in matrix["requested_cases"]
+                if item.get("sku") != "b300"
+            }
+        self.assertEqual(by_id(partial), by_id(full))
+        self.assertTrue(
+            all(item.get("sku") != "b300" for item in partial["requested_cases"])
+        )
+
+    def test_exclude_skus_rejects_unknown_and_conflicting_pools(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "unknown --exclude-skus"):
+            sweep_matrix.resolve_matrix(exclude_skus="nosuchsku")
+        with self.assertRaisesRegex(SystemExit, "disjoint pools"):
+            sweep_matrix.resolve_matrix(only_sku="b300", exclude_skus="b300")
+
     def test_frontend_catalog_covers_every_requested_case_and_point(self) -> None:
         catalog = sweep_matrix.frontend_catalog(self.matrix)
         self.assertEqual(catalog["format"], "collectivex.frontend-catalog.v1")
