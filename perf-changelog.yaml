@@ -4063,6 +4063,7 @@
   description:
     - "init submission of dsv4 sglang disagg "
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1818
+  evals-only: true
 
 - config-keys:
     - glm5.1-fp4-mi355x-sglang
