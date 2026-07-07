@@ -4368,24 +4368,6 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1966
 
 - config-keys:
-    - minimaxm3-fp4-mi355x-atom
-    - minimaxm3-fp4-mi355x-atom-mtp
-  description:
-    - "Bump image to rocm/atom-dev:MiniMax-M3-20260630 for both fp4 atom entries"
-    - "Add OPT_ARGS: pass --online_quant_config '{\"global_quant_config\": \"ptpc_fp8\", \"exclude_layer\": [\"lm_head\", \"model.embed_tokens\", \"vision_tower\", \"multi_modal_projector\", \"patch_merge_mlp\", \"*block_sparse_moe\"]}' and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' to both scripts"
-    - "Replace AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1967
-
-- config-keys:
-    - minimaxm3-fp8-mi355x-atom
-    - minimaxm3-fp8-mi355x-atom-mtp
-  description:
-    - "Bump image to rocm/atom-dev:MiniMax-M3-20260630 for both fp8 atom entries"
-    - "Add OPT_ARGS: pass --online_quant_config '{\"global_quant_config\": \"ptpc_fp8\", \"exclude_layer\": [\"lm_head\", \"model.embed_tokens\", \"vision_tower\", \"multi_modal_projector\", \"patch_merge_mlp\", \"*block_sparse_moe\"]}' and --hf-overrides '{\"use_index_cache\": true, \"index_topk_freq\": 4}' to both scripts"
-    - "Replace AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1968
-
-- config-keys:
     - dsv4-fp4-b200-dynamo-vllm
   description:
     - "Add point-specific DeepSeek-V4-Pro FP4 B200 Dynamo-vLLM disaggregated recipes for the 8k/1k concurrency points c=1, 32, 64, 128, 256, 512."
@@ -4426,6 +4408,179 @@
     - "Use 1k/1k TP4/EP1 c1-c32 and TP4/EP4 c64-c256; use 8k/1k TP4/EP1 c1-c32 and TP4/EP4 DP-attention c64-c256."
     - "Drop the TP8/EP8 single-concurrency points."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1975
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Update Minimax M3 b300 vllm image tag"
+    - "Update search space to cover more configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1990
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm
+  description:
+    - "Update Minimax M3 b200 vllm image tag"
+    - "Update search space to cover more configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1978
+
+- config-keys:
+    - minimaxm3-fp4-mi355x-atom
+    - minimaxm3-fp4-mi355x-atom-mtp
+    - minimaxm3-fp8-mi355x-atom
+    - minimaxm3-fp8-mi355x-atom-mtp
+  description:
+    - "Bump ATOM image from rocm/atom-dev:MiniMax-M3-20260623 to rocm/atom-dev:nightly_202607011530 for all single-node MiniMax-M3 ATOM recipes."
+    - "Add --online_quant_config with ptpc_fp8 and MoE layer exclusions (*block_sparse_moe) to all scripts."
+    - "Replace deprecated AITER_QUICK_REDUCE_CAST_BF16_TO_FP16=0 and ATOM_M3_SPARSE_USE_ASM_PA=1 with ATOM_FORCE_ATTN_TRITON=1."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2001
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM image to nightly-09663abde0f50944a8d5ea30120666024b503faa"
+    - "Use --linear-backend emulation for the MXFP8 dense-linear path (beats the stock nightly native MXFP8 linear: ~+26% tput / -21% TPOT at 8k1k conc1, ~+2-3% at high concurrency)"
+    - "Add --max-num-batched-tokens 32768 (env MAX_NUM_BATCHED_TOKENS) to enlarge the per-step prefill budget and improve TP4 throughput at high concurrency"
+    - "Enable the AITER master switch for TP-only (no-EP) runs via --moe-backend aiter: the earlier degenerate-output issue that forced it off for TP-only is fixed by vllm-project/vllm#47158, so TP4 uses the AITER_MXFP8 MoE path (verified GSM8K 0.9613 flex / 0.9621 strict on this nightly)"
+    - "Simplify both search spaces to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8 and TP4/EP4: TP8 has poor throughput/GPU and plain TP4 matches or beats TP4/EP4 at high concurrency)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2003
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Bump the MiniMax-M3 MXFP8 MI355X vLLM MTP (EAGLE3) image to nightly-09663abde0f50944a8d5ea30120666024b503faa, which natively supports SupportsEagle3 (the in-place EAGLE3 patch is now a no-op) and carries vllm-project/vllm#47158"
+    - "Port the non-MTP serve-command tuning to the MTP recipe: --moe-backend aiter, --linear-backend emulation, --max-num-batched-tokens 32768, and the AITER master switch on for TP-only runs (kept --speculative-config eagle3 with 3 draft tokens)"
+    - "Simplify both search spaces to a single TP4 conc 1-512 sweep for 1k1k and 8k1k (drop TP8 and TP4/EP4, matching the non-MTP entry; verified locally on this nightly at TP4 conc512, 5120/5120 completed)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2003
+
+- config-keys:
+    - dsv4-fp4-mi355x-atom
+  description:
+    - "Remove --hf-overrides use_index_cache/index_topk_freq indexer-skipping override from the ATOM serve command (not allowed: reduces model architecture FLOPs per PR_REVIEW_CHECKLIST.md)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2037
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm
+  description:
+    - "Bump DeepSeek-V4-Pro FP4 MI355X single-node vLLM STP image from vllm/vllm-openai-rocm:v0.22.0 to the latest nightly vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa."
+    - "The nightly enables two-stage attention kernels (split-KV decode), which reduce decode attention latency across all concurrency levels."
+    - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
+    - "Switch the MoE backend from triton_unfused to AITER MoE (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter) for the FP4 experts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1980
+
+- config-keys:
+    - qwen3.5-fp8-h200-sglang
+    - qwen3.5-fp8-h200-sglang-mtp
+  description:
+    - "Update SGLang image from qwen3.5-fp8-h200-sglang: lmsysorg/sglang:v0.5.12-cu130 / qwen3.5-fp8-h200-sglang-mtp: lmsysorg/sglang:v0.5.12 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2061
+
+- config-keys:
+    - kimik2.5-int4-b300-vllm
+  description:
+    - "Update vLLM image from vllm/vllm-openai:v0.21.0 to vllm/vllm-openai:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2070
+
+- config-keys:
+    - qwen3.5-fp4-b300-sglang
+    - qwen3.5-fp4-b300-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2057
+
+- config-keys:
+    - qwen3.5-bf16-b200-sglang
+    - qwen3.5-bf16-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2054
+
+- config-keys:
+    - dsv4-fp4-mi355x-vllm-mtp
+  description:
+    - "Bump DeepSeek-V4-Pro FP4 MI355X single-node vLLM MTP image from vllm/vllm-openai-rocm:v0.22.0 to the latest nightly vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa."
+    - "The nightly enables two-stage attention kernels (split-KV decode), which reduce decode attention latency across all concurrency levels."
+    - "Employ the AITER MLA attention backend for the DeepSeek-V4 MLA path."
+    - "Switch the MoE backend from triton_unfused to AITER MoE (VLLM_ROCM_USE_AITER_MOE=1 + --moe-backend aiter) for the FP4 experts."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1981
+
+- config-keys:
+    - qwen3.5-fp8-h100-sglang
+    - qwen3.5-fp8-h100-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2060
+
+- config-keys:
+    - qwen3.5-fp8-b200-sglang
+    - qwen3.5-fp8-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2058
+
+- config-keys:
+    - kimik2.5-int4-b200-vllm
+  description:
+    - "Update vLLM image from vllm/vllm-openai:v0.22.0 to vllm/vllm-openai:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2073
+
+- config-keys:
+    - qwen3.5-fp4-b200-sglang
+    - qwen3.5-fp4-b200-sglang-mtp
+  description:
+    - "Update SGLang image from lmsysorg/sglang:v0.5.12-cu130 to lmsysorg/sglang:v0.5.14-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2056
+
+- config-keys:
+    - qwen3.5-fp8-mi355x-sglang
+    - qwen3.5-fp8-mi355x-sglang-mtp
+  description:
+    - "Update SGLang ROCm image from lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260528 to lmsysorg/sglang:v0.5.14-rocm720-mi35x"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2067
+
+- config-keys:
+    - kimik2.5-fp4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from vllm/vllm-openai-rocm:v0.22.0 to vllm/vllm-openai-rocm:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2074
+
+- config-keys:
+    - kimik2.5-int4-mi355x-vllm
+  description:
+    - "Update vLLM ROCm image from vllm/vllm-openai-rocm:nightly-b8336c3c7c298e0878f22a7bf70f4e295b2f4e01 to vllm/vllm-openai-rocm:v0.24.0"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2077
+
+- config-keys:
+    - dsv4-fp4-gb300-dynamo-vllm
+  description:
+    - "Refresh DSV4 8k/1k vLLM GB300 recipes with new w4a4 container and updated configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2010
+
+- config-keys:
+    - minimaxm3-fp4-b200-vllm-mtp
+  description:
+    - "Update image tag to nightly"
+    - "Update B200 MTP search space"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2007
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm-mtp
+  description:
+    - "Update image tag to nightly"
+    - "Update B300 MTP search space"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2006
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "Add high concurrency configs"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override; without it the drafter falls back to a slow default backend."
+    - "Speeds up the draft forward measured on MI355X TP4 MXFP8, 8k/1k throughput gains growing with concurrency vs no override."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2107
 
 - config-keys:
     - glm5-fp8-gb300-dynamo-sglang-mtp

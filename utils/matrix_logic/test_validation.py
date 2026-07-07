@@ -7,6 +7,7 @@ from validation import (
     MultiNodeMatrixEntry,
     WorkerConfig,
     SingleNodeSearchSpaceEntry,
+    AgenticCodingConfig,
     AgenticCodingSearchSpaceEntry,
     MultiNodeSearchSpaceEntry,
     SingleNodeSeqLenConfig,
@@ -40,6 +41,8 @@ def valid_single_node_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "tp": 8,
+        "dcp-size": 1,
+        "pcp-size": 1,
         "ep": 1,
         "dp-attn": False,
         "conc": 4,
@@ -64,6 +67,7 @@ def valid_multinode_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "prefill": {
+            "hardware": "gb200",
             "num-worker": 5,
             "tp": 4,
             "ep": 4,
@@ -74,6 +78,7 @@ def valid_multinode_matrix_entry():
             ],
         },
         "decode": {
+            "hardware": "h100",
             "num-worker": 1,
             "tp": 8,
             "ep": 8,
@@ -140,6 +145,7 @@ def valid_multinode_master_config():
                     "search-space": [
                         {
                             "prefill": {
+                                "hardware": "gb200",
                                 "num-worker": 5,
                                 "tp": 4,
                                 "ep": 4,
@@ -150,6 +156,7 @@ def valid_multinode_master_config():
                                 ],
                             },
                             "decode": {
+                                "hardware": "h100",
                                 "num-worker": 1,
                                 "tp": 8,
                                 "ep": 8,
@@ -170,13 +177,23 @@ def valid_multinode_master_config():
 
 @pytest.fixture
 def valid_runner_config():
-    """Valid runner config based on .github/configs/runners.yaml."""
+    """Valid runner config based on configs/runners.yaml."""
     return {
-        "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
-        "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
-        "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
-        "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
-        "gb200": ["gb200-nv_0"],
+        "labels": {
+            "h100": ["h100-cr_0", "h100-cr_1", "h100-cw_0", "h100-cw_1"],
+            "h200": ["h200-cw_0", "h200-cw_1", "h200-nb_0", "h200-nb_1"],
+            "b200": ["b200-nvd_0", "b200-nvd_1", "b200-dgxc_1"],
+            "cluster:b200-dgxc": ["b200-dgxc_1"],
+            "mi300x": ["mi300x-amd_0", "mi300x-amd_1", "mi300x-cr_0"],
+            "gb200": ["gb200-nv_0"],
+        },
+        "hardware": {
+            "cluster:h100-dgxc": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 8},
+            "cluster:h200-dgxc": {"available-cpu-dram-mib": 1471356, "gpus-per-node": 8},
+            "cluster:b200-dgxc": {"available-cpu-dram-mib": 3774874, "gpus-per-node": 8},
+            "cluster:mi300x-amds": {"available-cpu-dram-mib": 2321924, "gpus-per-node": 8},
+            "cluster:gb200-nv": {"available-cpu-dram-mib": 860160, "gpus-per-node": 4},
+        },
     }
 
 
@@ -202,6 +219,7 @@ class TestFieldsEnum:
         assert Fields.SPEC_DECODING.value == "spec-decoding"
         assert Fields.PREFILL.value == "prefill"
         assert Fields.DECODE.value == "decode"
+        assert Fields.HARDWARE.value == "hardware"
 
 
 # =============================================================================
@@ -307,6 +325,12 @@ class TestSingleNodeMatrixEntry:
         with pytest.raises(Exception):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
+    def test_disagg_requires_multinode(self, valid_single_node_matrix_entry):
+        """Single-node matrix entries cannot enable disaggregation."""
+        valid_single_node_matrix_entry["disagg"] = True
+        with pytest.raises(Exception, match="disagg"):
+            SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
+
 
 # =============================================================================
 # Test Agentic Matrix Entries
@@ -315,52 +339,133 @@ class TestSingleNodeMatrixEntry:
 class TestAgenticMatrixEntries:
     """Tests for agentic coding validation models."""
 
-    def test_lmcache_mp_offloading_is_valid_for_single_node_agentic_entry(self):
-        """LMCache MP is a valid agentic offloading backend."""
+    def test_arbitrary_backend_is_valid_for_single_node_agentic_entry(self):
         entry = SingleNodeAgenticMatrixEntry(**{
             "image": "cquil/vllm-openai:v0.21.0-8813c92",
             "model": "deepseek-ai/DeepSeek-V4-Pro",
             "model-prefix": "dsv4",
             "precision": "fp4",
             "framework": "vllm",
-            "runner": "b200-dgxc",
+            "runner": "cluster:b200-dgxc",
             "tp": 8,
+            "dcp-size": 1,
+            "pcp-size": 1,
             "ep": 1,
             "dp-attn": False,
             "conc": 1,
-            "offloading": "lmcache-mp",
-            "duration": 1800,
-            "exp-name": "dsv4_tp8_conc1_offloadlmcache-mp",
+            "kv-offloading": "dram",
+            "kv-offload-backend": "future-backend",
+            "total-cpu-dram-gb": 2949,
+            "duration": 3600,
+            "exp-name": "dsv4_tp8_conc1_kvdram-future-backend",
             "scenario-type": "agentic-coding",
         })
-        assert entry.offloading == "lmcache-mp"
+        assert entry.kv_offloading == "dram"
+        assert entry.kv_offload_backend == "future-backend"
 
-    def test_lmcache_mp_offloading_is_valid_for_agentic_search_space(self):
-        """Agentic search-space entries can request LMCache MP offloading."""
+    def test_arbitrary_backend_is_valid_for_agentic_search_space(self):
         entry = AgenticCodingSearchSpaceEntry(**{
             "tp": 8,
-            "offloading": "lmcache-mp",
+            "kv-offloading": "dram",
+            "kv-offload-backend": "future-backend",
             "conc-list": [1, 2],
         })
-        assert entry.offloading == "lmcache-mp"
+        assert entry.kv_offloading == "dram"
+        assert entry.kv_offload_backend == "future-backend"
 
-    def test_lmcache_offloading_is_valid_for_agentic_search_space(self):
-        """Agentic search-space entries can request in-process LMCache."""
-        entry = AgenticCodingSearchSpaceEntry(**{
-            "tp": 8,
-            "offloading": "lmcache",
-            "conc-list": [1, 2],
-        })
-        assert entry.offloading == "lmcache"
+    def test_kv_offload_backend_requires_dram_mode(self):
+        with pytest.raises(Exception, match="kv-offload-backend"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "none",
+                "kv-offload-backend": "lmcache",
+                "conc-list": [1, 2],
+            })
 
-    def test_hicache_offloading_is_valid_for_agentic_search_space(self):
-        """Agentic search-space entries can request SGLang HiCache."""
-        entry = AgenticCodingSearchSpaceEntry(**{
-            "tp": 8,
-            "offloading": "hicache",
-            "conc-list": [1, 2],
+    def test_dram_kv_offload_requires_backend(self):
+        with pytest.raises(Exception, match="kv-offload-backend"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "dram",
+                "conc-list": [1, 2],
+            })
+
+    def test_single_node_agentic_requires_explicit_kv_offloading(self):
+        with pytest.raises(Exception, match="kv-offloading"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "conc-list": [1, 2],
+            })
+
+    def test_dram_kv_offload_requires_dram_utilization(self):
+        with pytest.raises(Exception, match="dram-utilization"):
+            AgenticCodingConfig(**{
+                "search-space": [{
+                    "tp": 4,
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": "native",
+                    "conc-list": [16],
+                }],
+            })
+
+    def test_agentic_search_space_rejects_total_cpu_dram_gb(self):
+        with pytest.raises(Exception, match="total-cpu-dram-gb"):
+            AgenticCodingSearchSpaceEntry(**{
+                "tp": 8,
+                "kv-offloading": "dram",
+                "kv-offload-backend": "native",
+                "total-cpu-dram-gb": 1000,
+                "conc-list": [1, 2],
+            })
+
+    def test_dram_kv_offload_accepts_scaled_capacity(self):
+        config = AgenticCodingConfig(**{
+            "dram-utilization": 0.80,
+            "search-space": [{
+                "tp": 4,
+                "kv-offloading": "dram",
+                "kv-offload-backend": "native",
+                "conc-list": [16],
+            }],
         })
-        assert entry.offloading == "hicache"
+        assert config.dram_utilization == 0.80
+
+    def test_gpus_per_node_is_not_a_master_config_field(self):
+        with pytest.raises(Exception, match="gpus-per-node"):
+            AgenticCodingConfig(**{
+                "dram-utilization": 0.80,
+                "gpus-per-node": 8,
+                "search-space": [{
+                    "tp": 4,
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": "native",
+                    "conc-list": [16],
+                }],
+            })
+
+    def test_available_cpu_dram_is_not_a_master_config_field(self):
+        with pytest.raises(Exception, match="available-cpu-dram-mib"):
+            AgenticCodingConfig(**{
+                "available-cpu-dram-mib": 2964436,
+                "dram-utilization": 0.80,
+                "search-space": [{
+                    "tp": 4,
+                    "kv-offloading": "dram",
+                    "kv-offload-backend": "native",
+                    "conc-list": [16],
+                }],
+            })
+
+    def test_duration_is_not_a_master_config_field(self):
+        with pytest.raises(Exception, match="duration"):
+            AgenticCodingConfig(**{
+                "duration": 1800,
+                "search-space": [{
+                    "tp": 8,
+                    "kv-offloading": "none",
+                    "conc-list": [16],
+                }],
+            })
 
 
 # =============================================================================
@@ -376,6 +481,25 @@ class TestMultiNodeMatrixEntry:
         assert entry.model == "deepseek-r1-fp4"
         assert entry.conc == [2150]
         assert entry.disagg is True
+        assert entry.prefill.hardware == "gb200"
+        assert entry.decode.hardware == "h100"
+
+    def test_disagg_allows_omitted_hardware(self, valid_multinode_matrix_entry):
+        """Homogeneous disaggregated entries may omit hardware metadata."""
+        del valid_multinode_matrix_entry["prefill"]["hardware"]
+        del valid_multinode_matrix_entry["decode"]["hardware"]
+        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+        assert entry.prefill.hardware is None
+        assert entry.decode.hardware is None
+
+    @pytest.mark.parametrize("missing_worker", ["prefill", "decode"])
+    def test_hardware_requires_prefill_and_decode(
+        self, valid_multinode_matrix_entry, missing_worker
+    ):
+        """Heterogeneous hardware metadata must identify both worker pools."""
+        del valid_multinode_matrix_entry[missing_worker]["hardware"]
+        with pytest.raises(Exception, match="both.*prefill.*decode"):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
         """Prefill and decode should be WorkerConfig objects."""
@@ -471,6 +595,15 @@ class TestSingleNodeSearchSpaceEntry:
             "conc-list": [4, 8, 16, 32, 64, 128],
         })
         assert entry.conc_list == [4, 8, 16, 32, 64, 128]
+
+    def test_dcp_size_must_divide_tp(self):
+        with pytest.raises(Exception, match="must be divisible"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 8,
+                "dcp-size": 3,
+                "pcp-size": 2,
+                "conc-list": [4],
+            })
 
     def test_cannot_have_both_range_and_list(self):
         """Cannot specify both conc range and list."""
@@ -727,6 +860,26 @@ class TestMasterConfigEntries:
         assert config.model_prefix == "dsr1"
         assert config.runner == "gb200"
         assert config.disagg is True
+        search_entry = config.scenarios.fixed_seq_len[0].search_space[0]
+        assert search_entry.prefill.hardware == "gb200"
+        assert search_entry.decode.hardware == "h100"
+
+    def test_disagg_master_config_allows_omitted_hardware(self, valid_multinode_master_config):
+        """Homogeneous disaggregated master configs may omit hardware metadata."""
+        search_entry = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        del search_entry["prefill"]["hardware"]
+        del search_entry["decode"]["hardware"]
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+        validated_entry = config.scenarios.fixed_seq_len[0].search_space[0]
+        assert validated_entry.prefill.hardware is None
+        assert validated_entry.decode.hardware is None
+
+    def test_master_hardware_requires_prefill_and_decode(self, valid_multinode_master_config):
+        """Heterogeneous master configs must identify both worker pools."""
+        search_entry = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        del search_entry["decode"]["hardware"]
+        with pytest.raises(Exception, match="both.*prefill.*decode"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_single_node_cannot_have_multinode_true(self, valid_single_node_master_config):
         """Single node config must have multinode=False."""
@@ -744,6 +897,84 @@ class TestMasterConfigEntries:
         """Disagg should default to False."""
         config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
         assert config.disagg is False
+
+    def test_disagg_requires_multinode(self, valid_single_node_master_config):
+        """Single-node master configs cannot enable disaggregation."""
+        valid_single_node_master_config["disagg"] = True
+        with pytest.raises(Exception, match="disagg"):
+            SingleNodeMasterConfigEntry(**valid_single_node_master_config)
+
+    def test_single_node_agentic_master_config_requires_cluster_runner(self):
+        """Single-node agentic configs must pin an exact cluster label."""
+        config = {
+            "image": "vllm/vllm-openai:test",
+            "model": "deepseek-ai/DeepSeek-V4-Pro",
+            "model-prefix": "dsv4",
+            "precision": "fp4",
+            "framework": "vllm",
+            "runner": "b200",
+            "multinode": False,
+            "scenarios": {
+                "agentic-coding": [
+                    {
+                        "search-space": [
+                            {"tp": 8, "conc-list": [1], "kv-offloading": "none"}
+                        ],
+                    }
+                ]
+            },
+        }
+
+        with pytest.raises(Exception, match="Agentic master configs must use"):
+            SingleNodeMasterConfigEntry(**config)
+
+        config["runner"] = "cluster:b200-dgxc"
+        assert SingleNodeMasterConfigEntry(**config).runner == "cluster:b200-dgxc"
+
+    def test_multinode_agentic_master_config_requires_cluster_runner(self):
+        """Multinode agentic configs must also pin an exact cluster label."""
+        config = {
+            "image": "nvcr.io/nvidia/ai-dynamo/tensorrtllm-runtime:test",
+            "model": "deepseek-r1-fp4",
+            "model-prefix": "dsr1",
+            "precision": "fp4",
+            "framework": "dynamo-trt",
+            "runner": "b200-multinode",
+            "multinode": True,
+            "disagg": True,
+            "scenarios": {
+                "agentic-coding": [
+                    {
+                        "search-space": [
+                            {
+                                "spec-decoding": "none",
+                                "conc-list": [1],
+                                "prefill": {
+                                    "hardware": "b200",
+                                    "num-worker": 1,
+                                    "tp": 4,
+                                    "ep": 4,
+                                    "dp-attn": True,
+                                },
+                                "decode": {
+                                    "hardware": "b200",
+                                    "num-worker": 1,
+                                    "tp": 8,
+                                    "ep": 8,
+                                    "dp-attn": False,
+                                },
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+
+        with pytest.raises(Exception, match="Agentic master configs must use"):
+            MultiNodeMasterConfigEntry(**config)
+
+        config["runner"] = "cluster:b200-dgxc"
+        assert MultiNodeMasterConfigEntry(**config).runner == "cluster:b200-dgxc"
 
 
 # =============================================================================
@@ -799,7 +1030,9 @@ class TestValidateRunnerConfig:
     def test_value_must_be_list(self):
         """Runner config values must be lists."""
         config = {
-            "h100": "h100-cr_0",  # Not a list
+            "labels": {
+                "h100": "h100-cr_0",  # Not a list
+            },
         }
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
@@ -808,7 +1041,9 @@ class TestValidateRunnerConfig:
     def test_list_must_contain_strings(self):
         """Runner config lists must contain only strings."""
         config = {
-            "h100": ["h100-cr_0", 123],  # Contains non-string
+            "labels": {
+                "h100": ["h100-cr_0", 123],  # Contains non-string
+            },
         }
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
@@ -817,7 +1052,9 @@ class TestValidateRunnerConfig:
     def test_list_cannot_be_empty(self):
         """Runner config lists cannot be empty."""
         config = {
-            "mi355x": [],
+            "labels": {
+                "mi355x": [],
+            },
         }
         with pytest.raises(ValueError) as exc_info:
             validate_runner_config(config)
@@ -826,10 +1063,35 @@ class TestValidateRunnerConfig:
     def test_multiple_runner_types(self, valid_runner_config):
         """Multiple runner types should work."""
         result = validate_runner_config(valid_runner_config)
-        assert "h100" in result
-        assert "h200" in result
-        assert "mi300x" in result
-        assert "gb200" in result
+        assert "h100" in result["labels"]
+        assert "h200" in result["labels"]
+        assert "mi300x" in result["labels"]
+        assert "gb200" in result["labels"]
+
+    def test_flat_runner_config_is_rejected(self):
+        config = {
+            "h100": ["h100-cr_0", "h100-cw_0"],
+        }
+        with pytest.raises(ValueError, match="labels mapping"):
+            validate_runner_config(config)
+
+    def test_hardware_available_dram_must_be_positive(self):
+        config = {
+            "labels": {"h100": ["h100-cr_0"]},
+            "hardware": {"h100": {"available-cpu-dram-mib": 0, "gpus-per-node": 8}},
+        }
+        with pytest.raises(ValueError) as exc_info:
+            validate_runner_config(config)
+        assert "available-cpu-dram-mib" in str(exc_info.value)
+
+    def test_hardware_gpus_per_node_must_be_positive(self):
+        config = {
+            "labels": {"h100": ["h100-cr_0"]},
+            "hardware": {"h100": {"available-cpu-dram-mib": 2063837, "gpus-per-node": 0}},
+        }
+        with pytest.raises(ValueError) as exc_info:
+            validate_runner_config(config)
+        assert "gpus-per-node" in str(exc_info.value)
 
 
 # =============================================================================
@@ -963,25 +1225,31 @@ class TestLoadRunnerFile:
         """Should load and validate runner config file."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
-h100:
-- h100-node-0
-- h100-node-1
+labels:
+  h100:
+  - h100-node-0
+  - h100-node-1
+hardware:
+  h100:
+    available-cpu-dram-mib: 2063837
+    gpus-per-node: 8
 """)
         result = load_runner_file(str(runner_file))
-        assert "h100" in result
-        assert len(result["h100"]) == 2
+        assert "h100" in result["labels"]
+        assert len(result["labels"]["h100"]) == 2
 
     def test_load_runner_file_without_validation(self, tmp_path):
         """Should load runner config file without validation when validate=False."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
-h100:
-- h100-node-0
-- h100-node-1
+labels:
+  h100:
+  - h100-node-0
+  - h100-node-1
 """)
         result = load_runner_file(str(runner_file), validate=False)
-        assert "h100" in result
-        assert len(result["h100"]) == 2
+        assert "h100" in result["labels"]
+        assert len(result["labels"]["h100"]) == 2
 
     def test_nonexistent_runner_file(self):
         """Nonexistent runner file should raise error."""
@@ -993,7 +1261,8 @@ h100:
         """Validation should run by default and catch invalid configs."""
         runner_file = tmp_path / "runners.yaml"
         runner_file.write_text("""
-h100: not-a-list
+labels:
+  h100: not-a-list
 """)
         with pytest.raises(ValueError) as exc_info:
             load_runner_file(str(runner_file))

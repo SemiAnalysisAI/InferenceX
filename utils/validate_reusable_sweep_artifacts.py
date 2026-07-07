@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 import shutil
@@ -79,6 +78,8 @@ def benchmark_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("isl")),
         as_int(row.get("osl")),
         as_int(row.get("tp")),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
@@ -130,6 +131,8 @@ def agentic_key(row: dict[str, Any]) -> tuple[Any, ...]:
         row.get("framework"),
         row.get("precision"),
         as_int(row.get("tp")),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),
@@ -250,9 +253,7 @@ def validate_agentic_artifacts(
     raw_names = {
         path.name
         for path in artifacts_dir.iterdir()
-        if path.is_dir()
-        and path.name.startswith("agentic_")
-        and path.name != "agentic_aggregated"
+        if path.is_dir() and path.name.startswith("agentic_")
     }
     if point_names != raw_names:
         missing_raw = point_names - raw_names
@@ -261,36 +262,6 @@ def validate_agentic_artifacts(
             errors.append(f"missing raw agentic artifact dir: {name}")
         for name in sorted(extra_raw):
             errors.append(f"unexpected raw agentic artifact dir: {name}")
-
-    aggregate_dir = artifacts_dir / "agentic_aggregated"
-    summary_path = aggregate_dir / "summary.csv"
-    if aggregate_dir.exists():
-        if not summary_path.is_file():
-            errors.append("missing agentic_aggregated/summary.csv")
-        else:
-            with open(summary_path, newline="") as handle:
-                summary_rows = [
-                    str(row.get("exp_name") or "")
-                    for row in csv.DictReader(handle)
-                    if row.get("exp_name")
-                ]
-            duplicate_names = [
-                name
-                for name, count in Counter(summary_rows).items()
-                if count > 1
-            ]
-            for name in sorted(duplicate_names):
-                errors.append(
-                    f"agentic aggregate has duplicate experiment: {name}"
-                )
-            summary_names = set(summary_rows)
-            if summary_names != raw_names:
-                for name in sorted(raw_names - summary_names):
-                    errors.append(f"agentic aggregate is missing experiment: {name}")
-                for name in sorted(summary_names - raw_names):
-                    errors.append(
-                        f"agentic aggregate has unexpected experiment: {name}"
-                    )
 
     return errors
 
@@ -332,6 +303,8 @@ def eval_key(row: dict[str, Any]) -> tuple[Any, ...]:
         as_int(row.get("isl", 8192), 8192),
         as_int(row.get("osl", 1024), 1024),
         as_int(row.get("tp")),
+        as_int(row.get("dcp_size", 1), 1),
+        as_int(row.get("pcp_size", 1), 1),
         as_int(row.get("ep", 1)),
         as_bool(row.get("dp_attention", False)),
         as_int(row.get("conc")),

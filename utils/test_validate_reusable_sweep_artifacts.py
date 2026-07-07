@@ -6,6 +6,7 @@ from pathlib import Path
 
 from validate_reusable_sweep_artifacts import (
     agentic_key,
+    benchmark_key,
     dedupe_reran_evals,
     main,
     validate_agentic_artifacts,
@@ -130,6 +131,8 @@ def fixed_result(conc: int) -> dict:
         "isl": 1024,
         "osl": 1024,
         "tp": 2,
+        "dcp_size": 1,
+        "pcp_size": 1,
         "ep": 1,
         "dp_attention": False,
         "conc": conc,
@@ -146,11 +149,28 @@ def agentic_result(conc: int = 16) -> dict:
         "scenario_type": "agentic-coding",
         "is_multinode": False,
         "tp": 8,
+        "dcp_size": 1,
+        "pcp_size": 1,
         "ep": 8,
         "dp_attention": "true",
         "conc": conc,
         "offloading": "cpu",
     }
+
+
+def test_single_node_reusable_keys_normalize_legacy_cp_and_separate_variants() -> None:
+    cases = (
+        ("fixed", benchmark_key, fixed_result(16)),
+        ("agentic", agentic_key, agentic_result()),
+    )
+
+    for name, identity, row in cases:
+        legacy_row = dict(row)
+        legacy_row.pop("dcp_size")
+        legacy_row.pop("pcp_size")
+        assert identity(legacy_row) == identity(row), name
+        assert identity({**row, "dcp_size": 2}) != identity(row), name
+        assert identity({**row, "pcp_size": 2}) != identity(row), name
 
 
 def test_multinode_agentic_identity_fields_match() -> None:
@@ -197,8 +217,6 @@ def test_multinode_agentic_identity_fields_match() -> None:
 def write_agentic_artifacts(
     root: Path,
     conc: int = 16,
-    *,
-    aggregate: bool = True,
 ) -> None:
     result_name = f"dsv4_tp8_conc{conc}_offloadcpu_result"
     point_dir = root / f"bmk_agentic_{result_name}"
@@ -207,12 +225,6 @@ def write_agentic_artifacts(
         json.dumps(agentic_result(conc))
     )
     (root / f"agentic_{result_name}").mkdir()
-    if aggregate:
-        aggregate_dir = root / "agentic_aggregated"
-        aggregate_dir.mkdir()
-        (aggregate_dir / "summary.csv").write_text(
-            f"exp_name,status\nagentic_{result_name},SUCCESS\n"
-        )
 
 
 def test_eval_validation_requires_raw_result_dirs_not_eval_debug_dirs(
@@ -398,7 +410,7 @@ def test_fixed_sequence_validation_rejects_duplicate_identity(
     assert "fixed-sequence artifacts contain 1 duplicate row(s)" in errors
 
 
-def test_agentic_validation_checks_points_raw_and_aggregate(tmp_path: Path) -> None:
+def test_agentic_validation_checks_points_and_raw_artifacts(tmp_path: Path) -> None:
     write_agentic_artifacts(tmp_path)
 
     assert validate_agentic_artifacts(tmp_path) == []
@@ -407,7 +419,7 @@ def test_agentic_validation_checks_points_raw_and_aggregate(tmp_path: Path) -> N
 def test_agentic_validation_accepts_run_sweep_point_artifacts(
     tmp_path: Path,
 ) -> None:
-    write_agentic_artifacts(tmp_path, aggregate=False)
+    write_agentic_artifacts(tmp_path)
 
     assert validate_agentic_artifacts(tmp_path) == []
 
@@ -420,8 +432,6 @@ def test_agentic_validation_accepts_additional_source_identity(
     extra_dir.mkdir()
     (extra_dir / "extra.json").write_text(json.dumps(agentic_result(32)))
     (tmp_path / "agentic_extra").mkdir()
-    summary = tmp_path / "agentic_aggregated" / "summary.csv"
-    summary.write_text(summary.read_text() + "agentic_extra,SUCCESS\n")
 
     assert validate_agentic_artifacts(tmp_path) == []
 
@@ -443,7 +453,7 @@ def test_agentic_validation_requires_point_and_raw_artifacts(
 def test_agentic_validation_rejects_duplicate_point_identity(
     tmp_path: Path,
 ) -> None:
-    write_agentic_artifacts(tmp_path, aggregate=False)
+    write_agentic_artifacts(tmp_path)
     point_dir = (
         tmp_path / "bmk_agentic_dsv4_tp8_conc16_offloadcpu_result"
     )
