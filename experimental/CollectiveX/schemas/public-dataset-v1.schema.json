@@ -50,6 +50,8 @@
                     "allocation_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/allocationId"}},
                     "required_allocations": {"const": 1},
                     "qualification_indices": {"type":"array","minItems":0,"maxItems":1,"uniqueItems":true,"items":{"enum":[1]}},
+                    "coverage_scope": {"enum": ["full","partial"]},
+                    "covered_skus": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/safeId"}},
                     "requested_cases": {"type": "integer","minimum": 0},
                     "terminal_cases": {"type": "integer","minimum": 0},
                     "measured_cases": {"type": "integer","minimum": 0},

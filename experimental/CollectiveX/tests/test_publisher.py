@@ -1012,6 +1012,33 @@ def _cohort_counts(dataset: dict) -> dict[str, int]:
     }
 
 
+def _canonical_entry_from_coverage(item: dict) -> dict:
+    """Build a canonical-catalog entry that a coverage row projects onto.
+
+    Used to monkeypatch ``_canonical_coverage_cases`` so a partial promotion
+    fixture whose case ids are synthetic can still exercise the partial-scope
+    membership + disposition contract.
+    """
+    return {
+        "sku": item["sku"],
+        "suite": item["suite"],
+        "workload": item["workload"],
+        "required_publication": item["publication_tier"],
+        "backend": item["backend"],
+        "mode": item["mode"],
+        "phase": item["phase"],
+        "routing": item["routing"],
+        "eplb": item["eplb"],
+        "precision_profile": item["precision_profile"],
+        "dispatch_precision": item["dispatch_precision"],
+        "combine_precision": item["combine_precision"],
+        "disposition": item["disposition"],
+        "reason": item["reason"],
+        "ladder": " ".join(str(point["tokens_per_rank"]) for point in item["points"]),
+        **item["topology"],
+    }
+
+
 class PublisherTest(unittest.TestCase):
     def test_trial_diagnostics_flag_drift_and_robust_outliers(self) -> None:
         def runs() -> dict[str, dict[int, dict[str, object]]]:
@@ -1865,11 +1892,6 @@ class PublisherTest(unittest.TestCase):
         ):
             publisher.validate_public_dataset(diagnostic)
 
-        broken = copy.deepcopy(dataset)
-        broken["promotion"]["matrix_id"] = "d" * 64
-        with self.assertRaisesRegex(publisher.PublisherError, "canonical full-v1 matrix"):
-            publisher.validate_public_dataset(broken)
-
         for original, replacement in (("runnable", "unsupported"),
                                       ("unsupported", "runnable")):
             with self.subTest(original=original):
@@ -1977,24 +1999,75 @@ class PublisherTest(unittest.TestCase):
             publisher.REQUIRED_PROMOTION_COHORT_COUNTS,
         )
 
-    def test_build_promotion_requires_canonical_full_matrix(self) -> None:
-        bundles = {
-            str(run_id): {
-                "id": str(run_id), "cases": [],
-                "manifest": {
-                    "matrix": {"sha256": "d" * 64},
-                    "run": {
-                        "run_id": str(run_id), "run_attempt": 1,
-                        "qualification_index": run_id,
-                    },
-                },
-            }
-            for run_id in range(1, 2)
-        }
+    def test_partial_promotion_binds_canonical_membership(self) -> None:
+        # A "v1 tag + success" promotion may cover a subset of the canonical
+        # matrix, but every covered case must be a real canonical case with the
+        # canonical disposition, covered_skus must agree with the coverage, and
+        # the subset must be a proper subset of the full catalog.
+        dataset = _promoted_dataset()
+        fixture_catalog = publisher._case_disposition_catalog_sha256(dataset["coverage"])
+        cohort_counts = _cohort_counts(dataset)
+
+        # covered_skus is checked for both scopes, before the scope branch.
+        inconsistent = copy.deepcopy(dataset)
+        inconsistent["promotion"]["covered_skus"] = ["nvidia-nonexistent"]
         with mock.patch.object(
-            publisher, "load_bundle", side_effect=lambda _, bundle_id: bundles[bundle_id]
-        ), self.assertRaisesRegex(publisher.PublisherError, "canonical full-v1 matrix"):
-            publisher.build_dataset(object(), list(bundles), promote=True)
+            publisher, "CANONICAL_FULL_V1_CASE_CATALOG_SHA256", fixture_catalog
+        ), mock.patch.object(
+            publisher, "REQUIRED_PROMOTION_COHORT_COUNTS", cohort_counts
+        ), self.assertRaisesRegex(
+            publisher.PublisherError, "covered_skus is inconsistent"
+        ):
+            publisher.validate_public_dataset(inconsistent)
+
+        # A partial promotion whose cases are not in the canonical catalog is
+        # rejected (the synthetic fixture case ids are not canonical).
+        partial = copy.deepcopy(dataset)
+        partial["promotion"]["coverage_scope"] = "partial"
+        partial["promotion"]["covered_skus"] = sorted(
+            {item["sku"] for item in partial["coverage"]}
+        )
+        with self.assertRaisesRegex(
+            publisher.PublisherError, "cases outside the canonical v1 catalog"
+        ):
+            publisher.validate_public_dataset(partial)
+
+        # With the canonical catalog monkeypatched to a proper superset of the
+        # covered cases (matching identities + dispositions), a partial
+        # promotion validates without the full-matrix catalog pin or the
+        # cohort-count requirement that gate a full promotion — and without
+        # monkeypatching CANONICAL_FULL_V1_CASE_CATALOG_SHA256 or
+        # REQUIRED_PROMOTION_COHORT_COUNTS at all.
+        canonical = {
+            item["case_id"]: _canonical_entry_from_coverage(item)
+            for item in dataset["coverage"]
+        }
+        superset = dict(
+            canonical,
+            **{"canonical-case-not-in-this-run": dict(
+                next(iter(canonical.values())), disposition="unsupported"
+            )},
+        )
+        happy = copy.deepcopy(dataset)
+        happy["promotion"]["coverage_scope"] = "partial"
+        happy["promotion"]["covered_skus"] = sorted(
+            {item["sku"] for item in happy["coverage"]}
+        )
+        happy["promotion"]["matrix_id"] = "e" * 64  # partial: matrix not pinned
+        with mock.patch.object(
+            publisher, "_canonical_coverage_cases", lambda: superset
+        ):
+            self.assertIs(publisher.validate_public_dataset(happy), happy)
+
+        # A "partial" promotion that in fact covers the entire canonical catalog
+        # must go through the full-coverage contract instead.
+        entire = copy.deepcopy(happy)
+        with mock.patch.object(
+            publisher, "_canonical_coverage_cases", lambda: canonical
+        ), self.assertRaisesRegex(
+            publisher.PublisherError, "must not cover the entire canonical catalog"
+        ):
+            publisher.validate_public_dataset(entire)
 
     def test_rejection_is_quarantined_without_updating_dev_latest(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:

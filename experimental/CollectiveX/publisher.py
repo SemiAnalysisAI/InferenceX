@@ -1274,13 +1274,41 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             } == {1}
             for coverage in doc["coverage"]
         )
-        if promotion["matrix_id"] != CANONICAL_FULL_V1_MATRIX_SHA256:
-            raise PublisherError("promotion requires the canonical full-v1 matrix")
-        if (
-            _case_disposition_catalog_sha256(doc["coverage"])
-            != CANONICAL_FULL_V1_CASE_CATALOG_SHA256
-        ):
-            raise PublisherError("promotion requires the canonical case/disposition catalog")
+        expected_scope = promotion.get("coverage_scope", "full")
+        covered_skus = sorted({item["sku"] for item in doc["coverage"]})
+        if "covered_skus" in promotion and promotion["covered_skus"] != covered_skus:
+            raise PublisherError(
+                "promotion covered_skus is inconsistent with covered cases"
+            )
+        if expected_scope == "full":
+            # A full-coverage promotion is pinned to the exact canonical
+            # case/disposition catalog (unchanged from the strict contract).
+            if (
+                _case_disposition_catalog_sha256(doc["coverage"])
+                != CANONICAL_FULL_V1_CASE_CATALOG_SHA256
+            ):
+                raise PublisherError(
+                    "promotion requires the canonical case/disposition catalog"
+                )
+        else:
+            # A partial ("v1 tag + success") promotion is not pinned to the full
+            # catalog, but every case must still be a real canonical case with
+            # the canonical disposition, and the subset must be a proper subset.
+            canonical = _canonical_coverage_cases()
+            covered = {item["case_id"] for item in doc["coverage"]}
+            if covered - set(canonical):
+                raise PublisherError(
+                    "promotion includes cases outside the canonical v1 catalog"
+                )
+            for item in doc["coverage"]:
+                if item["disposition"] != canonical[item["case_id"]]["disposition"]:
+                    raise PublisherError(
+                        "promotion case disposition differs from the canonical v1 catalog"
+                    )
+            if covered == set(canonical):
+                raise PublisherError(
+                    "partial promotion must not cover the entire canonical catalog"
+                )
         if (
             terminal != len(doc["coverage"])
             or promotion["qualification_indices"] != [1]
@@ -1318,8 +1346,8 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 "promotion rejects runnable cases with failed, invalid, or diagnostic retries"
             )
         _require_promotion_series(doc["series"])
-        _require_promotion_cohorts(doc["cohorts"], doc["series"])
-        if not doc["rankings"]:
+        _require_promotion_cohorts(doc["cohorts"], doc["series"], scope=expected_scope)
+        if expected_scope == "full" and not doc["rankings"]:
             raise PublisherError("promoted dataset lacks eligible rankings")
     if promotion["status"] == "quarantined" and any((
         doc["source_bundle_ids"], promotion["allocation_ids"], doc["coverage"],
@@ -3557,8 +3585,19 @@ def _expected_chip_cohort_count(series: Sequence[dict[str, Any]]) -> int:
 
 
 def _require_promotion_cohorts(
-    cohorts: Sequence[dict[str, Any]], series: Sequence[dict[str, Any]]
+    cohorts: Sequence[dict[str, Any]],
+    series: Sequence[dict[str, Any]],
+    *,
+    scope: str = "full",
 ) -> None:
+    if scope != "full":
+        # A partial ("v1 tag + success") run covers a subset of the catalog, so
+        # the fixed full-matrix cohort counts / required kinds do not apply. Any
+        # cohort a partial run does surface is still required to be
+        # decision-grade — quality is never relaxed, only coverage.
+        if any(not cohort["eligibility"]["decision_grade"] for cohort in cohorts):
+            raise PublisherError("promotion includes a non-decision-grade cohort")
+        return
     eligible_kinds = {
         cohort["kind"]
         for cohort in cohorts
@@ -3633,10 +3672,27 @@ def build_dataset(
         raise PublisherError(
             "promotion requires qualification index 1 from a first-attempt run"
         )
-    if promote and matrix_ids != {CANONICAL_FULL_V1_MATRIX_SHA256}:
-        raise PublisherError("promotion requires the canonical full-v1 matrix")
     cases = {case["case_id"]: case for case in loaded[0]["cases"]}
+    canonical = _canonical_coverage_cases()
+    covered_skus = sorted({
+        canonical[case_id]["sku"] for case_id in cases if case_id in canonical
+    })
+    coverage_scope = "full" if set(cases) == set(canonical) else "partial"
     if promote:
+        # A v1-tagged run may promote any subset of the canonical catalog (the
+        # "v1 tag + success" contract). Every promoted case must still be a real
+        # canonical case with the canonical disposition — a partial run cannot
+        # invent cases or reclassify them — but it need not cover every SKU.
+        unknown = set(cases) - set(canonical)
+        if unknown:
+            raise PublisherError(
+                "promotion includes cases outside the canonical v1 catalog"
+            )
+        for case_id, case in cases.items():
+            if case["_disposition"] != canonical[case_id]["disposition"]:
+                raise PublisherError(
+                    "promotion case disposition differs from the canonical v1 catalog"
+                )
         _require_runnable_promotion_success(loaded, cases)
     all_documents = [
         document for bundle in loaded for document in bundle["documents"].values()
@@ -3824,6 +3880,8 @@ def build_dataset(
             "allocation_ids": allocation_ids,
             "required_allocations": REQUIRED_ALLOCATIONS,
             "qualification_indices": qualification_indices,
+            "coverage_scope": coverage_scope,
+            "covered_skus": covered_skus,
             "requested_cases": len(coverage),
             "terminal_cases": len(coverage),
             "measured_cases": measured_cases,
@@ -3844,7 +3902,7 @@ def build_dataset(
     }
     if promote:
         _require_promotion_series(series)
-        _require_promotion_cohorts(cohorts, series)
+        _require_promotion_cohorts(cohorts, series, scope=coverage_scope)
     validate_public_dataset(dataset)
     return dataset
 
