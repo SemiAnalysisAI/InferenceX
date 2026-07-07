@@ -204,6 +204,21 @@ cx_fail_stage() {
   return 1
 }
 
+cx_job_root_is_safe() {
+  local root="$1"
+  if [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]]; then
+    :
+  elif [[ "$root" =~ ^/tmp/inferencex-collectivex-parent-([0-9]+)-([0-9]+)-([A-Za-z0-9._-]+)/inferencex-collectivex-([0-9]+)-([0-9]+)-([A-Za-z0-9._-]+)$ ]]; then
+    [ "${BASH_REMATCH[1]}" = "${BASH_REMATCH[4]}" ] \
+      && [ "${BASH_REMATCH[2]}" = "${BASH_REMATCH[5]}" ] \
+      && [ "${BASH_REMATCH[3]}" = "${BASH_REMATCH[6]}" ] || return 1
+  else
+    return 1
+  fi
+  [ -d "$root" ] && [ ! -L "$root" ] \
+    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ]
+}
+
 # Runner-local deployment settings are strict JSON kept outside the checkout.
 # Only the selected runner's allowlisted values are exported; the document is
 # never sourced or evaluated as shell.
@@ -224,9 +239,7 @@ cx_load_operator_config() {
   config_path="${COLLECTIVEX_OPERATOR_CONFIG:-${XDG_CONFIG_HOME:-${HOME}/.config}/inferencex/collectivex.json}"
   if [ -n "${COLLECTIVEX_OPERATOR_CONFIG_CONTENT:-}" ]; then
     umask 077
-    if [[ "${CX_JOB_ROOT:-}" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
-        && [ -d "$CX_JOB_ROOT" ] && [ ! -L "$CX_JOB_ROOT" ] \
-        && [ "$(stat -c '%u:%a' "$CX_JOB_ROOT" 2>/dev/null)" = "$(id -u):700" ]; then
+    if cx_job_root_is_safe "${CX_JOB_ROOT:-}"; then
       config_path="$CX_JOB_ROOT/operator-config.json"
       (set -C; : > "$config_path") 2>/dev/null \
         || cx_die "cannot create ephemeral runner configuration"
@@ -1409,9 +1422,7 @@ cx_record_allocation_jobid() {
   local job_id="$1" root="${CX_JOB_ROOT:-}" path temporary
   [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
   [ -n "$root" ] || return 0
-  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
-    && [ -d "$root" ] && [ ! -L "$root" ] \
-    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 1
+  cx_job_root_is_safe "$root" || return 1
   path="$root/allocation-job-id"
   temporary="$(mktemp "$root/.allocation-job-id.XXXXXX")" || return 1
   chmod 600 "$temporary" || { rm -f -- "$temporary"; return 1; }
@@ -1423,9 +1434,7 @@ cx_record_allocation_jobid() {
 cx_clear_allocation_jobid() {
   local root="${CX_JOB_ROOT:-}" path
   [ -n "$root" ] || return 0
-  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
-    && [ -d "$root" ] && [ ! -L "$root" ] \
-    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 1
+  cx_job_root_is_safe "$root" || return 1
   path="$root/allocation-job-id"
   [ ! -e "$path" ] || {
     [ -f "$path" ] && [ ! -L "$path" ] \
@@ -1452,9 +1461,7 @@ cx_cancel_job() {
 
 cx_write_cleanup_guard() {
   local state="$1" root="${CX_JOB_ROOT:-}" safe unsafe
-  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
-    && [ -d "$root" ] && [ ! -L "$root" ] \
-    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 0
+  cx_job_root_is_safe "$root" || return 0
   safe="$root/cleanup-safe"
   unsafe="$root/cleanup-unsafe"
   umask 077
@@ -1470,9 +1477,7 @@ cx_write_cleanup_guard() {
 # workflow step before isolated source cleanup is allowed.
 cx_reconcile_recorded_allocation() {
   local root="$1" path job_id
-  [[ "$root" =~ ^/tmp/inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
-    && [ -d "$root" ] && [ ! -L "$root" ] \
-    && [ "$(stat -c '%u:%a' "$root" 2>/dev/null)" = "$(id -u):700" ] || return 1
+  cx_job_root_is_safe "$root" || return 1
   export CX_JOB_ROOT="$root"
   path="$root/allocation-job-id"
   if [ ! -e "$path" ]; then

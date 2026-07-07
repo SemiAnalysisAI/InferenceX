@@ -1634,6 +1634,7 @@ class SamplingContractTest(unittest.TestCase):
             self.assertTrue((root / "cleanup-safe").is_file())
             self.assertFalse((root / "cleanup-unsafe").exists())
             self.assertFalse((root / "allocation-job-id").exists())
+
         prepare_start = workflow.index("- name: Prepare pinned backend source archive")
         source_archive_step = workflow[
             prepare_start:workflow.index("- uses: actions/upload-artifact", prepare_start)
@@ -1702,6 +1703,47 @@ class SamplingContractTest(unittest.TestCase):
             cleanup.index('cleanup-safe" ]'),
             cleanup.index('rm -rf -- "$CX_JOB_ROOT"'),
         )
+
+    def test_allocation_record_accepts_only_matching_amd_nested_roots(self) -> None:
+        common = str(ROOT / "runtime" / "common.sh")
+        tag = f"{os.getpid()}-1-mi300x-test"
+        parent = Path("/tmp") / f"inferencex-collectivex-parent-{tag}"
+        shared = Path(tempfile.mkdtemp(prefix="collectivex-amd-shared-"))
+        root = shared / f"inferencex-collectivex-{tag}"
+        root.mkdir(mode=0o700)
+        try:
+            parent.symlink_to(shared, target_is_directory=True)
+            nested_root = parent / root.name
+            result = subprocess.run(
+                [
+                    "bash", "-c",
+                    'source "$1"; '
+                    'stat() { case "$3" in */allocation-job-id) mode=600 ;; *) mode=700 ;; esac; '
+                    'printf "%s:%s\\n" "$(id -u)" "$mode"; }; '
+                    'export CX_JOB_ROOT="$2"; '
+                    'cx_record_allocation_jobid 6262; cat "$2/allocation-job-id"; '
+                    'cx_clear_allocation_jobid',
+                    "_", common, str(nested_root),
+                ],
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout, "6262\n")
+            self.assertFalse((root / "allocation-job-id").exists())
+
+            mismatched = parent / f"inferencex-collectivex-{os.getpid()}-2-mi300x-test"
+            result = subprocess.run(
+                [
+                    "bash", "-c", 'source "$1"; cx_job_root_is_safe "$2"',
+                    "_", common, str(mismatched),
+                ],
+            )
+            self.assertNotEqual(result.returncode, 0)
+        finally:
+            parent.unlink(missing_ok=True)
+            root.rmdir()
+            shared.rmdir()
 
     def test_v1_publication_requires_explicit_release_markers(self) -> None:
         workflows = ROOT.parent.parent / ".github" / "workflows"
