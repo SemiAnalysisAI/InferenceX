@@ -17,7 +17,10 @@ check_env_vars \
 # When MODEL_PATH is unset (stand-alone runs), fall back to the HF_HUB_CACHE
 # Either way, MODEL_PATH is what the server is launched with.
 if [[ -n "${MODEL_PATH:-}" ]]; then
-    if [[ ! -d "$MODEL_PATH" || -z "$(ls -A "$MODEL_PATH" 2>/dev/null)" ]]; then
+    # Run the download whenever MODEL_PATH is writable: `hf download` resumes
+    # partial fetches (e.g. after a cancelled run) and no-ops when the
+    # snapshot is complete. Only skip read-only pre-staged mounts.
+    if [[ ! -d "$MODEL_PATH" || -w "$MODEL_PATH" ]]; then
         hf download "$MODEL" --local-dir "$MODEL_PATH"
     fi
 else
@@ -71,6 +74,14 @@ fi
 # the checkpoint's reference recipe.
 NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-7}"
 
+# The scheduler reserves draft-token slots for every runnable sequence; with
+# the engine-default max_num_seqs and 7 draft tokens that drives
+# max_num_scheduled_tokens negative on a 2*ISL token budget. Bound running
+# sequences to the benchmark concurrency (floor 32 so eval traffic still
+# batches) and grow the token budget by the reserved slots.
+MAX_NUM_SEQS=$(( CONC > 32 ? CONC : 32 ))
+MAX_NUM_BATCHED_TOKENS=$(( MAX_NUM_BATCHED_TOKENS + MAX_NUM_SEQS * (NUM_SPEC_TOKENS + 1) ))
+
 start_gpu_monitor
 
 set -x
@@ -90,6 +101,7 @@ vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port "$PO
     --enable-auto-tool-choice \
     --reasoning-parser deepseek_v4 \
     --max-cudagraph-capture-size 2048 \
+    --max-num-seqs "$MAX_NUM_SEQS" \
     --speculative-config "{\"method\": \"dspark\", \"num_speculative_tokens\": $NUM_SPEC_TOKENS, \"draft_sample_method\": \"greedy\"}" \
     --max-model-len "$SERVE_MAX_MODEL_LEN" \
     --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" > "$SERVER_LOG" 2>&1 &
