@@ -823,7 +823,7 @@ kimik2.5-fp4-mi355x-atom:
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 4, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 128 }
 
 gptoss-fp4-mi300x-vllm:
   image: vllm/vllm-openai-rocm:v0.17.0
