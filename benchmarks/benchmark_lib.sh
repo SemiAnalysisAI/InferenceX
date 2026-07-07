@@ -1271,6 +1271,11 @@ agent:
   cost_limit: 0.
 environment:
   environment_class: swerex_modal
+  # Cold-start Modal sandbox creation includes pulling the GB-scale swebench
+  # instance image; mini's 60s default startup_timeout exhausts before the
+  # runtime aliveness check ("Runtime did not start within 0s").
+  startup_timeout: ${SWEBENCH_AGENT_STARTUP_TIMEOUT:-900}
+  timeout: ${SWEBENCH_AGENT_CMD_TIMEOUT:-300}
 model:
   model_name: "openai/${MODEL_NAME:-$MODEL}"
   cost_tracking: "ignore_errors"
