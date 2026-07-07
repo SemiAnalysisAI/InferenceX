@@ -4581,3 +4581,10 @@
     - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override; without it the drafter falls back to a slow default backend."
     - "Speeds up the draft forward measured on MI355X TP4 MXFP8, 8k/1k throughput gains growing with concurrency vs no override."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2107
+
+- config-keys:
+    - glm5-fp4-gb200-dynamo-sglang-mtp
+  description:
+    - "Add GLM-5 NVFP4 GB200 disaggregated dynamo-sglang MTP config covering 8k1k and 1k1k, high-throughput and low-latency topologies"
+    - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
