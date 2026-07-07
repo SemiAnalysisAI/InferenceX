@@ -39,6 +39,16 @@ on:
       disagg:
         required: true
         type: string
+      prefill-hardware:
+        description: "GPU SKU used by prefill workers"
+        required: false
+        type: string
+        default: ""
+      decode-hardware:
+        description: "GPU SKU used by decode workers"
+        required: false
+        type: string
+        default: ""
 
       max-model-len:
         required: true
@@ -144,6 +154,8 @@ env:
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  PREFILL_HARDWARE: ${{ inputs.prefill-hardware }}
+  DECODE_HARDWARE: ${{ inputs.decode-hardware }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}
@@ -183,7 +195,7 @@ jobs:
       ${{ inputs.spec-decoding != 'none' && inputs.spec-decoding || '' }}
       ${{ inputs.kv-offloading != '' && inputs.kv-offloading != 'none' && format('{0} KV offload', inputs.kv-offloading) || '' }}
       ${{ inputs.kv-offload-backend != '' && inputs.kv-offload-backend != 'none' && inputs.kv-offload-backend != 'default' && inputs.kv-offload-backend || '' }}
-      c=${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
+      c${{ inputs.conc != '' && inputs.conc || join(fromJson(inputs.conc-list), 'x') }}${{ inputs.eval-only && ' | eval-only' || (inputs.run-eval && ' | eval' || '') }}
 
     steps:
       - name: Slurm cleanup (pre-run)
@@ -197,7 +209,7 @@ jobs:
             done
           fi
 
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
           fetch-depth: 0

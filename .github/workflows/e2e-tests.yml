@@ -54,13 +54,13 @@ jobs:
         steps:
             - name: Checkout code (ref)
               if: ${{ inputs.ref && inputs.ref != '' }}
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                 ref: ${{ inputs.ref }}
 
             - name: Checkout code (default)
               if: ${{ !inputs.ref || inputs.ref == '' }}
-              uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+              uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                 ref: ${{ github.sha }}
 
@@ -106,6 +106,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
@@ -145,6 +147,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
 
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
@@ -181,6 +185,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -221,6 +227,8 @@ jobs:
             conc-list: ${{ toJson(matrix.config.conc) }}
             spec-decoding: ${{ matrix.config.spec-decoding }}
             disagg: ${{ matrix.config.disagg }}
+            prefill-hardware: ${{ matrix.config.prefill.hardware }}
+            decode-hardware: ${{ matrix.config.decode.hardware }}
             prefill-num-worker: ${{ matrix.config.prefill.num-worker }}
             prefill-tp: ${{ matrix.config.prefill.tp }}
             prefill-ep: ${{ matrix.config.prefill.ep }}
@@ -261,6 +269,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -291,6 +301,8 @@ jobs:
             framework: ${{ matrix.config.framework }}
             precision: ${{ matrix.config.precision }}
             tp: ${{ matrix.config.tp }}
+            dcp-size: ${{ matrix.config.dcp-size }}
+            pcp-size: ${{ matrix.config.pcp-size }}
             ep: ${{ matrix.config.ep }}
             dp-attn: ${{ matrix.config.dp-attn }}
             conc: ${{ matrix.config.conc }}
@@ -325,7 +337,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.REPO_PAT }}
 
         steps:
-            - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+            - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
               with:
                   token: ${{ secrets.REPO_PAT }}
                   fetch-depth: 0
