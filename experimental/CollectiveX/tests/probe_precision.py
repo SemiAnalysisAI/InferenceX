@@ -1071,6 +1071,7 @@ def run_target(target: dict[str, Any], output: Path) -> int:
             backend = _backend_class(target["backend"])(
                 args, rank, world_size, local_rank, device
             )
+            backend.create_buffer(backend.make_inputs(args))
             construction = {"ok": True}
         except Exception:
             construction = {"ok": False, "reason": "backend-construction-failed"}

@@ -14,6 +14,7 @@ import torch
 import torch.distributed as dist
 import contracts
 import ep_precision
+from ep_backend import EPBackend
 
 try:
     import uccl
@@ -183,8 +184,9 @@ def _normal_buffer_sizes(hidden: int, world_size: int) -> tuple[int, int]:
     return num_nvl_bytes, num_rdma_bytes
 
 
-class UCCLBackend:
+class UCCLBackend(EPBackend):
     name = "uccl"
+    SUPPORTED_MODES = ("normal", "low-latency")
     stage_device_work = False
     combine_needs_redispatch = False
     combine_weight_semantics = "unweighted-rank-sum"
@@ -192,13 +194,8 @@ class UCCLBackend:
     payload_unit = "token-rank"
 
     def __init__(self, args, rank, world_size, local_rank, device):
-        self.args = args
-        self.rank = rank
-        self.world_size = world_size
-        self.device = device
-        self.mode = getattr(args, "mode", "normal")
-        if self.mode not in {"normal", "low-latency"}:
-            raise ValueError(f"unsupported UCCL mode {self.mode!r}")
+        # Base validates mode against SUPPORTED_MODES (normal / low-latency).
+        super().__init__(args, rank, world_size, local_rank, device)
         supported_profiles = {
             "normal": {
                 "d-bf16.c-bf16",
@@ -224,10 +221,26 @@ class UCCLBackend:
             self.communication_precision
         )
         self.stage_device_work = self._fp8_dispatch
-
         self.group = dist.group.WORLD
+        # Low-latency flips the contract flags and fixes the per-rank cap so
+        # buffer_cap can report it to make_inputs before create_buffer runs.
+        if self.mode == "low-latency":
+            if args.phase != "decode":
+                raise ValueError("UCCL low-latency mode only supports the decode ladder")
+            if args.experts % world_size:
+                raise ValueError("UCCL low-latency experts must divide the EP group")
+            self.combine_needs_redispatch = True
+            self.combine_weight_semantics = "gate-weighted-sum"
+            self.oracle_layout = "expert-packed"
+            self.payload_unit = "token-expert"
+            self.max_tokens_per_rank = 128
+
+    def create_buffer(self, spec):
+        # Local aliases keep the moved buffer-construction body byte-verbatim.
+        args, world_size, device = self.args, self.world_size, self.device
         device_sms = torch.cuda.get_device_properties(device).multi_processor_count
         if self.mode == "low-latency":
+            assert spec.max_tokens_per_rank <= 128
             ep_precision.require_keyword(
                 Buffer.low_latency_dispatch,
                 "use_fp8",
@@ -238,15 +251,6 @@ class UCCLBackend:
                 "use_logfmt",
                 api="uccl_deepep.Buffer.low_latency_combine",
             )
-            if args.phase != "decode":
-                raise ValueError("UCCL low-latency mode only supports the decode ladder")
-            if args.experts % world_size:
-                raise ValueError("UCCL low-latency experts must divide the EP group")
-            self.combine_needs_redispatch = True
-            self.combine_weight_semantics = "gate-weighted-sum"
-            self.oracle_layout = "expert-packed"
-            self.payload_unit = "token-expert"
-            self.max_tokens_per_rank = 128
             num_qps_per_rank = args.experts // world_size
             num_rdma_bytes = Buffer.get_low_latency_rdma_size_hint(
                 self.max_tokens_per_rank, args.hidden, world_size, args.experts

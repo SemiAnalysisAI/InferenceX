@@ -21,6 +21,7 @@ import torch
 import torch.distributed as dist
 import contracts
 import ep_precision
+from ep_backend import EPBackend
 
 
 def _runtime_collective(args, torch_module) -> tuple[str, str]:
@@ -37,21 +38,17 @@ def _runtime_collective(args, torch_module) -> tuple[str, str]:
     return expected, collective["version"]
 
 
-class NCCLBackend:
+class NCCLBackend(EPBackend):
     name = "nccl-ep"
     stage_device_work = False
     combine_needs_redispatch = False  # dispatch saves the permutation + splits
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
-        self.args = args
-        self.rank = rank
-        self.world_size = world_size
-        self.device = device
+        # Base validates mode against SUPPORTED_MODES=("normal",) — this backend is
+        # bf16 normal only, so an unsupported mode raises there.
+        super().__init__(args, rank, world_size, local_rank, device)
         self.experts = args.experts
-        self.mode = getattr(args, "mode", "normal")
-        if self.mode != "normal":
-            raise ep_precision.PrecisionError("NCCL/RCCL EP supports normal mode only")
         self.precision_profile_id, self.communication_precision = (
             ep_precision.resolve_precision(
                 args,
@@ -105,6 +102,11 @@ class NCCLBackend:
             "dispatch_dtype": "bf16",
             "combine_dtype": "bf16",
         }
+
+    def create_buffer(self, spec):
+        # No fixed pre-allocated communicator: all-to-all sizes itself per step, and
+        # all provenance is resolved in __init__. Nothing to size from `spec`.
+        return None
 
     def buffer_cap(self, args):
         return None  # no fixed pre-allocated buffer; all-to-all sizes itself per step

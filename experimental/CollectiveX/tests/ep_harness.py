@@ -1233,11 +1233,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     import eplb     # stdlib planner + torch remap (the EPLB transform)
 
     ep_size = world_size
-    # EPLB (if on): run_ep.py already bumped args.experts to the PHYSICAL count and stashed the
-    # logical count, so experts_per_rank below is physical. The trace is built over LOGICAL
-    # experts then remapped to physical (build_trace), so the whole sweep runs over the
-    # balanced physical placement with no adapter change.
-    eplb_on = getattr(args, "eplb", False)
     num_logical = getattr(args, "num_logical_experts", args.experts)
     if args.experts % ep_size != 0:
         if rank == 0:
@@ -1275,120 +1270,52 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             print("ERROR: low-latency requires decode expert-packed token-expert execution")
         return 2
 
-    cap = backend.buffer_cap(args)
-    conditioning_ladder = CONDITIONING_LADDERS[args.phase]
-    if cap is not None and cap < conditioning_ladder[-1]:
+    spec = backend.make_inputs(args)
+    if not spec.ok:
         if rank == 0:
-            print(f"ERROR: {backend.name} buffer cap {cap} cannot run the v1 conditioning ladder")
-        return 2
-    ladder, dropped = token_ladder(args.tokens_ladder, args.phase, cap)
+            print(f"ERROR: {spec.message}")
+        return spec.rc
+    cap = spec.cap
+    conditioning_ladder = spec.conditioning_ladder
+    ladder, dropped = spec.ladder, spec.dropped
     if rank == 0 and dropped:
         print(f"NOTE: dropped tokens/rank {dropped} — exceed {backend.name} buffer cap {cap} "
               f"(hidden={args.hidden}); not silently truncated.")
-    if not ladder:
-        if rank == 0:
-            print(f"ERROR: empty token ladder (phase={args.phase}, cap={cap})")
-        return 2
+    loaded_workload_ids = spec.loaded_workload_ids
+    loaded_checksums = spec.loaded_checksums
+    canonical = bool(getattr(args, "workload_dir", ""))
     MAX, MIN, SUM = dist.ReduceOp.MAX, dist.ReduceOp.MIN, dist.ReduceOp.SUM
 
-    # EPLB plan (once): estimate logical load from the global logical trace at the largest
-    # ladder T (most samples), then replicate+place. Held fixed across all T (as real EPLB
-    # plans from an observed load estimate). build_trace builds the LOGICAL trace and remaps
-    # to physical when the plan is present; otherwise it's the identity (logical == physical).
+    # EPLB is off in v1 (uniform placement): the plan/calibration stay None so the
+    # disabled eplb_record and the identity trace-remap paths downstream take their
+    # inert branch. `eplb` remains imported for those None-guarded call sites.
     eplb_plan = None
     eplb_calibration = None
-    if eplb_on:
-        calibration_id, calibration_checksums, calibration_rows, _ = (
-            workload_contract.canonical_eplb_calibration_member(
-                args.routing,
-                args.hidden,
-                args.topk,
-                num_logical,
-                ep_size,
-                EPLB_REFERENCE_TOKENS_PER_RANK,
-                args.seed,
-            )
-        )
-        ref_idx = torch.tensor(
-            calibration_rows,
-            dtype=torch.int64,
-        )
-        eplb_calibration = {
-            "token_offset": workload_contract.EPLB_CALIBRATION_TOKEN_OFFSET,
-            "trace_sha256": calibration_checksums["trace"],
-            "window": workload_contract.EPLB_CALIBRATION_WINDOW,
-            "workload_id": calibration_id,
-        }
-        if ref_idx.shape != (
-            EPLB_REFERENCE_TOKENS_PER_RANK * ep_size,
-            args.topk,
-        ):
-            raise RuntimeError("EPLB calibration trace dimensions differ from the contract")
-        load = torch.bincount(ref_idx.reshape(-1), minlength=num_logical).float().tolist()
-        eplb_plan = eplb.build_plan(load, args.experts, ep_size)
-        if rank == 0:
-            print(f"NOTE: EPLB {num_logical}->{args.experts} experts ({ep_size}x{experts_per_rank}); "
-                  f"per-rank load imbalance {eplb_plan['imbalance_before']:.2f}x -> "
-                  f"{eplb_plan['imbalance_after']:.2f}x; {eplb_plan['replicated_experts']} experts "
-                  f"replicated (hottest {eplb_plan['max_replicas']}x)")
 
-    canonical = bool(getattr(args, "workload_dir", ""))
-    loaded_workload_ids, loaded_checksums = [], {}
-    if canonical:
-        import workload as _wl
-
-    def build_trace(gt):
-        # canonical: load pre-serialized trace bytes (verified by checksum) so this run is
-        # provably the SAME workload as any other consuming the same files. else: seeded gen.
-        if canonical:
-            wid = _wl.compute_workload_id(
-                args.routing, args.hidden, args.topk, num_logical, ep_size, gt, args.seed
-            )
-            idx_np, w_np, man = _wl.load_workload(os.path.join(args.workload_dir, f"{wid}.npz"), verify=True)
-            idx_l = torch.from_numpy(idx_np).to(torch.int64)
-            w = torch.from_numpy(w_np).to(torch.float32)
-            if wid not in loaded_workload_ids:
-                loaded_workload_ids.append(wid)
-                loaded_checksums[wid] = man.get("checksums")
-        else:
-            idx_l, w = routing.build_global_routing(
-                gt, num_logical, args.topk, args.routing, args.seed
-            )
-        return (eplb.remap_idx(idx_l, eplb_plan) if eplb_plan is not None else idx_l), w
-
-    # Fabric/clock warm-up BEFORE any timed point (review: H200 had an anomalous cold
-    # first point and a 40% decode-vs-prefill mismatch at the shared T=128). Gradually
-    # ramp through the small ladder shapes untimed — warms clocks/fabric for everyone
-    # and is also cold-jump-safe for MoRI.
-    def warm_roundtrips(problem, count):
-        for _ in range(count):
-            handle = backend.dispatch(problem)
-            if not hasattr(problem, "recv_tokens"):
-                # Dynamic receive cardinality is stable for this fixed routing trace. Cache it
-                # during untimed conditioning so adapters never read a device scalar in timing.
-                problem.recv_tokens = backend.recv_tokens(handle)
-            backend.stage(problem, handle)
-            backend.combine(problem, handle)
-            torch.cuda.synchronize()
+    # Size the communicator from the resolved numeric shape. Buffer sizing needs the
+    # ladder numbers (not the input tensors), so it runs after make_inputs rather than
+    # in __init__ — resolving the historical build-buffers-before-inputs inversion.
+    # make_inputs already materialized the per-rank routing/activation inputs (canonical
+    # bytes when a workload_dir was staged, else seeded generation) on `spec`.
+    backend.create_buffer(spec)
 
     for wt in conditioning_ladder:
-        # Warm-only shapes need not have canonical manifests: they are never measured or emitted.
-        wi, ww = routing.build_global_routing(
-            wt * ep_size, num_logical, args.topk, args.routing, args.seed,
+        # Fabric/clock warm-up BEFORE any timed point (review: H200 had an anomalous
+        # cold first point and a 40% decode-vs-prefill mismatch at the shared T=128).
+        # make_inputs already materialized these warm-only per-rank inputs; ramping
+        # through the small ladder shapes untimed warms clocks/fabric for everyone and
+        # is cold-jump-safe for MoRI. Warm-only shapes carry no canonical manifest:
+        # they are never measured or emitted.
+        cwp = spec.conditioning_points[wt]
+        wp = backend.make_problem(
+            wt, cwp.topk_idx.to(device), cwp.topk_weights.to(device), cwp.activations
         )
-        if eplb_plan is not None:
-            wi = eplb.remap_idx(wi, eplb_plan)
-        wsi, wsw = routing.rank_slice(wi, ww, rank, wt)
-        wx = routing.rank_activations(wt, args.hidden, args.seed, rank, device, torch.bfloat16)
-        wp = backend.make_problem(wt, wsi.to(device), wsw.to(device), wx)
-        warm_roundtrips(wp, CONDITIONING_ROUNDS_PER_SHAPE)
+        backend.warm(wp, CONDITIONING_ROUNDS_PER_SHAPE)
     torch.cuda.synchronize()
     dist.barrier()
     # Setup may materialize deferred provenance such as DeepEP V2 JIT CUBINs.
     # Resolve it after conditioning but before correctness or timed measurements.
-    capture_deferred_provenance = getattr(backend, "capture_deferred_provenance", None)
-    if capture_deferred_provenance is not None:
-        capture_deferred_provenance()
+    backend.capture_deferred_provenance()
     provenance_issues = contracts.backend_provenance_issues(
         backend.name, backend.backend_provenance
     )
@@ -1406,18 +1333,18 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         counts = [T] * ep_size
         gt = T * ep_size
         gts[T] = gt
-        idx_g, w_g = build_trace(gt)
+        point = spec.points[T]
+        idx_g, w_g = point.global_idx, point.global_weights
         rstats = routing.routing_stats(idx_g, args.experts, experts_per_rank, weights=w_g)
         gpn = args.gpus_per_node or ep_size
         rstats["locality"] = routing.routing_locality(idx_g, experts_per_rank, ep_size, max(1, T),
                                                       gpn, args.scale_up_domain or None)
         rstats["source_token_stats"] = _stats_vec(counts)
         routing_hashes.add(rstats["routing_hash"])
-        my_off, my_cnt = rank * T, T
-        idx_s = idx_g[my_off:my_off + my_cnt].contiguous()
-        w_s = w_g[my_off:my_off + my_cnt].contiguous()
-        x = routing.rank_activations(my_cnt, args.hidden, args.seed, rank, device, torch.bfloat16)
-        problem = backend.make_problem(my_cnt, idx_s.to(device), w_s.to(device), x)
+        my_cnt = T
+        problem = backend.make_problem(
+            my_cnt, point.topk_idx.to(device), point.topk_weights.to(device), point.activations
+        )
         input_snapshots[T] = (
             problem.x.clone(), problem.topk_idx.clone(), problem.topk_weights.clone()
         )
@@ -1454,12 +1381,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     stage_trials = {T: [] for T in ladder}
     comb_trials = {T: [] for T in ladder}
     rt_trials = {T: [] for T in ladder}
-    stage_device_work = getattr(backend, "stage_device_work", False)
-    if type(stage_device_work) is not bool:
-        raise ValueError("backend.stage_device_work must be a boolean")
-    dispatch_needs_cleanup = getattr(backend, "dispatch_needs_combine_cleanup", False)
-    if type(dispatch_needs_cleanup) is not bool:
-        raise ValueError("backend.dispatch_needs_combine_cleanup must be a boolean")
     order_identity = args.case_id or _sha256_json({
         "backend": backend.name,
         "ep_size": ep_size,
@@ -1477,22 +1398,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         )
         for T in order:
             problem = problems[T]
-            # Stateful paired APIs may expose only a measured round trip.
-            # Do not synthesize component latency from that measurement.
-            roundtrip_only = getattr(backend, "roundtrip_only", False)
-
-            def rt_once(p=problem):
-                hh = backend.dispatch(p)
-                backend.stage(p, hh)
-                return backend.combine(p, hh)
-
-            available_components = ["roundtrip"]
-            if not roundtrip_only:
-                available_components.extend(["dispatch", "combine"])
-                if stage_device_work:
-                    available_components.append("stage")
+            # timed_components() encodes the roundtrip-only vs full-component contract
+            # (and whether stage launches device work) once, in the base class.
             component_order = qualification_order(
-                available_components,
+                backend.timed_components(),
                 args.qualification_index,
                 trial_index,
                 identity_key=f"{order_identity}:components:{T}",
@@ -1503,60 +1412,13 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "trial_index": trial_index,
             })
             measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
-
-            def prep_stage(p=problem):
-                return backend.dispatch(p)
-
-            def prep_combine(p=problem):
-                hh = backend.dispatch(p)
-                backend.stage(p, hh)
-                return hh
-
-            def finish_dispatch(hh, p=problem):
-                backend.stage(p, hh)
-                backend.combine(p, hh)
-
             for component_name in component_order:
-                # Every measured component receives the same 32 synchronized full-roundtrip
-                # warmups immediately before its timed trial.
-                warm_roundtrips(problem, args.warmup)
-                if component_name == "roundtrip":
-                    measured[component_name] = time_us(
-                        torch, lambda p=problem: rt_once(p), 0, args.iters
-                    )
-                elif component_name == "dispatch":
-                    measured[component_name] = time_us(
-                        torch, lambda p=problem: backend.dispatch(p), 0, args.iters,
-                        post=finish_dispatch if dispatch_needs_cleanup else None,
-                    )
-                elif component_name == "stage":
-                    measured[component_name] = time_us(
-                        torch,
-                        lambda hh, p=problem: backend.stage(p, hh),
-                        0,
-                        args.iters,
-                        pre=prep_stage,
-                    )
-                elif component_name == "combine":
-                    if backend.combine_needs_redispatch:
-                        measured[component_name] = time_us(
-                            torch,
-                            lambda hh, p=problem: backend.combine(p, hh),
-                            0,
-                            args.iters,
-                            pre=prep_combine,
-                        )
-                    else:
-                        hh = prep_combine()
-                        torch.cuda.synchronize()
-                        measured[component_name] = time_us(
-                            torch,
-                            lambda p=problem, hx=hh: backend.combine(p, hx),
-                            0,
-                            args.iters,
-                        )
-                else:  # pragma: no cover - generated from the fixed list above
-                    raise RuntimeError(f"unknown timed component {component_name!r}")
+                # The base template gives every component the same synchronized
+                # full-roundtrip warm-up before its timed trial and encodes the two
+                # branch rules (dispatch cleanup, combine re-dispatch) internally.
+                measured[component_name] = backend.benchmark_component(
+                    component_name, problem, args.warmup, args.iters
+                )
             disp_iters = measured["dispatch"]
             stage_iters = measured["stage"]
             comb_iters = measured["combine"]
@@ -1791,8 +1653,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     # Capture again after correctness and timing so no lazily generated kernel can escape
     # the implementation identity recorded in the artifact.
-    if capture_deferred_provenance is not None:
-        capture_deferred_provenance()
+    backend.capture_deferred_provenance()
 
     # status=valid requires correctness AND a proven-identical routing trace across ranks.
     all_ok = bool(rows) and all(r["correctness"]["passed"] for r in rows) and routing_consistent

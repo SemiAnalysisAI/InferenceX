@@ -19,6 +19,7 @@ import torch.distributed as dist
 import contracts
 import ep_harness
 import ep_precision
+from ep_backend import EPBackend
 
 try:
     import deep_ep
@@ -328,18 +329,15 @@ def _require_runtime() -> tuple[str, str]:
     return torch_version, nccl_runtime_version
 
 
-class DeepEPV2Backend:
+class DeepEPV2Backend(EPBackend):
     name = "deepep-v2"
     stage_device_work = False
     combine_needs_redispatch = False
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
-        self.args = args
-        self.rank = rank
-        self.world_size = world_size
-        self.device = device
-        self.mode = "normal"
+        # deepep-v2 is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
+        super().__init__(args, rank, world_size, local_rank, device)
         self.precision_profile_id, self.communication_precision = (
             ep_precision.resolve_precision(
                 args,
@@ -361,10 +359,15 @@ class DeepEPV2Backend:
             api="deep_ep.ElasticBuffer.__init__",
         )
         self.group = dist.group.WORLD
+        self._deferred_jit_snapshot = None
+
+    def create_buffer(self, spec):
+        # Local aliases keep the moved buffer-construction body byte-verbatim. The cap
+        # equals the value the deleted __init__ ladder-peek computed
+        # (token_ladder(.., None) + conditioning), so the jit_cache_key stays stable.
+        args, world_size, device = self.args, self.world_size, self.device
+        self.max_tokens = spec.max_tokens_per_rank
         torch_version, nccl_runtime_version = _require_runtime()
-        ladder, _ = ep_harness.token_ladder(args.tokens_ladder, args.phase, None)
-        conditioning = ep_harness.CONDITIONING_LADDERS[args.phase]
-        self.max_tokens = max([*ladder, *conditioning])
         jit_root = Path(os.environ["EP_JIT_CACHE_DIR"])
         scale_up_domain = int(
             getattr(args, "scale_up_domain", None)
@@ -374,7 +377,6 @@ class DeepEPV2Backend:
         allow_hybrid_mode = _configure_gin_mode(args, world_size)
         gin_enabled = allow_hybrid_mode
         communication_backend = "nccl-gin" if gin_enabled else "nccl-device-lsa"
-        self._deferred_jit_snapshot = None
         self.buffer = ElasticBuffer(
             self.group,
             num_max_tokens_per_rank=self.max_tokens,
@@ -497,9 +499,6 @@ class DeepEPV2Backend:
             "physical_rdma_ranks": int(self.buffer.num_rdma_ranks),
             "physical_nvlink_ranks": int(self.buffer.num_nvlink_ranks),
         }
-
-    def buffer_cap(self, args):
-        return self.max_tokens
 
     def make_problem(self, T, idx, weights, x):
         encoding = ep_precision.encode_dispatch(

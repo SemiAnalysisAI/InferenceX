@@ -40,6 +40,7 @@ import torch
 import torch.distributed as dist
 import contracts
 import ep_precision
+from ep_backend import EPBackend
 
 try:
     import deep_ep
@@ -190,20 +191,20 @@ def _hybrid_topology(args, world_size: int) -> dict[str, int | str]:
     }
 
 
-class DeepEPHybridBackend:
+class DeepEPHybridBackend(EPBackend):
     name = "deepep-hybrid"
     stage_device_work = False
     # HybridEPBuffer.combine consumes the recv payload + the dispatch handle (no re-dispatch needed
     # before a timed combine); the harness times dispatch and combine separately (like ep_deepep).
     combine_needs_redispatch = False
     combine_weight_semantics = "unweighted-rank-sum"
+    # Hybrid hands scales back as uint8-viewed storage; the precision-evidence pass
+    # must read them that way.
+    _uint8_scale_storage = True
 
     def __init__(self, args, rank, world_size, local_rank, device):
-        self.args = args
-        self.rank = rank
-        self.world_size = world_size
-        self.device = device
-        self.mode = "normal"
+        # deepep-hybrid is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
+        super().__init__(args, rank, world_size, local_rank, device)
         self.precision_profile_id, self.communication_precision = (
             ep_precision.resolve_precision(
                 args,
@@ -255,6 +256,15 @@ class DeepEPHybridBackend:
             raise RuntimeError("DeepEP Hybrid MNNVL runtime enablement is incomplete")
         # Token cap (per rank) for the symmetric buffer; the sweep is capped here (buffer_cap).
         self.max_tokens = 4096
+        # Stash the topology so the moved create_buffer provenance can read it back.
+        self._topology = topology
+
+    def create_buffer(self, spec):
+        # Local aliases re-expose the __init__ names so the moved tempdir / buffer /
+        # geometry / monkeypatch / provenance body below stays byte-verbatim.
+        args, world_size, rank, device = self.args, self.world_size, self.rank, self.device
+        topology = self._topology
+        assert spec.max_tokens_per_rank <= self.max_tokens
         dev_sms = torch.cuda.get_device_properties(device).multi_processor_count
         ver = _deepep_hybrid_version()
         loaded_libraries = _hybrid_build_evidence()
@@ -537,15 +547,18 @@ class DeepEPHybridBackend:
             dist.destroy_process_group()
         except Exception:
             pass
-        shutil.rmtree(self._jit_cache_dir, ignore_errors=True)
-        if self._previous_jit_cache_dir is None:
-            os.environ.pop("HYBRID_EP_CACHE_DIR", None)
-        else:
-            os.environ["HYBRID_EP_CACHE_DIR"] = self._previous_jit_cache_dir
-        if self._previous_domain_ranks is None:
-            os.environ.pop("NUM_OF_HYBRID_EP_RANKS_PER_NVLINK_DOMAIN", None)
-        else:
-            os.environ[
-                "NUM_OF_HYBRID_EP_RANKS_PER_NVLINK_DOMAIN"
-            ] = self._previous_domain_ranks
+        # create_buffer may not have run (e.g. make_inputs early-returned before it),
+        # so the JIT tempdir/env state only needs unwinding when it was established.
+        if hasattr(self, "_jit_cache_dir"):
+            shutil.rmtree(self._jit_cache_dir, ignore_errors=True)
+            if self._previous_jit_cache_dir is None:
+                os.environ.pop("HYBRID_EP_CACHE_DIR", None)
+            else:
+                os.environ["HYBRID_EP_CACHE_DIR"] = self._previous_jit_cache_dir
+            if self._previous_domain_ranks is None:
+                os.environ.pop("NUM_OF_HYBRID_EP_RANKS_PER_NVLINK_DOMAIN", None)
+            else:
+                os.environ[
+                    "NUM_OF_HYBRID_EP_RANKS_PER_NVLINK_DOMAIN"
+                ] = self._previous_domain_ranks
         return rc

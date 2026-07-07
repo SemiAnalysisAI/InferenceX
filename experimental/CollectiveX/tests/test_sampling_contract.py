@@ -971,9 +971,12 @@ class SamplingContractTest(unittest.TestCase):
             pass_one.index("oracle = _run_expert_oracle"),
         )
         self.assertIn("pre_input_unchanged", pass_one)
+        # The combine timing template reuses one dispatched+staged handle (no per-iter
+        # re-dispatch) for stateless-combine backends; it lives in the base class now.
+        backend = (HERE / "ep_backend.py").read_text()
         self.assertIn(
-            "hh = prep_combine()\n                        torch.cuda.synchronize()",
-            harness,
+            "hh = prep_combine()\n        torch.cuda.synchronize()",
+            backend,
         )
 
     def test_squash_imports_are_reproducible_and_use_a_fresh_cache_key(self) -> None:

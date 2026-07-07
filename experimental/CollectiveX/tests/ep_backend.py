@@ -107,9 +107,11 @@ class EPBackend(abc.ABC):
     """One expert-parallel dispatch/combine transport under a fixed benchmark contract.
 
     Subclasses implement the transport (``create_buffer``, ``dispatch``, ``stage``,
-    ``combine``, ``recv_tokens``, ``inspect_dispatch``, ``combine_transformed``,
-    and the ``supported_profiles`` set); everything the driver and the oracles
-    need beyond that is provided here.
+    ``combine``, ``recv_tokens``, ``inspect_dispatch``, ``combine_transformed``);
+    everything the driver and the oracles need beyond that is provided here. Each
+    adapter resolves its own precision profile in ``__init__`` (passing the profile
+    set inline to ``ep_precision.resolve_precision``), so there is no abstract
+    ``supported_profiles`` hook.
     """
 
     # ---- Contract flags (class defaults; subclasses / low-latency override) ----
@@ -146,11 +148,6 @@ class EPBackend(abc.ABC):
             raise ValueError(f"{self.name} does not support mode {self.mode!r}")
 
     # ---- Abstract transport contract -------------------------------------------------
-
-    @property
-    @abc.abstractmethod
-    def supported_profiles(self):
-        """Precision-profile ids this backend realizes for the current ``self.mode``."""
 
     @abc.abstractmethod
     def create_buffer(self, spec: WorkloadSpec):

@@ -15,6 +15,7 @@ os.environ["MORI_SHMEM_HEAP_SIZE"] = "6G"
 import torch
 import torch.distributed as dist
 import ep_precision
+from ep_backend import EPBackend
 
 try:
     import mori  # type: ignore
@@ -60,7 +61,7 @@ def _mori_input_capacity(args, world_size: int) -> int:
     return max(base, largest * world_size)
 
 
-class MoRIBackend:
+class MoRIBackend(EPBackend):
     name = "mori"
     stage_device_work = False
     combine_needs_redispatch = True
@@ -68,11 +69,8 @@ class MoRIBackend:
     combine_weight_semantics = "unweighted-rank-sum"
 
     def __init__(self, args, rank, world_size, local_rank, device):
-        self.args = args
-        self.rank = rank
-        self.world_size = world_size
-        self.device = device
-        self.mode = "normal"
+        # mori is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
+        super().__init__(args, rank, world_size, local_rank, device)
         runner = str(getattr(args, "runner", ""))
         if runner.startswith("mi355x"):
             fp8_format = "fp8-e4m3fn"
@@ -234,6 +232,17 @@ class MoRIBackend:
         # Registered-input MoRI copies expert output into a device-side symmetric buffer. External
         # input kernels consume the dispatch output directly, so their stage is not applicable.
         self.stage_device_work = self._fp8_dispatch or not self._external_input
+        # Stash the __init__-only locals the moved create_buffer body reads back.
+        self._fp8_format = fp8_format
+        self._gpus_per_node = gpus_per_node
+
+    def create_buffer(self, spec):
+        # Local aliases re-expose the __init__ names so the moved shmem-init /
+        # config / op / provenance body below stays byte-verbatim.
+        args, world_size, rank, device = self.args, self.world_size, self.rank, self.device
+        fp8_format = self._fp8_format
+        gpus_per_node = self._gpus_per_node
+        device_cus = torch.cuda.get_device_properties(device).multi_processor_count
 
         world_group = torch.distributed.group.WORLD
         torch._C._distributed_c10d._register_process_group("default", world_group)
@@ -245,6 +254,7 @@ class MoRIBackend:
             )
 
         self._cap = self.buffer_cap(args)
+        assert spec.max_tokens_per_rank <= self._cap
         dispatch_dtype = (
             getattr(
                 torch,

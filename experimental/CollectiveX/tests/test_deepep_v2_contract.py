@@ -284,25 +284,27 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 key(baseline, 8, 128, False, {**realized, field: changed}),
                 field,
             )
-        init = next(
+        # Buffer construction now lives in create_buffer (it consumes make_inputs),
+        # so the ElasticBuffer/JIT-config/cache-dir ordering is pinned there.
+        build = next(
             node for node in backend.body
-            if isinstance(node, ast.FunctionDef) and node.name == "__init__"
+            if isinstance(node, ast.FunctionDef) and node.name == "create_buffer"
         )
         buffer_call = next(
-            node for node in ast.walk(init)
+            node for node in ast.walk(build)
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "ElasticBuffer"
         )
         jit_config_check = next(
-            node for node in ast.walk(init)
+            node for node in ast.walk(build)
             if isinstance(node, ast.Call)
             and isinstance(node.func, ast.Name)
             and node.func.id == "_require_cross_rank_equal"
             and ast.literal_eval(node.args[1]) == "JIT configuration"
         )
         cache_assignment = next(
-            node for node in ast.walk(init)
+            node for node in ast.walk(build)
             if isinstance(node, ast.Assign)
             and isinstance(node.targets[0], ast.Subscript)
             and ast.unparse(node.targets[0].value) == "os.environ"
@@ -986,7 +988,9 @@ class DeepEPV2ContractTests(unittest.TestCase):
         )
         methods = {node.name for node in backend.body if isinstance(node, ast.FunctionDef)}
         self.assertIn("capture_deferred_provenance", methods)
-        constructor = next(node for node in backend.body if isinstance(node, ast.FunctionDef) and node.name == "__init__")
+        # Buffer construction moved into create_buffer (consumes make_inputs); the
+        # cache-dir → HybridEPBuffer → wrapper-install ordering is pinned there now.
+        constructor = next(node for node in backend.body if isinstance(node, ast.FunctionDef) and node.name == "create_buffer")
         buffer_call = next(
             node for node in ast.walk(constructor)
             if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
