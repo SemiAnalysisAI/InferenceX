@@ -49,17 +49,15 @@ if [ "${DP_ATTENTION}" = "true" ]; then
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
     export SGLANG_DP_USE_REDUCE_SCATTER=1
+    export GPU_MAX_HW_QUEUES=5
 
     CHUNKED_PREFILL_SIZE=$((ISL * TP))
     PARALLEL_ARGS+=(
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
+        --enable-two-batch-overlap
     )
-    if [ "$ISL" -gt 1024 ]; then
-        export GPU_MAX_HW_QUEUES=5
-        PARALLEL_ARGS+=(--enable-two-batch-overlap)
-    fi
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
