@@ -5,9 +5,8 @@
 # is mandatory for MSA sparse attention. Keep the default BF16 KV cache on
 # gfx942: the checkpoint has no calibrated q/prob scales for ROCm FP8
 # attention, and vLLM's fallback scale of 1.0 corrupts model accuracy.
-# --async-scheduling and --max-num-batched-tokens 16384 are accuracy-safe
-# scheduling levers: the larger prefill batch amortizes the per-step
-# BF16-emulated MoE weight read, lifting high-concurrency throughput.
+# --max-num-batched-tokens 16384 amortizes the per-step BF16-emulated MoE
+# weight read over a larger prefill batch, lifting high-concurrency throughput.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -69,7 +68,6 @@ vllm serve "$MODEL" --port "$PORT" \
     --language-model-only \
     --max-model-len "$MAX_MODEL_LEN" \
     --attention-backend TRITON_ATTN \
-    --async-scheduling \
     --max-num-batched-tokens 16384 \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
