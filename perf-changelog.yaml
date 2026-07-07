@@ -4593,6 +4593,7 @@
 - config-keys:
     - dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe
   description:
-    - "Isolate max-tpt (3P+1D DEP8 conc4096) in sweep to diagnose sweep-harness failure"
-    - "Mid-curve and high-tpt dropped temporarily; max-tpt passes standalone e2e but fails in sweep"
+    - "Isolated max-tpt (3P+1D DEP8 conc4096) re-test with unique SLURM job-name fix"
+    - "max-tpt passes standalone e2e but was killed mid weight-load in sweep (run 28789948711)"
+    - "Fix: SLURM --job-name now includes GITHUB_RUN_ID/ATTEMPT so a name-scoped scancel from another job on the shared cluster cannot cancel this allocation"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050

@@ -116,6 +116,21 @@ fi
 export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
+# SLURM job name: make it unique per GitHub run+attempt, not just the runner
+# name. The workflow "Slurm cleanup" steps run
+#   scancel --user="$USER" --name="<runner.name>"
+# at pre-run and post-run, and RUNNER_NAME (e.g. "gb200-nv_1") is stable across
+# runs, so a bare runner-name job can be scancel'd by ANY concurrent/adjacent
+# job on the shared cluster+user that shares the runner name - not just its own
+# pre-run cleanup. That killed the max-tpt (3P1D conc4096) allocation mid
+# weight-load (~10 min in, before the server came up) in run 28789948711, so no
+# benchmark result was produced and the launch step failed with "No benchmark
+# result files found". Appending the run id + attempt makes the name unique, so
+# an exact --name="<runner.name>" scancel from elsewhere no longer matches this
+# allocation. The runner-name prefix is kept first so per-runner cleanup/greps
+# still recognize it.
+SLURM_JOB_NAME="${RUNNER_NAME}-${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}"
+
 JOB_ID=$(sbatch \
     --parsable \
     --exclusive \
@@ -126,7 +141,7 @@ JOB_ID=$(sbatch \
     --time "$TIME_LIMIT" \
     --partition "$SLURM_PARTITION" \
     --account "$SLURM_ACCOUNT" \
-    --job-name "$RUNNER_NAME" \
+    --job-name "$SLURM_JOB_NAME" \
     --output "${BENCHMARK_LOGS_DIR}/slurm_job-%j.out" \
     --error  "${BENCHMARK_LOGS_DIR}/slurm_job-%j.err" \
     "$(dirname "$0")/job.slurm")
