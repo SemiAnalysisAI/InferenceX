@@ -10,7 +10,7 @@
 # flash_mla sparse_decode_fwd KV-layout check under DSpark (run
 # 28859120879); TP support is tracked as a follow-up.
 dsv4-fp4-b300-vllm-dspark:
-  image: vllm/vllm-openai:nightly-34b560b725b401f33477464163244b4744d1c40f
+  image: vllm/vllm-openai:nightly-cbe9c40f998f13975b967773ac7e7920e115387f
   model: deepseek-ai/DeepSeek-V4-Pro-DSpark
   model-prefix: dsv4
   runner: b300

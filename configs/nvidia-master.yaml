@@ -3312,10 +3312,13 @@ dsv4-fp4-b300-vllm-mtp:
 # deepseek-ai/DeepSeek-V4-Pro-DSpark checkpoint (same V4-Pro weights with the
 # semi-autoregressive DSpark drafter attached, so no external draft model) on a
 # pinned vLLM nightly that includes DSpark spec-decode support
-# (vllm-project/vllm#46995 + #47093, merged 2026-07-02). Search space mirrors
-# the MTP entry so tput and acceptance are directly comparable.
+# (vllm-project/vllm#46995 + #47093, merged 2026-07-02) and the DSpark
+# KV-cache bugfixes #47716 + #47429 (merged 2026-07-06; earlier nightlies die
+# at engine init with a FlashMLA sparse KV-shape mismatch, vllm#47648).
+# Search space mirrors the MTP entry so tput and acceptance are directly
+# comparable.
 dsv4-fp4-b300-vllm-dspark:
-  image: vllm/vllm-openai:nightly-34b560b725b401f33477464163244b4744d1c40f
+  image: vllm/vllm-openai:nightly-cbe9c40f998f13975b967773ac7e7920e115387f
   model: deepseek-ai/DeepSeek-V4-Pro-DSpark
   model-prefix: dsv4
   runner: b300
