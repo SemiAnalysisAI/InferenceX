@@ -4582,7 +4582,7 @@
     - "Speeds up the draft forward measured on MI355X TP4 MXFP8, 8k/1k throughput gains growing with concurrency vs no override."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2107
   
-  - config-keys:
+- config-keys:
     - kimik2.5-fp4-b300-vllm-agentic
   description:
     - "Update kimi k2.5 agentx B300"
