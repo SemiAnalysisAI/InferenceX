@@ -10,8 +10,10 @@ SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 PARTITION="main"
 
+export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
 set -x
-srun --partition=$PARTITION --gres=gpu:$TP --exclusive --job-name="$RUNNER_NAME" \
+srun --partition=$PARTITION --gres=gpu:$GPU_COUNT --exclusive --job-name="$RUNNER_NAME" \
 --container-image=$IMAGE \
 --container-name=$(echo "$IMAGE" | sed 's/[\/:@#]/_/g')-${USER} \
 --container-mounts=$GITHUB_WORKSPACE:/workspace/,$HF_HUB_CACHE_MOUNT:$HF_HUB_CACHE,$AIPERF_MMAP_CACHE_HOST_PATH:/aiperf_mmap_cache \
