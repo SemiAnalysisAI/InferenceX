@@ -525,18 +525,16 @@ def _native_fixture(backend: str = "nccl-ep") -> tuple[dict, dict]:
 
 def _series(seed: str, backend: str, *, decision_grade: bool = False) -> tuple[dict, dict]:
     case, allocation, attempt, series_id, point_id, evidence = _ids(seed)
-    allocations = [identity.allocation_id({"seed": seed, "run": run}) for run in range(3)]
+    allocations = [identity.allocation_id({"seed": seed, "run": run}) for run in range(1)]
     eligibility = publisher._eligibility_record(
         allocations if decision_grade else [allocation],
         complete=decision_grade,
         correct=True,
         measured=True,
         stable_ordering=True,
-        p50_ratio=1.01 if decision_grade else None,
-        p99_ratio=1.02 if decision_grade else None,
     )
     component = _component(1.0 if backend == "deepep" else 1.2)
-    qualification_indices = [1, 2, 3] if decision_grade else [1]
+    qualification_indices = [1]
     communication_precision = identity.precision_profile(
         identity.V1_CONTROL_PRECISION_PROFILE
     )
@@ -606,13 +604,6 @@ def _series(seed: str, backend: str, *, decision_grade: bool = False) -> tuple[d
             "point_id": point_id, "tokens_per_rank": 8, "global_tokens": 64,
             "anomalies": [],
             "correctness": {"semantic_pass": True, "precision": _precision_evidence()},
-            "stability": {
-                "complete": decision_grade,
-                "qualification_indices": qualification_indices,
-                "p50_max_min_ratio": 1.02 if decision_grade else None,
-                "p99_max_min_ratio": 1.02 if decision_grade else None,
-                "stable_p50": decision_grade, "stable_p99": decision_grade,
-            },
             "trial_diagnostics": {
                 "flagged": False,
                 "reasons": [],
@@ -687,7 +678,7 @@ def _series(seed: str, backend: str, *, decision_grade: bool = False) -> tuple[d
                 for statistic in ("p50", "p99")
             },
         }}
-        for run in range(3)
+        for run in range(1)
     }
     trial_blocks = {
         run_id: {8: {
@@ -767,7 +758,7 @@ def _dataset() -> dict:
         "generated_at": "2026-07-04T00:00:00Z", "source_bundle_ids": ["c" * 64],
         "promotion": {
             "status": "diagnostic", "reason": None, "matrix_id": "d" * 64,
-            "allocation_ids": [allocation], "required_allocations": 3,
+            "allocation_ids": [allocation], "required_allocations": 1,
             "qualification_indices": [1],
             "requested_cases": 1, "terminal_cases": 1,
             "measured_cases": 1, "unsupported_cases": 0,
@@ -934,7 +925,7 @@ def _promoted_dataset(*, precision_profiles: tuple[str, ...] = ()) -> dict:
         and not case["eplb"] and case["ep"] == 8
     )
     unsupported_attempts = []
-    for run_id in range(1, 4):
+    for run_id in range(1, 2):
         allocation_id = identity.allocation_id(
             {"seed": "planned-unsupported", "run": run_id}
         )
@@ -986,12 +977,12 @@ def _promoted_dataset(*, precision_profiles: tuple[str, ...] = ()) -> dict:
     return {
         "format": "collectivex.public.v1", "schema_version": 1,
         "generated_at": "2026-07-04T00:00:00Z",
-        "source_bundle_ids": ["a" * 64, "b" * 64, "c" * 64],
+        "source_bundle_ids": ["a" * 64],
         "promotion": {
             "status": "promoted", "reason": None,
             "matrix_id": publisher.CANONICAL_FULL_V1_MATRIX_SHA256,
             "allocation_ids": sorted({item["allocation_id"] for item in attempts}),
-            "required_allocations": 3, "qualification_indices": [1, 2, 3],
+            "required_allocations": 1, "qualification_indices": [1],
             "requested_cases": len(coverage), "terminal_cases": len(coverage),
             "measured_cases": len(coverage) - 1, "unsupported_cases": 1,
             "requested_points": sum(len(item["points"]) for item in coverage),
@@ -1033,7 +1024,7 @@ class PublisherTest(unittest.TestCase):
                         "roundtrip": tuple(tuple([10.0] * 8) for _ in range(64)),
                     }
                 }
-                for index in range(1, 4)
+                for index in range(1, 2)
             }
 
         stable = publisher._trial_diagnostics(runs(), 8)
@@ -1041,7 +1032,7 @@ class PublisherTest(unittest.TestCase):
 
         drift = runs()
         drift["1"][8]["roundtrip"] = tuple(
-            tuple([12.0 if trial >= 56 else 10.0] * 8) for trial in range(64)
+            tuple([10.0 + 2.0 * trial / 63.0] * 8) for trial in range(64)
         )
         self.assertEqual(publisher._trial_diagnostics(drift, 8)["reasons"], ["trial-drift"])
 
@@ -1724,18 +1715,9 @@ class PublisherTest(unittest.TestCase):
         unstable_fast["phase"] = unstable_slow["phase"] = "prefill"
         unstable_fast["series_id"] = identity.series_id({"test": "unstable-fast"})
         unstable_slow["series_id"] = identity.series_id({"test": "unstable-slow"})
-        for statistic in ("p50", "p99"):
-            unstable_slow_internal["run_metrics"]["1"][8]["latency_us"][statistic] = (
-                unstable_fast_internal["run_metrics"]["1"][8]["latency_us"][statistic]
-                / 2
-            )
-            for field in (
-                "activation_data_rate_gbps_at_latency_percentile",
-                "total_logical_data_rate_gbps_at_latency_percentile",
-            ):
-                unstable_slow_internal["run_metrics"]["1"][8][field][statistic] = (
-                    unstable_fast_internal["run_metrics"]["1"][8][field][statistic] * 2
-                )
+        # A single-allocation cohort has no cross-run ordering to disagree, so the
+        # prefill pair is made ineligible through missing trial evidence instead.
+        del unstable_slow_internal["trial_blocks"]
         series = [stable_fast, stable_slow, unstable_fast, unstable_slow]
         internals = {
             stable_fast["series_id"]: stable_fast_internal,
@@ -1818,7 +1800,7 @@ class PublisherTest(unittest.TestCase):
                     dataset["cohorts"], dataset["series"]
                 )
 
-    def test_promotion_rejects_more_than_three_bundles(self) -> None:
+    def test_promotion_rejects_more_than_one_bundle(self) -> None:
         bundles = {
             str(run_id): {
                 "id": str(run_id), "cases": [],
@@ -1826,15 +1808,15 @@ class PublisherTest(unittest.TestCase):
                     "matrix": {"sha256": publisher.CANONICAL_FULL_V1_MATRIX_SHA256},
                     "run": {
                         "run_id": str(run_id), "run_attempt": 1,
-                        "qualification_index": min(run_id, 3),
+                        "qualification_index": 1,
                     },
                 },
             }
-            for run_id in range(1, 5)
+            for run_id in range(1, 3)
         }
         with mock.patch.object(
             publisher, "load_bundle", side_effect=lambda _, bundle_id: bundles[bundle_id]
-        ), self.assertRaisesRegex(publisher.PublisherError, "qualification indices"):
+        ), self.assertRaisesRegex(publisher.PublisherError, "qualification index 1"):
             publisher.build_dataset(object(), list(bundles), promote=True)
 
         dataset = _promoted_dataset()
@@ -1870,9 +1852,7 @@ class PublisherTest(unittest.TestCase):
         item["status"] = "diagnostic"
         item["eligibility"].update({
             "decision_grade": False,
-            "stable_p50": False,
-            "p50_max_min_ratio": 1.20,
-            "reasons": ["unstable-p50"],
+            "reasons": ["insufficient-allocations"],
         })
         with mock.patch.object(
             publisher, "CANONICAL_FULL_V1_CASE_CATALOG_SHA256", fixture_catalog
@@ -2009,7 +1989,7 @@ class PublisherTest(unittest.TestCase):
                     },
                 },
             }
-            for run_id in range(1, 4)
+            for run_id in range(1, 2)
         }
         with mock.patch.object(
             publisher, "load_bundle", side_effect=lambda _, bundle_id: bundles[bundle_id]
@@ -2404,6 +2384,7 @@ class PublisherTest(unittest.TestCase):
         )
         library = next(item for item in cohorts if item["kind"] == "library")
         self.assertTrue(library["eligibility"]["decision_grade"])
+        self.assertTrue(library["eligibility"]["stable_ordering"])
         self.assertEqual(
             len([item for item in rankings if item["cohort_id"] == library["cohort_id"]]),
             6,
@@ -2416,20 +2397,14 @@ class PublisherTest(unittest.TestCase):
             1,
         )
 
-        for statistic in ("p50", "p99"):
-            for field in (
-                "activation_data_rate_gbps_at_latency_percentile",
-                "total_logical_data_rate_gbps_at_latency_percentile",
-            ):
-                slow_internal["run_metrics"]["1"][8][field][statistic] = (
-                    fast_internal["run_metrics"]["1"][8][field][statistic] * 2
-                )
+        # A cohort whose single run is missing trial evidence cannot be ranked.
+        del slow_internal["trial_blocks"]
         cohorts, rankings, recommendations, _ = publisher.build_decisions(
             [fast, slow], internals
         )
         library = next(item for item in cohorts if item["kind"] == "library")
         self.assertFalse(library["eligibility"]["decision_grade"])
-        self.assertIn("unstable-ordering", library["eligibility"]["reasons"])
+        self.assertIn("missing-trial-blocks", library["eligibility"]["reasons"])
         self.assertFalse(any(
             item["cohort_id"] == library["cohort_id"] for item in rankings
         ))
@@ -2528,7 +2503,7 @@ class PublisherTest(unittest.TestCase):
     def test_p99_winner_requires_every_run_to_agree(self) -> None:
         fast, fast_internal = _series("run-fast", "deepep", decision_grade=True)
         slow, slow_internal = _series("run-slow", "uccl", decision_grade=True)
-        ratios = {"0": 0.98, "1": 1.20, "2": 1.20}
+        ratios = {"0": 0.98}
         for run_id, ratio in ratios.items():
             slow_internal["trial_blocks"][run_id][8]["roundtrip"] = tuple(
                 tuple(sample * ratio for sample in block)
@@ -2684,10 +2659,10 @@ class PublisherTest(unittest.TestCase):
         self.assertEqual((rankings, recommendations, sensitivities), ([], [], []))
 
     def test_extra_eligibility_reason_blocks_decision_grade(self) -> None:
-        allocations = [identity.allocation_id({"run": run}) for run in range(3)]
+        allocations = [identity.allocation_id({"run": run}) for run in range(1)]
         eligibility = publisher._eligibility_record(
             allocations, complete=True, correct=True, measured=True,
-            stable_ordering=True, p50_ratio=1.01, p99_ratio=1.02,
+            stable_ordering=True,
             extra_reasons=["incomplete-provenance"],
         )
         self.assertFalse(eligibility["decision_grade"])

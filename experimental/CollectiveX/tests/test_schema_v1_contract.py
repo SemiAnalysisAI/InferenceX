@@ -164,14 +164,14 @@ class CollectiveXV1SchemaContractTest(unittest.TestCase):
             self.assertEqual((value["minimum"], value["maximum"]), (1, 3))
         promotion_indices = self.public["properties"]["promotion"]["properties"]["qualification_indices"]
         series_indices = self.public["$defs"]["series"]["properties"]["measurement"]["properties"]["qualification_indices"]
-        for schema, valid_values in (
-            (promotion_indices, ([], [1], [1, 2, 3])),
-            (series_indices, ([1], [2, 3], [1, 2, 3])),
+        for schema, valid_values, invalid_values in (
+            (promotion_indices, ([], [1]), ([0], [2], [1, 2], [1, 2, 3])),
+            (series_indices, ([1], [2, 3], [1, 2, 3]), ([0], [4], [1, 1], [1, 2, 3, 1])),
         ):
             validator = jsonschema.Draft202012Validator(schema)
             for value in valid_values:
                 validator.validate(value)
-            for value in ([0], [4], [1, 1], [1, 2, 3, 1]):
+            for value in invalid_values:
                 with self.assertRaises(jsonschema.ValidationError):
                     validator.validate(value)
         measurement = self.raw["properties"]["measurement"]
@@ -368,10 +368,11 @@ class CollectiveXV1SchemaContractTest(unittest.TestCase):
             with self.assertRaises(jsonschema.ValidationError):
                 validator.validate(broken)
 
-    def test_public_measured_point_has_bounded_detail_and_three_run_stability(self) -> None:
+    def test_public_measured_point_has_bounded_detail(self) -> None:
         point = self.public["$defs"]["point"]
         self.assertFalse(point["additionalProperties"])
-        self.assertTrue({"anomalies", "correctness", "stability"} <= set(point["required"]))
+        self.assertTrue({"anomalies", "correctness"} <= set(point["required"]))
+        self.assertNotIn("stability", point["properties"])
         self.assertNotIn("correct", point["properties"])
 
         axis = {
@@ -400,44 +401,6 @@ class CollectiveXV1SchemaContractTest(unittest.TestCase):
         broken_correctness["precision"]["dispatch"]["unexpected"] = True
         with self.assertRaises(jsonschema.ValidationError):
             correctness_validator.validate(broken_correctness)
-
-        stability_validator = _definition_validator(self.public, "pointStability")
-        stability_validator.validate({
-            "complete": True,
-            "qualification_indices": [1, 2, 3],
-            "p50_max_min_ratio": 1.02,
-            "p99_max_min_ratio": 1.04,
-            "stable_p50": True,
-            "stable_p99": True,
-        })
-        stability_validator.validate({
-            "complete": False,
-            "qualification_indices": [2],
-            "p50_max_min_ratio": None,
-            "p99_max_min_ratio": None,
-            "stable_p50": False,
-            "stable_p99": False,
-        })
-        for broken in (
-            {
-                "complete": True,
-                "qualification_indices": [1, 2],
-                "p50_max_min_ratio": 1.0,
-                "p99_max_min_ratio": 1.0,
-                "stable_p50": True,
-                "stable_p99": True,
-            },
-            {
-                "complete": False,
-                "qualification_indices": [1],
-                "p50_max_min_ratio": 1.0,
-                "p99_max_min_ratio": None,
-                "stable_p50": False,
-                "stable_p99": False,
-            },
-        ):
-            with self.assertRaises(jsonschema.ValidationError):
-                stability_validator.validate(broken)
 
         anomalies = point["properties"]["anomalies"]
         self.assertEqual(anomalies["maxItems"], 16)

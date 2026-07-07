@@ -48,8 +48,8 @@
                     "reason": {"$ref": "#/$defs/reason"},
                     "matrix_id": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/sha256"}]},
                     "allocation_ids": {"type": "array","uniqueItems": true,"items": {"$ref": "#/$defs/allocationId"}},
-                    "required_allocations": {"const": 3},
-                    "qualification_indices": {"type":"array","minItems":0,"maxItems":3,"uniqueItems":true,"items":{"enum":[1,2,3]}},
+                    "required_allocations": {"const": 1},
+                    "qualification_indices": {"type":"array","minItems":0,"maxItems":1,"uniqueItems":true,"items":{"enum":[1]}},
                     "requested_cases": {"type": "integer","minimum": 0},
                     "terminal_cases": {"type": "integer","minimum": 0},
                     "measured_cases": {"type": "integer","minimum": 0},
@@ -166,38 +166,6 @@
             "properties": {
                     "semantic_pass":{"type":"boolean"},
                     "precision":{"$ref":"#/$defs/precisionEvidence"}
-                  }
-          },
-      "pointStability": {
-            "type":"object",
-            "additionalProperties":false,
-            "allOf":[
-                    {
-                              "if":{"properties":{"complete":{"const":true}},"required":["complete"]},
-                              "then":{"properties":{
-                                      "qualification_indices":{"const":[1,2,3]},
-                                      "p50_max_min_ratio":{"type":"number","minimum":1},
-                                      "p99_max_min_ratio":{"type":"number","minimum":1}
-                                    }},
-                              "else":{"properties":{
-                                      "p50_max_min_ratio":{"type":"null"},
-                                      "p99_max_min_ratio":{"type":"null"},
-                                      "stable_p50":{"const":false},
-                                      "stable_p99":{"const":false}
-                                    }}
-                            }
-                  ],
-            "required":[
-                    "complete","qualification_indices","p50_max_min_ratio","p99_max_min_ratio",
-                    "stable_p50","stable_p99"
-                  ],
-            "properties": {
-                    "complete":{"type":"boolean"},
-                    "qualification_indices":{"type":"array","minItems":1,"maxItems":3,"uniqueItems":true,"items":{"enum":[1,2,3]}},
-                    "p50_max_min_ratio":{"oneOf":[{"type":"null"},{"type":"number","minimum":1}]},
-                    "p99_max_min_ratio":{"oneOf":[{"type":"null"},{"type":"number","minimum":1}]},
-                    "stable_p50":{"type":"boolean"},
-                    "stable_p99":{"type":"boolean"}
                   }
           },
       "coverageTopology": {
@@ -381,11 +349,7 @@
                     "complete",
                     "correct",
                     "measured_roundtrip_p99",
-                    "stable_p50",
-                    "stable_p99",
                     "stable_ordering",
-                    "p50_max_min_ratio",
-                    "p99_max_min_ratio",
                     "reasons"
                   ],
             "properties": {
@@ -394,11 +358,7 @@
                     "complete": {"type": "boolean"},
                     "correct": {"type": "boolean"},
                     "measured_roundtrip_p99": {"type": "boolean"},
-                    "stable_p50": {"type": "boolean"},
-                    "stable_p99": {"type": "boolean"},
                     "stable_ordering": {"type": "boolean"},
-                    "p50_max_min_ratio": {"oneOf": [{"type": "null"},{"type": "number","minimum": 1}]},
-                    "p99_max_min_ratio": {"oneOf": [{"type": "null"},{"type": "number","minimum": 1}]},
                     "reasons": {
                               "type": "array",
                               "uniqueItems": true,
@@ -483,7 +443,6 @@
                     "global_tokens",
                     "anomalies",
                     "correctness",
-                    "stability",
                     "trial_diagnostics",
                     "routing",
                     "components",
@@ -496,7 +455,6 @@
                     "global_tokens": {"type": "integer","minimum": 1},
                     "anomalies": {"type":"array","maxItems":16,"uniqueItems":true,"items":{"$ref":"#/$defs/reasonId"}},
                     "correctness": {"$ref":"#/$defs/pointCorrectness"},
-                    "stability": {"$ref":"#/$defs/pointStability"},
                     "trial_diagnostics":{"$ref":"#/$defs/trialDiagnostics"},
                     "routing": {
                               "type": "object",

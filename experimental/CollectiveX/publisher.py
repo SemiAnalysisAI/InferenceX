@@ -39,7 +39,7 @@ FORMAT_CHANNEL = "collectivex.channel.v1"
 POLICY = "collectivex-decision-grade-v1"
 PUBLISHER_POLICY = "collectivex-publisher-v1"
 OUTCOMES = ("success", "unsupported", "failed", "invalid", "diagnostic")
-REQUIRED_ALLOCATIONS = 3
+REQUIRED_ALLOCATIONS = 1
 REQUIRED_COHORT_KINDS = ("library", "chip", "system")
 PRECISION_COHORT_KINDS = (
     "dispatch-precision", "combine-precision", "precision-pair",
@@ -51,8 +51,6 @@ CANONICAL_FULL_V1_MATRIX_SHA256 = (
 CANONICAL_FULL_V1_CASE_CATALOG_SHA256 = (
     "bbba014c9920e6349e9b269dee7cea4f397eaa4569bb8aac7b6ed09f6265905f"
 )
-P50_STABILITY_LIMIT = 1.10
-P99_STABILITY_LIMIT = 1.25
 TRIAL_DRIFT_RATIO_LIMIT = 1.10
 TRIAL_OUTLIER_FRACTION_LIMIT = 0.05
 TRIAL_OUTLIER_MAD_MULTIPLIER = 6.0
@@ -162,14 +160,10 @@ def _unique(values: Sequence[Any], path: str) -> None:
 
 def _eligibility(value: dict[str, Any], path: str) -> dict[str, Any]:
     allocations = value["allocation_ids"]
-    p50 = value["p50_max_min_ratio"]
-    p99 = value["p99_max_min_ratio"]
     gates = (
         len(allocations) >= REQUIRED_ALLOCATIONS,
         value["complete"], value["correct"], value["measured_roundtrip_p99"],
-        value["stable_p50"], value["stable_p99"], value["stable_ordering"],
-        p50 is not None and p50 <= P50_STABILITY_LIMIT,
-        p99 is not None and p99 <= P99_STABILITY_LIMIT,
+        value["stable_ordering"],
     )
     if value["decision_grade"] != (all(gates) and not value["reasons"]):
         raise PublisherError(f"{path}.decision_grade does not match promotion gates")
@@ -853,10 +847,8 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                     point_correctness["semantic_pass"]
                     and not point_correctness["precision"]["passed"]
                 )
-                or point["stability"]["qualification_indices"]
-                != item["measurement"]["qualification_indices"]
             ):
-                raise PublisherError("point correctness/stability differs from series evidence")
+                raise PublisherError("point correctness differs from series evidence")
             diagnostics = point["trial_diagnostics"]
             diagnostic_reasons = set(diagnostics["reasons"])
             component_reasons: set[str] = set()
@@ -1279,7 +1271,7 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
                 attempts[attempt_id]["qualification_index"]
                 for attempt_id in coverage["attempt_ids"]
                 if attempts[attempt_id]["selected"]
-            } == {1, 2, 3}
+            } == {1}
             for coverage in doc["coverage"]
         )
         if promotion["matrix_id"] != CANONICAL_FULL_V1_MATRIX_SHA256:
@@ -1291,7 +1283,7 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError("promotion requires the canonical case/disposition catalog")
         if (
             terminal != len(doc["coverage"])
-            or promotion["qualification_indices"] != [1, 2, 3]
+            or promotion["qualification_indices"] != [1]
             or promotion["measured_cases"] + promotion["unsupported_cases"]
             != promotion["requested_cases"]
             or promotion["measured_points"] + promotion["unsupported_points"]
@@ -2319,10 +2311,6 @@ def _public_attempt(document: dict[str, Any], *, selected: bool = False) -> dict
     }
 
 
-def _ratio(values: Sequence[float]) -> float | None:
-    return max(values) / min(values) if len(values) >= REQUIRED_ALLOCATIONS and min(values) > 0 else None
-
-
 def _private_trial_components(sample_document: dict[str, Any]) -> dict[int, dict[str, Any]]:
     """Copy validated trial blocks into publisher-private memory without fixing component names."""
     points: dict[int, dict[str, Any]] = {}
@@ -2371,7 +2359,7 @@ def _trial_diagnostics(
             raise PublisherError(f"{name} trial availability differs across qualification runs")
         array = np.asarray(values, dtype=np.float64)
         if array.shape != (REQUIRED_ALLOCATIONS, 64, 8) or not np.isfinite(array).all():
-            raise PublisherError(f"{name} trial diagnostics require three finite 64x8 runs")
+            raise PublisherError(f"{name} trial diagnostics require finite 64x8 runs")
         medians = np.median(array, axis=2)
         first = np.median(medians[:, :8], axis=1)
         last = np.median(medians[:, -8:], axis=1)
@@ -2422,7 +2410,7 @@ def _roundtrip_trial_array(
         raise PublisherError("series is missing private trial blocks")
     run_ids = tuple(sorted(trial_blocks, key=lambda value: (int(value), value)))
     if len(run_ids) != REQUIRED_ALLOCATIONS:
-        raise PublisherError("p99 bootstrap requires exactly three run blocks")
+        raise PublisherError("p99 bootstrap requires exactly one run block")
     values = []
     for run_id in run_ids:
         point = trial_blocks[run_id].get(token)
@@ -2499,11 +2487,11 @@ def _hierarchical_p99_ratio(
     p99_index = math.ceil(0.99 * 512) - 1
     for start in range(0, BOOTSTRAP_RESAMPLES, BOOTSTRAP_CHUNK_SIZE):
         size = min(BOOTSTRAP_CHUNK_SIZE, BOOTSTRAP_RESAMPLES - start)
-        sampled_runs = rng.integers(0, REQUIRED_ALLOCATIONS, size=(size, 3))
-        sampled_blocks = rng.integers(0, 64, size=(size, 3, 64))
+        sampled_runs = rng.integers(0, REQUIRED_ALLOCATIONS, size=(size, REQUIRED_ALLOCATIONS))
+        sampled_blocks = rng.integers(0, 64, size=(size, REQUIRED_ALLOCATIONS, 64))
         run_index = sampled_runs[:, :, None]
-        baseline_sample = baseline[run_index, sampled_blocks].reshape(size, 3, 512)
-        candidate_sample = candidate[run_index, sampled_blocks].reshape(size, 3, 512)
+        baseline_sample = baseline[run_index, sampled_blocks].reshape(size, REQUIRED_ALLOCATIONS, 512)
+        candidate_sample = candidate[run_index, sampled_blocks].reshape(size, REQUIRED_ALLOCATIONS, 512)
         baseline_p99 = np.partition(baseline_sample, p99_index, axis=2)[:, :, p99_index]
         candidate_p99 = np.partition(candidate_sample, p99_index, axis=2)[:, :, p99_index]
         ratios[start:start + size] = (
@@ -2562,21 +2550,15 @@ def _eligibility_record(
     correct: bool,
     measured: bool,
     stable_ordering: bool,
-    p50_ratio: float | None,
-    p99_ratio: float | None,
     extra_reasons: Sequence[str] = (),
 ) -> dict[str, Any]:
     ids = sorted(set(allocations))
-    stable_p50 = p50_ratio is not None and p50_ratio <= P50_STABILITY_LIMIT
-    stable_p99 = p99_ratio is not None and p99_ratio <= P99_STABILITY_LIMIT
     reasons = list(extra_reasons)
     for condition, reason in (
         (len(ids) >= REQUIRED_ALLOCATIONS, "insufficient-allocations"),
         (complete, "incomplete-repeat-coverage"),
         (correct, "correctness-failed"),
         (measured, "missing-measured-roundtrip-p99"),
-        (stable_p50, "unstable-p50"),
-        (stable_p99, "unstable-p99"),
         (stable_ordering, "unstable-ordering"),
     ):
         if not condition:
@@ -2589,11 +2571,7 @@ def _eligibility_record(
         "complete": complete,
         "correct": correct,
         "measured_roundtrip_p99": measured,
-        "stable_p50": stable_p50,
-        "stable_p99": stable_p99,
         "stable_ordering": stable_ordering,
-        "p50_max_min_ratio": p50_ratio,
-        "p99_max_min_ratio": p99_ratio,
         "reasons": reasons,
     }
 
@@ -2780,16 +2758,6 @@ def _build_series(
     qualification_indices = sorted(
         document["measurement"]["qualification_index"] for document in documents
     )
-    p50_ratios = [
-        _ratio([rows[token]["components"]["roundtrip"]["percentiles_us"]["p50"] for rows in row_maps])
-        for token in tokens
-    ]
-    p99_ratios = [
-        _ratio([rows[token]["components"]["roundtrip"]["percentiles_us"]["p99"] for rows in row_maps])
-        for token in tokens
-    ]
-    p50_ratio = max((value for value in p50_ratios if value is not None), default=None)
-    p99_ratio = max((value for value in p99_ratios if value is not None), default=None)
     correct = all(
         row["correctness"]["passed"]
         for document in documents for row in document["measurement"]["rows"]
@@ -2905,24 +2873,6 @@ def _build_series(
                 anomaly["type"].replace("_", "-")
                 for row in rows for anomaly in row["anomalies"]
             } | set(diagnostics["reasons"])),
-            "stability": {
-                "complete": qualification_indices == [1, 2, 3],
-                "qualification_indices": qualification_indices,
-                "p50_max_min_ratio": p50_ratios[tokens.index(token)]
-                if qualification_indices == [1, 2, 3] else None,
-                "p99_max_min_ratio": p99_ratios[tokens.index(token)]
-                if qualification_indices == [1, 2, 3] else None,
-                "stable_p50": bool(
-                    qualification_indices == [1, 2, 3]
-                    and p50_ratios[tokens.index(token)] is not None
-                    and p50_ratios[tokens.index(token)] <= P50_STABILITY_LIMIT
-                ),
-                "stable_p99": bool(
-                    qualification_indices == [1, 2, 3]
-                    and p99_ratios[tokens.index(token)] is not None
-                    and p99_ratios[tokens.index(token)] <= P99_STABILITY_LIMIT
-                ),
-            },
             "trial_diagnostics": diagnostics,
             "routing": routing,
             "components": components,
@@ -2940,8 +2890,6 @@ def _build_series(
         measured=measured,
         # Ordering is defined only across alternatives in a controlled cohort.
         stable_ordering=True,
-        p50_ratio=p50_ratio,
-        p99_ratio=p99_ratio,
         extra_reasons=sorted(set(extra_reasons)),
     )
     series = {
@@ -3333,14 +3281,6 @@ def build_decisions(
             same_points = len({tuple(sorted(values)) for values in token_sets}) == 1
             ordering, aligned_runs = _cohort_ordering(members, internals, tokens) if tokens else (False, 0)
             allocations = sorted({value for member in members for value in member["allocation_ids"]})
-            p50_ratio = max(
-                (member["eligibility"]["p50_max_min_ratio"] for member in members
-                 if member["eligibility"]["p50_max_min_ratio"] is not None), default=None
-            )
-            p99_ratio = max(
-                (member["eligibility"]["p99_max_min_ratio"] for member in members
-                 if member["eligibility"]["p99_max_min_ratio"] is not None), default=None
-            )
             extra = {
                 reason for member in members for reason in member["eligibility"]["reasons"]
                 if reason not in {"unstable-ordering"}
@@ -3370,8 +3310,6 @@ def build_decisions(
                 correct=all(member["eligibility"]["correct"] for member in members),
                 measured=all(member["eligibility"]["measured_roundtrip_p99"] for member in members),
                 stable_ordering=ordering,
-                p50_ratio=p50_ratio,
-                p99_ratio=p99_ratio,
                 extra_reasons=sorted(extra),
             )
             member_ids = [member["series_id"] for member in members]
@@ -3689,11 +3627,11 @@ def build_dataset(
     if promote and (
         len(loaded) != REQUIRED_ALLOCATIONS
         or len(run_ids) != len(set(run_ids))
-        or qualification_indices != [1, 2, 3]
+        or qualification_indices != [1]
         or any(bundle["manifest"]["run"]["run_attempt"] != 1 for bundle in loaded)
     ):
         raise PublisherError(
-            "promotion requires qualification indices 1, 2, and 3 from first-attempt runs"
+            "promotion requires qualification index 1 from a first-attempt run"
         )
     if promote and matrix_ids != {CANONICAL_FULL_V1_MATRIX_SHA256}:
         raise PublisherError("promotion requires the canonical full-v1 matrix")
@@ -4001,7 +3939,7 @@ def _bundle_ids(values: Sequence[str], *, promote: bool) -> list[str]:
     ):
         raise PublisherError("bundle IDs must be unique SHA-256 digests")
     if promote and len(bundle_ids) != REQUIRED_ALLOCATIONS:
-        raise PublisherError("promotion requires exactly three explicit bundle IDs")
+        raise PublisherError("promotion requires exactly one explicit bundle ID")
     return bundle_ids
 
 
