@@ -53,11 +53,15 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     tp = env_int("TP", 1)
     ep = env_int("EP_SIZE", 1)
     dp_attention = os.environ.get("DP_ATTENTION", "false")
-    num_gpus = tp
     fields: dict[str, Any] = {}
 
     if not is_multinode:
-        return fields, num_gpus, tp, ep, dp_attention
+        dcp_size = env_int("DCP_SIZE", 1)
+        pcp_size = env_int("PCP_SIZE", 1)
+        if dcp_size <= 0 or pcp_size <= 0:
+            raise SystemExit("DCP_SIZE and PCP_SIZE must be positive integers.")
+        fields.update({"dcp_size": dcp_size, "pcp_size": pcp_size})
+        return fields, tp * pcp_size, tp, ep, dp_attention
 
     prefill_num_workers = env_int("PREFILL_NUM_WORKERS")
     prefill_tp = env_int("PREFILL_TP")
@@ -67,6 +71,12 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
     decode_tp = env_int("DECODE_TP")
     decode_ep = env_int("DECODE_EP", 1)
     decode_dp_attention = os.environ.get("DECODE_DP_ATTN", "false")
+    prefill_hardware = os.environ.get("PREFILL_HARDWARE", "")
+    decode_hardware = os.environ.get("DECODE_HARDWARE", "")
+    if bool(prefill_hardware) != bool(decode_hardware):
+        raise SystemExit(
+            "PREFILL_HARDWARE and DECODE_HARDWARE must be specified together."
+        )
     num_prefill_gpu = prefill_num_workers * prefill_tp
     num_decode_gpu = decode_num_workers * decode_tp
     num_gpus = num_prefill_gpu + num_decode_gpu
@@ -91,6 +101,9 @@ def _gpu_shape() -> tuple[dict[str, Any], int, int, int, str]:
             "num_decode_gpu": num_decode_gpu,
         }
     )
+    if prefill_hardware:
+        fields["prefill_hw"] = prefill_hardware
+        fields["decode_hw"] = decode_hardware
     return fields, num_gpus, tp, ep, dp_attention
 
 
