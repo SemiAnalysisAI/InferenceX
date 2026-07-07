@@ -8,7 +8,7 @@
 # false-EOS / truncated-generation symptom in sgl issue #20404) and validates
 # GSM8K 0.950 with MTP on.
 
-source "$(dirname "$0")/../benchmark_lib.sh"
+source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
