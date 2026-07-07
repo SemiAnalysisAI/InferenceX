@@ -45,7 +45,6 @@ PARALLEL_ARGS=(
 )
 CHUNKED_PREFILL_SIZE=$ISL
 if [ "${DP_ATTENTION}" = "true" ]; then
-    export GPU_MAX_HW_QUEUES=5
     export SGLANG_SHARED_EXPERT_TP1=1
     export SGLANG_DP_SHARED_EXPERT_LOCAL=1
     export SGLANG_DP_USE_GATHERV=1
@@ -56,9 +55,11 @@ if [ "${DP_ATTENTION}" = "true" ]; then
         --dp "$TP"
         --enable-dp-attention
         --enable-prefill-delayer
-        --prefill-delayer-max-delay-ms 5000
-        --enable-two-batch-overlap
     )
+    if [ "$ISL" -gt 1024 ]; then
+        export GPU_MAX_HW_QUEUES=5
+        PARALLEL_ARGS+=(--enable-two-batch-overlap)
+    fi
 fi
 if [ "${EP_SIZE:-1}" -gt 1 ]; then
     PARALLEL_ARGS+=(--ep-size "$EP_SIZE")
@@ -72,10 +73,12 @@ sglang serve \
     --trust-remote-code \
     --disable-radix-cache \
     --attention-backend dsv4 \
+    --cuda-graph-max-bs ${CONC} \
     --max-running-requests ${CONC} \
     --mem-fraction-static 0.90 \
     --swa-full-tokens-ratio 0.15 \
     --page-size 256 \
+    --kv-cache-dtype fp8_e4m3 \
     --context-length $MAX_MODEL_LEN \
     --chunked-prefill-size $CHUNKED_PREFILL_SIZE \
     --disable-shared-experts-fusion \
