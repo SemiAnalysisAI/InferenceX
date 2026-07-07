@@ -1,6 +1,6 @@
 # 1k1k 2P1D / DEP12 / total 5 nodes
 # rate-match point between 2:4 and 3:4; c8bd stack, single conc=18432, mrr=13824
-# stack: lmsysorg/sglang nightly-dev-cu13-20260520-425dffbd (megamoe) + dynamo dd37acac04
+# stack: lmsysorg/sglang nightly-dev-cu13-20260707-b4155233 (megamoe) + dynamo 81d0555e
 
 name: "disagg-2p1d-dep12-conc18432"
 slurm:
@@ -39,7 +39,7 @@ frontend:
     no-kv-events: true
 model:
   path: "deepseek-v4-pro"
-  container: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
+  container: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
   precision: fp4
 resources:
   gpu_type: gb300
@@ -141,4 +141,4 @@ backend:
       cuda-graph-max-bs: 1152
 benchmark:
   type: custom
-  command: "set -e\nulimit -n 1048576\nREPO=/configs/upstream-sa-bench/InferenceX\n[ -d \"$REPO\" ] || git clone https://github.com/fzyzcjy/InferenceX.git \"$REPO\"\ncd \"$REPO/utils/bench_serving\"\n\necho \"=== 2P1D DEP12 rate-match point: conc=18432 prompts=55296 warmups=18432 mrr=13824 ===\"\npython3 benchmark_serving.py \\\n  --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \\\n  --host 127.0.0.1 --port 8000 --endpoint /v1/completions \\\n  --dataset-name random \\\n  --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \\\n  --random-num-workers 96 \\\n  --num-prompts 55296 --max-concurrency 18432 --request-rate inf \\\n  --num-warmups 18432 \\\n  --ignore-eos --trust-remote-code \\\n  --percentile-metrics ttft,tpot,itl,e2el \\\n  --save-result --result-dir /logs --result-filename results_conc18432_mrr13824.json\n"
+  command: "set -e\nulimit -n 1048576\nREPO=/configs/upstream-sa-bench/InferenceX\n[ -d \"$REPO\" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git \"$REPO\"\ncd \"$REPO/utils/bench_serving\"\n\necho \"=== 2P1D DEP12 rate-match point: conc=18432 prompts=55296 warmups=18432 mrr=13824 ===\"\npython3 benchmark_serving.py \\\n  --backend vllm --model deepseek-ai/DeepSeek-V4-Pro --tokenizer /model \\\n  --host 127.0.0.1 --port 8000 --endpoint /v1/completions \\\n  --dataset-name random \\\n  --random-input-len 1024 --random-output-len 1024 --random-range-ratio 0.8 \\\n  --random-num-workers 96 \\\n  --num-prompts 55296 --max-concurrency 18432 --request-rate inf \\\n  --num-warmups 18432 \\\n  --ignore-eos --trust-remote-code \\\n  --percentile-metrics ttft,tpot,itl,e2el \\\n  --save-result --result-dir /logs --result-filename results_conc18432_mrr13824.json\n"

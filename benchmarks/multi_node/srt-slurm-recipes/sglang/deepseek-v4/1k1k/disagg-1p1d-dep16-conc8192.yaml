@@ -1,6 +1,6 @@
 # 1k1k 1P1D / DEP16 / total 5 nodes
 # conc sweep: 2048, 4096, 8192 (c/4, c/2, c where c = X * 8192)
-# stack: lmsysorg/sglang nightly-dev-cu13-20260520-425dffbd (megamoe) + dynamo dd37acac04
+# stack: lmsysorg/sglang nightly-dev-cu13-20260707-b4155233 (megamoe) + dynamo 81d0555e
 
 name: "disagg-1p1d-dep16-conc8192"
 
@@ -44,7 +44,7 @@ frontend:
 
 model:
   path: "deepseek-v4-pro"
-  container: "lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd"
+  container: "lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233"
   precision: fp4
 
 resources:
@@ -157,7 +157,7 @@ benchmark:
       set -e
       ulimit -n 1048576
       REPO=/configs/upstream-sa-bench/InferenceX
-      [ -d "$REPO" ] || git clone https://github.com/fzyzcjy/InferenceX.git "$REPO"
+      [ -d "$REPO" ] || git clone https://github.com/SemiAnalysisAI/InferenceX.git "$REPO"
       cd "$REPO/utils/bench_serving"
 
       echo "=== block conc=2048 prompts=6144 warmups=2048 ==="
