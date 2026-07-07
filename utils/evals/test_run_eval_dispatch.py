@@ -432,3 +432,24 @@ def test_swebench_eval_source_contains_include_path_wiring():
     assert 'dirname "$yaml_path"' in content or "dirname \"$yaml_path\"" in content, (
         "benchmark_lib.sh run_swebench_eval does not derive EVAL_INCLUDE_PATH via dirname"
     )
+
+
+def test_modal_credentials_sanitizes_whitespace_contaminated_tokens(tmp_path):
+    """CI secrets pasted with a trailing newline must be stripped before use
+    (a contaminated token fails Modal validation: 'Token validation failed')."""
+    home = tmp_path / "home"
+    home.mkdir()
+    script = r"""
+source "$BENCHMARK_LIB" 2>/dev/null
+export SWEBENCH_USE_MODAL=true
+export MODAL_TOKEN_ID='ak-clean123'
+export MODAL_TOKEN_SECRET="$(printf 'as-dirty456\n')"
+_ensure_modal_credentials
+grep -q 'token_secret = "as-dirty456"' "$HOME/.modal.toml" || { echo FILE_DIRTY; exit 1; }
+[ "$MODAL_TOKEN_SECRET" = "as-dirty456" ] || { echo ENV_DIRTY; exit 1; }
+echo SANITIZED_OK
+"""
+    env = {**os.environ, "BENCHMARK_LIB": str(BENCHMARK_LIB), "HOME": str(home)}
+    res = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "SANITIZED_OK" in res.stdout

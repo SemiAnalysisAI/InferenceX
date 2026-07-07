@@ -1170,6 +1170,19 @@ _install_swebench_deps() {
 # the env so the harness's check passes. Never overwrite an existing file.
 _ensure_modal_credentials() {
     if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
+    # CI secrets are frequently pasted with a trailing newline (or quotes); a
+    # contaminated token fails Modal validation outright ("Token validation
+    # failed"). Tokens never contain whitespace/quotes, so strip and re-export
+    # -- the modal client reads the env vars directly and takes precedence
+    # over ~/.modal.toml, so the env must be clean too.
+    if [ -n "${MODAL_TOKEN_ID:-}" ]; then
+        MODAL_TOKEN_ID=$(printf %s "$MODAL_TOKEN_ID" | tr -d "[:space:]\"'")
+        export MODAL_TOKEN_ID
+    fi
+    if [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
+        MODAL_TOKEN_SECRET=$(printf %s "$MODAL_TOKEN_SECRET" | tr -d "[:space:]\"'")
+        export MODAL_TOKEN_SECRET
+    fi
     if [ -f "${HOME:-}/.modal.toml" ]; then return 0; fi
     if [ -n "${MODAL_TOKEN_ID:-}" ] && [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
         # On b300 slurm/pyxis, --export=ALL may propagate the HOST's HOME into
