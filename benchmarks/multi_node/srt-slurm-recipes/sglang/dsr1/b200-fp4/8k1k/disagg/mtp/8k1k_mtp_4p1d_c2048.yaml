@@ -80,6 +80,7 @@ backend:
       trust-remote-code: true
       quantization: modelopt_fp4
       disaggregation-mode: decode
+      prefill-round-robin-balance: true
       disaggregation-transfer-backend: nixl
       mem-fraction-static: 0.75
       max-prefill-tokens: 32768
