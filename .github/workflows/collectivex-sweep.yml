@@ -54,8 +54,8 @@ on:
         type: choice
         default: '1'
         options: ['1', '2', '3']
-      publish_run_ids:
-        description: For publish-v1, exactly three successful V1 sweep run IDs
+      publish_run_id:
+        description: For publish-v1, one successful first-attempt V1 sweep run ID (qualification index 1)
         type: string
         default: ''
       refresh_run_id:
@@ -740,60 +740,42 @@ jobs:
     timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
-      RUN_IDS: ${{ inputs.publish_run_ids }}
+      RUN_ID: ${{ inputs.publish_run_id }}
     steps:
-      - name: Verify source runs
+      - name: Verify source run
         id: runs
         env:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          IFS=',' read -r -a run_ids <<< "$RUN_IDS"
-          [ "${#run_ids[@]}" -eq 3 ] || {
-            echo 'publish_run_ids must contain exactly three IDs' >&2
-            exit 1
-          }
-          [ "$(printf '%s\n' "${run_ids[@]}" | sort -u | wc -l)" -eq 3 ] || {
-            echo 'publish_run_ids must be unique' >&2
+          run_id="$RUN_ID"
+          [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || {
+            echo 'publish_run_id must be a single decimal run ID' >&2
             exit 1
           }
 
           : > "$RUNNER_TEMP/collectivex-runs.tsv"
-          source_sha=''
-          for run_id in "${run_ids[@]}"; do
-            [[ "$run_id" =~ ^[1-9][0-9]*$ ]] || {
-              echo 'publish_run_ids contains a non-decimal ID' >&2
+          metadata=$(gh api "repos/$REPOSITORY/actions/runs/$run_id")
+          name=$(jq -r '.name' <<< "$metadata")
+          path=$(jq -r '.path' <<< "$metadata")
+          branch=$(jq -r '.head_branch' <<< "$metadata")
+          status=$(jq -r '.status' <<< "$metadata")
+          conclusion=$(jq -r '.conclusion' <<< "$metadata")
+          sha=$(jq -r '.head_sha' <<< "$metadata")
+          attempt=$(jq -r '.run_attempt' <<< "$metadata")
+          [ "$name" = 'CollectiveX Sweep' ] \
+            && [ "$path" = '.github/workflows/collectivex-sweep.yml' ] \
+            && [ "$branch" = 'collectivex' ] \
+            && [ "$status" = 'completed' ] \
+            && [ "$conclusion" = 'success' ] \
+            && [ "$attempt" = 1 ] \
+            && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
+              echo "run $run_id is not an eligible first-attempt V1 sweep" >&2
               exit 1
             }
-            metadata=$(gh api "repos/$REPOSITORY/actions/runs/$run_id")
-            name=$(jq -r '.name' <<< "$metadata")
-            path=$(jq -r '.path' <<< "$metadata")
-            branch=$(jq -r '.head_branch' <<< "$metadata")
-            status=$(jq -r '.status' <<< "$metadata")
-            conclusion=$(jq -r '.conclusion' <<< "$metadata")
-            sha=$(jq -r '.head_sha' <<< "$metadata")
-            attempt=$(jq -r '.run_attempt' <<< "$metadata")
-            [ "$name" = 'CollectiveX Sweep' ] \
-              && [ "$path" = '.github/workflows/collectivex-sweep.yml' ] \
-              && [ "$branch" = 'collectivex' ] \
-              && [ "$status" = 'completed' ] \
-              && [ "$conclusion" = 'success' ] \
-              && [ "$attempt" = 1 ] \
-              && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
-                echo "run $run_id is not an eligible first-attempt V1 sweep" >&2
-                exit 1
-              }
-            if [ -z "$source_sha" ]; then
-              source_sha="$sha"
-            else
-              [ "$sha" = "$source_sha" ] || {
-                echo 'source runs do not share one source SHA' >&2
-                exit 1
-              }
-            fi
-            printf '%s\t%s\t%s\n' "$run_id" "$attempt" "$sha" \
-              >> "$RUNNER_TEMP/collectivex-runs.tsv"
-          done
+          source_sha="$sha"
+          printf '%s\t%s\t%s\n' "$run_id" "$attempt" "$sha" \
+            >> "$RUNNER_TEMP/collectivex-runs.tsv"
           echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
@@ -851,7 +833,7 @@ jobs:
                and .run_id == $run_id
                and .run_attempt == $attempt
                and .source_sha == $source_sha
-               and (.qualification_index == 1 or .qualification_index == 2 or .qualification_index == 3)
+               and .qualification_index == 1
                and .matrix_sha256 == $matrix_sha
                and .execution_plan_sha256 == $execution_plan_sha' \
               "$marker" >/dev/null || {
@@ -888,8 +870,8 @@ jobs:
             printf '%s\n' "$bundle_id" >> "$RUNNER_TEMP/collectivex-bundles.txt"
           done < "$RUNNER_TEMP/collectivex-runs.tsv"
 
-          [ "$(sort -n "$RUNNER_TEMP/collectivex-qualification-indices.txt" | tr '\n' ' ')" = '1 2 3 ' ] || {
-            echo 'source runs must contain qualification indices 1, 2, and 3 exactly once' >&2
+          [ "$(sort -n "$RUNNER_TEMP/collectivex-qualification-indices.txt" | tr '\n' ' ')" = '1 ' ] || {
+            echo 'source run must be qualification index 1 exactly once' >&2
             exit 1
           }
 
@@ -923,7 +905,7 @@ jobs:
             echo
             echo "Dataset: \`$dataset_id\`"
             echo
-            echo 'Source runs:'
+            echo 'Source run:'
             sed 's/^/- `/' "$RUNNER_TEMP/collectivex-runs.tsv" | sed 's/$/`/'
           } >> "$GITHUB_STEP_SUMMARY"
 

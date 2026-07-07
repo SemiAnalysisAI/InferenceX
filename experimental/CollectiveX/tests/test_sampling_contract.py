@@ -1765,8 +1765,9 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("EXPECTED_MATRIX_SHA256", sweep)
         self.assertIn("cxrelease-v1-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
 
-        self.assertIn("publish_run_ids must contain exactly three IDs", sweep)
-        self.assertIn("source runs do not share one source SHA", sweep)
+        self.assertIn("publish_run_id must be a single decimal run ID", sweep)
+        self.assertIn("source run must be qualification index 1 exactly once", sweep)
+        self.assertIn("and .qualification_index == 1", sweep)
         self.assertIn("cxrelease-v1-$run_id-$attempt/release.json", sweep)
         self.assertIn("run $run_id is not tagged for V1 publication", sweep)
         self.assertIn("ref: ${{ steps.runs.outputs.source_sha }}", sweep)
