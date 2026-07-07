@@ -616,7 +616,7 @@ def _series(seed: str, backend: str, *, decision_grade: bool = False) -> tuple[d
                         "first_last_median_ratio": 1.0,
                         "outlier_flagged": False,
                         "robust_outlier_fraction": 0.0,
-                        "trial_count": 192,
+                        "trial_count": 64,
                     },
                 },
             },
@@ -1726,7 +1726,7 @@ class PublisherTest(unittest.TestCase):
         with self.assertRaisesRegex(publisher.PublisherError, "retry identity differs"):
             publisher.validate_public_dataset(dataset)
 
-    def test_promotion_requires_an_eligible_cohort_for_every_comparison_kind(self) -> None:
+    def test_promotion_requires_a_cohort_for_every_comparison_kind(self) -> None:
         stable_fast, stable_fast_internal = _series(
             "stable-fast", "deepep", decision_grade=True
         )
@@ -1780,14 +1780,28 @@ class PublisherTest(unittest.TestCase):
             publisher._require_promotion_cohorts(
                 required + ineligible, anchor_series
             )
+            # Promotion checks *structural* presence: a required comparison kind
+            # must appear in the catalogued shape, regardless of its per-cohort
+            # verdict. A kind is "missing" only when no cohort of that kind exists
+            # at all — a diagnostic (non-decision-grade) cohort of the kind still
+            # satisfies presence and ships with its verdict. So the missing-kind
+            # error only fires when every cohort of the kind is removed.
             for kind in publisher.REQUIRED_COHORT_KINDS:
                 with self.subTest(missing_kind=kind), self.assertRaisesRegex(
                     publisher.PublisherError, rf"cohort kinds:.*{kind}"
                 ):
                     publisher._require_promotion_cohorts([
                         item for item in required + ineligible
-                        if item["kind"] != kind or not item["eligibility"]["decision_grade"]
+                        if item["kind"] != kind
                     ], anchor_series)
+            # A kind present only as a diagnostic (non-decision-grade) cohort must
+            # NOT veto promotion — it ships labelled as diagnostic. (The outer
+            # patches already pin the fixed counts to {} and the chip count to 1.)
+            diagnostic_only = [
+                {"kind": kind, "eligibility": {"decision_grade": False}}
+                for kind in publisher.REQUIRED_COHORT_KINDS
+            ]
+            publisher._require_promotion_cohorts(diagnostic_only, anchor_series)
 
     def test_promotion_requires_exact_counts(self) -> None:
         dataset = _promoted_dataset()
@@ -1807,7 +1821,11 @@ class PublisherTest(unittest.TestCase):
                 dataset["cohorts"], dataset["series"]
             )
 
-    def test_promotion_requires_every_derived_chip_cohort_to_be_stable(self) -> None:
+    def test_promotion_requires_every_derived_chip_cohort_present(self) -> None:
+        # Promotion checks that the published shape carries *every* derived chip
+        # cohort the series imply (a structural completeness check), but it no
+        # longer requires each chip cohort to be decision-grade — a diagnostic
+        # chip cohort ships labelled with its verdict, it does not veto the run.
         dataset = _promoted_dataset()
         chip = next(item for item in dataset["cohorts"] if item["kind"] == "chip")
         self.assertEqual(
@@ -1817,15 +1835,19 @@ class PublisherTest(unittest.TestCase):
         with mock.patch.object(
             publisher, "REQUIRED_PROMOTION_COHORT_COUNTS", _cohort_counts(dataset)
         ):
+            # Dropping a derived chip cohort leaves the shape structurally
+            # incomplete → rejected.
             missing = [item for item in dataset["cohorts"] if item is not chip]
             with self.assertRaisesRegex(publisher.PublisherError, "derived chip cohorts"):
                 publisher._require_promotion_cohorts(missing, dataset["series"])
 
+            # A non-decision-grade (diagnostic) chip cohort keeps the shape
+            # complete → promotion accepts it; the verdict rides along for the
+            # consumer to surface or hide.
             chip["eligibility"]["decision_grade"] = False
-            with self.assertRaisesRegex(publisher.PublisherError, "derived chip cohorts"):
-                publisher._require_promotion_cohorts(
-                    dataset["cohorts"], dataset["series"]
-                )
+            publisher._require_promotion_cohorts(
+                dataset["cohorts"], dataset["series"]
+            )
 
     def test_promotion_rejects_more_than_one_bundle(self) -> None:
         bundles = {
@@ -1900,6 +1922,10 @@ class PublisherTest(unittest.TestCase):
         ):
             publisher.validate_public_dataset(dataset)
 
+        # A diagnostic (non-decision-grade) series does NOT veto promotion — the
+        # published dataset ships it labelled with its verdict, and the consumer
+        # decides whether to surface it. Validation succeeds as long as at least
+        # one decision-grade series remains (the honesty floor asserted below).
         diagnostic = copy.deepcopy(dataset)
         item = diagnostic["series"][0]
         item["status"] = "diagnostic"
@@ -1913,10 +1939,37 @@ class PublisherTest(unittest.TestCase):
             publisher,
             "REQUIRED_PROMOTION_COHORT_COUNTS",
             _cohort_counts(dataset),
-        ), self.assertRaisesRegex(
-            publisher.PublisherError, "unstable or incomplete required series"
         ):
-            publisher.validate_public_dataset(diagnostic)
+            validated = publisher.validate_public_dataset(diagnostic)
+        shipped = next(
+            series for series in validated["series"]
+            if series["series_id"] == item["series_id"]
+        )
+        self.assertEqual(shipped["status"], "diagnostic")
+        self.assertFalse(shipped["eligibility"]["decision_grade"])
+        self.assertIn(
+            "insufficient-allocations", shipped["eligibility"]["reasons"]
+        )
+
+        # Honesty floor: a dataset with NO decision-grade series is still rejected
+        # — a promoted "v1" must carry at least one cleanly measured series.
+        all_diagnostic = copy.deepcopy(dataset)
+        for series in all_diagnostic["series"]:
+            series["status"] = "diagnostic"
+            series["eligibility"].update({
+                "decision_grade": False,
+                "reasons": ["insufficient-allocations"],
+            })
+        with mock.patch.object(
+            publisher, "CANONICAL_FULL_V1_CASE_CATALOG_SHA256", fixture_catalog
+        ), mock.patch.object(
+            publisher,
+            "REQUIRED_PROMOTION_COHORT_COUNTS",
+            _cohort_counts(dataset),
+        ), self.assertRaisesRegex(
+            publisher.PublisherError, "at least one decision-grade series"
+        ):
+            publisher.validate_public_dataset(all_diagnostic)
 
         for original, replacement in (("runnable", "unsupported"),
                                       ("unsupported", "runnable")):

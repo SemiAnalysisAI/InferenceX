@@ -1053,6 +1053,12 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
     for cohort in doc["cohorts"]:
         if not cohort["eligibility"]["decision_grade"]:
             continue
+        # precision-pair cohorts are display-only paired contrasts — they drive
+        # neither an ordered ranking nor a sensitivity (their precision deltas
+        # are captured by the dispatch/combine-precision cohorts). The ranking
+        # generator skips them, so the coverage expectation must too.
+        if cohort["kind"] == "precision-pair":
+            continue
         members = [series[series_id] for series_id in cohort["series_ids"]]
         tokens = set.intersection(*(
             {point["tokens_per_rank"] for point in member["points"]}
@@ -3590,19 +3596,17 @@ def _require_promotion_cohorts(
     *,
     scope: str = "full",
 ) -> None:
+    # Cohorts carry their own quality verdict (``eligibility.decision_grade`` /
+    # ``eligibility.reasons``) into the published dataset; the consumer decides
+    # which to surface. Promotion no longer vetoes on non-decision-grade cohorts.
+    # For a full-coverage run it still checks *structural* well-formedness — that
+    # every required cohort kind is present in the catalogued shape — so a "full"
+    # publication genuinely spans the catalog. Quality is reported, not gated.
     if scope != "full":
         # A partial ("v1 tag + success") run covers a subset of the catalog, so
-        # the fixed full-matrix cohort counts / required kinds do not apply. Any
-        # cohort a partial run does surface is still required to be
-        # decision-grade — quality is never relaxed, only coverage.
-        if any(not cohort["eligibility"]["decision_grade"] for cohort in cohorts):
-            raise PublisherError("promotion includes a non-decision-grade cohort")
+        # the fixed full-matrix cohort counts / required kinds do not apply.
         return
-    eligible_kinds = {
-        cohort["kind"]
-        for cohort in cohorts
-        if cohort["eligibility"]["decision_grade"]
-    }
+    present_kinds = {cohort["kind"] for cohort in cohorts}
     required_kinds = list(REQUIRED_COHORT_KINDS)
     if any(
         item["workload"].get(
@@ -3612,33 +3616,38 @@ def _require_promotion_cohorts(
         for item in series
     ):
         required_kinds.extend(PRECISION_COHORT_KINDS)
-    missing = [kind for kind in required_kinds if kind not in eligible_kinds]
+    missing = [kind for kind in required_kinds if kind not in present_kinds]
     if missing:
         raise PublisherError(
-            "promotion lacks decision-grade cohort kinds: " + ", ".join(missing)
+            "promotion lacks cohort kinds: " + ", ".join(missing)
         )
     for kind, expected in REQUIRED_PROMOTION_COHORT_COUNTS.items():
         members = [cohort for cohort in cohorts if cohort["kind"] == kind]
-        if len(members) != expected or any(
-            not cohort["eligibility"]["decision_grade"] for cohort in members
-        ):
+        if len(members) != expected:
             raise PublisherError(
-                f"promotion requires exactly {expected} decision-grade {kind} cohorts"
+                f"promotion requires exactly {expected} {kind} cohorts"
             )
 
     chip_cohorts = [cohort for cohort in cohorts if cohort["kind"] == "chip"]
     expected_chips = _expected_chip_cohort_count(series)
-    if len(chip_cohorts) != expected_chips or any(
-        not cohort["eligibility"]["decision_grade"] for cohort in chip_cohorts
-    ):
+    if len(chip_cohorts) != expected_chips:
         raise PublisherError(
-            f"promotion requires all {expected_chips} derived chip cohorts to be decision-grade"
+            f"promotion requires all {expected_chips} derived chip cohorts"
         )
 
 
 def _require_promotion_series(series: Sequence[dict[str, Any]]) -> None:
-    if not series or any(item["status"] != "decision-grade" for item in series):
-        raise PublisherError("promotion has unstable or incomplete required series")
+    # Each series carries its own quality verdict (``status`` /
+    # ``eligibility.decision_grade`` / ``eligibility.reasons``) into the
+    # published dataset, and the consumer decides what to surface. Promotion no
+    # longer vetoes the whole run because some series are non-decision-grade —
+    # it only guarantees the publication is non-empty and holds at least one
+    # decision-grade series, so a promoted "v1" still means something measured
+    # cleanly. Diagnostic series ship labelled as diagnostic, never dropped.
+    if not series:
+        raise PublisherError("promotion requires at least one series")
+    if not any(item["status"] == "decision-grade" for item in series):
+        raise PublisherError("promotion requires at least one decision-grade series")
 
 
 def build_dataset(

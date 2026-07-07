@@ -231,10 +231,14 @@ may advance `dev-latest`; partial matrices remain diagnostic. The full-matrix di
 pins the exact workflow shard grouping as well as the requested cases, so changing `--max-cases`
 or the SKU round-robin scheduling order produces diagnostic-only runs even when case coverage is
 unchanged. Superseded retries,
-planned-unsupported outcomes, and unstable comparison cohorts may render diagnostically but cannot
-rank or recommend; every successful required series in a promoted dataset remains decision-grade.
-Any failed, invalid, or diagnostic retry of a runnable case blocks promotion even if a later retry
-succeeds. Routing cohorts are comparable-experimental sensitivities and never produce configuration
+planned-unsupported outcomes, and non-decision-grade (diagnostic) series and cohorts may render
+diagnostically but cannot rank or recommend; a promoted dataset ships them labelled with their
+verdict (`status` / `eligibility.reasons`) rather than dropping them, and need only hold at least
+one decision-grade series. The publisher computes and attaches each series' and cohort's verdict;
+the consumer decides which to surface and may reveal a diagnostic series.
+Any failed, invalid, or diagnostic retry of a runnable case still blocks promotion even if a later
+retry succeeds — the honesty floor that every runnable case physically produced clean data is
+never relaxed. Routing cohorts are comparable-experimental sensitivities and never produce configuration
 recommendations; official library/platform/system cohorts own actionable recommendations.
 
 A point becomes decision-grade only after a single workflow run and allocation ID passes

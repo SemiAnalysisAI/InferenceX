@@ -379,6 +379,17 @@
                     "p99": {"type": "number","exclusiveMinimum": 0}
                   }
           },
+      "ratePercentiles": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["p50","p90","p95","p99"],
+            "properties": {
+                    "p50": {"type": "number","minimum": 0},
+                    "p90": {"type": "number","minimum": 0},
+                    "p95": {"type": "number","minimum": 0},
+                    "p99": {"type": "number","minimum": 0}
+                  }
+          },
       "component": {
             "type": "object",
             "additionalProperties": false,
@@ -397,8 +408,8 @@
                     "origin": {"enum": ["measured","derived"]},
                     "latency_us": {"$ref": "#/$defs/percentiles"},
                     "byte_provenance": {"$ref":"#/$defs/byteAccounting"},
-                    "activation_data_rate_gbps_at_latency_percentile": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/percentiles"}]},
-                    "total_logical_data_rate_gbps_at_latency_percentile": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/percentiles"}]},
+                    "activation_data_rate_gbps_at_latency_percentile": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/ratePercentiles"}]},
+                    "total_logical_data_rate_gbps_at_latency_percentile": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/ratePercentiles"}]},
                     "sample_count": {"oneOf": [{"type": "null"},{"type": "integer","minimum": 1}]}
                   }
           },
@@ -412,7 +423,7 @@
                     "first_last_median_ratio":{"type":"number","minimum":1},
                     "outlier_flagged":{"type":"boolean"},
                     "robust_outlier_fraction":{"type":"number","minimum":0,"maximum":1},
-                    "trial_count":{"const":192}
+                    "trial_count":{"const":64}
                   }
           },
       "nullableTrialDiagnosticComponent": {"oneOf":[{"type":"null"},{"$ref":"#/$defs/trialDiagnosticComponent"}]},

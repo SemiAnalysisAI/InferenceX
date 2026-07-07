@@ -414,6 +414,45 @@ class CollectiveXV1SchemaContractTest(unittest.TestCase):
         with self.assertRaises(jsonschema.ValidationError):
             anomaly_validator.validate([f"anomaly-{index}" for index in range(17)])
 
+    def test_zero_byte_component_rates_and_trial_count_are_bound(self) -> None:
+        # A measured but zero-logical-byte component (e.g. UCCL host-staging's
+        # ``stage``: real latency, zero bytes) reports a 0.0 GB/s rate. Rate
+        # percentiles therefore allow 0 (``ratePercentiles``, minimum 0), while
+        # latency percentiles stay strictly positive (``percentiles``,
+        # exclusiveMinimum 0). This keeps a zero-byte measurement honest instead
+        # of forcing it to null or dropping the component.
+        defs = self.public["$defs"]
+
+        def _ref_validator(pointer: str) -> jsonschema.Validator:
+            return jsonschema.Draft202012Validator({
+                "$schema": "https://json-schema.org/draft/2020-12/schema",
+                "$defs": defs,
+                "$ref": pointer,
+            })
+
+        for field in (
+            "activation_data_rate_gbps_at_latency_percentile",
+            "total_logical_data_rate_gbps_at_latency_percentile",
+        ):
+            rate = _ref_validator(f"#/$defs/component/properties/{field}")
+            rate.validate({"p50": 0.0, "p90": 0.0, "p95": 0.0, "p99": 0.0})
+            rate.validate(None)
+            with self.assertRaises(jsonschema.ValidationError):
+                rate.validate({"p50": -1.0, "p90": 0.0, "p95": 0.0, "p99": 0.0})
+
+        latency = _ref_validator("#/$defs/component/properties/latency_us")
+        latency.validate({"p50": 1.0, "p90": 1.0, "p95": 1.0, "p99": 1.0})
+        with self.assertRaises(jsonschema.ValidationError):
+            latency.validate({"p50": 0.0, "p90": 1.0, "p95": 1.0, "p99": 1.0})
+
+        # A single qualification run yields exactly 64 trial medians per point.
+        trial_count = _ref_validator(
+            "#/$defs/trialDiagnosticComponent/properties/trial_count"
+        )
+        trial_count.validate(64)
+        with self.assertRaises(jsonschema.ValidationError):
+            trial_count.validate(192)
+
 
 if __name__ == "__main__":
     unittest.main()
