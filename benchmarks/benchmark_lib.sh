@@ -1257,6 +1257,8 @@ run_swebench_eval() {
     fi
     _ensure_modal_credentials
     local score_rc=0
+    local ns_args=()
+    if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
     python3 utils/evals/swebench_score.py \
         --samples-dir "$gen_dir" \
         --out-dir "$out_dir" \
@@ -1266,7 +1268,7 @@ run_swebench_eval() {
         --max-workers "${SWEBENCH_MAX_WORKERS:-4}" \
         --lm-eval-version "$lm_eval_version" \
         ${SWEBENCH_USE_MODAL:+--modal} \
-        ${SWEBENCH_NAMESPACE+--namespace "$SWEBENCH_NAMESPACE"} \
+        "${ns_args[@]}" \
         || score_rc=$?
     rm -rf "$gen_dir" 2>/dev/null || true
     if [ "$score_rc" -ne 0 ]; then

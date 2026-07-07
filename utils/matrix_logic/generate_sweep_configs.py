@@ -148,7 +148,7 @@ def _multinode_parallelism_key(entry: dict) -> tuple:
     ))
 
 
-def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
+def mark_eval_entries(matrix_values: list[dict], include_agentic: bool = False) -> list[dict]:
     """Eval selection policy:
     - Single-node: only consider 8k1k (isl=8192, osl=1024).
       For each unique (model, runner, framework, precision, isl, osl, spec-decoding, dp-attn):
@@ -160,6 +160,10 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
         - Ignore entries with all conc values < MIN_EVAL_CONC
         - Mark the entry containing its highest eligible concurrency
         - Set eval-conc to that highest eligible concurrency
+    - Agentic-coding entries (no isl/osl) are only marked for eval when
+      include_agentic=True (i.e. --evals-only or --all-evals mode). In default
+      sweeps, agentic entries are left unmarked so they all land in the
+      throughput job rather than the eval job.
     """
     from collections import defaultdict
 
@@ -226,23 +230,26 @@ def mark_eval_entries(matrix_values: list[dict]) -> list[dict]:
     # isl/osl so the 8k1k logic above never selects them. Single-node only for
     # now: mark one entry per (model, runner, framework, precision) at its
     # highest concurrency. (Multi-node agentic eval is a future extension.)
-    ag_sn_groups = defaultdict(list)
-    for i, entry in enumerate(matrix_values):
-        if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
-            continue
-        if Fields.PREFILL.value in entry:  # multi-node agentic: not yet
-            continue
-        conc = entry[Fields.CONC.value]
-        conc_val = max(conc) if isinstance(conc, list) else conc
-        key = (
-            entry[Fields.MODEL.value],
-            entry[Fields.RUNNER.value],
-            entry[Fields.FRAMEWORK.value],
-            entry[Fields.PRECISION.value],
-        )
-        ag_sn_groups[key].append((i, conc_val))
-    for entries in ag_sn_groups.values():
-        eval_indices.add(max(entries, key=lambda item: item[1])[0])
+    # Only mark agentic entries in evals-only / all-evals modes so that default
+    # sweeps keep every agentic throughput datapoint.
+    if include_agentic:
+        ag_sn_groups = defaultdict(list)
+        for i, entry in enumerate(matrix_values):
+            if entry.get(Fields.SCENARIO_TYPE.value) != 'agentic-coding':
+                continue
+            if Fields.PREFILL.value in entry:  # multi-node agentic: not yet
+                continue
+            conc = entry[Fields.CONC.value]
+            conc_val = max(conc) if isinstance(conc, list) else conc
+            key = (
+                entry[Fields.MODEL.value],
+                entry[Fields.RUNNER.value],
+                entry[Fields.FRAMEWORK.value],
+                entry[Fields.PRECISION.value],
+            )
+            ag_sn_groups[key].append((i, conc_val))
+        for entries in ag_sn_groups.values():
+            eval_indices.add(max(entries, key=lambda item: item[1])[0])
 
     # Mark the selected entries (agentic-coding entries run swebench; see above).
     for i, entry in enumerate(matrix_values):
@@ -1219,8 +1226,10 @@ def main():
         parser.error(f"Unknown command: {args.command}")
         
     # Apply the existing eval policy first, then expand it when requested.
+    # Pass include_agentic only in evals-only / all-evals modes so that default
+    # sweeps keep every agentic throughput datapoint (see mark_eval_entries).
     if not args.no_evals:
-        matrix_values = mark_eval_entries(matrix_values)
+        matrix_values = mark_eval_entries(matrix_values, include_agentic=args.evals_only or args.all_evals)
         if args.all_evals:
             matrix_values = mark_all_eval_entries(matrix_values)
 

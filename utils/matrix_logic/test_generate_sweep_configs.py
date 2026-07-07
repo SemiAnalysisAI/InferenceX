@@ -227,12 +227,36 @@ class TestMarkEvalEntries:
             },
         ]
 
-        result = mark_eval_entries(matrix_values)
+        result = mark_eval_entries(matrix_values, include_agentic=True)
 
         # One eval per config, at the highest concurrency (64, not 32).
         marked = [e for e in result if e.get("run-eval")]
         assert len(marked) == 1
         assert marked[0]["conc"] == 64
+
+    def test_default_mode_does_not_mark_agentic(self):
+        """In default (non-evals-only) mode, no agentic entry should have run-eval=True."""
+        matrix_values = [
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 32,
+            },
+            {
+                "scenario-type": "agentic-coding",
+                "model": "m", "runner": "b300", "framework": "vllm",
+                "precision": "fp4", "tp": 8, "conc": 64,
+            },
+        ]
+
+        # Default call: include_agentic not set (defaults to False)
+        result = mark_eval_entries(matrix_values)
+
+        # No agentic entry should be marked run-eval=True in default mode.
+        marked = [e for e in result if e.get("run-eval")]
+        assert len(marked) == 0, (
+            f"Expected 0 agentic entries marked run-eval in default mode, got {len(marked)}"
+        )
 
     def test_single_node_skips_eval_entries_below_min_conc(self):
         """Single-node eval selection should ignore conc values below MIN_EVAL_CONC."""

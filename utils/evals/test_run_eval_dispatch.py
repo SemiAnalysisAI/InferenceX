@@ -243,3 +243,82 @@ def test_modal_creds_no_remap_when_disabled(tmp_path):
     out = res.stdout + res.stderr
     assert "remapped" not in out.lower()
     assert "TOML_EXISTS" not in out
+
+
+# --- SWEBENCH_NAMESPACE ns_args construction tests -------------------------
+#
+# Tests that the ns_args array construction in benchmark_lib.sh handles the
+# three cases correctly: unset (0 args), empty (2 args with empty value),
+# and set-with-value (2 args with the value).
+
+_NS_ARGS_SNIPPET = r'''
+# Replicate the ns_args construction from benchmark_lib.sh (wrapped in a
+# function so `local` is valid, matching the original context).
+_test_ns_args() {
+    local ns_args=()
+    if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
+    echo "COUNT=${#ns_args[@]}"
+    if [ "${#ns_args[@]}" -gt 0 ]; then
+        echo "ARG0=${ns_args[0]}"
+        echo "ARG1=${ns_args[1]}"
+    fi
+}
+_test_ns_args
+'''
+
+
+def _run_ns_args(*, namespace_set: bool, namespace_value: str = "") -> dict:
+    """Run the ns_args snippet and return a dict of parsed KEY=VALUE outputs."""
+    if namespace_set:
+        env_extra = {"SWEBENCH_NAMESPACE": namespace_value}
+    else:
+        env_extra = {}
+    env = {k: v for k, v in os.environ.items() if k != "SWEBENCH_NAMESPACE"}
+    env.update(env_extra)
+    script = "set -e\n" + _NS_ARGS_SNIPPET
+    res = subprocess.run(
+        ["bash", "-c", script],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    parsed = {}
+    for line in res.stdout.splitlines():
+        if "=" in line:
+            k, _, v = line.partition("=")
+            parsed[k] = v
+    return parsed
+
+
+def test_ns_args_unset_produces_zero_args():
+    """When SWEBENCH_NAMESPACE is unset, ns_args should be empty (0 args)."""
+    result = _run_ns_args(namespace_set=False)
+    assert result["COUNT"] == "0", f"Expected COUNT=0, got: {result}"
+
+
+def test_ns_args_empty_produces_two_args():
+    """When SWEBENCH_NAMESPACE is set but empty, ns_args should be (--namespace '')."""
+    result = _run_ns_args(namespace_set=True, namespace_value="")
+    assert result["COUNT"] == "2", f"Expected COUNT=2, got: {result}"
+    assert result["ARG0"] == "--namespace"
+    assert result["ARG1"] == ""
+
+
+def test_ns_args_value_produces_two_args():
+    """When SWEBENCH_NAMESPACE has a value, ns_args should be (--namespace <value>)."""
+    result = _run_ns_args(namespace_set=True, namespace_value="my-namespace")
+    assert result["COUNT"] == "2", f"Expected COUNT=2, got: {result}"
+    assert result["ARG0"] == "--namespace"
+    assert result["ARG1"] == "my-namespace"
+
+
+def test_benchmark_lib_no_longer_uses_old_namespace_pattern():
+    """Static assertion: benchmark_lib.sh must not contain the old word-split pattern."""
+    content = BENCHMARK_LIB.read_text()
+    assert "${SWEBENCH_NAMESPACE+--namespace" not in content, (
+        "benchmark_lib.sh still contains the old ${SWEBENCH_NAMESPACE+--namespace ...} pattern"
+    )
+    assert "ns_args" in content, (
+        "benchmark_lib.sh does not contain the ns_args fix"
+    )
