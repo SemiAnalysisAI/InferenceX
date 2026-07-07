@@ -1,0 +1,65 @@
+# Fixed P4: aiter B-preshuffle block-scale GEMM (As-transpose numerics fix
+# + skip preshuffle for is_bmm/kv_b_proj raw-weight consumers).
+# Recovers DeepSeek-V4-Pro FP4 gsm8k from 0.0 -> 0.90 (verified enforce-eager).
+--- a/vllm/_aiter_ops.py
++++ b/vllm/_aiter_ops.py
+@@ -767,6 +767,10 @@
+     # are covered by aiter's dsv4 bpreshuffle tuned config down to M=1.
+     from aiter import gemm_a8w8_blockscale_bpreshuffle
+ 
++    # P4 accuracy fix: the bpreshuffle kernel consumes the block-scale As
++    # transposed relative to the plain block-scale kernel; without this the
++    # GEMM silently miscomputes. Round-trip the shape via .view.
++    As = As.transpose(0, 1).contiguous().view(As.shape)
+     return gemm_a8w8_blockscale_bpreshuffle(A, B, As, Bs, dtype=output_dtype)
+ 
+ 
+--- a/vllm/model_executor/kernels/linear/scaled_mm/aiter.py
++++ b/vllm/model_executor/kernels/linear/scaled_mm/aiter.py
+@@ -380,6 +380,35 @@
+         # though the weight scale never changes, showing up as ~3.5% aten
+         # lshift + direct_copy GPU time in profiles.
+         self._weight_scale_fp32_cache: dict[int, torch.Tensor] = {}
++        # P4 (fixed): use aiter's B-preshuffle block-scaled GEMM. The
++        # weight is preshuffled once at load (shuffle_weight layout (16,16));
++        # the scale is NOT shuffled. Disabled on the triton path (no
++        # preshuffle triton kernel).
++        self._use_bpreshuffle = not self.use_triton
++        self._weight_preshuffled = False
++
++    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
++        super().process_weights_after_loading(layer)
++        if not self._use_bpreshuffle:
++            return
++        # P4 accuracy fix: skip preshuffle for weights consumed OUTSIDE the
++        # standard 2D gemm_a8w8_blockscale_bpreshuffle. is_bmm layers
++        # (DeepSeek-V4 wo_a / o-proj LoRA) are dequantized RAW and .view()'d
++        # into a batched einsum (rocm_aiter_mla_sparse._get_cached_wo_a_bf16);
++        # the (16,16) shuffle permutes fp8 elements so .view() scatters them
++        # -> garbage output. kv_b_proj (stock MLA absorption) is the same
++        # class of raw-weight consumer. Leave these row-major.
++        if getattr(layer, "is_bmm", False) or "kv_b_proj" in getattr(
++            layer, "prefix", ""
++        ):
++            return
++        from aiter.ops.shuffle import shuffle_weight
++
++        params = self._get_layer_params(layer)
++        w = getattr(layer, params.WEIGHT)
++        shuffled = shuffle_weight(w.data, layout=(16, 16))
++        replace_parameter(layer, params.WEIGHT, shuffled)
++        self._weight_preshuffled = True
+ 
+     @classmethod
+     def is_supported(cls, compute_capability=None):
+@@ -436,6 +465,10 @@
+         out_dtype = self.config.out_dtype
+         if self.use_triton:
+             gemm_a8w8_blockscale_op = rocm_aiter_ops.triton_gemm_a8w8_blockscale
++        elif self._weight_preshuffled:
++            gemm_a8w8_blockscale_op = (
++                rocm_aiter_ops.gemm_a8w8_blockscale_bpreshuffle
++            )
+         else:
+             gemm_a8w8_blockscale_op = rocm_aiter_ops.gemm_a8w8_blockscale
+ 
