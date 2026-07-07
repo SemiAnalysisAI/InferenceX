@@ -77,6 +77,18 @@ if agentic_kv_offload_enabled; then
         agentic_pip_install --quiet --no-cache-dir --no-deps \
             --force-reinstall "mooncake-transfer-engine-cuda13==$MOONCAKE_VERSION"
 
+        # Filter Mooncake RDMA auto-discovery to routable RoCE NICs; B300
+        # hosts expose IB-mode fabric ports and IP-less NICs that crash the
+        # server when left in the device pool. With the filter applied,
+        # device_name stays empty so auto-discovery selects the devices.
+        VLLM_RDMA_PATCH="$(dirname "$0")/patches/vllm-mooncake-rdma-device-filter.patch"
+        VLLM_SITE_DIR="$(python3 -c 'import pathlib, vllm; print(pathlib.Path(vllm.__file__).resolve().parent.parent)')"
+        if git -C "$VLLM_SITE_DIR" apply --reverse --check "$VLLM_RDMA_PATCH" >/dev/null 2>&1; then
+            echo "vLLM RDMA device-filter patch already applied."
+        else
+            git -C "$VLLM_SITE_DIR" apply --verbose "$VLLM_RDMA_PATCH"
+        fi
+
         MOONCAKE_MASTER_PORT=$((PORT + 12000))
         MOONCAKE_CONFIG_PATH="$RESULT_DIR/mooncake_config.json"
         cat > "$MOONCAKE_CONFIG_PATH" <<EOF
@@ -87,7 +99,7 @@ if agentic_kv_offload_enabled; then
   "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": "mlx5_0"
+  "device_name": ""
 }
 EOF
         export MOONCAKE_CONFIG_PATH
