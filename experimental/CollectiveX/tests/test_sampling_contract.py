@@ -1745,7 +1745,7 @@ class SamplingContractTest(unittest.TestCase):
         sweep = (workflows / "collectivex-sweep.yml").read_text()
         self.assertFalse((workflows / "collectivex-publish.yml").exists())
 
-        self.assertIn("options: [sweep, probe-precision, publish-v1, refresh-v1]", sweep)
+        self.assertIn("options: [sweep, probe-precision, publish, refresh]", sweep)
         self.assertIn("${{ inputs.only_sku }}-${{ inputs.probe_id }}", sweep)
         self.assertIn("cancel-in-progress: false", sweep)
         self.assertIn("COLLECTIVEX_MI355_CONFIG_V1", sweep)
@@ -1755,27 +1755,73 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("collectivex.precision-probe-plan.v1", (ROOT / "tests" / "probe_precision.py").read_text())
         self.assertIn("cxprecision-probes-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
         self.assertIn("--validate-bundle", sweep)
+
+        # The release version is a numeric, incrementable field (1, 2, 3, ...),
+        # never a hardcoded "v1" tag. 'unversioned' stays diagnostic.
         self.assertIn("release_tag:", sweep)
         self.assertIn("default: unversioned", sweep)
-        self.assertIn("options: [unversioned, v1]", sweep)
+        self.assertNotIn("options: [unversioned, v1]", sweep)
+        self.assertIn("or a positive integer N to publish as version N", sweep)
         self.assertIn("qualification_index:", sweep)
-        self.assertIn("inputs.release_tag == 'v1'", sweep)
+        self.assertIn("inputs.release_tag != 'unversioned'", sweep)
+        self.assertNotIn("inputs.release_tag == 'v1'", sweep)
+        self.assertIn(
+            'release_tag must be "unversioned" or a positive integer version N', sweep
+        )
+        # collectivex.release-tag.v1 is a frozen data-format id, NOT the release version.
         self.assertIn("collectivex.release-tag.v1", sweep)
-        self.assertIn("V1 release tag requires the locked full matrix", sweep)
+        # A versioned run may cover the full canonical matrix or a filtered subset;
+        # the release marker records the coverage scope AND the numeric version.
+        self.assertNotIn("V1 sweeps require the exact unfiltered full matrix", sweep)
+        self.assertNotIn("V1 release tag requires the locked full matrix", sweep)
+        self.assertIn("a full release version requires the locked execution plan", sweep)
+        self.assertIn('"coverage_scope": coverage_scope', sweep)
+        self.assertIn('"version": version', sweep)
+        self.assertIn(
+            '"full" if matrix_sha256 == os.environ["EXPECTED_MATRIX_SHA256"] else "partial"',
+            sweep,
+        )
         self.assertIn("EXPECTED_MATRIX_SHA256", sweep)
-        self.assertIn("cxrelease-v1-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
+        self.assertIn(
+            "cxrelease-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}",
+            sweep,
+        )
 
         self.assertIn("publish_run_id must be a single decimal run ID", sweep)
         self.assertIn("source run must be qualification index 1 exactly once", sweep)
         self.assertIn("and .qualification_index == 1", sweep)
-        self.assertIn("cxrelease-v1-$run_id-$attempt/release.json", sweep)
-        self.assertIn("run $run_id is not tagged for V1 publication", sweep)
+        self.assertIn(
+            '"coverage_scope","execution_plan_sha256","format","matrix_sha256"', sweep
+        )
+        # The marker key set now carries a numeric version, not a release_tag string.
+        self.assertIn('"run_id","source_sha","version"]', sweep)
+        self.assertIn('(.coverage_scope == "full" or .coverage_scope == "partial")', sweep)
+        self.assertIn("cxrelease-[1-9][0-9]*-$run_id-$attempt/release", sweep)
+        self.assertIn("run $run_id is not tagged for a release version", sweep)
         self.assertIn("ref: ${{ steps.runs.outputs.source_sha }}", sweep)
         self.assertIn("[ \"$attempt\" = 1 ]", sweep)
-        self.assertIn("cxpublication-v1-${{ github.run_id }}-${{ github.run_attempt }}", sweep)
+        self.assertIn(
+            "cxpublication-${{ steps.build.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}",
+            sweep,
+        )
         self.assertIn("refresh source bytes differ from their requested digest", sweep)
         self.assertIn("retention-days: 90", sweep)
         self.assertNotIn("workflow_run:", sweep)
+
+        # A successful first-attempt versioned sweep (full OR partial) self-publishes
+        # its own run so the frontend can discover many runs of a version JIT, without
+        # a separate manual publish dispatch. The artifact name embeds the numeric
+        # version so the frontend can group runs by version.
+        self.assertIn("autopublish:", sweep)
+        self.assertIn("inputs.qualification_index == '1'", sweep)
+        self.assertIn(
+            "github.run_attempt == '1' && needs.sweep.result == 'success'", sweep
+        )
+        self.assertIn("CollectiveX publication (auto) — version", sweep)
+        self.assertIn(
+            "cxpublication-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}",
+            sweep,
+        )
 
     def test_source_archive_preserves_only_contained_leaf_symlinks(self) -> None:
         selected = "deepep-hybrid-pinned"
