@@ -228,20 +228,6 @@ class DeepEPBackend(EPBackend):
     def buffer_cap(self, args):
         return self.max_tokens_per_rank if self.mode == "low-latency" else None
 
-    def make_problem(self, T, idx, weights, x):
-        encoding = ep_precision.encode_dispatch(
-            torch, x, self.communication_precision
-        )
-        return types.SimpleNamespace(
-            T=T,
-            x=x,
-            dispatch_x=encoding.native_input,
-            oracle_x=encoding.semantic,
-            dispatch_precision_evidence=encoding.evidence,
-            topk_idx=idx.to(torch.int64),
-            topk_weights=weights.to(torch.float32),
-        )
-
     def dispatch(self, p):
         if self.mode == "low-latency":
             recv_x, recv_counts, handle, _, _ = self.buffer.low_latency_dispatch(
@@ -403,20 +389,6 @@ class DeepEPBackend(EPBackend):
                     self.communication_precision["dispatch"],
                 )
         return h.recv_semantic
-
-    def oracle_dispatch_payload(self, payload):
-        return ep_precision.encode_dispatch(
-            torch, payload, self.communication_precision
-        ).semantic
-
-    def precision_evidence(self, problem, view=None):
-        return ep_precision.precision_evidence(
-            torch,
-            profile_id=self.precision_profile_id,
-            profile=self.communication_precision,
-            problem=problem,
-            view=view,
-        )
 
     def finalize(self, rc):
         try:

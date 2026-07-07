@@ -108,24 +108,6 @@ class NCCLBackend(EPBackend):
         # all provenance is resolved in __init__. Nothing to size from `spec`.
         return None
 
-    def buffer_cap(self, args):
-        return None  # no fixed pre-allocated buffer; all-to-all sizes itself per step
-
-    def make_problem(self, T, idx, weights, x):
-        encoding = ep_precision.encode_dispatch(
-            torch, x, self.communication_precision
-        )
-        # idx[T,topk] int64, weights[T,topk] f32, x[T,hidden] bf16 — the shared routing-trace slice.
-        return types.SimpleNamespace(
-            T=T,
-            x=x,
-            oracle_x=encoding.semantic,
-            dispatch_precision_evidence=encoding.evidence,
-            topk_idx=idx.to(torch.int64),
-            topk_weights=weights.to(torch.float32),
-            layout=None,
-        )
-
     def dispatch(self, p):
         ws = self.world_size
         x = p.x  # [T, H] bf16
@@ -221,21 +203,6 @@ class NCCLBackend(EPBackend):
         return int(h.total_recv)
 
     def oracle_dispatch_payload(self, payload):
+        # NCCL is the identity reference: the wire payload is exactly what the oracle
+        # built, so no dispatch-encoding projection (unlike the base) applies.
         return payload
-
-    def precision_evidence(self, problem, view=None):
-        return ep_precision.precision_evidence(
-            torch,
-            profile_id=self.precision_profile_id,
-            profile=self.communication_precision,
-            problem=problem,
-            view=view,
-        )
-
-    def finalize(self, rc):
-        try:
-            dist.barrier()
-            dist.destroy_process_group()
-        except Exception:
-            pass
-        return rc

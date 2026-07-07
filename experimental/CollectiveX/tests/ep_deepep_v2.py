@@ -500,19 +500,9 @@ class DeepEPV2Backend(EPBackend):
             "physical_nvlink_ranks": int(self.buffer.num_nvlink_ranks),
         }
 
-    def make_problem(self, T, idx, weights, x):
-        encoding = ep_precision.encode_dispatch(
-            torch, x, self.communication_precision
-        )
-        return types.SimpleNamespace(
-            T=T,
-            x=x,
-            dispatch_x=encoding.native_input,
-            oracle_x=encoding.semantic,
-            dispatch_precision_evidence=encoding.evidence,
-            topk_idx=idx.to(deep_ep.topk_idx_t),
-            topk_weights=weights.to(torch.float32),
-        )
+    def _topk_idx_dtype(self):
+        # DeepEP V2's kernels key routing indices on deep_ep.topk_idx_t, not int64.
+        return deep_ep.topk_idx_t
 
     def dispatch(self, p):
         recv_x, recv_topk_idx, recv_topk_weights, handle, _ = self.buffer.dispatch(
@@ -631,20 +621,6 @@ class DeepEPV2Backend(EPBackend):
         elif h.recv_semantic_rows != rows:
             raise RuntimeError("DeepEP V2 receive count changed for one dispatch handle")
         return h.recv_semantic
-
-    def oracle_dispatch_payload(self, payload):
-        return ep_precision.encode_dispatch(
-            torch, payload, self.communication_precision
-        ).semantic
-
-    def precision_evidence(self, problem, view=None):
-        return ep_precision.precision_evidence(
-            torch,
-            profile_id=self.precision_profile_id,
-            profile=self.communication_precision,
-            problem=problem,
-            view=view,
-        )
 
     def finalize(self, rc):
         try:

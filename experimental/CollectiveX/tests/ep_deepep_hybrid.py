@@ -526,21 +526,6 @@ class DeepEPHybridBackend(EPBackend):
             raise RuntimeError("DeepEP Hybrid receive count changed for one dispatch handle")
         return h.recv_semantic
 
-    def oracle_dispatch_payload(self, payload):
-        return ep_precision.encode_dispatch(
-            torch, payload, self.communication_precision
-        ).semantic
-
-    def precision_evidence(self, problem, view=None):
-        return ep_precision.precision_evidence(
-            torch,
-            profile_id=self.precision_profile_id,
-            profile=self.communication_precision,
-            problem=problem,
-            view=view,
-            uint8_storage=True,
-        )
-
     def finalize(self, rc):
         try:
             dist.barrier()
