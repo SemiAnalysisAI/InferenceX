@@ -177,11 +177,6 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--topk", type=int, default=8)
     ap.add_argument("--experts", type=int, default=256, help="TOTAL experts (fixed across EP degrees)")
     ap.add_argument("--routing", default="uniform", choices=["uniform"])
-    # EPLB (Expert-Parallel Load Balancer): replicate hot experts onto redundant physical
-    # slots + balanced-place so per-rank load equalizes. A pure routing-trace transform
-    # (tests/eplb.py); experts becomes num_logical+redundant. The remedy for `zipf` skew.
-    ap.add_argument("--eplb", action="store_true",
-                    help="apply EPLB expert replication/placement to the routing trace")
     # Canonical workloads consume pre-generated trace bytes instead of the
     # seeded runtime generator, so a result is provably the SAME workload as another machine's
     # (checksum match). Points at a dir of <workload_id>.npz/.manifest.json (make_workloads.py).

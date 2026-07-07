@@ -406,7 +406,7 @@ def main() -> int:
         ep=world_size,
         nodes=observed_nodes,
         routing=args.routing,
-        eplb=args.eplb,
+        eplb=False,
         mode=args.mode,
     )
     if not schedulable:
@@ -415,18 +415,6 @@ def main() -> int:
     args.runtime_device_product = device_name
     args.runtime_device_count = device_count
     args.allocation_execution_id = os.environ.get("COLLECTIVEX_EXECUTION_ID")
-
-    # EPLB bumps the expert count to PHYSICAL (logical + redundant) BEFORE backend construction
-    # so the backend sizes its buffers for the replicated set; ep_harness builds the LOGICAL
-    # routing trace and remaps it to the balanced physical placement (a pure routing transform,
-    # tests/eplb.py — no adapter change). Deterministic, so every rank agrees on the count.
-    if getattr(args, "eplb", False):
-        import eplb
-
-        args.num_logical_experts = args.experts
-        args.experts = eplb.physical_count(
-            args.experts, ep_harness.EPLB_REDUNDANT_EXPERTS, world_size
-        )
 
     # Reproduction provenance (recorded in the artifact). Rack launchers provide ranks directly
     # through srun, while single-node launchers use torchrun; do not claim torchrun for both.

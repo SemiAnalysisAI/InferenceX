@@ -93,7 +93,6 @@ run_ep_suite() {
       --qualification-index "${CX_QUALIFICATION_INDEX:-1}"
       --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
       --out "$out")
-    cx_bool_enabled "${CX_EPLB:-0}" && EPARGS+=(--eplb)
     [ -n "${CX_WORKLOAD_DIR:-}" ] && EPARGS+=(--workload-dir "$CX_WORKLOAD_DIR")
     cx_write_runtime_stage execution || cx_die "cannot record runtime stage"
     if timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \

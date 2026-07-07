@@ -2743,7 +2743,7 @@ def _terminal_case_from_environment(backend: str, phase: str) -> dict[str, Any]:
         "routing": os.environ.get("CX_ROUTING", "uniform"),
         "phase": phase,
         "ep": ep,
-        "eplb": _env_enabled("CX_EPLB"),
+        "eplb": False,
         "hidden": _env_integer("CX_HIDDEN", 7168),
         "topk": _env_integer("CX_TOPK", 8),
         "experts": _env_integer("CX_EXPERTS", 256),
