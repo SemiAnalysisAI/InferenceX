@@ -6,25 +6,7 @@
 # 2026-05-27, commit deaba74), which fixes the ROCm HIP-radix backend's
 # per-step draft out_cache_loc slicing under CUDA graph (the bug behind the
 # false-EOS / truncated-generation symptom in sgl issue #20404) and validates
-# GSM8K 0.950 with MTP on. The EAGLE chain follows that PR's accuracy config
-# for the DP-attention path (steps=2, topk=1, draft=3); the TP-only
-# low-concurrency path uses the (3,1,4) chain shared with dsr1_fp4_mi355x_mtp.sh.
-#
-# Image: #26383 is on sglang `main`, so this runs on the mainline ROCm nightly
-# (lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-*), NOT a rocm/sgl-dev:*-DSv4
-# build. The -DSv4 images are cut from the amd/deepseek_v4 branch, which has not
-# merged #26383 (latest da28108 = f96ac98 + build fixes + an unrelated MLA-decode
-# refactor; it still crashes at MTP graph capture, run 26723126211). Mainline
-# carries #26383 but omits deep_gemm, which DSv4-Pro's default fp8 wo_a path
-# imports. AMD doesn't need deep_gemm (it uses aiter/tilelang/torch), and every
-# deep_gemm use on the DSv4 path is behind an env-flag fallback, so the block
-# below detects deep_gemm's absence and routes around it: SGLANG_OPT_FP8_WO_A_GEMM=0
-# (dequant fp8 wo_a -> bf16 + torch.einsum; also skips the weight-load
-# transform_sf_into_required_layout that crashed run 26727984372) and
-# SGLANG_TOPK_TRANSFORM_512_TORCH=1 (torch topk). The indexer already routes to
-# tilelang + torch paged-MQA-logits and MHC to aiter via flags set below. On a
-# -DSv4 image that carries #26383, bump amd-master.yaml and the detect restores
-# the deep_gemm perf path. RUN_EVAL on the high-conc points gates accuracy.
+# GSM8K 0.950 with MTP on.
 
 source "$(dirname "$0")/../benchmark_lib.sh"
 

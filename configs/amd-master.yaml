@@ -1764,14 +1764,6 @@ dsv4-fp4-mi355x-sglang:
 # graph + sparse triton attn optimizations, merged to main 2026-05-27). That PR
 # fixes the ROCm HIP-radix MTP CUDA-graph bug (the false-EOS symptom in sgl
 # #20404) and validates GSM8K 0.950 with MTP on.
-#
-# #26383 is on sglang `main`, NOT the amd/deepseek_v4 branch the rocm/sgl-dev:*-DSv4
-# builds are cut from (latest da28108 = f96ac98 + build fixes + an unrelated
-# MLA-decode refactor, still pre-#26383 -> kv_score crash, run 26723126211). So we
-# pin the mainline ROCm nightly, which carries #26383. Mainline omits deep_gemm,
-# but the recipe detects that and routes the DSv4 fp8 wo_a / topk paths to their
-# torch fallbacks (see dsv4_fp4_mi355x_sglang_mtp.sh). When a -DSv4 image carrying
-# #26383 ships, bump to it; the recipe auto-restores the deep_gemm perf path.
 dsv4-fp4-mi355x-sglang-mtp:
   image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
