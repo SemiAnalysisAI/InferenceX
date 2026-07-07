@@ -209,7 +209,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (49, 364, 191, 173, 1356, 681, 675),
+            (49, 332, 165, 167, 1324, 655, 669),
         )
         b300_ep16 = [
             item for item in unsupported_cases
@@ -276,13 +276,13 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIsNotNone(capability.topology_for("mi325x", 8))
         self.assertEqual(
             Counter(shard["n"] for shard in matrix["include"]),
-            Counter({2: 29, 8: 12, 4: 6, 7: 1, 6: 1}),
+            Counter({2: 29, 6: 13, 4: 6, 5: 1}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
             if item["case"]["mode"] == "low-latency"
         ]
-        self.assertEqual(len(ll_cases), 80)
+        self.assertEqual(len(ll_cases), 48)
         self.assertTrue(all(
             item["case"]["backend"] in {"deepep", "uccl"}
             and item["case"]["phase"] == "decode"
@@ -2298,7 +2298,6 @@ class SamplingContractTest(unittest.TestCase):
             contracts._validate_oracle(tampered, "oracle")
 
         for profile_id, expected in (
-            ("d-bf16.c-logfmt10-dynamic64", {"atol": 3e-2, "rtol": 6e-2}),
             ("d-bf16.c-fp8-e4m3fn-direct-cast-noscale", {"atol": 4e-2, "rtol": 8e-2}),
         ):
             with self.subTest(profile_id=profile_id):
@@ -2349,21 +2348,14 @@ class SamplingContractTest(unittest.TestCase):
             saturated, profile_id, communication_precision, "precision"
         )
 
-        logfmt_profile_id = "d-bf16.c-logfmt10-dynamic64"
-        logfmt_precision = identity.precision_profile(logfmt_profile_id)
-        logfmt_evidence = copy.deepcopy(evidence)
-        logfmt_evidence["profile_id"] = logfmt_profile_id
-        contracts._validate_precision_evidence(
-            logfmt_evidence, logfmt_profile_id, logfmt_precision, "precision"
-        )
-        invented_scales = copy.deepcopy(logfmt_evidence)
+        invented_scales = copy.deepcopy(evidence)
         invented_scales["combine"].update({
             "scales_finite": True,
             "scales_positive": True,
         })
         with self.assertRaisesRegex(contracts.ContractError, "must be null"):
             contracts._validate_precision_evidence(
-                invented_scales, logfmt_profile_id, logfmt_precision, "precision"
+                invented_scales, profile_id, communication_precision, "precision"
             )
 
     def test_oracle_stability_canonicalizes_native_receive_order(self) -> None:

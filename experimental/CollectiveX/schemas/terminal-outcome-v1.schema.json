@@ -145,8 +145,6 @@
                     "d-bf16.c-bf16",
                     "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
                     "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
-                    "d-bf16.c-logfmt10-dynamic64",
-                    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
                     "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
         "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
         "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
@@ -166,11 +164,11 @@
                     "alignment_contract":{"enum":["native-bf16-vector-alignment","hidden-block-128","native-fp8-vector-alignment","value-block-64"]},
                     "api_input_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
                     "api_output_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
-                    "communication_format":{"enum":["bf16","fp8-e4m3fn","fp8-e4m3fnuz","logfmt10"]},
+                    "communication_format":{"enum":["bf16","fp8-e4m3fn","fp8-e4m3fnuz"]},
                     "conversion_boundary":{"enum":["none","before-dispatch-timing","inside-dispatch-timing","inside-combine-timing"]},
                     "padding_contract":{"enum":["none","right-zero-pad-hidden-to-128","right-zero-pad-values-to-64"]},
                     "quantization_origin":{"enum":["none","caller-prequantized","backend-fused","backend-internal","backend-internal-direct-cast"]},
-                    "scale_dtype":{"oneOf":[{"type":"null"},{"enum":["f32","implicit-logfmt10"]}]},
+                    "scale_dtype":{"oneOf":[{"type":"null"},{"enum":["f32"]}]},
                     "scale_group_size":{"oneOf":[{"type":"null"},{"enum":[64,128]}]},
                     "scale_layout":{"enum":["none","per-token-hidden-block","dynamic-per-64-values"]}
                   }

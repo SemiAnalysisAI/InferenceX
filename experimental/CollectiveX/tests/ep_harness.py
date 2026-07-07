@@ -128,12 +128,11 @@ def precision_byte_provenance(
         "bf16": 16,
         "fp8-e4m3fn": 8,
         "fp8-e4m3fnuz": 8,
-        "logfmt10": 10,
     }.get(axis["communication_format"])
     if bits_per_value is None:
         raise ValueError(f"unknown communication format {axis['communication_format']!r}")
     activation_data_bytes = logical_copies * math.ceil(hidden * bits_per_value / 8)
-    scale_bytes_per_value = {None: 0, "f32": 4, "implicit-logfmt10": 0}.get(
+    scale_bytes_per_value = {None: 0, "f32": 4}.get(
         axis["scale_dtype"]
     )
     if scale_bytes_per_value is None:

@@ -77,8 +77,6 @@ V1_NORMAL_PRECISION_PROFILE_IDS = (
 )
 V1_LOW_LATENCY_PRECISION_PROFILE_IDS = (
     "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
-    "d-bf16.c-logfmt10-dynamic64",
-    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
 )
 
 
@@ -157,18 +155,6 @@ _FP8_E4M3FN_FUSED_DISPATCH = _communication_axis(
     quantization_origin="backend-fused",
     conversion_boundary="inside-dispatch-timing",
 )
-_LOGFMT10_DYNAMIC64_COMBINE = _communication_axis(
-    api_input_dtype="bf16",
-    api_output_dtype="bf16",
-    communication_format="logfmt10",
-    scale_dtype="implicit-logfmt10",
-    scale_layout="dynamic-per-64-values",
-    scale_group_size=64,
-    padding_contract="right-zero-pad-values-to-64",
-    alignment_contract="value-block-64",
-    quantization_origin="backend-internal",
-    conversion_boundary="inside-combine-timing",
-)
 _FP8_E4M3FN_DIRECT_CAST_COMBINE = _communication_axis(
     api_input_dtype="bf16",
     api_output_dtype="bf16",
@@ -210,16 +196,6 @@ V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
         "dispatch": _FP8_E4M3FN_FUSED_DISPATCH,
         "combine": _BF16_AXIS,
     },
-    "d-bf16.c-logfmt10-dynamic64": {
-        "modes": ["low-latency"],
-        "dispatch": _BF16_AXIS,
-        "combine": _LOGFMT10_DYNAMIC64_COMBINE,
-    },
-    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64": {
-        "modes": ["low-latency"],
-        "dispatch": _FP8_E4M3FN_FUSED_DISPATCH,
-        "combine": _LOGFMT10_DYNAMIC64_COMBINE,
-    },
     "d-bf16.c-fp8-e4m3fn-direct-cast-noscale": {
         "modes": ["normal"],
         "dispatch": _BF16_AXIS,
@@ -249,7 +225,6 @@ V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
 
 V1_COMBINE_ORACLE_TOLERANCES = {
     "bf16": {"atol": 2e-2, "rtol": 5e-2},
-    "logfmt10": {"atol": 3e-2, "rtol": 6e-2},
     "fp8-direct-cast": {"atol": 4e-2, "rtol": 8e-2},
 }
 
@@ -260,8 +235,6 @@ def combine_oracle_tolerances(communication_precision: dict[str, Any]) -> dict[s
     communication_format = combine["communication_format"]
     if communication_format == "bf16":
         key = "bf16"
-    elif communication_format == "logfmt10":
-        key = "logfmt10"
     elif (
         communication_format in {"fp8-e4m3fn", "fp8-e4m3fnuz"}
         and combine["quantization_origin"] == "backend-internal-direct-cast"

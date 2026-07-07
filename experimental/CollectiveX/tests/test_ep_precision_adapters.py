@@ -49,11 +49,11 @@ class PrecisionResolutionTests(unittest.TestCase):
         with self.assertRaisesRegex(ep_precision.PrecisionError, "not valid in mode"):
             ep_precision.resolve_precision(
                 SimpleNamespace(
-                    precision_profile="d-bf16.c-logfmt10-dynamic64"
+                    precision_profile="d-fp8-e4m3fn-b128-f32-fused.c-bf16"
                 ),
                 backend="deepep",
                 mode="normal",
-                supported_profiles={"d-bf16.c-logfmt10-dynamic64"},
+                supported_profiles={"d-fp8-e4m3fn-b128-f32-fused.c-bf16"},
             )
 
     def test_required_native_keyword_is_checked(self):

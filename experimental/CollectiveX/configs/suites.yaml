@@ -54,7 +54,5 @@ suites:
     token_points_decode: [128]
     precision_profiles:
       - d-fp8-e4m3fn-b128-f32-fused.c-bf16
-      - d-bf16.c-logfmt10-dynamic64
-      - d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64
     provisional: false
     required_publication: comparable-experimental

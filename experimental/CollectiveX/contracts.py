@@ -860,11 +860,10 @@ def _precision_byte_provenance(
         "bf16": 16,
         "fp8-e4m3fn": 8,
         "fp8-e4m3fnuz": 8,
-        "logfmt10": 10,
     }.get(axis["communication_format"])
     if bits_per_value is None:
         raise ContractError("unknown communication precision format")
-    scale_size = {None: 0, "f32": 4, "implicit-logfmt10": 0}.get(axis["scale_dtype"])
+    scale_size = {None: 0, "f32": 4}.get(axis["scale_dtype"])
     if scale_size is None:
         raise ContractError("unknown communication scale dtype")
     group_size = axis["scale_group_size"]
@@ -1553,7 +1552,7 @@ def _validate_precision_evidence(
             if type(axis[field]) is not bool:
                 raise ContractError(f"{axis_path}.{field} must be boolean")
         scale_dtype = communication_precision[direction]["scale_dtype"]
-        expects_scales = scale_dtype not in (None, "implicit-logfmt10")
+        expects_scales = scale_dtype is not None
         for field in ("scales_finite", "scales_positive"):
             if expects_scales:
                 if type(axis[field]) is not bool:

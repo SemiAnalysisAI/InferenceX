@@ -232,10 +232,6 @@ def _precision_rule(
 _NORMAL_E4M3FN_PROFILE = "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16"
 _NORMAL_E4M3FNUZ_PROFILE = "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"
 _LL_FP8_PROFILE = "d-fp8-e4m3fn-b128-f32-fused.c-bf16"
-_LL_LOGFMT_PROFILE = "d-bf16.c-logfmt10-dynamic64"
-_LL_FP8_LOGFMT_PROFILE = (
-    "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64"
-)
 _MORI_E4M3FN_DIRECT_PROFILE = "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
 _MORI_E4M3FN_BOTH_PROFILE = (
     "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale"
@@ -284,30 +280,6 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
             basis="uccl-deepep-api-low-latency-fused-e4m3fn-block128-f32-scale",
         ),
     ),
-    _LL_LOGFMT_PROFILE: (
-        _precision_rule(
-            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
-            mode="low-latency",
-            basis="deepep-v1-low-latency-logfmt10-dynamic-per64-combine",
-        ),
-        _precision_rule(
-            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16),
-            mode="low-latency",
-            basis="uccl-deepep-api-low-latency-logfmt10-dynamic-per64-combine",
-        ),
-    ),
-    _LL_FP8_LOGFMT_PROFILE: (
-        _precision_rule(
-            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
-            mode="low-latency",
-            basis="deepep-v1-low-latency-fused-e4m3fn-dispatch-logfmt10-combine",
-        ),
-        _precision_rule(
-            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16),
-            mode="low-latency",
-            basis="uccl-deepep-api-low-latency-fused-e4m3fn-dispatch-logfmt10-combine",
-        ),
-    ),
     _MORI_E4M3FN_DIRECT_PROFILE: (
         _precision_rule(
             backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
@@ -347,8 +319,6 @@ for _profile, _backend, _mode in (
     (_NORMAL_E4M3FN_PROFILE, "deepep-v2", "normal"),
     (_NORMAL_E4M3FN_PROFILE, "deepep-hybrid", "normal"),
     (_LL_FP8_PROFILE, "deepep", "low-latency"),
-    (_LL_LOGFMT_PROFILE, "deepep", "low-latency"),
-    (_LL_FP8_LOGFMT_PROFILE, "deepep", "low-latency"),
 ):
     PRECISION_CELL_OVERRIDES[(_profile, _backend, "b300", 16, _mode)] = {
         "disposition": "unsupported",
@@ -359,55 +329,38 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     # run, SKU, EP, backend, mode, profile, disposition, result
     ("28737315879", "b200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28737315879", "b200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28737315879", "b200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
     ("28745114766", "b200-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-timeout"),
-    ("28746354426", "b200-dgxc", 16, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28747290376", "b200-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "unsupported", "native-operation-timeout"),
-    ("28747292565", "b200-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28746910633", "b200-dgxc", 16, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "construction-consensus-accelerator-memory"),
     ("28748550531", "b200-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
     ("28737422303", "h200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28737422303", "h200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28737422303", "h200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
     *(("28737422303", "h200-dgxc", 8, "uccl", mode, profile, "supported", "native-probe-passed")
-      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
-                            (_LL_LOGFMT_PROFILE, "low-latency"), (_LL_FP8_LOGFMT_PROFILE, "low-latency"))),
+      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"))),
     *(("28737422902", "gb200", ep, "deepep", mode, profile, "supported", "native-probe-passed")
       for ep in (8, 16)
-      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
-                            (_LL_LOGFMT_PROFILE, "low-latency"), (_LL_FP8_LOGFMT_PROFILE, "low-latency"))),
+      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"))),
     *(("28737422902", "gb200", ep, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed")
       for ep in (8, 16)),
     *(("28737422902", "gb200", ep, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed")
       for ep in (8, 16)),
     ("28738113606", "h100-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28738113606", "h100-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28738113606", "h100-dgxc", 8, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28738113606", "h100-dgxc", 8, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28738113606", "h100-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28738113606", "h100-dgxc", 8, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28738113606", "h100-dgxc", 8, "uccl", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28738113606", "h100-dgxc", 8, "uccl", "low-latency", _LL_FP8_PROFILE, "unsupported", "native-operation-timeout"),
-    ("28738113606", "h100-dgxc", 8, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28745208954", "h100-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28796549762", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "unsupported", "native-operation-timeout"),
     ("28745423523", "h100-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28745423523", "h100-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     *(("28738445591", "gb300", ep, "deepep", mode, profile, "supported", "native-probe-passed")
       for ep in (8, 16)
-      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"),
-                            (_LL_LOGFMT_PROFILE, "low-latency"), (_LL_FP8_LOGFMT_PROFILE, "low-latency"))),
+      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"))),
     *(("28738445591", "gb300", ep, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed")
       for ep in (8, 16)),
     *(("28738445591", "gb300", ep, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed")
@@ -415,14 +368,10 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28738738793", "b300", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28738738793", "b300", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28739555164", "h200-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28739555164", "h200-dgxc", 16, "deepep", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28739555164", "h200-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
     ("28740154697", "h200-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28740154697", "h200-dgxc", 16, "deepep", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
-    ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28740074613", "b300", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_FP8_LOGFMT_PROFILE, "supported", "native-probe-passed"),
     ("28740154697", "h200-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
     ("28750823474", "mi355x", 8, "mori", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
     ("28750825814", "mi355x", 16, "mori", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
@@ -433,9 +382,7 @@ _VALIDATED_NATIVE_PROBE_CELLS = (
     ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),
     ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
     ("28788599713", "mi300x", 16, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "unsupported", "distributed-init-timeout"),
-    *(("28743235213", "b300", 8, "deepep", "low-latency", profile,
-       "supported", "native-probe-passed")
-      for profile in (_LL_FP8_PROFILE, _LL_LOGFMT_PROFILE, _LL_FP8_LOGFMT_PROFILE)),
+    ("28743235213", "b300", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
 )
 PRECISION_CELL_OVERRIDES.update({
     (profile, backend, sku, ep, mode): {

@@ -94,8 +94,6 @@ class DeepEPBackend:
             "low-latency": {
                 "d-bf16.c-bf16",
                 "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
-                "d-bf16.c-logfmt10-dynamic64",
-                "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
             },
         }
         self.precision_profile_id, self.communication_precision = (

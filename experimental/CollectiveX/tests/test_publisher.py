@@ -1968,7 +1968,7 @@ class PublisherTest(unittest.TestCase):
                     if item["disposition"] == "unsupported"
                 ),
             ),
-            (49, 364, 191, 173, 1356, 681, 675),
+            (49, 332, 165, 167, 1324, 655, 669),
         )
         library: dict[tuple, set[str]] = {}
         system: dict[tuple, set[str]] = {}
@@ -2581,9 +2581,9 @@ class PublisherTest(unittest.TestCase):
     def test_precision_cohorts_isolate_axes_and_never_recommend(self) -> None:
         profiles = (
             identity.V1_CONTROL_PRECISION_PROFILE,
-            "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
-            "d-bf16.c-logfmt10-dynamic64",
-            "d-fp8-e4m3fn-b128-f32-fused.c-logfmt10-dynamic64",
+            "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+            "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+            "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
         )
         series = []
         internals = {}
@@ -2593,11 +2593,11 @@ class PublisherTest(unittest.TestCase):
             )
             precision = identity.precision_profile(profile_id)
             item["suite"] = (
-                "ep-low-latency-v1"
+                "ep-core-v1"
                 if index == 0
-                else "ep-precision-low-latency-v1"
+                else "ep-precision-normal-v1"
             )
-            item["mode"] = "low-latency"
+            item["mode"] = "normal"
             item["publication_tier"] = (
                 "official" if index == 0 else "comparable-experimental"
             )

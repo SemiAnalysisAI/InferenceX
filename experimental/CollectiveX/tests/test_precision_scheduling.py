@@ -206,22 +206,11 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(fused["conversion_boundary"], "inside-dispatch-timing")
         self.assertEqual(prequantized["scale_group_size"], 128)
 
-        logfmt = identity.precision_profile("d-bf16.c-logfmt10-dynamic64")["combine"]
-        self.assertEqual(
-            (logfmt["communication_format"], logfmt["scale_group_size"]),
-            ("logfmt10", 64),
-        )
         self.assertEqual(
             identity.combine_oracle_tolerances(
                 identity.precision_profile(identity.V1_CONTROL_PRECISION_PROFILE)
             ),
             {"atol": 2e-2, "rtol": 5e-2},
-        )
-        self.assertEqual(
-            identity.combine_oracle_tolerances(
-                identity.precision_profile("d-bf16.c-logfmt10-dynamic64")
-            ),
-            {"atol": 3e-2, "rtol": 6e-2},
         )
         self.assertEqual(
             identity.combine_oracle_tolerances(identity.precision_profile(
@@ -250,13 +239,13 @@ class PrecisionSchedulingTest(unittest.TestCase):
             {"supported", "unsupported"},
         )
         self.assertEqual(
-            len(targets), 94
+            len(targets), 62
         )
         self.assertEqual(
-            sum(item["disposition"] == "supported" for item in targets), 59
+            sum(item["disposition"] == "supported" for item in targets), 33
         )
         self.assertEqual(
-            sum(item["disposition"] == "unsupported" for item in targets), 35
+            sum(item["disposition"] == "unsupported" for item in targets), 29
         )
         self.assertEqual(len(capability.provisional_precision_targets()), 0)
         keys = {
@@ -273,7 +262,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
 
         normal = "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16"
         direct = "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
-        low_latency = "d-bf16.c-logfmt10-dynamic64"
+        low_latency = "d-fp8-e4m3fn-b128-f32-fused.c-bf16"
         cases = (
             (("h200-dgxc", "deepep-v2", 8, "normal", normal), "unsupported"),
             (("h100-dgxc", "deepep-v2", 8, "normal", normal), "not-applicable"),
