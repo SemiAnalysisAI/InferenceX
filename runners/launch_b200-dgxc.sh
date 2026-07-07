@@ -419,8 +419,10 @@ else
     # and gpu-15 names no longer exist. gpu-2 currently has 10 fully-idle GPU
     # nodes (all of gpu-2-[0-9]); gpu-1 has 2 drained (gpu-1-4, gpu-1-8). We
     # land on gpu-2 to avoid drained nodes and skip the per-node excludes.
+    export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"
+
     SALLOC_TIME_LIMIT="${SALLOC_TIME_LIMIT:-480}"
-    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$TP --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
+    salloc --partition=$SLURM_PARTITION --account=$SLURM_ACCOUNT --gres=gpu:$GPU_COUNT --exclusive --mem=0 --time="$SALLOC_TIME_LIMIT" --no-shell --job-name="$RUNNER_NAME"
     JOB_ID=$(squeue --name="$RUNNER_NAME" -u "$USER" -h -o %A | head -n1)
 
     # DSv4 is also staged on the compute nodes' local RAID. Loading the 806 GB
