@@ -491,6 +491,7 @@ jobs:
           COLLECTIVEX_OPERATOR_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_OPERATOR_CONFIG_V1 }}
           COLLECTIVEX_NETWORK_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_NETWORK_CONFIG_V1 }}
           COLLECTIVEX_H100_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_H100_CONFIG_V1 }}
+          COLLECTIVEX_B300_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B300_CONFIG_V1 }}
           COLLECTIVEX_B200_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_B200_CONFIG_V1 }}
           COLLECTIVEX_MI300_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI300_CONFIG_V1 }}
           COLLECTIVEX_MI355_CONFIG_CONTENT: ${{ secrets.COLLECTIVEX_MI355_CONFIG_V1 }}
@@ -523,6 +524,7 @@ jobs:
           base = load("COLLECTIVEX_OPERATOR_CONFIG_CONTENT")
           for overlay_name in (
               "COLLECTIVEX_NETWORK_CONFIG_CONTENT", "COLLECTIVEX_H100_CONFIG_CONTENT",
+              "COLLECTIVEX_B300_CONFIG_CONTENT",
               "COLLECTIVEX_B200_CONFIG_CONTENT", "COLLECTIVEX_MI300_CONFIG_CONTENT",
               "COLLECTIVEX_MI355_CONFIG_CONTENT",
           ):
@@ -545,6 +547,10 @@ jobs:
               elif overlay_name == "COLLECTIVEX_H100_CONFIG_CONTENT":
                   if set(overlay["runners"]) != {"h100-dgxc"}:
                       raise ValueError("invalid H100 overlay runner")
+                  private_fields.add("exclude_nodes")
+              elif overlay_name == "COLLECTIVEX_B300_CONFIG_CONTENT":
+                  if set(overlay["runners"]) != {"b300"}:
+                      raise ValueError("invalid B300 overlay runner")
                   private_fields.add("exclude_nodes")
               elif overlay_name == "COLLECTIVEX_MI355_CONFIG_CONTENT":
                   if set(overlay["runners"]) != {"mi355x"}:
@@ -575,7 +581,7 @@ jobs:
               stream.write(payload)
           PY
           unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
-          unset COLLECTIVEX_H100_CONFIG_CONTENT
+          unset COLLECTIVEX_H100_CONFIG_CONTENT COLLECTIVEX_B300_CONFIG_CONTENT
           unset COLLECTIVEX_B200_CONFIG_CONTENT
           unset COLLECTIVEX_MI300_CONFIG_CONTENT COLLECTIVEX_MI355_CONFIG_CONTENT
           unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED

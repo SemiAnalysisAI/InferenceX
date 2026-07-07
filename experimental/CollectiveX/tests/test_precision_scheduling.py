@@ -323,10 +323,8 @@ class PrecisionSchedulingTest(unittest.TestCase):
                 "b300", backend, ep=16, nodes=2,
                 precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
             )
-            self.assertEqual(disposition, "unsupported")
-            self.assertEqual(
-                reason, "v1 publication fabric unavailable for B300 EP16"
-            )
+            self.assertEqual(disposition, "supported")
+            self.assertEqual(reason, "ok")
         b300_ep8, reason = capability.resolve_disposition(
             "b300", "nccl-ep", ep=8, nodes=1,
             precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,

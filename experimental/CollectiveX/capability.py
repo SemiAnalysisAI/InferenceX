@@ -173,9 +173,7 @@ SWEEP_BACKENDS = tuple(BACKENDS)
 # Publication-quality topology exceptions apply after ordinary backend support
 # checks. They describe the currently usable benchmark fabric, not a library
 # implementation limit, and can be removed when the named topology is repaired.
-TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {
-    ("b300", 16): "v1 publication fabric unavailable for B300 EP16",
-}
+TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, int], str] = {}
 
 # Backend-specific topology limits require repeated native execution evidence.
 # Keep these narrower than platform overrides so working reference paths remain

@@ -209,20 +209,20 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (49, 322, 163, 159, 1314, 653, 661),
+            (53, 322, 172, 150, 1314, 701, 613),
         )
         b300_ep16 = [
-            item for item in unsupported_cases
+            item for item in runnable_cases
             if item["sku"] == "b300" and item["case"]["ep"] == 16
             and item["case"]["backend"] in {
                 "deepep", "deepep-v2", "deepep-hybrid", "nccl-ep",
             }
         ]
         self.assertTrue(b300_ep16)
-        self.assertTrue(all(
-            item["detail"] == "v1 publication fabric unavailable for B300 EP16"
-            for item in b300_ep16
-        ))
+        self.assertEqual(
+            {item["case"]["backend"] for item in b300_ep16},
+            {"deepep", "deepep-v2", "deepep-hybrid", "nccl-ep"},
+        )
         expected_topologies = {}
         for sku, product in (
             ("h100-dgxc", "h100"), ("h200-dgxc", "h200"),

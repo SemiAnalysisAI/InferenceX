@@ -1968,7 +1968,7 @@ class PublisherTest(unittest.TestCase):
                     if item["disposition"] == "unsupported"
                 ),
             ),
-            (49, 322, 163, 159, 1314, 653, 661),
+            (53, 322, 172, 150, 1314, 701, 613),
         )
         library: dict[tuple, set[str]] = {}
         system: dict[tuple, set[str]] = {}
