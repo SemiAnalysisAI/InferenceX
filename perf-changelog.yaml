@@ -4576,6 +4576,13 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override; without it the drafter falls back to a slow default backend."
+    - "Speeds up the draft forward measured on MI355X TP4 MXFP8, 8k/1k throughput gains growing with concurrency vs no override."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2107
+
+- config-keys:
     - dsv4-fp4-gb300-dynamo-sglang
   description:
     - "Add DeepSeek-V4-Pro NVFP4 GB300 1k1k STP disagg scenarios to the existing dsv4-fp4-gb300-dynamo-sglang key (7 fixed-seq-len entries alongside the existing 8k1k scenarios)."
