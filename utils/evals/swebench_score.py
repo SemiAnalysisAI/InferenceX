@@ -320,7 +320,11 @@ def build_results_json(
 
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description="Score SWE-bench patches from lm-eval samples")
-    parser.add_argument("--samples-dir", required=True, help="dir containing lm-eval samples_*.jsonl")
+    parser.add_argument("--samples-dir", default=None, help="dir containing lm-eval samples_*.jsonl (single-shot mode)")
+    parser.add_argument(
+        "--predictions-file", default=None,
+        help="pre-built predictions.jsonl (agentic mode) -- skips samples parsing",
+    )
     parser.add_argument("--out-dir", required=True, help="dir to write predictions + results JSON")
     parser.add_argument("--model-name", required=True, help="served model name (model_name_or_path)")
     parser.add_argument("--dataset-name", default=DEFAULT_DATASET)
@@ -350,16 +354,30 @@ def main(argv: Optional[list[str]] = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    samples_dir = Path(args.samples_dir)
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     run_id = args.run_id or args.task_name
 
-    # 1-3. samples -> predictions.jsonl
-    predictions = build_predictions(samples_dir, args.model_name)
-    predictions_path = out_dir / "predictions.jsonl"
-    write_predictions(predictions, predictions_path)
-    print(f"[swebench] wrote {len(predictions)} predictions -> {predictions_path}")
+    if args.predictions_file:
+        # Agentic mode: an agent harness already produced predictions.jsonl in
+        # the standard {instance_id, model_name_or_path, model_patch} shape.
+        src = Path(args.predictions_file)
+        predictions = [json.loads(line) for line in src.open() if line.strip()]
+        if not predictions:
+            print(f"ERROR: no predictions in {src}", file=sys.stderr)
+            return 1
+        predictions_path = out_dir / "predictions.jsonl"
+        write_predictions(predictions, predictions_path)
+        print(f"[swebench] using {len(predictions)} pre-built predictions -> {predictions_path}")
+    elif args.samples_dir:
+        # Single-shot mode: extract patches from lm-eval samples.
+        predictions = build_predictions(Path(args.samples_dir), args.model_name)
+        predictions_path = out_dir / "predictions.jsonl"
+        write_predictions(predictions, predictions_path)
+        print(f"[swebench] wrote {len(predictions)} predictions -> {predictions_path}")
+    else:
+        print("ERROR: one of --samples-dir or --predictions-file is required", file=sys.stderr)
+        return 1
 
     if args.predictions_only:
         print("[swebench] predictions-only: skipping scoring (score elsewhere)")

@@ -234,3 +234,28 @@ def test_results_json_flows_through_collect_and_validate(tmp_path, monkeypatch):
         "--results-glob", "results_swebench_lite.json",
     ])
     assert vs.main() == 0  # 0.5 >= 0.10 default threshold
+
+
+def test_predictions_file_mode_skips_samples_and_scores(tmp_path):
+    """Agentic mode: pre-built predictions.jsonl + offline report -> results."""
+    preds = tmp_path / "agent_preds.jsonl"
+    preds.write_text(json.dumps({
+        "instance_id": "r__p-1", "model_name_or_path": "m",
+        "model_patch": "diff --git a/a b/a\n+x\n",
+    }) + "\n")
+    report = tmp_path / "report.json"
+    report.write_text(json.dumps({"resolved_instances": 1, "total_instances": 1}))
+    out = tmp_path / "out"
+    rc = sbs.main([
+        "--predictions-file", str(preds), "--out-dir", str(out),
+        "--model-name", "m", "--report", str(report),
+    ])
+    assert rc == 0
+    assert (out / "predictions.jsonl").exists()
+    results = json.loads((out / "results_swebench_lite.json").read_text())
+    assert results["results"]["swebench_lite"]["exact_match,resolved"] == 1.0
+
+
+def test_no_input_source_errors(tmp_path):
+    rc = sbs.main(["--out-dir", str(tmp_path / "o"), "--model-name", "m"])
+    assert rc == 1
