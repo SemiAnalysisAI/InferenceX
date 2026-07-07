@@ -282,7 +282,8 @@ EOF
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
-        git checkout 1720917e
+        # https://github.com/LMCache/LMCache/pull/3853
+        git checkout dev
         pip install -r requirements/build.txt
         pip install grpcio==1.78.0
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
