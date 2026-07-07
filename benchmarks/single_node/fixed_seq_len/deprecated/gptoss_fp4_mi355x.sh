@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/../../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -35,6 +35,7 @@ fi
 
 export AMDGCN_USE_BUFFER_OPS=0
 export VLLM_ROCM_USE_AITER=1
+export VLLM_ROCM_USE_AITER_TRITON_ROPE=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 ATTN_BACKEND="--attention-backend ROCM_AITER_UNIFIED_ATTN"
 FUSE_ROPE_KVCACHE="-cc.pass_config.fuse_rope_kvcache=True -cc.use_inductor_graph_partition=True"
@@ -69,7 +70,7 @@ run_benchmark_serving \
     --input-len "$ISL" \
     --output-len "$OSL" \
     --random-range-ratio "$RANDOM_RANGE_RATIO" \
-    --num-prompts $(( $CONC * 10 )) \
+    --num-prompts "$((CONC * 10))" \
     --max-concurrency "$CONC" \
     --result-filename "$RESULT_FILENAME" \
     --result-dir /workspace/
