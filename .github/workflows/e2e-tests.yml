@@ -21,6 +21,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            eval-limit:
+                description: "Limit eval to first N instances (smoke tests); empty = full set"
+                required: false
+                type: string
+                default: ""
     workflow_call:
         inputs:
             generate-cli-command:
@@ -37,6 +42,11 @@ on:
                 type: string
             duration-override:
                 description: "Override matrix.config.duration (seconds). Empty = use matrix value."
+                required: false
+                type: string
+                default: ""
+            eval-limit:
+                description: "Limit eval to first N instances (smoke tests); empty = full set"
                 required: false
                 type: string
                 default: ""
@@ -238,6 +248,7 @@ jobs:
             # scenario-type agentic-coding => run_eval auto-selects swebench.
             run-eval: true
             eval-only: true
+            eval-limit: ${{ inputs.eval-limit }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 
@@ -344,6 +355,7 @@ jobs:
             disagg: ${{ matrix.config.disagg }}
             run-eval: true
             eval-only: true
+            eval-limit: ${{ inputs.eval-limit }}
             ref: ${{ inputs.ref }}
 
     collect-results:

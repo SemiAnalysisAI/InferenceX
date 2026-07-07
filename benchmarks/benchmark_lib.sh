@@ -855,6 +855,7 @@ run_lm_eval() {
     local temperature=0
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
+    local eval_limit="${EVAL_LIMIT:-}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -895,7 +896,8 @@ run_lm_eval() {
       --output_path "${results_dir}" \
       --log_samples \
       --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
-      --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
+      --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}" \
+      ${eval_limit:+--limit "$eval_limit"}
     local eval_exit=$?
     set +x
     return $eval_exit
@@ -1158,8 +1160,16 @@ _install_swebench_deps() {
 # the env so the harness's check passes. Never overwrite an existing file.
 _ensure_modal_credentials() {
     if [ "${SWEBENCH_USE_MODAL:-false}" != "true" ]; then return 0; fi
-    if [ -f "$HOME/.modal.toml" ]; then return 0; fi
+    if [ -f "${HOME:-}/.modal.toml" ]; then return 0; fi
     if [ -n "${MODAL_TOKEN_ID:-}" ] && [ -n "${MODAL_TOKEN_SECRET:-}" ]; then
+        # On b300 slurm/pyxis, --export=ALL may propagate the HOST's HOME into
+        # the container where that path doesn't exist or isn't writable. Remap
+        # HOME to a writable /tmp directory so the credential file can be written.
+        if [ -z "${HOME:-}" ] || ! mkdir -p "$HOME" 2>/dev/null || [ ! -w "$HOME" ]; then
+            export HOME=/tmp/inferencex-modal-home
+            mkdir -p "$HOME"
+            echo "[swebench] HOME remapped to $HOME for Modal credentials (original path missing or not writable)"
+        fi
         printf '[default]\ntoken_id = "%s"\ntoken_secret = "%s"\nactive = true\n' \
             "$MODAL_TOKEN_ID" "$MODAL_TOKEN_SECRET" > "$HOME/.modal.toml"
         chmod 600 "$HOME/.modal.toml"

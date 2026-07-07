@@ -5,7 +5,9 @@ Scenario picks the default framework (agentic-coding -> swebench, fixed-seq-len
 """
 
 import os
+import stat
 import subprocess
+import tempfile
 from pathlib import Path
 
 BENCHMARK_LIB = Path(__file__).resolve().parents[2] / "benchmarks" / "benchmark_lib.sh"
@@ -75,3 +77,169 @@ def test_env_can_force_swebench_on_fixed_seqlen():
 def test_recipe_lm_eval_arg_still_lm_eval_on_fixed_seqlen():
     # The existing fixed-seq-len recipes call `run_eval --framework lm-eval`.
     assert "DISPATCH=lm-eval" in _dispatch(is_agentic="0", cli_fw="lm-eval")
+
+
+# --- EVAL_LIMIT smoke-test knob --------------------------------------------
+#
+# Use a shim python3 on PATH that echoes its args and exits 0 so we can
+# observe the constructed lm_eval command line without a real server.
+
+_EVAL_LIMIT_SCRIPT = r'''
+set -e
+# Build a tiny python3 shim that just echoes its args to stdout
+SHIM_DIR=$(mktemp -d)
+cat > "$SHIM_DIR/python3" <<'PY'
+#!/usr/bin/env bash
+echo "PYTHON_ARGS: $*"
+exit 0
+PY
+chmod +x "$SHIM_DIR/python3"
+
+source "$BENCHMARK_LIB"
+
+export EVAL_MAX_MODEL_LEN=16384
+export MODEL_NAME=test-model
+export OPENAI_API_KEY=EMPTY
+export INFERENCEX_LM_EVAL_RUNTIME_READY=true
+
+# Intercept _install_lm_eval_deps and _patch_lm_eval so they are no-ops
+_install_lm_eval_deps() { :; }
+_patch_lm_eval() { :; }
+
+PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999 2>&1
+'''
+
+
+def _run_lm_eval_cmdline(*, eval_limit=None) -> str:
+    """Run run_lm_eval with a python3 shim and return captured stdout."""
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "KV_OFFLOADING": "none",
+    }
+    env.pop("EVAL_LIMIT", None)
+    if eval_limit is not None:
+        env["EVAL_LIMIT"] = str(eval_limit)
+    res = subprocess.run(
+        ["bash", "-c", _EVAL_LIMIT_SCRIPT],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return res.stdout + res.stderr
+
+
+def test_eval_limit_appended_when_set():
+    out = _run_lm_eval_cmdline(eval_limit=10)
+    assert "--limit 10" in out, f"Expected '--limit 10' in output:\n{out}"
+
+
+def test_eval_limit_absent_when_unset():
+    out = _run_lm_eval_cmdline(eval_limit=None)
+    assert "--limit" not in out, f"Expected no '--limit' in output:\n{out}"
+
+
+# --- Modal credential HOME hardening tests ---------------------------------
+#
+# Tests for _ensure_modal_credentials HOME-remap logic (Change B).
+
+_MODAL_CREDS_SCRIPT = r'''
+source "$BENCHMARK_LIB"
+_ensure_modal_credentials
+echo "HOME_AFTER=$HOME"
+if [ -f "$HOME/.modal.toml" ]; then
+    echo "TOML_EXISTS=true"
+    PERMS=$(stat -c '%a' "$HOME/.modal.toml" 2>/dev/null || stat -f '%A' "$HOME/.modal.toml" 2>/dev/null)
+    echo "TOML_PERMS=$PERMS"
+fi
+'''
+
+
+def _run_modal_creds(tmp_path: Path, *, home: str, token_id="tok-id", token_secret="tok-secret") -> str:
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "KV_OFFLOADING": "none",
+        "SWEBENCH_USE_MODAL": "true",
+        "MODAL_TOKEN_ID": token_id,
+        "MODAL_TOKEN_SECRET": token_secret,
+        "HOME": home,
+    }
+    res = subprocess.run(
+        ["bash", "-c", _MODAL_CREDS_SCRIPT],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return res.stdout + res.stderr
+
+
+def test_modal_creds_no_remap_when_home_writable(tmp_path):
+    """When HOME is a writable directory, no remap happens and .modal.toml is written there."""
+    home = str(tmp_path / "writable_home")
+    Path(home).mkdir()
+    out = _run_modal_creds(tmp_path, home=home)
+    assert f"HOME_AFTER={home}" in out, f"HOME should not be remapped:\n{out}"
+    assert "TOML_EXISTS=true" in out
+    toml_path = Path(home) / ".modal.toml"
+    assert toml_path.exists()
+    # Check mode 600
+    mode = oct(stat.S_IMODE(toml_path.stat().st_mode))
+    assert mode == "0o600", f"Expected 0o600 got {mode}"
+
+
+def test_modal_creds_remaps_home_when_not_writable_parent(tmp_path):
+    """When HOME is nested under a read-only dir (mkdir -p fails), HOME is remapped."""
+    # Create a read-only parent so mkdir -p "$HOME" inside the function will fail.
+    readonly_parent = tmp_path / "readonly_parent"
+    readonly_parent.mkdir(mode=0o555)
+    nested_home = str(readonly_parent / "nested_home")
+    try:
+        out = _run_modal_creds(tmp_path, home=nested_home)
+        assert "HOME_AFTER=/tmp/inferencex-modal-home" in out, f"Expected HOME remap:\n{out}"
+        assert "remapped" in out.lower() or "HOME remapped" in out
+        assert "TOML_EXISTS=true" in out
+        toml_path = Path("/tmp/inferencex-modal-home/.modal.toml")
+        assert toml_path.exists()
+        mode = oct(stat.S_IMODE(toml_path.stat().st_mode))
+        assert mode == "0o600", f"Expected 0o600 got {mode}"
+    finally:
+        readonly_parent.chmod(0o755)
+
+
+def test_modal_creds_remaps_home_when_not_writable(tmp_path):
+    """When HOME exists but is not writable, HOME is remapped."""
+    readonly_home = tmp_path / "readonly_home"
+    readonly_home.mkdir(mode=0o555)
+    try:
+        out = _run_modal_creds(tmp_path, home=str(readonly_home))
+        assert "HOME_AFTER=/tmp/inferencex-modal-home" in out, f"Expected HOME remap:\n{out}"
+        assert "TOML_EXISTS=true" in out
+    finally:
+        # Restore write permission so tmp_path cleanup can remove it
+        readonly_home.chmod(0o755)
+
+
+def test_modal_creds_no_remap_when_disabled(tmp_path):
+    """When SWEBENCH_USE_MODAL != true, _ensure_modal_credentials is a no-op."""
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "KV_OFFLOADING": "none",
+        "SWEBENCH_USE_MODAL": "false",
+        "MODAL_TOKEN_ID": "tok",
+        "MODAL_TOKEN_SECRET": "sec",
+        "HOME": str(tmp_path),
+    }
+    res = subprocess.run(
+        ["bash", "-c", _MODAL_CREDS_SCRIPT],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    out = res.stdout + res.stderr
+    assert "remapped" not in out.lower()
+    assert "TOML_EXISTS" not in out

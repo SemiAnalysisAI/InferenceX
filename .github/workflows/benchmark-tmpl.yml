@@ -91,6 +91,11 @@ on:
         required: false
         type: string
         default: '3600'
+      eval-limit:
+        description: "Limit eval to first N instances (smoke tests); empty = full set"
+        required: false
+        type: string
+        default: ""
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -120,6 +125,7 @@ env:
   KV_OFFLOAD_BACKEND: ${{ inputs.kv-offload-backend }}
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
+  EVAL_LIMIT: ${{ inputs.eval-limit }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'
