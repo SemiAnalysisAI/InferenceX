@@ -45,6 +45,8 @@ AGG_TOP_LEVEL_KEYS = {
     "scenario_type",
     "is_multinode",
     "tp",
+    "dcp_size",
+    "pcp_size",
     "ep",
     "dp_attention",
     "kv_offloading",
@@ -321,6 +323,8 @@ def _run_processor(
             "FRAMEWORK": "vllm",
             "PRECISION": "fp4",
             "TP": "4",
+            "DCP_SIZE": "1",
+            "PCP_SIZE": "1",
             "EP_SIZE": "1",
             "DP_ATTENTION": "false",
             "CONC": "8",
@@ -434,14 +438,24 @@ def test_processor_derives_interactivity_from_matching_itl_percentile(
 def test_processor_throughput_per_gpu(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir)
-    per_gpu = agg["request_metrics"]["throughput"]["per_gpu"]
-    assert per_gpu["total_tput_tps"] > 0
-    assert per_gpu["input_tput_tps"] > 0
-    assert per_gpu["output_tput_tps"] > 0
-    assert "tput_per_gpu" not in agg
-    assert "input_tput_per_gpu" not in agg
-    assert "output_tput_per_gpu" not in agg
+    agg = _run_processor(
+        result_dir,
+        output_dir,
+        env_overrides={"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"},
+    )
+    throughput = agg["request_metrics"]["throughput"]
+    per_gpu = throughput["per_gpu"]
+    assert agg["dcp_size"] == 2
+    assert agg["pcp_size"] == 2
+    assert per_gpu["total_tput_tps"] == pytest.approx(
+        throughput["total"]["tokens_per_second"] / 8
+    )
+    assert per_gpu["input_tput_tps"] == pytest.approx(
+        throughput["input"]["tokens_per_second"] / 8
+    )
+    assert per_gpu["output_tput_tps"] == pytest.approx(
+        throughput["output"]["tokens_per_second"] / 8
+    )
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
