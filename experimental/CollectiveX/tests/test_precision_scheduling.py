@@ -318,13 +318,28 @@ class PrecisionSchedulingTest(unittest.TestCase):
         self.assertEqual(h100_ep16, "supported")
         self.assertEqual(reason, "ok")
 
-        for backend in ("deepep", "deepep-v2", "deepep-hybrid", "nccl-ep"):
+        # B300 EP16 runs over the RoCE GPU-fabric: nccl-ep and the DeepEP Hybrid
+        # control path (native DOCA transport) execute there; DeepEP V1/V2 cannot --
+        # their internode path is NVSHMEM-IBGDA, which needs GDRCopy /dev/gdrdrv, and
+        # that char device is unprovisioned on B300 hosts.
+        for backend in ("deepep-hybrid", "nccl-ep"):
             disposition, reason = capability.resolve_disposition(
                 "b300", backend, ep=16, nodes=2,
                 precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
             )
             self.assertEqual(disposition, "supported")
             self.assertEqual(reason, "ok")
+        for backend, version in (("deepep", "V1"), ("deepep-v2", "V2")):
+            disposition, reason = capability.resolve_disposition(
+                "b300", backend, ep=16, nodes=2,
+                precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,
+            )
+            self.assertEqual(disposition, "unsupported")
+            self.assertEqual(
+                reason,
+                f"DeepEP {version} EP16 requires GDRCopy /dev/gdrdrv for "
+                "NVSHMEM-IBGDA, unprovisioned on B300 hosts",
+            )
         b300_ep8, reason = capability.resolve_disposition(
             "b300", "nccl-ep", ep=8, nodes=1,
             precision_profile=identity.V1_CONTROL_PRECISION_PROFILE,

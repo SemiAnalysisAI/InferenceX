@@ -209,8 +209,11 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (53, 322, 172, 150, 1314, 701, 613),
+            (51, 322, 167, 155, 1314, 673, 641),
         )
+        # B300 EP16 runs over RoCE: only nccl-ep and the DeepEP Hybrid control path
+        # execute. DeepEP V1/V2 are walled (NVSHMEM-IBGDA needs GDRCopy /dev/gdrdrv,
+        # unprovisioned on B300 hosts) so they must NOT appear among runnable cases.
         b300_ep16 = [
             item for item in runnable_cases
             if item["sku"] == "b300" and item["case"]["ep"] == 16
@@ -221,7 +224,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertTrue(b300_ep16)
         self.assertEqual(
             {item["case"]["backend"] for item in b300_ep16},
-            {"deepep", "deepep-v2", "deepep-hybrid", "nccl-ep"},
+            {"deepep-hybrid", "nccl-ep"},
         )
         expected_topologies = {}
         for sku, product in (
@@ -276,7 +279,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIsNotNone(capability.topology_for("mi325x", 8))
         self.assertEqual(
             Counter(shard["n"] for shard in matrix["include"]),
-            Counter({2: 30, 6: 13, 4: 5, 5: 1}),
+            Counter({2: 32, 6: 13, 4: 5, 5: 1}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]

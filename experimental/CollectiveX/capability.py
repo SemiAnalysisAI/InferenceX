@@ -185,6 +185,14 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ("b200-dgxc", "deepep-hybrid", 16): (
         "DeepEP Hybrid EP16 requires unavailable GPU-to-NIC doorbell/UAR mappings on B200"
     ),
+    ("b300", "deepep", 16): (
+        "DeepEP V1 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
+        "unprovisioned on B300 hosts"
+    ),
+    ("b300", "deepep-v2", 16): (
+        "DeepEP V2 EP16 requires GDRCopy /dev/gdrdrv for NVSHMEM-IBGDA, "
+        "unprovisioned on B300 hosts"
+    ),
     ("mi355x", "mori", 8): (
         "Pinned MoRI backend construction does not complete on MI355X EP8"
     ),
@@ -312,16 +320,27 @@ PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
 
 PRECISION_CELL_OVERRIDES: dict[tuple[str, str, str, int, str], dict[str, str]] = {}
 
+# B300 EP16 runs over the RoCE GPU-fabric: nccl-ep and the DeepEP Hybrid control
+# path (native DOCA transport) execute there. DeepEP V1/V2 cannot -- their internode
+# path is NVSHMEM-IBGDA, which needs GDRCopy /dev/gdrdrv, and that char device is
+# unprovisioned on B300 hosts (module loaded, no device node; gdr_open returns NULL).
+# V1/V2 are additionally walled at the topology layer above; these precision-cell
+# overrides keep their declared native targets consistent (base_ok gates them anyway).
 for _profile, _backend, _mode in (
     (_NORMAL_E4M3FN_PROFILE, "deepep", "normal"),
     (_NORMAL_E4M3FN_PROFILE, "deepep-v2", "normal"),
-    (_NORMAL_E4M3FN_PROFILE, "deepep-hybrid", "normal"),
     (_LL_FP8_PROFILE, "deepep", "low-latency"),
 ):
     PRECISION_CELL_OVERRIDES[(_profile, _backend, "b300", 16, _mode)] = {
         "disposition": "unsupported",
-        "basis": "v1-publication-fabric-unavailable",
+        "basis": "deepep-ibgda-gdrcopy-unavailable-b300",
     }
+# DeepEP Hybrid's control path passes on B300 EP16, but its native FP8 precision
+# path is not yet validated on this fabric; keep the precision cell unsupported.
+PRECISION_CELL_OVERRIDES[(_NORMAL_E4M3FN_PROFILE, "deepep-hybrid", "b300", 16, "normal")] = {
+    "disposition": "unsupported",
+    "basis": "hybrid-native-precision-unvalidated-b300-ep16",
+}
 
 _VALIDATED_NATIVE_PROBE_CELLS = (
     # run, SKU, EP, backend, mode, profile, disposition, result
