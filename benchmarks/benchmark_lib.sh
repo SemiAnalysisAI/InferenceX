@@ -1251,11 +1251,15 @@ _run_swebench_agentic_generation() {
     _install_swebench_agent_deps
     _ensure_modal_credentials  # the agent's execution sandboxes run on Modal
 
+    # NOTE: importing minisweagent prints a multi-line version banner to stdout
+    # on fresh machines -- keep only the LAST stdout line (our path print) and
+    # validate it, or the banner ends up passed to mini-extra as a config path.
     local default_cfg
-    default_cfg=$(python3 -c 'import minisweagent, os; print(os.path.join(os.path.dirname(minisweagent.__file__), "config/benchmarks/swebench.yaml"))') || {
-        echo "ERROR: mini-swe-agent not importable after install" >&2
+    default_cfg=$(python3 -c 'import minisweagent, os; print(os.path.join(os.path.dirname(minisweagent.__file__), "config/benchmarks/swebench.yaml"))' 2>/dev/null | tail -n 1)
+    if [ ! -f "$default_cfg" ]; then
+        echo "ERROR: could not locate mini-swe-agent default swebench config (got: '${default_cfg}')" >&2
         return 1
-    }
+    fi
 
     # Overrides layered on mini's shipped swebench.yaml (which carries the
     # load-bearing prompt templates). cost_limit is inert for a self-hosted

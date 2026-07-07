@@ -473,7 +473,9 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
     default_yaml.write_text("agent: {}\n")
     (shim / "python3").write_text(
         "#!/bin/bash\n"
-        f'if [[ "$*" == *minisweagent* ]]; then echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
+        # emulate mini's import-time version banner (regression: the banner must
+        # not end up in the captured config path)
+        f'if [[ "$*" == *minisweagent* ]]; then echo "This is mini-swe-agent version 2.4.5."; echo "Check the v2 migration guide"; echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
     )
     (shim / "python3").chmod(0o755)
 
