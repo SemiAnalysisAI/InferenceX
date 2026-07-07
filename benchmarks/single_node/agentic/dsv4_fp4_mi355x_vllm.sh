@@ -249,7 +249,7 @@ EOF
                 echo "LMCache server died before creating log file. Exiting." >&2
                 exit 1
             fi
-            sleep 1
+            sleep 10
         done
 
         tail -f -n +1 "$LMCACHE_LOG" &
@@ -282,7 +282,9 @@ EOF
 
         git clone https://github.com/LMCache/LMCache.git
         cd LMCache
-        pip install -r requirements/build.txt 
+        git checkout 1720917e
+        pip install -r requirements/build.txt
+        pip install grpcio==1.78.0
         CXX=hipcc BUILD_WITH_HIP=1 pip install -e .   --no-build-isolation
         cd ..
 
@@ -316,7 +318,8 @@ EOF
         LMCACHE_CHUNK_SIZE="${LMCACHE_CHUNK_SIZE:-256}"
         LMCACHE_MAX_WORKERS="${LMCACHE_MAX_WORKERS:-$TP}"
         export PYTHONHASHSEED="${PYTHONHASHSEED:-0}"
-        export LMCACHE_BLOCKING_TIMEOUT_SECS=600
+        export LMCACHE_BLOCKING_TIMEOUT_SECS=1200
+        LMCACHE_TX_MODE="lmcache_driven"
 
         echo "Starting LMCache MP server..."
         LMCACHE_CMD=(
@@ -331,6 +334,7 @@ EOF
             --chunk-size "$LMCACHE_CHUNK_SIZE"
             --max-workers "$LMCACHE_MAX_WORKERS"
             --eviction-policy LRU
+            --supported-transfer-mode "$LMCACHE_TX_MODE"
         )
         printf '%q ' "${LMCACHE_CMD[@]}" > "$RESULT_DIR/lmcache_command.txt"
         printf '\n' >> "$RESULT_DIR/lmcache_command.txt"
