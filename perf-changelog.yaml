@@ -4574,3 +4574,11 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - dsr1-fp4-b200-dynamo-sglang-mtp
+  description:
+    - "Prune the 8k/1k MTP disagg low-latency points: 1p5d-tp8 to conc 4-32, 1p3d-tp8 to conc 32-64, and 1p1d-tp8 to conc 32."
+    - "Add 8k/1k MTP disagg high-throughput points: 1p1d and 4p1d (DEP4 prefill / DEP8 decode) at conc 512."
+    - "Add an 8k/1k MTP disagg 4p1d (DEP4 prefill / DEP8 decode) high-throughput point at conc 2048 with a dedicated engine tune (max-running-requests 2048, decode scheduler-recv-interval 1, prefill/decode stream-interval 100/34, SGLANG_HACK_SEQ_BOOTSTRAP_ROOM)."
+  pr-link: XXX
