@@ -58,7 +58,7 @@ on:
         default: '1'
         options: ['1', '2', '3']
       publish_run_id:
-        description: For publish, one successful first-attempt versioned sweep run ID (qualification index 1)
+        description: For publish, one successful versioned sweep run ID (qualification index 1)
         type: string
         default: ''
       refresh_run_id:
@@ -755,13 +755,13 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # ---- autopublish: a successful first-attempt versioned sweep self-publishes its own run ----
+  # ---- autopublish: a successful versioned sweep self-publishes its own run ----
   # A "tagged + success" sweep (full OR partial) emits its own promoted
   # publication artifact from the same run, so the frontend can discover many
   # independent runs of a version Just-In-Time without a separate manual publish step.
   autopublish:
     needs: [setup, sweep]
-    if: ${{ inputs.operation == 'sweep' && inputs.release_tag != 'unversioned' && inputs.qualification_index == '1' && github.run_attempt == '1' && needs.sweep.result == 'success' }}
+    if: ${{ inputs.operation == 'sweep' && inputs.release_tag != 'unversioned' && inputs.qualification_index == '1' && needs.sweep.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -888,9 +888,9 @@ jobs:
             && [ "$branch" = 'collectivex' ] \
             && [ "$status" = 'completed' ] \
             && [ "$conclusion" = 'success' ] \
-            && [ "$attempt" = 1 ] \
+            && [[ "$attempt" =~ ^[1-9][0-9]*$ ]] \
             && [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || {
-              echo "run $run_id is not an eligible first-attempt V1 sweep" >&2
+              echo "run $run_id is not an eligible V1 sweep" >&2
               exit 1
             }
           source_sha="$sha"

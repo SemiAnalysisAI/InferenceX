@@ -3667,10 +3667,9 @@ def build_dataset(
         len(loaded) != REQUIRED_ALLOCATIONS
         or len(run_ids) != len(set(run_ids))
         or qualification_indices != [1]
-        or any(bundle["manifest"]["run"]["run_attempt"] != 1 for bundle in loaded)
     ):
         raise PublisherError(
-            "promotion requires qualification index 1 from a first-attempt run"
+            "promotion requires qualification index 1 from a single versioned run"
         )
     cases = {case["case_id"]: case for case in loaded[0]["cases"]}
     canonical = _canonical_coverage_cases()

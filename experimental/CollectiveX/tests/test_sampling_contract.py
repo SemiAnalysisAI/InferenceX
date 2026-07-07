@@ -1799,7 +1799,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("cxrelease-[1-9][0-9]*-$run_id-$attempt/release", sweep)
         self.assertIn("run $run_id is not tagged for a release version", sweep)
         self.assertIn("ref: ${{ steps.runs.outputs.source_sha }}", sweep)
-        self.assertIn("[ \"$attempt\" = 1 ]", sweep)
+        self.assertIn("[[ \"$attempt\" =~ ^[1-9][0-9]*$ ]]", sweep)
         self.assertIn(
             "cxpublication-${{ steps.build.outputs.version }}-${{ github.run_id }}-${{ github.run_attempt }}",
             sweep,
@@ -1808,15 +1808,17 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn("retention-days: 90", sweep)
         self.assertNotIn("workflow_run:", sweep)
 
-        # A successful first-attempt versioned sweep (full OR partial) self-publishes
-        # its own run so the frontend can discover many runs of a version JIT, without
-        # a separate manual publish dispatch. The artifact name embeds the numeric
-        # version so the frontend can group runs by version.
+        # A successful versioned sweep (full OR partial) self-publishes its own run so
+        # the frontend can discover many runs of a version JIT, without a separate
+        # manual publish dispatch. Publication is no longer pinned to the first attempt:
+        # a re-run whose legs re-emit at a single consistent attempt can also publish.
+        # The artifact name embeds the numeric version so the frontend can group runs.
         self.assertIn("autopublish:", sweep)
         self.assertIn("inputs.qualification_index == '1'", sweep)
         self.assertIn(
-            "github.run_attempt == '1' && needs.sweep.result == 'success'", sweep
+            "inputs.qualification_index == '1' && needs.sweep.result == 'success'", sweep
         )
+        self.assertNotIn("github.run_attempt == '1' &&", sweep)
         self.assertIn("CollectiveX publication (auto) — version", sweep)
         self.assertIn(
             "cxpublication-${{ inputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}",

@@ -1858,6 +1858,32 @@ class PublisherTest(unittest.TestCase):
         ), self.assertRaisesRegex(publisher.PublisherError, "complete coverage"):
             publisher.validate_public_dataset(dataset)
 
+    def test_promotion_accepts_a_non_first_attempt_run(self) -> None:
+        # Publication is no longer pinned to run attempt 1: a re-run whose legs
+        # re-emit at a single consistent attempt (e.g. attempt 2) is eligible to
+        # promote. The single-run gate must not reject a lone qualification-index-1
+        # bundle merely because its run_attempt is 2 — it fails later on coverage,
+        # not on the attempt.
+        bundle = {
+            "id": "1", "cases": [],
+            "manifest": {
+                "matrix": {"sha256": publisher.CANONICAL_FULL_V1_MATRIX_SHA256},
+                "run": {
+                    "run_id": "1", "run_attempt": 2,
+                    "qualification_index": 1,
+                },
+            },
+        }
+        # The lone bundle passes the single-run/attempt gate and only fails
+        # further downstream (the fixture omits documents/coverage), so the
+        # failure is any post-gate error — never the attempt rejection.
+        with mock.patch.object(
+            publisher, "load_bundle", side_effect=lambda _, bundle_id: bundle
+        ), self.assertRaises(Exception) as ctx:
+            publisher.build_dataset(object(), ["1"], promote=True)
+        self.assertNotIn("single versioned run", str(ctx.exception))
+        self.assertNotIn("first-attempt", str(ctx.exception))
+
     def test_standalone_promotion_binds_matrix_and_requested_dispositions(self) -> None:
         dataset = _promoted_dataset()
         fixture_catalog = publisher._case_disposition_catalog_sha256(dataset["coverage"])
