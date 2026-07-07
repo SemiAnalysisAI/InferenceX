@@ -8,12 +8,11 @@ Each rank materializes its slice `[rank*T,(rank+1)*T)`. Activations
 are per-rank (same rank ⇒ same x on any platform), so a given global token id has
 identical activation everywhere without materializing a global activation tensor.
 
-The v1 suite keeps two routing distributions:
+The v1 suite uses a single routing distribution:
 
   * uniform   — top-k distinct experts drawn uniformly per token. The DEFAULT.
                 Expected fan-out for top-k=8, 256 experts, EP8 (32 experts/rank) ≈
                 8·(1 − C(224,8)/C(256,8)) ≈ 5.3 ranks/token. Load ~ Poisson.
-  * zipf      — expert popularity proportional to 1/rank, producing expert/rank load skew.
 
 Always publish the realized fan-out so the workload is never misread again
 (`routing_stats`).
@@ -208,10 +207,9 @@ if __name__ == "__main__":
     import sys
     E, TOPK, EPR, GT = 256, 8, 32, 4096
     ui, _ = build_global_routing(GT, E, TOPK, "uniform", 67)
-    zi, _ = build_global_routing(GT, E, TOPK, "zipf", 67)
     assert all(len(set(row.tolist())) == TOPK for row in ui[:16])
-    uniform, zipf = routing_stats(ui, E, EPR), routing_stats(zi, E, EPR)
-    assert uniform["hotspot_ratio"] < zipf["hotspot_ratio"]
+    uniform = routing_stats(ui, E, EPR)
+    assert uniform["hotspot_ratio"] >= 1.0
     dev = torch.device("cpu")
     first = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32)
     second = rank_activations(8, 256, 67, 0, dev, dtype=torch.float32)

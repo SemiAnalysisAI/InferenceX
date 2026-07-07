@@ -165,7 +165,7 @@ class SamplingContractTest(unittest.TestCase):
             "format": contracts.TERMINAL_FORMAT,
             "case": {
                 "backend": "deepep", "phase": "prefill", "ep": 8,
-                "suite": "ep-routing-v1", "routing": "zipf", "eplb": True,
+                "suite": "ep-precision-normal-v1", "routing": "uniform", "eplb": False,
                 "required_publication": "comparable-experimental",
             },
             "identity": {"case_factors": {"sku": "h100-dgxc"}},
@@ -173,7 +173,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertEqual(
             summarize._identity(terminal),
             (
-                "h100-dgxc", "ep-routing-v1", "zipf", "prefill", True,
+                "h100-dgxc", "ep-precision-normal-v1", "uniform", "prefill", False,
                 "comparable-experimental", 8,
             ),
         )
@@ -209,7 +209,7 @@ class SamplingContractTest(unittest.TestCase):
                 sum(len(item["case"]["ladder"].split()) for item in runnable_cases),
                 sum(len(item["case"]["ladder"].split()) for item in unsupported_cases),
             ),
-            (49, 748, 387, 361, 1740, 877, 863),
+            (49, 364, 191, 173, 1356, 681, 675),
         )
         b300_ep16 = [
             item for item in unsupported_cases
@@ -276,7 +276,7 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIsNotNone(capability.topology_for("mi325x", 8))
         self.assertEqual(
             Counter(shard["n"] for shard in matrix["include"]),
-            Counter({6: 29, 8: 6, 10: 1, 11: 1, 12: 12}),
+            Counter({2: 29, 8: 12, 4: 6, 7: 1, 6: 1}),
         )
         ll_cases = [
             item for item in matrix["requested_cases"]
@@ -308,17 +308,6 @@ class SamplingContractTest(unittest.TestCase):
                 tuple(shard[field] for field in topology_fields),
                 expected_topologies[shard["sku"], ep],
             )
-        routing_points = {
-            phase: {
-                int(point)
-                for item in matrix["requested_cases"]
-                if item["case"]["suite"] == "ep-routing-v1"
-                and item["case"]["phase"] == phase
-                for point in item["case"]["ladder"].split()
-            }
-            for phase in ("decode", "prefill")
-        }
-        self.assertEqual(routing_points, {"decode": {128}, "prefill": {512}})
         skus = sorted({shard["sku"] for shard in matrix["include"]})
         self.assertEqual(
             [shard["sku"] for shard in matrix["include"][:len(skus)]],
@@ -429,7 +418,7 @@ class SamplingContractTest(unittest.TestCase):
             ),
             (
                 "integer EPLB",
-                lambda s, _w: s["suites"]["ep-routing-v1"].update({"eplb": [0, 1]}),
+                lambda s, _w: s["suites"]["ep-core-v1"].update({"eplb": [0, 1]}),
             ),
             (
                 "duplicate platform",
@@ -450,7 +439,7 @@ class SamplingContractTest(unittest.TestCase):
             ),
             (
                 "unreachable phase ladder",
-                lambda s, _w: s["suites"]["ep-routing-v1"].update({"phases": ["prefill"]}),
+                lambda s, _w: s["suites"]["ep-core-v1"].update({"phases": ["decode"]}),
             ),
         )
         for label, mutate in invalid:
@@ -2207,26 +2196,6 @@ class SamplingContractTest(unittest.TestCase):
         self.assertEqual(member, manifest["workload_id"])
         self.assertEqual(checksums, manifest["checksums"])
 
-    def test_eplb_calibration_window_is_disjoint_and_identity_bound(self) -> None:
-        evaluation = workload.canonical_member("zipf", 8, 2, 8, 2, 4, 67)
-        calibration = workload.canonical_eplb_calibration_member(
-            "zipf", 8, 2, 8, 2, 4, 67
-        )
-        self.assertNotEqual(evaluation[0], calibration[0])
-        self.assertNotEqual(evaluation[1]["trace"], calibration[1]["trace"])
-        self.assertGreater(
-            workload.EPLB_CALIBRATION_TOKEN_OFFSET,
-            2 * 4,
-        )
-        repeated = workload.canonical_eplb_calibration_member(
-            "zipf", 8, 2, 8, 2, 4, 67
-        )
-        self.assertEqual(calibration, repeated)
-        with self.assertRaises(ValueError):
-            workload.canonical_routing_rows(
-                8, 8, 2, "zipf", 67, token_offset=-1
-            )
-
     def test_canonical_members_are_bound_to_each_scheduled_row(self) -> None:
         case = {
             "routing": "uniform", "hidden": 8, "topk": 2, "experts": 4, "ep": 2,
@@ -2292,36 +2261,6 @@ class SamplingContractTest(unittest.TestCase):
                 contracts._validate_canonical_workload(
                     bad_proof, case, bad_rows, eplb_record
                 )
-
-    def test_eplb_row_hash_is_bound_to_the_frozen_remap(self) -> None:
-        case = {
-            "routing": "zipf", "hidden": 8, "topk": 2, "experts": 4, "ep": 2,
-            "mode": "normal",
-        }
-        physical = eplb.physical_count(4, 32, 2)
-        plan = contracts._expected_eplb_plan("zipf", 2, 4, physical, 2, 67, 2048)
-        eplb_record = {
-            "enabled": True,
-            "mapping_hash": eplb.mapping_hash(plan),
-            "num_physical_experts": physical,
-        }
-        member, checksums, row_hash, _, _ = contracts._expected_canonical_trace(
-            "zipf", 8, 2, 4, physical, 2, 1, 67, True, 2048
-        )
-        self.assertNotEqual(row_hash, checksums["trace"])
-        workload_proof = {
-            "manifest_checksums": {member: checksums},
-            "members": [member],
-            "workload_id": identity.workload_id({
-                "members": [{"checksums": checksums, "workload_id": member}]
-            }),
-        }
-        rows = [{"tokens_per_rank": 1, "routing": {"hash": row_hash}}]
-        contracts._validate_canonical_workload(workload_proof, case, rows, eplb_record)
-        with self.assertRaisesRegex(contracts.ContractError, "EPLB mapping"):
-            contracts._validate_canonical_workload(
-                workload_proof, case, rows, {**eplb_record, "mapping_hash": "0" * 64}
-            )
 
     def test_oracle_pass_cannot_ignore_combined_value_failure(self) -> None:
         oracle = {

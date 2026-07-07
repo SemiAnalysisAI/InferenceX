@@ -511,8 +511,8 @@ def _resolve_base(
     topology = topology_for(sku, ep)
     if topology is None or (nodes is not None and nodes != topology["nodes"]):
         return False, f"{sku} does not register EP{ep} on {nodes} nodes"
-    if routing not in {"uniform", "zipf"} or (eplb and routing != "zipf"):
-        return False, "v1 routing is uniform or zipf, with EPLB only on zipf"
+    if routing != "uniform" or eplb:
+        return False, "v1 routing is uniform; EPLB is unavailable"
     if platform["vendor"] not in implementation["vendors"]:
         return False, f"{backend} does not support {platform['vendor']}"
     sku_capability = implementation.get("sku_capabilities", {}).get(sku)

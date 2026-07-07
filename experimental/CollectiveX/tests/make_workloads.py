@@ -58,7 +58,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Generate canonical CollectiveX workloads")
     ap.add_argument("--out-dir", help="required unless --id-only")
     ap.add_argument("--workload", help="named manifest in configs/workloads.yaml (sets hidden/topk/experts)")
-    ap.add_argument("--routing", default="uniform", choices=["uniform", "zipf"])
+    ap.add_argument("--routing", default="uniform", choices=["uniform"])
     ap.add_argument("--ep", type=int, required=True, help="ep_size (global_tokens = T * ep)")
     ap.add_argument("--hidden", type=int, help="override (default 7168, or the --workload's hidden)")
     ap.add_argument("--topk", type=int, help="override (default 8, or the --workload's topk)")

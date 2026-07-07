@@ -355,7 +355,7 @@
         "phase": {"enum":["decode","prefill"]},
         "precision_profile": {"$ref":"#/$defs/precision_profile"},
         "required_publication": {"enum":["official","comparable-experimental"]},
-        "routing": {"enum":["uniform","zipf"]},
+        "routing": {"enum":["uniform"]},
         "samples_per_point": {"const":512},
         "scale_out_transport": {"oneOf":[{"type":"null"},{"maxLength":128,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"}]},
         "scale_up_domain": {"minimum":1,"type":"integer"},
@@ -525,7 +525,7 @@
             "kernel_gen": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
             "num_logical_experts": {"minimum":1,"type":"integer"},
             "precision_profile": {"$ref":"#/$defs/precision_profile"},
-            "routing": {"enum":["uniform","zipf"]},
+            "routing": {"enum":["uniform"]},
             "topk": {"minimum":1,"type":"integer"}
           },
           "required": [

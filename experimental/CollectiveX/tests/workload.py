@@ -16,7 +16,6 @@ parameters therefore produce the same int32/float32 bytes across PyTorch and acc
 from __future__ import annotations
 
 from array import array
-import bisect
 import hashlib
 import json
 import os
@@ -67,20 +66,12 @@ def canonical_routing_rows(
     token_offset: int = 0,
 ) -> tuple[list[list[int]], list[list[float]]]:
     """Generate a deterministic routing window from exact integer counters."""
-    if routing not in {"uniform", "zipf"}:
-        raise ValueError(f"unknown routing {routing!r} (uniform|zipf)")
+    if routing != "uniform":
+        raise ValueError(f"unknown routing {routing!r} (uniform)")
     if global_tokens <= 0 or experts <= 0 or topk <= 0 or topk > experts:
         raise ValueError("global_tokens/experts/topk must be positive and topk <= experts")
     if type(token_offset) is not int or token_offset < 0:
         raise ValueError("token_offset must be a non-negative integer")
-
-    cumulative: list[int] | None = None
-    if routing == "zipf":
-        total = 0
-        cumulative = []
-        for expert in range(experts):
-            total += (1 << 32) // (expert + 1)
-            cumulative.append(total)
 
     indices: list[list[int]] = []
     weights: list[list[float]] = []
@@ -92,11 +83,7 @@ def canonical_routing_rows(
             attempt = 0
             while True:
                 value = _counter(seed, token, slot, attempt, 0)
-                expert = (
-                    value % experts
-                    if cumulative is None
-                    else bisect.bisect_right(cumulative, value % cumulative[-1])
-                )
+                expert = value % experts
                 if expert not in used:
                     used.add(expert)
                     selected.append(expert)
@@ -328,7 +315,7 @@ def verify_workload(manifest, idx_np, weights_np):
     if (manifest["schema_version"] != WORKLOAD_SCHEMA_VERSION
             or manifest["generator_version"] != GENERATOR_VERSION
             or manifest["gate_weight_format"] != GATE_WEIGHT_FORMAT
-            or manifest["routing_profile"] not in {"uniform", "zipf"}):
+            or manifest["routing_profile"] != "uniform"):
         return False, "manifest version or generator is unsupported"
     if (isinstance(manifest["seed"], bool) or not isinstance(manifest["seed"], int)
             or not identity.is_typed_id(manifest["workload_id"], "workload")):
@@ -389,16 +376,16 @@ if __name__ == "__main__":
     import sys
     import tempfile
     # (1) workload_id determinism + sensitivity — pure stdlib, always runs.
-    a = compute_workload_id("zipf", 7168, 8, 256, 8, 4096, 67)
-    b = compute_workload_id("zipf", 7168, 8, 256, 8, 4096, 67)
-    c = compute_workload_id("uniform", 7168, 8, 256, 8, 4096, 67)
+    a = compute_workload_id("uniform", 7168, 8, 256, 8, 4096, 67)
+    b = compute_workload_id("uniform", 7168, 8, 256, 8, 4096, 67)
+    c = compute_workload_id("uniform", 7168, 8, 256, 8, 4096, 68)
     assert a == b, "workload_id must be deterministic"
-    assert a != c, "workload_id must depend on routing"
-    print(f"workload_id determinism OK (zipf={a} uniform={c})")
+    assert a != c, "workload_id must depend on seed"
+    print(f"workload_id determinism OK (uniform={a})")
     # (2) build/save/load/verify roundtrip + cross-build identity — needs torch+numpy.
     try:
         import numpy as np  # noqa: F401
-        idx, w, man = build_workload(7168, 8, 256, "zipf", 512, 67, 32)
+        idx, w, man = build_workload(7168, 8, 256, "uniform", 512, 67, 32)
         with tempfile.TemporaryDirectory() as d:
             wid = save_workload(d, idx, w, man)
             idx2, w2, man2 = load_workload(os.path.join(d, f"{wid}.npz"), verify=True)

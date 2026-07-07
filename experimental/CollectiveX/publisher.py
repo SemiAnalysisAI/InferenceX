@@ -40,16 +40,16 @@ POLICY = "collectivex-decision-grade-v1"
 PUBLISHER_POLICY = "collectivex-publisher-v1"
 OUTCOMES = ("success", "unsupported", "failed", "invalid", "diagnostic")
 REQUIRED_ALLOCATIONS = 3
-REQUIRED_COHORT_KINDS = ("library", "chip", "system", "routing")
+REQUIRED_COHORT_KINDS = ("library", "chip", "system")
 PRECISION_COHORT_KINDS = (
     "dispatch-precision", "combine-precision", "precision-pair",
 )
-REQUIRED_PROMOTION_COHORT_COUNTS = {"library": 64, "system": 12, "routing": 58}
+REQUIRED_PROMOTION_COHORT_COUNTS = {"library": 24, "system": 4}
 CANONICAL_FULL_V1_MATRIX_SHA256 = (
-    "5894bab58d3deb2bcee51baa075ca5f5d324b4292ac1cef9f6bc08a07ab1d9a3"
+    "2108f920c4315a9f3292d57d81ac8873e0831b4ed97bc2f4604170d971c95396"
 )
 CANONICAL_FULL_V1_CASE_CATALOG_SHA256 = (
-    "664b742da3e5ce9073a87da9191f2a488b6891a1d3a207ada264fcaa9a4b5280"
+    "78bc6969ee48a1c66bc732ef46d0fc367c5e4316758a0f9f482fe4935c9eef27"
 )
 P50_STABILITY_LIMIT = 1.10
 P99_STABILITY_LIMIT = 1.25
@@ -226,23 +226,6 @@ def _metric_label(measure: str, statistic: str) -> str:
     return f"{label} at {statistic} latency"
 
 
-def _routing_build_control(build: dict[str, Any]) -> dict[str, Any]:
-    return {
-        key: build[key]
-        for key in (
-            "routing_control_sha256", "image_digest", "source_sha", "squash_sha256",
-        )
-    }
-
-
-def _routing_implementation_mismatch(members: Sequence[dict[str, Any]]) -> bool:
-    off_eplb_hashes = {
-        member["build"]["implementation_contract_sha256"]
-        for member in members if not member["workload"]["eplb"]
-    }
-    return len(off_eplb_hashes) > 1
-
-
 def _public_case_factors(series: dict[str, Any]) -> dict[str, Any]:
     workload = series["workload"]
     system = series["system"]
@@ -359,13 +342,6 @@ def _public_cohort_factors(kind: str, item: dict[str, Any]) -> tuple[Any, Any]:
         return {**common, "workload": workload, "source": build["source_sha"]}, [
             item["system"]["sku"], item["backend"]["id"], item["resource"]["profile"]
         ]
-    if kind == "routing":
-        return (
-            {**common, "backend": item["backend"], "system": item["system"],
-             "resource": item["resource"], "build": _routing_build_control(build)},
-            [workload["routing"], workload["eplb"],
-             build["implementation_contract_sha256"]],
-        )
     if kind in PRECISION_COHORT_KINDS:
         static_shape = {
             key: workload[key]
@@ -989,7 +965,7 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError("library cohort contains non-library evidence")
         if item["kind"] == "system" and roles != {"reference"}:
             raise PublisherError("system cohort is not a portable reference comparison")
-        if item["kind"] in {"chip", "routing", *PRECISION_COHORT_KINDS} and len(
+        if item["kind"] in {"chip", *PRECISION_COHORT_KINDS} and len(
             {_canonical(member["backend"]) for member in members}
         ) != 1:
             raise PublisherError(f"{item['kind']} cohort mixes backend implementations")
@@ -998,21 +974,6 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError(f"{item['kind']} cohort does not control its public factors")
         if len({_canonical(value[1]) for value in public_factors}) < 2:
             raise PublisherError(f"{item['kind']} cohort does not vary its declared contrast")
-        if item["kind"] == "routing":
-            if item["publication_tier"] != "comparable-experimental":
-                raise PublisherError("routing cohort must be experimental")
-            has_baseline = sum(
-                member["workload"]["routing"] == "uniform"
-                and not member["workload"]["eplb"]
-                for member in members
-            ) == 1
-            missing_reason = "missing-uniform-baseline" in item["eligibility"]["reasons"]
-            if has_baseline == missing_reason:
-                raise PublisherError("routing baseline and eligibility reason disagree")
-            mismatch = _routing_implementation_mismatch(members)
-            mismatch_reason = "implementation-config-mismatch" in item["eligibility"]["reasons"]
-            if mismatch != mismatch_reason:
-                raise PublisherError("routing implementation control and eligibility disagree")
         if item["kind"] in PRECISION_COHORT_KINDS:
             if item["publication_tier"] != "comparable-experimental":
                 raise PublisherError("precision cohorts must be experimental")
@@ -1057,10 +1018,6 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             "system": (
                 ["workload", "mode", "phase", "measurement", "source"],
                 ["system", "backend", "resource"],
-            ),
-            "routing": (
-                ["backend", "implementation-static-build", "system", "model-shape", "mode", "phase", "measurement", "resource"],
-                ["workload.routing", "workload.eplb", "implementation-config"],
             ),
             "dispatch-precision": (
                 [
@@ -1226,7 +1183,7 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
         if (
             cohort is None
             or cohort["kind"] not in {
-                "routing", "dispatch-precision", "combine-precision",
+                "dispatch-precision", "combine-precision",
             }
             or not cohort["eligibility"]["decision_grade"]
             or item["publication_tier"] != cohort["publication_tier"]
@@ -1240,24 +1197,17 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
             raise PublisherError("sensitivity series differ from its cohort")
         _validate_metric(item["metric"])
         baseline_series = series[item["baseline_series_id"]]
-        if cohort["kind"] == "routing":
-            if (
-                baseline_series["workload"]["routing"] != "uniform"
-                or baseline_series["workload"]["eplb"]
-            ):
-                raise PublisherError("sensitivity baseline is not uniform without EPLB")
-        else:
-            axis = (
-                "dispatch"
-                if cohort["kind"] == "dispatch-precision"
-                else "combine"
-            )
-            field = f"{axis}_precision"
-            bf16 = identity.precision_profile(
-                identity.V1_CONTROL_PRECISION_PROFILE
-            )[axis]
-            if _canonical(baseline_series["workload"][field]) != _canonical(bf16):
-                raise PublisherError("precision sensitivity baseline is not BF16")
+        axis = (
+            "dispatch"
+            if cohort["kind"] == "dispatch-precision"
+            else "combine"
+        )
+        field = f"{axis}_precision"
+        bf16 = identity.precision_profile(
+            identity.V1_CONTROL_PRECISION_PROFILE
+        )[axis]
+        if _canonical(baseline_series["workload"][field]) != _canonical(bf16):
+            raise PublisherError("precision sensitivity baseline is not BF16")
         _, baseline, _ = _metric_value(series[item["baseline_series_id"]], item["metric"])
         _, candidate, _ = _metric_value(series[item["candidate_series_id"]], item["metric"])
         if not math.isclose(item["signed_change_ratio"], (candidate - baseline) / baseline, rel_tol=1e-12):
@@ -1279,32 +1229,25 @@ def validate_public_dataset(doc: Any) -> dict[str, Any]:
     for cohort in doc["cohorts"]:
         if (
             cohort["kind"] not in {
-                "routing", "dispatch-precision", "combine-precision",
+                "dispatch-precision", "combine-precision",
             }
             or not cohort["eligibility"]["decision_grade"]
         ):
             continue
         members = [series[series_id] for series_id in cohort["series_ids"]]
-        if cohort["kind"] == "routing":
-            baseline = next((
-                member for member in members
-                if member["workload"]["routing"] == "uniform"
-                and not member["workload"]["eplb"]
-            ), None)
-        else:
-            axis = (
-                "dispatch"
-                if cohort["kind"] == "dispatch-precision"
-                else "combine"
-            )
-            field = f"{axis}_precision"
-            bf16 = identity.precision_profile(
-                identity.V1_CONTROL_PRECISION_PROFILE
-            )[axis]
-            baseline = next((
-                member for member in members
-                if _canonical(member["workload"][field]) == _canonical(bf16)
-            ), None)
+        axis = (
+            "dispatch"
+            if cohort["kind"] == "dispatch-precision"
+            else "combine"
+        )
+        field = f"{axis}_precision"
+        bf16 = identity.precision_profile(
+            identity.V1_CONTROL_PRECISION_PROFILE
+        )[axis]
+        baseline = next((
+            member for member in members
+            if _canonical(member["workload"][field]) == _canonical(bf16)
+        ), None)
         if baseline is None:
             continue
         tokens = set.intersection(*(
@@ -3246,24 +3189,6 @@ def _cohort_control(
         control = {**common, "workload": workload, "source": source}
         varying = [series["system"]["sku"], series["backend"]["id"], series["resource"]["profile"]]
         return control, ["workload", "mode", "phase", "measurement", "source"], ["system", "backend", "resource"], varying
-    if kind == "routing":
-        control = {
-            **common,
-            "backend": series["backend"],
-            "system": series["system"],
-            "resource": series["resource"],
-            "build": _routing_build_control(binary_build),
-        }
-        varying = [
-            workload["routing"], workload["eplb"],
-            binary_build["implementation_contract_sha256"],
-        ]
-        return (
-            control,
-            ["backend", "implementation-static-build", "system", "model-shape", "mode", "phase", "measurement", "resource"],
-            ["workload.routing", "workload.eplb", "implementation-config"],
-            varying,
-        )
     if kind in PRECISION_COHORT_KINDS:
         control, variant = _public_cohort_factors(kind, series)
         if kind == "dispatch-precision":
@@ -3424,20 +3349,7 @@ def build_decisions(
                 extra.add("incomplete-aligned-repeats")
             if tokens and not _bootstrap_inputs_ready(members, internals, tokens):
                 extra.add("missing-trial-blocks")
-            if kind == "routing" and sum(
-                member["workload"]["routing"] == "uniform"
-                and not member["workload"]["eplb"]
-                for member in members
-            ) != 1:
-                extra.add("missing-uniform-baseline")
-            if kind == "routing" and {
-                (member["workload"]["routing"], member["workload"]["eplb"])
-                for member in members
-            } != {("uniform", False), ("zipf", False), ("zipf", True)}:
-                extra.add("incomplete-routing-anchors")
-            if kind == "routing" and _routing_implementation_mismatch(members):
-                extra.add("implementation-config-mismatch")
-            endpoint_contrast = kind == "routing" or kind in PRECISION_COHORT_KINDS
+            endpoint_contrast = kind in PRECISION_COHORT_KINDS
             if not tokens or (not endpoint_contrast and not same_points):
                 extra.add("unmatched-token-coverage")
             if kind in {"dispatch-precision", "combine-precision"}:
@@ -3495,10 +3407,6 @@ def build_decisions(
                 "system": (
                     f"Reference EP{first['system']['ep_size']} / {first['mode']} / "
                     f"{first['phase']} / {routing_label}"
-                ),
-                "routing": (
-                    f"{first['system']['sku'].upper()} / {first['backend']['label']} / "
-                    f"EP{first['system']['ep_size']} / {first['mode']} / {first['phase']}"
                 ),
                 "dispatch-precision": (
                     f"{first['system']['sku'].upper()} / {first['backend']['label']} / "
@@ -3616,48 +3524,6 @@ def build_decisions(
                         "publication_tier": cohort["publication_tier"],
                         "eligibility": cohort["eligibility"],
                     })
-        if cohort["kind"] == "routing":
-            baseline = next(
-                (member for member in members
-                 if member["workload"]["routing"] == "uniform" and not member["workload"]["eplb"]),
-                None,
-            )
-            if baseline:
-                for candidate in members:
-                    if candidate is baseline:
-                        continue
-                    for token in tokens:
-                        for measure, objective in (
-                            ("latency_us", "min"),
-                            ("activation_data_rate_gbps_at_latency_percentile", "max"),
-                            ("total_logical_data_rate_gbps_at_latency_percentile", "max"),
-                        ):
-                            for statistic in ("p50", "p99"):
-                                metric = {
-                                    "operation": "roundtrip", "statistic": statistic,
-                                    "measure": measure, "objective": objective,
-                                    "tokens_per_rank": token, "phase": baseline["phase"],
-                                }
-                                _, base_value, _ = _metric_value(baseline, metric)
-                                _, candidate_value, _ = _metric_value(candidate, metric)
-                                sensitivity_id = _derived_id("cxsensitivity-v1-", {
-                                    "baseline": baseline["series_id"], "candidate": candidate["series_id"],
-                                    "cohort": cohort["cohort_id"], "metric": metric,
-                                })
-                                sensitivities.append({
-                                    "sensitivity_id": sensitivity_id,
-                                    "cohort_id": cohort["cohort_id"],
-                                    "label": (
-                                        f"Routing sensitivity: "
-                                        f"{_metric_label(measure, statistic)} T={token}"
-                                    ),
-                                    "baseline_series_id": baseline["series_id"],
-                                    "candidate_series_id": candidate["series_id"],
-                                    "metric": metric,
-                                    "signed_change_ratio": (candidate_value - base_value) / base_value,
-                                    "publication_tier": cohort["publication_tier"],
-                                    "eligibility": cohort["eligibility"],
-                                })
         if cohort["kind"] in {"dispatch-precision", "combine-precision"}:
             axis = (
                 "dispatch"
@@ -3791,29 +3657,6 @@ def _require_promotion_cohorts(
         raise PublisherError(
             f"promotion requires all {expected_chips} derived chip cohorts to be decision-grade"
         )
-
-    by_id = {item["series_id"]: item for item in series}
-    anchors = {("uniform", False), ("zipf", False), ("zipf", True)}
-    for cohort in (
-        item for item in cohorts
-        if item["kind"] == "routing" and item["eligibility"]["decision_grade"]
-    ):
-        observed = {
-            (by_id[series_id]["workload"]["routing"], by_id[series_id]["workload"]["eplb"]):
-            by_id[series_id]
-            for series_id in cohort["series_ids"]
-        }
-        if len(cohort["series_ids"]) != len(anchors) or set(observed) != anchors:
-            raise PublisherError(
-                "promotion routing cohorts require exact uniform, zipf, and zipf+EPLB anchors"
-            )
-        if (
-            observed[("uniform", False)]["build"]["implementation_contract_sha256"]
-            != observed[("zipf", False)]["build"]["implementation_contract_sha256"]
-        ):
-            raise PublisherError(
-                "promotion routing cohorts require identical off-EPLB generated implementation"
-            )
 
 
 def _require_promotion_series(series: Sequence[dict[str, Any]]) -> None:

@@ -51,17 +51,6 @@ V1_SUITE_CONTRACTS = {
             "prefill": (256, 512),
         },
     },
-    "ep-routing-v1": {
-        "mode": "normal",
-        "publication": "comparable-experimental",
-        "coordinates": {
-            ("normal", "decode", "zipf", False),
-            ("normal", "decode", "zipf", True),
-            ("normal", "prefill", "zipf", False),
-            ("normal", "prefill", "zipf", True),
-        },
-        "ladders": {"decode": (128,), "prefill": (512,)},
-    },
     "ep-low-latency-v1": {
         "mode": "low-latency",
         "publication": "official",
@@ -105,9 +94,9 @@ TOPOLOGY_FIELDS = (
 )
 QUALIFICATION_INDICES = range(1, 4)
 CANONICAL_V1_EXECUTION_PLAN_SHA256 = {
-    1: "b54cdf53496868424848860225f1ea84c87ce60e115c83de4ce2f5aae36625dc",
-    2: "4fbd22df187578c88b1552747955e85fe97d576d31e0b5be5501840ca5dfb3e6",
-    3: "e03105b970af3d8f5f0788c5c04ed1f53761460bb432109152bdb22b7b99f165",
+    1: "cc6d65b4424630a80ca76fc792ca49142820315601d05979756a03f5e9d920f4",
+    2: "ce6856db2953a019414629f3130b58361feeae7f7e425f311dbf65b1aea7c1b0",
+    3: "c5826efac5d91bb5b333bbb721f534ed1cdf7a6c80185fa8c77b2d2c0fa2cf74",
 }
 
 
@@ -295,10 +284,10 @@ def validate_config_documents(
             suite["platforms"], f"suite {name}.platforms", str, set(cap.PLATFORMS)
         )
         phases = _list(suite["phases"], f"suite {name}.phases", str, {"decode", "prefill"})
-        routings = _list(suite["routings"], f"suite {name}.routings", str, {"uniform", "zipf"})
+        routings = _list(suite["routings"], f"suite {name}.routings", str, {"uniform"})
         eplb = _list(suite.get("eplb", [False]), f"suite {name}.eplb", bool)
-        if True in eplb and routings != ["zipf"]:
-            raise SystemExit(f"suite {name}: EPLB is only valid for Zipf routing")
+        if True in eplb:
+            raise SystemExit(f"suite {name}: EPLB is unavailable for v1 uniform routing")
         if suite["required_publication"] not in {"official", "comparable-experimental"}:
             raise SystemExit(f"suite {name}.required_publication is invalid")
         if suite["required_publication"] != contract["publication"]:
@@ -974,9 +963,9 @@ def validate_shard_control(
             raise MatrixError(f"case {index} has invalid warmup semantics")
         if case["phase"] not in {"decode", "prefill"}:
             raise MatrixError(f"case {index} has invalid phase")
-        if case["routing"] not in {"uniform", "zipf"}:
+        if case["routing"] != "uniform":
             raise MatrixError(f"case {index} has invalid routing")
-        if not isinstance(case["eplb"], bool) or (case["eplb"] and case["routing"] != "zipf"):
+        if not isinstance(case["eplb"], bool) or case["eplb"]:
             raise MatrixError(f"case {index} has invalid EPLB setting")
         if not isinstance(case["canonical"], bool) or not case["canonical"]:
             raise MatrixError(f"case {index} must use a canonical workload")

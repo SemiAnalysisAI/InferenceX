@@ -318,7 +318,7 @@
                     "phase": {"enum": ["decode","prefill"]},
                     "precision_profile": {"$ref":"#/$defs/precisionProfile"},
                     "required_publication": {"enum": ["official","comparable-experimental","diagnostic"]},
-                    "routing": {"enum": ["uniform","zipf"]},
+                    "routing": {"enum": ["uniform"]},
                     "samples_per_point": {"const": 512},
                     "scale_out_transport": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/safeId"}]},
                     "scale_up_domain": {"type": "integer","minimum": 1},

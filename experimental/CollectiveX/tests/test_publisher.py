@@ -822,8 +822,6 @@ def _promoted_dataset(*, precision_profiles: tuple[str, ...] = ()) -> dict:
         ("chip-peer", "deepep", "h200-dgxc", False, None),
         ("system-one", "nccl-ep", None, True, None),
         ("system-two", "nccl-ep", "h200-dgxc", True, None),
-        ("routing-zipf", "deepep", None, False, None),
-        ("routing-zipf-eplb", "deepep", None, False, None),
     ]
     specifications.extend(
         (f"precision-{index}", "deepep", None, False, precision_profile)
@@ -845,26 +843,6 @@ def _promoted_dataset(*, precision_profiles: tuple[str, ...] = ()) -> dict:
             })
         if reference:
             item["backend"]["role"] = "reference"
-        if seed.startswith("routing-zipf"):
-            item["suite"] = "ep-routing-v1"
-            item["publication_tier"] = "comparable-experimental"
-            item["workload"]["routing"] = "zipf"
-        if seed == "routing-zipf-eplb":
-            item["workload"]["eplb"] = True
-            plan, calibration = contracts._expected_eplb_calibration(
-                "zipf", 7168, 8, 256, 288, item["system"]["ep_size"], 67, 2048
-            )
-            item["eplb"] = {
-                "enabled": True, **calibration, "planner": "greedy-rank-major-v1",
-                "mapping_sha256": contracts.eplb_contract.mapping_hash(plan),
-                "logical_experts": 256, "physical_experts": 288,
-                "redundant_experts": 32, "reference_tokens_per_rank": 2048,
-                "replicated_experts": plan["replicated_experts"],
-                "max_replicas": plan["max_replicas"],
-                "imbalance_before": plan["imbalance_before"],
-                "imbalance_after": plan["imbalance_after"],
-            }
-            item["build"]["implementation_contract_sha256"] = "8" * 64
         if precision_profile is not None:
             precision = identity.precision_profile(precision_profile)
             item["suite"] = "ep-precision-normal-v1"
@@ -1039,7 +1017,7 @@ def _promoted_dataset(*, precision_profiles: tuple[str, ...] = ()) -> dict:
 def _cohort_counts(dataset: dict) -> dict[str, int]:
     return {
         kind: sum(item["kind"] == kind for item in dataset["cohorts"])
-        for kind in ("library", "system", "routing")
+        for kind in ("library", "system")
     }
 
 
@@ -1772,22 +1750,15 @@ class PublisherTest(unittest.TestCase):
         self.assertTrue(ineligible)
         anchor_series = [
             {
-                "series_id": name,
-                "workload": {"routing": routing, "eplb": eplb},
+                "series_id": "uniform",
+                "workload": {"routing": "uniform", "eplb": False},
                 "build": {"implementation_contract_sha256": "1" * 64},
             }
-            for name, routing, eplb in (
-                ("uniform", "uniform", False),
-                ("zipf", "zipf", False),
-                ("zipf-eplb", "zipf", True),
-            )
         ]
         required = eligible + [
             {
                 "kind": kind,
                 "eligibility": {"decision_grade": True},
-                **({"series_ids": [item["series_id"] for item in anchor_series]}
-                   if kind == "routing" else {}),
             }
             for kind in publisher.REQUIRED_COHORT_KINDS
             if kind != "library"
@@ -1809,7 +1780,7 @@ class PublisherTest(unittest.TestCase):
                         if item["kind"] != kind or not item["eligibility"]["decision_grade"]
                     ], anchor_series)
 
-    def test_promotion_requires_exact_counts_and_routing_anchors(self) -> None:
+    def test_promotion_requires_exact_counts(self) -> None:
         dataset = _promoted_dataset()
         counts = _cohort_counts(dataset)
         with mock.patch.object(
@@ -1818,33 +1789,6 @@ class PublisherTest(unittest.TestCase):
             publisher._require_promotion_cohorts(
                 dataset["cohorts"], dataset["series"]
             )
-            routing = next(
-                item for item in dataset["cohorts"] if item["kind"] == "routing"
-            )
-            eplb = next(
-                item for item in dataset["series"]
-                if item["series_id"] in routing["series_ids"]
-                and item["workload"]["eplb"]
-            )
-            eplb["workload"]["eplb"] = False
-            with self.assertRaisesRegex(publisher.PublisherError, "exact uniform"):
-                publisher._require_promotion_cohorts(
-                    dataset["cohorts"], dataset["series"]
-                )
-
-        dataset = _promoted_dataset()
-        routing = next(item for item in dataset["cohorts"] if item["kind"] == "routing")
-        zipf = next(
-            item for item in dataset["series"]
-            if item["series_id"] in routing["series_ids"]
-            and item["workload"]["routing"] == "zipf"
-            and not item["workload"]["eplb"]
-        )
-        zipf["build"]["implementation_contract_sha256"] = "f" * 64
-        with mock.patch.object(
-            publisher, "REQUIRED_PROMOTION_COHORT_COUNTS", counts
-        ), self.assertRaisesRegex(publisher.PublisherError, "identical off-EPLB"):
-            publisher._require_promotion_cohorts(dataset["cohorts"], dataset["series"])
 
         wrong_counts = {**counts, "library": counts["library"] + 1}
         with mock.patch.object(
@@ -2024,11 +1968,10 @@ class PublisherTest(unittest.TestCase):
                     if item["disposition"] == "unsupported"
                 ),
             ),
-            (49, 748, 387, 361, 1740, 877, 863),
+            (49, 364, 191, 173, 1356, 681, 675),
         )
         library: dict[tuple, set[str]] = {}
         system: dict[tuple, set[str]] = {}
-        routing: dict[tuple, list[tuple[str, bool]]] = {}
         for requested in matrix["requested_cases"]:
             if requested["disposition"] != "runnable":
                 continue
@@ -2046,18 +1989,10 @@ class PublisherTest(unittest.TestCase):
                 )
             else:
                 system.setdefault((shape, route), set()).add(requested["sku"])
-            routing.setdefault(
-                (requested["sku"], case["backend"], shape), []
-            ).append(route)
-        anchors = {("uniform", False), ("zipf", False), ("zipf", True)}
         self.assertEqual(
             {
                 "library": sum(len(variants) >= 2 for variants in library.values()),
                 "system": sum(len(variants) >= 2 for variants in system.values()),
-                "routing": sum(
-                    len(variants) == 3 and set(variants) == anchors
-                    for variants in routing.values()
-                ),
             },
             publisher.REQUIRED_PROMOTION_COHORT_COUNTS,
         )
@@ -2360,37 +2295,6 @@ class PublisherTest(unittest.TestCase):
         with self.assertRaisesRegex(publisher.PublisherError, "routing differs"):
             publisher._exact_repeat_value([facts, changed], "routing")
 
-        dataset = _promoted_dataset()
-        dataset["promotion"]["status"] = "diagnostic"
-        eplb = next(item for item in dataset["series"] if item["eplb"]["enabled"])
-        eplb["points"][0]["routing"]["empty_expert_count"] = 280
-        publisher.validate_public_dataset(dataset)
-        eplb["points"][0]["routing"]["empty_expert_count"] = 288
-        with self.assertRaisesRegex(publisher.PublisherError, "routing/load facts"):
-            publisher.validate_public_dataset(dataset)
-
-        for field, value in (
-            ("mapping_sha256", "0" * 64),
-            ("redundant_experts", 31),
-            ("replicated_experts", 1),
-            ("max_replicas", 2),
-            ("replicated_experts", 257),
-            ("max_replicas", 999),
-            ("imbalance_after", 0.4),
-            ("planner", "different-planner"),
-            ("reference_tokens_per_rank", 1024),
-        ):
-            broken = _promoted_dataset()
-            broken["promotion"]["status"] = "diagnostic"
-            descriptor = next(
-                item["eplb"] for item in broken["series"] if item["eplb"]["enabled"]
-            )
-            descriptor[field] = value
-            with self.subTest(eplb_field=field), self.assertRaisesRegex(
-                publisher.PublisherError, "EPLB descriptor"
-            ):
-                publisher.validate_public_dataset(broken)
-
     def test_publisher_owns_stable_rankings_and_recommendations(self) -> None:
         fast, fast_internal = _series("fast", "deepep", decision_grade=True)
         slow, slow_internal = _series("slow", "uccl", decision_grade=True)
@@ -2425,101 +2329,6 @@ class PublisherTest(unittest.TestCase):
             item["kind"] == "system" and reference["series_id"] in item["series_ids"]
             for item in cohorts
         ))
-
-    def test_routing_evidence_is_experimental_and_not_a_configuration_recommendation(self) -> None:
-        dataset = _promoted_dataset()
-        routing = next(item for item in dataset["cohorts"] if item["kind"] == "routing")
-        members = [
-            item for item in dataset["series"]
-            if item["series_id"] in routing["series_ids"]
-        ]
-        self.assertEqual(
-            {(item["workload"]["routing"], item["workload"]["eplb"]) for item in members},
-            {("uniform", False), ("zipf", False), ("zipf", True)},
-        )
-        self.assertIn("implementation-static-build", routing["controlled_factors"])
-        self.assertIn("resource", routing["controlled_factors"])
-        self.assertEqual(
-            routing["varying_factors"],
-            ["workload.routing", "workload.eplb", "implementation-config"],
-        )
-        self.assertEqual(
-            len({item["build"]["routing_control_sha256"] for item in members}),
-            1,
-        )
-        self.assertGreater(
-            len({item["build"]["implementation_contract_sha256"] for item in members}),
-            1,
-        )
-        self.assertEqual(len({json.dumps(item["resource"], sort_keys=True) for item in members}), 1)
-        self.assertEqual(routing["publication_tier"], "comparable-experimental")
-        self.assertTrue(any(
-            item["cohort_id"] == routing["cohort_id"] for item in dataset["rankings"]
-        ))
-        self.assertFalse(any(
-            item["cohort_id"] == routing["cohort_id"] for item in dataset["recommendations"]
-        ))
-        self.assertTrue(all(
-            item["publication_tier"] == "official"
-            for item in dataset["recommendations"]
-        ))
-        self.assertFalse(any(
-            dataset_cohort["publication_tier"] == "comparable-experimental"
-            and item["cohort_id"] == dataset_cohort["cohort_id"]
-            for item in dataset["recommendations"]
-            for dataset_cohort in dataset["cohorts"]
-        ))
-        self.assertTrue(all(
-            item["publication_tier"] == "comparable-experimental"
-            for item in dataset["sensitivities"]
-            if item["cohort_id"] == routing["cohort_id"]
-        ))
-
-    def test_routing_implementation_mismatch_blocks_all_decisions(self) -> None:
-        dataset = _promoted_dataset()
-        published = next(item for item in dataset["cohorts"] if item["kind"] == "routing")
-        members = [
-            item for item in dataset["series"]
-            if item["series_id"] in published["series_ids"]
-        ]
-        zipf = next(
-            item for item in members
-            if item["workload"]["routing"] == "zipf" and not item["workload"]["eplb"]
-        )
-        zipf["build"]["implementation_contract_sha256"] = "f" * 64
-        internals = {}
-        for member in members:
-            point = member["points"][0]
-            roundtrip = point["components"]["roundtrip"]
-            metrics = {
-                "latency_us": {
-                    name: roundtrip["latency_us"][name] for name in ("p50", "p99")
-                },
-                **{
-                    field: {
-                        name: roundtrip[field][name] for name in ("p50", "p99")
-                    }
-                    for field in (
-                        "activation_data_rate_gbps_at_latency_percentile",
-                        "total_logical_data_rate_gbps_at_latency_percentile",
-                    )
-                },
-            }
-            internals[member["series_id"]] = {
-                "run_metrics": {
-                    str(run): {point["tokens_per_rank"]: metrics}
-                    for run in range(3)
-                }
-            }
-        cohorts, rankings, recommendations, sensitivities = publisher.build_decisions(
-            members, internals
-        )
-        routing = next(item for item in cohorts if item["kind"] == "routing")
-        self.assertFalse(routing["eligibility"]["decision_grade"])
-        self.assertIn(
-            "implementation-config-mismatch", routing["eligibility"]["reasons"]
-        )
-        self.assertEqual((rankings, recommendations, sensitivities), ([], [], []))
 
     def test_promoted_series_fields_are_bound_to_case_and_series_identities(self) -> None:
         dataset = _promoted_dataset()

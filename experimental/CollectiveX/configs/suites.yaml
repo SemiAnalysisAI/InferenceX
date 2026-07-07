@@ -12,18 +12,6 @@ suites:
     token_points_prefill: [256, 512]
     required_publication: official
 
-  ep-routing-v1:
-    mode: normal
-    workloads: [deepseek-v3-v1]
-    platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
-    ep_degrees: [8, 16]
-    routings: [zipf]
-    eplb: [false, true]
-    phases: [decode, prefill]
-    token_points_decode: [128]
-    token_points_prefill: [512]
-    required_publication: comparable-experimental
-
   ep-low-latency-v1:
     mode: low-latency
     backends: [deepep, uccl]
