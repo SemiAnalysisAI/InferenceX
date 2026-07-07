@@ -84,7 +84,7 @@ if agentic_kv_offload_enabled; then
   "mode": "embedded",
   "metadata_server": "P2PHANDSHAKE",
   "master_server_address": "127.0.0.1:$MOONCAKE_MASTER_PORT",
-  "global_segment_size": "200GB",
+  "global_segment_size": "${PER_RANK_GB}GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
   "device_name": "mlx5_0"
