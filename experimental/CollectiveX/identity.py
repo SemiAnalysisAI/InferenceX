@@ -69,10 +69,6 @@ V1_CASE_PROFILES = {
 V1_CONTROL_PRECISION_PROFILE = "d-bf16.c-bf16"
 V1_NORMAL_PRECISION_PROFILE_IDS = (
     "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
-    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
-    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
-    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
     "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale",
 )
 V1_LOW_LATENCY_PRECISION_PROFILE_IDS = (

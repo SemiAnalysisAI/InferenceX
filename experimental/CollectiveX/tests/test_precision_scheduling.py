@@ -169,9 +169,24 @@ class PrecisionSchedulingTest(unittest.TestCase):
         scheduled = set(identity.V1_NORMAL_PRECISION_PROFILE_IDS) | set(
             identity.V1_LOW_LATENCY_PRECISION_PROFILE_IDS
         )
-        self.assertEqual(
-            set(identity.V1_PRECISION_PROFILES),
+        # The scheduled subset plus the control must be a subset of the frozen
+        # registry; the four normal profiles the v1 sweep no longer schedules
+        # stay defined-but-unscheduled so their schema enums and capability
+        # targets survive for republication of already-collected evidence.
+        self.assertLessEqual(
             scheduled | {identity.V1_CONTROL_PRECISION_PROFILE},
+            set(identity.V1_PRECISION_PROFILES),
+        )
+        self.assertEqual(
+            set(identity.V1_PRECISION_PROFILES)
+            - scheduled
+            - {identity.V1_CONTROL_PRECISION_PROFILE},
+            {
+                "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
+                "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
+                "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
+                "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
+            },
         )
         self.assertNotIn(identity.V1_CONTROL_PRECISION_PROFILE, scheduled)
         self.assertNotIn("fp4", repr(identity.V1_PRECISION_PROFILES).lower())
@@ -456,13 +471,16 @@ class PrecisionSchedulingTest(unittest.TestCase):
             raise AssertionError(name)
 
         suite_names = "ep-precision-normal-v1,ep-precision-low-latency-v1"
+        scheduled_ids = list(identity.V1_NORMAL_PRECISION_PROFILE_IDS) + list(
+            identity.V1_LOW_LATENCY_PRECISION_PROFILE_IDS
+        )
         expected_cases = sum(
             len(resolved_suites["suites"][
                 "ep-precision-normal-v1"
                 if target["mode"] == "normal"
                 else "ep-precision-low-latency-v1"
             ]["phases"])
-            for target in capability.precision_targets()
+            for target in capability.precision_targets(scheduled_ids)
         )
         with mock.patch.object(capability, "PRECISION_CAPABILITIES", promoted):
             sweep_matrix.validate_config_documents(resolved_suites, workloads)
@@ -476,7 +494,7 @@ class PrecisionSchedulingTest(unittest.TestCase):
                     if target["mode"] == "normal"
                     else "ep-precision-low-latency-v1"
                 ]["phases"])
-                for target in capability.precision_targets()
+                for target in capability.precision_targets(scheduled_ids)
                 if capability.resolve_disposition(
                     target["sku"], target["backend"], ep=target["ep"],
                     nodes=capability.topology_for(target["sku"], target["ep"])["nodes"],
