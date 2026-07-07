@@ -1208,8 +1208,13 @@ _ensure_modal_credentials() {
 maybe_run_eval() {
     local port="${1:-${PORT:-8888}}"
     if [ "${RUN_EVAL}" = "true" ]; then
-        run_eval --port "$port"
-        append_lm_eval_summary
+        # Stage whatever artifacts exist even when the eval fails (e.g. scoring
+        # dies or times out after generation) so samples/results still upload
+        # for diagnosis instead of dying with the job sandbox.
+        local eval_rc=0
+        run_eval --port "$port" || eval_rc=$?
+        append_lm_eval_summary || true
+        return "$eval_rc"
     fi
 }
 
@@ -1293,6 +1298,10 @@ run_swebench_eval() {
     local score_rc=0
     local ns_args=()
     if [ "${SWEBENCH_NAMESPACE+set}" = "set" ]; then ns_args=(--namespace "$SWEBENCH_NAMESPACE"); fi
+    # Guard against a stalled scoring backend (e.g. Modal image-build queue):
+    # kill scoring after SWEBENCH_SCORE_TIMEOUT seconds (default 2h) rather
+    # than holding the GPU allocation until the slurm wall clock.
+    timeout "${SWEBENCH_SCORE_TIMEOUT:-7200}" \
     python3 utils/evals/swebench_score.py \
         --samples-dir "$gen_dir" \
         --out-dir "$out_dir" \
