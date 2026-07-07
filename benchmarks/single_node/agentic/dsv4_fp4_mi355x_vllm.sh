@@ -378,6 +378,12 @@ export VLLM_ROCM_USE_AITER=1
 #export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 export VLLM_ROCM_USE_AITER_MOE=1
 
+sleep 180
+
+# https://github.com/vllm-project/vllm/pull/45497
+git clone https://gist.github.com/seungrokj/a37ff4d9a52db31752e2d5fa5b192e00
+cp a37ff4d9a52db31752e2d5fa5b192e00/gistfile1.txt /usr/local/lib/python3.12/dist-packages/vllm/v1/core/sched/scheduler.py
+
 { set +x; } 2>/dev/null
 VLLM_CMD=(
     vllm serve "$MODEL_PATH" --served-model-name "$MODEL"
