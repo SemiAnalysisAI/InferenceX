@@ -6,8 +6,8 @@
 
 </div>
 
-This document is the frozen V1 qualification contract. No V1 dataset is approved until three
-complete first-attempt executions pass publication and frontend audit. Chinese documentation
+This document is the frozen V1 qualification contract. No V1 dataset is approved until one
+complete first-attempt execution passes publication and frontend audit. Chinese documentation
 synchronization is explicitly deferred for the V1 implementation phase. MI325X is deferred to a
 later version because its intended two-node runner pool is unavailable.
 
@@ -237,10 +237,10 @@ Any failed, invalid, or diagnostic retry of a runnable case blocks promotion eve
 succeeds. Routing cohorts are comparable-experimental sensitivities and never produce configuration
 recommendations; official library/platform/system cohorts own actionable recommendations.
 
-A point becomes decision-grade only after three independent workflow runs and allocation IDs pass
-correctness, identity, provenance, tail gates, p50/p99 repeat-stability thresholds, and stable ordering. The
-publisher, not the frontend, computes eligibility, controlled cohorts, sensitivity pairs, and
-recommendations.
+A point becomes decision-grade only after a single workflow run and allocation ID passes
+correctness, identity, provenance, tail gates, within-run trial drift/outlier diagnostics, and stable
+ordering. The publisher, not the frontend, computes eligibility, controlled cohorts, sensitivity pairs,
+and recommendations.
 
 ## Execution Isolation
 
@@ -318,7 +318,7 @@ Publication is fail-closed:
 Rejected attempts remain only in the disposable private workspace and short-lived source artifacts;
 they never advance `dev-latest` or enter a production channel. The workspace is destroyed with the
 publication runner and is never attached to the frontend. No publication artifact is emitted unless
-all three selected bundles advance `dev-latest`.
+the single selected bundle advances `dev-latest`.
 
 `publisher.py ingest` accepts the exact matrix plus one `--artifact` directory or ZIP per GitHub
 artifact. `promote` accepts explicit immutable bundle IDs. Default `verify` requires
@@ -330,11 +330,11 @@ content are never bundled into the application.
 Sweeps default to `release_tag=unversioned`. The main-registered `collectivex-sweep.yml` owns
 `sweep`, `publish-v1`, and `refresh-v1`, so its branch revision remains dispatchable. V1 emits a
 marker bound to the run ID, first attempt, qualification index, source SHA, and locked matrix digest.
-Publication accepts exactly three unique successful run IDs from one source SHA with qualification
-indices 1, 2, and 3, downloads their immutable artifacts, and passes the same provenance assertions
-to `publisher.py ingest`. Refresh requires an exact source run and dataset digest and reuploads the
-same validated sanitized bytes. Partial, filtered, untagged, cross-source, rerun, failed, expired,
-or digest-mismatched inputs fail closed.
+Publication accepts one successful first-attempt run ID at qualification index 1, downloads its
+immutable artifacts, and passes the same provenance assertions to `publisher.py ingest`. Refresh
+requires an exact source run and dataset digest and reuploads the same validated sanitized bytes.
+Partial, filtered, untagged, cross-source, rerun, failed, expired, or digest-mismatched inputs fail
+closed.
 
 Using a server-side GitHub read token, the frontend discovers the latest successful version-scoped
 publication run and downloads the publication artifact just in time. It requires exactly one root

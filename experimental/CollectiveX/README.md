@@ -105,8 +105,8 @@ a run/attempt/source-bound `cxrelease-v1-*` marker. Partial and filtered runs ca
 The main-registered `.github/workflows/collectivex-sweep.yml` provides `probe-precision`, `sweep`,
 `publish-v1`, and `refresh-v1` operations, so its branch revision can be dispatched with
 `--ref collectivex` without a standalone branch-only workflow. Probes are unversioned, bounded,
-native-runtime checks and cannot publish. Publication accepts exactly three successful first-attempt tagged
-sweep run IDs from one source SHA, revalidates their metadata and release markers, and runs
+native-runtime checks and cannot publish. Publication accepts one successful first-attempt tagged
+sweep run ID at qualification index 1, revalidates its metadata and release marker, and runs
 `publisher.py` in a disposable runner-local workspace. Refresh revalidates and reuploads only the
 exact content-addressed sanitized dataset. Raw artifacts and the private publisher workspace are
 never exposed to the frontend.
