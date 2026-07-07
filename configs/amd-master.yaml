@@ -1773,7 +1773,7 @@ dsv4-fp4-mi355x-sglang:
 # torch fallbacks (see dsv4_fp4_mi355x_sglang_mtp.sh). When a -DSv4 image carrying
 # #26383 ships, bump to it; the recipe auto-restores the deep_gemm perf path.
 dsv4-fp4-mi355x-sglang-mtp:
-  image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260601
+  image: lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: mi355x
