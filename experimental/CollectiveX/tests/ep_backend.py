@@ -1,0 +1,460 @@
+#!/usr/bin/env python3
+"""Abstract base class for CollectiveX EP dispatch/combine backends.
+
+The benchmark drives every backend through one fixed lifecycle, modelled on the
+DeepEP (`tests/legacy/test_internode.py`) and ROCm/mori
+(`examples/ops/dispatch_combine/test_dispatch_combine_internode.py`) reference
+harnesses, but wrapped in a real base class so the shared plumbing lives in one
+place and each adapter supplies only the transport-specific pieces:
+
+    spec = backend.make_inputs(args)      # base: ladder + per-rank routing/activations
+    backend.create_buffer(spec)           # subclass: size the communicator from `spec`
+    problem = backend.make_problem(...)    # base: dtype coercion + dispatch encoding
+    backend.benchmark_dispatch(...)        # base template: warm + time the raw op
+    backend.benchmark_combine(...)         # base template: warm + time the raw op
+
+`make_inputs` computes the sweep's numeric shape (token ladder, max tokens/rank)
+and materialises the per-rank inputs; `create_buffer` consumes those numbers to
+size the communicator. This resolves the historical inversion where buffers were
+built in ``__init__`` before any input existed.
+
+The base class carries the contract flags the driver reads (``stage_device_work``,
+``combine_needs_redispatch``, ``dispatch_needs_combine_cleanup``,
+``combine_weight_semantics``, ``oracle_layout``/``payload_unit``, ``roundtrip_only``)
+with defaults matching the common (non-fp8, normal-mode) case; subclasses and the
+low-latency path override them. The two Pass-2 timing branch rules — untimed
+stage+combine cleanup after a timed dispatch (MoRI), and per-iter re-dispatch for
+stateful combine (MoRI + DeepEP low-latency) — are encoded once in
+``benchmark_dispatch``/``benchmark_combine`` so subclasses supply only the raw op.
+
+``torch`` and ``routing`` are imported lazily inside the methods that touch a
+device, mirroring ``ep_harness`` — so this module byte-compiles and imports under
+the CPU-only test environment, while ``run_sweep`` imports it lazily on the GPU
+image to avoid an import cycle.
+"""
+from __future__ import annotations
+
+import abc
+import os
+import types
+from dataclasses import dataclass, field
+
+import ep_precision
+from ep_harness import (
+    CONDITIONING_LADDERS,
+    CONDITIONING_ROUNDS_PER_SHAPE,
+    time_us,
+    token_ladder,
+)
+
+
+@dataclass
+class RankInputs:
+    """Inputs for one token-ladder shape at ``tokens_per_rank`` tokens on this rank.
+
+    ``topk_idx``/``topk_weights`` are this rank's contiguous slice of the global
+    routing trace (host tensors; moved to device at ``make_problem`` time);
+    ``activations`` are the rank's token activations (already on device). The
+    global trace is retained for measured ladder shapes so Pass 1 can compute
+    routing statistics and input snapshots; warm-only conditioning shapes leave
+    it ``None``.
+    """
+
+    tokens_per_rank: int
+    topk_idx: "torch.Tensor"
+    topk_weights: "torch.Tensor"
+    activations: "torch.Tensor"
+    global_tokens: int = 0
+    global_idx: "torch.Tensor | None" = None
+    global_weights: "torch.Tensor | None" = None
+    workload_id: "str | None" = None
+    checksums: "dict | None" = None
+
+
+@dataclass
+class WorkloadSpec:
+    """Numeric shape + materialised inputs for one fully-specified sweep line.
+
+    Fully default-constructible so ``make_inputs`` can early-return a tensor-free
+    spec (``ok=False`` + ``rc``) on an empty ladder or a buffer cap too small for
+    the conditioning ladder; the driver prints ``message`` and returns ``rc``.
+    """
+
+    ok: bool = True
+    rc: int = 0
+    message: str = ""
+    phase: str = ""
+    routing: str = "uniform"
+    seed: int = 0
+    hidden: int = 0
+    topk: int = 0
+    experts: int = 0
+    num_logical: int = 0
+    ep_size: int = 0
+    experts_per_rank: int = 0
+    cap: "int | None" = None
+    dropped: list = field(default_factory=list)
+    max_tokens_per_rank: int = 0
+    ladder: list = field(default_factory=list)
+    conditioning_ladder: list = field(default_factory=list)
+    points: dict = field(default_factory=dict)
+    conditioning_points: dict = field(default_factory=dict)
+    loaded_workload_ids: list = field(default_factory=list)
+    loaded_checksums: dict = field(default_factory=dict)
+
+
+class EPBackend(abc.ABC):
+    """One expert-parallel dispatch/combine transport under a fixed benchmark contract.
+
+    Subclasses implement the transport (``create_buffer``, ``dispatch``, ``stage``,
+    ``combine``, ``recv_tokens``, ``inspect_dispatch``, ``combine_transformed``,
+    and the ``supported_profiles`` set); everything the driver and the oracles
+    need beyond that is provided here.
+    """
+
+    # ---- Contract flags (class defaults; subclasses / low-latency override) ----
+    name: str = ""
+    SUPPORTED_MODES: tuple = ("normal",)
+    stage_device_work = False
+    combine_needs_redispatch = False
+    dispatch_needs_combine_cleanup = False
+    # Adapters that reduce activations and top-k weights independently must carry
+    # the complete local weighted expert sum in the activation tensor.
+    combine_weight_semantics = "unweighted-rank-sum"
+    oracle_layout = "token-rank"
+    payload_unit = "token-rank"
+    roundtrip_only = False
+    # Precision-evidence knob: adapters that hand scales back as uint8-viewed
+    # storage (deepep-hybrid) flip this so the evidence pass reads them correctly.
+    _uint8_scale_storage = False
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if not getattr(cls, "name", ""):
+            raise TypeError(
+                f"{cls.__name__} must declare a non-empty class-level `name`"
+            )
+
+    def __init__(self, args, rank, world_size, local_rank, device):
+        self.args = args
+        self.rank = rank
+        self.world_size = world_size
+        self.local_rank = local_rank
+        self.device = device
+        self.mode = getattr(args, "mode", "normal")
+        if self.mode not in self.SUPPORTED_MODES:
+            raise ValueError(f"{self.name} does not support mode {self.mode!r}")
+
+    # ---- Abstract transport contract -------------------------------------------------
+
+    @property
+    @abc.abstractmethod
+    def supported_profiles(self):
+        """Precision-profile ids this backend realizes for the current ``self.mode``."""
+
+    @abc.abstractmethod
+    def create_buffer(self, spec: WorkloadSpec):
+        """Size the communicator from ``spec``; must leave ``backend_provenance`` complete."""
+
+    @abc.abstractmethod
+    def dispatch(self, problem):
+        """Scatter tokens to their experts; return an opaque per-call handle."""
+
+    @abc.abstractmethod
+    def stage(self, problem, handle):
+        """Prepare the combine input on ``handle`` (dequantize / copy into place)."""
+
+    @abc.abstractmethod
+    def combine(self, problem, handle):
+        """Gather the staged tokens back to their source rank; return combined activations."""
+
+    @abc.abstractmethod
+    def recv_tokens(self, handle):
+        """Number of tokens this rank received in dispatch (stable for a fixed trace)."""
+
+    @abc.abstractmethod
+    def inspect_dispatch(self, problem, handle):
+        """Normalized post-dispatch view for the token-rank correctness oracle."""
+
+    @abc.abstractmethod
+    def combine_transformed(self, problem, handle, transformed):
+        """Combine an oracle-transformed payload in place of the staged input."""
+
+    # ---- Input generation (shared) ---------------------------------------------------
+
+    def buffer_cap(self, args):
+        """Max tokens/rank the communicator can serve, or ``None`` when unbounded."""
+        return None
+
+    def make_inputs(self, args) -> WorkloadSpec:
+        """Resolve the token ladder and materialise per-rank inputs for the sweep.
+
+        Buffer sizing needs the ladder *numbers* (not the input tensors), so this
+        runs before ``create_buffer``. Returns a tensor-free spec with ``ok=False``
+        when the ladder is empty or the cap cannot serve the conditioning ladder.
+        """
+        ep_size = self.world_size
+        num_logical = getattr(args, "num_logical_experts", args.experts)
+        experts_per_rank = args.experts // ep_size
+        conditioning_ladder = list(CONDITIONING_LADDERS[args.phase])
+        cap = self.buffer_cap(args)
+        if cap is not None and cap < conditioning_ladder[-1]:
+            return WorkloadSpec(
+                ok=False, rc=2, phase=args.phase,
+                message=(
+                    f"{self.name} buffer cap {cap} cannot run the v1 conditioning ladder"
+                ),
+            )
+        ladder, dropped = token_ladder(args.tokens_ladder, args.phase, cap)
+        if not ladder:
+            return WorkloadSpec(
+                ok=False, rc=2, phase=args.phase,
+                message=f"empty token ladder (phase={args.phase}, cap={cap})",
+            )
+        spec = WorkloadSpec(
+            phase=args.phase,
+            routing=args.routing,
+            seed=args.seed,
+            hidden=args.hidden,
+            topk=args.topk,
+            experts=args.experts,
+            num_logical=num_logical,
+            ep_size=ep_size,
+            experts_per_rank=experts_per_rank,
+            cap=cap,
+            dropped=list(dropped),
+            max_tokens_per_rank=max(list(ladder) + conditioning_ladder),
+            ladder=list(ladder),
+            conditioning_ladder=conditioning_ladder,
+        )
+        # Warm-only conditioning shapes never need canonical manifests or the
+        # global trace: they are never measured or emitted.
+        for wt in conditioning_ladder:
+            spec.conditioning_points[wt] = self._build_rank_inputs(
+                args, wt, canonical=False, retain_global=False
+            )
+        canonical = bool(getattr(args, "workload_dir", ""))
+        for tokens_per_rank in ladder:
+            point = self._build_rank_inputs(
+                args, tokens_per_rank, canonical=canonical, retain_global=True
+            )
+            spec.points[tokens_per_rank] = point
+            if point.workload_id is not None and point.workload_id not in spec.loaded_workload_ids:
+                spec.loaded_workload_ids.append(point.workload_id)
+                spec.loaded_checksums[point.workload_id] = point.checksums
+        return spec
+
+    def _build_rank_inputs(self, args, tokens_per_rank, *, canonical, retain_global) -> RankInputs:
+        """Build one rank's inputs for a given tokens-per-rank shape.
+
+        canonical: load pre-serialized trace bytes (checksum-verified) so this run
+        is provably the SAME workload as any other consuming the same files;
+        otherwise seeded generation. (EPLB is off, so no logical->physical remap.)
+        """
+        import torch
+        import routing
+
+        ep_size = self.world_size
+        num_logical = getattr(args, "num_logical_experts", args.experts)
+        global_tokens = tokens_per_rank * ep_size
+        workload_id = None
+        checksums = None
+        if canonical:
+            import workload as _wl
+
+            workload_id = _wl.compute_workload_id(
+                args.routing, args.hidden, args.topk, num_logical, ep_size,
+                global_tokens, args.seed,
+            )
+            idx_np, w_np, manifest = _wl.load_workload(
+                os.path.join(args.workload_dir, f"{workload_id}.npz"), verify=True
+            )
+            idx_g = torch.from_numpy(idx_np).to(torch.int64)
+            w_g = torch.from_numpy(w_np).to(torch.float32)
+            checksums = manifest.get("checksums")
+        else:
+            idx_g, w_g = routing.build_global_routing(
+                global_tokens, num_logical, args.topk, args.routing, args.seed
+            )
+        idx_s, w_s = routing.rank_slice(idx_g, w_g, self.rank, tokens_per_rank)
+        activations = routing.rank_activations(
+            tokens_per_rank, args.hidden, args.seed, self.rank, self.device, torch.bfloat16
+        )
+        return RankInputs(
+            tokens_per_rank=tokens_per_rank,
+            topk_idx=idx_s.contiguous(),
+            topk_weights=w_s.contiguous(),
+            activations=activations,
+            global_tokens=global_tokens,
+            global_idx=idx_g if retain_global else None,
+            global_weights=w_g if retain_global else None,
+            workload_id=workload_id,
+            checksums=checksums,
+        )
+
+    def make_problem(self, T, idx, weights, x):
+        """Encode the dispatch payload and assemble the per-shape problem namespace."""
+        import torch
+
+        encoding = ep_precision.encode_dispatch(torch, x, self.communication_precision)
+        problem = types.SimpleNamespace(
+            T=T,
+            x=x,
+            dispatch_x=encoding.native_input,
+            oracle_x=encoding.semantic,
+            dispatch_precision_evidence=encoding.evidence,
+            topk_idx=idx.to(self._topk_idx_dtype()),
+            topk_weights=weights.to(torch.float32),
+        )
+        self._extend_problem(problem, encoding)
+        return problem
+
+    def _topk_idx_dtype(self):
+        """Integer dtype the backend's kernels expect for top-k routing indices."""
+        import torch
+
+        return torch.int64
+
+    def _extend_problem(self, problem, encoding):
+        """Hook: subclasses attach backend-specific problem fields (scales, layout, ...)."""
+
+    # ---- Timing template methods -----------------------------------------------------
+
+    def timed_components(self):
+        """Components measured for this backend: roundtrip always; the rest unless
+        the backend exposes only a stateful paired round trip."""
+        components = ["roundtrip"]
+        if not self.roundtrip_only:
+            components.extend(["dispatch", "combine"])
+            if self.stage_device_work:
+                components.append("stage")
+        return components
+
+    def warm(self, problem, count):
+        """Untimed synchronized full round trips (fabric/clock warm-up; cold-jump-safe).
+
+        Caches the dynamic receive cardinality once so adapters never read a device
+        scalar during a timed trial (the count is stable for a fixed routing trace).
+        """
+        import torch
+
+        for _ in range(count):
+            handle = self.dispatch(problem)
+            if not hasattr(problem, "recv_tokens"):
+                problem.recv_tokens = self.recv_tokens(handle)
+            self.stage(problem, handle)
+            self.combine(problem, handle)
+            torch.cuda.synchronize()
+
+    def run_roundtrip(self, problem):
+        """One full dispatch -> stage -> combine round trip; returns combined activations."""
+        handle = self.dispatch(problem)
+        self.stage(problem, handle)
+        return self.combine(problem, handle)
+
+    def benchmark_component(self, component, problem, warmup, iters):
+        """Measure one named component; every component gets the same warm-up first."""
+        if component == "roundtrip":
+            return self.benchmark_roundtrip(problem, warmup, iters)
+        if component == "dispatch":
+            return self.benchmark_dispatch(problem, warmup, iters)
+        if component == "stage":
+            return self.benchmark_stage(problem, warmup, iters)
+        if component == "combine":
+            return self.benchmark_combine(problem, warmup, iters)
+        raise RuntimeError(f"unknown timed component {component!r}")
+
+    def benchmark_roundtrip(self, problem, warmup, iters):
+        import torch
+
+        self.warm(problem, warmup)
+        return time_us(torch, lambda p=problem: self.run_roundtrip(p), 0, iters)
+
+    def benchmark_dispatch(self, problem, warmup, iters):
+        import torch
+
+        self.warm(problem, warmup)
+
+        def finish_dispatch(hh, p=problem):
+            self.stage(p, hh)
+            self.combine(p, hh)
+
+        dispatch_needs_cleanup = self.dispatch_needs_combine_cleanup
+        return time_us(
+            torch, lambda p=problem: self.dispatch(p), 0, iters,
+            post=finish_dispatch if dispatch_needs_cleanup else None,
+        )
+
+    def benchmark_stage(self, problem, warmup, iters):
+        import torch
+
+        self.warm(problem, warmup)
+
+        def prep_stage(p=problem):
+            return self.dispatch(p)
+
+        return time_us(
+            torch, lambda hh, p=problem: self.stage(p, hh), 0, iters, pre=prep_stage,
+        )
+
+    def benchmark_combine(self, problem, warmup, iters):
+        import torch
+
+        self.warm(problem, warmup)
+
+        def prep_combine(p=problem):
+            hh = self.dispatch(p)
+            self.stage(p, hh)
+            return hh
+
+        if self.combine_needs_redispatch:
+            return time_us(
+                torch, lambda hh, p=problem: self.combine(p, hh), 0, iters, pre=prep_combine,
+            )
+        hh = prep_combine()
+        torch.cuda.synchronize()
+        return time_us(torch, lambda p=problem, hx=hh: self.combine(p, hx), 0, iters)
+
+    # ---- Correctness / precision hooks (shared) --------------------------------------
+
+    def inspect_expert_dispatch(self, problem, handle):
+        """Expert-packed post-dispatch view; only low-latency backends provide one."""
+        raise RuntimeError("expert-packed inspection requires low-latency mode")
+
+    def oracle_dispatch_payload(self, payload):
+        """Project an oracle-built payload through the dispatch encoding's semantics."""
+        import torch
+
+        return ep_precision.encode_dispatch(
+            torch, payload, self.communication_precision
+        ).semantic
+
+    def precision_evidence(self, problem, view=None):
+        """Per-direction precision evidence for the raw document."""
+        import torch
+
+        return ep_precision.precision_evidence(
+            torch,
+            profile_id=self.precision_profile_id,
+            profile=self.communication_precision,
+            problem=problem,
+            view=view,
+            uint8_storage=self._uint8_scale_storage,
+        )
+
+    def capture_deferred_provenance(self):
+        """Resolve provenance materialized only after conditioning (e.g. JIT CUBINs).
+
+        No-op by default; JIT backends override to record and cross-rank-check it.
+        """
+
+    def finalize(self, rc):
+        """Barrier and tear down the process group; returns ``rc``."""
+        import torch.distributed as dist
+
+        try:
+            dist.barrier()
+            dist.destroy_process_group()
+        except Exception:
+            pass
+        return rc
