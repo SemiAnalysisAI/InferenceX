@@ -20,10 +20,9 @@ fi
 echo "TP: $TP, CONC: $CONC, ISL: $ISL, OSL: $OSL, EP_SIZE: $EP_SIZE, DP_ATTENTION: $DP_ATTENTION"
 
 SERVER_LOG=/workspace/server.log
-sed -i '1626c\      timeout=timedelta(seconds=1200))' /app/aiter-test/aiter/dist/parallel_state.py
-sed -i '33c\from datetime import timedelta' /app/aiter-test/aiter/dist/parallel_state.py
 
 
+export ATOM_DISABLE_MMAP=true
 export AITER_QUICK_REDUCE_QUANTIZATION=INT4
 export AITER_MXFP4_INTERMEDIATE=1
 export OMP_NUM_THREADS=1
