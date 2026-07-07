@@ -322,3 +322,113 @@ def test_benchmark_lib_no_longer_uses_old_namespace_pattern():
     assert "ns_args" in content, (
         "benchmark_lib.sh does not contain the ns_args fix"
     )
+
+
+# --- include_path wiring for swebench generation ---------------------------
+#
+# The pinned lm-eval (0.4.9.2, ref b315ef3) crashes with
+# KeyError: '<task_name>' in pretty_print_task when --tasks receives a path to
+# an external YAML whose task: name is not in lm-eval's bundled registry.
+# The fix is to invoke with --include_path <dir> --tasks <task-name> instead.
+#
+# Two tests:
+#   1. Dynamic: drive run_lm_eval directly via the shim with
+#      EVAL_INCLUDE_PATH=utils/evals and EVAL_TASKS_DIR=swebench_lite; assert
+#      --include_path utils/evals and --tasks swebench_lite appear in argv and
+#      that argv contains no .yaml path in the --tasks position.
+#   2. Default (EVAL_INCLUDE_PATH unset): --include_path must be absent and
+#      --tasks must carry the default utils/evals/gsm8k.yaml path unchanged.
+#   3. Static: run_swebench_eval's source must contain the EVAL_INCLUDE_PATH
+#      wiring (EVAL_INCLUDE_PATH= and dirname), proving the include-path form
+#      is wired for the swebench generation call.
+
+# Reuse the shim-based _EVAL_LIMIT_SCRIPT infrastructure.
+_INCLUDE_PATH_SCRIPT = r'''
+set -e
+SHIM_DIR=$(mktemp -d)
+cat > "$SHIM_DIR/python3" <<'PY'
+#!/usr/bin/env bash
+echo "PYTHON_ARGS: $*"
+exit 0
+PY
+chmod +x "$SHIM_DIR/python3"
+
+source "$BENCHMARK_LIB"
+
+export EVAL_MAX_MODEL_LEN=16384
+export MODEL_NAME=test-model
+export OPENAI_API_KEY=EMPTY
+export INFERENCEX_LM_EVAL_RUNTIME_READY=true
+
+_install_lm_eval_deps() { :; }
+_patch_lm_eval() { :; }
+
+PATH="$SHIM_DIR:$PATH" run_lm_eval --port 9999 2>&1
+'''
+
+
+def _run_lm_eval_with_include_path(
+    *,
+    eval_include_path: str | None = None,
+    eval_tasks_dir: str | None = None,
+) -> str:
+    """Run run_lm_eval with the shim and optional EVAL_INCLUDE_PATH/EVAL_TASKS_DIR."""
+    env = {
+        **os.environ,
+        "BENCHMARK_LIB": str(BENCHMARK_LIB),
+        "KV_OFFLOADING": "none",
+    }
+    env.pop("EVAL_INCLUDE_PATH", None)
+    env.pop("EVAL_TASKS_DIR", None)
+    if eval_include_path is not None:
+        env["EVAL_INCLUDE_PATH"] = eval_include_path
+    if eval_tasks_dir is not None:
+        env["EVAL_TASKS_DIR"] = eval_tasks_dir
+    res = subprocess.run(
+        ["bash", "-c", _INCLUDE_PATH_SCRIPT],
+        env=env,
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return res.stdout + res.stderr
+
+
+def test_include_path_injected_when_eval_include_path_set():
+    """When EVAL_INCLUDE_PATH is set, --include_path <dir> appears before --tasks."""
+    out = _run_lm_eval_with_include_path(
+        eval_include_path="utils/evals",
+        eval_tasks_dir="swebench_lite",
+    )
+    assert "--include_path utils/evals" in out, (
+        f"Expected '--include_path utils/evals' in output:\n{out}"
+    )
+    assert "--tasks swebench_lite" in out, (
+        f"Expected '--tasks swebench_lite' in output:\n{out}"
+    )
+    # Must NOT pass a .yaml path to --tasks
+    assert ".yaml" not in out.split("--tasks")[1].split()[0], (
+        f"--tasks must not contain a .yaml path when include_path is set:\n{out}"
+    )
+
+
+def test_include_path_absent_when_eval_include_path_unset():
+    """When EVAL_INCLUDE_PATH is unset, --include_path must not appear and --tasks carries the default yaml path."""
+    out = _run_lm_eval_with_include_path()  # both env vars unset
+    assert "--include_path" not in out, (
+        f"Expected no '--include_path' in output:\n{out}"
+    )
+    assert "--tasks utils/evals/gsm8k.yaml" in out, (
+        f"Expected '--tasks utils/evals/gsm8k.yaml' in output:\n{out}"
+    )
+
+
+def test_swebench_eval_source_contains_include_path_wiring():
+    """Static: run_swebench_eval source must wire EVAL_INCLUDE_PATH and use dirname."""
+    content = BENCHMARK_LIB.read_text()
+    assert "EVAL_INCLUDE_PATH=" in content, (
+        "benchmark_lib.sh run_swebench_eval does not set EVAL_INCLUDE_PATH"
+    )
+    assert 'dirname "$yaml_path"' in content or "dirname \"$yaml_path\"" in content, (
+        "benchmark_lib.sh run_swebench_eval does not derive EVAL_INCLUDE_PATH via dirname"
+    )

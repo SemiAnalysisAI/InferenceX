@@ -856,6 +856,15 @@ run_lm_eval() {
     local top_p=1
     local concurrent_requests="${EVAL_CONCURRENT_REQUESTS:-${CONC:-64}}"
     local eval_limit="${EVAL_LIMIT:-}"
+    # Optional: when set, passes --include_path to lm_eval so that external YAML
+    # task files in that directory are registered into lm-eval's task index.
+    # Needed because the pinned lm-eval (0.4.9.2, ref b315ef3) crashes with
+    # KeyError: '<task_name>' in pretty_print_task when --tasks is given a file
+    # path whose task: name is not in lm-eval's bundled registry.  Passing
+    # --include_path <dir> + --tasks <task-name> registers the dir's YAMLs and
+    # avoids the crash.  Callers that do not need this (gsm8k, gpqa_diamond)
+    # leave EVAL_INCLUDE_PATH unset and the flag is not injected.
+    local include_path="${EVAL_INCLUDE_PATH:-}"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -892,6 +901,7 @@ run_lm_eval() {
     export EVAL_RESULT_DIR="$results_dir"
     set -x
     python3 -m lm_eval --model local-chat-completions --apply_chat_template \
+      ${include_path:+--include_path "$include_path"} \
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
@@ -1217,11 +1227,22 @@ run_swebench_eval() {
 
     # 1. Generation via lm-eval (reuses endpoint wiring, _patch_lm_eval, etc.).
     #    run_lm_eval already passes --log_samples, which is what we consume.
+    #
+    #    Use the --include_path form rather than passing the YAML file path to
+    #    --tasks.  The pinned lm-eval (0.4.9.2, ref b315ef3) crashes with
+    #    KeyError: '<task_name>' in pretty_print_task (tasks/__init__.py:681)
+    #    when --tasks receives a path to an external YAML whose task: name is
+    #    not in lm-eval's bundled registry.  Passing
+    #      --include_path <dir-of-yaml> --tasks <task-name>
+    #    registers the directory's YAMLs into the task index before the lookup.
     local prev_tasks_dir="${EVAL_TASKS_DIR:-}"
-    export EVAL_TASKS_DIR="$yaml_path"
+    local prev_include_path="${EVAL_INCLUDE_PATH:-}"
+    export EVAL_TASKS_DIR="$task_name"
+    export EVAL_INCLUDE_PATH="$(dirname "$yaml_path")"
     local gen_rc=0
     run_lm_eval "$@" --results-dir "$gen_dir" || gen_rc=$?
     export EVAL_TASKS_DIR="$prev_tasks_dir"
+    export EVAL_INCLUDE_PATH="$prev_include_path"
     if [ "$gen_rc" -ne 0 ]; then
         echo "ERROR: swebench generation (lm-eval) failed with $gen_rc" >&2
         rm -rf "$gen_dir" 2>/dev/null || true
