@@ -74,6 +74,12 @@ fi
 # the checkpoint's reference recipe.
 NUM_SPEC_TOKENS="${NUM_SPEC_TOKENS:-7}"
 
+# kv-cache-dtype must be the canonical packed layout, not plain fp8: FlashMLA
+# sparse decode only supports fp8_ds_mla (see vLLM
+# tests/v1/attention/test_dspark_noncausal_sparse_mla.py), and the fp8 ->
+# fp8_ds_mla auto-upgrade does not reach every consumer once the DSpark
+# drafter is registered ('kv must have shape ...' at engine init otherwise).
+#
 # The scheduler reserves draft-token slots for every runnable sequence; with
 # the engine-default max_num_seqs and 7 draft tokens that drives
 # max_num_scheduled_tokens negative on a 2*ISL token budget. Bound running
@@ -88,7 +94,7 @@ set -x
 vllm serve "$MODEL_PATH" --served-model-name "$MODEL" --host 0.0.0.0 --port "$PORT" \
     "${PARALLEL_ARGS[@]}" \
     --pipeline-parallel-size 1 \
-    --kv-cache-dtype fp8 \
+    --kv-cache-dtype fp8_ds_mla \
     --trust-remote-code \
     --block-size 256 \
     --no-enable-prefix-caching \
