@@ -3,7 +3,12 @@
 # so pointing --config-files here avoids fanning out the sibling dsv4 b300
 # vLLM entries (base + mtp) from nvidia-master.yaml. Not read by any sweep:
 # run-sweep/process_changelog load MASTER_CONFIGS (utils/constants.py) only.
-# Mirrors dsv4-fp4-b300-vllm-dspark, narrowed to tp4 / conc 4 / 1k1k.
+# Mirrors dsv4-fp4-b300-vllm-dspark, narrowed to conc 4 / 1k1k on the
+# reference topology: DP8 + EP8 attention-DP, per the official checkpoint
+# card and recipes.vllm.ai B300 guidance ("single-node DP + EP with
+# --data-parallel-size 8"). Plain TP4 crashes the pinned nightly's
+# flash_mla sparse_decode_fwd KV-layout check under DSpark (run
+# 28859120879); TP support is tracked as a follow-up.
 dsv4-fp4-b300-vllm-dspark:
   image: vllm/vllm-openai:nightly-34b560b725b401f33477464163244b4744d1c40f
   model: deepseek-ai/DeepSeek-V4-Pro-DSpark
@@ -17,4 +22,4 @@ dsv4-fp4-b300-vllm-dspark:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 4, conc-start: 4, conc-end: 4, spec-decoding: dspark }
+      - { tp: 8, ep: 8, dp-attn: true, conc-start: 4, conc-end: 4, spec-decoding: dspark }
