@@ -1,7 +1,7 @@
-name: gb300-fp8-glm5-mtp_8k1k_lowlat_2
+name: gb300-fp8-glm5-mtp_1k1k_lowlat_1
 
 model:
-  path: glm-5-fp8
+  path: glm-5.1-fp8
   container: "lmsysorg/sglang:v0.5.11-cu130"
   precision: fp8
 
@@ -56,7 +56,7 @@ backend:
   sglang_config:
     prefill:
         # Model configuration
-      served-model-name: GLM-5-FP8
+      served-model-name: GLM-5.1-FP8
       trust-remote-code: true
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
@@ -94,7 +94,7 @@ backend:
 
     decode:
         # Model configuration
-      served-model-name: GLM-5-FP8
+      served-model-name: GLM-5.1-FP8
       trust-remote-code: true
 
       quantization: fp8
@@ -139,6 +139,6 @@ health_check:
 benchmark:
   type: sa-bench
   req_rate: inf
-  isl: 8192
+  isl: 1024
   osl: 1024
-  concurrencies: '24'
+  concurrencies: '32'

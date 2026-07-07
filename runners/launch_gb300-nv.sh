@@ -47,8 +47,11 @@ elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/GLM-5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
 elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH=/scratch/models/GLM-5.1-FP8
+    export MODEL_PATH=/scratch/models/GLM-5-FP8
     export SRT_SLURM_MODEL_PREFIX="glm-5-fp8"
+elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
+    export MODEL_PATH=/scratch/models/GLM-5.1-FP8
+    export SRT_SLURM_MODEL_PREFIX="glm-5.1-fp8"
 elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/data/models/MiniMax-M2.5-NVFP4
     export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
@@ -67,7 +70,7 @@ elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
     export MODEL_PATH=/scratch/models/Qwen3.5-397B-A17B-NVFP4
     export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
 else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
+    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4, glm5-fp4, glm5-fp8, glm5.1-fp8, minimaxm2.5-fp4, minimaxm2.5-fp8, kimik2.5-fp4, qwen3.5-fp4"
     exit 1
 fi
 
@@ -159,6 +162,12 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
     git checkout sa-submission-q2-2026
     mkdir -p recipes/sglang/glm5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
+    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/glm5.1
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5.1" recipes/sglang/glm5.1
 elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     # Same srt-slurm tooling as glm5: NVIDIA/srt-slurm @ sa-submission-q2-2026.
     # Overlay our version-controlled Qwen3.5 recipes on top (upstream has none).

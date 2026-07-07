@@ -1,21 +1,19 @@
-name: gb300-fp8-glm5-mtp_8k1k_hightpt_2
+name: gb300-fp8-glm5-mtp_8k1k_lowlat_1
 
 model:
-  path: glm-5-fp8
+  path: glm-5.1-fp8
   container: "lmsysorg/sglang:v0.5.11-cu130"
   precision: fp8
 
 resources:
   gpu_type: gb300
   gpus_per_node: 4
-  prefill_nodes: 10
-  prefill_workers: 10
-  decode_nodes: 8
-  decode_workers: 1
+  prefill_nodes: 1
+  prefill_workers: 1
+  decode_nodes: 17
+  decode_workers: 17
 frontend:
   type: dynamo
-  enable_multiple_frontends: true
-  num_additional_frontends: 9
 dynamo:
   version: 1.2.1
 
@@ -58,7 +56,7 @@ backend:
   sglang_config:
     prefill:
         # Model configuration
-      served-model-name: GLM-5-FP8
+      served-model-name: GLM-5.1-FP8
       trust-remote-code: true
       quantization: fp8
       kv-cache-dtype: fp8_e4m3
@@ -96,7 +94,7 @@ backend:
 
     decode:
         # Model configuration
-      served-model-name: GLM-5-FP8
+      served-model-name: GLM-5.1-FP8
       trust-remote-code: true
 
       quantization: fp8
@@ -123,19 +121,13 @@ backend:
       disable-radix-cache: true
       weight-loader-prefetch-checkpoints: true
       model-loader-extra-config: '{"enable_multithread_load": true}'
-      tensor-parallel-size: 32
-      expert-parallel-size: 32
-      data-parallel-size: 32
-      enable-dp-lm-head: true
-      enable-dp-attention: true
-      moe-dense-tp-size: 1
-      ep-num-redundant-experts: 32
-      ep-dispatch-algorithm: static
-      moe-a2a-backend: deepep
-      deepep-mode: low_latency
-      deepep-config: /configs/deepep_config.json
-      max-running-requests: 1280
-      cuda-graph-max-bs: 40
+      tensor-parallel-size: 4
+      expert-parallel-size: 1
+      data-parallel-size: 1
+      enable-flashinfer-allreduce-fusion: true
+      moe-runner-backend: flashinfer_trtllm
+      max-running-requests: 8
+      cuda-graph-max-bs: 8
       speculative-algorithm: "EAGLE"
       speculative-num-steps: 2
       speculative-eagle-topk: 1
@@ -149,4 +141,4 @@ benchmark:
   req_rate: inf
   isl: 8192
   osl: 1024
-  concurrencies: '1300'
+  concurrencies: 128x64x32
