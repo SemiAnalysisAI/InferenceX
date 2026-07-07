@@ -81,7 +81,7 @@ if agentic_kv_offload_enabled; then
         # hosts expose IB-mode fabric ports and IP-less NICs that crash the
         # server when left in the device pool. With the filter applied,
         # device_name stays empty so auto-discovery selects the devices.
-        VLLM_RDMA_PATCH="$(dirname "$0")/patches/vllm-mooncake-rdma-device-filter.patch"
+        VLLM_RDMA_PATCH="$(cd "$(dirname "$0")" && pwd)/patches/vllm-mooncake-rdma-device-filter.patch"
         VLLM_SITE_DIR="$(python3 -c 'import pathlib, vllm; print(pathlib.Path(vllm.__file__).resolve().parent.parent)')"
         if git -C "$VLLM_SITE_DIR" apply --reverse --check "$VLLM_RDMA_PATCH" >/dev/null 2>&1; then
             echo "vLLM RDMA device-filter patch already applied."
