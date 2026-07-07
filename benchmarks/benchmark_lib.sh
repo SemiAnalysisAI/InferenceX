@@ -1156,6 +1156,16 @@ META
 #   SWEBENCH_NAMESPACE     local-Docker only: pass "" on arm/Mac to build locally
 #   SWEBENCH_SKIP_SCORE    "true" => generate + stage predictions only, no scoring
 #                          (score elsewhere)
+# Agentic generation deps: mini-swe-agent runs the agent loop on this node
+# against the local OpenAI endpoint; each instance's shell runs in a Modal
+# sandbox via swe-rex. NOTE: the [modal] extra is required (pulls modal+boto3;
+# without it swe-rex's modal backend import fails as a misleading
+# "Unknown environment type: swerex_modal").
+_install_swebench_agent_deps() {
+    python3 -m pip install -q --no-cache-dir --break-system-packages \
+        'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
+}
+
 _install_swebench_deps() {
     # Best-effort (mirrors _install_lm_eval_deps); a real failure surfaces at scoring.
     python3 -m pip install -q --no-cache-dir --break-system-packages swebench || true
@@ -1218,6 +1228,81 @@ maybe_run_eval() {
     fi
 }
 
+# Agentic SWE-bench generation: mini-swe-agent drives the model at the local
+# OpenAI-compatible endpoint; each instance's shell commands execute in a Modal
+# sandbox (swe-rex) running the official per-instance SWE-bench image -- no
+# docker daemon needed on this node. Writes <gen_dir>/agent_out/preds.json
+# (dict keyed by instance_id; consumed via swebench_score.py --predictions-file).
+# Env knobs:
+#   SWEBENCH_AGENT_WORKERS     (default 8)     parallel instances / sandboxes
+#   SWEBENCH_AGENT_STEP_LIMIT  (default 30)    per-instance agent step cap
+#   SWEBENCH_AGENT_TIMEOUT     (default 14400) whole-generation guard, seconds
+#   EVAL_LIMIT                 first-N instances only (--slice 0:N)
+_run_swebench_agentic_generation() {
+    local gen_dir="$1"; shift
+    local port="${PORT:-8888}"
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --port) port="$2"; shift 2 ;;
+            *)      shift ;;
+        esac
+    done
+
+    _install_swebench_agent_deps
+    _ensure_modal_credentials  # the agent's execution sandboxes run on Modal
+
+    local default_cfg
+    default_cfg=$(python3 -c 'import minisweagent, os; print(os.path.join(os.path.dirname(minisweagent.__file__), "config/benchmarks/swebench.yaml"))') || {
+        echo "ERROR: mini-swe-agent not importable after install" >&2
+        return 1
+    }
+
+    # Overrides layered on mini's shipped swebench.yaml (which carries the
+    # load-bearing prompt templates). cost_limit is inert for a self-hosted
+    # model (litellm has no pricing for it) -- step_limit is the real cap.
+    local cfg="$gen_dir/mini_swebench_overrides.yaml"
+    cat > "$cfg" <<MINICFG
+agent:
+  step_limit: ${SWEBENCH_AGENT_STEP_LIMIT:-30}
+  cost_limit: 0.
+environment:
+  environment_class: swerex_modal
+model:
+  model_name: "openai/${MODEL_NAME:-$MODEL}"
+  cost_tracking: "ignore_errors"
+  model_kwargs:
+    api_base: "http://0.0.0.0:${port}/v1"
+    api_key: "dummy"
+    custom_llm_provider: "openai"
+    temperature: 0.0
+MINICFG
+
+    local slice_args=()
+    if [ -n "${EVAL_LIMIT:-}" ]; then
+        slice_args=(--slice "0:${EVAL_LIMIT}")
+    fi
+
+    export MSWEA_COST_TRACKING=ignore_errors
+    echo "[swebench-agentic] mini-swe-agent: workers=${SWEBENCH_AGENT_WORKERS:-8} step_limit=${SWEBENCH_AGENT_STEP_LIMIT:-30} slice=${EVAL_LIMIT:-full}"
+    local agen_rc=0
+    timeout "${SWEBENCH_AGENT_TIMEOUT:-14400}" \
+    mini-extra swebench \
+        -c "$default_cfg" -c "$cfg" \
+        --subset lite --split test \
+        --environment-class swerex_modal \
+        "${slice_args[@]}" \
+        -w "${SWEBENCH_AGENT_WORKERS:-8}" \
+        -o "$gen_dir/agent_out" || agen_rc=$?
+    if [ "$agen_rc" -ne 0 ]; then
+        echo "ERROR: agentic generation (mini-swe-agent) failed with $agen_rc" >&2
+        return "$agen_rc"
+    fi
+    if [ ! -s "$gen_dir/agent_out/preds.json" ]; then
+        echo "ERROR: agentic generation produced no preds.json" >&2
+        return 1
+    fi
+}
+
 run_swebench_eval() {
     local out_dir="${EVAL_RESULT_DIR:-$(mktemp -d /tmp/eval_out-XXXXXX)}"
     local task_name="${SWEBENCH_TASK_NAME:-swebench_lite}"
@@ -1243,8 +1328,22 @@ run_swebench_eval() {
         return 1
     fi
 
-    # 1. Generation via lm-eval (reuses endpoint wiring, _patch_lm_eval, etc.).
-    #    run_lm_eval already passes --log_samples, which is what we consume.
+    # 1. Generation: agentic (mini-swe-agent + Modal execution sandboxes) or
+    #    single-shot (lm-eval prompt-per-instance). Selected by SWEBENCH_GEN_MODE.
+    local score_input=()
+    if [ "${SWEBENCH_GEN_MODE:-single-shot}" = "agentic" ]; then
+        _run_swebench_agentic_generation "$gen_dir" "$@" || {
+            local agen_rc=$?
+            rm -rf "$gen_dir" 2>/dev/null || true
+            return "$agen_rc"
+        }
+        score_input=(--predictions-file "$gen_dir/agent_out/preds.json")
+        # Preserve agent predictions as artifacts alongside the scored results.
+        mkdir -p "$out_dir"
+        cp -f "$gen_dir/agent_out/preds.json" "$out_dir/agent_preds.json" 2>/dev/null || true
+    else
+    # Single-shot generation via lm-eval (reuses endpoint wiring, _patch_lm_eval
+    # etc.).
     #
     #    Use the --include_path form rather than passing the YAML file path to
     #    --tasks.  The pinned lm-eval (0.4.9.2, ref b315ef3) crashes with
@@ -1270,6 +1369,8 @@ run_swebench_eval() {
     # Preserve generations as artifacts alongside the scored results.
     mkdir -p "$out_dir"
     find "$gen_dir" -name 'samples_*.jsonl' -exec cp -f {} "$out_dir"/ \; 2>/dev/null || true
+    score_input=(--samples-dir "$gen_dir")
+    fi
     export EVAL_RESULT_DIR="$out_dir"
 
     local lm_eval_version
@@ -1280,7 +1381,7 @@ run_swebench_eval() {
         # TODO(alec): wire the separate scoring job (Modal / sb-cli / CPU runner).
         local skip_rc=0
         python3 utils/evals/swebench_score.py \
-            --samples-dir "$gen_dir" --out-dir "$out_dir" \
+            "${score_input[@]}" --out-dir "$out_dir" \
             --model-name "${MODEL_NAME:-$MODEL}" --task-name "$task_name" \
             --predictions-only || skip_rc=$?
         echo "SWEBENCH_SKIP_SCORE=true: staged predictions only (no resolved-rate)." >&2
@@ -1303,7 +1404,7 @@ run_swebench_eval() {
     # than holding the GPU allocation until the slurm wall clock.
     timeout "${SWEBENCH_SCORE_TIMEOUT:-7200}" \
     python3 utils/evals/swebench_score.py \
-        --samples-dir "$gen_dir" \
+        "${score_input[@]}" \
         --out-dir "$out_dir" \
         --model-name "${MODEL_NAME:-$MODEL}" \
         --task-name "$task_name" \

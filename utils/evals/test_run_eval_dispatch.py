@@ -453,3 +453,51 @@ echo SANITIZED_OK
     res = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
     assert res.returncode == 0, res.stdout + res.stderr
     assert "SANITIZED_OK" in res.stdout
+
+
+def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
+    """SWEBENCH_GEN_MODE=agentic: mini-extra called with slice/workers/config;
+    preds.json produced; config carries the local endpoint + model."""
+    shim = tmp_path / "shim"
+    shim.mkdir()
+    (shim / "mini-extra").write_text(
+        "#!/bin/bash\n"
+        'echo "MINI_ARGV: $*" >> ' + str(shim / "argv.log") + "\n"
+        'out=""; prev=""\n'
+        'for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done\n'
+        'mkdir -p "$out"\n'
+        "printf '{\"i1\": {\"instance_id\": \"i1\", \"model_name_or_path\": \"m\", \"model_patch\": \"d\"}}' > \"$out/preds.json\"\n"
+    )
+    (shim / "mini-extra").chmod(0o755)
+    default_yaml = shim / "default.yaml"
+    default_yaml.write_text("agent: {}\n")
+    (shim / "python3").write_text(
+        "#!/bin/bash\n"
+        f'if [[ "$*" == *minisweagent* ]]; then echo {default_yaml}; else exec /usr/bin/python3 "$@"; fi\n'
+    )
+    (shim / "python3").chmod(0o755)
+
+    gen_dir = tmp_path / "gen"
+    gen_dir.mkdir()
+    script = r"""
+source "$BENCHMARK_LIB" 2>/dev/null
+_install_swebench_agent_deps() { :; }
+_ensure_modal_credentials() { :; }
+export EVAL_LIMIT=10 MODEL_NAME=test-model
+_run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
+[ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
+grep -q 'api_base: "http://0.0.0.0:8899/v1"' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
+grep -q 'openai/test-model' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
+echo AGENTIC_GEN_OK
+"""
+    env = {**os.environ,
+           "BENCHMARK_LIB": str(BENCHMARK_LIB),
+           "GEN_DIR": str(gen_dir),
+           "PATH": f"{shim}:{os.environ['PATH']}"}
+    res = subprocess.run(["bash", "-c", script], env=env, text=True, capture_output=True)
+    assert res.returncode == 0, res.stdout + res.stderr
+    assert "AGENTIC_GEN_OK" in res.stdout
+    argv = (shim / "argv.log").read_text()
+    assert "--slice 0:10" in argv
+    assert "--environment-class swerex_modal" in argv
+    assert "--subset lite" in argv

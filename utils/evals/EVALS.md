@@ -188,6 +188,10 @@ append_lm_eval_summary
 - Scoring: `utils/evals/swebench_score.py` (diff extraction → `predictions.jsonl` →
   `python -m swebench.harness.run_evaluation` → resolved-rate → results JSON). Offline
   `--report` mode skips Docker for testing.
+- Generation modes (`SWEBENCH_GEN_MODE`): `single-shot` (default; lm-eval, one prompt per
+  instance — cheap floor baseline) or `agentic` (mini-swe-agent loop against the local endpoint;
+  each instance's shell runs in a Modal sandbox via swe-rex — the real SWE-bench setting). Agentic
+  knobs: `SWEBENCH_AGENT_WORKERS` (8), `SWEBENCH_AGENT_STEP_LIMIT` (30), `SWEBENCH_AGENT_TIMEOUT` (4h).
 - Knobs: `SWEBENCH_TASK_NAME` (selects the YAML), `SWEBENCH_MAX_WORKERS`,
   `SWEBENCH_NAMESPACE` (pass `""` on arm/Mac), `SWEBENCH_SKIP_SCORE=true` (generate-only),
   `SWEBENCH_USE_MODAL=true` (score on Modal remote sandboxes instead of local Docker). Modal

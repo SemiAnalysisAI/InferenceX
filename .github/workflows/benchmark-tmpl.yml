@@ -96,6 +96,11 @@ on:
         required: false
         type: string
         default: ""
+      swebench-gen-mode:
+        description: "SWE-bench generation mode (single-shot | agentic). Empty = single-shot."
+        required: false
+        type: string
+        default: ""
 env:
   RANDOM_RANGE_RATIO: 0.8
   HF_TOKEN: ${{ secrets.INFERENCEX_OFFICIAL_RO_HF_TOKEN }}
@@ -126,6 +131,7 @@ env:
   TOTAL_CPU_DRAM_GB: ${{ inputs.total-cpu-dram-gb }}
   DURATION: ${{ inputs.duration }}
   EVAL_LIMIT: ${{ inputs.eval-limit }}
+  SWEBENCH_GEN_MODE: ${{ inputs.swebench-gen-mode }}
   AIPERF_FAILED_REQUEST_THRESHOLD: '0.10'
   RESULT_DIR: /workspace/results
   PYTHONDONTWRITEBYTECODE: '1'

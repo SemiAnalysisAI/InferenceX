@@ -26,6 +26,11 @@ on:
                 required: false
                 type: string
                 default: ""
+            swebench-gen-mode:
+                description: "SWE-bench generation mode (single-shot | agentic). Empty = single-shot."
+                required: false
+                type: string
+                default: ""
     workflow_call:
         inputs:
             generate-cli-command:
@@ -47,6 +52,11 @@ on:
                 default: ""
             eval-limit:
                 description: "Limit eval to first N instances (smoke tests); empty = full set"
+                required: false
+                type: string
+                default: ""
+            swebench-gen-mode:
+                description: "SWE-bench generation mode (single-shot | agentic). Empty = single-shot."
                 required: false
                 type: string
                 default: ""
@@ -249,6 +259,7 @@ jobs:
             run-eval: true
             eval-only: true
             eval-limit: ${{ inputs.eval-limit }}
+            swebench-gen-mode: ${{ inputs.swebench-gen-mode }}
             scenario-type: agentic-coding
             ref: ${{ inputs.ref }}
 

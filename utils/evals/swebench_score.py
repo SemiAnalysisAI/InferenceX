@@ -359,10 +359,17 @@ def main(argv: Optional[list[str]] = None) -> int:
     run_id = args.run_id or args.task_name
 
     if args.predictions_file:
-        # Agentic mode: an agent harness already produced predictions.jsonl in
-        # the standard {instance_id, model_name_or_path, model_patch} shape.
+        # Agentic mode: an agent harness already produced predictions in the
+        # standard {instance_id, model_name_or_path, model_patch} shape --
+        # either JSONL (one object per line) or mini-swe-agent/SWE-agent's
+        # preds.json (a single dict keyed by instance_id).
         src = Path(args.predictions_file)
-        predictions = [json.loads(line) for line in src.open() if line.strip()]
+        text = src.read_text()
+        try:
+            blob = json.loads(text)
+            predictions = list(blob.values()) if isinstance(blob, dict) else blob
+        except json.JSONDecodeError:
+            predictions = [json.loads(line) for line in text.splitlines() if line.strip()]
         if not predictions:
             print(f"ERROR: no predictions in {src}", file=sys.stderr)
             return 1
