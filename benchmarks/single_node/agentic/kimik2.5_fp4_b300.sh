@@ -87,7 +87,7 @@ if agentic_kv_offload_enabled; then
   "global_segment_size": "200GB",
   "local_buffer_size": "4GB",
   "protocol": "rdma",
-  "device_name": ""
+  "device_name": "mlx5_0"
 }
 EOF
         export MOONCAKE_CONFIG_PATH
