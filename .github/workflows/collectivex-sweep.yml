@@ -602,6 +602,48 @@ jobs:
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           source experimental/CollectiveX/runtime/common.sh
           cx_report_private_scheduler_failure
+      - name: Encrypt MI300X scheduler diagnostic
+        id: encrypt_scheduler_diagnostic
+        if: ${{ always() && matrix.sku == 'mi300x' && steps.source.outputs.prepared == 'true' && steps.sweep_shard.outcome == 'failure' }}
+        run: |
+          set -euo pipefail
+          umask 077
+          diagnostic_root="$CX_JOB_ROOT/encrypted-scheduler-diagnostic"
+          log="$CX_JOB_ROOT/control/private-logs/$COLLECTIVEX_EXECUTION_ID/scheduler-allocation.log"
+          [ -f "$log" ] && [ ! -L "$log" ] && [ "$(stat -c '%a' "$log")" = 600 ] \
+            || { echo 'MI300X private scheduler diagnostic is unavailable' >&2; exit 1; }
+          mkdir -m 700 "$diagnostic_root"
+          cat > "$diagnostic_root/public.pem" <<'EOF'
+          -----BEGIN PUBLIC KEY-----
+          MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAiT4793KA53HtshUZGjQ3
+          EA1hbL5UvAxPr0imI+VrJEJghMzHoH8KODAnsK0WY6d4aZSLuF6IYCVsPNfUcocE
+          zi/kPoo5tXD20vRZME53uqMknfkBysvyWvskecSh7dmOC7pbi5gFwiAXPGNnGjG8
+          P3N8WxjB9pLeTxKxSQLLL6xOWWWynbMYEB5DHs9ZSY0+LACa9d4XsC69jOTEWnOe
+          icngxehSXZl9ttfgKyEs9GmyylcYI/Z7bV5KeDP6cL2lO17sU2D3h52foZ7vYh8U
+          Z4+JEXdGAWLh9vahdBkSlSYX8Jc1KzekZLoIFAe7YtL56UHjMFpVERzWjuQys11w
+          WEbHBwrrzKyb3Y9O3zieLuo0FhzlfIorYuJFxpBvGXtXEQNr4yuYEDqbcR6Whf2y
+          7raz4HstwwZMax9P53uJ8r9cg1o6GmySNFB4y/onsYcb8GaTAT3L+/iYEKnGSv6g
+          bsEJBUlnMOn60wcqMNaqNqiVNBbB65o62ZOz76p3V8MLAgMBAAE=
+          -----END PUBLIC KEY-----
+          EOF
+          openssl rand -hex 32 > "$diagnostic_root/passphrase"
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt \
+            -in "$log" -out "$diagnostic_root/scheduler.log.enc" \
+            -pass file:"$diagnostic_root/passphrase" >/dev/null 2>&1
+          openssl pkeyutl -encrypt -pubin -inkey "$diagnostic_root/public.pem" \
+            -pkeyopt rsa_padding_mode:oaep -pkeyopt rsa_oaep_md:sha256 \
+            -in "$diagnostic_root/passphrase" \
+            -out "$diagnostic_root/passphrase.enc" >/dev/null 2>&1
+          rm -f -- "$diagnostic_root/passphrase" "$diagnostic_root/public.pem"
+          echo 'prepared=true' >> "$GITHUB_OUTPUT"
+      - name: Upload encrypted MI300X scheduler diagnostic
+        if: ${{ always() && steps.encrypt_scheduler_diagnostic.outputs.prepared == 'true' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: cxdiag-${{ matrix.id }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CX_JOB_ROOT }}/encrypted-scheduler-diagnostic/*.enc
+          if-no-files-found: error
+          retention-days: 1
       - name: Confirm allocation cleanup
         id: allocation_cleanup
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}

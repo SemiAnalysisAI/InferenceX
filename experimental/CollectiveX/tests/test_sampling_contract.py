@@ -1665,6 +1665,10 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('[ "$CX_JOB_PARENT" != /tmp ]', cleanup)
         self.assertIn("- name: Classify private scheduler failure", workflow)
         self.assertIn("cx_report_private_scheduler_failure", workflow)
+        self.assertIn("Encrypt MI300X scheduler diagnostic", workflow)
+        self.assertIn("rsa_padding_mode:oaep", workflow)
+        self.assertIn("retention-days: 1", workflow)
+        self.assertNotIn("BEGIN PRIVATE KEY", workflow)
         for step in (
             "sweep_shard", "allocation_cleanup", "artifact_safety",
             "delivery_contracts", "stage_artifact", "upload_artifact",
