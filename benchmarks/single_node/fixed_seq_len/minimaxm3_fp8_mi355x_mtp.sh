@@ -6,7 +6,7 @@
 # --speculative-config with 3 speculative tokens. 
 #
 # The EAGLE3 drafter (dense Llama MHA head) is pinned to TRITON_ATTN in the
-# speculative-config, otherwise it would fallback to a slow default backend.
+# speculative-config, otherwise it would fall back to a slow default backend.
 # Adding the explicit override left the draft's token acceptance unchanged but
 # sped up the draft forward enough to turn into a win across the board.
 #
