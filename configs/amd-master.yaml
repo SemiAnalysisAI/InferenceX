@@ -2040,10 +2040,11 @@ dsv4-fp4-mi355x-vllm-agentic:
     - dram-utilization: 0.60
       search-space:
       #- { tp: 8, ep: 1, dp-attn: false, kv-offloading: none, conc-list: [16, 32, 48, 64] }
-      #- { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40, 48, 56, 64, 72] }
-      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [40, 56, 72] }
-      - { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40] }
+      - { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [100, 150, 200, 250, 300] }
+      #- { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40] }
 
+
+      #- { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32, 40, 48, 56, 64, 72] }
       #- { tp: 8, ep: 1, dp-attn: true, kv-offloading: none, conc-list: [32] }
       #- { tp: 8, ep: 1, dp-attn: true, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [32] }
       #- { tp: 8, ep: 1, dp-attn: false, kv-offloading: dram, kv-offload-backend: native, conc-list: [32] }
