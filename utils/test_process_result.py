@@ -82,6 +82,8 @@ def multinode_env_vars(base_env_vars):
         "DECODE_TP": "8",
         "DECODE_EP": "8",
         "DECODE_DP_ATTN": "true",
+        "PREFILL_HARDWARE": "gb200",
+        "DECODE_HARDWARE": "h100",
     }
 
 
@@ -232,12 +234,40 @@ class TestProcessResultScript:
         assert output_data["decode_num_workers"] == 1
         assert output_data["num_prefill_gpu"] == 20
         assert output_data["num_decode_gpu"] == 8
+        assert output_data["prefill_hw"] == "gb200"
+        assert output_data["decode_hw"] == "h100"
 
         # Verify throughput calculations
         total_gpus = 20 + 8  # prefill + decode
         assert output_data["tput_per_gpu"] == pytest.approx(15000.5 / total_gpus)
         assert output_data["output_tput_per_gpu"] == pytest.approx(12000.0 / 8)  # decode gpus
         assert output_data["input_tput_per_gpu"] == pytest.approx((15000.5 - 12000.0) / 20)  # prefill gpus
+
+    def test_homogeneous_multinode_omits_hardware_fields(
+        self, tmp_path, sample_benchmark_result, multinode_env_vars
+    ):
+        """Absent hardware metadata should preserve homogeneous result output."""
+        multinode_env_vars.pop("PREFILL_HARDWARE")
+        multinode_env_vars.pop("DECODE_HARDWARE")
+
+        result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)
+
+        assert result.returncode == 0, f"Script failed: {result.stderr}"
+        output_data = json.loads(result.stdout)
+        assert "prefill_hw" not in output_data
+        assert "decode_hw" not in output_data
+
+    @pytest.mark.parametrize("missing_var", ["PREFILL_HARDWARE", "DECODE_HARDWARE"])
+    def test_partial_hardware_metadata_fails(
+        self, tmp_path, sample_benchmark_result, multinode_env_vars, missing_var
+    ):
+        """Prefill and decode hardware must always be provided together."""
+        multinode_env_vars.pop(missing_var)
+
+        result = run_script(tmp_path, multinode_env_vars, sample_benchmark_result)
+
+        assert result.returncode != 0
+        assert "PREFILL_HARDWARE and DECODE_HARDWARE" in result.stderr
 
     def test_missing_base_env_vars(self, tmp_path, sample_benchmark_result):
         """Test that missing base env vars causes failure."""
@@ -343,7 +373,7 @@ class TestCalculations:
         assert output_data["intvty_p99"] == pytest.approx(20.0)
 
     def test_throughput_per_gpu_single_node(self, tmp_path, single_node_env_vars):
-        """Test throughput per GPU calculation for single node."""
+        """PCP expands the GPU denominator while DCP remains metadata."""
         benchmark_result = {
             "model_id": "test-model",
             "max_concurrency": 8,
@@ -352,15 +382,17 @@ class TestCalculations:
         }
 
         env = single_node_env_vars.copy()
-        env["TP"] = "4"
+        env.update({"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"})
 
         result = run_script(tmp_path, env, benchmark_result)
         assert result.returncode == 0, f"Script failed: {result.stderr}"
 
         output_data = json.loads(result.stdout)
-        assert output_data["tput_per_gpu"] == pytest.approx(2000.0)  # 8000 / 4
-        assert output_data["output_tput_per_gpu"] == pytest.approx(1500.0)  # 6000 / 4
-        assert output_data["input_tput_per_gpu"] == pytest.approx(500.0)  # (8000 - 6000) / 4
+        assert output_data["dcp_size"] == 2
+        assert output_data["pcp_size"] == 2
+        assert output_data["tput_per_gpu"] == pytest.approx(8000.0 / 8)
+        assert output_data["output_tput_per_gpu"] == pytest.approx(6000.0 / 8)
+        assert output_data["input_tput_per_gpu"] == pytest.approx(2000.0 / 8)
 
     def test_throughput_per_gpu_multinode(self, tmp_path, multinode_env_vars):
         """Test throughput per GPU calculation for multinode."""

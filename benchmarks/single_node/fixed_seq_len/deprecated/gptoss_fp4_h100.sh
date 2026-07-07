@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(dirname "$0")/../../benchmark_lib.sh"
+source "$(dirname "$0")/../../../benchmark_lib.sh"
 
 check_env_vars \
     MODEL \
@@ -17,49 +17,40 @@ fi
 
 if [[ "$MODEL" != /* ]]; then hf download "$MODEL"; fi
 
-# Start GPU monitoring (power, temperature, clocks every second)
-start_gpu_monitor
-
-set -x
-pip install datasets pandas
-
-# Calculate max-model-len based on ISL and OSL
-if [ "$ISL" = "1024" ] && [ "$OSL" = "1024" ]; then
-    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 20))
-elif [ "$ISL" = "8192" ] || [ "$OSL" = "8192" ]; then
-    CALCULATED_MAX_MODEL_LEN=$((ISL + OSL + 256))
-else
-    CALCULATED_MAX_MODEL_LEN=${MAX_MODEL_LEN:-10240}
-fi
+MAX_MODEL_LEN=10240
 
 if [ "${EVAL_ONLY}" = "true" ]; then
     setup_eval_context
-    CALCULATED_MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
+    MAX_MODEL_LEN="$EVAL_MAX_MODEL_LEN"
 fi
 
-# Create config.yaml
 cat > config.yaml << EOF
 no-enable-prefix-caching: true
 max-cudagraph-capture-size: 2048
 max-num-batched-tokens: 8192
-max-model-len: $CALCULATED_MAX_MODEL_LEN
+max-model-len: $MAX_MODEL_LEN
 EOF
 
-SERVER_LOG=/workspace/server.log
-export TORCH_CUDA_ARCH_LIST="9.0"
-
+export PYTHONNOUSERSITE=1
 export VLLM_MXFP4_USE_MARLIN=1
+SERVER_LOG=/workspace/server.log
 
-PYTHONNOUSERSITE=1 vllm serve $MODEL --host 0.0.0.0 --port $PORT \
- --config config.yaml \
- --gpu-memory-utilization 0.9 \
- --tensor-parallel-size $TP \
- --max-num-seqs $CONC > $SERVER_LOG 2>&1 &
+# Start GPU monitoring (power, temperature, clocks every second)
+start_gpu_monitor
+
+set -x
+vllm serve $MODEL --host=0.0.0.0 --port=$PORT \
+--config config.yaml \
+--gpu-memory-utilization=0.9 \
+--tensor-parallel-size=$TP \
+--max-num-seqs=$CONC > $SERVER_LOG 2>&1 &
 
 SERVER_PID=$!
 
 # Wait for server to be ready
 wait_for_server_ready --port "$PORT" --server-log "$SERVER_LOG" --server-pid "$SERVER_PID"
+
+pip install -q datasets pandas
 
 run_benchmark_serving \
     --model "$MODEL" \

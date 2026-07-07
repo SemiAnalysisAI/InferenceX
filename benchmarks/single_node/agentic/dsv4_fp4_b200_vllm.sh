@@ -27,6 +27,23 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
+DCP_SIZE="${DCP_SIZE:-1}"
+PCP_SIZE="${PCP_SIZE:-1}"
+VLLM_CP_ARGS=()
+if [ "$DCP_SIZE" -gt 1 ]; then
+    VLLM_CP_ARGS+=(--decode-context-parallel-size "$DCP_SIZE")
+fi
+if [ "$PCP_SIZE" -gt 1 ]; then
+    VLLM_CP_ARGS+=(--prefill-context-parallel-size "$PCP_SIZE")
+fi
+
+GPU_COUNT="${GPU_COUNT:-$((TP * PCP_SIZE))}"
+if [[ ! "$GPU_COUNT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: GPU_COUNT must be a positive integer, got '$GPU_COUNT'" >&2
+    exit 1
+fi
+export GPU_COUNT
+
 if [[ -n "${SLURM_JOB_ID:-}" ]]; then
     echo "JOB $SLURM_JOB_ID running on ${SLURMD_NODENAME:-unknown}"
 fi
@@ -95,7 +112,7 @@ OFFLOAD_ARGS=()
 if require_agentic_kv_offload_backend mooncake; then
         # Embedded mode contributes one segment per GPU rank to a shared
         # distributed store, so pre-divide the aggregate host-memory budget.
-        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / TP))
+        PER_RANK_GB=$((TOTAL_CPU_DRAM_GB / GPU_COUNT))
 
         MOONCAKE_VERSION=0.3.11.post1
         agentic_pip_install --quiet --no-cache-dir --no-deps \
@@ -183,6 +200,7 @@ VLLM_CMD=(
     --kv-cache-dtype fp8
     --block-size 256
     "${PARALLEL_ARGS[@]}"
+    "${VLLM_CP_ARGS[@]}"
     "${EP_ARGS[@]}"
     --compilation-config '{"cudagraph_mode":"FULL_AND_PIECEWISE","custom_ops":["all"]}'
     --attention_config.use_fp4_indexer_cache=True

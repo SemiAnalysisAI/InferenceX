@@ -81,6 +81,14 @@ def runner_gpus_per_node(runner: str, runner_data: dict) -> int:
     return runner_hardware_int(runner, runner_data, Fields.GPUS_PER_NODE.value)
 
 
+def effective_gpu_count(benchmark: dict) -> int:
+    """Return GPUs used by a single-node TP/PCP topology."""
+    return (
+        benchmark[Fields.TP.value]
+        * benchmark.get(Fields.PCP_SIZE.value, 1)
+    )
+
+
 def agentic_dram_offload_gb(
     agentic_config: dict, benchmark: dict, runner: str, runner_data: dict
 ) -> int:
@@ -95,14 +103,17 @@ def agentic_dram_offload_gb(
     )
     utilization = Decimal(str(agentic_config[Fields.DRAM_UTILIZATION.value]))
     gpus_per_node = runner_gpus_per_node(runner, runner_data)
-    tp = benchmark[Fields.TP.value]
-    if tp > gpus_per_node:
+    gpu_count = effective_gpu_count(benchmark)
+    if gpu_count > gpus_per_node:
         raise ValueError(
-            f"tp={tp} exceeds {Fields.GPUS_PER_NODE.value}={gpus_per_node} "
-            f"for runner '{runner}'"
+            f"tp={benchmark[Fields.TP.value]} with "
+            f"{Fields.PCP_SIZE.value}={benchmark.get(Fields.PCP_SIZE.value, 1)} "
+            f"requires {gpu_count} GPUs and exceeds "
+            f"{Fields.GPUS_PER_NODE.value}={gpus_per_node} for runner '{runner}'"
         )
     proportional_bytes = (
-        Decimal(available_mib) * BYTES_PER_MIB * utilization * tp / gpus_per_node
+        Decimal(available_mib) * BYTES_PER_MIB * utilization
+        * gpu_count / gpus_per_node
     )
     return int(proportional_bytes / BYTES_PER_GB)
 
@@ -463,6 +474,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                 else:
                     # Single-node configuration
                     tp = bmk[Fields.TP.value]
+                    dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
+                    pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
@@ -555,6 +568,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.ISL.value: isl,
                                 Fields.OSL.value: osl,
                                 Fields.TP.value: tp,
+                                Fields.DCP_SIZE.value: dcp_size,
+                                Fields.PCP_SIZE.value: pcp_size,
                                 Fields.CONC.value: conc,
                                 Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                                 Fields.EP.value: 1,  # Default
@@ -593,6 +608,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                     kv_offload_backend = None
                 else:
                     tp = bmk[Fields.TP.value]
+                    dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
+                    pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
@@ -667,6 +684,8 @@ def generate_full_sweep(args, all_config_data, runner_data):
                                 Fields.FRAMEWORK.value: framework,
                                 Fields.RUNNER.value: runner_value,
                                 Fields.TP.value: tp,
+                                Fields.DCP_SIZE.value: dcp_size,
+                                Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,
@@ -801,6 +820,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                 else:
                     # Single-node config
                     tp = bmk[Fields.TP.value]
+                    dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
+                    pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     spec_decoding = bmk.get(Fields.SPEC_DECODING.value, "none")
@@ -840,6 +861,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.ISL.value: isl,
                                 Fields.OSL.value: osl,
                                 Fields.TP.value: tp,
+                                Fields.DCP_SIZE.value: dcp_size,
+                                Fields.PCP_SIZE.value: pcp_size,
                                 Fields.CONC.value: conc,
                                 Fields.MAX_MODEL_LEN.value: isl + osl + 256,
                                 Fields.EP.value: ep if ep is not None else 1,
@@ -866,6 +889,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                     kv_offload_backend = None
                 else:
                     tp = bmk[Fields.TP.value]
+                    dcp_size = bmk.get(Fields.DCP_SIZE.value, 1)
+                    pcp_size = bmk.get(Fields.PCP_SIZE.value, 1)
                     ep = bmk.get(Fields.EP.value)
                     dp_attn = bmk.get(Fields.DP_ATTN.value)
                     kv_offloading = bmk[Fields.KV_OFFLOADING.value]
@@ -933,6 +958,8 @@ def generate_test_config_sweep(args, all_config_data, runner_data=None):
                                 Fields.FRAMEWORK.value: framework,
                                 Fields.RUNNER.value: runner_value,
                                 Fields.TP.value: tp,
+                                Fields.DCP_SIZE.value: dcp_size,
+                                Fields.PCP_SIZE.value: pcp_size,
                                 Fields.EP.value: ep if ep is not None else 1,
                                 Fields.DP_ATTN.value: dp_attn if dp_attn is not None else False,
                                 Fields.CONC.value: conc,

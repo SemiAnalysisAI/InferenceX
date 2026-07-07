@@ -26,6 +26,7 @@ from utils.agentic.aggregation.request_metrics import (
     load_aggregate,
     load_records,
 )
+from utils.agentic.aggregation.process_agentic_result import _gpu_shape
 from utils.agentic.aggregation.server_metrics import (
     compute_server_metrics,
     load_server_metrics,
@@ -44,6 +45,8 @@ AGG_TOP_LEVEL_KEYS = {
     "scenario_type",
     "is_multinode",
     "tp",
+    "dcp_size",
+    "pcp_size",
     "ep",
     "dp_attention",
     "kv_offloading",
@@ -308,6 +311,8 @@ def _run_processor(
     env_overrides: dict[str, str] | None = None,
 ) -> dict:
     env = os.environ.copy()
+    env.pop("PREFILL_HARDWARE", None)
+    env.pop("DECODE_HARDWARE", None)
     env.update(
         {
             "RESULT_DIR": str(result_dir),
@@ -318,6 +323,8 @@ def _run_processor(
             "FRAMEWORK": "vllm",
             "PRECISION": "fp4",
             "TP": "4",
+            "DCP_SIZE": "1",
+            "PCP_SIZE": "1",
             "EP_SIZE": "1",
             "DP_ATTENTION": "false",
             "CONC": "8",
@@ -431,14 +438,24 @@ def test_processor_derives_interactivity_from_matching_itl_percentile(
 def test_processor_throughput_per_gpu(tmp_path: Path):
     result_dir = _write_fixture(tmp_path)
     output_dir = tmp_path / "out"
-    agg = _run_processor(result_dir, output_dir)
-    per_gpu = agg["request_metrics"]["throughput"]["per_gpu"]
-    assert per_gpu["total_tput_tps"] > 0
-    assert per_gpu["input_tput_tps"] > 0
-    assert per_gpu["output_tput_tps"] > 0
-    assert "tput_per_gpu" not in agg
-    assert "input_tput_per_gpu" not in agg
-    assert "output_tput_per_gpu" not in agg
+    agg = _run_processor(
+        result_dir,
+        output_dir,
+        env_overrides={"TP": "4", "DCP_SIZE": "2", "PCP_SIZE": "2"},
+    )
+    throughput = agg["request_metrics"]["throughput"]
+    per_gpu = throughput["per_gpu"]
+    assert agg["dcp_size"] == 2
+    assert agg["pcp_size"] == 2
+    assert per_gpu["total_tput_tps"] == pytest.approx(
+        throughput["total"]["tokens_per_second"] / 8
+    )
+    assert per_gpu["input_tput_tps"] == pytest.approx(
+        throughput["input"]["tokens_per_second"] / 8
+    )
+    assert per_gpu["output_tput_tps"] == pytest.approx(
+        throughput["output"]["tokens_per_second"] / 8
+    )
 
 
 def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
@@ -451,6 +468,70 @@ def test_processor_surfaces_allocated_cpu_dram(tmp_path: Path):
     )
 
     assert agg["allocated_cpu_dram_gb"] == 2400
+
+
+def test_multinode_processor_surfaces_heterogeneous_hardware(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "PREFILL_EP": "8",
+            "PREFILL_DP_ATTN": "false",
+            "PREFILL_HARDWARE": "b200",
+            "DECODE_NUM_WORKERS": "2",
+            "DECODE_TP": "8",
+            "DECODE_EP": "8",
+            "DECODE_DP_ATTN": "false",
+            "DECODE_HARDWARE": "h100",
+        },
+    )
+
+    assert agg["prefill_hw"] == "b200"
+    assert agg["decode_hw"] == "h100"
+
+
+def test_multinode_processor_omits_homogeneous_hardware(tmp_path: Path):
+    result_dir = _write_fixture(tmp_path)
+    agg = _run_processor(
+        result_dir,
+        tmp_path / "out",
+        env_overrides={
+            "IS_MULTINODE": "true",
+            "DISAGG": "true",
+            "PREFILL_NUM_WORKERS": "1",
+            "PREFILL_TP": "8",
+            "DECODE_NUM_WORKERS": "2",
+            "DECODE_TP": "8",
+        },
+    )
+
+    assert "prefill_hw" not in agg
+    assert "decode_hw" not in agg
+
+
+@pytest.mark.parametrize(
+    ("present_var", "missing_var"),
+    [
+        ("PREFILL_HARDWARE", "DECODE_HARDWARE"),
+        ("DECODE_HARDWARE", "PREFILL_HARDWARE"),
+    ],
+)
+def test_multinode_processor_rejects_one_sided_hardware(
+    monkeypatch: pytest.MonkeyPatch,
+    present_var: str,
+    missing_var: str,
+):
+    monkeypatch.setenv("IS_MULTINODE", "true")
+    monkeypatch.setenv(present_var, "b200")
+    monkeypatch.delenv(missing_var, raising=False)
+
+    with pytest.raises(SystemExit, match="must be specified together"):
+        _gpu_shape()
 
 
 def test_processor_surfaces_request_accounting(tmp_path: Path):

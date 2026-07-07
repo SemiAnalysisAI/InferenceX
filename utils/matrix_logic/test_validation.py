@@ -41,6 +41,8 @@ def valid_single_node_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "tp": 8,
+        "dcp-size": 1,
+        "pcp-size": 1,
         "ep": 1,
         "dp-attn": False,
         "conc": 4,
@@ -65,6 +67,7 @@ def valid_multinode_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "prefill": {
+            "hardware": "gb200",
             "num-worker": 5,
             "tp": 4,
             "ep": 4,
@@ -75,6 +78,7 @@ def valid_multinode_matrix_entry():
             ],
         },
         "decode": {
+            "hardware": "h100",
             "num-worker": 1,
             "tp": 8,
             "ep": 8,
@@ -141,6 +145,7 @@ def valid_multinode_master_config():
                     "search-space": [
                         {
                             "prefill": {
+                                "hardware": "gb200",
                                 "num-worker": 5,
                                 "tp": 4,
                                 "ep": 4,
@@ -151,6 +156,7 @@ def valid_multinode_master_config():
                                 ],
                             },
                             "decode": {
+                                "hardware": "h100",
                                 "num-worker": 1,
                                 "tp": 8,
                                 "ep": 8,
@@ -213,6 +219,7 @@ class TestFieldsEnum:
         assert Fields.SPEC_DECODING.value == "spec-decoding"
         assert Fields.PREFILL.value == "prefill"
         assert Fields.DECODE.value == "decode"
+        assert Fields.HARDWARE.value == "hardware"
 
 
 # =============================================================================
@@ -318,6 +325,12 @@ class TestSingleNodeMatrixEntry:
         with pytest.raises(Exception):
             SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
 
+    def test_disagg_requires_multinode(self, valid_single_node_matrix_entry):
+        """Single-node matrix entries cannot enable disaggregation."""
+        valid_single_node_matrix_entry["disagg"] = True
+        with pytest.raises(Exception, match="disagg"):
+            SingleNodeMatrixEntry(**valid_single_node_matrix_entry)
+
 
 # =============================================================================
 # Test Agentic Matrix Entries
@@ -335,6 +348,8 @@ class TestAgenticMatrixEntries:
             "framework": "vllm",
             "runner": "cluster:b200-dgxc",
             "tp": 8,
+            "dcp-size": 1,
+            "pcp-size": 1,
             "ep": 1,
             "dp-attn": False,
             "conc": 1,
@@ -466,6 +481,25 @@ class TestMultiNodeMatrixEntry:
         assert entry.model == "deepseek-r1-fp4"
         assert entry.conc == [2150]
         assert entry.disagg is True
+        assert entry.prefill.hardware == "gb200"
+        assert entry.decode.hardware == "h100"
+
+    def test_disagg_allows_omitted_hardware(self, valid_multinode_matrix_entry):
+        """Homogeneous disaggregated entries may omit hardware metadata."""
+        del valid_multinode_matrix_entry["prefill"]["hardware"]
+        del valid_multinode_matrix_entry["decode"]["hardware"]
+        entry = MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
+        assert entry.prefill.hardware is None
+        assert entry.decode.hardware is None
+
+    @pytest.mark.parametrize("missing_worker", ["prefill", "decode"])
+    def test_hardware_requires_prefill_and_decode(
+        self, valid_multinode_matrix_entry, missing_worker
+    ):
+        """Heterogeneous hardware metadata must identify both worker pools."""
+        del valid_multinode_matrix_entry[missing_worker]["hardware"]
+        with pytest.raises(Exception, match="both.*prefill.*decode"):
+            MultiNodeMatrixEntry(**valid_multinode_matrix_entry)
 
     def test_prefill_decode_worker_configs(self, valid_multinode_matrix_entry):
         """Prefill and decode should be WorkerConfig objects."""
@@ -561,6 +595,15 @@ class TestSingleNodeSearchSpaceEntry:
             "conc-list": [4, 8, 16, 32, 64, 128],
         })
         assert entry.conc_list == [4, 8, 16, 32, 64, 128]
+
+    def test_dcp_size_must_divide_tp(self):
+        with pytest.raises(Exception, match="must be divisible"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 8,
+                "dcp-size": 3,
+                "pcp-size": 2,
+                "conc-list": [4],
+            })
 
     def test_cannot_have_both_range_and_list(self):
         """Cannot specify both conc range and list."""
@@ -817,6 +860,26 @@ class TestMasterConfigEntries:
         assert config.model_prefix == "dsr1"
         assert config.runner == "gb200"
         assert config.disagg is True
+        search_entry = config.scenarios.fixed_seq_len[0].search_space[0]
+        assert search_entry.prefill.hardware == "gb200"
+        assert search_entry.decode.hardware == "h100"
+
+    def test_disagg_master_config_allows_omitted_hardware(self, valid_multinode_master_config):
+        """Homogeneous disaggregated master configs may omit hardware metadata."""
+        search_entry = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        del search_entry["prefill"]["hardware"]
+        del search_entry["decode"]["hardware"]
+        config = MultiNodeMasterConfigEntry(**valid_multinode_master_config)
+        validated_entry = config.scenarios.fixed_seq_len[0].search_space[0]
+        assert validated_entry.prefill.hardware is None
+        assert validated_entry.decode.hardware is None
+
+    def test_master_hardware_requires_prefill_and_decode(self, valid_multinode_master_config):
+        """Heterogeneous master configs must identify both worker pools."""
+        search_entry = valid_multinode_master_config["scenarios"]["fixed-seq-len"][0]["search-space"][0]
+        del search_entry["decode"]["hardware"]
+        with pytest.raises(Exception, match="both.*prefill.*decode"):
+            MultiNodeMasterConfigEntry(**valid_multinode_master_config)
 
     def test_single_node_cannot_have_multinode_true(self, valid_single_node_master_config):
         """Single node config must have multinode=False."""
@@ -834,6 +897,12 @@ class TestMasterConfigEntries:
         """Disagg should default to False."""
         config = SingleNodeMasterConfigEntry(**valid_single_node_master_config)
         assert config.disagg is False
+
+    def test_disagg_requires_multinode(self, valid_single_node_master_config):
+        """Single-node master configs cannot enable disaggregation."""
+        valid_single_node_master_config["disagg"] = True
+        with pytest.raises(Exception, match="disagg"):
+            SingleNodeMasterConfigEntry(**valid_single_node_master_config)
 
     def test_single_node_agentic_master_config_requires_cluster_runner(self):
         """Single-node agentic configs must pin an exact cluster label."""
@@ -881,12 +950,14 @@ class TestMasterConfigEntries:
                                 "spec-decoding": "none",
                                 "conc-list": [1],
                                 "prefill": {
+                                    "hardware": "b200",
                                     "num-worker": 1,
                                     "tp": 4,
                                     "ep": 4,
                                     "dp-attn": True,
                                 },
                                 "decode": {
+                                    "hardware": "b200",
                                     "num-worker": 1,
                                     "tp": 8,
                                     "ep": 8,

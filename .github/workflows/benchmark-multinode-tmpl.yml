@@ -39,6 +39,16 @@ on:
       disagg:
         required: true
         type: string
+      prefill-hardware:
+        description: "GPU SKU used by prefill workers"
+        required: false
+        type: string
+        default: ""
+      decode-hardware:
+        description: "GPU SKU used by decode workers"
+        required: false
+        type: string
+        default: ""
 
       max-model-len:
         required: true
@@ -144,6 +154,8 @@ env:
   CONC_LIST: ${{ join(fromJson(inputs.conc-list), ' ') }}
   SPEC_DECODING: ${{ inputs.spec-decoding }}
   DISAGG: ${{ inputs.disagg }}
+  PREFILL_HARDWARE: ${{ inputs.prefill-hardware }}
+  DECODE_HARDWARE: ${{ inputs.decode-hardware }}
   RUN_EVAL: ${{ inputs.run-eval }}
   EVAL_ONLY: ${{ inputs.eval-only }}
   EVAL_CONC: ${{ inputs.eval-conc }}

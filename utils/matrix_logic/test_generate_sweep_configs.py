@@ -78,6 +78,7 @@ def sample_multinode_config():
                             {
                                 "conc-list": [2150],
                                 "prefill": {
+                                    "hardware": "gb200",
                                     "num-worker": 5,
                                     "tp": 4,
                                     "ep": 4,
@@ -88,6 +89,7 @@ def sample_multinode_config():
                                     ],
                                 },
                                 "decode": {
+                                    "hardware": "h100",
                                     "num-worker": 1,
                                     "tp": 8,
                                     "ep": 8,
@@ -670,6 +672,21 @@ class TestGenerateFullSweepSingleNode:
         assert entry["tp"] == 8
         assert "exp-name" in entry
         assert "max-model-len" in entry
+        assert (entry["dcp-size"], entry["pcp-size"]) == (1, 1)
+
+        explicit_config = copy.deepcopy(sample_single_node_config)
+        for seq_config in explicit_config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"]:
+            for search_entry in seq_config["search-space"]:
+                search_entry.update({"dcp-size": 2, "pcp-size": 2})
+        explicit_result = generate_full_sweep(
+            full_sweep_args_single_node,
+            explicit_config,
+            sample_runner_config,
+        )
+        assert {
+            (row["dcp-size"], row["pcp-size"])
+            for row in explicit_result
+        } == {(2, 2)}
 
     def test_filter_by_model_prefix(self, sample_single_node_config, sample_runner_config, full_sweep_args_single_node):
         """Filter by model prefix should work."""
@@ -981,6 +998,8 @@ class TestGenerateFullSweepMultiNode:
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
+        assert entry["prefill"]["hardware"] == "gb200"
+        assert entry["decode"]["hardware"] == "h100"
 
     def test_multinode_conc_as_list(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
         """Multinode conc should be passed as list."""
@@ -1829,6 +1848,38 @@ def full_sweep_args_both():
 class TestGenerateTestConfigSweep:
     """Tests for exact config-key sweep generation."""
 
+    def test_single_node_context_parallel_fields_are_generated(
+        self,
+        sample_single_node_config,
+        sample_runner_config,
+    ):
+        args = argparse.Namespace(
+            config_keys=["dsr1-fp8-mi300x-sglang"],
+            seq_lens=["1k1k"],
+            conc=[4],
+            runner_node_filter=None,
+        )
+
+        default_result = generate_test_config_sweep(
+            args, sample_single_node_config, sample_runner_config
+        )
+        assert [
+            (row["dcp-size"], row["pcp-size"])
+            for row in default_result
+        ] == [(1, 1)]
+
+        explicit_config = copy.deepcopy(sample_single_node_config)
+        explicit_config["dsr1-fp8-mi300x-sglang"]["scenarios"]["fixed-seq-len"][0]["search-space"][0].update(
+            {"dcp-size": 2, "pcp-size": 2}
+        )
+        explicit_result = generate_test_config_sweep(
+            args, explicit_config, sample_runner_config
+        )
+        assert [
+            (row["dcp-size"], row["pcp-size"])
+            for row in explicit_result
+        ] == [(2, 2)]
+
     def test_runner_node_filter_expands_config_runner(self, sample_multinode_config, sample_runner_config):
         """test-config should allow targeting one concrete runner node."""
         args = argparse.Namespace(
@@ -1929,6 +1980,22 @@ class TestGenerateTestConfigSweep:
                                 "kv-offload-backend": "native",
                                 "conc-list": [32],
                             },
+                            {
+                                "tp": 4,
+                                "dcp-size": 2,
+                                "pcp-size": 1,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
+                            {
+                                "tp": 4,
+                                "dcp-size": 1,
+                                "pcp-size": 2,
+                                "kv-offloading": "dram",
+                                "kv-offload-backend": "native",
+                                "conc-list": [32],
+                            },
                         ],
                     }],
                 },
@@ -1944,9 +2011,12 @@ class TestGenerateTestConfigSweep:
 
         result = generate_test_config_sweep(args, config, sample_runner_config)
 
-        budgets = {entry["tp"]: entry["total-cpu-dram-gb"] for entry in result}
-        assert budgets == {4: 1199}
-        assert result[0]["duration"] == 3600
+        budgets = {
+            (entry["dcp-size"], entry["pcp-size"]): entry["total-cpu-dram-gb"]
+            for entry in result
+        }
+        assert budgets == {(1, 1): 1199, (2, 1): 1199, (1, 2): 2399}
+        assert all(entry["duration"] == 3600 for entry in result)
 
     def test_agentic_node_dram_rejects_tp_above_runner_gpus(self, sample_runner_config):
         config = {
@@ -2004,8 +2074,8 @@ class TestGenerateTestConfigSweep:
                             "search-space": [
                                 {
                                     "conc-list": [16, 32, 64, 128, 256],
-                                    "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
-                                    "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                                    "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                    "decode": {"hardware": "h100", "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                                 }
                             ],
                         }
@@ -2151,8 +2221,8 @@ class TestGenerateFullSweepMixed:
                         "search-space": [
                             {
                                 "conc-list": [16, 32],
-                                "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
-                                "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                                "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                "decode": {"hardware": "h100", "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                             },
                         ],
                     }],
