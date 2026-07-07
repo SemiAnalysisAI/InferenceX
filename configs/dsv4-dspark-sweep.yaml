@@ -1,0 +1,32 @@
+# Full DSpark sweep mirroring the dsv4-fp4-b300-vllm-mtp search space
+# (reference: run 25975679841), dispatched standalone via e2e-tests.yml.
+#
+# spec-decoding is deliberately labeled `mtp` (not `dspark`) on every row so
+# results ingest into the InferenceX-app frontend's unofficial-runs view
+# without frontend changes. launch_b300-nv.sh routes *DSpark* checkpoints to
+# the dspark recipe regardless of this label, so the jobs still serve with
+# method=dspark. The honest `spec-decoding: dspark` variant lives in
+# nvidia-master.yaml as dsv4-fp4-b300-vllm-dspark.
+dsv4-fp4-b300-vllm-dspark-sweep:
+  image: vllm/vllm-openai:nightly-cbe9c40f998f13975b967773ac7e7920e115387f
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: mtp }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: mtp }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }

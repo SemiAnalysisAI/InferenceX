@@ -379,6 +379,13 @@ else
         dspark) SPEC_SUFFIX='_dspark' ;;
         *)      SPEC_SUFFIX='' ;;
     esac
+    # DSpark checkpoints always run the dspark recipe, even when the sweep
+    # labels them spec-decoding=mtp for frontend compatibility (unofficial
+    # runs reuse the mtp spec label; the mtp script would run actual MTP off
+    # the checkpoint's mtp.* weights instead of the DSpark drafter).
+    if [[ "$MODEL" == *DSpark* && "$SPEC_DECODING" == "mtp" ]]; then
+        SPEC_SUFFIX='_dspark'
+    fi
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical
     # name without an engine suffix (`_trt` for trt, bare for everyone else)
