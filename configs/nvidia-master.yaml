@@ -3308,6 +3308,36 @@ dsv4-fp4-b300-vllm-mtp:
       - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: mtp }
       - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: mtp }
 
+# DSpark variant of dsv4-fp4-b300-vllm-mtp. Serves the official
+# deepseek-ai/DeepSeek-V4-Pro-DSpark checkpoint (same V4-Pro weights with the
+# semi-autoregressive DSpark drafter attached, so no external draft model) on a
+# pinned vLLM nightly that includes DSpark spec-decode support
+# (vllm-project/vllm#46995 + #47093, merged 2026-07-02). Search space mirrors
+# the MTP entry so tput and acceptance are directly comparable.
+dsv4-fp4-b300-vllm-dspark:
+  image: vllm/vllm-openai:nightly-34b560b725b401f33477464163244b4744d1c40f
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 256, spec-decoding: dspark }
+      - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: dspark }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 1024, spec-decoding: dspark }
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 64, spec-decoding: dspark }
+      - { tp: 8, conc-start: 1, conc-end: 8, spec-decoding: dspark }
+      - { tp: 4, ep: 4, conc-start: 64, conc-end: 256, spec-decoding: dspark }
+      - { tp: 4, ep: 4, dp-attn: true, conc-start: 256, conc-end: 512, spec-decoding: dspark }
+
 qwen3.5-fp8-h200-sglang:
   image: lmsysorg/sglang:v0.5.14-cu130
   model: Qwen/Qwen3.5-397B-A17B-FP8

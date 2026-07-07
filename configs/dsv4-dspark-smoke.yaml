@@ -1,0 +1,20 @@
+# One-entry smoke config for the DSpark bring-up on B300 vLLM, dispatched via
+# e2e-tests.yml workflow_dispatch. The sweep generator has no per-entry filter,
+# so pointing --config-files here avoids fanning out the sibling dsv4 b300
+# vLLM entries (base + mtp) from nvidia-master.yaml. Not read by any sweep:
+# run-sweep/process_changelog load MASTER_CONFIGS (utils/constants.py) only.
+# Mirrors dsv4-fp4-b300-vllm-dspark, narrowed to tp4 / conc 4 / 1k1k.
+dsv4-fp4-b300-vllm-dspark:
+  image: vllm/vllm-openai:nightly-34b560b725b401f33477464163244b4744d1c40f
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 4, conc-end: 4, spec-decoding: dspark }

@@ -4556,3 +4556,10 @@
   description:
     - "Add high concurrency configs"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
+
+- config-keys:
+    - dsv4-fp4-b300-vllm-dspark
+  description:
+    - "Add DeepSeek-V4 DSpark speculative decoding config for B300 vLLM"
+    - "Official DeepSeek-V4-Pro-DSpark checkpoint, method=dspark, 7 greedy draft tokens"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/XXX
