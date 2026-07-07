@@ -1,0 +1,22 @@
+# Chunk 1/4 of configs/dsv4-dspark-sweep.yaml (1k1k low-concurrency rows).
+# The full 36-job sweep (run 28862886122) occupied 16/17 b300 nodes and was
+# externally cancelled; these chunk files re-run the identical matrix in
+# sequential dispatches of <=8 jobs so at least half the fleet stays free.
+# Dispatch with --no-evals; evals come from a final --evals-only dispatch of
+# the unsliced sweep file (eval marks depend on the full conc set).
+# See dsv4-dspark-sweep.yaml for why spec-decoding is deliberately `mtp`.
+dsv4-fp4-b300-vllm-dspark-sweep-chunk1:
+  image: vllm/vllm-openai:nightly-cbe9c40f998f13975b967773ac7e7920e115387f
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 1024
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 16, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 4, spec-decoding: mtp }

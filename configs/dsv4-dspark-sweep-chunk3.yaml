@@ -1,0 +1,17 @@
+# Chunk 3/4 of configs/dsv4-dspark-sweep.yaml (8k1k low-concurrency rows).
+# See dsv4-dspark-sweep-chunk1.yaml for the chunking rationale.
+dsv4-fp4-b300-vllm-dspark-sweep-chunk3:
+  image: vllm/vllm-openai:nightly-cbe9c40f998f13975b967773ac7e7920e115387f
+  model: deepseek-ai/DeepSeek-V4-Pro-DSpark
+  model-prefix: dsv4
+  runner: b300
+  precision: fp4
+  framework: vllm
+  multinode: false
+  scenarios:
+    fixed-seq-len:
+    - isl: 8192
+      osl: 1024
+      search-space:
+      - { tp: 4, conc-start: 1, conc-end: 16, spec-decoding: mtp }
+      - { tp: 8, conc-start: 1, conc-end: 4, spec-decoding: mtp }
