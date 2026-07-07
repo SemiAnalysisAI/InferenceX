@@ -41,6 +41,8 @@ def valid_single_node_matrix_entry():
         "isl": 1024,
         "osl": 1024,
         "tp": 8,
+        "dcp-size": 1,
+        "pcp-size": 1,
         "ep": 1,
         "dp-attn": False,
         "conc": 4,
@@ -346,6 +348,8 @@ class TestAgenticMatrixEntries:
             "framework": "vllm",
             "runner": "cluster:b200-dgxc",
             "tp": 8,
+            "dcp-size": 1,
+            "pcp-size": 1,
             "ep": 1,
             "dp-attn": False,
             "conc": 1,
@@ -591,6 +595,15 @@ class TestSingleNodeSearchSpaceEntry:
             "conc-list": [4, 8, 16, 32, 64, 128],
         })
         assert entry.conc_list == [4, 8, 16, 32, 64, 128]
+
+    def test_dcp_size_must_divide_tp(self):
+        with pytest.raises(Exception, match="must be divisible"):
+            SingleNodeSearchSpaceEntry(**{
+                "tp": 8,
+                "dcp-size": 3,
+                "pcp-size": 2,
+                "conc-list": [4],
+            })
 
     def test_cannot_have_both_range_and_list(self):
         """Cannot specify both conc range and list."""
