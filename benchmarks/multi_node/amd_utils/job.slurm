@@ -532,6 +532,7 @@ if [[ \"$ENGINE\" == \"vllm-disagg\" && \"$ROUTER_TYPE\" == \"vllm-router\" && \
     \$DOCKER_CMD run -d \
         --name \"$ROUTER_CONT_NAME\" \
         --network host \
+        --ulimit nofile=1048576:1048576 \
         -v /tmp:/run_logs \
         \"$VLLM_ROUTER_IMAGE\" \
         bash -lc \"mkdir -p /run_logs/slurm_job-${SLURM_JOB_ID} && exec vllm-router \
