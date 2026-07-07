@@ -98,13 +98,12 @@ class NativeAdapterWiringTests(unittest.TestCase):
         return result
 
     def test_deepep_and_uccl_wire_native_low_latency_controls(self):
-        for filename in ("ep_deepep.py", "ep_uccl.py"):
-            with self.subTest(filename=filename):
-                tree = self._tree(filename)
-                dispatch_calls = self._keywords(tree, "low_latency_dispatch")
-                combine_calls = self._keywords(tree, "low_latency_combine")
-                self.assertTrue(any("use_fp8" in call for call in dispatch_calls))
-                self.assertTrue(any("use_logfmt" in call for call in combine_calls))
+        # DeepEP and UCCL share the low-latency dispatch/combine surface in the family base.
+        tree = self._tree("ep_deepep_family.py")
+        dispatch_calls = self._keywords(tree, "low_latency_dispatch")
+        combine_calls = self._keywords(tree, "low_latency_combine")
+        self.assertTrue(any("use_fp8" in call for call in dispatch_calls))
+        self.assertTrue(any("use_logfmt" in call for call in combine_calls))
 
     def test_elastic_and_hybrid_constructors_enable_native_fp8(self):
         v2 = self._tree("ep_deepep_v2.py")

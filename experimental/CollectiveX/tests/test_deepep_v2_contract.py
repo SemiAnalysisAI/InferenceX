@@ -474,13 +474,14 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 os.environ["EP_DISABLE_GIN"] = original
 
     def test_ep_adapters_declare_unweighted_rank_sum(self) -> None:
+        # DeepEP and UCCL share their combine semantics and dispatch/combine methods in the
+        # family base, so it stands in for both here; the other adapters declare their own.
         adapters = {
-            "ep_deepep.py": "DeepEPBackend",
+            "ep_deepep_family.py": "DeepEPFamilyBackend",
             "ep_deepep_v2.py": "DeepEPV2Backend",
             "ep_deepep_hybrid.py": "DeepEPHybridBackend",
             "ep_mori.py": "MoRIBackend",
             "ep_nccl.py": "NCCLBackend",
-            "ep_uccl.py": "UCCLBackend",
         }
         for filename, class_name in adapters.items():
             with self.subTest(adapter=filename):
@@ -504,7 +505,7 @@ class DeepEPV2ContractTests(unittest.TestCase):
                 self.assertEqual(len(combine_methods), 2)
                 for method in combine_methods:
                     source = ast.unparse(method)
-                    if filename in {"ep_deepep.py", "ep_uccl.py"}:
+                    if filename == "ep_deepep_family.py":
                         self.assertIn("self.mode == 'low-latency'", source)
                     else:
                         self.assertNotIn("topk_weights", source)
@@ -565,11 +566,9 @@ class DeepEPV2ContractTests(unittest.TestCase):
                     )
 
     def test_deepep_and_uccl_expose_genuine_low_latency_calls(self) -> None:
-        required_fragments = (
-            "Buffer.get_low_latency_rdma_size_hint(",
-            "low_latency_mode=True",
-            "num_qps_per_rank=num_qps_per_rank",
-            "self.buffer.clean_low_latency_buffer(",
+        # The operational low-latency surface is shared by DeepEP and UCCL in the family base;
+        # each concrete adapter keeps only its own native buffer construction.
+        shared_fragments = (
             "self.buffer.low_latency_dispatch(",
             "use_fp8=False",
             "self.buffer.low_latency_combine(",
@@ -577,15 +576,26 @@ class DeepEPV2ContractTests(unittest.TestCase):
             'self.combine_weight_semantics = "gate-weighted-sum"',
             "self.combine_needs_redispatch = True",
             "def inspect_expert_dispatch(",
+            "self.max_tokens_per_rank = 128",
+            "async_finish=False",
+            "return_recv_hook=False",
+        )
+        family = (HERE / "ep_deepep_family.py").read_text()
+        for fragment in shared_fragments:
+            with self.subTest(fragment=fragment):
+                self.assertIn(fragment, family)
+
+        buffer_fragments = (
+            "Buffer.get_low_latency_rdma_size_hint(",
+            "low_latency_mode=True",
+            "num_qps_per_rank=num_qps_per_rank",
+            "self.buffer.clean_low_latency_buffer(",
         )
         for filename in ("ep_deepep.py", "ep_uccl.py"):
             source = (HERE / filename).read_text()
             with self.subTest(adapter=filename):
-                for fragment in required_fragments:
+                for fragment in buffer_fragments:
                     self.assertIn(fragment, source)
-                self.assertIn("self.max_tokens_per_rank = 128", source)
-                self.assertIn("async_finish=False", source)
-                self.assertIn("return_recv_hook=False", source)
 
         run_ep_source = (HERE / "run_ep.py").read_text()
         self.assertIn('args.backend not in {"deepep", "uccl"}', run_ep_source)
