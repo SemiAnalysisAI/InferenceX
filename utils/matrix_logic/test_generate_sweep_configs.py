@@ -78,6 +78,7 @@ def sample_multinode_config():
                             {
                                 "conc-list": [2150],
                                 "prefill": {
+                                    "hardware": "gb200",
                                     "num-worker": 5,
                                     "tp": 4,
                                     "ep": 4,
@@ -88,6 +89,7 @@ def sample_multinode_config():
                                     ],
                                 },
                                 "decode": {
+                                    "hardware": "h100",
                                     "num-worker": 1,
                                     "tp": 8,
                                     "ep": 8,
@@ -981,6 +983,8 @@ class TestGenerateFullSweepMultiNode:
         assert entry["prefill"]["num-worker"] == 5
         assert entry["decode"]["num-worker"] == 1
         assert entry["disagg"] is True
+        assert entry["prefill"]["hardware"] == "gb200"
+        assert entry["decode"]["hardware"] == "h100"
 
     def test_multinode_conc_as_list(self, sample_multinode_config, sample_runner_config, full_sweep_args_multi_node):
         """Multinode conc should be passed as list."""
@@ -2004,8 +2008,8 @@ class TestGenerateTestConfigSweep:
                             "search-space": [
                                 {
                                     "conc-list": [16, 32, 64, 128, 256],
-                                    "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
-                                    "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                                    "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                    "decode": {"hardware": "h100", "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                                 }
                             ],
                         }
@@ -2151,8 +2155,8 @@ class TestGenerateFullSweepMixed:
                         "search-space": [
                             {
                                 "conc-list": [16, 32],
-                                "prefill": {"num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
-                                "decode": {"num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
+                                "prefill": {"hardware": "gb200", "num-worker": 2, "tp": 8, "ep": 8, "dp-attn": False},
+                                "decode": {"hardware": "h100", "num-worker": 1, "tp": 8, "ep": 1, "dp-attn": False},
                             },
                         ],
                     }],

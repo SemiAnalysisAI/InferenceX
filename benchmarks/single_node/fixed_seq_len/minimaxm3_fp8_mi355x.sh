@@ -32,11 +32,7 @@ SERVER_LOG=/workspace/server.log
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_USE_BREAKABLE_CUDAGRAPH=0
 # MI355X mxfp8 recipe (vllm-project/recipes#581): INT6 quick all-reduce plus
-# the router-append shared-experts MoE fusion (vllm-project/vllm#46545). The
-# fusion checks this env directly and runs on both the aiter and native MXFP8
-# MoE paths (it is independent of the AITER master switch, and self-disables
-# under expert parallelism inside the model), so enable it unconditionally.
-# (The AITER master switch itself is set below, gated on expert parallelism.)
+# the router-append shared-experts MoE fusion (vllm-project/vllm#46545). 
 export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT6
 
@@ -55,16 +51,15 @@ elif [ "$EP_SIZE" -gt 1 ]; then
     PARALLEL_ARGS+=(--enable-expert-parallel)
 fi
 
-# Gate the AITER master switch on expert parallelism. With EP, the aiter fused
-# MoE path is the auto-selected backend (no --moe-backend override). With EP
-# disabled (TP-only) the AITER master switch produces degenerate MiniMax-M3
-# output, so leave it off and fall back to the native MXFP8 path (the
-# shared-experts fusion set above still applies — it is master-independent).
-if printf '%s\n' "${PARALLEL_ARGS[@]}" | grep -qxF -- '--enable-expert-parallel'; then
-    export VLLM_ROCM_USE_AITER=1
-else
-    export VLLM_ROCM_USE_AITER=0
-fi
+# Previously when EP is On, VLLM_ROCM_USE_AITER needs to be off.
+# After https://github.com/vllm-project/vllm/pull/47158, 
+# it can be simplified as VLLM_ROCM_USE_AITER=1.
+# As the configs are TP only, remove the conditional check.
+export VLLM_ROCM_USE_AITER=1
+
+# Larger per-step prefill token budget to improve TP4 throughput at high
+# concurrency. Overridable via env.
+MAX_NUM_BATCHED_TOKENS="${MAX_NUM_BATCHED_TOKENS:-32768}"
 
 start_gpu_monitor
 
@@ -74,9 +69,12 @@ vllm serve "$MODEL" --port "$PORT" \
     --block-size 128 \
     --no-enable-prefix-caching \
     --language-model-only \
+    --moe-backend aiter \
     --max-model-len "$MAX_MODEL_LEN" \
+    --max-num-batched-tokens "$MAX_NUM_BATCHED_TOKENS" \
     --kv-cache-dtype fp8 \
     --attention-backend TRITON_ATTN \
+    --linear-backend emulation \
     --tool-call-parser minimax_m3 \
     --reasoning-parser minimax_m3 \
     --enable-auto-tool-choice > "$SERVER_LOG" 2>&1 &
