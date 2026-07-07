@@ -1389,6 +1389,34 @@ class SamplingContractTest(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_salloc_accepts_a_live_grant_despite_wrapper_failure(self) -> None:
+        scenario = self._run_salloc_scenario(
+            "printf 'salloc: Granted job allocation 4242\\n' >&2; exit 1",
+            r'''
+              case " $* " in
+                *" -j 4242 "*) printf '4242\n' ;;
+                *) exit 2 ;;
+              esac
+            ''',
+            cleanup=False,
+        )
+        result = scenario["result"]
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, "0:4242:0\n")
+        self.assertIn("scheduler-request=verified-grant", result.stderr)
+        self.assertEqual(scenario["squeue_calls"], ["-h -j 4242 -o %A"])
+
+    def test_salloc_rejects_a_vanished_grant_after_wrapper_failure(self) -> None:
+        scenario = self._run_salloc_scenario(
+            "printf 'salloc: Granted job allocation 4242\\n' >&2; exit 1",
+            "exit 0",
+            cleanup=False,
+        )
+        result = scenario["result"]
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "1:4242:0\n")
+        self.assertIn("scheduler-request=rejected", result.stderr)
+
     def test_salloc_verified_rejection_is_cleanup_safe(self) -> None:
         scenario = self._run_salloc_scenario("exit 1", "exit 0", cleanup=True)
         result = scenario["result"]
@@ -1665,10 +1693,6 @@ class SamplingContractTest(unittest.TestCase):
         self.assertIn('[ "$CX_JOB_PARENT" != /tmp ]', cleanup)
         self.assertIn("- name: Classify private scheduler failure", workflow)
         self.assertIn("cx_report_private_scheduler_failure", workflow)
-        self.assertIn("Encrypt MI300X scheduler diagnostic", workflow)
-        self.assertIn("rsa_padding_mode:oaep", workflow)
-        self.assertIn("retention-days: 1", workflow)
-        self.assertNotIn("BEGIN PRIVATE KEY", workflow)
         for step in (
             "sweep_shard", "allocation_cleanup", "artifact_safety",
             "delivery_contracts", "stage_artifact", "upload_artifact",

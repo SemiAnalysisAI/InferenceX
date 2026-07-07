@@ -1322,6 +1322,18 @@ cx_reconcile_salloc_jobid() {
   return 1
 }
 
+cx_verify_salloc_jobid() {
+  local job_id="$1" queue_output line count=0
+  [[ "$job_id" =~ ^[1-9][0-9]*$ ]] || return 1
+  queue_output="$(squeue -h -j "$job_id" -o %A 2>/dev/null)" || return 1
+  while IFS= read -r line; do
+    [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+    [[ "$line" =~ ^[[:space:]]*${job_id}[[:space:]]*$ ]] || return 1
+    count=$((count + 1))
+  done <<< "$queue_output"
+  [ "$count" -eq 1 ]
+}
+
 # Allocate via salloc's stable grant message and assign JOB_ID in this shell.
 # Raw scheduler output remains in the bounded private execution log.
 cx_salloc_jobid() {
@@ -1369,6 +1381,11 @@ cx_salloc_jobid() {
     CX_ALLOCATION_UNCERTAIN=0
   fi
   if [ "$salloc_rc" != 0 ]; then
+    if [ -n "$JOB_ID" ] && cx_verify_salloc_jobid "$JOB_ID"; then
+      cx_log "scheduler-request=verified-grant"
+      cx_record_allocation_jobid "$JOB_ID" || return 1
+      return 0
+    fi
     cx_log "ERROR: scheduler-request=rejected"
     if [ "$salloc_rc" -ge 128 ] && [ -z "$JOB_ID" ]; then
       cx_fail_stage scheduler-allocation "$log"
