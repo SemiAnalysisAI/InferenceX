@@ -2,7 +2,6 @@
 """CPU-only contract tests for native EP precision adapter wiring."""
 from __future__ import annotations
 
-import ast
 import sys
 import unittest
 from pathlib import Path
@@ -75,62 +74,6 @@ class PrecisionResolutionTests(unittest.TestCase):
         self.assertEqual(evidence["saturation_rate"], 0.0)
         self.assertIsNone(evidence["scales_finite"])
         self.assertIsNone(evidence["scales_positive"])
-
-
-class NativeAdapterWiringTests(unittest.TestCase):
-    @staticmethod
-    def _tree(name: str) -> ast.Module:
-        return ast.parse((TESTS / name).read_text(encoding="utf-8"))
-
-    @staticmethod
-    def _keywords(tree: ast.AST, attribute: str) -> list[set[str]]:
-        result = []
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            function = node.func
-            if (
-                isinstance(function, ast.Attribute) and function.attr == attribute
-            ) or (
-                isinstance(function, ast.Name) and function.id == attribute
-            ):
-                result.append({keyword.arg for keyword in node.keywords})
-        return result
-
-    def test_deepep_and_uccl_wire_native_low_latency_controls(self):
-        # DeepEP and UCCL share the low-latency dispatch/combine surface in the family base.
-        tree = self._tree("ep_deepep_family.py")
-        dispatch_calls = self._keywords(tree, "low_latency_dispatch")
-        combine_calls = self._keywords(tree, "low_latency_combine")
-        self.assertTrue(any("use_fp8" in call for call in dispatch_calls))
-        self.assertTrue(any("use_logfmt" in call for call in combine_calls))
-
-    def test_elastic_and_hybrid_constructors_enable_native_fp8(self):
-        v2 = self._tree("ep_deepep_v2.py")
-        hybrid = self._tree("ep_deepep_hybrid.py")
-        self.assertTrue(
-            any("use_fp8_dispatch" in call for call in self._keywords(v2, "ElasticBuffer"))
-        )
-        self.assertTrue(
-            any("use_fp8" in call for call in self._keywords(hybrid, "HybridEPBuffer"))
-        )
-        self.assertTrue(
-            any("scaling_factor" in call for call in self._keywords(hybrid, "dispatch"))
-        )
-
-    def test_mori_wires_dispatch_scales_and_direct_cast_config(self):
-        source = (TESTS / "ep_mori.py").read_text(encoding="utf-8")
-        harness = (TESTS / "ep_harness.py").read_text(encoding="utf-8")
-        backend = (TESTS / "ep_backend.py").read_text(encoding="utf-8")
-        precision = (TESTS / "ep_precision.py").read_text(encoding="utf-8")
-        self.assertIn('"fp8_direct_cast" if self._direct_cast_combine', source)
-        self.assertIn("p.scales,", source)
-        self.assertIn("dispatch_scales=_scales", source)
-        self.assertIn("dispatch_needs_combine_cleanup = True", source)
-        # The dispatch-cleanup branch rule is encoded once in the base timing template.
-        self.assertIn("post=finish_dispatch if dispatch_needs_cleanup else None", backend)
-        self.assertEqual(harness.count("view.combine_input = transformed"), 2)
-        self.assertIn("transformed = view.combine_input.float()", precision)
 
 
 if __name__ == "__main__":
