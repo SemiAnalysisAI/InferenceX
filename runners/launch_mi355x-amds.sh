@@ -217,10 +217,14 @@ PY
                 # next checkout's `git clean` fails with
                 #   EACCES: permission denied, rmdir '.../LOGS/agentic'.
                 # chown to the invoking user (the same one that runs git clean)
-                # via sudo (already passwordless here for rm -rf), then force it
-                # writable so it always stays cleanable.
+                # via sudo (already passwordless here for rm -rf). The follow-up
+                # chmod uses a+rwX (not just u+rwX): the *next* job against this
+                # same $GITHUB_WORKSPACE may be picked up by a different runner
+                # process running as a different OS user, which would otherwise
+                # fall outside the owner bits and still fail the same
+                # `git clean` with EACCES despite the chown above.
                 sudo chown -R "$(id -u):$(id -g)" "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
-                chmod -R u+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
+                chmod -R a+rwX "$GITHUB_WORKSPACE/LOGS" 2>/dev/null || true
                 ls -laR "$GITHUB_WORKSPACE/LOGS/agentic"
             else
                 echo "WARNING: no agentic conc_*/ artifacts found under $JOB_LOGS_DIR/agentic"
