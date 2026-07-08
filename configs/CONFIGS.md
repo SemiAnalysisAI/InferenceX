@@ -129,3 +129,35 @@ cluster/fleet rather than a broad SKU label. Agentic master configs must use a
 MiB. Agentic DRAM KV-offload matrices combine it with `gpus-per-node` and the
 master config's `dram-utilization` to emit `total-cpu-dram-gb` for benchmark
 templates.
+
+### Model path registry (`model-paths`)
+
+`runners.yaml` also carries the per-cluster registry of staged model
+checkpoints:
+
+```yaml
+model-paths:
+  cluster:gb300-nv:
+    - model-prefix: dsv4
+      precision: fp4
+      framework: dynamo-trt   # optional; omit to match any framework
+      path: /scratch/models/DeepSeek-V4-Pro
+      alias: deepseek-ai/DeepSeek-V4-Pro   # srt-slurm model_paths key
+      served-model-name: deepseek-v4-pro   # optional
+    - model-prefix: dsv4
+      precision: fp4
+      path-candidates:                      # probe in order, first existing
+        - /data/models/dsv4-pro             # dir wins; else first entry
+        - /data/models/DeepSeek-V4-Pro
+      alias: deepseek-v4-pro
+```
+
+Runner launch scripts resolve `MODEL_PATH` / `SRT_SLURM_MODEL_PREFIX` /
+`SERVED_MODEL_NAME` from this section via
+`runners/lib/multinode.sh:infx_resolve_model_paths` — model staging paths
+must live here, not in if/elif ladders inside runner bash. Entries are
+matched first-to-last on `model-prefix` + `precision` (+ `framework` when
+present), so framework-specific rows go above generic ones. Staging a new
+checkpoint on a cluster is a one-line registry change. See
+`benchmarks/multi_node/srt_slurm/README.md` for how this feeds the
+multinode contract.

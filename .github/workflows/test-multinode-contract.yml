@@ -1,0 +1,45 @@
+name: Test Multinode Contract
+run-name: "Multinode Contract Tests PR #${{ github.event.pull_request.number }}"
+
+on:
+  pull_request:
+    paths:
+      - 'runners/**'
+      - 'benchmarks/multi_node/srt_slurm/**'
+      - 'benchmarks/multi_node/bench_serving_srt.sh'
+      - 'configs/runners.yaml'
+      - 'utils/multinode_contract/**'
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    if: github.event.pull_request.draft != true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml
+
+      - name: Shell syntax check
+        run: |
+          bash -n runners/lib/multinode.sh
+          bash -n benchmarks/multi_node/srt_slurm/run.sh
+          bash -n benchmarks/multi_node/bench_serving_srt.sh
+          for f in runners/launch_*.sh; do bash -n "$f"; done
+
+      - name: Dry-run contract tests
+        run: bash utils/multinode_contract/test_dry_run.sh

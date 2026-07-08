@@ -646,12 +646,42 @@ class RunnerHardwareConfig(BaseModel):
     )
 
 
+class RunnerModelPathEntry(BaseModel):
+    """One staged-checkpoint registry entry in the model-paths section.
+
+    Matched on model-prefix + precision (+ optional framework) by
+    runners/lib/resolve_model_path.py; first match wins. Exactly one of
+    `path` / `path-candidates` must be provided.
+    """
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value, min_length=1)
+    precision: str = Field(min_length=1)
+    framework: Optional[str] = Field(default=None, min_length=1)
+    path: Optional[str] = Field(default=None, min_length=1)
+    path_candidates: Optional[List[str]] = Field(
+        default=None, alias='path-candidates', min_length=1)
+    alias: str = Field(min_length=1)
+    served_model_name: Optional[str] = Field(
+        default=None, alias='served-model-name', min_length=1)
+
+    @model_validator(mode='after')
+    def validate_path_or_candidates(self):
+        if bool(self.path) == bool(self.path_candidates):
+            raise ValueError(
+                "model-paths entries must set exactly one of "
+                "'path' or 'path-candidates'")
+        return self
+
+
 class RunnerConfig(BaseModel):
     """Top-level runner configuration file."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     labels: Dict[str, List[str]]
     hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
+    model_paths: Dict[str, List[RunnerModelPathEntry]] = Field(
+        default_factory=dict, alias='model-paths')
 
 
 def validate_runner_config(runner_configs: dict) -> dict:

@@ -10,323 +10,62 @@ set -x
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
-# Validate framework
-if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK != "dynamo-vllm" ]]; then
-    echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang, dynamo-vllm"
-    exit 1
-fi
+# Multinode cluster profile — declares cluster facts per the contract in
+# benchmarks/multi_node/srt_slurm/README.md and hands off to the
+# cluster-agnostic orchestrator.
 
-# MODEL_PATH: Override with pre-downloaded paths on B300 runner
-# The yaml files specify HuggingFace model IDs for portability, but we use
-# local paths to avoid repeated downloading on the shared B300 cluster.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp4"
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp8"
-    export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /data/models/dsv4-pro /data/models/deepseek-v4-pro /data/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/scratch/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
-    export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
-else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
-    exit 1
-fi
+set -eo pipefail
 
-echo "Cloning srt-slurm repository..."
-SRT_REPO_DIR="srt-slurm"
-SRTCTL_SETUP_SCRIPT=""
-if [ -d "$SRT_REPO_DIR" ]; then
-    echo "Removing existing $SRT_REPO_DIR..."
-    rm -rf "$SRT_REPO_DIR"
-fi
+source "$(dirname "$0")/lib/multinode.sh"
 
-# TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
-    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout aflowers/vllm-gb200-v0.20.0
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECISION == "fp4" || $PRECISION == "fp8" ) ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
-    mkdir -p recipes/vllm/minimax-m3
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    if [[ $PRECISION == "fp8" ]]; then
-        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
-    fi
-    # NVIDIA/srt-slurm#38
-    git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
-    if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
-        cp \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-            "configs/$SRTCTL_SETUP_SCRIPT"
-    fi
-else
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
-fi
+export SLURM_PARTITION SLURM_ACCOUNT
 
-echo "Installing srtctl..."
-export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
-curl -LsSf https://astral.sh/uv/install.sh | sh
-export PATH="$UV_INSTALL_DIR:$PATH"
+INFX_CLUSTER="b300"
+INFX_GPUS_PER_NODE=8
+INFX_ARCH="x86_64"
+INFX_SLURM_TIME_LIMIT="4:00:00"
 
-uv venv "$GITHUB_WORKSPACE/.venv"
-source "$GITHUB_WORKSPACE/.venv/bin/activate"
-uv pip install -e .
-
-if ! command -v srtctl &> /dev/null; then
-    echo "Error: Failed to install srtctl"
-    exit 1
-fi
-
-# Map container images to local squash files
-NGINX_IMAGE="nginx:1.27.4"
-SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-
-# Import containers via enroot
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
-srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $NGINX_SQUASH_FILE docker://$NGINX_IMAGE"
-
-export ISL="$ISL"
-export OSL="$OSL"
-export EVAL_ONLY="${EVAL_ONLY:-false}"
-
-# Create srtslurm.yaml for srtctl
-SRTCTL_ROOT="${GITHUB_WORKSPACE}/${SRT_REPO_DIR}"
-echo "Creating srtslurm.yaml configuration..."
-cat > srtslurm.yaml <<EOF
-# SRT SLURM Configuration for B300
-
-# Default SLURM settings
-default_account: "${SLURM_ACCOUNT}"
-default_partition: "${SLURM_PARTITION}"
-default_time_limit: "4:00:00"
-# Resource defaults
-gpus_per_node: 8
-network_interface: ""
-# Path to srtctl repo root (where the configs live)
-srtctl_root: "${SRTCTL_ROOT}"
-# Model path aliases
-model_paths:
-  "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
-# Container aliases
-containers:
-  dynamo-trtllm: "${SQUASH_FILE}"
-  dynamo-sglang: "${SQUASH_FILE}"
-  dynamo-vllm: "${SQUASH_FILE}"
-  "${IMAGE}": "${SQUASH_FILE}"
-  nginx-sqsh: "${NGINX_SQUASH_FILE}"
-use_exclusive_sbatch_directive: true
+INFX_SRTSLURM_EXTRA="use_exclusive_sbatch_directive: true
 default_mounts:
-  "/opt/ucx-no-ud": "/usr/local/ucx"
-EOF
+  \"/opt/ucx-no-ud\": \"/usr/local/ucx\""
 
-echo "Generated srtslurm.yaml:"
-cat srtslurm.yaml
+# MODEL_PATH / SRT_SLURM_MODEL_PREFIX / SERVED_MODEL_NAME come from the
+# model-paths registry in configs/runners.yaml.
+infx_resolve_model_paths cluster:b300-nv
 
-echo "Running make setup..."
-make setup ARCH=x86_64
+NGINX_IMAGE="nginx:1.27.4"
+SQUASH_FILE="$(infx_squash_path /data/squash "$IMAGE")"
+NGINX_SQUASH_FILE="$(infx_squash_path /data/squash "$NGINX_IMAGE")"
 
-# Export eval-related env vars for srt-slurm post-benchmark eval
-export INFMAX_WORKSPACE="$GITHUB_WORKSPACE"
-
-echo "Submitting job with srtctl..."
-
-if [[ -z "$CONFIG_FILE" ]]; then
-    echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
-    echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
-    exit 1
+if [[ "${INFX_DRY_RUN:-0}" != "1" ]]; then
+    infx_import_squash_srun "$SQUASH_FILE" "$IMAGE" \
+        -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION"
+    infx_import_squash_srun "$NGINX_SQUASH_FILE" "$NGINX_IMAGE" \
+        -N 1 -A "$SLURM_ACCOUNT" -p "$SLURM_PARTITION"
 fi
 
-# Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
-if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
-    sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$CONFIG_FILE"
-fi
-SRTCTL_APPLY_ARGS=(
-    -f "$CONFIG_FILE"
-    --tags "b300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
-)
-if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
-    SRTCTL_APPLY_ARGS+=(--setup-script "$SRTCTL_SETUP_SCRIPT")
-fi
-SRTCTL_OUTPUT=$(srtctl apply "${SRTCTL_APPLY_ARGS[@]}" 2>&1)
-echo "$SRTCTL_OUTPUT"
-
-# Extract JOB_ID from srtctl output
-JOB_ID=$(echo "$SRTCTL_OUTPUT" | grep -oP '✅ Job \K[0-9]+' || echo "$SRTCTL_OUTPUT" | grep -oP 'Job \K[0-9]+')
-
-set +x
-
-if [ -z "$JOB_ID" ]; then
-    echo "Error: Failed to extract JOB_ID from srtctl output"
-    exit 1
-fi
-
-if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
-    SBATCH_SCRIPT="outputs/$JOB_ID/sbatch_script.sh"
-    if ! grep -Fq "#SBATCH --exclude=${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}" "$SBATCH_SCRIPT"; then
-        echo "Error: Slurm node exclusion was not rendered in $SBATCH_SCRIPT" >&2
-        scancel "$JOB_ID" || true
-        exit 1
+# Keep MiniMax-M3 jobs off nodes with known-bad UCX/NIXL behavior, and
+# verify the exclusion actually rendered into the sbatch script.
+infx_hook_edit_recipe() {
+    local recipe="$1"
+    if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+        sed -i "/^name:.*/a sbatch_directives:\n  exclude: \"${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}\"" "$recipe"
     fi
-fi
+}
 
-echo "Extracted JOB_ID: $JOB_ID"
-
-# Use the JOB_ID to find the logs directory
-# srtctl creates logs in outputs/JOB_ID/logs/
-LOGS_DIR="outputs/$JOB_ID/logs"
-LOG_FILE="$LOGS_DIR/sweep_${JOB_ID}.log"
-
-# Wait for log file to appear (also check job is still alive)
-while ! ls "$LOG_FILE" &>/dev/null; do
-    if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
-        echo "ERROR: Job $JOB_ID failed before creating log file"
-        scontrol show job "$JOB_ID"
-        exit 1
+infx_hook_post_submit() {
+    local job_id="$1"
+    if [[ "$MODEL_PREFIX" == "minimaxm3" && -n "$MINIMAX_M3_SLURM_EXCLUDED_NODELIST" ]]; then
+        local sbatch_script="outputs/$job_id/sbatch_script.sh"
+        if ! grep -Fq "#SBATCH --exclude=${MINIMAX_M3_SLURM_EXCLUDED_NODELIST}" "$sbatch_script"; then
+            echo "Error: Slurm node exclusion was not rendered in $sbatch_script" >&2
+            scancel "$job_id" || true
+            return 1
+        fi
     fi
-    echo "Waiting for JOB_ID $JOB_ID to begin and $LOG_FILE to appear..."
-    sleep 5
-done
+}
 
-# Poll for job completion in background
-(
-    while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
-        sleep 10
-    done
-) &
-POLL_PID=$!
-
-echo "Tailing LOG_FILE: $LOG_FILE"
-
-# Stream the log file until job completes (-F follows by name, polls instead of inotify for NFS)
-tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
-
-wait $POLL_PID
-
-set -x
-
-echo "Job $JOB_ID completed!"
-echo "Collecting results..."
-
-if [ ! -d "$LOGS_DIR" ]; then
-    echo "Warning: Logs directory not found at $LOGS_DIR"
-    exit 1
-fi
-
-echo "Found logs directory: $LOGS_DIR"
-
-cp -r "$LOGS_DIR" "$GITHUB_WORKSPACE/LOGS"
-tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" -C "$LOGS_DIR" .
-
-if [[ "${EVAL_ONLY:-false}" != "true" ]]; then
-    # Find all result subdirectories
-    RESULT_SUBDIRS=$(find "$LOGS_DIR" -maxdepth 1 -type d -name "*isl*osl*" 2>/dev/null)
-
-    if [ -z "$RESULT_SUBDIRS" ]; then
-        echo "Warning: No result subdirectories found in $LOGS_DIR"
-    else
-        # Process results from all configurations
-        for result_subdir in $RESULT_SUBDIRS; do
-            echo "Processing result subdirectory: $result_subdir"
-
-            # Extract configuration info from directory name
-            CONFIG_NAME=$(basename "$result_subdir")
-
-            # Find all result JSON files
-            RESULT_FILES=$(find "$result_subdir" -name "results_concurrency_*.json" 2>/dev/null)
-
-            for result_file in $RESULT_FILES; do
-                if [ -f "$result_file" ]; then
-                    # Extract metadata from filename
-                    # Files may be "results_concurrency_N_gpus_G_ctx_C_gen_D.json" (disagg) or "results_concurrency_N_gpus_G.json" (non-disagg)
-                    filename=$(basename "$result_file")
-                    concurrency=$(echo "$filename" | sed -n 's/results_concurrency_\([0-9]*\)_gpus_.*/\1/p')
-                    gpus=$(echo "$filename" | sed -n 's/results_concurrency_[0-9]*_gpus_\([0-9][0-9]*\).*/\1/p')
-                    ctx=$(echo "$filename" | sed -n 's/.*_ctx_\([0-9]*\)_gen_.*/\1/p')
-                    gen=$(echo "$filename" | sed -n 's/.*_gen_\([0-9]*\)\.json/\1/p')
-
-                    echo "Processing concurrency $concurrency with $gpus GPUs (ctx: $ctx, gen: $gen): $result_file"
-
-                    if [ -n "$ctx" ] && [ -n "$gen" ]; then
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}_ctx_${ctx}_gen_${gen}.json"
-                    else
-                        WORKSPACE_RESULT_FILE="$GITHUB_WORKSPACE/${RESULT_FILENAME}_${CONFIG_NAME}_conc${concurrency}_gpus_${gpus}.json"
-                    fi
-                    cp "$result_file" "$WORKSPACE_RESULT_FILE"
-
-                    echo "Copied result file to: $WORKSPACE_RESULT_FILE"
-                fi
-            done
-        done
-    fi
-
-    echo "All result files processed"
-else
-    echo "EVAL_ONLY=true: Skipping benchmark result collection"
-fi
-
-# Collect eval results if eval was requested
-if [[ "${RUN_EVAL:-false}" == "true" || "${EVAL_ONLY:-false}" == "true" ]]; then
-    EVAL_DIR="$LOGS_DIR/eval_results"
-    if [ -d "$EVAL_DIR" ]; then
-        echo "Extracting eval results from $EVAL_DIR"
-        shopt -s nullglob
-        for eval_file in "$EVAL_DIR"/*; do
-            [ -f "$eval_file" ] || continue
-            cp "$eval_file" "$GITHUB_WORKSPACE/"
-            echo "Copied eval artifact: $(basename "$eval_file")"
-        done
-        shopt -u nullglob
-    else
-        echo "WARNING: RUN_EVAL=true but no eval results found at $EVAL_DIR"
-    fi
-fi
-
-# Clean up srt-slurm outputs to prevent NFS silly-rename lock files
-# from blocking the next job's checkout on this runner
-echo "Cleaning up srt-slurm outputs..."
-for i in 1 2 3 4 5; do
-    rm -rf outputs 2>/dev/null && break
-    echo "Retry $i/5: Waiting for NFS locks to release..."
-    sleep 10
-done
-find . -name '.nfs*' -delete 2>/dev/null || true
+source "$GITHUB_WORKSPACE/benchmarks/multi_node/srt_slurm/run.sh"
 
 else
     # HF_HUB_CACHE is set to help with dataset download inside the container
@@ -340,7 +79,7 @@ else
     HF_HUB_CACHE_MOUNT="/scratch/models/"
     WRITABLE_MODELS_DIR="/data/models/"
 
-    # Pre-staged model 
+    # Pre-staged model
     STAGED_MODELS=(
         DeepSeek-R1-0528
         DeepSeek-R1-0528-NVFP4-v2

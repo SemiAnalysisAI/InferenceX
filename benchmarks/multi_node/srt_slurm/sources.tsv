@@ -1,0 +1,29 @@
+# srt-slurm pin registry (burn-down list — the goal is for this file to
+# stay empty).
+#
+# Every multinode job resolves its srt-slurm checkout here. The standard
+# pin is NVIDIA/srt-slurm @ main; a job only deviates when a row below
+# matches it. SRT_SLURM_REPO / SRT_SLURM_REF environment overrides (e.g.
+# from a config entry's additional-settings) beat this table.
+#
+# Columns (whitespace-separated, first match wins, shell globs allowed):
+#   cluster  scenario(fixed|agentic)  framework  model-prefix  precision  repo  ref
+#
+# Example:
+#   gb200  fixed  dynamo-vllm  dsv4  *  https://github.com/NVIDIA/srt-slurm.git  aflowers/vllm-gb200-v0.20.0
+#
+# --- Historical pins removed when the fleet standardized on main -----------
+# These are kept as documentation and one-line rollbacks. If a family breaks
+# on main, uncomment its row, file the upstream issue, and re-delete the row
+# once fixed. Everything the agentic path needed from the cquil11 fork
+# (--no-preflight, BenchmarkType.CUSTOM, benchmark-stage srun_options) has
+# since merged into NVIDIA/srt-slurm main.
+#
+# *      *        *             *           *    https://github.com/NVIDIA/srt-slurm.git   sa-submission-q2-2026
+# *      agentic  *             *           *    https://github.com/cquil11/srt-slurm-nv.git  cam/sa-submission-q2-2026
+# gb200  agentic  *             dsv4        *    https://github.com/cquil11/srt-slurm-nv.git  de59739b172e507e15ebf145bfe305f606e82fbf
+# gb300  agentic  *             dsv4        *    https://github.com/cquil11/srt-slurm-nv.git  6e34b8b83229634d732e41a4e2d6595f46ef60b5
+# gb200  fixed    dynamo-vllm   dsv4        *    https://github.com/NVIDIA/srt-slurm.git   aflowers/vllm-gb200-v0.20.0
+# gb300  fixed    dynamo-vllm   dsv4        *    https://github.com/NVIDIA/srt-slurm.git   aflowers/gb200-dsv4-recipes
+# b300   fixed    dynamo-vllm   dsv4        *    https://github.com/NVIDIA/srt-slurm.git   aflowers/vllm-gb200-v0.20.0
+# b200   fixed    dynamo-vllm   dsv4        *    https://github.com/NVIDIA/srt-slurm.git   aflowers/vllm-gb200-v0.20.0

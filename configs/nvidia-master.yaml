@@ -11718,6 +11718,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/1p1d-dep2-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -11731,6 +11732,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/1p1d-dep2-tp4-marlin-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 4
@@ -11744,6 +11746,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/1p2d-dep2-dep4-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 4
@@ -11757,6 +11760,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/2p1d-dep2-dep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -11770,6 +11774,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/2p1d-dep2-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -11783,6 +11788,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/2p2d-dep2-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -11796,6 +11802,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/1k1k/3p2d-dep2-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -11812,6 +11819,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/2p2d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -11825,6 +11833,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/2p2d-dep2-tep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -11838,6 +11847,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/4p2d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -11851,6 +11861,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/1p1d-dep2-tp4-marlin-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 4
@@ -11864,6 +11875,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/4p2d-dep2-tep4-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 4
@@ -11877,6 +11889,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/1p4d-dep2-tep4-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 4
           tp: 4
@@ -11890,6 +11903,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/1p2d-dep2-tep4-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 4
@@ -11903,6 +11917,7 @@ minimaxm3-fp8-b300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3/b300-fp8/8k1k/1p4d-dep2-tep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-vllm-fixes.sh"
         decode:
           num-worker: 4
           tp: 8
@@ -12151,6 +12166,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/1p1d-dep2-dep4-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 4
@@ -12166,6 +12182,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/1p2d-dep2-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12181,6 +12198,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p2d-dep2-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12196,6 +12214,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p3d-dep2-dep4-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 3
           tp: 4
@@ -12211,6 +12230,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/2p4d-dep2-dep4-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 4
           tp: 4
@@ -12226,6 +12246,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/1k1k/4p2d-dep2-dep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12244,6 +12265,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/1p1d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12259,6 +12281,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/1p1d-dep2-tep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12274,6 +12297,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/1p2d-dep2-tep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12289,6 +12313,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/2p1d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12304,6 +12329,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/2p2d-dep2-tep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12319,6 +12345,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/2p4d-dep2-tep4-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 4
           tp: 4
@@ -12334,6 +12361,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/3p1d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12349,6 +12377,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/3p2d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12364,6 +12393,7 @@ minimaxm3-fp8-gb300-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb300-fp8/8k1k/6p1d-dep2-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb300-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12424,6 +12454,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p1d-dep4-dep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12439,6 +12470,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p1d-dep4-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 1
           tp: 8
@@ -12454,6 +12486,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p2d-dep4-dep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12469,6 +12502,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p2d-dep4-tep8-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12484,6 +12518,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/1k1k/1p4d-dep4-tp4-marlin-1k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 4
           tp: 4
@@ -12502,6 +12537,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12517,6 +12553,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-tep4-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 4
@@ -12532,6 +12569,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/1p2d-dep4-tep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12547,6 +12585,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/2p2d-dep4-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12562,6 +12601,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/3p2d-dep4-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8
@@ -12577,6 +12617,7 @@ minimaxm3-fp8-gb200-dynamo-vllm:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/vllm/minimax-m3-gb200-fp8/8k1k/5p2d-dep4-dep8-8k1k.yaml"
+          - "SRTCTL_SETUP_SCRIPT=minimax-m3-gb200-vllm-fixes.sh"
         decode:
           num-worker: 2
           tp: 8

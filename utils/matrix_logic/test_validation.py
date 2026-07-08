@@ -1068,6 +1068,56 @@ class TestValidateRunnerConfig:
         assert "mi300x" in result["labels"]
         assert "gb200" in result["labels"]
 
+    def test_model_paths_valid_entries(self, valid_runner_config):
+        """model-paths entries with path or path-candidates should pass."""
+        config = dict(valid_runner_config)
+        config["model-paths"] = {
+            "cluster:gb300-nv": [
+                {
+                    "model-prefix": "dsv4",
+                    "precision": "fp4",
+                    "framework": "dynamo-trt",
+                    "path": "/scratch/models/DeepSeek-V4-Pro",
+                    "alias": "deepseek-ai/DeepSeek-V4-Pro",
+                    "served-model-name": "deepseek-v4-pro",
+                },
+                {
+                    "model-prefix": "dsv4",
+                    "precision": "fp4",
+                    "path-candidates": ["/data/models/dsv4-pro", "/data/models/DeepSeek-V4-Pro"],
+                    "alias": "deepseek-v4-pro",
+                },
+            ],
+        }
+        assert validate_runner_config(config) == config
+
+    def test_model_paths_requires_path_or_candidates(self, valid_runner_config):
+        """model-paths entries must set exactly one of path / path-candidates."""
+        config = dict(valid_runner_config)
+        for bad_entry in (
+            {"model-prefix": "dsv4", "precision": "fp4", "alias": "x"},
+            {"model-prefix": "dsv4", "precision": "fp4", "alias": "x",
+             "path": "/a", "path-candidates": ["/b"]},
+        ):
+            config["model-paths"] = {"cluster:gb300-nv": [bad_entry]}
+            with pytest.raises(ValueError, match="exactly one of"):
+                validate_runner_config(config)
+
+    def test_model_paths_rejects_unknown_fields(self, valid_runner_config):
+        """model-paths entries reject typo'd fields."""
+        config = dict(valid_runner_config)
+        config["model-paths"] = {
+            "cluster:gb300-nv": [{
+                "model-prefix": "dsv4",
+                "precision": "fp4",
+                "path": "/a",
+                "alias": "x",
+                "model-path": "/typo",
+            }],
+        }
+        with pytest.raises(ValueError):
+            validate_runner_config(config)
+
     def test_flat_runner_config_is_rejected(self):
         config = {
             "h100": ["h100-cr_0", "h100-cw_0"],
