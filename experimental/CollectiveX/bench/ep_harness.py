@@ -1371,7 +1371,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "runner": args.runner,
         "suite": args.suite,
     })
-    observed_component_orders = []
     for trial_index in range(args.trials):
         order = qualification_order(
             list(ladder), args.qualification_index, trial_index,
@@ -1387,11 +1386,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 trial_index,
                 identity_key=f"{order_identity}:components:{T}",
             )
-            observed_component_orders.append({
-                "components": component_order,
-                "tokens_per_rank": T,
-                "trial_index": trial_index,
-            })
             measured = {name: [] for name in ("dispatch", "stage", "combine", "roundtrip")}
             for component_name in component_order:
                 # The base template gives every component the same synchronized
@@ -1690,9 +1684,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
         "experts_per_rank": experts_per_rank,
-        "precision_profile": resolved_precision_id,
-        "dispatch_precision": communication_precision["dispatch"],
-        "combine_precision": communication_precision["combine"],
         "routing": args.routing, "eplb": bool(eplb_plan), "num_logical_experts": num_logical,
         # V2 is reserved for the PR #605 ElasticBuffer adapter; package versions never imply it.
         "kernel_gen": kernel_generation(backend),
@@ -1749,7 +1740,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "artifact": git_run.get("artifact"),
         "execution_id": getattr(args, "allocation_execution_id", None),
         "job": git_run.get("job"),
-        "qualification_index": args.qualification_index,
         "repo": git_run.get("repo"),
         "run_attempt": git_run.get("run_attempt"),
         "run_id": git_run.get("run_id"),
@@ -1767,29 +1757,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         allocation=allocation_identifier, case=case_identifier, ordinal=attempt_ordinal
     )
     runtime_fingerprint = getattr(args, "runtime_fingerprint", None) or {}
-    implementation_contract = {
-        "kernel_generation": kernel_generation(backend),
-        "name": backend.name,
-        "provenance": ep_provenance.series_provenance(backend.backend_provenance),
-        "resource_profile": resource_profile,
-    }
-    public_config = ep_provenance.public_series_config(
-        kernel_generation=implementation_contract["kernel_generation"],
-        provenance=backend.backend_provenance,
-        resource_profile=resource_profile,
-        resource_mode=args.resource_mode,
-        device_product=getattr(args, "runtime_device_product", None),
-    )
     series_factors = {
         "backend": backend.name,
-        "implementation_contract_sha256": _sha256_json(implementation_contract),
-        "public_config_sha256": ep_provenance.public_series_config_sha256(public_config),
-        "routing_control_sha256": ep_provenance.routing_implementation_control_sha256(
-            implementation_contract
-        ),
         "case_id": case_identifier,
         "image_digest": getattr(args, "image_digest", None),
-        "runtime_fingerprint_sha256": _sha256_json(runtime_fingerprint),
         "source_sha": git_run.get("source_sha"),
         "squash_sha256": getattr(args, "squash_sha256", None),
         "workload_id": getattr(args, "workload_id", None) or trace_sig,
@@ -1840,7 +1811,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "case_id": case_identifier,
         "format": "collectivex.samples.v1",
         "points": sample_points,
-        "qualification_index": args.qualification_index,
         "sampling": {
             "iterations_per_trial": args.iters,
             "reduction": case_profile["rank_reduction"],
@@ -1945,8 +1915,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "roundtrips_per_shape": CONDITIONING_ROUNDS_PER_SHAPE,
             },
             "contract": case_profile["contract"],
-            "execution_order_sha256": _sha256_json(observed_component_orders),
-            "qualification_index": args.qualification_index,
             "rows": rows,
             "sampling": {
                 "contract": SAMPLING_CONTRACT,
@@ -1983,7 +1951,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "runtime_fingerprint": runtime_fingerprint,
         "provenance": {
-            "allocation_stratum_sha256": allocation_stratum_sha256,
             "command": getattr(args, "reproduction_command", ""),
             "distributed_launcher": getattr(args, "distributed_launcher", None),
             "git_run": getattr(args, "git_run", None),

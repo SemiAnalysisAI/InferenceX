@@ -446,7 +446,6 @@ def main() -> int:
         "artifact": os.environ.get("COLLECTIVEX_ARTIFACT_NAME"),
     }
     if any(_run.values()):
-        _run["qualification_index"] = args.qualification_index
         args.git_run = _run
     else:
         args.git_run = None
