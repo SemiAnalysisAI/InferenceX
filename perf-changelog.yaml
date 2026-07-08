@@ -4612,3 +4612,9 @@
     - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
     - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
+
+- config-keys:
+    - minimaxm3-fp4-b300-vllm
+  description:
+    - "update vllm image"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2119
