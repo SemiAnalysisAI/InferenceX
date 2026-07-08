@@ -4612,3 +4612,19 @@
     - "8k1k: 4 wide-EP (TP=32) max-throughput + 6 per-node (TP=4) low-latency topologies."
     - "1k1k: 1 wide-EP max-throughput + 6 low-latency (DEP16/DEP32 + TP=4) topologies."
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1780
+
+- config-keys:
+    - dsv4-fp4-gb200-llm-d-vllm-max-tpt-megamoe
+    - dsv4-fp4-gb200-llm-d-vllm-mid-curve-megamoe
+    - dsv4-fp4-gb200-llm-d-vllm-high-tpt-megamoe
+    - dsv4-fp4-gb200-llm-d-vllm-low-middle
+    - dsv4-fp4-gb200-llm-d-vllm-low-latency
+  description:
+    - "Add DeepSeek-V4-Pro FP4 GB200 llm-d-vllm disaggregated multinode benchmarks (full curve)"
+    - "Low-latency 1P1D pure-TP8 decode (conc 1)"
+    - "Mid-curve 1P+1D DEP8 (conc 256/512/1024)"
+    - "Low-middle 1P4D pure-TP8 decode (conc 256/512)"
+    - "High-tpt 2P+1D DEP8 (conc 4096)"
+    - "Max-tpt 3P+1D DEP8 (conc 4096); same engine config as high-tpt, one more prefill instance"
+    - "Unique SLURM job-name (includes GITHUB_RUN_ID/ATTEMPT) so a name-scoped scancel from another job on the shared cluster cannot cancel the allocation; fixes the max-tpt in-sweep kill (re-test run 28918650203 = 8730 tok/s/GPU)"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2050
