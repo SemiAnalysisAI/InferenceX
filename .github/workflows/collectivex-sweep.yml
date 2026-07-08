@@ -44,6 +44,10 @@ on:
         description: Keep only shards with at most this node/tray count (1 keeps non-GB EP8; blank = all)
         type: string
         default: ''
+      ep_sizes:
+        description: Keep only shards whose expert-parallel degree is in this comma-list (8 keeps EP8 only, dropping EP16 so GB SKUs co-schedule with 8-GPU SKUs; blank = all)
+        type: string
+        default: ''
       max_cases:
         description: Max cases per shard cell before chunking into another GHA job (128 = no chunking for current suites)
         type: string
@@ -98,6 +102,7 @@ jobs:
           INPUT_PROBE_ID: ${{ inputs.probe_id }}
           INPUT_MIN_NODES: ${{ inputs.min_nodes }}
           INPUT_MAX_NODES: ${{ inputs.max_nodes }}
+          INPUT_EP_SIZES: ${{ inputs.ep_sizes }}
           INPUT_MAX_CASES: ${{ inputs.max_cases }}
           INPUT_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
           CX_QUALIFICATION_INDEX: ${{ inputs.qualification_index }}
@@ -151,6 +156,7 @@ jobs:
             [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
             [ -n "$INPUT_MIN_NODES" ] && args+=(--min-nodes "$INPUT_MIN_NODES")
             [ -n "$INPUT_MAX_NODES" ] && args+=(--max-nodes "$INPUT_MAX_NODES")
+            [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
             python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
           fi
           python3 artifact_safety.py matrix_full.json

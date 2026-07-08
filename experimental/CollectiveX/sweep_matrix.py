@@ -454,6 +454,7 @@ def resolve_matrix(
     exclude_skus: str = "",
     min_nodes: int = 0,
     max_nodes: int = 0,
+    ep_sizes: str = "",
     max_cases: int = 128,
 ) -> dict[str, Any]:
     """Resolve suite configuration into allocation-sized workflow shards."""
@@ -461,6 +462,19 @@ def resolve_matrix(
         raise SystemExit("--max-cases must be positive")
     if min_nodes < 0 or max_nodes < 0 or (min_nodes and max_nodes and min_nodes > max_nodes):
         raise SystemExit("invalid node bounds")
+    # --ep-sizes narrows the matrix to specific expert-parallel degrees, dispatch-time
+    # like --max-nodes: "8" keeps every EP8 shard and drops EP16, so a comprehensive run
+    # can co-schedule the 8-GPU SKUs' single-node EP8 with the GB SKUs' two-node EP8
+    # without dispatching any EP16 leg. Blank keeps every degree. The resulting matrix is
+    # a partial (still publishable) subset; the publisher binds every promoted case to the
+    # canonical catalog, so a filtered matrix cannot invent or reclassify cases.
+    selected_eps: set[int] = set()
+    for value in (part.strip() for part in ep_sizes.split(",")):
+        if not value:
+            continue
+        if not value.isdigit() or int(value) <= 0:
+            raise SystemExit(f"invalid --ep-sizes {ep_sizes!r}; expected positive integers")
+        selected_eps.add(int(value))
     if only_sku and only_sku not in cap.PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(cap.PLATFORMS)}")
     # --exclude-skus narrows the matrix to a partial (still publishable) subset by
@@ -528,6 +542,8 @@ def resolve_matrix(
                 suite["workloads"], ep_degrees, phases, routings, eplb_values,
                 suite_targets, precision_profiles,
             ):
+                if selected_eps and ep not in selected_eps:
+                    continue
                 if precision_profile is not None and not cap.precision_target_declared(
                     precision_profile,
                     sku=platform_name,
@@ -1384,6 +1400,11 @@ def main() -> int:
     )
     parser.add_argument("--min-nodes", type=int, default=0)
     parser.add_argument("--max-nodes", type=int, default=0)
+    parser.add_argument(
+        "--ep-sizes",
+        default="",
+        help="comma-list of expert-parallel degrees to keep (e.g. 8 drops EP16); blank = all",
+    )
     parser.add_argument("--max-cases", type=int, default=128)
     parser.add_argument("--extract-from", default="", metavar="MATRIX")
     parser.add_argument("--validate-control", default="", metavar="SHARD")
@@ -1460,6 +1481,7 @@ def main() -> int:
         exclude_skus=args.exclude_skus,
         min_nodes=args.min_nodes,
         max_nodes=args.max_nodes,
+        ep_sizes=args.ep_sizes,
         max_cases=args.max_cases,
     )
     try:

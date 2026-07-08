@@ -270,6 +270,42 @@ class QualificationPlanningTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "disjoint pools"):
             sweep_matrix.resolve_matrix(only_sku="b300", exclude_skus="b300")
 
+    def test_ep_sizes_narrows_matrix_to_a_publishable_subset(self) -> None:
+        full = sweep_matrix.validate_matrix_document(
+            sweep_matrix.resolve_matrix(suites="all", backends="all", max_cases=128)
+        )
+        partial = sweep_matrix.validate_matrix_document(
+            sweep_matrix.resolve_matrix(
+                suites="all", backends="all", max_cases=128, ep_sizes="8"
+            )
+        )
+        full_eps = {item["case"]["ep"] for item in full["requested_cases"]}
+        partial_eps = {item["case"]["ep"] for item in partial["requested_cases"]}
+        # The canonical matrix carries EP16; --ep-sizes=8 drops it entirely so a
+        # comprehensive run can co-schedule EP8 across every SKU (GB EP8 is two nodes,
+        # the 8-GPU SKUs' EP8 is one) with no EP16 leg to wall.
+        self.assertIn(16, full_eps)
+        self.assertEqual(partial_eps, {8})
+        # Keeping a degree only omits the others; every surviving cell is byte-identical
+        # to the full matrix (a partial run cannot invent or reclassify cases).
+        def ep8_by_id(matrix: dict[str, object]) -> dict[str, object]:
+            return {
+                item["case"]["case_id"]: item
+                for item in matrix["requested_cases"]
+                if item["case"]["ep"] == 8
+            }
+        self.assertEqual(ep8_by_id(partial), ep8_by_id(full))
+        # Every include shard cell that survives is single-degree EP8 (no EP16 shard).
+        self.assertTrue(
+            all(item["case"]["ep"] == 8 for item in partial["requested_cases"])
+        )
+
+    def test_ep_sizes_rejects_non_positive_or_non_integer_degrees(self) -> None:
+        with self.assertRaisesRegex(SystemExit, "invalid --ep-sizes"):
+            sweep_matrix.resolve_matrix(ep_sizes="0")
+        with self.assertRaisesRegex(SystemExit, "invalid --ep-sizes"):
+            sweep_matrix.resolve_matrix(ep_sizes="eight")
+
     def test_frontend_catalog_covers_every_requested_case_and_point(self) -> None:
         catalog = sweep_matrix.frontend_catalog(self.matrix)
         self.assertEqual(catalog["format"], "collectivex.frontend-catalog.v1")

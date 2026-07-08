@@ -1770,6 +1770,14 @@ class SamplingContractTest(unittest.TestCase):
         )
         # collectivex.release-tag.v1 is a frozen data-format id, NOT the release version.
         self.assertIn("collectivex.release-tag.v1", sweep)
+        # The ep-size filter is a dispatch-time narrower (like max_nodes): it lets a
+        # comprehensive run schedule EP8 across every SKU without any EP16 leg, and it
+        # only applies to the sweep branch (not precision probes).
+        self.assertIn("ep_sizes:", sweep)
+        self.assertIn("INPUT_EP_SIZES: ${{ inputs.ep_sizes }}", sweep)
+        self.assertIn(
+            '[ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")', sweep
+        )
         # A versioned run may cover the full canonical matrix or a filtered subset;
         # the release marker records the coverage scope AND the numeric version.
         self.assertNotIn("V1 sweeps require the exact unfiltered full matrix", sweep)
