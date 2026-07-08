@@ -333,11 +333,6 @@ def _sha256_json(value) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _series_provenance(provenance: dict) -> dict:
-    """Retain stable semantic build identity while keeping raw binaries diagnostic."""
-    return contracts.series_provenance(provenance)
-
-
 def _write_bytes_atomic(path: str, payload: bytes) -> tuple[str, int]:
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     temporary = f"{path}.tmp-{os.getpid()}"
@@ -1198,18 +1193,6 @@ def _histogram(xs: list[float], nbins: int = 40) -> dict:
     return {"n": len(xs), "min": round(lo, 3), "max": round(hi, 3), "bins": nbins, "counts": counts}
 
 
-def _derive_publication_status(v: dict) -> str:
-    """Classify raw attempts; only the isolated coverage publisher may promote evidence."""
-    if v["execution_status"] != "complete":
-        return "failed"
-    if v["semantic_correctness"] != "pass" or v["measurement_conformance"] != "conformant" \
-       or v["workload_identity"] == "inconsistent":
-        return "invalid"
-    # Per-case producers cannot prove exact matrix coverage, repeat stability, or controlled
-    # cohorts. Keep even sound attempts diagnostic until the isolated publisher validates them.
-    return "diagnostic"
-
-
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = getattr(args, "mode", "normal")
@@ -1703,7 +1686,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         # anomaly-free unless a contract-level timing anomaly fired (then diagnostic, see above).
         "anomaly_free": anomaly_free,
     }
-    publication_status = _derive_publication_status(validity)
 
     shape = {  # FIXED line identity (no T, no per-backend resource knobs)
         "hidden": args.hidden, "topk": args.topk, "experts": args.experts,
@@ -1788,10 +1770,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     implementation_contract = {
         "kernel_generation": kernel_generation(backend),
         "name": backend.name,
-        "provenance": _series_provenance(backend.backend_provenance),
+        "provenance": ep_provenance.series_provenance(backend.backend_provenance),
         "resource_profile": resource_profile,
     }
-    public_config = contracts.public_series_config(
+    public_config = ep_provenance.public_series_config(
         kernel_generation=implementation_contract["kernel_generation"],
         provenance=backend.backend_provenance,
         resource_profile=resource_profile,
@@ -1801,8 +1783,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     series_factors = {
         "backend": backend.name,
         "implementation_contract_sha256": _sha256_json(implementation_contract),
-        "public_config_sha256": contracts.public_series_config_sha256(public_config),
-        "routing_control_sha256": contracts.routing_implementation_control_sha256(
+        "public_config_sha256": ep_provenance.public_series_config_sha256(public_config),
+        "routing_control_sha256": ep_provenance.routing_implementation_control_sha256(
             implementation_contract
         ),
         "case_id": case_identifier,
@@ -2016,7 +1998,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         },
         "sample_artifact": sample_artifact,
         "outcome": {
-            "publication_status": publication_status,
             "reasons": [] if all_ok else ["semantic correctness or routing identity failed"],
             "status": "success" if all_ok else "invalid",
             "validity": validity,

@@ -464,3 +464,108 @@ def content_manifest_evidence(
         canonical_json_bytes(sorted(manifest, key=lambda item: item["label"]))
     ).hexdigest()
     return {"name": name, "role": role, "sha256": digest}
+
+
+# Source-built backend libraries whose raw build tree is projected to a stable
+# public source identity (private cache keys / host paths are dropped).
+SOURCE_BUILT_LIBRARY_ROLES = frozenset({
+    "deepep-extension", "deepep-hybrid-extension",
+})
+
+
+def series_provenance(provenance: dict[str, Any]) -> dict[str, Any]:
+    """Project stable semantic build identity while dropping private binaries and host paths."""
+    projected = {
+        key: value for key, value in provenance.items()
+        if key not in {"jit_cache_key", "jit_shared_objects", "path", "sm_fraction"}
+    }
+    libraries = provenance.get("loaded_libraries")
+    if isinstance(libraries, list):
+        projected["loaded_libraries"] = [
+            {
+                "name": item.get("name"),
+                "role": item.get("role"),
+                "source_tree": provenance.get("deepep_tree"),
+            }
+            if isinstance(item, dict) and item.get("role") in SOURCE_BUILT_LIBRARY_ROLES
+            else item
+            for item in libraries
+        ]
+    jit_cubins = provenance.get("jit_cubins")
+    if isinstance(jit_cubins, list):
+        projected["jit_cubins"] = [
+            {
+                "cache_key": item.get("cache_key"),
+                "sass_sha256": item.get("sass_sha256"),
+                "source_sha256": item.get("source_sha256"),
+            }
+            if isinstance(item, dict)
+            else item
+            for item in jit_cubins
+        ]
+    return projected
+
+
+def _sha256_json(value: Any) -> str:
+    """Canonical sha256 of a finite JSON value (matches contracts.canonical_json_bytes)."""
+    return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
+
+
+def backend_version(provenance: dict[str, Any]) -> str | None:
+    """Return the canonical public backend version from implementation provenance."""
+    for field in (
+        "deepep_version", "uccl_version", "nccl_version",
+        "mori_commit", "deepep_commit",
+    ):
+        value = provenance.get(field)
+        if value is not None and str(value).strip():
+            return str(value)[:160]
+    return None
+
+
+def public_series_config(
+    *, kernel_generation: Any, provenance: dict[str, Any],
+    resource_profile: dict[str, Any], resource_mode: Any, device_product: Any,
+) -> dict[str, Any]:
+    """Project raw implementation facts into the exact public configuration fields."""
+    generation = None if kernel_generation == "n-a" else kernel_generation
+    profile = "profile-" + _sha256_json(resource_profile)[:16]
+    return {
+        "backend": {
+            "generation": generation,
+            "version": backend_version(provenance),
+        },
+        "resource": {
+            "mode": resource_mode,
+            "profile": profile,
+            "comm_units_kind": resource_profile.get("comm_units_kind"),
+            "configured_units": resource_profile.get("configured_units"),
+        },
+        "system": {"label": str(device_product)[:160]},
+    }
+
+
+def public_series_config_sha256(config: dict[str, Any]) -> str:
+    """Commit the canonical public configuration projection into series identity."""
+    return _sha256_json(config)
+
+
+def routing_implementation_control_sha256(implementation: dict[str, Any]) -> str:
+    """Bind routing cohorts to the same static build/generator and non-treatment configuration."""
+    provenance = implementation.get("provenance")
+    if not isinstance(provenance, dict):
+        raise ContractError("implementation provenance is unavailable")
+    semantic = series_provenance(provenance)
+    treatment_fields = {
+        "jit_cache_key", "jit_cubins", "jit_kernel_keys", "jit_shared_objects",
+        "local_experts", "num_experts", "path", "realized_config", "sm_fraction",
+    }
+    return _sha256_json({
+        "kernel_generation": implementation.get("kernel_generation"),
+        "name": implementation.get("name"),
+        "provenance": {
+            key: value for key, value in semantic.items()
+            if key not in treatment_fields
+        },
+        "resource_profile": implementation.get("resource_profile"),
+    })
