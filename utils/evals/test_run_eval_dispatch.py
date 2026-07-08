@@ -485,13 +485,14 @@ def test_agentic_generation_invokes_mini_swe_agent(tmp_path):
 source "$BENCHMARK_LIB" 2>/dev/null
 _install_swebench_agent_deps() { :; }
 _ensure_modal_credentials() { :; }
-export EVAL_LIMIT=10 MODEL_NAME=test-model
+export EVAL_LIMIT=10 MODEL_NAME=test-model SWEBENCH_SANDBOX_SWEEP=0
 _run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
 [ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
 grep -q 'api_base: http://0.0.0.0:8899/v1' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
 grep -q 'openai/test-model' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
 grep -q 'additional_critical_guidance' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_GUIDANCE; exit 1; }
 grep -q 'BEFORE submitting you MUST run the test' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_VERIFY_RULE; exit 1; }
+grep -q 'runtime_timeout: 3600' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_RUNTIME_TIMEOUT; exit 1; }
 echo AGENTIC_GEN_OK
 """
     env = {**os.environ,

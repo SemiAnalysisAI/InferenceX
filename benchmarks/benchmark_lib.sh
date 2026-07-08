@@ -1164,6 +1164,91 @@ META
 _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
+    _patch_swebench_agent_cleanup || \
+        echo "WARN: sandbox-cleanup patch failed; leaked sandboxes will bill until runtime_timeout" >&2
+}
+
+# Both pinned deps leak Modal sandboxes (observed: batches dying at 59m59s =
+# the 1h runtime_timeout, billing the full hour for ~7-min instances):
+#   - mini-swe-agent 2.4.5: process_instance() never calls env.stop() -- not
+#     even on success -- so EVERY sandbox lives until runtime_timeout.
+#   - swe-rex 1.4.0: ModalDeployment.stop() has its poll check inverted
+#     (terminates only already-exited sandboxes), and start() leaks the
+#     sandbox when the runtime never comes alive (startup timeout).
+# Patch the installed files (idempotent, anchor-checked; pinned versions keep
+# the anchors stable). Best-effort: the post-generation sweep still bounds the
+# damage if an anchor ever drifts.
+_patch_swebench_agent_cleanup() {
+    python3 - <<'PYPATCH'
+import sys
+
+SENTINEL = "inferencex sandbox cleanup"
+
+
+def patch(path, replacements):
+    src = open(path).read()
+    if SENTINEL in src:
+        print(f"[swebench-agentic] {path}: cleanup patch already applied")
+        return True
+    ok = True
+    for old, new in replacements:
+        if src.count(old) != 1:
+            print(f"WARN: [swebench-agentic] {path}: patch anchor not found exactly once "
+                  f"(count={src.count(old)}); skipping hunk", file=sys.stderr)
+            ok = False
+            continue
+        src = src.replace(old, new)
+    open(path, "w").write(src)
+    print(f"[swebench-agentic] {path}: sandbox-cleanup patch {'applied' if ok else 'PARTIALLY applied'}")
+    return ok
+
+
+import minisweagent.run.benchmarks.swebench as mini_sb
+import swerex.deployment.modal as rex_modal
+
+mini_ok = patch(mini_sb.__file__, [
+    (
+        "    agent = None\n    exit_status = None",
+        "    agent = None\n    env = None  # inferencex sandbox cleanup\n    exit_status = None",
+    ),
+    (
+        "    finally:\n        if agent is not None:",
+        "    finally:\n"
+        "        if env is not None and callable(getattr(env, \"stop\", None)):\n"
+        "            try:\n"
+        "                env.stop()\n"
+        "            except Exception:\n"
+        "                pass\n"
+        "        if agent is not None:",
+    ),
+])
+
+rex_ok = patch(rex_modal.__file__, [
+    (
+        "        if self._sandbox is not None:\n"
+        "            exit_code = await self._sandbox.poll.aio()\n"
+        "            if exit_code is not None:\n"
+        "                await self._sandbox.terminate.aio()",
+        "        if self._sandbox is not None:  # inferencex sandbox cleanup\n"
+        "            try:\n"
+        "                await self._sandbox.terminate.aio()\n"
+        "            except Exception:\n"
+        "                pass",
+    ),
+    (
+        "        await self._wait_until_alive(timeout=remaining_startup_timeout)",
+        "        try:\n"
+        "            await self._wait_until_alive(timeout=remaining_startup_timeout)\n"
+        "        except BaseException:\n"
+        "            try:\n"
+        "                await self._sandbox.terminate.aio()\n"
+        "            except Exception:\n"
+        "                pass\n"
+        "            raise",
+    ),
+])
+sys.exit(0 if (mini_ok and rex_ok) else 1)
+PYPATCH
 }
 
 _install_swebench_deps() {
@@ -1237,6 +1322,7 @@ maybe_run_eval() {
 #   SWEBENCH_AGENT_WORKERS     (default 8)     parallel instances / sandboxes
 #   SWEBENCH_AGENT_STEP_LIMIT  (default 30)    per-instance agent step cap
 #   SWEBENCH_AGENT_TIMEOUT     (default 14400) whole-generation guard, seconds
+#   SWEBENCH_AGENT_RUNTIME_TIMEOUT (default 3600) max sandbox lifetime backstop
 #   EVAL_LIMIT                 first-N instances only (--slice 0:N)
 _run_swebench_agentic_generation() {
     local gen_dir="$1"; shift
@@ -1293,6 +1379,10 @@ env.update({
     # mini's 60s default startup_timeout exhausts before the aliveness check.
     "startup_timeout": float(os.environ.get("SWEBENCH_AGENT_STARTUP_TIMEOUT", "900")),
     "timeout": int(os.environ.get("SWEBENCH_AGENT_CMD_TIMEOUT", "300")),
+    # Backstop only: sandboxes are terminated on instance completion (see
+    # _patch_swebench_agent_cleanup) and swept after generation; this caps
+    # billing for any that slip through both.
+    "runtime_timeout": float(os.environ.get("SWEBENCH_AGENT_RUNTIME_TIMEOUT", "3600")),
 })
 d["environment"] = env
 model_name = os.environ.get("MODEL_NAME") or os.environ.get("MODEL", "")
@@ -1325,6 +1415,25 @@ PYGEN
         "${slice_args[@]}" \
         -w "${SWEBENCH_AGENT_WORKERS:-8}" \
         -o "$gen_dir/agent_out" || agen_rc=$?
+    # Reap sandboxes still running after generation (crashed workers, outer
+    # timeout kills, anything the in-process cleanup missed). Nothing else is
+    # using Modal at this point -- scoring creates its own containers later --
+    # so a workspace-wide sweep is safe. Every leaked sandbox otherwise bills
+    # until runtime_timeout (1h). SWEBENCH_SANDBOX_SWEEP=0 disables (tests).
+    [ "${SWEBENCH_SANDBOX_SWEEP:-1}" = "1" ] && python3 - <<'PYSWEEP' || true
+try:
+    import modal
+    n = 0
+    for sb in modal.Sandbox.list():
+        try:
+            sb.terminate()
+            n += 1
+        except Exception as e:
+            print(f"[swebench-agentic] sweep: could not terminate {sb.object_id}: {e}")
+    print(f"[swebench-agentic] sandbox sweep: terminated {n} lingering sandbox(es)")
+except Exception as e:
+    print(f"[swebench-agentic] sandbox sweep skipped: {e}")
+PYSWEEP
     if [ "$agen_rc" -ne 0 ]; then
         echo "ERROR: agentic generation (mini-swe-agent) failed with $agen_rc" >&2
         return "$agen_rc"
