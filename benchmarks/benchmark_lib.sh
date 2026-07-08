@@ -1086,6 +1086,8 @@ append_lm_eval_summary() {
   "precision": "${prec:-unknown}",
   "spec_decoding": "${SPEC_DECODING}",
   "tp": ${TP:-1},
+  "dcp_size": ${DCP_SIZE:-1},
+  "pcp_size": ${PCP_SIZE:-1},
   "conc": ${metadata_conc},
 ${batch_metadata}  "ep": ${EP_SIZE:-1},
   "dp_attention": ${dp_json},
