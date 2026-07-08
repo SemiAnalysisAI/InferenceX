@@ -29,6 +29,11 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5.1 sglang recipes.
+        export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
+        export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp8" ]]; then
         # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5.1-fp8")
         # in our GLM-5.1 sglang recipes.
@@ -502,7 +507,10 @@ fi
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
-    -f "$CONFIG_PATH"
+    # Pass the full CONFIG_FILE (not the stripped CONFIG_PATH): srtctl needs the
+    # ":zip_override_...[i]" selector to pick the recipe block. For plain-file
+    # recipes CONFIG_FILE == CONFIG_PATH, so this is a no-op for them.
+    -f "$CONFIG_FILE"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
