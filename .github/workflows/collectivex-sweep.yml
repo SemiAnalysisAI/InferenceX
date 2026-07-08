@@ -469,10 +469,18 @@ jobs:
           set -euo pipefail
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          cp -- experimental/CollectiveX/results/*.json "$CX_JOB_ROOT/artifact/"
+          shopt -s nullglob
+          results=(experimental/CollectiveX/results/*.json)
+          if [ "${#results[@]}" -eq 0 ]; then
+            echo "staged=false" >> "$GITHUB_OUTPUT"
+            echo "No result JSON to stage; leg produced none."
+            exit 0
+          fi
+          cp -- "${results[@]}" "$CX_JOB_ROOT/artifact/"
+          echo "staged=true" >> "$GITHUB_OUTPUT"
       - name: Upload shard results
         id: upload_artifact
-        if: always() && steps.stage_artifact.outcome == 'success'
+        if: always() && steps.stage_artifact.outputs.staged == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: ${{ format('cxshard-{0}-{1}-{2}', matrix.id, github.run_id, github.run_attempt) }}

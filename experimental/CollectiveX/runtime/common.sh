@@ -138,6 +138,16 @@ cx_fail_stage() {
     fi
   fi
   cx_log "ERROR: failure-class=$stage diagnostic=$diagnostic"
+  # Surface the failing stage's captured output verbatim on stdout for debugging.
+  # Bounded by line count only (anti-flood, not redaction): this is public CI
+  # output, so the tail carries whatever the underlying tool emitted, unmasked.
+  if [ -n "$log_path" ] && [ -f "$log_path" ] && [ -s "$log_path" ]; then
+    local tail_lines="${CX_LOG_TAIL_LINES:-100}"
+    [[ "$tail_lines" =~ ^[0-9]+$ ]] || tail_lines=100
+    cx_log "--- $stage log tail (last $tail_lines lines, verbatim) ---"
+    tail -n "$tail_lines" "$log_path" >&2 || true
+    cx_log "--- end $stage log tail ---"
+  fi
   return 1
 }
 
