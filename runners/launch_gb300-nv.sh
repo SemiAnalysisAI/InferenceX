@@ -278,8 +278,12 @@ if [[ -z "$CONFIG_FILE" ]]; then
     exit 1
 fi
 
-# Override the job name in the config file with the runner name
-sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
+# Override the job name in the config file with the runner name.
+# CONFIG_FILE may carry a ":zip_override_...[i]" selector suffix that only
+# `srtctl apply -f` parses; strip it to the real path for the sed. srtctl
+# below still receives the full CONFIG_FILE (with selector).
+CONFIG_PATH="${CONFIG_FILE%%:*}"
+sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
 # --no-preflight is only safe on the agentic path, where the recipe
 # resolves model.path to /scratch (compute-node-only NVMe) and the
