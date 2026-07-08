@@ -12,7 +12,7 @@ SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
 
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
-        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro"
+        export MODEL_PATH="/mnt/numa1/models/DeepSeek-V4-Pro"
         export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
     else
         echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
