@@ -16,6 +16,8 @@ source "$(dirname "$0")/../../benchmark_lib.sh"
 
 check_env_vars MODEL TP CONC KV_OFFLOADING TOTAL_CPU_DRAM_GB RESULT_DIR DURATION EP_SIZE DP_ATTENTION
 
+echo "MODEL=$MODEL TP=$TP CONC=$CONC KV_OFFLOADING=$KV_OFFLOADING TOTAL_CPU_DRAM_GB=$TOTAL_CPU_DRAM_GB RESULT_DIR=$RESULT_DIR DURATION=$DURATION EP_SIZE=$EP_SIZE DP_ATTENTION=$DP_ATTENTION"
+
 PORT=${PORT:-8888}
 DURATION=${DURATION:-1800}
 EP_SIZE=${EP_SIZE:-1}
@@ -123,7 +125,7 @@ case "$KV_OFFLOAD_BACKEND" in
         # reserve 2.5 TB for the offload pool (leaves ~200 GB headroom for
         # worker RSS / page cache / slurm cgroup).
         TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
-        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
+        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-${TOTAL_CPU_DRAM_GB}}"
         # Use vLLM's regular native KV-offload path (OffloadingConnector),
         # NOT the SimpleCPUOffloadConnector. The "native" backend resolves to
         # OffloadingConnector by default; setting VLLM_USE_SIMPLE_KV_OFFLOAD=1
@@ -160,7 +162,7 @@ case "$KV_OFFLOAD_BACKEND" in
         # split --kv-offloading-size across TP ranks through the integrated
         # LMCache backend.
         TOTAL_CPU_DRAM_GB="${TOTAL_CPU_DRAM_GB:-3000}"
-        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-$((TOTAL_CPU_DRAM_GB / (8 / TP)))}"
+        TOTAL_CPU_DRAM_PARTITION_GB="${TOTAL_CPU_DRAM_PARTITION_GB:-${TOTAL_CPU_DRAM_GB}}"
         LMCACHE_HOST="${LMCACHE_HOST:-127.0.0.1}"
         LMCACHE_PORT="${LMCACHE_PORT:-5555}"
         LMCACHE_HTTP_PORT="${LMCACHE_HTTP_PORT:-8080}"
@@ -239,9 +241,9 @@ export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 # single biggest decode kernel at high concurrency. The MIN_SIZE_KB override is
 # required: vLLM's default INT4 quick-reduce size gate for (bf16, TP4) is 16 MB,
 # so it never fires for decode-sized tensors without it.
-# export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-# export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
-# export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
+export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
 
 VLLM_CMD=(
     vllm serve "$MODEL"
