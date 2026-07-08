@@ -4061,7 +4061,7 @@
 - config-keys:
     - dsv4-fp4-mi355x-sglang-disagg
   description:
-    - "init submission of dsv4 sglang disagg "
+    - "initial submission of dsv4 sglang disagg "
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1818
   evals-only: true
 
