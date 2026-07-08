@@ -240,7 +240,8 @@ export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
 export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
 
 VLLM_CMD=(
-    vllm serve "$MODEL"
+    vllm serve "$MODEL_PATH"
+    --served-model-name "$MODEL"
     --host 0.0.0.0
     --port "$PORT"
     "${PARALLEL_ARGS[@]}"
