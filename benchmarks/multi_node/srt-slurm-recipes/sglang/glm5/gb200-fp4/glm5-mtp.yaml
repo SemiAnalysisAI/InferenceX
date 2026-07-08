@@ -2,7 +2,7 @@ base:
   name: gb200-fp4-glm5-mtp
   model:
     path: glm-5-fp4
-    container: v0.5.13.post1
+    container: "lmsysorg/sglang:v0.5.13.post1-cu130"
     precision: fp4
   identity:
     model:
