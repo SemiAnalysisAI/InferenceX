@@ -3054,7 +3054,6 @@ minimaxm3-fp4-mi355x-vllm-agentic:
     agentic-coding:
     - dram-utilization: 0.80
       search-space:
-      - { tp: 4, kv-offloading: none, conc-list: [1, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [1, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96] }
-      - { tp: 4, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [1, 8, 16, 24, 32, 40, 48, 56, 64, 72, 96] }
-      
+      - { tp: 4, kv-offloading: none, conc-list: [24, 32, 40, 48, 56] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [24, 32, 40, 48, 56] }
+      - { tp: 4, kv-offloading: dram, kv-offload-backend: lmcache, conc-list: [24, 32, 40, 48, 56] }
