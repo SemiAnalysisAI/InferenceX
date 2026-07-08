@@ -4332,6 +4332,18 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1954
 
 - config-keys:
+    - minimaxm3-fp8-mi300x-vllm
+  description:
+    - "Update the MiniMax-M3 MXFP8 MI300X vLLM image from vllm/vllm-openai-rocm:minimax-m3 to vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1."
+    - "Enable AITER kernels for MiniMax-M3 MXFP8 on MI300X/gfx942 via the single master toggle VLLM_ROCM_USE_AITER=1: the stock image left it unset, so the hot decode GEMMs and fused MoE ran on the generic kernels. The per-component AITER flags (MoE, linear, RMSNorm, FP8 batched-GEMM) default to True and are gated behind the master flag, so they are left at their defaults. Keep attention on TRITON_ATTN (VLLM_ROCM_USE_AITER_MHA=0, which defaults to True) because the MXFP8 checkpoint lacks calibrated q/prob scales for ROCm FP8 attention."
+    - "Add AMD-recommended, numerically-inert MI300X runtime knobs: TORCH_BLAS_PREFER_HIPBLASLT=1, NCCL_MIN_NCHANNELS=112 (raises RCCL channels above the ~32-64 default for TP8), GPU_MAX_HW_QUEUES=2 (caps HIP streams below the default of 4)."
+    - "Stack two accuracy-safe scheduling levers: --async-scheduling (overlaps CPU input-prep with GPU decode) and --max-num-batched-tokens 16384 (amortizes the per-step BF16-emulated MoE weight read of ~95 GB/rank over more prompt tokens, halving prefill weight-reads vs the 8192 default). Both are token-for-token identical (scheduling only); GSM8K exact-match holds at 0.959."
+    - "Switch the 1k1k conc256 search-space row from TP8/EP8 to TP8/EP1: the EP8 topology regressed high-concurrency throughput (434 vs 905 tok/s/gpu @ conc256, EP8 vs EP1) and EP1 matches the topology the prior AITER uplift was measured against."
+    - "Measured uplift on 8xMI300X, 1k1k random sweep (total tok/s/gpu): conc256 782.7->905 (EP8->EP1 + scheduling levers), conc128 598.9->628 (+4.9%), conc64 365.1->429 (+17.5%), conc32 295.6->327.4 (+10.8%), conc16 203.1->216.5 (+6.6%), conc8 127.6->136.6 (+7.1%), conc4 80.1->84.6 (+5.6%); conc1-2 unchanged (latency-bound). GSM8K exact-match holds at 0.959."
+    - "Drop the remaining TP8/EP8 row from the 8k1k search space (conc128-256), same fix as the 1k1k row above: the CI eval-only job at 8k1k TP8/EP8 conc256 caught GSM8K collapsing to ~0 (0.0000 strict / ~0.01 flexible). Reproduced locally on 8xMI300X against this image: --enable-expert-parallel (EP8) returns garbled/incoherent tokens on both /v1/completions and /v1/chat/completions for trivial prompts (e.g. 'The capital of France is' -> gibberish), while the same request against plain TP8 (EP1) answers correctly and scores 0.92 exact-match on a 50-question GSM8K sample. Root cause is EP8 itself (garbage generation), not --async-scheduling, which was tried and ruled out first. 8k1k is now TP8/EP1 across the full conc1-256 range."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1951
+
+- config-keys:
     - minimaxm3-fp8-mi355x-vllm
     - minimaxm3-fp8-mi355x-vllm-mtp
   description:
