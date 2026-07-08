@@ -1,0 +1,143 @@
+name: "gb200-fp4-glm5_8k1k_lowlat_0"
+
+# Ported from upstream srt-slurm recipes/gb200-fp4/glm5.yaml (PR #211).
+# Upstream uses a single combined file with `zip_override_*` arrays expanded
+# by srtctl across zip indices. We split into one flat yaml per concrete
+# topology to match the InferenceX glm5 sglang convention (see ../../gb300-fp4/).
+# All shared base envs and the prefill sglang_config are inlined here verbatim
+# from the upstream `base:` block; the decode block is the upstream base plus
+# the topology-specific override from this zip index.
+
+model:
+  path: "glm-5-fp4"
+  container: "lmsysorg/sglang:v0.5.11-cu130"
+  precision: "fp4"
+
+dynamo:
+  version: "1.2.1"
+
+slurm:
+  time_limit: "03:00:00"
+
+# Mirror the gb300-fp4 glm5 recipes: cpus-per-task=144 avoids the 1-CPU default
+# that turns dynamo install + sglang weight load into a serial crawl; mem=0
+# grants whole-node memory.
+sbatch_directives:
+  cpus-per-task: "144"
+  mem: "0"
+
+resources:
+  gpu_type: "gb200"
+  gpus_per_node: 4
+  prefill_nodes: 1
+  prefill_workers: 1
+  gpus_per_prefill: 4
+  decode_nodes: 4
+  decode_workers: 4
+  gpus_per_decode: 4
+
+frontend:
+  type: dynamo
+
+backend:
+  type: sglang
+
+  prefill_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    MC_TE_METRIC: "true"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+
+  decode_environment:
+    TORCH_DISTRIBUTED_DEFAULT_TIMEOUT: "1800"
+    PYTHONUNBUFFERED: "1"
+    DYN_SKIP_SGLANG_LOG_FORMATTING: "1"
+    SGLANG_DISAGGREGATION_HEARTBEAT_MAX_FAILURE: "100000"
+    SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT: "100000"
+    SGLANG_DISAGGREGATION_WAITING_TIMEOUT: "100000"
+    MC_TE_METRIC: "true"
+    MC_FORCE_MNNVL: "1"
+    NCCL_MNNVL_ENABLE: "1"
+    NCCL_CUMEM_ENABLE: "1"
+    SGLANG_MOONCAKE_CUSTOM_MEM_POOL: "True"
+    SGLANG_USE_MESSAGE_QUEUE_BROADCASTER: "0"
+    SGLANG_DISABLE_TP_MEMORY_INBALANCE_CHECK: "1"
+    SGLANG_DEEPEP_NUM_MAX_DISPATCH_TOKENS_PER_RANK: "512"
+    SGLANG_MOE_NVFP4_DISPATCH: "1"
+
+  sglang_config:
+    prefill:
+      served-model-name: "GLM-5-FP4"
+      trust-remote-code: true
+      quantization: "modelopt_fp4"
+      kv-cache-dtype: "fp8_e4m3"
+      disaggregation-mode: "prefill"
+      disaggregation-transfer-backend: "nixl"
+      tensor-parallel-size: 4
+      data-parallel-size: 4
+      expert-parallel-size: 4
+      enable-dp-attention: true
+      enable-dp-lm-head: true
+      load-balance-method: "total_tokens"
+      max-running-requests: 72
+      cuda-graph-max-bs: 72
+      chunked-prefill-size: 65536
+      max-prefill-tokens: 16384
+      context-length: 9280
+      mem-fraction-static: 0.8
+      nsa-prefill-backend: "trtllm"
+      nsa-decode-backend: "trtllm"
+      moe-runner-backend: "flashinfer_trtllm"
+      fp4-gemm-backend: "flashinfer_cutlass"
+      enable-flashinfer-allreduce-fusion: true
+      disable-radix-cache: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+    decode:
+      served-model-name: "GLM-5-FP4"
+      trust-remote-code: true
+      quantization: "modelopt_fp4"
+      kv-cache-dtype: "fp8_e4m3"
+      disaggregation-mode: "decode"
+      disaggregation-transfer-backend: "nixl"
+      context-length: 9600
+      skip-tokenizer-init: true
+      stream-interval: 30
+      disable-radix-cache: true
+      weight-loader-prefetch-checkpoints: true
+      model-loader-extra-config: '{"enable_multithread_load": true}'
+      nsa-decode-backend: "trtllm"
+      nsa-prefill-backend: "trtllm"
+      fp4-gemm-backend: "flashinfer_cutlass"
+      # Parallelism (override from upstream zip_override_*)
+      tensor-parallel-size: 4
+      data-parallel-size: 1
+      expert-parallel-size: 1
+      enable-dp-attention: false
+      enable-dp-lm-head: false
+      load-balance-method: "round_robin"
+      moe-runner-backend: "flashinfer_trtllm"
+      enable-flashinfer-allreduce-fusion: true
+      mem-fraction-static: 0.94
+      max-running-requests: 32
+      cuda-graph-max-bs: 32
+
+health_check:
+  max_attempts: 360
+  interval_seconds: 10
+
+benchmark:
+  type: "sa-bench"
+  isl: 8192
+  osl: 1024
+  concurrencies: "133"
+  req_rate: "inf"
