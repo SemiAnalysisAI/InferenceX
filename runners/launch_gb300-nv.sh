@@ -296,17 +296,21 @@ fi
 CONFIG_PATH="${CONFIG_FILE%%:*}"
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_PATH"
 
-# --no-preflight is only safe on the agentic path, where the recipe
-# resolves model.path to /scratch (compute-node-only NVMe) and the
-# srtctl process running on the GHA runner pod can't see it. Fixed-
-# seq-len recipes still resolve model.path to an NFS-visible location
-# where the precheck is a useful sanity guard, so keep enforcement on
-# for them.
+# --no-preflight skips srtctl's pre-submit model-path stat, which runs on
+# the GHA runner host (im-gb300-login-02, an x86 login node). It's required
+# whenever model.path resolves to the node-local /scratch NVMe that the login
+# node can't see:
+#   - the agentic path (DSv4-Pro checkpoint), and
+#   - glm5.1, whose GLM-5.1-NVFP4 weights are prestaged on the compute-node
+#     /scratch/models.
+# The engine still fails loudly at runtime if the path is genuinely missing on
+# the compute node. Other fixed-seq-len recipes resolve model.path to a
+# login-visible location, so keep the precheck enforced for them.
 SRTCTL_APPLY_ARGS=(
     -f "$CONFIG_FILE"
     --tags "gb300,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
-if [[ "$IS_AGENTIC" == "1" ]]; then
+if [[ "$IS_AGENTIC" == "1" || "$MODEL_PREFIX" == "glm5.1" ]]; then
     SRTCTL_APPLY_ARGS+=(--no-preflight)
 fi
 if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
