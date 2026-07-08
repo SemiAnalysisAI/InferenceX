@@ -1350,6 +1350,11 @@ run_swebench_eval() {
         # Preserve agent predictions as artifacts alongside the scored results.
         mkdir -p "$out_dir"
         cp -f "$gen_dir/agent_out/preds.json" "$out_dir/agent_preds.json" 2>/dev/null || true
+        # Trajectories (per-instance agent conversations) are the primary
+        # forensic artifact for tuning. append_lm_eval_summary flattens *.json*
+        # files from out_dir into the workspace root, so copy them flat here;
+        # the workflow uploads them via the *.traj* glob.
+        find "$gen_dir/agent_out" -name "*.traj*" -exec cp -f {} "$out_dir/" \; 2>/dev/null || true
     else
     # Single-shot generation via lm-eval (reuses endpoint wiring, _patch_lm_eval
     # etc.).

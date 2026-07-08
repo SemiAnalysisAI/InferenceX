@@ -294,6 +294,9 @@ jobs:
             meta_env.json
             results*.json
             sample*.jsonl
+            agent_preds.json
+            predictions.jsonl
+            *.traj*
           if-no-files-found: ${{ inputs.eval-only && 'error' || 'ignore' }}
 
       - name: Verify eval scores
@@ -307,6 +310,7 @@ jobs:
           # Remove any eval results JSONs that were moved into workspace
           rm -f results*.json || true
           rm -f sample*.jsonl || true
+          rm -f agent_preds.json predictions.jsonl *.traj* || true
           
       - name: Resource cleanup (post-run)
         if: always()
