@@ -1,0 +1,4 @@
+interface:
+  display_name: "InferenceX CI Dispatch"
+  short_description: "Dispatch and inspect InferenceX GitHub Actions benchmark jobs."
+  default_prompt: "Use this skill to trigger, monitor, or inspect InferenceX GitHub Actions benchmark workflows."

@@ -1,0 +1,4 @@
+interface:
+  display_name: "InferenceX Local Bench"
+  short_description: "Run and archive local InferenceX Slurm benchmark reproductions."
+  default_prompt: "Use this skill to reproduce InferenceX benchmark recipes locally on Slurm/GPU nodes and archive logs."
