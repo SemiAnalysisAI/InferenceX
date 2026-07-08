@@ -49,7 +49,10 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
       - name: Install matrix dependencies
-        run: python3 -m pip install --quiet PyYAML==6.0.2
+        # jsonschema is required by contracts.py (make_terminal_document via
+        # --emit-unsupported-from, and validate-delivery) once it is exercised;
+        # PyYAML is used by sweep_matrix.py to read the suites config.
+        run: python3 -m pip install --quiet PyYAML==6.0.2 jsonschema==4.25.1
       - id: gen
         working-directory: experimental/CollectiveX
         env:
@@ -188,6 +191,23 @@ jobs:
       CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
       HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
+      - name: Provision host Python for contract validation
+        # P2 moved contracts.py onto jsonschema (host-only publisher schemas that,
+        # per requirements.txt, are never imported by GPU execution). The self-hosted
+        # runners ship a bare python3 with no system pip, so build a venv and put it on
+        # PATH for every later step: the launcher fail-safe (emit-terminal),
+        # validate-delivery, and summarize.py all invoke bare `python3` and must resolve
+        # jsonschema. venv + ensurepip are available even where system pip is not.
+        env:
+          HOME: ${{ runner.temp }}
+        run: |
+          set -euo pipefail
+          venv="$RUNNER_TEMP/cx-hostpy"
+          python3 -m venv --clear "$venv"
+          "$venv/bin/python3" -m pip install --quiet --no-cache-dir --upgrade pip
+          "$venv/bin/python3" -m pip install --quiet --no-cache-dir \
+            jsonschema==4.25.1 PyYAML==6.0.2 "numpy>=1.26,<3"
+          echo "$venv/bin" >> "$GITHUB_PATH"
       - name: Prepare isolated source
         id: source
         env:
