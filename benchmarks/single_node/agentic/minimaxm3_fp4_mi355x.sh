@@ -242,9 +242,9 @@ export VLLM_ROCM_USE_AITER_FUSION_SHARED_EXPERTS=1
 # single biggest decode kernel at high concurrency. The MIN_SIZE_KB override is
 # required: vLLM's default INT4 quick-reduce size gate for (bf16, TP4) is 16 MB,
 # so it never fires for decode-sized tensors without it.
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
-export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
-export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
+# export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
+# export VLLM_ROCM_QUICK_REDUCE_CAST_BF16_TO_FP16=0
+# export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION_MIN_SIZE_KB=256
 
 VLLM_CMD=(
     vllm serve "$MODEL"
