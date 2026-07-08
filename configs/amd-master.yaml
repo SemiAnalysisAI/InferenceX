@@ -304,7 +304,6 @@ qwen3.5-fp8-mi355x-sglang-agentic:
     - search-space:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
 
-
 qwen3.5-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: Qwen/Qwen3.5-397B-A17B-FP8
@@ -809,7 +808,6 @@ kimik2.5-fp4-mi355x-vllm-agentic:
       - { tp: 4, kv-offloading: none, conc-list: [16, 24, 32, 40] }
       - { tp: 4, kv-offloading: dram, kv-offload-backend: native, conc-list: [16, 24, 32, 40] }
 
-
 kimik2.5-fp4-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
   model: amd/Kimi-K2.5-MXFP4
@@ -830,100 +828,6 @@ kimik2.5-fp4-mi355x-atom:
       search-space:
       - { tp: 8, conc-start: 4, conc-end: 128 }
       - { tp: 4, conc-start: 4, conc-end: 128 }
-
-gptoss-fp4-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:v0.17.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: mi300x
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 64, conc-end: 256 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 1, conc-end: 16 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 1, conc-end: 16 }
-
-gptoss-fp4-mi325x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: mi325x
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 64 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 8, conc-start: 4, conc-end: 64 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 64 }
-      - { tp: 2, conc-start: 4, conc-end: 8 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
-
-gptoss-fp4-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:v0.22.0
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: mi355x
-  precision: fp4
-  framework: vllm
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 8 }
-      - { tp: 8, conc-start: 4, conc-end: 16 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 128 }
-      - { tp: 4, conc-start: 4, conc-end: 4 }
-      - { tp: 8, conc-start: 4, conc-end: 8 }
-
-gptoss-fp4-mi355x-atom:
-  image: rocm/atom:rocm7.2.2_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom0.1.2.post
-  model: openai/gpt-oss-120b
-  model-prefix: gptoss
-  runner: mi355x
-  precision: fp4
-  framework: atom
-  multinode: false
-  scenarios:
-    fixed-seq-len:
-    - isl: 1024
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 16, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 32 }
-    - isl: 8192
-      osl: 1024
-      search-space:
-      - { tp: 1, conc-start: 4, conc-end: 256 }
-      - { tp: 8, ep: 1, conc-start: 4, conc-end: 16 }
 
 dsr1-fp8-mi355x-atom:
   image: rocm/atom:rocm7.2.3_ubuntu24.04_py3.12_pytorch_release_2.10.0_atom20260511
@@ -1664,7 +1568,6 @@ dsr1-fp4-mi355x-sglang-disagg-1k1k-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
-
 dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
   image: lmsysorg/sglang-rocm:v0.5.12.post1-rocm720-mi35x-20260529
   model: amd/DeepSeek-R1-0528-MXFP4-v2
@@ -1775,7 +1678,6 @@ dsr1-fp4-mi355x-sglang-disagg-8k1k-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=3"
 
-
       # 1*DEP8 + 1*DEP8
       - spec-decoding: "mtp"
         conc-list: [ 128 ]
@@ -1855,7 +1757,6 @@ dsv4-fp4-mi355x-sglang:
       - { tp: 8, dp-attn: true, conc-start: 64, conc-end: 2048 }
       - { tp: 4, dp-attn: true, conc-start: 16, conc-end: 128 }
       - { tp: 4, dp-attn: false, conc-start: 1, conc-end: 32 }
-
 
 # MTP variant of dsv4-fp4-mi355x-sglang. Mirrors the base search space and adds
 # spec-decoding: mtp, which routes to dsv4_fp4_mi355x_sglang_mtp.sh (EAGLE
@@ -2121,8 +2022,6 @@ qwen3.5-fp8-mi355x-sglang-agentic-hicache:
       - { tp: 8, ep: 1, kv-offloading: none, conc-list: [1, 2, 4, 8, 16, 32] }
       - { tp: 8, ep: 1, kv-offloading: dram, kv-offload-backend: hicache, conc-list: [16, 32, 48, 64] }
 
-
-
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
@@ -2145,7 +2044,6 @@ dsv4-fp4-mi355x-vllm-agentic:
       - { tp: 8, kv-offloading: none, conc-list: [1, 2, 4] }
       - { tp: 4, kv-offloading: none, conc-list: [1, 2, 4, 8, 10, 12, 16] }
       - { tp: 4, ep: 4, dp-attn: true, kv-offloading: none, conc-list: [16, 24, 32, 40, 48] }
-
 
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
@@ -2380,7 +2278,6 @@ dsr1-fp4-mi355x-sglang-disagg-mtp:
           - "DECODE_NODES=1"
           - "DECODE_MTP_SIZE=1"
 
-
 # DSv4-Pro FP4 on MI355X via SGLang. Uses a rocm720 mi35x image built off the
 # amd/deepseek_v4 branch in sgl-project/sglang; the SHA is encoded in the
 # image tag, so bumping sglang is just an image tag bump here. Sweeps
@@ -2399,7 +2296,6 @@ dsv4-fp4-mi355x-sglang-agentic:
     - search-space:
       - { tp: 8, kv-offloading: none, conc-list: [16, 32, 64] }
       - { tp: 8, dp-attn: true, kv-offloading: none, conc-list: [64, 128, 256] }
-
 
 # MiniMax-M3 MXFP8 MI355X recipe:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
@@ -2475,7 +2371,7 @@ dsv4-fp4-mi355x-atom-disagg:
 # https://github.com/vllm-project/recipes/commit/2a3728ed9892debfd767a72a58ebc90b33f186e5
 # MXFP8 runs from TP=4 on gfx950; block size 128 is mandatory for MSA.
 minimaxm3-fp8-mi355x-vllm:
-  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2487,14 +2383,11 @@ minimaxm3-fp8-mi355x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 32 }
-      - { tp: 4, conc-start: 4, conc-end: 64 }
-      - { tp: 4, ep: 4, conc-start: 64, conc-end: 512 }
+      - { tp: 4, conc-start: 1, conc-end: 512 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 2 }
-      - { tp: 4, conc-start: 2, conc-end: 128 }
+      - { tp: 4, conc-start: 1, conc-end: 512 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi355x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
@@ -2507,7 +2400,7 @@ minimaxm3-fp8-mi355x-vllm:
 # acceptance dilutes in big batches, and the draft weights + draft KV shave
 # headroom — tp2-ep2 is dropped since its KV headroom was already thin.
 minimaxm3-fp8-mi355x-vllm-mtp:
-  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
+  image: vllm/vllm-openai-rocm:nightly-09663abde0f50944a8d5ea30120666024b503faa
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi355x
@@ -2519,17 +2412,11 @@ minimaxm3-fp8-mi355x-vllm-mtp:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
-      - { tp: 8, ep: 8, conc-start: 1, conc-end: 256, spec-decoding: mtp }
-      - { tp: 4, conc-start: 1, conc-end: 2, spec-decoding: mtp }
-      - { tp: 4, conc-start: 32, conc-end: 64, spec-decoding: mtp }
-      - { tp: 4, ep: 4, conc-start: 128, conc-end: 256, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 512, spec-decoding: mtp }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 4, conc-end: 16, spec-decoding: mtp }
-      - { tp: 4, conc-start: 2, conc-end: 128, spec-decoding: mtp }
-      - { tp: 8, conc-start: 1, conc-end: 1, spec-decoding: mtp }
+      - { tp: 4, conc-start: 1, conc-end: 512, spec-decoding: mtp }
 
 # MiniMax-M3 MXFP4 MI355X vLLM disaggregated (prefill/decode) config.
 minimaxm3-fp4-mi355x-vllm-disagg:
@@ -2824,10 +2711,14 @@ minimaxm3-fp4-mi355x-atom-disagg:
 
 # MiniMax-M3 MXFP8 MI300X day-zero recipe. Reuse the dedicated ROCm image and
 # MI355X serving shape, but retain the default BF16 KV cache because this
-# checkpoint lacks calibrated ROCm FP8 attention scales. Use the TP8-only H100
-# search space: TP8 for latency and TP8+EP8 (TEP) at high concurrency.
+# checkpoint lacks calibrated ROCm FP8 attention scales. TP8-only, plain
+# (non-expert-parallel) search space across the full conc range: EP8
+# (--enable-expert-parallel) produces garbage/incoherent output on this
+# MXFP8+gfx942 combination (confirmed locally: TP8/EP8 returns garbled tokens
+# even on trivial prompts, TP8/EP1 answers correctly), and was already the
+# lower-throughput topology where measured.
 minimaxm3-fp8-mi300x-vllm:
-  image: vllm/vllm-openai-rocm:minimax-m3
+  image: vllm/vllm-openai-rocm:nightly-4559c43a9526597c00cbcc4f59979496500268d1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
   runner: mi300x
@@ -2839,13 +2730,11 @@ minimaxm3-fp8-mi300x-vllm:
     - isl: 1024
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 128 }
-      - { tp: 8, ep: 8, conc-start: 256, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 256 }
     - isl: 8192
       osl: 1024
       search-space:
-      - { tp: 8, conc-start: 1, conc-end: 64 }
-      - { tp: 8, ep: 8, conc-start: 128, conc-end: 256 }
+      - { tp: 8, conc-start: 1, conc-end: 256 }
 
 # EAGLE3 speculative-decoding (spec-decoding: mtp) variant of
 # minimaxm3-fp8-mi300x-vllm, pairing MiniMaxAI/MiniMax-M3-MXFP8 with the
