@@ -494,7 +494,10 @@ fi
 
 SRTCTL_APPLY_ARGS=(
     "${PREFLIGHT_ARGS[@]}"
-    -f "$CONFIG_PATH"
+    # Pass the full CONFIG_FILE (not the stripped CONFIG_PATH): srtctl needs the
+    # ":zip_override_...[i]" selector to pick the recipe block. For plain-file
+    # recipes CONFIG_FILE == CONFIG_PATH, so this is a no-op for them.
+    -f "$CONFIG_FILE"
     --tags "gb200,${MODEL_PREFIX},${PRECISION},${ISL}x${OSL},infmax-$(date +%Y%m%d)"
 )
 if [[ "$FRAMEWORK" == "dynamo-sglang" ]]; then
