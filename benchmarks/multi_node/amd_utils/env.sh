@@ -56,9 +56,10 @@ export MORI_IO_QP_MAX_CQE=32768
 export MORI_IO_QP_MAX_SGE=2
 export MORI_IO_TC_DISABLE=0
 
-# QoS/DSCP configuration
-# Priority order: 1) Set by runner, 2) Detect via nicctl, 3) Detect from hostname
+# QoS/DSCP configuration. Fabric policy belongs to the runner; nicctl is a
+# portable fallback when the cluster exposes it.
 if [[ -n "$MORI_RDMA_TC" ]]; then
+    export MORI_IO_TC="${MORI_IO_TC:-$MORI_RDMA_TC}"
     echo "[INFO] Using MORI_RDMA_TC=$MORI_RDMA_TC (set by runner or environment)"
 elif command -v nicctl &> /dev/null; then
     ND_PRIO=$(nicctl show qos  2>/dev/null | awk '/PFC no-drop priorities/ {print $NF; exit}')
@@ -75,36 +76,10 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
         export MORI_IO_TC=$TC
         echo "[INFO] Detected QoS config from nicctl: MORI_RDMA_TC=$MORI_RDMA_TC, MORI_RDMA_SL=$MORI_RDMA_SL, MORI_IO_TC=$MORI_IO_TC, MORI_IO_SL=$MORI_IO_SL"
     else
-        echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
-        # Fall back to hostname-based detection
-        NODENAME=$(hostname -s)
-        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-            export MORI_RDMA_TC=96
-            export MORI_IO_TC=96
-            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
-            export MORI_RDMA_TC=104
-            export MORI_IO_TC=104
-            echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-        else
-            echo "[INFO] Unable to detect MORI_RDMA_TC from hostname. Skipping RDMA QoS configuration."
-        fi
+        echo "[WARN] nicctl available but QoS data unavailable; leaving RDMA QoS unset."
     fi
 else
-    # nicctl not available, try hostname-based detection
-    NODENAME=$(hostname -s)
-    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-        export MORI_RDMA_TC=96
-        export MORI_IO_TC=96
-        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-    elif [[ $NODENAME == mia1* ]]; then
-        export MORI_RDMA_TC=104
-        export MORI_IO_TC=104
-        echo "[INFO] Auto-detected MORI_RDMA_TC=$MORI_RDMA_TC from hostname $NODENAME"
-    else
-        echo "[INFO] nicctl not found and unable to detect from hostname. Skipping RDMA QoS configuration."
-        echo "       This is normal for clusters without QoS or outside Docker containers."
-    fi
+    echo "[INFO] RDMA QoS was not provided and nicctl is unavailable; leaving it unset."
 fi
 
 # =============================================================================
@@ -154,27 +129,10 @@ $1 == "DSCP" && $2 == ":" && $NF == p {
             export UCX_IB_SL=$ND_PRIO
             echo "[INFO] Detected QoS from nicctl: UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS, UCX_IB_SL=$UCX_IB_SL"
         else
-            echo "[WARN] nicctl available but QoS data unavailable; trying hostname detection."
-            NODENAME=$(hostname -s)
-            if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-                export UCX_IB_TRAFFIC_CLASS=96
-                echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-            elif [[ $NODENAME == mia1* ]]; then
-                export UCX_IB_TRAFFIC_CLASS=104
-                echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-            fi
+            echo "[WARN] nicctl available but QoS data unavailable; leaving UCX QoS unset."
         fi
     else
-        NODENAME=$(hostname -s)
-        if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-            export UCX_IB_TRAFFIC_CLASS=96
-            echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-        elif [[ $NODENAME == mia1* ]]; then
-            export UCX_IB_TRAFFIC_CLASS=104
-            echo "[INFO] Auto-detected UCX_IB_TRAFFIC_CLASS=$UCX_IB_TRAFFIC_CLASS from hostname $NODENAME"
-        else
-            echo "[INFO] No nicctl and unable to detect from hostname. Skipping QoS configuration."
-        fi
+        echo "[INFO] UCX QoS was not provided and nicctl is unavailable; leaving it unset."
     fi
 
     set +x

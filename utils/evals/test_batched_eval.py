@@ -230,9 +230,8 @@ def test_validate_scores_checks_threshold_for_every_concurrency(
 def test_amd_multinode_container_forwards_eval_concurrency_list() -> None:
     job_slurm = (
         Path(__file__).resolve().parents[2]
-        / "benchmarks"
-        / "multi_node"
-        / "amd_utils"
+        / "runners"
+        / "mi355x-amds"
         / "job.slurm"
     )
     contents = job_slurm.read_text()

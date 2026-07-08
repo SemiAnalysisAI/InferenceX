@@ -7,12 +7,20 @@ on:
       - main
     paths:
       - ".claude/commands/recover-failed-ingest.md"
+      - ".github/workflows/benchmark-tmpl.yml"
       - ".github/workflows/benchmark-multinode-tmpl.yml"
       - ".github/workflows/e2e-tests.yml"
       - ".github/workflows/run-sweep.yml"
       - ".github/workflows/test-changelog-gate.yml"
       - "benchmarks/benchmark_lib.sh"
-      - "benchmarks/multi_node/amd_utils/job.slurm"
+      - "benchmarks/multi_node/**"
+      - "configs/runners.yaml"
+      - "runners/lib/**"
+      - "runners/srt-slurm-patches/**"
+      - "runners/launch_*dgxc*.sh"
+      - "runners/launch_*-nv.sh"
+      - "runners/launch_mi355x-amds.sh"
+      - "runners/mi355x-amds/**"
       - "utils/find_reusable_sweep_run.py"
       - "utils/test_find_reusable_sweep_run.py"
       - "utils/process_changelog.py"
@@ -21,6 +29,12 @@ on:
       - "utils/test_collect_eval_results.py"
       - "utils/evals/validate_scores.py"
       - "utils/evals/test_batched_eval.py"
+      - "utils/test_multinode_contract.py"
+      - "utils/prepare_srt_config.py"
+      - "utils/runner_config.py"
+      - "utils/test_prepare_srt_config.py"
+      - "utils/test_runner_config.py"
+      - "utils/validate_srt_catalog.py"
       - "utils/prepare_perf_changelog_merge.py"
       - "utils/recover_failed_ingest.py"
       - "utils/changelog_gate_tests/test_prepare_perf_changelog_merge.py"
@@ -60,7 +74,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pytest pydantic pyyaml tabulate
+          python -m pip install \
+            pytest pydantic pyyaml tabulate \
+            jinja2 marshmallow marshmallow-dataclass \
+            requests rich questionary ruamel.yaml
 
       - name: Run validator, reuse, and gating tests
         run: |
@@ -74,4 +91,16 @@ jobs:
             utils/test_process_changelog.py \
             utils/test_collect_eval_results.py \
             utils/evals/test_batched_eval.py \
+            utils/test_multinode_contract.py \
+            utils/test_prepare_srt_config.py \
+            utils/test_runner_config.py \
             -v
+
+      - name: Validate pinned srt-slurm recipe catalog
+        run: |
+          export GITHUB_WORKSPACE="$PWD"
+          SRT_ROOT="$RUNNER_TEMP/srt-slurm"
+          source runners/lib/srt_slurm.sh
+          clone_srt_slurm "$SRT_ROOT"
+          PYTHONPATH="$SRT_ROOT/src${PYTHONPATH:+:$PYTHONPATH}" \
+            python utils/validate_srt_catalog.py --srt-root "$SRT_ROOT"

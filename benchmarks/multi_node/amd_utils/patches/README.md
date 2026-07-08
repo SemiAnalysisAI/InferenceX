@@ -14,7 +14,8 @@ block our benchmark + accuracy configs — so we can keep reusing the
 > image; `minimaxm3-fp8-mi355x-vllm-disagg` now runs the stock nightly directly.
 
 The `mori_conn.py` overlay is wired through the `EXTRA_DOCKER_MOUNTS` env
-var that `job.slurm` consumes (an opt-in `${EXTRA_DOCKER_MOUNTS:-}` after
+var that `runners/mi355x-amds/job.slurm` consumes (an opt-in
+`${EXTRA_DOCKER_MOUNTS:-}` after
 the existing `-v` block). The local-test driver scripts under
 `scripts/sglang_disagg/` pre-set this env var to the path of the relevant
 overlay; CI runners that need the patch can do the same.
@@ -73,8 +74,8 @@ plural `state_types: List[StateType]` API (full design + diff in
 export EXTRA_DOCKER_MOUNTS="-v $DI_REPO_DIR/benchmarks/multi_node/amd_utils/patches/mori_conn.py:/sgl-workspace/sglang/python/sglang/srt/disaggregation/mori/conn.py:ro"
 ```
 
-`$DI_REPO_DIR` is the InferenceX checkout root that `job.slurm`
-already mounts into the container at `/workspace`.
+`$DI_REPO_DIR` is the InferenceX checkout root. The runner adapter mounts it at
+the container workspace selected by `INFERENCEX_CONTAINER_ROOT`.
 
 When this env var is unset (CI default for runs that don't need the
 patch), `${EXTRA_DOCKER_MOUNTS:-}` expands to the empty string and

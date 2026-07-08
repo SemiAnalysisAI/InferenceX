@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Cluster Configuration Template for Multi-Node Disaggregated Serving
+# MI355X AMDS Slurm adapter for the cluster-agnostic multi-node contract.
 #
 # This script submits a multi-node disaggregated benchmark job to SLURM.
 # It must be configured for your specific cluster before use.
@@ -10,43 +10,25 @@
 #
 # Router is co-located with the first prefill node (same for both engines),
 # so NUM_NODES = PREFILL_NODES + DECODE_NODES.
+set -euo pipefail
 
 usage() {
     cat << 'USAGE'
 Usage:
-  bash submit.sh <PREFILL_NODES> <PREFILL_WORKERS> <DECODE_NODES> <DECODE_WORKERS> \
-                 <ISL> <OSL> <CONCURRENCIES> <REQUEST_RATE> \
-                 <PREFILL_ENABLE_EP> <PREFILL_ENABLE_DP> \
-                 <DECODE_ENABLE_EP> <DECODE_ENABLE_DP> \
-                 <PREFILL_TP> <DECODE_TP> \
-                 <RANDOM_RANGE_RATIO> [NODE_LIST]
-
-Arguments:
-  PREFILL_NODES        Number of prefill nodes
-  PREFILL_WORKERS      Number of prefill workers (usually 1)
-  DECODE_NODES         Number of decode nodes
-  DECODE_WORKERS       Number of decode workers (usually 1)
-  ISL                  Input sequence length
-  OSL                  Output sequence length
-  CONCURRENCIES        Concurrency levels, delimited by 'x' (e.g., "8x16x32")
-  REQUEST_RATE         Request rate ("inf" for max throughput)
-  PREFILL_ENABLE_EP    true/false or 1/0 (expert parallelism on prefill)
-  PREFILL_ENABLE_DP    true/false or 1/0 (data-parallel attention on prefill)
-  DECODE_ENABLE_EP     true/false or 1/0 (expert parallelism on decode)
-  DECODE_ENABLE_DP     true/false or 1/0 (data-parallel attention on decode)
-  PREFILL_TP           Tensor parallel size per prefill node
-  DECODE_TP            Tensor parallel size per decode node
-  RANDOM_RANGE_RATIO   Random range ratio for benchmark client
-  NODE_LIST            Optional: comma-separated hostnames (must match NUM_NODES)
+  MULTINODE_LAUNCHER=runners/mi355x-amds/submit.sh \
+    bash benchmarks/multi_node/<recipe>.sh
 
 Required environment variables:
-  SLURM_ACCOUNT    SLURM account name
-  SLURM_PARTITION  SLURM partition
-  TIME_LIMIT       Job time limit (e.g., "08:00:00")
-  MODEL_PATH       Path to model directory (e.g., /nfsdata)
-  MODEL_NAME       Model name directory
-  CONTAINER_IMAGE  Docker image name (e.g., vllm_disagg_pd:latest)
-  RUNNER_NAME      Runner identifier (for job name)
+  Benchmark contract:
+    CONC_LIST, ISL, OSL, PREFILL_NODES, PREFILL_NUM_WORKERS,
+    PREFILL_TP, PREFILL_EP, PREFILL_DP_ATTN, PREFILL_ENABLE_EP,
+    PREFILL_ENABLE_DP, DECODE_NODES, DECODE_NUM_WORKERS, DECODE_TP,
+    DECODE_EP, DECODE_DP_ATTN, DECODE_ENABLE_EP, DECODE_ENABLE_DP,
+    RANDOM_RANGE_RATIO, FRAMEWORK, CONTAINER_IMAGE, MULTINODE_BENCHMARK_DIR
+
+  Cluster contract:
+    SLURM_ACCOUNT, SLURM_PARTITION, TIME_LIMIT, MODEL_PATH, MODEL_NAME,
+    RUNNER_NAME, INFERENCEX_REPO_ROOT, GPUS_PER_NODE
 USAGE
 }
 
@@ -59,81 +41,91 @@ check_env() {
     fi
 }
 
-check_env SLURM_ACCOUNT
-check_env SLURM_PARTITION
-check_env TIME_LIMIT
+for required in \
+    SLURM_ACCOUNT SLURM_PARTITION TIME_LIMIT MODEL_PATH MODEL_NAME \
+    CONTAINER_IMAGE RUNNER_NAME FRAMEWORK GPUS_PER_NODE \
+    INFERENCEX_REPO_ROOT MULTINODE_BENCHMARK_DIR \
+    CONC_LIST ISL OSL RANDOM_RANGE_RATIO \
+    PREFILL_NODES PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN \
+    PREFILL_ENABLE_EP PREFILL_ENABLE_DP \
+    DECODE_NODES DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN \
+    DECODE_ENABLE_EP DECODE_ENABLE_DP; do
+    check_env "$required"
+done
 
-check_env MODEL_PATH
-check_env MODEL_NAME
-check_env CONTAINER_IMAGE
-check_env RUNNER_NAME
-check_env FRAMEWORK
+for numeric in \
+    GPUS_PER_NODE \
+    PREFILL_NODES PREFILL_NUM_WORKERS PREFILL_TP \
+    DECODE_NODES DECODE_NUM_WORKERS DECODE_TP; do
+    if ! [[ "${!numeric}" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: ${numeric} must be a positive integer, got '${!numeric}'" >&2
+        exit 1
+    fi
+done
 
-# GPUS_PER_NODE defaults to 8 (MI355X). Set to 4 for MI325X if needed.
-GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
+if (( (PREFILL_NODES * PREFILL_TP) % PREFILL_NUM_WORKERS != 0 )); then
+    echo "Error: PREFILL_NODES * PREFILL_TP must be divisible by PREFILL_NUM_WORKERS" >&2
+    echo "Error: ${PREFILL_NODES} * ${PREFILL_TP} / ${PREFILL_NUM_WORKERS} is not integral" >&2
+    exit 1
+fi
+if (( (DECODE_NODES * DECODE_TP) % DECODE_NUM_WORKERS != 0 )); then
+    echo "Error: DECODE_NODES * DECODE_TP must be divisible by DECODE_NUM_WORKERS" >&2
+    echo "Error: ${DECODE_NODES} * ${DECODE_TP} / ${DECODE_NUM_WORKERS} is not integral" >&2
+    exit 1
+fi
 
-# COMMAND_LINE ARGS
-PREFILL_NODES=$1
-PREFILL_WORKERS=${2:-1}
-DECODE_NODES=$3
-DECODE_WORKERS=${4:-1}
-ISL=$5
-OSL=$6
-CONCURRENCIES=$7
-REQUEST_RATE=$8
-PREFILL_ENABLE_EP=${9:-true}
-PREFILL_ENABLE_DP=${10:-true}
-DECODE_ENABLE_EP=${11:-true}
-DECODE_ENABLE_DP=${12:-true}
-PREFILL_TP=${13:-8}
-DECODE_TP=${14:-8}
-RANDOM_RANGE_RATIO=${15:-0.8}
-NODE_LIST=${16}
+PREFILL_WORKERS="$PREFILL_NUM_WORKERS"
+DECODE_WORKERS="$DECODE_NUM_WORKERS"
+CONCURRENCIES="${CONC_LIST// /x}"
+REQUEST_RATE="${BENCH_REQUEST_RATE:-inf}"
+NODE_LIST="${NODE_LIST:-}"
 
 NUM_NODES=$((PREFILL_NODES + DECODE_NODES))
 profiler_args="${ISL} ${OSL} ${CONCURRENCIES} ${REQUEST_RATE}"
 
 # Export variables for the SLURM job
 export ENGINE="${FRAMEWORK:-sglang}"
-export MODEL_DIR=$MODEL_PATH
-export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
-export PROFILER_ARGS=$profiler_args
+export MODEL_DIR="$MODEL_PATH"
+export DOCKER_IMAGE_NAME="$CONTAINER_IMAGE"
+export PROFILER_ARGS="$profiler_args"
 
 # Engine-specific xP/yD semantics and TP exports
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
     export PROXY_STREAM_IDLE_TIMEOUT=${PROXY_STREAM_IDLE_TIMEOUT:-300}
 fi
 # xP = prefill workers, yD = decode workers (may span multiple nodes)
-export xP=$PREFILL_WORKERS
-export yD=$DECODE_WORKERS
-export PREFILL_TP_SIZE=$(( $PREFILL_NODES * $PREFILL_TP / $PREFILL_WORKERS ))
-export PREFILL_ENABLE_EP=${PREFILL_ENABLE_EP}
-export PREFILL_ENABLE_DP=${PREFILL_ENABLE_DP}
-export DECODE_TP_SIZE=$(( $DECODE_NODES * $DECODE_TP / $DECODE_WORKERS ))
-export DECODE_ENABLE_EP=${DECODE_ENABLE_EP}
-export DECODE_ENABLE_DP=${DECODE_ENABLE_DP}
-export DECODE_MTP_SIZE=${DECODE_MTP_SIZE}
+export xP="$PREFILL_WORKERS"
+export yD="$DECODE_WORKERS"
+export PREFILL_TP_SIZE=$((PREFILL_NODES * PREFILL_TP / PREFILL_WORKERS))
+export PREFILL_NODES PREFILL_NUM_WORKERS PREFILL_TP PREFILL_EP PREFILL_DP_ATTN
+export PREFILL_ENABLE_EP
+export PREFILL_ENABLE_DP
+export DECODE_TP_SIZE=$((DECODE_NODES * DECODE_TP / DECODE_WORKERS))
+export DECODE_NODES DECODE_NUM_WORKERS DECODE_TP DECODE_EP DECODE_DP_ATTN
+export DECODE_ENABLE_EP
+export DECODE_ENABLE_DP
+export DECODE_MTP_SIZE="${DECODE_MTP_SIZE:-0}"
 
-export NUM_NODES=$NUM_NODES
-export GPUS_PER_NODE=$GPUS_PER_NODE
-export MODEL_NAME=$MODEL_NAME
-export BENCH_INPUT_LEN=${ISL}
-export BENCH_OUTPUT_LEN=${OSL}
+export NUM_NODES
+export GPUS_PER_NODE
+export MODEL_NAME
+export BENCH_INPUT_LEN="$ISL"
+export BENCH_OUTPUT_LEN="$OSL"
 export BENCH_NUM_PROMPTS_MULTIPLIER=${BENCH_NUM_PROMPTS_MULTIPLIER:-10}
-export BENCH_MAX_CONCURRENCY=${CONCURRENCIES}
-export BENCH_REQUEST_RATE=${REQUEST_RATE}
-export BENCH_RANDOM_RANGE_RATIO=${RANDOM_RANGE_RATIO:-0.8}
+export BENCH_MAX_CONCURRENCY="$CONCURRENCIES"
+export BENCH_REQUEST_RATE="$REQUEST_RATE"
+export BENCH_RANDOM_RANGE_RATIO="$RANDOM_RANGE_RATIO"
 
 # Eval-related env vars (threaded from workflow → runner → here → job.slurm → Docker)
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
 export EVAL_CONC="${EVAL_CONC:-}"
-export FRAMEWORK="${FRAMEWORK:-}"
+export FRAMEWORK
 export PRECISION="${PRECISION:-}"
 export MODEL_PREFIX="${MODEL_PREFIX:-}"
 export RUNNER_TYPE="${RUNNER_TYPE:-}"
 export RESULT_FILENAME="${RESULT_FILENAME:-}"
-export SPEC_DECODING="${SPEC_DECODING:-}"
+export SPEC_DECODING="${SPEC_DECODING:-none}"
 export IS_MULTINODE="${IS_MULTINODE:-false}"
 
 # Log directory: must be on NFS (shared filesystem) so the submit host can read SLURM output.
@@ -153,10 +145,8 @@ if [[ -n "${NODE_LIST//[[:space:]]/}" ]]; then
     NODELIST_OPT=(--nodelist "$NODELIST_CSV")
 fi
 
-# Optional: exclude specific nodes (e.g. nodes with broken Docker sockets).
-# Set SLURM_EXCLUDE_NODES env var to a comma-separated list of hostnames.
+# Optional runner policy: exclude cluster nodes that are under maintenance.
 EXCLUDE_OPT=()
-SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
 if [[ -n "${SLURM_EXCLUDE_NODES:-}" ]]; then
     EXCLUDE_OPT=(--exclude "$SLURM_EXCLUDE_NODES")
 fi
@@ -217,8 +207,15 @@ sbatch_cmd=(
     --exclusive
     -N "$NUM_NODES"
     -n "$NUM_NODES"
-    "${NODELIST_OPT[@]}"
-    "${EXCLUDE_OPT[@]}"
+    --gres "gpu:$GPUS_PER_NODE"
+)
+if (( ${#NODELIST_OPT[@]} > 0 )); then
+    sbatch_cmd+=("${NODELIST_OPT[@]}")
+fi
+if (( ${#EXCLUDE_OPT[@]} > 0 )); then
+    sbatch_cmd+=("${EXCLUDE_OPT[@]}")
+fi
+sbatch_cmd+=(
     --time "$TIME_LIMIT"
     --partition "$SLURM_PARTITION"
     --account "$SLURM_ACCOUNT"

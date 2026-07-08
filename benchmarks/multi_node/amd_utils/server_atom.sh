@@ -21,6 +21,8 @@ NODE0_ADDR="${NODE0_ADDR:-localhost}"
 NODE_RANK="${NODE_RANK:-0}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
+INFERENCEX_CONTAINER_ROOT="${INFERENCEX_CONTAINER_ROOT:-/workspace}"
+INFERENCEX_LOG_ROOT="${INFERENCEX_LOG_ROOT:-/run_logs}"
 
 xP="${xP:-1}"
 yD="${yD:-1}"
@@ -232,7 +234,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill0_${host_name}.log &
+            2>&1 | tee "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/prefill0_${host_name}.log" &
         set +x
         prefill0_pid=$!
     fi
@@ -319,7 +321,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     BENCH_CMD="bash $ATOM_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+        $MODEL_DIR $MODEL_NAME "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}" ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} \"${BENCH_MAX_CONCURRENCY}\" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
@@ -351,9 +353,9 @@ if [ "$NODE_RANK" -eq 0 ]; then
         if [[ "$EVAL_HEALTH_OK" != "true" ]]; then
             echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
         else
-            pushd /workspace
+            pushd "$INFERENCEX_CONTAINER_ROOT"
 
-            source /workspace/benchmarks/benchmark_lib.sh
+            source "$INFERENCEX_CONTAINER_ROOT/benchmarks/benchmark_lib.sh"
 
             if [[ -n "${EVAL_CONC:-}" ]]; then
                 export EVAL_CONCURRENT_REQUESTS="${EVAL_CONC}"
@@ -384,13 +386,13 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
                     MODEL_NAME="${MODEL_DIR}/${MODEL_NAME}" append_lm_eval_summary
 
-                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                    EVAL_COPY_DIR="$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/eval_results"
                     mkdir -p "$EVAL_COPY_DIR"
                     for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+                        [ -e "$INFERENCEX_CONTAINER_ROOT/$f" ] && cp -f "$INFERENCEX_CONTAINER_ROOT/$f" "$EVAL_COPY_DIR/"
                     done
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find "$INFERENCEX_CONTAINER_ROOT" -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find "$INFERENCEX_CONTAINER_ROOT" -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
                     echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
                 fi
@@ -401,10 +403,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Copy results
-    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
+    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-$INFERENCEX_LOG_ROOT}/logs"
     mkdir -p "$LOGS_OUTPUT"
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
+        cp -r "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}" "$LOGS_OUTPUT/"
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
@@ -454,7 +456,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            2>&1 | tee "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log" &
         set +x
         prefill_pid=$!
         trap 'echo "Caught signal, killing prefill (pid=$prefill_pid)"; kill $prefill_pid 2>/dev/null; exit 0' SIGTERM SIGINT
@@ -540,7 +542,7 @@ else
     else
         set -x
         eval "$DECODE_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
+            2>&1 | tee "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log" &
         set +x
         decode_pid=$!
         trap 'echo "Caught signal, killing decode (pid=$decode_pid)"; kill $decode_pid 2>/dev/null; exit 0' SIGTERM SIGINT

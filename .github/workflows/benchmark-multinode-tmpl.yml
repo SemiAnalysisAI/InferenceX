@@ -217,6 +217,20 @@ jobs:
           clean: true
           submodules: true
 
+      - name: Bootstrap runner registry dependency
+        shell: bash
+        run: |
+          set -euo pipefail
+          if python3 -c 'import yaml' >/dev/null 2>&1; then
+            echo "INFERENCEX_RUNNER_PYTHON=$(command -v python3)" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          registry_venv="$RUNNER_TEMP/inferencex-runner-registry"
+          python3 -m venv "$registry_venv"
+          "$registry_venv/bin/python" -m pip install --quiet 'PyYAML>=6,<7'
+          echo "INFERENCEX_RUNNER_PYTHON=$registry_venv/bin/python" >> "$GITHUB_ENV"
+
       - name: Launch multi-node job script
         env:
           RUNNER_NAME: ${{ runner.name }}

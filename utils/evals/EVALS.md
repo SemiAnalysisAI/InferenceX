@@ -83,14 +83,15 @@ In eval-only mode (`EVAL_ONLY=true`), the benchmark script computes `EVAL_MAX_MO
 ### Multi-node
 Multi-node evals support two hardware paths:
 
-**MI355X (AMD)** — `benchmarks/multi_node/amd_utils/server.sh`
+**MI355X (AMD)** — portable engine scripts in `benchmarks/multi_node/amd_utils/`,
+launched by the cluster adapter in `runners/mi355x-amds/`
 - Skips `bench.sh` when `EVAL_ONLY=true`
 - Runs lm-eval via `run_eval` against the router on port 30000
 - Concurrency uses workflow-provided `EVAL_CONC` when set, otherwise falls back to max of `BENCH_MAX_CONCURRENCY` (x-separated values)
-- Eval artifacts copied to `/run_logs/slurm_job-*/eval_results/`
+- Eval artifacts copied beneath the runner-provided container log root
 - `runners/launch_mi355x-amds.sh` skips benchmark result collection when `EVAL_ONLY=true` and uses `find` to locate eval results
 
-**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** — via [srt-slurm](https://github.com/NVIDIA/srt-slurm) (`sa-submission-q2-2026` branch)
+**NVIDIA Slurm multi-node (GB200, GB300, B200, B300, H100, H200)** — via a single immutable snapshot of [srt-slurm](https://github.com/NVIDIA/srt-slurm) `main`, declared in `configs/runners.yaml`
 - `do_sweep.py` skips the benchmark stage when `EVAL_ONLY=true`, runs `_run_post_eval()` directly
 - In eval-only mode, uses the full `wait_for_model()` health check (same as benchmark stage) since the benchmark health check was skipped
 - `lm-eval` runner (`benchmarks/lm_eval.py`) is invoked by `do_sweep.py` as a post/eval-only step and sources InferenceX's `benchmark_lib.sh` from the mounted workspace (`/infmax-workspace`)

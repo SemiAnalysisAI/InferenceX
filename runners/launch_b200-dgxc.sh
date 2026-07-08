@@ -1,85 +1,16 @@
 #!/usr/bin/bash
 
+source "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}/runners/lib/srt_slurm.sh"
+
 # System-specific configuration for B200 DGXC Slurm cluster
 SLURM_PARTITION="gpu-2"
 SLURM_ACCOUNT="benchmark"
 
 set -x
 
-# MODEL_PATH: Override with pre-downloaded paths on the shared Lustre tree.
-# Bench scripts and srt-slurm yaml configs specify HuggingFace model IDs for
-# portability, but we resolve to /lustre/fsw/models/* here to avoid repeated
-# downloading on every dgxc node. Runs for both single-node and multinode
-# launches.
-# NOTE: per-node /raid/models/* would be faster but is only populated on a
-# subset of dgxc nodes today, so we use Lustre for reliability.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2"
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/dsr1-0528-fp8"
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /lustre/fsw/models/deepseek-v4-pro /lustre/fsw/models/dsv4-pro /lustre/fsw/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/lustre/fsw/models/deepseek-v4-pro}"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "bf16" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-FP8"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
-elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp4"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/GLM-5-FP8"
-    export SRT_SLURM_MODEL_PREFIX="glm5-fp8"
-elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/GLM-5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="glm5-fp4"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "int4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5"
-    export SRT_SLURM_MODEL_PREFIX="kimik2.5"
-elif [[ $MODEL_PREFIX == "kimik2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/Kimi-K2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="kimik2.5-fp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/MiniMax-M2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "gptoss" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/lustre/fsw/models/gpt-oss-120b"
-    export SRT_SLURM_MODEL_PREFIX="gptoss"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
-    # Day-zero: MiniMax-M3-MXFP8 is not in the SRE-staged /lustre/fsw/models
-    # tree (root-owned); it lives in the sa-shared-writable gharunners tree.
-    export MODEL_PATH="/lustre/fsw/gharunners/models/MiniMax-M3-MXFP8"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-mxfp8"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" ]]; then
-    # NVFP4 checkpoint, pre-staged on the b200-dgxc scratch tree.
-    export MODEL_PATH="/scratch/fsw/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m3-nvfp4"
-else
-    echo "Unsupported model prefix/precision: $MODEL_PREFIX/$PRECISION"
-    echo "Available models under /lustre/fsw/models:"
-    ls -la /lustre/fsw/models
-    exit 1
-fi
+load_runner_model b200-dgxc || exit 1
 
-export AIPERF_MMAP_CACHE_HOST_PATH="/lustre/fsw/gharunners/aiperf-cache"
+export AIPERF_MMAP_CACHE_HOST_PATH="$RUNNER_PATH_AIPERF_CACHE"
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
     # Validate framework
@@ -103,31 +34,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-    elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout aflowers/vllm-gb200-v0.20.0
-        mkdir -p recipes/vllm/deepseek-v4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" && $PRECISION == "fp8" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-    elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout main
-        mkdir -p recipes/sglang/dsr1/b200-fp4
-        cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/dsr1/b200-fp4" recipes/sglang/dsr1/b200-fp4
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR" || exit 1
-        git checkout sa-submission-q2-2026
-    fi
+    clone_srt_slurm "$SRT_REPO_DIR" || exit 1
+    cd "$SRT_REPO_DIR" || exit 1
 
     echo "Installing srtctl..."
     export UV_INSTALL_DIR="$GITHUB_WORKSPACE/.local/bin"
@@ -149,9 +57,9 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Map container images to local squash files
     NGINX_IMAGE="nginx:1.27.4"
-    SQUASH_DIR="${B200_SQUASH_DIR:-/home/sa-shared/containers}"
+    SQUASH_DIR="${B200_SQUASH_DIR:-$RUNNER_PATH_CONTAINER_ROOT}"
     if [[ $MODEL_PREFIX == "minimaxm2.5" && $FRAMEWORK == "dynamo-vllm" ]]; then
-        SQUASH_DIR="${B200_SQUASH_DIR:-/home/slurm-shared/gharunners/squash}"
+        SQUASH_DIR="${B200_SQUASH_DIR:-$RUNNER_PATH_VLLM_SQUASH_ROOT}"
     fi
     if ! mkdir -p "$SQUASH_DIR" 2>/dev/null || [[ ! -w "$SQUASH_DIR" ]]; then
         echo "Warning: $SQUASH_DIR is not writable; using workspace-local squash cache" >&2
@@ -213,9 +121,12 @@ network_interface: ""
 srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
+  inferencex-model: "${MODEL_PATH}"
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 # Container aliases
 containers:
+  inferencex-workload: "${SQUASH_FILE}"
+  inferencex-nginx: "${NGINX_SQUASH_FILE}"
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   dynamo-vllm: "${SQUASH_FILE}"
@@ -236,13 +147,15 @@ EOF
 
     echo "Submitting job with srtctl..."
     echo "MODEL_PATH=$MODEL_PATH (exists=$(test -d "$MODEL_PATH" && echo yes || echo NO))"
-    ls -ld "$MODEL_PATH" 2>&1 || ls /lustre/fsw/models/ 2>&1 | head -40
+    ls -ld "$MODEL_PATH" 2>&1 || ls "$RUNNER_PATH_MODEL_ROOT" 2>&1 | head -40
 
     if [[ -z "$CONFIG_FILE" ]]; then
         echo "Error: CONFIG_FILE is not set. The srt-slurm path requires a CONFIG_FILE in additional-settings." >&2
         echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
         exit 1
     fi
+    CONFIG_FILE="$(stage_srt_recipe "$CONFIG_FILE")" || exit 1
+    CONFIG_FILE="$(prepare_srt_benchmark "$CONFIG_FILE")" || exit 1
 
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "${CONFIG_FILE%%:*}"
@@ -295,6 +208,8 @@ EOF
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
+
+    require_slurm_job_succeeded "$JOB_ID" || exit 1
 
     set -x
 
@@ -387,7 +302,7 @@ EOF
 
 else
 
-    SQUASH_FILE="/home/sa-shared/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="$RUNNER_PATH_CONTAINER_ROOT/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     # Point the bench script at the local MODEL_PATH resolved above instead of
     # pulling from the HF hub cache. Bench scripts skip `hf download` when
     # MODEL is a local path.
@@ -431,7 +346,7 @@ else
     # Slurm assigns a node, and retain the shared-Lustre path as a fallback for
     # nodes whose local staging is incomplete.
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" && "$FRAMEWORK" == "sglang" ]]; then
-        LOCAL_MODEL_PATH=/raid/models/DeepSeek-V4-Pro-NVFP4
+        LOCAL_MODEL_PATH="$RUNNER_PATH_NODE_LOCAL_DSV4_MODEL"
         if srun --jobid="$JOB_ID" bash -c \
             'test -f "$1/config.json" && test -f "$1/model.safetensors.index.json" && test "$(find "$1" -maxdepth 1 -name "model-*.safetensors" | wc -l)" -eq 64' \
             _ "$LOCAL_MODEL_PATH"; then

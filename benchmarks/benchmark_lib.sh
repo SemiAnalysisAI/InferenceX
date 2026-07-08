@@ -330,6 +330,7 @@ wait_for_server_ready() {
 # All parameters are required except --endpoint, --use-chat-template, --dsv4, and --trust-remote-code
 # Parameters:
 #   --model: Model name
+#   --host: Optional server host (default: 0.0.0.0)
 #   --port: Server port
 #   --backend: Backend type - e.g., 'vllm' or 'openai'
 #   --endpoint: Optional API endpoint override
@@ -338,6 +339,9 @@ wait_for_server_ready() {
 #   --random-range-ratio: Random range ratio
 #   --num-prompts: Number of prompts
 #   --max-concurrency: Max concurrency
+#   --request-rate: Optional request rate (default: inf)
+#   --num-warmups: Optional warmup request count (default: 2 * concurrency)
+#   --tokenizer-mode: Optional tokenizer loader mode (default: auto)
 #   --result-filename: Result filename without extension
 #   --result-dir: Result directory
 #   --use-chat-template: Optional flag to enable chat template
@@ -348,13 +352,14 @@ wait_for_server_ready() {
 #   --server-pid: Optional server process ID to monitor during benchmark
 run_benchmark_serving() {
     # In eval-only mode, skip the throughput benchmark entirely.
-    if [ "${EVAL_ONLY}" = "true" ]; then
+    if [ "${EVAL_ONLY:-false}" = "true" ]; then
         echo "EVAL_ONLY mode: skipping throughput benchmark"
         return 0
     fi
 
     set +x
     local model=""
+    local host="0.0.0.0"
     local port=""
     local backend=""
     local endpoint=""
@@ -363,6 +368,8 @@ run_benchmark_serving() {
     local random_range_ratio=""
     local num_prompts=""
     local max_concurrency=""
+    local request_rate="inf"
+    local num_warmups=""
     local result_filename=""
     local result_dir=""
     local workspace_dir=""
@@ -371,11 +378,16 @@ run_benchmark_serving() {
     local trust_remote_code=false
     local server_pid=""
     local tokenizer=""
+    local tokenizer_mode="auto"
 
     while [[ $# -gt 0 ]]; do
         case $1 in
             --model)
                 model="$2"
+                shift 2
+                ;;
+            --host)
+                host="$2"
                 shift 2
                 ;;
             --port)
@@ -410,6 +422,14 @@ run_benchmark_serving() {
                 max_concurrency="$2"
                 shift 2
                 ;;
+            --request-rate)
+                request_rate="$2"
+                shift 2
+                ;;
+            --num-warmups)
+                num_warmups="$2"
+                shift 2
+                ;;
             --result-filename)
                 result_filename="$2"
                 shift 2
@@ -441,6 +461,10 @@ run_benchmark_serving() {
                 ;;
             --tokenizer)
                 tokenizer="$2"
+                shift 2
+                ;;
+            --tokenizer-mode)
+                tokenizer_mode="$2"
                 shift 2
                 ;;
             *)
@@ -495,6 +519,9 @@ run_benchmark_serving() {
     if [[ -z "$workspace_dir" ]]; then
         workspace_dir=$(pwd)
     fi
+    if [[ -z "$num_warmups" ]]; then
+        num_warmups="$((2 * max_concurrency))"
+    fi
 
     # Profiling support: when PROFILE=1, ensure profiler dir exists, add --profile flag,
     # and cap num_prompts to keep traces small.
@@ -513,18 +540,19 @@ run_benchmark_serving() {
         python3 "$workspace_dir/utils/bench_serving/benchmark_serving.py"
         --model "$model"
         --backend "$backend"
-        --base-url "http://0.0.0.0:$port"
+        --base-url "http://$host:$port"
         --dataset-name random
         --random-input-len "$input_len"
         --random-output-len "$output_len"
         --random-range-ratio "$random_range_ratio"
         --num-prompts "$num_prompts"
         --max-concurrency "$max_concurrency"
-        --request-rate inf
+        --request-rate "$request_rate"
+        --tokenizer-mode "$tokenizer_mode"
         --ignore-eos
         "${profile_flag[@]}"
         --save-result
-        --num-warmups "$((2 * max_concurrency))" \
+        --num-warmups "$num_warmups" \
         --percentile-metrics 'ttft,tpot,itl,e2el'
         --result-dir "$result_dir"
         --result-filename "$result_filename.json"
@@ -1212,7 +1240,7 @@ run_eval() {
 
     if [ "$eval_rc" -ne 0 ]; then
         echo "ERROR: run_eval failed with exit code $eval_rc" >&2
-        if [ "${EVAL_ONLY}" = "true" ]; then
+        if [ "${EVAL_ONLY:-false}" = "true" ]; then
             echo "Eval-only mode: failing after artifact collection" >&2
             return "$eval_rc"
         fi

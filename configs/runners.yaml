@@ -213,6 +213,9 @@ labels:
     - b200-dgxc_07
     - b200-dgxc_08
     - b200-dgxc_09
+    - b200-dgxc-slurm_7
+    - b200-dgxc-slurm_8
+    - b200-dgxc-slurm_9
   cluster:b300-cw:
     - b300-cw_0
     - b300-cw_01
@@ -324,3 +327,334 @@ hardware:
   cluster:mi355x-amds:
     available-cpu-dram-mib: 3_095_781
     gpus-per-node: 8
+srt-slurm:
+  repository: https://github.com/NVIDIA/srt-slurm.git
+  branch: main
+  # Immutable snapshot of upstream main. Update this single revision after
+  # validating the full InferenceX recipe catalog.
+  revision: 662538ed0991fd46788208e54a8feba1a6d16631
+  # Data-only fallback for recipe paths not migrated to upstream main yet.
+  legacy-recipes-revision: deb1dfd9934398664f92d194169c183e009da83b
+clusters:
+  cluster:h100-dgxc:
+    paths:
+      aiperf-cache: /mnt/nfs/sa-shared/gharunners/ai-perf-cache
+      container-root: /mnt/nfs/lustre/containers
+      hf-cache: /mnt/nfs/sa-shared/gharunners/hf-hub-cache
+      model-root: /mnt/nfs/lustre/models
+      shared-container-root: /mnt/nfs/sa-shared/containers
+      uv-root: /mnt/nfs/sa-shared/.uv
+    models:
+      - model-prefix: dsr1
+        precision: fp8
+        framework: dynamo-sglang
+        path: /mnt/nfs/lustre/models/dsr1-fp8
+        srt-model-prefix: dsr1-fp8
+      - model-prefix: dsr1
+        precision: fp8
+        framework: dynamo-trt
+        path: /mnt/nfs/lustre/models/dsr1-fp8
+        srt-model-prefix: DeepSeek-R1-0528
+        served-model-name: DeepSeek-R1-0528
+  cluster:h200-dgxc:
+    paths:
+      aiperf-cache: /home/sa-shared/gharunners/ai-perf-cache
+      container-root: /data/containers
+      hf-cache: /models/gharunners/hf-hub-cache
+      model-root: /models
+      single-node-container-root: /data/gharunners/containers
+    models:
+      - model-prefix: dsr1
+        precision: fp8
+        framework: dynamo-sglang
+        path: /models/DeepSeek-R1-0528
+        srt-model-prefix: dsr1-fp8
+      - model-prefix: dsr1
+        precision: fp8
+        framework: dynamo-trt
+        path: /models/DeepSeek-R1-0528
+        srt-model-prefix: DeepSeek-R1-0528
+        served-model-name: DeepSeek-R1-0528
+  cluster:b200-dgxc:
+    paths:
+      aiperf-cache: /lustre/fsw/gharunners/aiperf-cache
+      container-root: /home/sa-shared/containers
+      model-root: /lustre/fsw/models
+      node-local-dsv4-model: /raid/models/DeepSeek-V4-Pro-NVFP4
+      vllm-squash-root: /home/slurm-shared/gharunners/squash
+    models:
+      - model-prefix: dsr1
+        precision: fp4
+        path: /scratch/fsw/models/DeepSeek-R1-0528-NVFP4-v2
+        srt-model-prefix: dsr1
+      - model-prefix: dsr1
+        precision: fp8
+        path: /lustre/fsw/models/dsr1-0528-fp8
+        srt-model-prefix: dsr1-fp8
+      - model-prefix: dsv4
+        precision: fp4
+        path: /lustre/fsw/models/deepseek-v4-pro
+        srt-model-prefix: deepseek-v4-pro
+      - model-prefix: qwen3.5
+        precision: bf16
+        path: /lustre/fsw/models/Qwen3.5-397B-A17B
+        srt-model-prefix: qwen3.5
+      - model-prefix: qwen3.5
+        precision: fp8
+        path: /lustre/fsw/models/Qwen3.5-397B-A17B-FP8
+        srt-model-prefix: qwen3.5-fp8
+      - model-prefix: qwen3.5
+        precision: fp4
+        path: /lustre/fsw/models/Qwen3.5-397B-A17B-NVFP4
+        srt-model-prefix: qwen3.5-fp4
+      - model-prefix: glm5
+        precision: fp8
+        path: /lustre/fsw/models/GLM-5-FP8
+        srt-model-prefix: glm5-fp8
+      - model-prefix: glm5
+        precision: fp4
+        path: /lustre/fsw/models/GLM-5-NVFP4
+        srt-model-prefix: glm5-fp4
+      - model-prefix: kimik2.5
+        precision: int4
+        path: /lustre/fsw/models/Kimi-K2.5
+        srt-model-prefix: kimik2.5
+      - model-prefix: kimik2.5
+        precision: fp4
+        path: /lustre/fsw/models/Kimi-K2.5-NVFP4
+        srt-model-prefix: kimik2.5-fp4
+      - model-prefix: minimaxm2.5
+        precision: fp8
+        path: /lustre/fsw/models/MiniMax-M2.5
+        srt-model-prefix: minimax-m2.5-fp8
+      - model-prefix: minimaxm2.5
+        precision: fp4
+        path: /lustre/fsw/models/MiniMax-M2.5-NVFP4
+        srt-model-prefix: minimax-m2.5-nvfp4
+      - model-prefix: gptoss
+        precision: fp4
+        path: /lustre/fsw/models/gpt-oss-120b
+        srt-model-prefix: gptoss
+      - model-prefix: minimaxm3
+        precision: fp8
+        path: /lustre/fsw/gharunners/models/MiniMax-M3-MXFP8
+        srt-model-prefix: minimax-m3-mxfp8
+      - model-prefix: minimaxm3
+        precision: fp4
+        path: /scratch/fsw/models/MiniMax-M3-NVFP4
+        srt-model-prefix: minimax-m3-nvfp4
+  cluster:b300-nv:
+    paths:
+      model-root: /data/models
+      scratch-model-root: /scratch/models
+      squash-root: /data/squash
+    models:
+      - model-prefix: dsr1
+        precision: fp4
+        path: /data/models/dsr1-fp4
+        srt-model-prefix: dsr1
+        served-model-name: deepseek-r1-fp4
+      - model-prefix: dsr1
+        precision: fp8
+        path: /data/models/dsr1-fp8
+        srt-model-prefix: dsr1-fp8
+        served-model-name: deepseek-r1-fp8
+      - model-prefix: dsv4
+        precision: fp4
+        framework: dynamo-vllm
+        path: /data/models/dsv4-pro
+        srt-model-prefix: deepseek-v4-pro
+      - model-prefix: minimaxm2.5
+        precision: fp4
+        framework: dynamo-vllm
+        path: /data/models/MiniMax-M2.5-NVFP4
+        srt-model-prefix: minimax-m2.5-nvfp4
+      - model-prefix: minimaxm2.5
+        precision: fp8
+        framework: dynamo-vllm
+        path: /data/models/MiniMax-M2.5
+        srt-model-prefix: minimax-m2.5-fp8
+      - model-prefix: minimaxm3
+        precision: fp4
+        framework: dynamo-vllm
+        path: /scratch/models/MiniMax-M3-NVFP4
+        srt-model-prefix: nvidia/MiniMax-M3-NVFP4
+      - model-prefix: minimaxm3
+        precision: fp8
+        framework: dynamo-vllm
+        path: /data/models/MiniMax-M3-MXFP8
+        srt-model-prefix: MiniMaxAI/MiniMax-M3-MXFP8
+  cluster:gb200-nv:
+    paths:
+      aiperf-cache: /mnt/lustre01/users-public/sa-shared/ai-perf-cache
+      hf-cache: /mnt/lustre01/users-public/sa-shared/hf-hub-cache
+      model-root: /mnt/lustre01/models
+      squash-root: /mnt/lustre01/users-public/sa-shared
+    models:
+      - model-prefix: dsr1
+        precision: fp8
+        framework: dynamo-sglang
+        path: /mnt/lustre01/models/deepseek-r1-0528
+        srt-model-prefix: dsr1-fp8
+      - model-prefix: dsr1
+        precision: fp4
+        framework: dynamo-sglang
+        path: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2/
+        srt-model-prefix: dsr1-fp4
+      - model-prefix: dsv4
+        precision: fp4
+        framework: dynamo-sglang
+        path: /mnt/lustre01/models/deepseek-v4-pro
+        srt-model-prefix: deepseek-v4-pro
+      - model-prefix: glm5.1
+        precision: fp4
+        framework: dynamo-sglang
+        path: /mnt/lustre01/models/GLM-5.1-NVFP4
+        srt-model-prefix: glm-5-fp4
+      - model-prefix: qwen3.5
+        precision: fp8
+        framework: dynamo-sglang
+        path: /mnt/lustre01/models/Qwen3.5-397B-A17B-FP8
+        srt-model-prefix: qwen3.5-fp8
+      - model-prefix: glm5.1
+        precision: fp8
+        framework: dynamo-sglang
+        path: /mnt/lustre01/models/GLM-5.1-FP8
+        srt-model-prefix: glm-5.1-fp8
+      - model-prefix: gptoss
+        precision: "*"
+        framework: dynamo-trt
+        path: /mnt/lustre01/models/gpt-oss-120b
+        srt-model-prefix: gptoss
+        served-model-name: gpt-oss-120b
+      - model-prefix: dsr1
+        precision: fp4
+        framework: dynamo-trt
+        path: /mnt/lustre01/models/deepseek-r1-0528-fp4-v2/
+        srt-model-prefix: dsr1
+        served-model-name: deepseek-r1-fp4
+      - model-prefix: dsr1
+        precision: fp8
+        framework: dynamo-trt
+        path: /mnt/numa1/groups/sa-shared/models/deepseek-r1-0528/
+        srt-model-prefix: dsr1-fp8
+        served-model-name: deepseek-r1-fp8
+      - model-prefix: kimik2.5
+        precision: fp4
+        framework: dynamo-trt
+        path: /mnt/lustre01/models/kimi-k2.5-nvfp4
+        srt-model-prefix: nvidia/Kimi-K2.5-NVFP4
+        served-model-name: kimi-k2.5-nvfp4
+      - model-prefix: kimik2.5
+        precision: fp4
+        framework: dynamo-vllm
+        path: /mnt/lustre01/models/kimi-k2.5-nvfp4
+        srt-model-prefix: kimi-k2.5-nvfp4
+      - model-prefix: dsv4
+        precision: fp4
+        framework: dynamo-vllm
+        path: /mnt/lustre01/models/DeepSeek-V4-Pro-NVFP4/
+        srt-model-prefix: deepseek-v4-pro
+      - model-prefix: minimaxm2.5
+        precision: fp4
+        framework: dynamo-vllm
+        path: /mnt/lustre01/models/MiniMax-M2.5-NVFP4
+        srt-model-prefix: minimax-m2.5-nvfp4
+      - model-prefix: minimaxm2.5
+        precision: fp8
+        framework: dynamo-vllm
+        path: /mnt/lustre01/models/MiniMax-M2.5
+        srt-model-prefix: minimax-m2.5-fp8
+      - model-prefix: minimaxm3
+        precision: fp8
+        framework: dynamo-vllm
+        path: /mnt/lustre01/models/MiniMax-M3-MXFP8
+        srt-model-prefix: minimax-m3-mxfp8
+      - model-prefix: "*"
+        precision: "*"
+        framework: dynamo-sglang
+        path: "{model}"
+        srt-model-prefix: "{model_prefix}"
+  cluster:gb300-nv:
+    paths:
+      aiperf-cache: /data/home/sa-shared/gharunners/ai-perf-cache
+      hf-cache: /data/home/sa-shared/gharunners/hf-hub-cache
+      model-root: /data/models
+      scratch-model-root: /scratch/models
+      squash-root: /data/home/sa-shared/gharunners/squash
+    models:
+      - model-prefix: dsr1
+        precision: fp4
+        path: /scratch/models/DeepSeek-R1-0528-NVFP4-v2
+        srt-model-prefix: dsr1
+        served-model-name: deepseek-r1-fp4
+      - model-prefix: dsr1
+        precision: fp8
+        path: /scratch/models/DeepSeek-R1-0528
+        srt-model-prefix: dsr1-fp8
+        served-model-name: deepseek-r1-fp8
+      - model-prefix: dsv4
+        precision: fp4
+        framework: dynamo-trt
+        path: /scratch/models/DeepSeek-V4-Pro
+        srt-model-prefix: deepseek-ai/DeepSeek-V4-Pro
+      - model-prefix: dsv4
+        precision: fp4
+        path: /scratch/models/DeepSeek-V4-Pro
+        srt-model-prefix: deepseek-v4-pro
+      - model-prefix: glm5
+        precision: fp4
+        framework: dynamo-trt
+        path: /scratch/models/GLM-5-NVFP4
+        srt-model-prefix: nvidia/GLM-5-NVFP4
+        served-model-name: glm-5-nvfp4
+      - model-prefix: glm5
+        precision: fp4
+        path: /scratch/models/GLM-5-NVFP4
+        srt-model-prefix: glm-5-fp4
+      - model-prefix: glm5
+        precision: fp8
+        path: /scratch/models/GLM-5-FP8
+        srt-model-prefix: glm-5-fp8
+      - model-prefix: minimaxm2.5
+        precision: fp4
+        path: /data/models/MiniMax-M2.5-NVFP4
+        srt-model-prefix: minimax-m2.5-nvfp4
+      - model-prefix: minimaxm2.5
+        precision: fp8
+        path: /data/models/MiniMax-M2.5
+        srt-model-prefix: minimax-m2.5-fp8
+      - model-prefix: minimaxm3
+        precision: fp8
+        path: /data/models/MiniMax-M3-MXFP8
+        srt-model-prefix: minimax-m3-mxfp8
+      - model-prefix: kimik2.5
+        precision: fp4
+        framework: dynamo-vllm
+        path: /scratch/models/Kimi-K2.5-NVFP4
+        srt-model-prefix: kimi-k2.5-nvfp4
+      - model-prefix: kimik2.5
+        precision: fp4
+        path: /scratch/models/Kimi-K2.5-NVFP4
+        srt-model-prefix: nvidia/Kimi-K2.5-NVFP4
+      - model-prefix: qwen3.5
+        precision: fp4
+        path: /scratch/models/Qwen3.5-397B-A17B-NVFP4
+        srt-model-prefix: qwen3.5-fp4
+  cluster:mi355x-amds:
+    paths:
+      aiperf-cache: /it-share/aiperf-cache
+      benchmark-logs: "{workspace}/benchmark_logs"
+      hf-cache: /it-share/hf-hub-cache
+      model-root: /it-share/data
+      vllm-cache: /it-share/gharunners/.cache/vllm
+    models:
+      - model-prefix: minimaxm3
+        precision: fp8
+        framework: vllm-disagg
+        path: /it-share/hf-hub-cache
+        layout: root
+      - model-prefix: "*"
+        precision: "*"
+        path: /it-share/data
+        layout: root

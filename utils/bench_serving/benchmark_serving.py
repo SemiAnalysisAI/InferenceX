@@ -1249,12 +1249,13 @@ if __name__ == "__main__":
         '--tokenizer-mode',
         type=str,
         default="auto",
-        choices=['auto', 'slow', 'mistral', 'custom'],
+        choices=['auto', 'slow', 'mistral', 'custom', 'deepseek_v4'],
         help='The tokenizer mode.\n\n* "auto" will use the '
         'fast tokenizer if available.\n* "slow" will '
         'always use the slow tokenizer. \n* '
         '"mistral" will always use the `mistral_common` tokenizer. \n*'
-        '"custom" will use --tokenizer to select the preregistered tokenizer.')
+        '"custom" will use --tokenizer to select the preregistered tokenizer. '
+        '"deepseek_v4" loads tokenizer.json without AutoConfig.')
 
     parser.add_argument("--served-model-name",
                         type=str,

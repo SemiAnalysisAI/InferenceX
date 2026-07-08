@@ -1,6 +1,8 @@
 #!/usr/bin/bash
 set -e
 
+source "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}/runners/lib/srt_slurm.sh"
+
 # System-specific configuration for H100 DGXC Slurm cluster
 SLURM_PARTITION="hpc-gpu-1"
 SLURM_ACCOUNT="customer"
@@ -10,33 +12,15 @@ SLURM_ACCOUNT="customer"
 SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
 
 set -x
+load_runner_paths h100-dgxc || exit 1
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
-    # MODEL_PATH: Override with pre-downloaded paths on H100 runner
-    # The yaml files specify HuggingFace model IDs for portability, but we use
-    # local paths to avoid repeated downloading on the shared H100 cluster.
-    if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
-            export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-        else
-            echo "Unsupported model prefix/precision for dynamo-sglang: $MODEL_PREFIX/$PRECISION"
-            exit 1
-        fi
-    elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
-        if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-            export MODEL_PATH="/mnt/nfs/lustre/models/dsr1-fp8"
-            export SERVED_MODEL_NAME="DeepSeek-R1-0528"
-            export SRT_SLURM_MODEL_PREFIX="DeepSeek-R1-0528"
-        else
-            echo "Unsupported model prefix/precision for dynamo-trt: $MODEL_PREFIX/$PRECISION"
-            exit 1
-        fi
-    else
+    if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" ]]; then
         echo "Unsupported framework: $FRAMEWORK. Supported frameworks are: dynamo-trt, dynamo-sglang"
         exit 1
     fi
+    load_runner_model h100-dgxc || exit 1
 
     echo "Cloning srt-slurm repository..."
     SRT_REPO_DIR="srt-slurm"
@@ -45,20 +29,13 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
         rm -rf "$SRT_REPO_DIR"
     fi
 
-    # TODO(CJQ): make first class upon srt-slurm upstream refactor
-    if [[ "$IS_AGENTIC" == "1" ]]; then
-        git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-    else
-        git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-        cd "$SRT_REPO_DIR"
-        git checkout sa-submission-q2-2026
-    fi
+    clone_srt_slurm "$SRT_REPO_DIR"
+    cd "$SRT_REPO_DIR"
 
     echo "Installing srtctl..."
-    export UV_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/bin"
-    export UV_CACHE_DIR="/mnt/nfs/sa-shared/.uv/cache"
-    export UV_PYTHON_INSTALL_DIR="/mnt/nfs/sa-shared/.uv/python"
+    export UV_INSTALL_DIR="$RUNNER_PATH_UV_ROOT/bin"
+    export UV_CACHE_DIR="$RUNNER_PATH_UV_ROOT/cache"
+    export UV_PYTHON_INSTALL_DIR="$RUNNER_PATH_UV_ROOT/python"
     mkdir -p "$UV_INSTALL_DIR" "$UV_CACHE_DIR" "$UV_PYTHON_INSTALL_DIR"
     if ! [ -x "$UV_INSTALL_DIR/uv" ]; then
         curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -78,16 +55,16 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     echo "Configs available at: $SRT_REPO_DIR/"
 
     # Map container images to local squash files based on framework
-    NGINX_SQUASH_FILE="/mnt/nfs/lustre/containers/nginx_1.27.4.sqsh"
+    NGINX_SQUASH_FILE="$RUNNER_PATH_CONTAINER_ROOT/nginx_1.27.4.sqsh"
 
     if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
         # SGLang container mapping
-        SQUASH_FILE="/mnt/nfs/lustre/containers/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
+        SQUASH_FILE="$RUNNER_PATH_CONTAINER_ROOT/lmsysorg_sglang_v0.5.8.post1-cu130.sqsh"
         CONTAINER_KEY="lmsysorg/sglang:v0.5.8-cu130"
     elif [[ $FRAMEWORK == "dynamo-trt" ]]; then
         # TRT-LLM container mapping - convert IMAGE to srt-slurm format (nvcr.io/ -> nvcr.io#)
         CONTAINER_KEY=$(echo "$IMAGE" | sed 's|nvcr.io/|nvcr.io#|')
-        SQUASH_FILE="/mnt/nfs/sa-shared/containers/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
+        SQUASH_FILE="$RUNNER_PATH_SHARED_CONTAINER_ROOT/$(echo "$IMAGE" | sed 's|nvcr.io/||' | sed 's/[\/:@#]/+/g').sqsh"
     fi
 
     export ISL="$ISL"
@@ -111,8 +88,11 @@ network_interface: ""
 srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
+  inferencex-model: "${MODEL_PATH}"
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 containers:
+  inferencex-workload: "${SQUASH_FILE}"
+  inferencex-nginx: "${NGINX_SQUASH_FILE}"
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   nginx-sqsh: "${NGINX_SQUASH_FILE}"
@@ -140,6 +120,8 @@ EOF
         echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
         exit 1
     fi
+    CONFIG_FILE="$(stage_srt_recipe "$CONFIG_FILE")" || exit 1
+    CONFIG_FILE="$(prepare_srt_benchmark "$CONFIG_FILE")" || exit 1
 
     # Override the job name in the config file with the runner name
     sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
@@ -190,6 +172,8 @@ EOF
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
+
+    require_slurm_job_succeeded "$JOB_ID" || exit 1
 
     set -x
 
@@ -282,9 +266,9 @@ EOF
 
 else
 
-    HF_HUB_CACHE_MOUNT="/mnt/nfs/sa-shared/gharunners/hf-hub-cache/"
-    AIPERF_MMAP_CACHE_HOST_PATH="/mnt/nfs/sa-shared/gharunners/ai-perf-cache"
-    SQUASH_FILE="/mnt/nfs/lustre/containers/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    HF_HUB_CACHE_MOUNT="$RUNNER_PATH_HF_CACHE/"
+    AIPERF_MMAP_CACHE_HOST_PATH="$RUNNER_PATH_AIPERF_CACHE"
+    SQUASH_FILE="$RUNNER_PATH_CONTAINER_ROOT/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     LOCK_FILE="${SQUASH_FILE}.lock"
 
     export GPU_COUNT="${GPU_COUNT:-${TP:?TP must be set}}"

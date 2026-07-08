@@ -646,12 +646,53 @@ class RunnerHardwareConfig(BaseModel):
     )
 
 
+class RunnerModelConfig(BaseModel):
+    """One public-model to cluster-storage mapping."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    model_prefix: str = Field(alias=Fields.MODEL_PREFIX.value, min_length=1)
+    precision: str = Field(min_length=1)
+    framework: Optional[str] = Field(default=None, min_length=1)
+    path: str = Field(min_length=1)
+    layout: Literal["direct", "root"] = "direct"
+    srt_model_prefix: Optional[str] = Field(
+        default=None, alias="srt-model-prefix", min_length=1
+    )
+    served_model_name: Optional[str] = Field(
+        default=None, alias="served-model-name", min_length=1
+    )
+
+
+class RunnerClusterConfig(BaseModel):
+    """Runtime resources owned by one physical cluster."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    paths: Dict[str, str] = Field(default_factory=dict)
+    models: List[RunnerModelConfig] = Field(default_factory=list)
+
+
+class RunnerSrtSlurmConfig(BaseModel):
+    """Canonical srt-slurm tooling and data-only legacy recipe snapshot."""
+    model_config = ConfigDict(extra='forbid', populate_by_name=True)
+
+    repository: str = Field(min_length=1)
+    branch: str = Field(min_length=1)
+    revision: str = Field(pattern=r"^[0-9a-f]{40}$")
+    legacy_recipes_revision: str = Field(
+        alias="legacy-recipes-revision", pattern=r"^[0-9a-f]{40}$"
+    )
+
+
 class RunnerConfig(BaseModel):
     """Top-level runner configuration file."""
     model_config = ConfigDict(extra='forbid', populate_by_name=True)
 
     labels: Dict[str, List[str]]
     hardware: Dict[str, RunnerHardwareConfig] = Field(default_factory=dict)
+    clusters: Dict[str, RunnerClusterConfig] = Field(default_factory=dict)
+    srt_slurm: Optional[RunnerSrtSlurmConfig] = Field(
+        default=None, alias="srt-slurm"
+    )
 
 
 def validate_runner_config(runner_configs: dict) -> dict:

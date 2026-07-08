@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+source "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}/runners/lib/runner_config.sh"
+source "$GITHUB_WORKSPACE/runners/lib/slurm.sh"
+load_runner_paths mi355x-amds || exit 1
+
 scancel_sync() {
     local jobid=$1
     local timeout=${2:-600}
@@ -33,21 +37,28 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     export SLURM_ACCOUNT="$USER"
     export SLURM_PARTITION="compute"
     export SLURM_JOB_NAME="benchmark-sglang-disagg.job"
+    export TIME_LIMIT="${TIME_LIMIT:-08:00:00}"
+    export GPUS_PER_NODE=8
+    export SLURM_EXCLUDE_NODES="${SLURM_EXCLUDE_NODES:-mia1-p01-g11,mia1-p01-g12,mia1-p01-g15}"
 
     export MODEL_NAME=${MODEL##*/}
-    export MODEL_PATH="/it-share/data"
+    load_runner_model mi355x-amds || exit 1
+    if [[ "$MODEL_PATH_LAYOUT" != "root" ]]; then
+        echo "Error: MI355X model mapping must use layout=root, got '$MODEL_PATH_LAYOUT'" >&2
+        exit 1
+    fi
     export IBDEVICES="rdma0,rdma1,rdma2,rdma3,rdma4,rdma5,rdma6,rdma7"
     export MORI_RDMA_TC=104
+    export MORI_IO_TC=104
+    export UCX_IB_TRAFFIC_CLASS=104
 
-    # Set additional required env vars for multi_node scripts
-    export MODEL_DIR="$MODEL_PATH"  # job.slurm uses MODEL_DIR
-    export GPUS_PER_NODE=8          # MI355X has 8 GPUs (set to 4 for MI325X)
-
-    export ISL="$ISL"
-    export OSL="$OSL"
+    # Pluggable benchmark -> runner contract. Everything below this boundary is
+    # cluster policy; benchmark recipes never need to know Slurm or host paths.
+    export INFERENCEX_REPO_ROOT="$GITHUB_WORKSPACE"
+    export MULTINODE_LAUNCHER="$GITHUB_WORKSPACE/runners/mi355x-amds/submit.sh"
 
     # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible, outside the repo tree)
-    export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
+    export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$RUNNER_PATH_BENCHMARK_LOGS}"
     mkdir -p "$BENCHMARK_LOGS_DIR"
     sudo rm -rf "$BENCHMARK_LOGS_DIR/logs" 2>/dev/null || true
 
@@ -82,7 +93,15 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     else
         BENCHMARK_SUBDIR="single_node/fixed_seq_len"
     fi
-    JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}")
+    if ! JOB_ID=$(bash "benchmarks/${BENCHMARK_SUBDIR}/${SCRIPT_NAME}"); then
+        echo "ERROR: failed to submit MI355X benchmark" >&2
+        exit 1
+    fi
+    JOB_ID="${JOB_ID%%;*}"
+    if ! [[ "$JOB_ID" =~ ^[1-9][0-9]*$ ]]; then
+        echo "ERROR: invalid Slurm job ID returned by launcher: '$JOB_ID'" >&2
+        exit 1
+    fi
 
     # Wait for job to complete
     LOG_FILE="$BENCHMARK_LOGS_DIR/slurm_job-${JOB_ID}.out"
@@ -92,7 +111,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Wait for log file to appear (also check job is still alive)
     while ! ls "$LOG_FILE" &>/dev/null; do
-        if ! squeue -u "$USER" --noheader --format='%i' | grep -q "$JOB_ID"; then
+        if ! squeue -h -j "$JOB_ID" --format='%i' | grep -Fxq "$JOB_ID"; then
             echo "ERROR: Job $JOB_ID failed before creating log file"
             scontrol show job "$JOB_ID"
             exit 1
@@ -104,7 +123,7 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
 
     # Poll for job completion in background
     (
-        while squeue -u $USER --noheader --format='%i' | grep -q "$JOB_ID"; do
+        while squeue -h -j "$JOB_ID" --format='%i' | grep -Fxq "$JOB_ID"; do
             sleep 10
         done
     ) &
@@ -114,6 +133,8 @@ if [[ "$IS_MULTINODE" == "true" ]]; then
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
     wait $POLL_PID
+
+    require_slurm_job_succeeded "$JOB_ID" || exit 1
 
     set -x
 
@@ -195,7 +216,7 @@ PY
 else
 
     export HF_HUB_CACHE_MOUNT="/var/lib/hf-hub-cache/"
-    export AIPERF_MMAP_CACHE_HOST_PATH="/it-share/aiperf-cache/"
+    export AIPERF_MMAP_CACHE_HOST_PATH="$RUNNER_PATH_AIPERF_CACHE/"
     export PORT_OFFSET=${RUNNER_NAME: -1}
     export PORT=$(( 8888 + ${PORT_OFFSET} ))
     FRAMEWORK_SUFFIX=$([[ "$FRAMEWORK" == "atom" ]] && printf '_atom' || printf '')
@@ -229,7 +250,7 @@ else
         fi
     "
 
-    export VLLM_CACHE_ROOT="/it-share/gharunners/.cache/vllm"
+    export VLLM_CACHE_ROOT="$RUNNER_PATH_VLLM_CACHE"
         #--container-mount-home \
 
     if [[ "$FRAMEWORK" == "atom" ]] || [[ "$FRAMEWORK" == "sglang" ]]; then
@@ -240,14 +261,14 @@ else
 
     # to prevent reading outdated saved model. use a fresh model from hf repo
     if [[ ("$FRAMEWORK" == "vllm" || "$FRAMEWORK" == "atom") ]] && [[ "$MODEL" == "deepseek-ai/DeepSeek-V4-Pro" ]]; then
-        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+        export HF_HUB_CACHE_MOUNT="$RUNNER_PATH_HF_CACHE/"
     fi
 
     # MiniMax-M3 weights are not staged on the node-local /var/lib NVMe cache;
     # they are pre-downloaded once to the NFS share instead. Covers both the
     # MiniMaxAI MXFP8 checkpoint and the amd MXFP4 atom checkpoint.
     if [[ "$MODEL" == MiniMaxAI/MiniMax-M3* || "$MODEL" == amd/MiniMax-M3* ]]; then
-        export HF_HUB_CACHE_MOUNT="/it-share/hf-hub-cache/"
+        export HF_HUB_CACHE_MOUNT="$RUNNER_PATH_HF_CACHE/"
     fi
 
     SCRIPT_BASE="${EXP_NAME%%_*}_${PRECISION}_mi355x"

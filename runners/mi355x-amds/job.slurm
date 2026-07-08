@@ -1,5 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=disagg-bench
+# Cluster-specific scheduling and container orchestration lives with the runner.
 #SBATCH -N 3            # Overridden by submit.sh -N flag
 #SBATCH -n 3            # Overridden by submit.sh -n flag
 #SBATCH --ntasks-per-node=1
@@ -21,14 +22,17 @@ echo ""
 # Model Validation
 # =============================================================================
 
-# Use $(pwd) not BASH_SOURCE — sbatch copies the script to /var/spool/slurmd/
-# at runtime, but the CWD remains the submit-time directory (amd_utils/).
+if [[ -z "${MULTINODE_BENCHMARK_DIR:-}" || -z "${INFERENCEX_REPO_ROOT:-}" ]]; then
+    echo "Error: benchmark directory and repository root were not provided by the runner adapter"
+    exit 1
+fi
+
 if [[ "$ENGINE" == "vllm-disagg" ]]; then
-    MODELS_YAML="$(pwd)/models_vllm.yaml"
+    MODELS_YAML="$MULTINODE_BENCHMARK_DIR/amd_utils/models_vllm.yaml"
 elif [[ "$ENGINE" == "atom-disagg" ]]; then
-    MODELS_YAML="$(pwd)/models_atom.yaml"
+    MODELS_YAML="$MULTINODE_BENCHMARK_DIR/amd_utils/models_atom.yaml"
 else
-    MODELS_YAML="$(pwd)/models.yaml"
+    MODELS_YAML="$MULTINODE_BENCHMARK_DIR/amd_utils/models.yaml"
 fi
 
 if [[ ! -f "$MODELS_YAML" ]]; then
@@ -53,9 +57,7 @@ echo "Model found: $MODEL_NAME"
 RUN_FILE="server.sh"
 echo "Runfile set: $RUN_FILE"
 
-# DI_REPO_DIR points to the repo root.
-# $(pwd) is amd_utils/ (the sbatch submit dir); go up 3 levels to reach the repo root.
-export DI_REPO_DIR=$(cd "$(pwd)/../../.." && pwd)
+export DI_REPO_DIR="$INFERENCEX_REPO_ROOT"
 
 # ── In-tree sglang patches: auto-apply for known-affected images ──────
 # sglang v0.5.12.post1 ships a known-broken MoRI PD-disaggregation
@@ -111,17 +113,9 @@ PROXY_PING_PORT="${PROXY_PING_PORT:-36367}"
 # Model Path Resolution
 # =============================================================================
 
-# MODEL_DIR detection: prefer env var, fall back to hostname detection
-if [[ -z "$MODEL_DIR" ]]; then
-    NODENAME=$(hostname -s)
-    if [[ $NODENAME == GPU* ]] || [[ $NODENAME == smci355-ccs-aus* ]]; then
-        MODEL_DIR="/nfsdata"
-    elif [[ $NODENAME == mia1* ]]; then
-        MODEL_DIR="/it-share/data"
-    else
-        MODEL_DIR="/nfsdata"
-    fi
-    echo "[INFO] Auto-detected MODEL_DIR=$MODEL_DIR from hostname $(hostname -s)"
+if [[ -z "${MODEL_DIR:-}" ]]; then
+    echo "Error: MODEL_DIR must be mapped by the cluster runner"
+    exit 1
 fi
 export MODEL_DIR
 
@@ -150,8 +144,6 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     SEARCH_PATHS=(
         "${MODEL_DIR}/${DISK_DIR_NAME}"
         "${MODEL_DIR}/${MODEL_NAME}"
-        "/nfsdata/hf_hub_cache-0/${DISK_DIR_NAME}"
-        "/nfsdata/hf_hub_cache-0/${MODEL_NAME}"
     )
 
     for search_path in "${SEARCH_PATHS[@]}"; do
@@ -217,8 +209,19 @@ fi
 # Node Selection
 # =============================================================================
 
-NUM_NODES=$((xP + yD))
-echo "NUM_NODES: $NUM_NODES (xP=$xP + yD=$yD)"
+if [[ -z "${NUM_NODES:-}" ]]; then
+    echo "Error: NUM_NODES must be computed from prefill/decode node counts by submit.sh"
+    exit 1
+fi
+PREFILL_NODES_PER_WORKER=$(((PREFILL_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE))
+DECODE_NODES_PER_WORKER=$(((DECODE_TP_SIZE + GPUS_PER_NODE - 1) / GPUS_PER_NODE))
+EXPECTED_NUM_NODES=$((PREFILL_NODES_PER_WORKER * xP + DECODE_NODES_PER_WORKER * yD))
+if (( NUM_NODES != EXPECTED_NUM_NODES )); then
+    echo "Error: NUM_NODES=$NUM_NODES does not match the effective topology"
+    echo "Error: expected ${EXPECTED_NUM_NODES} nodes: ${xP} prefill workers x ${PREFILL_NODES_PER_WORKER} nodes + ${yD} decode workers x ${DECODE_NODES_PER_WORKER} nodes"
+    exit 1
+fi
+echo "NUM_NODES: $NUM_NODES (xP=$xP workers, yD=$yD workers)"
 
 FULL_NODELIST=$(scontrol show hostnames "$SLURM_JOB_NODELIST")
 SELECTED_NODES=$(echo "$FULL_NODELIST" | head -n $NUM_NODES)
@@ -368,8 +371,14 @@ DOCKER_ENV_COMMON=(
     -e TQDM_MININTERVAL=\$TQDM_MININTERVAL
     -e DRY_RUN=\$DRY_RUN
     -e BENCHMARK_LOGS_DIR=/benchmark_logs
+    -e INFERENCEX_CONTAINER_ROOT=${DOCKER_MOUNT_PATH}
+    -e INFERENCEX_LOG_ROOT=/run_logs
     -e ENGINE=\$ENGINE
     -e WS_PATH=${WS_PATH}
+    -e IBDEVICES=${IBDEVICES:-}
+    -e MORI_RDMA_TC=${MORI_RDMA_TC:-}
+    -e MORI_IO_TC=${MORI_IO_TC:-}
+    -e UCX_IB_TRAFFIC_CLASS=${UCX_IB_TRAFFIC_CLASS:-}
     -e RUN_EVAL=\$RUN_EVAL
     -e EVAL_ONLY=\$EVAL_ONLY
     -e \"EVAL_CONC=\$EVAL_CONC\"
@@ -379,9 +388,21 @@ DOCKER_ENV_COMMON=(
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    -e PREFILL_NODES=\$PREFILL_NODES
+    -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
+    -e PREFILL_TP=\$PREFILL_TP
+    -e PREFILL_EP=\$PREFILL_EP
+    -e PREFILL_DP_ATTN=\$PREFILL_DP_ATTN
+    -e PREFILL_DP_ATTENTION=\$PREFILL_DP_ATTN
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
+    -e DECODE_NODES=\$DECODE_NODES
+    -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
+    -e DECODE_TP=\$DECODE_TP
+    -e DECODE_EP=\$DECODE_EP
+    -e DECODE_DP_ATTN=\$DECODE_DP_ATTN
+    -e DECODE_DP_ATTENTION=\$DECODE_DP_ATTN
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
@@ -394,6 +415,7 @@ if [[ "$ENGINE" == "vllm-disagg" ]]; then
     DOCKER_ENV_ENGINE=(
         -e VLLM_WS_PATH=${WS_PATH}
         -e MODEL_PATH=$DOCKER_MODEL_PATH
+        -e VLLM_MORIIO_CONNECTOR_READ_MODE=${VLLM_MORIIO_CONNECTOR_READ_MODE:-}
         -e UCX_TLS=tcp,self,shm,rocm_ipc,rocm_copy,cma
         -e UCX_SOCKADDR_TLS_PRIORITY=tcp
         -e UCX_MEMTYPE_CACHE=y
@@ -419,7 +441,6 @@ elif [[ "$ENGINE" == "atom-disagg" ]]; then
         -e MAX_MODEL_LEN=${MAX_MODEL_LEN:-}
         -e MAX_NUM_BATCHED_TOKENS=${MAX_NUM_BATCHED_TOKENS:-}
         -e EXTRA_SERVER_ARGS=\${EXTRA_SERVER_ARGS:-}
-        -e IBDEVICES=${IBDEVICES:-}
     )
 else
     DOCKER_ENV_ENGINE=(
@@ -430,6 +451,7 @@ fi
 # Engine-specific container filter for pre-clean
 CONT_FILTER="name=^container_${ENGINE}_"
 
+set +e
 srun \
   --nodelist="$SELECTED_NODELIST_SRUN" \
   --kill-on-bad-exit=1 \
@@ -604,14 +626,17 @@ echo \"[rank 0] Main container exited (rc=\$DOCKER_EXIT_CODE). Stopping vllm-rou
 \$DOCKER_CMD rm -f \"$ROUTER_CONT_NAME\" 2>/dev/null || true
 exit \$DOCKER_EXIT_CODE
 "
+WORKLOAD_RC=$?
 
 if [[ "${KEEP_CONTAINERS}" != "1" ]]; then
-    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true'
+    srun --nodelist="$SELECTED_NODELIST_SRUN" bash -c 'eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$DOCKER_CONT_NAME"' 2>/dev/null || true' || true
 
     # Clean up vLLM external router container on node 0
     if [[ "$ENGINE" == "vllm-disagg" && "$ROUTER_TYPE" == "vllm-router" ]]; then
         srun --nodes=1 --ntasks=1 --nodelist="$MASTER_NODE" bash -c '
             eval "$DOCKER_CMD_DETECT"; $DOCKER_CMD rm -f '"$ROUTER_CONT_NAME"' 2>/dev/null || true
-        '
+        ' || true
     fi
 fi
+
+exit "$WORKLOAD_RC"

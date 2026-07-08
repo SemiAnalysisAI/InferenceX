@@ -12,6 +12,7 @@
 #            <concurrency_list> <req_rate> <random_range_ratio> <num_prompts_multiplier>
 
 ENGINE="${ENGINE:-sglang-disagg}"
+INFERENCEX_CONTAINER_ROOT="${INFERENCEX_CONTAINER_ROOT:-/workspace}"
 
 n_prefill=$1
 n_decode=$2
@@ -99,7 +100,7 @@ for max_concurrency in "${chosen_concurrencies[@]}"; do
         --num-prompts "$num_prompts" \
         --max-concurrency "$max_concurrency" \
         --result-filename "$export_file" \
-        --result-dir /workspace/ \
+        --result-dir "$INFERENCEX_CONTAINER_ROOT" \
         $extra_flags
 
     echo "-----------------------------------------"

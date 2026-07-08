@@ -1,0 +1,19 @@
+diff --git a/src/srtctl/cli/mixins/benchmark_stage.py b/src/srtctl/cli/mixins/benchmark_stage.py
+index e048845..8fe77c1 100644
+--- a/src/srtctl/cli/mixins/benchmark_stage.py
++++ b/src/srtctl/cli/mixins/benchmark_stage.py
+@@ -414,5 +414,10 @@ class BenchmarkStageMixin:
+-        # Add AIPerf-specific env vars for AIPerf-driven benchmarks only
+-        if isinstance(runner, AIPerfBenchmarkRunner):
++        # Built-in AIPerf runners discover worker metrics automatically.
++        # InferenceX custom agentic runners opt in through their supported
++        # benchmark.env mapping without extending the upstream schema.
++        custom_server_metrics = self.config.benchmark.env.get(
++            "INFERENCEX_AIPERF_SERVER_METRICS", ""
++        ).lower() == "true"
++        if isinstance(runner, AIPerfBenchmarkRunner) or custom_server_metrics:
+             env.update(self._get_aiperf_server_metrics_env())
+-            if self.config.benchmark.aiperf_package:
+-                env["AIPERF_PACKAGE"] = self.config.benchmark.aiperf_package
++        if isinstance(runner, AIPerfBenchmarkRunner) and self.config.benchmark.aiperf_package:
++            env["AIPERF_PACKAGE"] = self.config.benchmark.aiperf_package

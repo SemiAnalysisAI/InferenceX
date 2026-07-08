@@ -1,5 +1,7 @@
 #!/usr/bin/bash
 
+source "${GITHUB_WORKSPACE:?GITHUB_WORKSPACE must be set}/runners/lib/srt_slurm.sh"
+
 # System-specific configuration for B300 NV Slurm cluster (sa-shared)
 SLURM_PARTITION="batch_1"
 SLURM_ACCOUNT="benchmark"
@@ -7,6 +9,7 @@ SLURM_ACCOUNT="benchmark"
 MINIMAX_M3_SLURM_EXCLUDED_NODELIST="${MINIMAX_M3_SLURM_EXCLUDED_NODELIST-b300-018}"
 
 set -x
+load_runner_paths b300-nv || exit 1
 
 if [[ "$IS_MULTINODE" == "true" ]]; then
 
@@ -16,47 +19,7 @@ if [[ $FRAMEWORK != "dynamo-sglang" && $FRAMEWORK != "dynamo-trt" && $FRAMEWORK 
     exit 1
 fi
 
-# MODEL_PATH: Override with pre-downloaded paths on B300 runner
-# The yaml files specify HuggingFace model IDs for portability, but we use
-# local paths to avoid repeated downloading on the shared B300 cluster.
-if [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp4" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp4"
-    export SERVED_MODEL_NAME="deepseek-r1-fp4"
-    export SRT_SLURM_MODEL_PREFIX="dsr1"
-elif [[ $MODEL_PREFIX == "dsr1" && $PRECISION == "fp8" ]]; then
-    export MODEL_PATH="/data/models/dsr1-fp8"
-    export SERVED_MODEL_NAME="deepseek-r1-fp8"
-    export SRT_SLURM_MODEL_PREFIX="dsr1-fp8"
-elif [[ $MODEL_PREFIX == "dsv4" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    SELECTED_MODEL_PATH=""
-    if [[ -n "${MODEL_PATH:-}" && -d "${MODEL_PATH}" ]]; then
-        SELECTED_MODEL_PATH="$MODEL_PATH"
-    else
-        for candidate in /data/models/dsv4-pro /data/models/deepseek-v4-pro /data/models/DeepSeek-V4-Pro; do
-            if [[ -d "$candidate" ]]; then
-                SELECTED_MODEL_PATH="$candidate"
-                break
-            fi
-        done
-    fi
-    export MODEL_PATH="${SELECTED_MODEL_PATH:-/data/models/dsv4-pro}"
-    export SRT_SLURM_MODEL_PREFIX="deepseek-v4-pro"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M2.5-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-nvfp4"
-elif [[ $MODEL_PREFIX == "minimaxm2.5" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M2.5"
-    export SRT_SLURM_MODEL_PREFIX="minimax-m2.5-fp8"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp4" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/scratch/models/MiniMax-M3-NVFP4"
-    export SRT_SLURM_MODEL_PREFIX="nvidia/MiniMax-M3-NVFP4"
-elif [[ $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" && $FRAMEWORK == "dynamo-vllm" ]]; then
-    export MODEL_PATH="/data/models/MiniMax-M3-MXFP8"
-    export SRT_SLURM_MODEL_PREFIX="MiniMaxAI/MiniMax-M3-MXFP8"
-else
-    echo "Unsupported model: $MODEL_PREFIX-$PRECISION. Supported models are: dsr1-fp4, dsr1-fp8, dsv4-fp4 with dynamo-vllm, minimaxm2.5-fp4 with dynamo-vllm, minimaxm2.5-fp8 with dynamo-vllm, minimaxm3-fp4 with dynamo-vllm, minimaxm3-fp8 with dynamo-vllm"
-    exit 1
-fi
+load_runner_model b300-nv || exit 1
 
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
@@ -66,36 +29,13 @@ if [ -d "$SRT_REPO_DIR" ]; then
     rm -rf "$SRT_REPO_DIR"
 fi
 
-# TODO(CJQ): make first class upon srt-slurm upstream refactor
-if [[ "$IS_AGENTIC" == "1" ]]; then
-    git clone --branch cam/sa-submission-q2-2026 --single-branch https://github.com/cquil11/srt-slurm-nv.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "dsv4" ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout aflowers/vllm-gb200-v0.20.0
-    mkdir -p recipes/vllm/deepseek-v4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/deepseek-v4" recipes/vllm/deepseek-v4
-elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && ( $PRECISION == "fp4" || $PRECISION == "fp8" ) ]]; then
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
-    mkdir -p recipes/vllm/minimax-m3
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/vllm/minimax-m3" recipes/vllm/minimax-m3
-    if [[ $PRECISION == "fp8" ]]; then
-        SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
-    fi
-    # NVIDIA/srt-slurm#38
-    git show 22d46ba9971615016d2339c9ffbc7b4597accfad --format= -- src/srtctl/core/ip_utils/get_node_ip.sh | git apply - || exit 1
-    if [[ -n "$SRTCTL_SETUP_SCRIPT" ]]; then
-        cp \
-            "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
-            "configs/$SRTCTL_SETUP_SCRIPT"
-    fi
-else
-    git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
-    cd "$SRT_REPO_DIR" || exit 1
-    git checkout sa-submission-q2-2026
+clone_srt_slurm "$SRT_REPO_DIR" || exit 1
+cd "$SRT_REPO_DIR" || exit 1
+if [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
+    SRTCTL_SETUP_SCRIPT="minimax-m3-vllm-fixes.sh"
+    cp \
+        "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/configs/$SRTCTL_SETUP_SCRIPT" \
+        "configs/$SRTCTL_SETUP_SCRIPT"
 fi
 
 echo "Installing srtctl..."
@@ -114,8 +54,8 @@ fi
 
 # Map container images to local squash files
 NGINX_IMAGE="nginx:1.27.4"
-SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
-NGINX_SQUASH_FILE="/data/squash/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+SQUASH_FILE="$RUNNER_PATH_SQUASH_ROOT/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+NGINX_SQUASH_FILE="$RUNNER_PATH_SQUASH_ROOT/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
 # Import containers via enroot
 srun -N 1 -A $SLURM_ACCOUNT -p $SLURM_PARTITION bash -c "enroot import -o $SQUASH_FILE docker://$IMAGE"
@@ -142,9 +82,12 @@ network_interface: ""
 srtctl_root: "${SRTCTL_ROOT}"
 # Model path aliases
 model_paths:
+  inferencex-model: "${MODEL_PATH}"
   "${SRT_SLURM_MODEL_PREFIX}": "${MODEL_PATH}"
 # Container aliases
 containers:
+  inferencex-workload: "${SQUASH_FILE}"
+  inferencex-nginx: "${NGINX_SQUASH_FILE}"
   dynamo-trtllm: "${SQUASH_FILE}"
   dynamo-sglang: "${SQUASH_FILE}"
   dynamo-vllm: "${SQUASH_FILE}"
@@ -171,6 +114,8 @@ if [[ -z "$CONFIG_FILE" ]]; then
     echo "Config: MODEL_PREFIX=${MODEL_PREFIX} PRECISION=${PRECISION} FRAMEWORK=${FRAMEWORK}" >&2
     exit 1
 fi
+CONFIG_FILE="$(stage_srt_recipe "$CONFIG_FILE")" || exit 1
+CONFIG_FILE="$(prepare_srt_benchmark "$CONFIG_FILE")" || exit 1
 
 # Override the job name in the config file with the runner name
 sed -i "s/^name:.*/name: \"${RUNNER_NAME}\"/" "$CONFIG_FILE"
@@ -238,6 +183,8 @@ echo "Tailing LOG_FILE: $LOG_FILE"
 tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
 
 wait $POLL_PID
+
+require_slurm_job_succeeded "$JOB_ID" || exit 1
 
 set -x
 
@@ -337,8 +284,8 @@ else
     # HF_HUB_CACHE_MOUNT is read-only and holds the pre-staged weights below.
     # WRITABLE_MODELS_DIR is writable; the benchmark script downloads anything not
     # in the staged list there.
-    HF_HUB_CACHE_MOUNT="/scratch/models/"
-    WRITABLE_MODELS_DIR="/data/models/"
+    HF_HUB_CACHE_MOUNT="$RUNNER_PATH_SCRATCH_MODEL_ROOT/"
+    WRITABLE_MODELS_DIR="$RUNNER_PATH_MODEL_ROOT/"
 
     # Pre-staged model 
     STAGED_MODELS=(
@@ -373,7 +320,7 @@ else
         export MODEL_PATH="${WRITABLE_MODELS_DIR%/}/${MODEL_BASENAME}"
     fi
 
-    SQUASH_FILE="/data/squash/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
+    SQUASH_FILE="$RUNNER_PATH_SQUASH_ROOT/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
     SPEC_SUFFIX=$([[ "$SPEC_DECODING" == "mtp" ]] && printf '_mtp' || printf '')
     # Prefer a framework-tagged script (e.g. dsv4_fp4_b300_sglang.sh) so models
     # with multiple inference engines can coexist; fall back to the historical

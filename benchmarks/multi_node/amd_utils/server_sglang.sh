@@ -10,6 +10,8 @@ NODE0_ADDR="${NODE0_ADDR:-localhost}"
 NODE_RANK="${NODE_RANK:-0}"
 MODEL_DIR="${MODEL_DIR:-}"
 MODEL_NAME="${MODEL_NAME:-}"
+INFERENCEX_CONTAINER_ROOT="${INFERENCEX_CONTAINER_ROOT:-/workspace}"
+INFERENCEX_LOG_ROOT="${INFERENCEX_LOG_ROOT:-/run_logs}"
 
 xP="${xP:-1}" #-> Number of Prefill Workers
 yD="${yD:-1}" #-> Number of Decode Workers
@@ -438,7 +440,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            2>&1 | tee "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log" &
         set +x
         prefill0_pid=$!
     fi
@@ -515,7 +517,7 @@ if [ "$NODE_RANK" -eq 0 ]; then
 
     # n_prefill n_decode prefill_gpus decode_gpus model_dir model_name log_path isl osl concurrency_list req_rate random_range_ratio num_prompts_multiplier
     BENCH_CMD="bash $SGLANG_WS_PATH/bench.sh ${xP} ${yD} $((PREFILL_TP_SIZE*xP)) $((DECODE_TP_SIZE*yD)) \
-        $MODEL_DIR $MODEL_NAME /run_logs/slurm_job-${SLURM_JOB_ID} ${BENCH_INPUT_LEN} \
+        $MODEL_DIR $MODEL_NAME "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}" ${BENCH_INPUT_LEN} \
         ${BENCH_OUTPUT_LEN} "${BENCH_MAX_CONCURRENCY}" ${BENCH_REQUEST_RATE} \
         ${BENCH_RANDOM_RANGE_RATIO} ${BENCH_NUM_PROMPTS_MULTIPLIER}"
 
@@ -549,10 +551,10 @@ if [ "$NODE_RANK" -eq 0 ]; then
             echo "WARNING: Router health check failed after 3 attempts. Skipping eval."
         else
             # Must run from repo root so utils/evals/${task}.yaml resolves
-            pushd /workspace
+            pushd "$INFERENCEX_CONTAINER_ROOT"
 
             # Source eval functions from benchmark_lib.sh
-            source /workspace/benchmarks/benchmark_lib.sh
+            source "$INFERENCEX_CONTAINER_ROOT/benchmarks/benchmark_lib.sh"
 
             # Use EVAL_CONC from workflow if set, otherwise fall back to max of conc list
             if [[ -n "${EVAL_CONC:-}" ]]; then
@@ -599,17 +601,17 @@ if [ "$NODE_RANK" -eq 0 ]; then
                     # RESULT_FILENAME are already set via Docker -e flags from job.slurm
 
                     append_lm_eval_summary
-                    # Files (meta_env.json, results*.json, sample*.jsonl) are now in /workspace
+                    # Eval files are written to the configured container workspace.
 
                     # Copy eval artifacts to run_logs for NFS extraction by runner
-                    EVAL_COPY_DIR="/run_logs/slurm_job-${SLURM_JOB_ID}/eval_results"
+                    EVAL_COPY_DIR="$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/eval_results"
                     mkdir -p "$EVAL_COPY_DIR"
                     for f in meta_env.json; do
-                        [ -e "/workspace/$f" ] && cp -f "/workspace/$f" "$EVAL_COPY_DIR/"
+                        [ -e "$INFERENCEX_CONTAINER_ROOT/$f" ] && cp -f "$INFERENCEX_CONTAINER_ROOT/$f" "$EVAL_COPY_DIR/"
                     done
                     # Use find for glob patterns to avoid "no match" errors
-                    find /workspace -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
-                    find /workspace -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find "$INFERENCEX_CONTAINER_ROOT" -maxdepth 1 -name 'results*.json' -exec cp -f {} "$EVAL_COPY_DIR/" \;
+                    find "$INFERENCEX_CONTAINER_ROOT" -maxdepth 1 -name 'sample*.jsonl' -exec cp -f {} "$EVAL_COPY_DIR/" \;
 
                     echo "Eval completed. Artifacts staged in $EVAL_COPY_DIR"
                 fi
@@ -620,11 +622,11 @@ if [ "$NODE_RANK" -eq 0 ]; then
     fi
 
     # Copy benchmark results to BENCHMARK_LOGS_DIR (mounted from host)
-    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-/run_logs}/logs"
+    LOGS_OUTPUT="${BENCHMARK_LOGS_DIR:-$INFERENCEX_LOG_ROOT}/logs"
     mkdir -p "$LOGS_OUTPUT"
 
     if [[ "$DRY_RUN" -eq 0 ]]; then
-        cp -r /run_logs/slurm_job-${SLURM_JOB_ID} "$LOGS_OUTPUT/"
+        cp -r "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}" "$LOGS_OUTPUT/"
         echo "Copied results to $LOGS_OUTPUT/slurm_job-${SLURM_JOB_ID}"
     fi
 
@@ -672,7 +674,7 @@ elif [ "$NODE_RANK" -gt 0 ] && [ "$NODE_RANK" -lt "$NODE_OFFSET" ]; then
     else
         set -x
         eval "$PREFILL_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log &
+            2>&1 | tee "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/prefill_${host_name}.log" &
         set +x
         prefill_pid=$!
     fi
@@ -741,7 +743,7 @@ else
     else
         set -x
         eval "$DECODE_CMD" \
-            2>&1 | tee /run_logs/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log &
+            2>&1 | tee "$INFERENCEX_LOG_ROOT/slurm_job-${SLURM_JOB_ID}/decode_${host_name}.log" &
 
         set +x
         decode_pid=$!

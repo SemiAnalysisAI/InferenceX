@@ -552,6 +552,16 @@ def get_tokenizer(
                               "to use mistral tokenizer mode.") from e
         return MistralTokenizer.from_pretrained(
             str(pretrained_model_name_or_path))
+    if tokenizer_mode == "deepseek_v4":
+        # DSV4 publishes tokenizer.json but its model_type is not registered in
+        # stock Transformers. Loading the fast tokenizer directly bypasses
+        # AutoConfig; benchmark_serving.py's --dsv4 path supplies the matching
+        # chat renderer when chat formatting is enabled.
+        return PreTrainedTokenizerFast.from_pretrained(
+            pretrained_model_name_or_path,
+            trust_remote_code=trust_remote_code,
+            **kwargs,
+        )
     else:
         tokenizer = AutoTokenizer.from_pretrained(
             pretrained_model_name_or_path,
