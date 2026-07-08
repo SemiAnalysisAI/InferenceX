@@ -63,7 +63,7 @@ SERVER_LOG="$RESULT_DIR/server.log"
 LMCACHE_LOG="$RESULT_DIR/lmcache_server.log"
 mkdir -p "$RESULT_DIR"
 
-OFFLOAD_ARGS=()
+OFFLOAD_ARGS=(--no-enable-prefix-caching)
 
 # ---- Lmcache config ----------------------------------------------------------
 LMCACHE_PID=""
@@ -115,7 +115,6 @@ wait_for_lmcache_ready() {
     cat "$LMCACHE_LOG" >&2 || true
     exit 1
 }
-OFFLOAD_ARGS=(--no-enable-prefix-caching)
 
 case "$KV_OFFLOAD_BACKEND" in
     native)
@@ -136,14 +135,12 @@ case "$KV_OFFLOAD_BACKEND" in
 
         # Remove --disable-hybrid-kv-cache-manager and enable hybrid kv cache manager (default)
         # This gives extra cache hit than disabling hybrid kv cache manager
-        unset OFFLOAD_ARGS
         OFFLOAD_ARGS=(
             --kv_offloading_backend native
             --kv_offloading_size "$TOTAL_CPU_DRAM_PARTITION_GB"
         )
         ;;
     lmcache)
-        unset OFFLOAD_ARGS
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
 
         git clone https://github.com/LMCache/LMCache.git
