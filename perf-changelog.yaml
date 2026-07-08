@@ -4576,10 +4576,24 @@
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1994
 
 - config-keys:
+    - minimaxm3-fp8-mi355x-vllm-mtp
+  description:
+    - "Pin the EAGLE3 drafter to TRITON_ATTN via the speculative-config attention_backend override; without it the drafter falls back to a slow default backend."
+    - "Speeds up the draft forward measured on MI355X TP4 MXFP8, 8k/1k throughput gains growing with concurrency vs no override."
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2107
+
+- config-keys:
+    - glm5-fp8-gb200-dynamo-sglang
+  description:
+    - "Add GLM-5.1-FP8 GB200 disaggregated multinode SGLang benchmarks via Dynamo"
+    - "Image: lmsysorg/sglang:v0.5.12"
+    - "14 topologies across 1k/1k and 8k/1k: prefill TP8 STP + decode wide-EP (DEP16/DEP32 high-throughput) and per-node TP8 low-latency, recipes under benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp8/"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/1895
+
+- config-keys:
     - dsv4-fp4-mi355x-sglang
   description:
     - "Bump image to lmsysorg/sglang-rocm:v0.5.14-rocm720-mi35x-20260706"
     - "Clean the export envs"
     - "Enable two batch overlap"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2093
-
