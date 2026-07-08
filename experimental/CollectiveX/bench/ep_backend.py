@@ -39,7 +39,6 @@ import os
 import types
 from dataclasses import dataclass, field
 
-import ep_precision
 from ep_harness import (
     CONDITIONING_LADDERS,
     CONDITIONING_ROUNDS_PER_SHAPE,
@@ -108,10 +107,8 @@ class EPBackend(abc.ABC):
 
     Subclasses implement the transport (``create_buffer``, ``dispatch``, ``stage``,
     ``combine``, ``recv_tokens``, ``inspect_dispatch``, ``combine_transformed``);
-    everything the driver and the oracles need beyond that is provided here. Each
-    adapter resolves its own precision profile in ``__init__`` (passing the profile
-    set inline to ``ep_precision.resolve_precision``), so there is no abstract
-    ``supported_profiles`` hook.
+    everything the driver and the oracles need beyond that is provided here.
+    Dispatch and combine are fixed BF16, so no adapter selects a precision codec.
     """
 
     # ---- Contract flags (class defaults; subclasses / low-latency override) ----
@@ -126,9 +123,6 @@ class EPBackend(abc.ABC):
     oracle_layout = "token-rank"
     payload_unit = "token-rank"
     roundtrip_only = False
-    # Precision-evidence knob: adapters that hand scales back as uint8-viewed
-    # storage (deepep-hybrid) flip this so the evidence pass reads them correctly.
-    _uint8_scale_storage = False
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -290,30 +284,22 @@ class EPBackend(abc.ABC):
         )
 
     def make_problem(self, T, idx, weights, x):
-        """Encode the dispatch payload and assemble the per-shape problem namespace."""
+        """Assemble the per-shape problem namespace (BF16 dispatch sends ``x`` directly)."""
         import torch
 
-        encoding = ep_precision.encode_dispatch(torch, x, self.communication_precision)
-        problem = types.SimpleNamespace(
+        return types.SimpleNamespace(
             T=T,
             x=x,
-            dispatch_x=encoding.native_input,
-            oracle_x=encoding.semantic,
-            dispatch_precision_evidence=encoding.evidence,
+            dispatch_x=x,
             topk_idx=idx.to(self._topk_idx_dtype()),
             topk_weights=weights.to(torch.float32),
         )
-        self._extend_problem(problem, encoding)
-        return problem
 
     def _topk_idx_dtype(self):
         """Integer dtype the backend's kernels expect for top-k routing indices."""
         import torch
 
         return torch.int64
-
-    def _extend_problem(self, problem, encoding):
-        """Hook: subclasses attach backend-specific problem fields (scales, layout, ...)."""
 
     # ---- Timing template methods -----------------------------------------------------
 
@@ -412,32 +398,11 @@ class EPBackend(abc.ABC):
         torch.cuda.synchronize()
         return time_us(torch, lambda p=problem, hx=hh: self.combine(p, hx), 0, iters)
 
-    # ---- Correctness / precision hooks (shared) --------------------------------------
+    # ---- Correctness hooks (shared) --------------------------------------------------
 
     def inspect_expert_dispatch(self, problem, handle):
         """Expert-packed post-dispatch view; only low-latency backends provide one."""
         raise RuntimeError("expert-packed inspection requires low-latency mode")
-
-    def oracle_dispatch_payload(self, payload):
-        """Project an oracle-built payload through the dispatch encoding's semantics."""
-        import torch
-
-        return ep_precision.encode_dispatch(
-            torch, payload, self.communication_precision
-        ).semantic
-
-    def precision_evidence(self, problem, view=None):
-        """Per-direction precision evidence for the raw document."""
-        import torch
-
-        return ep_precision.precision_evidence(
-            torch,
-            profile_id=self.precision_profile_id,
-            profile=self.communication_precision,
-            problem=problem,
-            view=view,
-            uint8_storage=self._uint8_scale_storage,
-        )
 
     def capture_deferred_provenance(self):
         """Resolve provenance materialized only after conditioning (e.g. JIT CUBINs).

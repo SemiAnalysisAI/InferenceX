@@ -19,15 +19,13 @@ It does not predict serving throughput without a separate correlation study.
 
 ## Matrix
 
-The implemented workload is `deepseek-v3-v1`: hidden 7168, top-k 8, 256 routed experts, packed
-placement, and one pinned fixed resource profile per backend/topology. The default sweep runs the
-portable BF16 dispatch / BF16 combine control; the native FP8 codec paths remain in the code
-(`bench/ep_precision.py` and each adapter's FP8 dispatch/combine) and stay callable but are not a
-swept dimension. Each case explicitly selects normal `layout-and-dispatch-v1` or low-latency
-`expert-packed-weighted-combine-v1` semantics.
+The implemented workload is `deepseek-v3`: hidden 7168, top-k 8, 256 routed experts, packed
+placement, and one pinned fixed resource profile per backend/topology. Dispatch and combine are
+fixed BF16 on every backend; precision is not a swept dimension. Each case explicitly selects normal
+`layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
 
-- `ep-core-v1`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
-- `ep-low-latency-v1`: DeepEP V1 / UCCL native low-latency APIs; uniform decode T=1..128 powers of
+- `ep-core`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
+- `ep-low-latency`: DeepEP V1 / UCCL native low-latency APIs; uniform decode T=1..128 powers of
   two; other backends are recorded as unsupported rather than fabricating a low-latency path.
 
 `sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
@@ -133,12 +131,9 @@ Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracl
 gate-weighted expert aggregate before combine, independently derives `sum(gate * expert(token))`, and
 checks the dispatch metadata and transformed output. Low-latency adapters separately verify the
 expert-packed source/expert assignment, native gate weights, and gate-weighted combined output. Both
-contracts compare against the semantic value after the declared communication codec. The combine
-gates are `rtol=0.05, atol=0.02` for BF16 (the default sweep), `rtol=0.06, atol=0.03` for native
-logfmt10, and `rtol=0.08, atol=0.04` for native FP8 direct-cast combine when those codec paths are
-exercised. These thresholds are correctness gates, not estimates of codec error. Direct-cast
-saturation is measured on the exact transformed native combine input, and the required saturation
-count is zero. Any failed rank or point makes the case ineligible and is recorded as such.
+contracts compare against the reference activation. The combine gate is `rtol=0.05, atol=0.02` for
+the BF16 communication path. This threshold is a correctness gate, not an estimate of transport
+error. Any failed rank or point makes the case ineligible and is recorded as such.
 Pre/post dispatch evidence is hashed in canonical source-token order. Native receive slots may be
 assigned nondeterministically, so physical receive order is not treated as a correctness property.
 
@@ -165,24 +160,26 @@ local mode-0600 logs and ignored operator notes and never enter an emitted artif
 
 ## Identity
 
-Canonical JSON produces three full SHA-256 IDs:
+Identifiers are readable factor strings with a short digest suffix, not opaque hashes:
 
-- `series_id`: all locked factors except token coordinate and repeat allocation;
-- `point_id`: `series_id` plus token coordinate; and
-- `evidence_id`: `point_id` plus allocation/run/attempt/sample checksum.
+- `case_id`: `{sku}-{backend}-{workload}-{mode}-{phase}-ep{ep}-{routing}[-eplb]` followed by a
+  12-hex digest of the full case factors (SKU, profile, and case), so the body is human-readable
+  while the suffix makes the ID collision-proof and a tamper-evident join key;
+- `attempt_id`: `case_id` plus `-a{ordinal:02d}`; and
+- `point_id`: `case_id` plus `-t{tokens_per_rank}`.
 
-Locked factors include workload bytes, measurement and sampling contract, resources, realized
-topology, implementation/build, loaded libraries, image/squash, runtime, and source SHA. Deferred
-code generation is captured before measurement and recaptured afterward. DeepEP V2 uses a fixed NVCC
-random seed and binds final cache keys plus generated-source and executable-SASS hashes; raw CUBIN
-bytes remain private diagnostics and are stripped before they enter an artifact. Hybrid binds its
-realized auto-tuned config and complete kernel-key set while retaining rank-local shared-object
-hashes as private diagnostics. Locally built extension hashes are diagnostic; their pinned source
-trees, build recipe, runtime, and dependencies remain series-bound.
+Content SHA-256 is retained only where it identifies separately-stored bytes or executable code: the
+workload manifest (`workload_id` = `cxwork-v1-{sha256}`), detached sample files (`sample_sha256`),
+source commits, container images and squash layers, and deferred/JIT-generated source. DeepEP V2
+uses a fixed NVCC random seed and binds final cache keys plus generated-source and executable-SASS
+hashes; raw CUBIN bytes remain private diagnostics and are stripped before they enter an artifact.
+Hybrid binds its realized auto-tuned config and complete kernel-key set while retaining rank-local
+shared-object hashes as private diagnostics. Locally built extension hashes are diagnostic; their
+pinned source trees, build recipe, runtime, and dependencies remain bound to the case factors.
 
 These IDs let a consumer group matched configurations and separate distinct ones. The backend does
 not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or
-recommendations — a reader decides which series to surface and how to compare them.
+recommendations — a reader decides which cases to surface and how to compare them.
 
 ## Execution Isolation
 
@@ -238,13 +235,11 @@ uploads them as GitHub artifacts with `always()` so a red or partial run still u
 
 - strict schema validity of every result, terminal, and samples document;
 - exactly one terminal record per scheduled case, with no missing, extra, or duplicate case;
-- detached-sample path and SHA-256 consistency (`point_id` / `evidence_id`); and
+- detached-sample path and SHA-256 consistency (`point_id` / `sample_sha256`); and
 - privacy — no private host, address, selector, credential, or path leaks into any artifact.
 
-The `setup` job also emits a neutral `collectivex.frontend-catalog.v1` projection of the matrix so a
-consumer can enumerate scheduled coverage without parsing shard internals. No step promotes a run,
-builds a dataset, or advances a channel; the artifacts are the output. Any downstream display or
-comparison is the consumer's responsibility.
+No step promotes a run, builds a dataset, or advances a channel; the artifacts are the output. Any
+downstream display or comparison is the consumer's responsibility.
 
 ## Legacy Data
 

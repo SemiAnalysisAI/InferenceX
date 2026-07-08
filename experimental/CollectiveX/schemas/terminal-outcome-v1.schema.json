@@ -4,7 +4,7 @@
   "title": "CollectiveX terminal outcome v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["case","format","generated_at","identity","outcome","provenance","record_type","schema_version"],
+  "required": ["case","format","generated_at","identity","outcome","provenance","record_type","schema_version","version"],
   "properties": {
       "case": {"$ref": "#/$defs/case"},
       "format": {"const": "collectivex.terminal.v1"},
@@ -12,10 +12,9 @@
       "identity": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["allocation_factors","allocation_id","attempt_id","attempt_ordinal","case_factors","case_id"],
+            "required": ["allocation_factors","attempt_id","attempt_ordinal","case_factors","case_id"],
             "properties": {
                     "allocation_factors": {"$ref": "#/$defs/allocationFactors"},
-                    "allocation_id": {"$ref": "#/$defs/allocationId"},
                     "attempt_id": {"$ref": "#/$defs/attemptId"},
                     "attempt_ordinal": {"type": "integer","minimum": 1},
                     "case_factors": {
@@ -60,7 +59,8 @@
                   }
           },
       "record_type": {"const": "terminal-outcome"},
-      "schema_version": {"const": 1}
+      "schema_version": {"const": 1},
+      "version": {"type": "integer","minimum": 1}
     },
   "allOf": [
       {
@@ -139,9 +139,8 @@
           },
       "sha256": {"type": "string","pattern": "^[0-9a-f]{64}$"},
       "safeId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 128},
-      "caseId": {"type": "string","pattern": "^cxcase-v1-[0-9a-f]{64}$"},
-      "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
-      "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
+      "caseId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 180},
+      "attemptId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 180},
       "nullableText": {"oneOf": [{"type": "null"},{"type": "string","minLength": 1}]},
       "caseProfile": {
             "type":"object",
@@ -170,12 +169,11 @@
                                     }}
                             }
                   ],
-            "required":["activation_generator","activation_profile","combine_dtype","combine_quant_mode","combine_semantics","component_order_contract","conditioning_contract","contract","correctness_scope","dtype","eplb_planner","eplb_redundant_experts","eplb_reference_tokens_per_rank","mode","oracle_contract","oracle_tolerances","payload_unit","placement","percentile_method","rank_reduction","resource_mode","routing_generator","sampling_contract","seed","source_identity_contract"],
+            "required":["activation_generator","activation_profile","combine_dtype","combine_semantics","component_order_contract","conditioning_contract","contract","correctness_scope","dtype","eplb_planner","eplb_redundant_experts","eplb_reference_tokens_per_rank","mode","oracle_contract","payload_unit","placement","percentile_method","rank_reduction","resource_mode","routing_generator","sampling_contract","seed","source_identity_contract"],
             "properties": {
                     "activation_generator":{"const":"collectivex-activation-counter-v4"},
                     "activation_profile":{"const":"canonical-counter-source-v4"},
                     "combine_dtype":{"const":"bf16"},
-                    "combine_quant_mode":{"const":"none"},
                     "combine_semantics":{"enum":["activation-only","gate-weighted"]},
                     "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
                     "conditioning_contract":{"const":"fixed-phase-ramp-8-roundtrips-v1"},
@@ -187,7 +185,6 @@
                     "eplb_reference_tokens_per_rank":{"const":2048},
                     "mode":{"enum":["normal","low-latency"]},
                     "oracle_contract":{"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
-                    "oracle_tolerances":{"const":"codec-specific-combine-v1"},
                     "payload_unit":{"enum":["token-rank","token-expert"]},
                     "placement":{"const":"packed"},
                     "percentile_method":{"const":"nearest-rank"},

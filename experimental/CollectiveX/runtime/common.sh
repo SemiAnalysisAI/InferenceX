@@ -97,26 +97,6 @@ cx_fail_stage() {
       diagnostic="python-import"
     elif grep -aEqi 'AttributeError:|TypeError:.*(unexpected|argument|operand)|has no attribute' "$log_path"; then
       diagnostic="backend-api"
-    elif grep -aEqi 'FP8 dispatch payload is missing block-128 scales' "$log_path"; then
-      diagnostic="precision-dispatch-scales-missing"
-    elif grep -aEqi 'native FP8 dispatch payload has an invalid dtype or shape' "$log_path"; then
-      diagnostic="precision-dispatch-payload-shape"
-    elif grep -aEqi 'native FP8 dispatch scales have an invalid dtype or shape' "$log_path"; then
-      diagnostic="precision-dispatch-scale-shape"
-    elif grep -aEqi 'expert-packed FP8 receive count exceeds capacity' "$log_path"; then
-      diagnostic="precision-receive-capacity"
-    elif grep -aEqi 'expert-packed (FP8 receive counts|BF16 stage workspace) has an invalid shape' "$log_path"; then
-      diagnostic="precision-receive-shape"
-    elif grep -aEqi 'active torch build does not expose (torch[.])?float8|active torch build does not expose fp8-' "$log_path"; then
-      diagnostic="precision-runtime-dtype"
-    elif grep -aEqi 'omits EpDispatchCombineQuantType[.]Fp8DirectCast' "$log_path"; then
-      diagnostic="precision-combine-api"
-    elif grep -aEqi 'dispatch FP8 format differs from the pinned GPU architecture' "$log_path"; then
-      diagnostic="precision-architecture-format"
-    elif grep -aEqi 'native FP8 dispatch requires hidden divisible by 128' "$log_path"; then
-      diagnostic="precision-hidden-alignment"
-    elif grep -aEqi 'PrecisionError:|unsupported precision|precision profile.*(invalid|unsupported|differs)' "$log_path"; then
-      diagnostic="precision-contract"
     elif grep -aEqi 'AssertionError:' "$log_path"; then
       diagnostic="python-assertion"
     elif grep -aEqi 'RuntimeError:' "$log_path"; then
@@ -709,8 +689,7 @@ PY
 # Explicit Slurm export boundary. Operator config, runner credentials, HOME,
 # workspace paths, and unrelated service secrets never enter the container.
 cx_container_exports() {
-  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_CONTROL_SHA256,COLLECTIVEX_IMAGE,COLLECTIVEX_IMAGE_DIGEST,COLLECTIVEX_IMAGE_DIGEST_VERIFIED,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_EPLB,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_PRECISION_PROFILE,CX_QUALIFICATION_INDEX,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_CACHE_SENTINEL_SHA256,CX_BACKEND_SOURCE_ROOT,CX_AUDIT_SALT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,UCCL_SOCKET_IFNAME,UCCL_IB_GID_INDEX,UCCL_IB_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL'
-  printf '%s' ',MORI_COMMIT'
+  printf '%s' 'COLLECTIVEX_SOURCE_SHA,COLLECTIVEX_ARTIFACT_NAME,COLLECTIVEX_EXECUTION_ID,COLLECTIVEX_CONTROL_SHA256,COLLECTIVEX_IMAGE,COLLECTIVEX_IMAGE_DIGEST,COLLECTIVEX_IMAGE_DIGEST_VERIFIED,COLLECTIVEX_SQUASH_SHA256,GITHUB_REF_NAME,GITHUB_REF,GITHUB_REPOSITORY,GITHUB_JOB,GITHUB_RUN_ID,GITHUB_RUN_ATTEMPT,GITHUB_SHA,CX_RUNNER,CX_BENCH,CX_NODES,CX_GPUS_PER_NODE,CX_SCALE_UP_DOMAIN,CX_SHARD_FILE,CX_SHARD_SKU,CX_NGPUS,CX_TS,CX_TOPO,CX_SCOPE,CX_TRANSPORT,CX_SCALE_UP_TRANSPORT,CX_SCALE_OUT_TRANSPORT,CX_MODE,CX_PHASE,CX_ROUTING,CX_EPLB,CX_CASE_ID,CX_SUITE,CX_WORKLOAD_NAME,CX_QUALIFICATION_INDEX,CX_VERSION,CX_HIDDEN,CX_TOPK,CX_EXPERTS,CX_TOKENS_LADDER,CX_CANONICAL,CX_ITERS,CX_TRIALS,CX_WARMUP,CX_SAMPLES_PER_POINT,CX_WARMUP_SEMANTICS,CX_SEED,CX_RUN_TIMEOUT,CX_NCCL_HOME,CX_ALLOW_MNNVL,CX_ATTEMPT_ID,CX_RUNTIME_MARKER,CX_MORI_KERNEL_TYPE,CX_WORKLOAD_DIR,CX_BACKEND_CACHE_ROOT,CX_BACKEND_CACHE_SENTINEL_SHA256,CX_BACKEND_SOURCE_ROOT,CX_AUDIT_SALT,CX_SOCKET_IFNAME,CX_RDMA_DEVICES,CX_IB_GID_INDEX,CX_RDMA_SERVICE_LEVEL,CX_RDMA_TRAFFIC_CLASS,CX_RDMA_LINK_LAYER,MASTER_ADDR,MASTER_PORT,RANK,WORLD_SIZE,LOCAL_RANK,LOCAL_WORLD_SIZE,NCCL_NET,NCCL_SOCKET_IFNAME,GLOO_SOCKET_IFNAME,NCCL_IB_HCA,NCCL_IB_GID_INDEX,NCCL_IB_SL,NVSHMEM_DISABLE_IB,NVSHMEM_ENABLE_NIC_PE_MAPPING,NVSHMEM_HCA_LIST,NVSHMEM_IB_GID_INDEX,NVSHMEM_IB_SL,NVSHMEM_IB_ENABLE_IBGDA,NVSHMEM_IBGDA_NIC_HANDLER,EP_NIC_NAME,EP_OVERRIDE_RDMA_SL,UCCL_SOCKET_IFNAME,UCCL_IB_GID_INDEX,UCCL_IB_SL,MORI_RDMA_DEVICES,MORI_RDMA_TC,MORI_IO_TC,MORI_RDMA_SL,MORI_IO_SL,HYBRID_EP_MULTINODE,USE_NIXL,RDMA_CORE_HOME,DEEPEP_HYBRID_BUILD_MODE,NCCL_CUMEM_ENABLE,NCCL_MNNVL_ENABLE,MC_FORCE_MNNVL,MORI_DISABLE_AUTO_XGMI,MORI_ENABLE_SDMA,MORI_APP_LOG_LEVEL,MORI_SHMEM_LOG_LEVEL,MORI_IO_LOG_LEVEL,MORI_COMMIT'
 }
 
 # Host-side utility steps need only the basic login paths. They never receive
@@ -2911,7 +2890,7 @@ cx_emit_setup_failures() {
   local root="$1" out_dir="$2" backend="$3" rc="$4" shard="${CX_SHARD_FILE:-}" path
   local phase case_id suite workload required routing eplb ep hidden topk experts nodes
   local gpn domain ladder canonical timing mode scope scale_up_transport scale_out_transport
-  local warmup_semantics precision_profile
+  local warmup_semantics
   local transport topology_class
   local cases_file expected emitted=0 covered=0
   mkdir -p "$out_dir" || return 1
@@ -2943,6 +2922,9 @@ cx_emit_setup_failures() {
     cx_log "ERROR: cannot hash shard for setup-failure records"
     return 1
   }
+  # Setup-failure terminal outcomes carry the shard's iterable benchmark version.
+  CX_VERSION="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$path")"
+  export CX_VERSION
   cases_file="$(mktemp)" || return 1
   if ! python3 - "$path" > "$cases_file" <<'PY'
 import json, sys
@@ -2959,7 +2941,6 @@ for case in cases:
         case["transport"], case["topology_class"], case["ladder"],
         case["warmup_semantics"],
         "1" if case["canonical"] else "", case["timing"],
-        case.get("precision_profile") or "",
     )
     print("|".join(map(str, fields)))
 PY
@@ -2972,7 +2953,7 @@ PY
   [ "$expected" -gt 0 ] || { rm -f "$cases_file"; unset CX_FAILURE_MODE; return 1; }
   while IFS='|' read -r phase mode case_id suite workload routing eplb ep hidden topk \
       experts nodes gpn domain scope scale_up_transport scale_out_transport transport \
-      topology_class ladder warmup_semantics canonical timing precision_profile; do
+      topology_class ladder warmup_semantics canonical timing; do
     export CX_CASE_ID="$case_id" CX_SUITE="$suite" CX_WORKLOAD_NAME="$workload"
     export CX_ROUTING="$routing" CX_EPLB="$eplb"
     export CX_EP="$ep" CX_NGPUS="$ep" CX_HIDDEN="$hidden" CX_TOPK="$topk" CX_EXPERTS="$experts"
@@ -2982,7 +2963,6 @@ PY
     export CX_SCALE_OUT_TRANSPORT="$scale_out_transport"
     export CX_TRANSPORT="$transport" CX_TOPO="$topology_class"
     export CX_TOKENS_LADDER="$ladder" CX_CANONICAL="$canonical"
-    export CX_PRECISION_PROFILE="$precision_profile"
     export CX_WARMUP_SEMANTICS="$warmup_semantics"
     IFS=: read -r CX_ITERS CX_TRIALS CX_WARMUP <<< "$timing"
     export CX_ITERS CX_TRIALS CX_WARMUP CX_SAMPLES_PER_POINT="$((CX_ITERS * CX_TRIALS))"
@@ -3009,7 +2989,6 @@ cx_run_distributed_shard() {
   local ph mode routing eplb hidden topk experts ladder suite workload
   local canonical case_id ep timing case_iters case_trials case_warmup case_stem
   local scope scale_up_transport scale_out_transport transport topology_class nodes gpn domain
-  local precision_profile
   local workload_dir workload_ladder workload_log stage_rc attempt_tag out failure_out
   local runtime_log run_rc expected_out case_ok summary_log
   local -a container_args workload_args ep_args
@@ -3059,6 +3038,12 @@ cx_run_distributed_shard() {
   cases_file="$(mktemp)" || return 1
   local shard="${CX_SHARD_FILE:-}"
   [ -z "$shard" ] || [ -f "$shard" ] || shard="$CX_DIR/$shard"
+  # Iterable benchmark version is a shard-level scalar; export it once so the
+  # harness copies it verbatim into every emitted result for this shard.
+  if [ -n "$shard" ] && [ -f "$shard" ]; then
+    CX_VERSION="$(python3 -c "import json,sys;print(json.load(open(sys.argv[1]))['version'])" "$shard")"
+    export CX_VERSION
+  fi
   if [ -n "$shard" ]; then
     if [ ! -f "$shard" ] || ! python3 - "$shard" > "$cases_file" <<'PY'
 import json
@@ -3077,7 +3062,6 @@ for case in cases:
         get("timing", "8:64:32"), get("nodes"), get("gpus_per_node"),
         get("scale_up_domain"), get("scope"), get("scale_up_transport"),
         get("scale_out_transport"), get("transport"), get("topology_class"),
-        get("precision_profile"),
     )
     print("|".join(fields))
 PY
@@ -3092,13 +3076,12 @@ PY
       "${CX_EPLB:-}" "${CX_HIDDEN:-7168}" "${CX_TOPK:-8}" "${CX_EXPERTS:-256}" \
       "${CX_TOKENS_LADDER:-}" "${CX_SUITE:-}" "${CX_WORKLOAD_NAME:-}" \
       "${CX_CANONICAL:-}" "${CX_CASE_ID:-}" \
-      "${CX_PRECISION_PROFILE:-}" \
       "${CX_ITERS:-8}" "${CX_TRIALS:-64}" "${CX_WARMUP:-32}" \
       "${CX_SCOPE:-scale-up}" \
       "${CX_SCALE_UP_TRANSPORT:-unknown}" "${CX_SCALE_OUT_TRANSPORT:-}" \
       "${CX_TRANSPORT:-unknown}" "${CX_TOPO:-manual}"
     for phase in $phases; do
-      (IFS='|'; printf '%s\n' "$phase|${CX_MODE:-normal}|${CX_ROUTING:-uniform}|${CX_EPLB:-}|${CX_HIDDEN:-7168}|${CX_TOPK:-8}|${CX_EXPERTS:-256}|${CX_TOKENS_LADDER:-}|${CX_SUITE:-}|${CX_WORKLOAD_NAME:-}|${CX_CANONICAL:-}|${CX_CASE_ID:-}|$NGPUS|${CX_ITERS:-8}:${CX_TRIALS:-64}:${CX_WARMUP:-32}|$NODES|$GPN|$SCALE_UP_DOMAIN|${CX_SCOPE:-scale-up}|${CX_SCALE_UP_TRANSPORT:-unknown}|${CX_SCALE_OUT_TRANSPORT:-}|${CX_TRANSPORT:-unknown}|${CX_TOPO:-manual}|${CX_PRECISION_PROFILE:-}")
+      (IFS='|'; printf '%s\n' "$phase|${CX_MODE:-normal}|${CX_ROUTING:-uniform}|${CX_EPLB:-}|${CX_HIDDEN:-7168}|${CX_TOPK:-8}|${CX_EXPERTS:-256}|${CX_TOKENS_LADDER:-}|${CX_SUITE:-}|${CX_WORKLOAD_NAME:-}|${CX_CANONICAL:-}|${CX_CASE_ID:-}|$NGPUS|${CX_ITERS:-8}:${CX_TRIALS:-64}:${CX_WARMUP:-32}|$NODES|$GPN|$SCALE_UP_DOMAIN|${CX_SCOPE:-scale-up}|${CX_SCALE_UP_TRANSPORT:-unknown}|${CX_SCALE_OUT_TRANSPORT:-}|${CX_TRANSPORT:-unknown}|${CX_TOPO:-manual}")
     done > "$cases_file"
   fi
   expected_cases="$(wc -l < "$cases_file" | tr -d ' ')"
@@ -3107,7 +3090,7 @@ PY
 
   while IFS='|' read -r ph mode routing eplb hidden topk experts ladder suite workload \
       canonical case_id ep timing nodes gpn domain scope scale_up_transport \
-      scale_out_transport transport topology_class precision_profile; do
+      scale_out_transport transport topology_class; do
     [ -n "$ph" ] || continue
     ci=$((ci + 1))
     case_stem="${RUNNER}_${CX_BENCH}_${ph}_${TS}-c$(printf '%03d' "$ci")"
@@ -3119,7 +3102,6 @@ PY
     export CX_MODE="$mode" CX_PHASE="$ph" CX_CASE_ID="$case_id" CX_SUITE="$suite"
     export CX_WORKLOAD_NAME="$workload"
     export CX_CANONICAL="$canonical" CX_EP="$ep"
-    export CX_PRECISION_PROFILE="$precision_profile"
     export CX_ROUTING="$routing" CX_EPLB="$eplb" CX_TOKENS_LADDER="$ladder"
     export CX_HIDDEN="$hidden" CX_TOPK="$topk" CX_EXPERTS="$experts"
     export CX_NODES="$nodes" CX_GPUS_PER_NODE="$gpn" CX_SCALE_UP_DOMAIN="$domain"
@@ -3168,7 +3150,6 @@ PY
     fi
 
     ep_args=(--backend "$CX_BENCH" --mode "$mode" --phase "$ph" --routing "$routing"
-      --precision-profile "$precision_profile"
       --gpus-per-node "$gpn" --scale-up-domain "$domain" --scope "$scope"
       --scale-up-transport "$scale_up_transport" --scale-out-transport "$scale_out_transport"
       --tokens-ladder "$ladder" --hidden "$hidden" --topk "$topk" --experts "$experts"
@@ -3176,7 +3157,7 @@ PY
       --seed "${CX_SEED:-67}" --runner "$RUNNER" --topology-class "$topology_class"
       --transport "$transport" --case-id "$case_id" --suite "$suite"
       --workload-name "$workload"
-      --qualification-index "${CX_QUALIFICATION_INDEX:-1}")
+      --qualification-index "${CX_QUALIFICATION_INDEX:-1}" --version "${CX_VERSION:-1}")
     cx_bool_enabled "$eplb" && ep_args+=(--eplb)
     [ -z "$workload_dir" ] || ep_args+=(--workload-dir "$workload_dir")
     export CX_ATTEMPT_ID=1

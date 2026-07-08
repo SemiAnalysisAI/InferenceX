@@ -1,8 +1,8 @@
-# CollectiveX v1 canonical workload and phase metadata.
+# CollectiveX EP canonical workload and phase metadata.
 schema_version: 1
 
 model_derived:
-  deepseek-v3-v1:
+  deepseek-v3:
     hidden: 7168
     topk: 8
     routed_experts: 256

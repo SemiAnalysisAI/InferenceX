@@ -80,7 +80,6 @@ run_ep_suite() {
     cx_log "ep backend=$backend phase=$phase ngpus=$CX_NGPUS ladder='${ladder:-<phase-default>}'"
     local out="results/${CX_RUNNER}_${backend}_${phase}_${CX_TS}.json"
     local -a EPARGS=(--backend "$backend" --mode "${CX_MODE:-normal}" --phase "$phase"
-      --precision-profile "${CX_PRECISION_PROFILE:-}"
       --tokens-ladder "$ladder"
       --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" --experts "${CX_EXPERTS:-256}"
       --routing "${CX_ROUTING:-uniform}" --seed "${CX_SEED:-67}" --iters "${CX_ITERS:-8}"
@@ -89,7 +88,7 @@ run_ep_suite() {
       --scope "${CX_SCOPE:-scale-up}" --scale-up-transport "${CX_SCALE_UP_TRANSPORT:-unknown}"
       --scale-out-transport "${CX_SCALE_OUT_TRANSPORT:-}"
       --case-id "${CX_CASE_ID:-}" --suite "${CX_SUITE:-}" --workload-name "${CX_WORKLOAD_NAME:-}"
-      --qualification-index "${CX_QUALIFICATION_INDEX:-1}"
+      --qualification-index "${CX_QUALIFICATION_INDEX:-1}" --version "${CX_VERSION:-1}"
       --runner "$CX_RUNNER" --topology-class "$CX_TOPO" --transport "$CX_TRANSPORT"
       --out "$out")
     [ -n "${CX_WORKLOAD_DIR:-}" ] && EPARGS+=(--workload-dir "$CX_WORKLOAD_DIR")
@@ -1012,7 +1011,11 @@ if [ -n "${CX_SHARD_FILE:-}" ]; then
   # SHARD/SWEEP mode (collectivex-sweep.yml): run EVERY case of this shard in THIS one allocation.
   # All cases share (sku, backend, nodes), so backend preparation is paid once and cached.
   ncases="$(python3 -c "import json;print(len(json.load(open('$CX_SHARD_FILE'))['cases']))")"
-  cx_log "SHARD mode: $ncases case(s) in one allocation (shard=$CX_SHARD_FILE)"
+  # The iterable benchmark version is a shard-level scalar (identical for every case);
+  # export it once so run_ep copies it verbatim into each emitted result.
+  CX_VERSION="$(python3 -c "import json;print(json.load(open('$CX_SHARD_FILE'))['version'])")"
+  export CX_VERSION
+  cx_log "SHARD mode: $ncases case(s) in one allocation (shard=$CX_SHARD_FILE, version=$CX_VERSION)"
   _cx_ts_base="$CX_TS"   # per-case CX_TS suffix below keeps each case's result file UNIQUE (else
                          # cases sharing backend+phase overwrite each other at the same timestamp).
   ci=0
@@ -1033,7 +1036,6 @@ env = {
   "CX_EP": g("ep", "1"),
   "CX_EPLB": "1" if c.get("eplb") else "",
   "CX_CASE_ID": g("case_id"), "CX_SUITE": g("suite"), "CX_WORKLOAD_NAME": g("workload"),
-  "CX_PRECISION_PROFILE": g("precision_profile"),
   "CX_HIDDEN": g("hidden"), "CX_TOPK": g("topk"), "CX_EXPERTS": g("experts"),
   "CX_TOKENS_LADDER": g("ladder"), "CX_CANONICAL": ("1" if c.get("canonical") else ""),
   "CX_NODES": g("nodes"), "CX_GPUS_PER_NODE": g("gpus_per_node"),

@@ -297,7 +297,7 @@ def main() -> int:
         if args.phase != "decode":
             print("ERROR: low-latency mode requires --phase decode", file=sys.stderr)
             return 2
-    if args.case_id and not identity.is_typed_id(args.case_id, "case"):
+    if args.case_id and not identity.is_case_id(args.case_id):
         print(f"ERROR: invalid native case ID {args.case_id!r}", file=sys.stderr)
         return 2
     if args.case_id and args.seed != ep_harness.ROUTING_SEED:

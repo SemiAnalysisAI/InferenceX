@@ -57,7 +57,7 @@
         "num_of_tokens_per_chunk_preprocessing_api": {"minimum":0,"type":"integer"},
         "num_of_tokens_per_group_combine_api": {"minimum":0,"type":"integer"},
         "pad_multiple": {"minimum":0,"type":"integer"},
-        "token_data_type": {"enum":["UINT8","UINT16"]}
+        "token_data_type": {"const":"UINT16"}
       },
       "required": [
         "backward_combine_api","device_side_sync_combine_api","device_side_sync_dispatch_api",
@@ -120,7 +120,6 @@
         "activation_generator": {"const":"collectivex-activation-counter-v4"},
         "activation_profile": {"const":"canonical-counter-source-v4"},
         "combine_dtype": {"const":"bf16"},
-        "combine_quant_mode": {"const":"none"},
         "combine_semantics": {"enum":["activation-only","gate-weighted"]},
         "component_order_contract": {"const":"qualification-hash-rotated-components-v1"},
         "conditioning_contract": {"const":"fixed-phase-ramp-8-roundtrips-v1"},
@@ -132,7 +131,6 @@
         "eplb_reference_tokens_per_rank": {"const":2048},
         "mode": {"enum":["normal","low-latency"]},
         "oracle_contract": {"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
-        "oracle_tolerances": {"const":"codec-specific-combine-v1"},
         "payload_unit": {"enum":["token-rank","token-expert"]},
         "placement": {"const":"packed"},
         "percentile_method": {"const":"nearest-rank"},
@@ -144,10 +142,10 @@
         "source_identity_contract": {"const":"bounded-sign-bit-source-v1"}
       },
       "required": [
-        "activation_generator","activation_profile","combine_dtype","combine_quant_mode",
+        "activation_generator","activation_profile","combine_dtype",
         "combine_semantics","component_order_contract","conditioning_contract","contract",
         "correctness_scope","dtype","eplb_planner","eplb_redundant_experts",
-        "eplb_reference_tokens_per_rank","mode","oracle_contract","oracle_tolerances",
+        "eplb_reference_tokens_per_rank","mode","oracle_contract",
         "payload_unit","placement","percentile_method","rank_reduction","resource_mode",
         "routing_generator","sampling_contract","seed","source_identity_contract"
       ],
@@ -170,7 +168,7 @@
           "required": ["combine_values","counts","metadata","multiplicity","payload","source_set","weights"],
           "type": "object"
         },
-        "atol": {"enum":[0.02,0.04]},
+        "atol": {"const":0.02},
         "combine_weight_semantics": {"enum":["unweighted-rank-sum","gate-weighted-sum"]},
         "contract": {"enum":["expert-specific-transform-v1","expert-assignment-transform-v1"]},
         "dispatch_sha256": {"$ref":"#/$defs/nullable_sha256"},
@@ -182,7 +180,7 @@
         "ordering_contract": {"minLength":1,"type":"string"},
         "passed": {"type":"boolean"},
         "receive_count": {"minimum":0,"type":"integer"},
-        "rtol": {"enum":[0.05,0.08]}
+        "rtol": {"const":0.05}
       },
       "required": [
         "atol",
@@ -463,8 +461,7 @@
           "required": ["artifact","execution_id","job","repo","run_attempt","run_id","runner","source_sha"],
           "type": "object"
         },
-        "allocation_id": {"pattern":"^cxallocation-v1-[0-9a-f]{64}$","type":"string"},
-        "attempt_id": {"pattern":"^cxattempt-v1-[0-9a-f]{64}$","type":"string"},
+        "attempt_id": {"maxLength":180,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"},
         "attempt_ordinal": {"minimum":1,"type":"integer"},
         "case_factors": {
           "additionalProperties": false,
@@ -476,38 +473,14 @@
           "required": ["case","profile","sku"],
           "type": "object"
         },
-        "case_id": {"pattern":"^cxcase-v1-[0-9a-f]{64}$","type":"string"},
-        "series_factors": {
-          "additionalProperties": false,
-          "properties": {
-            "backend": {"maxLength":128,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"},
-            "case_id": {"pattern":"^cxcase-v1-[0-9a-f]{64}$","type":"string"},
-            "image_digest": {"oneOf":[{"type":"null"},{"minLength":1,"type":"string"}]},
-            "source_sha": {"oneOf":[{"type":"null"},{"pattern":"^[0-9a-f]{40}$","type":"string"}]},
-            "squash_sha256": {"oneOf":[{"type":"null"},{"pattern":"^[0-9a-f]{64}$","type":"string"}]},
-            "workload_id": {"pattern":"^cxwork-v1-[0-9a-f]{64}$","type":"string"}
-          },
-          "required": [
-            "backend",
-            "case_id",
-            "image_digest",
-            "source_sha",
-            "squash_sha256",
-            "workload_id"
-          ],
-          "type": "object"
-        },
-        "series_id": {"pattern":"^cxseries-v1-[0-9a-f]{64}$","type":"string"}
+        "case_id": {"maxLength":180,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"}
       },
       "required": [
         "allocation_factors",
-        "allocation_id",
         "attempt_id",
         "attempt_ordinal",
         "case_factors",
-        "case_id",
-        "series_factors",
-        "series_id"
+        "case_id"
       ],
       "type": "object"
     },
@@ -796,7 +769,6 @@
                 "required": ["contract","max_relative_error","passed","rank_evidence","scope"],
                 "type": "object"
               },
-              "evidence_id": {"pattern":"^cxevidence-v1-[0-9a-f]{64}$","type":"string"},
               "global_tokens": {"minimum":1,"type":"integer"},
               "byte_provenance": {
                 "additionalProperties": false,
@@ -809,7 +781,7 @@
                 "required": ["combine","dispatch","roundtrip","stage"],
                 "type": "object"
               },
-              "point_id": {"pattern":"^cxpoint-v1-[0-9a-f]{64}$","type":"string"},
+              "point_id": {"maxLength":180,"pattern":"^[a-z0-9][a-z0-9_.-]*$","type":"string"},
               "receive": {
                 "additionalProperties": false,
                 "properties": {
@@ -935,7 +907,6 @@
               "components",
               "correctness",
               "byte_provenance",
-              "evidence_id",
               "global_tokens",
               "point_id",
               "receive",
@@ -1160,6 +1131,7 @@
       ],
       "type": "object"
     },
+    "version": {"minimum":1,"type":"integer"},
     "workload": {
       "additionalProperties": false,
       "properties": {
@@ -1238,6 +1210,7 @@
     "sample_artifact",
     "schema_version",
     "topology",
+    "version",
     "workload"
   ],
   "title": "CollectiveX raw case attempt v1",

@@ -47,7 +47,6 @@ import types
 
 import contracts
 import ep_provenance
-import ep_precision
 import identity
 import workload as workload_contract
 
@@ -88,13 +87,9 @@ CONDITIONING_LADDERS = {
 CONDITIONING_ROUNDS_PER_SHAPE = contracts.V1_CONDITIONING_ROUNDS_PER_SHAPE
 CONDITIONING_CONTRACT = identity.V1_CASE_PROFILE["conditioning_contract"]
 ORACLE_CONTRACT = identity.V1_CASE_PROFILE["oracle_contract"]
+# Dispatch and combine are fixed BF16, so the combine oracle uses one frozen gate.
 ORACLE_RTOL = 5e-2
 ORACLE_ATOL = 2e-2
-
-
-def _oracle_tolerances(backend) -> tuple[float, float]:
-    tolerance = ep_precision.combine_oracle_tolerances(backend.communication_precision)
-    return tolerance["atol"], tolerance["rtol"]
 
 EPLB_REDUNDANT_EXPERTS = 32
 EPLB_REFERENCE_TOKENS_PER_RANK = 2048
@@ -102,7 +97,6 @@ EPLB_PLANNER = "greedy-rank-major-v1"
 V1_PROFILE = {
     "dispatch_dtype": "bf16",
     "combine_dtype": "bf16",
-    "combine_quant_mode": "none",
     "mode": "normal",
     "measurement_contract": "layout-and-dispatch-v1",
     "resource_mode": "fixed-profile",
@@ -120,33 +114,20 @@ V1_PROFILE = {
 }
 
 
-def precision_byte_provenance(
-    axis: dict, logical_copies: int, hidden: int
-) -> dict[str, int | str]:
-    """Return comparable logical activation and required scale bytes for one direction."""
+def logical_byte_provenance(logical_copies: int, hidden: int) -> dict[str, int | str]:
+    """Return comparable logical BF16 activation bytes for one direction.
+
+    Dispatch and combine both move BF16 (2 bytes/value) with no separate scale
+    payload, so ``scale_bytes`` is always zero.
+    """
     if logical_copies < 0 or hidden < 0:
-        raise ValueError("logical precision byte dimensions must be non-negative")
-    bits_per_value = {
-        "bf16": 16,
-        "fp8-e4m3fn": 8,
-        "fp8-e4m3fnuz": 8,
-    }.get(axis["communication_format"])
-    if bits_per_value is None:
-        raise ValueError(f"unknown communication format {axis['communication_format']!r}")
-    activation_data_bytes = logical_copies * math.ceil(hidden * bits_per_value / 8)
-    scale_bytes_per_value = {None: 0, "f32": 4}.get(
-        axis["scale_dtype"]
-    )
-    if scale_bytes_per_value is None:
-        raise ValueError(f"unknown communication scale dtype {axis['scale_dtype']!r}")
-    group_size = axis["scale_group_size"]
-    scale_groups = math.ceil(hidden / group_size) if group_size is not None else 0
-    scale_bytes = logical_copies * scale_groups * scale_bytes_per_value
+        raise ValueError("logical byte dimensions must be non-negative")
+    activation_data_bytes = logical_copies * hidden * 2
     return {
         "accounting_contract": "activation-data-plus-scales-v1",
         "activation_data_bytes": activation_data_bytes,
-        "scale_bytes": scale_bytes,
-        "total_logical_bytes": activation_data_bytes + scale_bytes,
+        "scale_bytes": 0,
+        "total_logical_bytes": activation_data_bytes,
     }
 
 def format_collective_version(raw) -> str:
@@ -164,12 +145,6 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     """Add the varying v1 inputs; fixed profile values are not CLI axes."""
     ap.set_defaults(**V1_PROFILE)
     ap.add_argument("--mode", default="normal", choices=["normal", LOW_LATENCY_MODE])
-    ap.add_argument(
-        "--precision-profile",
-        default="",
-        choices=("", *ep_precision.V1_PRECISION_PROFILES),
-        help="exact native dispatch/combine communication profile; blank selects BF16 control",
-    )
     ap.add_argument("--phase", default="decode", choices=["decode", "prefill"],
                     help="token-size regime: decode (small T) / prefill (large T) — picks the default ladder")
     ap.add_argument("--tokens-ladder", default="",
@@ -193,6 +168,12 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
         choices=range(1, QUALIFICATION_RUNS + 1),
         default=os.environ.get("CX_QUALIFICATION_INDEX", "1"),
         help="one-based qualification repeat used for deterministic measurement ordering",
+    )
+    ap.add_argument(
+        "--version",
+        type=int,
+        default=os.environ.get("CX_VERSION", "1"),
+        help="iterable benchmark version copied verbatim into the emitted result",
     )
     # 32: B300/Blackwell needs ~30 untimed iters to reach steady-state GPU clocks +
     # establish NVLink/NVSHMEM connections — at warmup=8 its dispatch read ~1787us
@@ -627,126 +608,6 @@ def _expected_transformed_combine(torch, problem):
     return expected
 
 
-def _baseline_precision_axis() -> dict:
-    return {
-        "encoded_payload_valid": True,
-        "scales_finite": None,
-        "scales_positive": None,
-        "dequantized_semantics": True,
-        "saturation_count": 0,
-        "saturation_rate": 0.0,
-        "max_abs_error": 0.0,
-        "max_rel_error": 0.0,
-        "passed": True,
-    }
-
-
-def _precision_evidence(backend, problem, view, combined, expected_combined) -> dict:
-    method = getattr(backend, "precision_evidence", None)
-    if method is not None:
-        evidence = method(problem, view)
-        combine_axis = backend.communication_precision["combine"]
-        if combine_axis["communication_format"] != "bf16":
-            oracle_atol, oracle_rtol = _oracle_tolerances(backend)
-            if combined.shape == expected_combined.shape and combined.numel():
-                absolute = (combined.float() - expected_combined.float()).abs()
-                max_abs_error = float(absolute.max().item())
-                max_rel_error = max_abs_error / (
-                    float(expected_combined.float().abs().max().item()) + 1e-6
-                )
-                tolerance = oracle_atol + oracle_rtol * expected_combined.float().abs()
-                semantics = bool((absolute <= tolerance).all().item())
-            elif combined.shape == expected_combined.shape:
-                max_abs_error = max_rel_error = 0.0
-                semantics = True
-            else:
-                max_abs_error = max_rel_error = 1e30
-                semantics = False
-            direction = evidence["combine"]
-            direction.update({
-                "dequantized_semantics": semantics,
-                "max_abs_error": max_abs_error,
-                "max_rel_error": max_rel_error,
-            })
-            scale_ok = (
-                direction["scales_finite"] is not False
-                and direction["scales_positive"] is not False
-            )
-            direction["passed"] = bool(
-                direction["encoded_payload_valid"]
-                and semantics
-                and scale_ok
-                and direction["saturation_count"] == 0
-            )
-            evidence["passed"] = bool(
-                evidence["dispatch"]["passed"] and direction["passed"]
-            )
-        return evidence
-    profile_id = getattr(backend, "precision_profile_id", None)
-    if profile_id != ep_precision.V1_CONTROL_PRECISION_PROFILE:
-        failed = _baseline_precision_axis()
-        failed.update({"encoded_payload_valid": False, "dequantized_semantics": False,
-                       "passed": False})
-        return {"profile_id": profile_id, "dispatch": failed, "combine": dict(failed),
-                "passed": False}
-    return {
-        "profile_id": profile_id,
-        "dispatch": _baseline_precision_axis(),
-        "combine": _baseline_precision_axis(),
-        "passed": True,
-    }
-
-
-def _failed_precision_evidence(backend) -> dict:
-    failed = _baseline_precision_axis()
-    failed.update({"encoded_payload_valid": False, "dequantized_semantics": False,
-                   "passed": False})
-    return {
-        "profile_id": getattr(backend, "precision_profile_id", None),
-        "dispatch": failed,
-        "combine": dict(failed),
-        "passed": False,
-    }
-
-
-def aggregate_precision_evidence(evidence_by_rank: list[dict]) -> dict:
-    """Collapse pre/post rank evidence without hiding any direction's worst observation."""
-    records = [record[phase] for record in evidence_by_rank for phase in ("pre", "post")]
-    profile_ids = {record["profile_id"] for record in records}
-    if len(profile_ids) != 1:
-        raise ValueError("precision evidence profiles differ across ranks or oracle passes")
-    result = {"profile_id": profile_ids.pop()}
-    for direction in ("dispatch", "combine"):
-        axes = [record[direction] for record in records]
-        rank_counts = []
-        for rank_index in range(len(evidence_by_rank)):
-            rank_counts.append(max(
-                evidence_by_rank[rank_index][phase][direction]["saturation_count"]
-                for phase in ("pre", "post")
-            ))
-        scale_finite = [axis["scales_finite"] for axis in axes]
-        scale_positive = [axis["scales_positive"] for axis in axes]
-        result[direction] = {
-            "encoded_payload_valid": all(axis["encoded_payload_valid"] for axis in axes),
-            "scales_finite": (
-                None if all(value is None for value in scale_finite)
-                else all(value is True for value in scale_finite)
-            ),
-            "scales_positive": (
-                None if all(value is None for value in scale_positive)
-                else all(value is True for value in scale_positive)
-            ),
-            "dequantized_semantics": all(axis["dequantized_semantics"] for axis in axes),
-            "saturation_count": sum(rank_counts),
-            "saturation_rate": max(axis["saturation_rate"] for axis in axes),
-            "max_abs_error": max(axis["max_abs_error"] for axis in axes),
-            "max_rel_error": max(axis["max_rel_error"] for axis in axes),
-            "passed": all(axis["passed"] for axis in axes),
-        }
-    result["passed"] = all(result[direction]["passed"] for direction in ("dispatch", "combine"))
-    return result
-
-
 def _run_expert_packed_oracle(
     torch,
     routing,
@@ -760,7 +621,7 @@ def _run_expert_packed_oracle(
 ):
     """Verify an expert-packed dispatch and native gate-weighted combine."""
     contract = LOW_LATENCY_ORACLE_CONTRACT
-    oracle_atol, oracle_rtol = _oracle_tolerances(backend)
+    oracle_atol, oracle_rtol = ORACLE_ATOL, ORACLE_RTOL
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
@@ -786,7 +647,6 @@ def _run_expert_packed_oracle(
         except Exception as cleanup_error:
             raise inspection_error from cleanup_error
         return {
-            "_precision": _failed_precision_evidence(backend),
             "contract": contract,
             "passed": False,
             "ordering_contract": "adapter-inspection-failed",
@@ -847,9 +707,6 @@ def _run_expert_packed_oracle(
         if source_range
         else torch.empty_like(view.payload)
     )
-    normalize_payload = getattr(backend, "oracle_dispatch_payload", None)
-    if source_range and normalize_payload is not None:
-        expected_payload = normalize_payload(expected_payload)
     payload_ok = bool(
         source_range
         and torch.equal(decoded_source_ids.to(torch.int64), view.source_ids)
@@ -941,7 +798,6 @@ def _run_expert_packed_oracle(
         max_relative_error = None
         combine_values_ok = False
     tolerance = oracle_rtol
-    precision = _precision_evidence(backend, problem, view, combined, expected_combined)
     checks = {
         "combine_values": combine_values_ok,
         "counts": counts_ok,
@@ -952,11 +808,9 @@ def _run_expert_packed_oracle(
         "weights": weights_ok,
     }
     return {
-        "_precision": precision,
         "contract": contract,
         "passed": bool(
             all(checks.values())
-            and precision["passed"]
             and ordering_contract
             and max_relative_error is not None
             and max_relative_error < tolerance
@@ -1000,7 +854,7 @@ def _run_expert_oracle(
             experts_per_rank,
             seed,
         )
-    oracle_atol, oracle_rtol = _oracle_tolerances(backend)
+    oracle_atol, oracle_rtol = ORACLE_ATOL, ORACLE_RTOL
     handle = backend.dispatch(problem)
     torch.cuda.synchronize()
     try:
@@ -1015,7 +869,6 @@ def _run_expert_oracle(
         except Exception as cleanup_error:
             raise inspection_error from cleanup_error
         return {
-            "_precision": _failed_precision_evidence(backend),
             "contract": ORACLE_CONTRACT,
             "passed": False,
             "ordering_contract": "adapter-inspection-failed",
@@ -1061,9 +914,6 @@ def _run_expert_oracle(
         expected_payload = routing.activations_for_source_ids(
             source_ids, problem.x.shape[1], seed, problem.x.dtype
         )
-        normalize_payload = getattr(backend, "oracle_dispatch_payload", None)
-        if normalize_payload is not None:
-            expected_payload = normalize_payload(expected_payload)
     else:
         expected_ids = torch.full_like(view.expert_ids, -1)
         expected_weights = torch.zeros_like(view.weights)
@@ -1143,7 +993,6 @@ def _run_expert_oracle(
         max_relative_error = None
         combine_values_ok = False
     tolerance = oracle_rtol
-    precision = _precision_evidence(backend, problem, view, combined, expected_combined)
     checks = {
         "combine_values": combine_values_ok,
         "counts": counts_ok,
@@ -1154,11 +1003,9 @@ def _run_expert_oracle(
         "weights": weights_ok,
     }
     return {
-        "_precision": precision,
         "contract": ORACLE_CONTRACT,
         "passed": bool(
             all(checks.values())
-            and precision["passed"]
             and ordering_contract
             and max_relative_error is not None
             and max_relative_error < tolerance
@@ -1196,12 +1043,9 @@ def _histogram(xs: list[float], nbins: int = 40) -> dict:
 def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) -> int:
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = getattr(args, "mode", "normal")
-    requested_precision = getattr(args, "precision_profile", "") or None
-    resolved_precision_id = requested_precision or ep_precision.V1_CONTROL_PRECISION_PROFILE
     try:
         case_profile = identity.profile_for_case({"mode": mode})
-        communication_precision = ep_precision.precision_profile(resolved_precision_id)
-    except (identity.IdentityError, ep_precision.PrecisionError) as exc:
+    except identity.IdentityError as exc:
         if rank == 0:
             print(f"ERROR: {exc}")
         return 2
@@ -1223,13 +1067,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     if getattr(backend, "mode", None) != mode:
         if rank == 0:
             print(f"ERROR: backend mode {getattr(backend, 'mode', None)!r} != {mode!r}")
-        return 2
-    if (
-        getattr(backend, "precision_profile_id", None) != resolved_precision_id
-        or getattr(backend, "communication_precision", None) != communication_precision
-    ):
-        if rank == 0:
-            print("ERROR: backend did not realize the requested communication precision")
         return 2
     expected_weight_semantics = (
         "gate-weighted-sum"
@@ -1333,7 +1170,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             torch, routing, backend, problem, idx_g, w_g, rank, experts_per_rank,
             args.seed,
         )
-        precision_pre = oracle.pop("_precision")
         before_x, before_idx, before_weights = input_snapshots[T]
         pre_input_unchanged = (
             torch.equal(problem.x, before_x)
@@ -1348,7 +1184,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "max_rel": oracle["max_relative_error"] or 0.0,
             "local_ok": int(oracle["passed"]),
             "oracle_pre": oracle,
-            "precision_pre": precision_pre,
             "pre_input_unchanged": pre_input_unchanged,
         }
 
@@ -1367,7 +1202,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "ep_size": ep_size,
         "mode": mode,
         "phase": args.phase,
-        "precision_profile": resolved_precision_id,
         "runner": args.runner,
         "suite": args.suite,
     })
@@ -1428,7 +1262,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             torch, routing, backend, problem, idx_g, w_g, rank, experts_per_rank,
             args.seed,
         )
-        precision_post = post.pop("_precision")
         pre = gate[T]["oracle_pre"]
         order_stable = (
             pre["ordering_contract"] == post["ordering_contract"]
@@ -1440,7 +1273,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "local_ok": int(pre["passed"] and post["passed"] and input_unchanged and order_stable),
             "max_rel": max(pre["max_relative_error"] or 0.0, post["max_relative_error"] or 0.0),
             "oracle_post": post,
-            "precision_post": precision_post,
             "order_stable": order_stable,
         })
 
@@ -1507,12 +1339,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             percentile_name: gt / (latency_us * 1e-6)
             for percentile_name, latency_us in rtp.items()
         }
-        dispatch_bytes = precision_byte_provenance(
-            communication_precision["dispatch"], logical_copies, H
-        )
-        combine_bytes = precision_byte_provenance(
-            communication_precision["combine"], logical_copies, H
-        )
+        dispatch_bytes = logical_byte_provenance(logical_copies, H)
+        combine_bytes = logical_byte_provenance(logical_copies, H)
         stage_bytes = {
             "accounting_contract": "activation-data-plus-scales-v1",
             "activation_data_bytes": 0,
@@ -1713,14 +1541,12 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "warmup_semantics": WARMUP_SEMANTICS,
             "workload": args.workload_name or "manual",
     }
-    if requested_precision is not None:
-        scheduled_case["precision_profile"] = requested_precision
     case_factors = {
         "case": scheduled_case,
         "profile": case_profile,
         "sku": args.runner,
     }
-    computed_case_id = identity.digest("case", case_factors)
+    computed_case_id = identity.case_id_from_factors(case_factors)
     if args.case_id and args.case_id != computed_case_id:
         raise ValueError(
             f"scheduled case ID does not match realized factors: {args.case_id} != {computed_case_id}"
@@ -1737,7 +1563,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         "runner": args.runner,
         "source_sha": git_run.get("source_sha"),
     }
-    allocation_identifier = identity.allocation_id(allocation_factors)
     try:
         attempt_ordinal = int(os.environ.get("CX_ATTEMPT_ID", "1"))
     except ValueError:
@@ -1745,18 +1570,9 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     if attempt_ordinal <= 0:
         raise ValueError("CX_ATTEMPT_ID must be a positive integer")
     attempt_identifier = identity.attempt_id(
-        allocation=allocation_identifier, case=case_identifier, ordinal=attempt_ordinal
+        case=case_identifier, ordinal=attempt_ordinal
     )
     runtime_fingerprint = getattr(args, "runtime_fingerprint", None) or {}
-    series_factors = {
-        "backend": backend.name,
-        "case_id": case_identifier,
-        "image_digest": getattr(args, "image_digest", None),
-        "source_sha": git_run.get("source_sha"),
-        "squash_sha256": getattr(args, "squash_sha256", None),
-        "workload_id": getattr(args, "workload_id", None) or trace_sig,
-    }
-    series_identifier = identity.series_id(series_factors)
 
     sample_points = []
     for row in rows:
@@ -1773,31 +1589,22 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         }
         sample_sha256 = _sha256_json(sample_point)
         point_identifier = identity.point_id(
-            series=series_identifier, tokens_per_rank=token_count
-        )
-        evidence_identifier = identity.evidence_id(
-            point=point_identifier,
-            allocation=allocation_identifier,
-            attempt=attempt_identifier,
-            sample_sha256=sample_sha256,
+            case=case_identifier, tokens_per_rank=token_count
         )
         sample_point.update(
             {
-                "evidence_id": evidence_identifier,
                 "point_id": point_identifier,
                 "sample_sha256": sample_sha256,
             }
         )
         sample_points.append(sample_point)
         row.update({
-            "evidence_id": evidence_identifier,
             "point_id": point_identifier,
             "sample_sha256": sample_sha256,
         })
 
     samples_path = args.out[:-5] + ".samples.json" if args.out.endswith(".json") else args.out + ".samples.json"
     samples_document = {
-        "allocation_id": allocation_identifier,
         "attempt_id": attempt_identifier,
         "case_id": case_identifier,
         "format": "collectivex.samples.v1",
@@ -1808,9 +1615,8 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "trials": args.trials,
         },
         "schema_version": 1,
-        "series_id": series_identifier,
     }
-    samples_payload = contracts.canonical_json_bytes(samples_document)
+    samples_payload = ep_provenance.canonical_json_bytes(samples_document)
     samples_sha256 = hashlib.sha256(samples_payload).hexdigest()
     samples_bytes = len(samples_payload)
     sample_artifact = {
@@ -1860,17 +1666,15 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     doc = {
         "format": "collectivex.ep.v1",
         "schema_version": SCHEMA_VERSION,
+        "version": args.version,
         "record_type": "case-attempt",
         "generated_at": generated_at,
         "identity": {
             "allocation_factors": allocation_factors,
-            "allocation_id": allocation_identifier,
             "attempt_id": attempt_identifier,
             "attempt_ordinal": attempt_ordinal,
             "case_factors": case_factors,
             "case_id": case_identifier,
-            "series_factors": series_factors,
-            "series_id": series_identifier,
         },
         "case": {
             "attempt_ordinal": attempt_ordinal,

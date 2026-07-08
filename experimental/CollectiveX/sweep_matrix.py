@@ -37,9 +37,9 @@ EP_TIMING_PROFILE = (
     f"{ep_harness.TIMED_ITERS_PER_TRIAL}:{ep_harness.TRIALS_PER_POINT}:"
     f"{ep_harness.WARMUP_ITERS_PER_TRIAL}"
 )
-V1_WORKLOAD = ("deepseek-v3-v1", 7168, 8, 256)
+V1_WORKLOAD = ("deepseek-v3", 7168, 8, 256)
 V1_SUITE_CONTRACTS = {
-    "ep-core-v1": {
+    "ep-core": {
         "mode": "normal",
         "coordinates": {
             ("normal", "decode", "uniform", False),
@@ -50,7 +50,7 @@ V1_SUITE_CONTRACTS = {
             "prefill": (256, 512),
         },
     },
-    "ep-low-latency-v1": {
+    "ep-low-latency": {
         "mode": "low-latency",
         "backends": {"deepep", "uccl"},
         "coordinates": {("low-latency", "decode", "uniform", False)},
@@ -141,7 +141,7 @@ def validate_config_documents(
     """Reject configuration that is ambiguous, unused, or outside the v1 grid."""
     _fields(
         suites_document, "configs/suites.yaml",
-        {"schema_version", "suites"}, {"schema_version", "suites"},
+        {"schema_version", "version", "suites"}, {"schema_version", "version", "suites"},
     )
     _fields(
         workloads, "configs/workloads.yaml",
@@ -149,6 +149,10 @@ def validate_config_documents(
     )
     if type(suites_document["schema_version"]) is not int or suites_document["schema_version"] != 1:
         raise SystemExit("configs/suites.yaml schema_version must be integer 1")
+    # The iterable benchmark version is independent of the JSON schema_version: it
+    # is any positive integer the operator bumps to mark a new, incomparable grid.
+    if type(suites_document["version"]) is not int or suites_document["version"] < 1:
+        raise SystemExit("configs/suites.yaml version must be a positive integer")
     if type(workloads["schema_version"]) is not int or workloads["schema_version"] != 1:
         raise SystemExit("configs/workloads.yaml schema_version must be integer 1")
     registry: dict[str, dict[str, Any]] = {}
@@ -524,6 +528,7 @@ def resolve_matrix(
     return {
         "format": "collectivex.matrix.v1",
         "schema_version": 1,
+        "version": suites_document["version"],
         "requested_cases": requested_cases,
         "include": include,
     }
@@ -590,7 +595,7 @@ def validate_shard_control(
     if sku not in cap.PLATFORMS or backend not in cap.SWEEP_BACKENDS:
         raise MatrixError("shard platform/backend is not registered")
     top_fields = {
-        "schema_version", "id", "sku", "backend", "nodes", "n", "cases",
+        "schema_version", "version", "id", "sku", "backend", "nodes", "n", "cases",
         "execution_weight",
     }
     if (
@@ -599,6 +604,8 @@ def validate_shard_control(
         or shard["schema_version"] != 1
     ):
         raise MatrixError("shard fields or schema version differ from v1 contract")
+    if type(shard.get("version")) is not int or shard["version"] < 1:
+        raise MatrixError("shard benchmark version must be a positive integer")
     if not isinstance(shard.get("id"), str) or not IDENTIFIER.fullmatch(shard["id"]):
         raise MatrixError("shard has invalid id")
     for field, expected in (("sku", sku), ("backend", backend)):
@@ -631,7 +638,7 @@ def validate_shard_control(
                 f"missing={sorted(required - fields)}, extra={sorted(fields - required)}"
             )
         case_id = case["case_id"]
-        if not identity.is_typed_id(case_id, "case"):
+        if not identity.is_case_id(case_id):
             raise MatrixError(f"case {index} has invalid case_id")
         if case_id in seen:
             raise MatrixError(f"duplicate case_id {case_id}")
@@ -715,7 +722,7 @@ def validate_shard_control(
 def validate_matrix_document(document: Any) -> dict[str, Any]:
     """Validate the complete requested grid and its runnable shard partition."""
     if not isinstance(document, dict) or set(document) != {
-        "format", "schema_version", "requested_cases", "include"
+        "format", "schema_version", "version", "requested_cases", "include"
     }:
         raise MatrixError("matrix fields differ from the v1 contract")
     if (
@@ -724,6 +731,8 @@ def validate_matrix_document(document: Any) -> dict[str, Any]:
         or document["schema_version"] != 1
     ):
         raise MatrixError("matrix format/schema differs from v1")
+    if type(document["version"]) is not int or document["version"] < 1:
+        raise MatrixError("matrix benchmark version must be a positive integer")
     requested = document["requested_cases"]
     include = document["include"]
     if not isinstance(requested, list) or not requested:
@@ -768,6 +777,7 @@ def validate_matrix_document(document: Any) -> dict[str, Any]:
         validate_shard_control(
             {
                 "schema_version": 1,
+                "version": document["version"],
                 "id": "requested-case",
                 "sku": sku,
                 "backend": backend,
@@ -869,6 +879,7 @@ def extract_shard(
     cases = [requested[case_id]["case"] for case_id in source["case_ids"]]
     control = {
         "schema_version": 1,
+        "version": document["version"],
         "id": source.get("id"),
         "sku": source.get("sku"),
         "backend": source.get("backend"),
@@ -933,7 +944,7 @@ def emit_unsupported(
             "profile": identity.profile_for_case(case),
             "sku": wrapper["sku"],
         }
-        case_id = identity.digest("case", case_factors)
+        case_id = identity.case_id_from_factors(case_factors)
         if case_id != scheduled["case_id"]:
             raise MatrixError(f"unsupported case identity differs for {scheduled['case_id']}")
         record = contracts.make_terminal_document(
@@ -949,6 +960,7 @@ def emit_unsupported(
             return_code=5,
             source="matrix-capability-resolver",
             status="unsupported",
+            version=document["version"],
             expected_case_id=case_id,
         )
         path = destination / f"unsupported_{case_id}.json"
@@ -964,59 +976,6 @@ def emit_unsupported(
             temporary.unlink(missing_ok=True)
         written.append(path)
     return written
-
-
-def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
-    """Project the validated requested graph into a compact frontend test fixture."""
-    document = validate_matrix_document(matrix)
-    matrix_bytes = contracts.canonical_json_bytes(document) + b"\n"
-    cases = []
-    for wrapper in document["requested_cases"]:
-        case = wrapper["case"]
-        cases.append({
-            "backend": case["backend"],
-            "backend_generation": None,
-            "case_id": case["case_id"],
-            "disposition": wrapper["disposition"],
-            "eplb": case["eplb"],
-            "label": (
-                f"{wrapper['sku'].upper()} / {case['backend']} / EP{case['ep']} / "
-                f"{case['mode']} / {case['phase']} / {case['routing']}"
-            ),
-            "mode": case["mode"],
-            "phase": case["phase"],
-            "reason": wrapper["reason"],
-            "required": True,
-            "resource": {
-                "mode": "fixed-profile",
-                "profile": None,
-                "comm_units_kind": None,
-                "configured_units": None,
-            },
-            "routing": case["routing"],
-            "sku": wrapper["sku"],
-            "suite": case["suite"],
-            "topology": {
-                "ep_size": case["ep"],
-                **{field: case[field] for field in TOPOLOGY_FIELDS},
-            },
-            "workload": case["workload"],
-            "points": [
-                {
-                    "global_tokens": int(token) * case["ep"],
-                    "tokens_per_rank": int(token),
-                }
-                for token in case["ladder"].split()
-            ],
-        })
-    return {
-        "case_count": len(cases),
-        "format": "collectivex.frontend-catalog.v1",
-        "matrix_sha256": hashlib.sha256(matrix_bytes).hexdigest(),
-        "point_count": sum(len(case["points"]) for case in cases),
-        "schema_version": 1,
-        "cases": cases,
-    }
 
 
 def main() -> int:
@@ -1040,7 +999,6 @@ def main() -> int:
     parser.add_argument("--validate-control", default="", metavar="SHARD")
     parser.add_argument("--emit-unsupported-from", default="", metavar="MATRIX")
     parser.add_argument("--out-dir", default="")
-    parser.add_argument("--frontend-catalog", action="store_true")
     parser.add_argument("--shard-id", default="")
     parser.add_argument("--expect-sku", default="")
     parser.add_argument("--expect-backend", default="")
@@ -1110,10 +1068,9 @@ def main() -> int:
         validate_matrix_document(matrix)
     except MatrixError as exc:
         parser.error(str(exc))
-    output_document = frontend_catalog(matrix) if args.frontend_catalog else matrix
     if args.out:
         with open(args.out, "w") as fh:
-            json.dump(output_document, fh, sort_keys=True, separators=(",", ":"))
+            json.dump(matrix, fh, sort_keys=True, separators=(",", ":"))
             fh.write("\n")
     runnable = sum(
         item["disposition"] == "runnable" for item in matrix["requested_cases"]
@@ -1124,7 +1081,7 @@ def main() -> int:
         f"{runnable} runnable and {unsupported} unsupported cases",
         file=sys.stderr,
     )
-    print(json.dumps(output_document))
+    print(json.dumps(matrix))
     return 0
 
 

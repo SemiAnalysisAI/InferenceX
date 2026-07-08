@@ -21,7 +21,6 @@ import torch
 import torch.distributed as dist
 import contracts
 import ep_provenance
-import ep_precision
 from ep_backend import EPBackend
 
 
@@ -50,14 +49,6 @@ class NCCLBackend(EPBackend):
         # bf16 normal only, so an unsupported mode raises there.
         super().__init__(args, rank, world_size, local_rank, device)
         self.experts = args.experts
-        self.precision_profile_id, self.communication_precision = (
-            ep_precision.resolve_precision(
-                args,
-                backend=self.name,
-                mode=self.mode,
-                supported_profiles={"d-bf16.c-bf16"},
-            )
-        )
         if args.experts % world_size:
             raise ValueError(f"experts({args.experts}) must divide world_size({world_size})")
         self.experts_per_rank = args.experts // world_size
@@ -202,8 +193,3 @@ class NCCLBackend(EPBackend):
 
     def recv_tokens(self, h):
         return int(h.total_recv)
-
-    def oracle_dispatch_payload(self, payload):
-        # NCCL is the identity reference: the wire payload is exactly what the oracle
-        # built, so no dispatch-encoding projection (unlike the base) applies.
-        return payload

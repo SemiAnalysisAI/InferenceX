@@ -40,7 +40,6 @@ import torch
 import torch.distributed as dist
 import contracts
 import ep_provenance
-import ep_precision
 from ep_backend import EPBackend
 
 try:
@@ -199,34 +198,16 @@ class DeepEPHybridBackend(EPBackend):
     # before a timed combine); the harness times dispatch and combine separately (like ep_deepep).
     combine_needs_redispatch = False
     combine_weight_semantics = "unweighted-rank-sum"
-    # Hybrid hands scales back as uint8-viewed storage; the precision-evidence pass
-    # must read them that way.
-    _uint8_scale_storage = True
 
     def __init__(self, args, rank, world_size, local_rank, device):
         # deepep-hybrid is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
         super().__init__(args, rank, world_size, local_rank, device)
-        self.precision_profile_id, self.communication_precision = (
-            ep_precision.resolve_precision(
-                args,
-                backend=self.name,
-                mode=self.mode,
-                supported_profiles={
-                    "d-bf16.c-bf16",
-                    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-                },
-            )
-        )
-        self._fp8_dispatch = ep_precision.is_low_precision_dispatch(
-            self.communication_precision
-        )
-        self.stage_device_work = self._fp8_dispatch
-        ep_precision.require_keyword(
+        ep_provenance.require_keyword(
             HybridEPBuffer.__init__,
             "use_fp8",
             api="deep_ep.HybridEPBuffer.__init__",
         )
-        ep_precision.require_keyword(
+        ep_provenance.require_keyword(
             HybridEPBuffer.dispatch,
             "scaling_factor",
             api="deep_ep.HybridEPBuffer.dispatch",
@@ -293,7 +274,7 @@ class DeepEPHybridBackend(EPBackend):
                 self.group, hidden_dim=self.hidden,
                 max_num_of_tokens_per_rank=self.max_tokens,
                 num_local_experts=self.local_experts,
-                use_fp8=self._fp8_dispatch,
+                use_fp8=False,  # BF16 communication path.
             )
             realized_geometry = (
                 int(self.buffer.num_of_hybrid_ep_ranks_per_nvlink_domain),
@@ -340,10 +321,10 @@ class DeepEPHybridBackend(EPBackend):
                 or realized["num_of_nodes"] != self.communication_domains
             ):
                 raise RuntimeError("DeepEP Hybrid realized topology changed within one case")
-            expected_token_type = "UINT8" if self._fp8_dispatch else "UINT16"
-            if realized["token_data_type"] != expected_token_type:
+            # BF16 dispatch realizes the 2-byte UINT16 token wire type.
+            if realized["token_data_type"] != "UINT16":
                 raise RuntimeError(
-                    "DeepEP Hybrid realized token dtype differs from the precision profile"
+                    "DeepEP Hybrid realized token dtype is not the BF16 UINT16 wire type"
                 )
             if self._realized_config is not None and realized != self._realized_config:
                 raise RuntimeError("DeepEP Hybrid realized autotune config changed within one case")
@@ -367,12 +348,8 @@ class DeepEPHybridBackend(EPBackend):
             "loaded_libraries": loaded_libraries,
             "impl": "deep_ep.HybridEPBuffer (NVIDIA TMA + warp-pipeline)",
             "mode": "normal", "transport": topology["transport"],
-            "dispatch_dtype": ep_precision.communication_format(
-                self.communication_precision, "dispatch"
-            ),
-            "combine_dtype": ep_precision.communication_format(
-                self.communication_precision, "combine"
-            ),
+            "dispatch_dtype": "bf16",
+            "combine_dtype": "bf16",
             "resource_mode": "fixed-profile",
             "num_sms": None, "device_sms": dev_sms,
             "tuned_source": "deepep-hybrid-configurer-autotune-v1",
@@ -386,21 +363,12 @@ class DeepEPHybridBackend(EPBackend):
         return self.max_tokens
 
     def make_problem(self, T, idx, weights, x):
-        encoding = ep_precision.encode_dispatch(
-            torch, x, self.communication_precision
-        )
-        dispatch_x = (
-            encoding.encoded_payload.view(torch.uint8)
-            if self._fp8_dispatch
-            else encoding.native_input
-        )
+        # BF16 dispatch sends x directly; scaling_factor stays None (no separate scale payload).
         return types.SimpleNamespace(
             T=int(T),
             x=x,
-            dispatch_x=dispatch_x,
-            dispatch_scales=encoding.scales,
-            oracle_x=encoding.semantic,
-            dispatch_precision_evidence=encoding.evidence,
+            dispatch_x=x,
+            dispatch_scales=None,
             topk_idx=idx.to(torch.int64),
             topk_weights=weights.to(torch.float32),
         )
@@ -416,7 +384,6 @@ class DeepEPHybridBackend(EPBackend):
         return types.SimpleNamespace(
             recv=recv,
             recv_payload=recv,
-            recv_scales=_scales,
             recv_probs=recv_probs,
             handle=handle,
             combine_input=None,
@@ -424,7 +391,7 @@ class DeepEPHybridBackend(EPBackend):
 
     def stage(self, p, h):
         # Identity expert: the recv hidden IS the "expert output". combine reduces it per source token.
-        h.combine_input = self._semantic_recv(h, p.recv_tokens)
+        h.combine_input = h.recv_payload
         return None
 
     def combine(self, p, h):
@@ -487,9 +454,7 @@ class DeepEPHybridBackend(EPBackend):
         expert_ids[rows, positions] = local_expert_ids + self.rank * self.local_experts
         weights[rows, positions] = h.recv_probs[:count][rows, probability_columns]
         return types.SimpleNamespace(
-            payload=self._semantic_recv(h, count)[:count],
-            encoded_payload=h.recv_payload[:count],
-            scales=(h.recv_scales[:count] if h.recv_scales is not None else None),
+            payload=h.recv_payload[:count],
             expert_ids=expert_ids,
             weights=weights,
             local_expert_counts=routing_map.sum(dim=0, dtype=torch.int64),
@@ -504,28 +469,6 @@ class DeepEPHybridBackend(EPBackend):
 
     def recv_tokens(self, h):
         return int(h.handle[3].item())
-
-    def _semantic_recv(self, h, rows):
-        if not self._fp8_dispatch:
-            return h.recv_payload
-        if not hasattr(h, "recv_semantic"):
-            semantic = torch.empty(
-                h.recv_payload.shape,
-                dtype=torch.bfloat16,
-                device=h.recv_payload.device,
-            )
-            semantic[:rows].copy_(ep_precision.dequantize_dispatch(
-                torch,
-                h.recv_payload[:rows],
-                h.recv_scales[:rows],
-                self.communication_precision["dispatch"],
-                uint8_storage=True,
-            ))
-            h.recv_semantic = semantic
-            h.recv_semantic_rows = rows
-        elif h.recv_semantic_rows != rows:
-            raise RuntimeError("DeepEP Hybrid receive count changed for one dispatch handle")
-        return h.recv_semantic
 
     def finalize(self, rc):
         try:

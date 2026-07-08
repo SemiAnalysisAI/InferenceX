@@ -13,21 +13,110 @@ holds only the neutral document/delivery validation.
 from __future__ import annotations
 
 import hashlib
+import inspect
+import json
+import math
 import os
 import re
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
-from contracts import (
-    ContractError,
-    canonical_json_bytes,
-    DEEPEP_V2_DISTRIBUTION_VERSIONS,
-    DEEPEP_V2_JIT_KERNELS,
-    DEEPEP_V2_V1_PROVENANCE,
-    GIT_RUN_FIELDS,
-    REQUIRED_BACKEND_PROVENANCE,
-    UCCL_DEPENDENCY_VERSIONS,
-)
+from contracts import ContractError, GIT_RUN_FIELDS
+
+
+def _finite_tree(value: Any, path: str = "$") -> None:
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ContractError(f"{path} contains a non-finite number")
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _finite_tree(item, f"{path}[{index}]")
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _finite_tree(item, f"{path}.{key}")
+
+
+def canonical_json_bytes(value: Any) -> bytes:
+    """Canonical finite JSON bytes for checksums and immutable artifacts."""
+    _finite_tree(value)
+    try:
+        return json.dumps(
+            value, allow_nan=False, ensure_ascii=False, sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"value is not canonical JSON: {exc}") from exc
+
+
+# Backend implementation-provenance constants: the required evidence fields per
+# backend and the pinned native versions a self-check compares against. They
+# describe executable code, so they live beside the emitter that consumes them
+# rather than in the neutral document/delivery validator.
+DEEPEP_V2_JIT_KERNELS = frozenset({
+    "barrier", "combine", "combine_reduce_epilogue", "dispatch",
+    "dispatch_copy_epilogue",
+})
+DEEPEP_V2_V1_PROVENANCE = {
+    "deepep_version": "2.0.0",
+    "deepep_distribution_version": "2.0.0+fa8a9b1",
+    "deepep_commit": "fa8a9b16898204afd347c663b89e65ef87dc6ce6",
+    "deepep_tree": "29809e75c5874e6609dac4804e7b651d5226959f",
+    "deepep_pr": 605,
+    "deepep_fix_pr": 630,
+    "deepep_nccl_check_fix_pr": 640,
+    "deepep_nccl_check_commit": "93d0564188f7a0a6288c6e316484861b0efa042e",
+    "fmt_commit": "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa",
+    "torch_version": "2.10.0+cu130",
+    "nccl_package_version": "2.30.4",
+    "nccl_version": "2.30.4",
+    "nvshmem_package_version": "3.3.9",
+}
+DEEPEP_V2_DISTRIBUTION_VERSIONS = frozenset({
+    "2.0.0+fa8a9b1", "2.0.0+local",
+})
+UCCL_DEPENDENCY_VERSIONS = {
+    "intervaltree": "3.1.0",
+    "nvidia-cuda-runtime-cu12": "12.9.79",
+    "sortedcontainers": "2.4.0",
+}
+REQUIRED_BACKEND_PROVENANCE = {
+    "deepep": (
+        "deepep_version", "deepep_commit", "backend_lineage", "allow_mnnvl",
+        "mnnvl_comm", "mode", "num_nvl_bytes", "num_rdma_bytes",
+        "nvshmem_ibgda_nic_handler",
+    ),
+    "deepep-v2": (
+        *DEEPEP_V2_V1_PROVENANCE, "api_signature_sha256", "loaded_libraries",
+        "jit_cubins", "jit_random_seed", "deterministic", "num_experts",
+        "tuning_num_experts", "allow_hybrid_mode", "gin_enabled",
+        "communication_backend",
+    ),
+    "deepep-hybrid": (
+        "deepep_commit", "deepep_tree", "branch", "backend_lineage",
+        "loaded_libraries", "realized_config", "jit_kernel_keys", "jit_shared_objects",
+    ),
+    "uccl": (
+        "uccl_version", "uccl_commit", "uccl_wrapper_commit", "backend_lineage",
+        "loaded_libraries", "uccl_dependency_versions", "mode", "num_nvl_bytes",
+        "num_rdma_bytes",
+    ),
+    "mori": ("mori_commit",),
+    "nccl-ep": ("nccl_version", "collective_library", "backend_lineage"),
+}
+
+
+def require_keyword(callable_object, keyword: str, *, api: str) -> None:
+    """Fail closed when a pinned native API does not expose a required control.
+
+    A runtime-API contract guard: it verifies the loaded kernel build still accepts
+    the keyword the adapter drives (e.g. the BF16 ``use_fp8=False`` control), so a
+    version mismatch surfaces here instead of as an opaque call-site TypeError.
+    """
+    try:
+        parameters = inspect.signature(callable_object).parameters
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"cannot inspect required native API {api}") from exc
+    if keyword not in parameters:
+        raise ContractError(f"required native API {api} omits {keyword!r}")
 
 
 def resolve_deepep_mnnvl(
@@ -507,7 +596,7 @@ def series_provenance(provenance: dict[str, Any]) -> dict[str, Any]:
 
 
 def _sha256_json(value: Any) -> str:
-    """Canonical sha256 of a finite JSON value (matches contracts.canonical_json_bytes)."""
+    """Canonical sha256 of a finite JSON value."""
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 

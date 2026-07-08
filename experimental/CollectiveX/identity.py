@@ -1,5 +1,18 @@
 #!/usr/bin/env python3
-"""Canonical, cross-runtime identities for CollectiveX v1."""
+"""Canonical cross-runtime identities for CollectiveX.
+
+A case identity is a readable, factor-derived join between a scheduled case and
+its emitted result: a human-readable body (SKU, backend, workload, mode, phase,
+EP size, routing) plus a short digest of the exact case factors. The suffix keeps
+the identity collision-proof and tamper-evident without hiding what the case is.
+Attempt and point identities are readable derivations of the case identity.
+
+Content SHA-256 survives only where it identifies separately-stored bytes: the
+workload manifest whose exact routing/gate data a result consumes. Detached
+sample files, source commits, container images, and generated kernels carry their
+own SHA-256 fields in the artifacts; this module does not mint identifiers for
+catalogs, series, evidence, allocations, or any other publisher-side grouping.
+"""
 from __future__ import annotations
 
 import hashlib
@@ -7,22 +20,17 @@ import json
 import re
 from typing import Any
 
-IDENTITY_VERSION = 1
 MAX_SAFE_INTEGER = (1 << 53) - 1
-PREFIXES = {
-    "case": "cxcase-v1-",
-    "workload": "cxwork-v1-",
-    "series": "cxseries-v1-",
-    "point": "cxpoint-v1-",
-    "evidence": "cxevidence-v1-",
-    "allocation": "cxallocation-v1-",
-    "attempt": "cxattempt-v1-",
-}
+WORKLOAD_PREFIX = "cxwork-v1-"
+_CASE_SUFFIX_LEN = 12
+_NON_SLUG = re.compile(r"[^a-z0-9]+")
+_CASE_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]*-[0-9a-f]{%d}$" % _CASE_SUFFIX_LEN)
+_WORKLOAD_ID = re.compile(r"^cxwork-v1-[0-9a-f]{64}$")
+
 V1_NORMAL_CASE_PROFILE = {
     "activation_generator": "collectivex-activation-counter-v4",
     "activation_profile": "canonical-counter-source-v4",
     "combine_dtype": "bf16",
-    "combine_quant_mode": "none",
     "combine_semantics": "activation-only",
     "component_order_contract": "qualification-hash-rotated-components-v1",
     "conditioning_contract": "fixed-phase-ramp-8-roundtrips-v1",
@@ -34,7 +42,6 @@ V1_NORMAL_CASE_PROFILE = {
     "eplb_reference_tokens_per_rank": 2048,
     "mode": "normal",
     "oracle_contract": "expert-specific-transform-v1",
-    "oracle_tolerances": "codec-specific-combine-v1",
     "payload_unit": "token-rank",
     "placement": "packed",
     "percentile_method": "nearest-rank",
@@ -66,6 +73,10 @@ V1_CASE_PROFILES = {
 }
 
 
+class IdentityError(ValueError):
+    """An identity payload cannot be represented consistently across runtimes."""
+
+
 def case_profile(mode: str) -> dict[str, Any]:
     """Return the immutable measurement profile for one scheduled mode."""
     try:
@@ -84,10 +95,6 @@ def profile_for_case(case: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(mode, str):
         raise IdentityError("scheduled case mode is missing")
     return case_profile(mode)
-
-
-class IdentityError(ValueError):
-    """An identity payload cannot be represented consistently across runtimes."""
 
 
 def _validate(value: Any, path: str = "$") -> None:
@@ -128,79 +135,65 @@ def canonical_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
-def digest(kind: str, value: Any) -> str:
-    """Hash a typed v1 identity payload and return its typed identifier."""
-    try:
-        prefix = PREFIXES[kind]
-    except KeyError as exc:
-        raise IdentityError(f"unknown identity kind {kind!r}") from exc
-    body = {"kind": kind, "value": value, "version": IDENTITY_VERSION}
-    return prefix + hashlib.sha256(canonical_bytes(body)).hexdigest()
+def _content_sha256(value: Any) -> str:
+    return hashlib.sha256(canonical_bytes(value)).hexdigest()
 
 
-def is_typed_id(value: Any, kind: str) -> bool:
-    prefix = PREFIXES.get(kind)
-    return bool(
-        isinstance(value, str)
-        and prefix
-        and re.fullmatch(re.escape(prefix) + r"[0-9a-f]{64}", value)
-    )
+def _slug(value: Any) -> str:
+    text = _NON_SLUG.sub("-", str(value).strip().lower()).strip("-")
+    if not text:
+        raise IdentityError("case factor has no printable identity component")
+    return text
+
+
+def _case_body(sku: str, case: dict[str, Any]) -> str:
+    parts = [
+        _slug(sku),
+        _slug(case["backend"]),
+        _slug(case.get("workload") or "manual"),
+        _slug(case["mode"]),
+        _slug(case["phase"]),
+        "ep%d" % int(case["ep"]),
+        _slug(case["routing"]),
+    ]
+    if case.get("eplb"):
+        parts.append("eplb")
+    return "-".join(parts)
 
 
 def case_id(*, sku: str, profile: dict[str, Any], case: dict[str, Any]) -> str:
-    return digest("case", {"case": case, "profile": profile, "sku": sku})
+    """Readable case identity: factor body plus a digest of the exact factors."""
+    factors = {"case": case, "profile": profile, "sku": sku}
+    return f"{_case_body(sku, case)}-{_content_sha256(factors)[:_CASE_SUFFIX_LEN]}"
+
+
+def case_id_from_factors(factors: dict[str, Any]) -> str:
+    """Recompute a case identity from an emitted `case_factors` object."""
+    return case_id(sku=factors["sku"], profile=factors["profile"], case=factors["case"])
+
+
+def attempt_id(*, case: str, ordinal: int) -> str:
+    if not isinstance(ordinal, int) or isinstance(ordinal, bool) or ordinal < 1:
+        raise IdentityError("attempt ordinal must be a positive integer")
+    return f"{case}-a{ordinal:02d}"
+
+
+def point_id(*, case: str, tokens_per_rank: int) -> str:
+    if not isinstance(tokens_per_rank, int) or isinstance(tokens_per_rank, bool) or tokens_per_rank < 1:
+        raise IdentityError("tokens_per_rank must be a positive integer")
+    return f"{case}-t{tokens_per_rank}"
+
+
+def is_case_id(value: Any) -> bool:
+    return bool(isinstance(value, str) and _CASE_ID.fullmatch(value))
 
 
 def workload_id(value: dict[str, Any]) -> str:
-    return digest("workload", value)
-
-
-def series_id(value: dict[str, Any]) -> str:
-    return digest("series", value)
-
-
-def point_id(*, series: str, tokens_per_rank: int) -> str:
-    return digest("point", {"series_id": series, "tokens_per_rank": tokens_per_rank})
-
-
-def allocation_id(value: dict[str, Any]) -> str:
-    return digest("allocation", value)
-
-
-def attempt_id(*, allocation: str, case: str, ordinal: int) -> str:
-    return digest(
-        "attempt", {"allocation_id": allocation, "case_id": case, "ordinal": ordinal}
+    """Content identity of a workload manifest's canonical routing/gate data."""
+    return WORKLOAD_PREFIX + _content_sha256(
+        {"kind": "workload", "value": value, "version": 1}
     )
 
 
-def evidence_id(
-    *, point: str, allocation: str, attempt: str, sample_sha256: str
-) -> str:
-    return digest(
-        "evidence",
-        {
-            "allocation_id": allocation,
-            "attempt_id": attempt,
-            "point_id": point,
-            "sample_sha256": sample_sha256,
-        },
-    )
-
-
-IDENTITY_TEST_VECTOR = {
-    "payload": {"backend": "deepep", "ep": 8, "shape": [7168, 8, 256]},
-    "series_id": "cxseries-v1-a79bf758488e3edd50f5531f3af825f371bf42aae7c4097e461fd2a32615af81",
-}
-
-
-def verify_test_vector() -> None:
-    observed = series_id(IDENTITY_TEST_VECTOR["payload"])
-    if observed != IDENTITY_TEST_VECTOR["series_id"]:
-        raise IdentityError(
-            f"identity implementation differs: {observed} != {IDENTITY_TEST_VECTOR['series_id']}"
-        )
-
-
-if __name__ == "__main__":
-    verify_test_vector()
-    print(IDENTITY_TEST_VECTOR["series_id"])
+def is_workload_id(value: Any) -> bool:
+    return bool(isinstance(value, str) and _WORKLOAD_ID.fullmatch(value))

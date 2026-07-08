@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CollectiveX UCCL adapter for native V1 dispatch/combine precision profiles."""
+"""CollectiveX UCCL adapter: native BF16 dispatch/combine over uccl_deepep."""
 from __future__ import annotations
 
 import importlib.metadata as metadata
@@ -11,9 +11,7 @@ import sys
 
 import torch
 import torch.distributed as dist
-import contracts
 import ep_provenance
-import ep_precision
 from ep_deepep_family import DeepEPFamilyBackend
 
 try:
@@ -35,9 +33,9 @@ def _uccl_version() -> str:
 def _uccl_dependency_versions() -> dict[str, str]:
     versions = {
         package: metadata.version(package)
-        for package in contracts.UCCL_DEPENDENCY_VERSIONS
+        for package in ep_provenance.UCCL_DEPENDENCY_VERSIONS
     }
-    if versions != contracts.UCCL_DEPENDENCY_VERSIONS:
+    if versions != ep_provenance.UCCL_DEPENDENCY_VERSIONS:
         raise RuntimeError(
             "UCCL runtime dependency versions differ from the v1 contract"
         )
@@ -185,9 +183,9 @@ def _normal_buffer_sizes(hidden: int, world_size: int) -> tuple[int, int]:
 
 
 class UCCLBackend(DeepEPFamilyBackend):
-    # uccl_deepep.Buffer is a DeepEP-API clone, so mode handling, dispatch/combine, and fp8
-    # dequantization are shared in DeepEPFamilyBackend; only the native uccl_deepep buffer
-    # construction, its content-provenance, and process teardown are UCCL-specific.
+    # uccl_deepep.Buffer is a DeepEP-API clone, so mode handling and dispatch/combine are
+    # shared in DeepEPFamilyBackend; only the native uccl_deepep buffer construction, its
+    # content-provenance, and process teardown are UCCL-specific.
     name = "uccl"
     _vendor = "UCCL"
 
@@ -197,12 +195,12 @@ class UCCLBackend(DeepEPFamilyBackend):
         device_sms = torch.cuda.get_device_properties(device).multi_processor_count
         if self.mode == "low-latency":
             assert spec.max_tokens_per_rank <= 128
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.low_latency_dispatch,
                 "use_fp8",
                 api="uccl_deepep.Buffer.low_latency_dispatch",
             )
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.low_latency_combine,
                 "use_logfmt",
                 api="uccl_deepep.Buffer.low_latency_combine",
@@ -232,12 +230,12 @@ class UCCLBackend(DeepEPFamilyBackend):
                 "num_rdma_bytes": num_rdma_bytes,
             }
         else:
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.dispatch,
                 "async_finish",
                 api="uccl_deepep.Buffer.dispatch",
             )
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.combine,
                 "async_finish",
                 api="uccl_deepep.Buffer.combine",
@@ -278,12 +276,8 @@ class UCCLBackend(DeepEPFamilyBackend):
             "uccl_dependency_versions": dependency_versions,
             "loaded_libraries": loaded_libraries,
             "mode": self.mode,
-            "dispatch_dtype": ep_precision.communication_format(
-                self.communication_precision, "dispatch"
-            ),
-            "combine_dtype": ep_precision.communication_format(
-                self.communication_precision, "combine"
-            ),
+            "dispatch_dtype": "bf16",
+            "combine_dtype": "bf16",
             "resource_mode": "fixed-profile",
             "device_sms": device_sms,
             **resource_provenance,

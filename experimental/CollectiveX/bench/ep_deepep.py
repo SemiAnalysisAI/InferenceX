@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""CollectiveX DeepEP adapter for native V1 dispatch/combine precision profiles."""
+"""CollectiveX DeepEP adapter: native BF16 dispatch/combine over deep_ep."""
 from __future__ import annotations
 
 import inspect
@@ -10,7 +10,6 @@ import torch
 import torch.distributed as dist
 import contracts
 import ep_provenance
-import ep_precision
 from ep_deepep_family import DeepEPFamilyBackend
 
 try:
@@ -70,8 +69,8 @@ def _normal_buffer_sizes(hidden: int, world_size: int) -> tuple[int, int]:
 
 
 class DeepEPBackend(DeepEPFamilyBackend):
-    # Mode handling, dispatch/combine, and fp8 dequantization are shared with UCCL in
-    # DeepEPFamilyBackend; only the native deep_ep buffer construction and teardown live here.
+    # Mode handling and dispatch/combine are shared with UCCL in DeepEPFamilyBackend;
+    # only the native deep_ep buffer construction and teardown live here.
     name = "deepep"
 
     def create_buffer(self, spec):
@@ -81,12 +80,12 @@ class DeepEPBackend(DeepEPFamilyBackend):
         mnnvl_kwargs, mnnvl_comm = _mnnvl_buffer_configuration()
         if self.mode == "low-latency":
             assert spec.max_tokens_per_rank <= 128
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.low_latency_dispatch,
                 "use_fp8",
                 api="deep_ep.Buffer.low_latency_dispatch",
             )
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.low_latency_combine,
                 "use_logfmt",
                 api="deep_ep.Buffer.low_latency_combine",
@@ -119,12 +118,12 @@ class DeepEPBackend(DeepEPFamilyBackend):
                 "num_qps_per_rank": num_qps_per_rank,
             }
         else:
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.dispatch,
                 "async_finish",
                 api="deep_ep.Buffer.dispatch",
             )
-            ep_precision.require_keyword(
+            ep_provenance.require_keyword(
                 Buffer.combine,
                 "async_finish",
                 api="deep_ep.Buffer.combine",
@@ -161,12 +160,8 @@ class DeepEPBackend(DeepEPFamilyBackend):
             "deepep_commit": os.environ.get("DEEPEP_COMMIT") or f"pkg-{version}",
             "backend_lineage": "deepep-v1",
             "mode": self.mode,
-            "dispatch_dtype": ep_precision.communication_format(
-                self.communication_precision, "dispatch"
-            ),
-            "combine_dtype": ep_precision.communication_format(
-                self.communication_precision, "combine"
-            ),
+            "dispatch_dtype": "bf16",
+            "combine_dtype": "bf16",
             "resource_mode": "fixed-profile",
             "device_sms": device_sms,
             "allow_mnnvl": bool(mnnvl_kwargs),

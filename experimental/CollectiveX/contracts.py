@@ -3,17 +3,18 @@
 
 JSON Schema (``schemas/*.schema.json``, Draft 2020-12) owns document shape and
 field constraints. The Python here covers only the facts JSON Schema cannot
-express: typed-identity recomputation, detached-sample path/hash joins, one
-terminal result per scheduled case, complete shard delivery, and the artifact
-privacy boundary. The public surface is intentionally small:
+express: recomputing the readable identities from their factors, joining detached
+samples by point identity and digest, one terminal result per scheduled case,
+complete shard delivery, and the artifact privacy boundary. The public surface is
+intentionally small:
 
-    strict_json_load()   - duplicate/non-finite-rejecting JSON reader
-    validate_result()     - validate one emitted result file (raw+samples or terminal)
+    strict_json_load()     - duplicate/non-finite-rejecting JSON reader
+    validate_result()      - validate one emitted result file (raw+samples or terminal)
     make_terminal_result() - build and self-validate one non-success outcome
     validate_delivery()    - reconcile a shard/matrix with its complete attempt set
 
-The backend-provenance and resource-projection helpers stay here so the bench
-emitter can call them; they move to the bench layer with the executable modules.
+Backend implementation-provenance constants and canonical-JSON helpers now live in
+``bench/ep_provenance.py``, beside the executable modules that emit them.
 """
 from __future__ import annotations
 
@@ -22,29 +23,17 @@ import datetime as dt
 import hashlib
 import ipaddress
 import json
-import math
 import os
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 import re
 import sys
-from typing import Any, Iterable
+from typing import Any
 
 import identity
 
 RAW_FORMAT = "collectivex.ep.v1"
 SAMPLES_FORMAT = "collectivex.samples.v1"
 TERMINAL_FORMAT = "collectivex.terminal.v1"
-TERMINAL_CASE_FIELDS = {
-    "backend", "canonical", "eplb", "ep", "experts", "gpus_per_node", "hidden",
-    "ladder", "mode", "nodes", "phase", "routing",
-    "samples_per_point", "scale_out_transport", "scale_up_domain", "scale_up_transport",
-    "scope", "suite", "timing", "topk", "topology_class", "transport",
-    "warmup_semantics", "workload",
-}
-ALLOCATION_FACTOR_FIELDS = {
-    "artifact", "execution_id", "job", "repo", "run_attempt", "run_id", "runner",
-    "source_sha",
-}
 GIT_RUN_FIELDS = {
     "artifact", "job", "ref", "repo", "run_attempt", "run_id", "source_sha",
 }
@@ -84,58 +73,7 @@ V1_CONDITIONING_LADDERS = {
     "prefill": (1, 2, 4, 8, 16, 32, 64, 128, 256, 512),
 }
 V1_CONDITIONING_ROUNDS_PER_SHAPE = 8
-DEEPEP_V2_JIT_KERNELS = frozenset({
-    "barrier", "combine", "combine_reduce_epilogue", "dispatch",
-    "dispatch_copy_epilogue",
-})
-DEEPEP_V2_V1_PROVENANCE = {
-    "deepep_version": "2.0.0",
-    "deepep_distribution_version": "2.0.0+fa8a9b1",
-    "deepep_commit": "fa8a9b16898204afd347c663b89e65ef87dc6ce6",
-    "deepep_tree": "29809e75c5874e6609dac4804e7b651d5226959f",
-    "deepep_pr": 605,
-    "deepep_fix_pr": 630,
-    "deepep_nccl_check_fix_pr": 640,
-    "deepep_nccl_check_commit": "93d0564188f7a0a6288c6e316484861b0efa042e",
-    "fmt_commit": "a4c7e17133ee9cb6a2f45545f6e974dd3c393efa",
-    "torch_version": "2.10.0+cu130",
-    "nccl_package_version": "2.30.4",
-    "nccl_version": "2.30.4",
-    "nvshmem_package_version": "3.3.9",
-}
-DEEPEP_V2_DISTRIBUTION_VERSIONS = frozenset({
-    "2.0.0+fa8a9b1", "2.0.0+local",
-})
-UCCL_DEPENDENCY_VERSIONS = {
-    "intervaltree": "3.1.0",
-    "nvidia-cuda-runtime-cu12": "12.9.79",
-    "sortedcontainers": "2.4.0",
-}
 SCHEMA_DIR = Path(__file__).resolve().parent / "schemas"
-REQUIRED_BACKEND_PROVENANCE = {
-    "deepep": (
-        "deepep_version", "deepep_commit", "backend_lineage", "allow_mnnvl",
-        "mnnvl_comm", "mode", "num_nvl_bytes", "num_rdma_bytes",
-        "nvshmem_ibgda_nic_handler",
-    ),
-    "deepep-v2": (
-        *DEEPEP_V2_V1_PROVENANCE, "api_signature_sha256", "loaded_libraries",
-        "jit_cubins", "jit_random_seed", "deterministic", "num_experts",
-        "tuning_num_experts", "allow_hybrid_mode", "gin_enabled",
-        "communication_backend",
-    ),
-    "deepep-hybrid": (
-        "deepep_commit", "deepep_tree", "branch", "backend_lineage",
-        "loaded_libraries", "realized_config", "jit_kernel_keys", "jit_shared_objects",
-    ),
-    "uccl": (
-        "uccl_version", "uccl_commit", "uccl_wrapper_commit", "backend_lineage",
-        "loaded_libraries", "uccl_dependency_versions", "mode", "num_nvl_bytes",
-        "num_rdma_bytes",
-    ),
-    "mori": ("mori_commit",),
-    "nccl-ep": ("nccl_version", "collective_library", "backend_lineage"),
-}
 
 
 class ContractError(ValueError):
@@ -319,29 +257,6 @@ def strict_json_load(path: str | os.PathLike[str]) -> Any:
 strict_load = strict_json_load
 
 
-def _finite_tree(value: Any, path: str = "$") -> None:
-    if isinstance(value, float) and not math.isfinite(value):
-        raise ContractError(f"{path} contains a non-finite number")
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _finite_tree(item, f"{path}[{index}]")
-    elif isinstance(value, dict):
-        for key, item in value.items():
-            _finite_tree(item, f"{path}.{key}")
-
-
-def canonical_json_bytes(value: Any) -> bytes:
-    """Canonical finite JSON bytes for checksums and immutable artifacts."""
-    _finite_tree(value)
-    try:
-        return json.dumps(
-            value, allow_nan=False, ensure_ascii=False, sort_keys=True,
-            separators=(",", ":"),
-        ).encode("utf-8")
-    except (TypeError, ValueError) as exc:
-        raise ContractError(f"value is not canonical JSON: {exc}") from exc
-
-
 def _obj(value: Any, path: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ContractError(f"{path} must be an object")
@@ -364,12 +279,6 @@ def _text(value: Any, path: str, *, nullable: bool = False) -> str | None:
         return None
     if not isinstance(value, str) or not value:
         raise ContractError(f"{path} must be a non-empty string")
-    return value
-
-
-def _integer(value: Any, path: str, *, minimum: int = 0) -> int:
-    if type(value) is not int or value < minimum:
-        raise ContractError(f"{path} must be an integer >= {minimum}")
     return value
 
 
@@ -428,17 +337,11 @@ def validate_raw_document(document: Any, samples: Any) -> dict[str, Any]:
     _schema_validate(document, "raw-case-v1.schema.json", "raw")
     _schema_validate(samples, "samples-v1.schema.json", "samples")
     ids = document["identity"]
-    case_id = identity.digest("case", ids["case_factors"])
-    allocation_id = identity.allocation_id(ids["allocation_factors"])
-    attempt_id = identity.attempt_id(
-        allocation=allocation_id, case=case_id, ordinal=ids["attempt_ordinal"]
-    )
-    if (case_id, allocation_id, attempt_id) != (
-        ids["case_id"], ids["allocation_id"], ids["attempt_id"]
-    ):
-        raise ContractError("raw typed identities do not match their factors")
-    series_id = ids["series_id"]
-    for field in ("case_id", "series_id", "allocation_id", "attempt_id"):
+    case_id = identity.case_id_from_factors(ids["case_factors"])
+    attempt_id = identity.attempt_id(case=case_id, ordinal=ids["attempt_ordinal"])
+    if (case_id, attempt_id) != (ids["case_id"], ids["attempt_id"]):
+        raise ContractError("raw case identity does not match its factors")
+    for field in ("case_id", "attempt_id"):
         if samples.get(field) != ids[field]:
             raise ContractError(f"detached samples {field} differs from raw identity")
     rows = document["measurement"]["rows"]
@@ -448,17 +351,13 @@ def validate_raw_document(document: Any, samples: Any) -> dict[str, Any]:
     success = document["outcome"]["status"] == "success"
     for row in rows:
         expected_point = identity.point_id(
-            series=series_id, tokens_per_rank=row["tokens_per_rank"]
+            case=case_id, tokens_per_rank=row["tokens_per_rank"]
         )
-        expected_evidence = identity.evidence_id(
-            point=expected_point, allocation=allocation_id, attempt=attempt_id,
-            sample_sha256=row["sample_sha256"],
-        )
-        if row["point_id"] != expected_point or row["evidence_id"] != expected_evidence:
-            raise ContractError("raw point/evidence identity does not match its factors")
+        if row["point_id"] != expected_point:
+            raise ContractError("raw point identity does not match its factors")
         point = sample_points[row["point_id"]]
-        if (point["sample_sha256"], point["evidence_id"], point["tokens_per_rank"]) != (
-            row["sample_sha256"], row["evidence_id"], row["tokens_per_rank"]
+        if (point["sample_sha256"], point["tokens_per_rank"]) != (
+            row["sample_sha256"], row["tokens_per_rank"]
         ):
             raise ContractError("detached sample point differs from its raw row")
         if success and row["correctness"]["passed"] is not True:
@@ -499,6 +398,22 @@ def validate_result(path: str | os.PathLike[str]) -> dict[str, Any]:
 # ---------------------------------------------------------------------------
 # Terminal outcome construction and validation.
 # ---------------------------------------------------------------------------
+_ALLOCATION_GIT_FIELDS = ("artifact", "job", "repo", "run_attempt", "run_id", "source_sha")
+
+
+def _allocation_factors(
+    git_run: dict[str, Any] | None, runner: str, execution_id: str | None
+) -> dict[str, Any]:
+    """Project the CI provenance into the eight canonical allocation factors."""
+    factors: dict[str, Any] = {
+        name: (git_run[name] if git_run is not None else None)
+        for name in _ALLOCATION_GIT_FIELDS
+    }
+    factors["execution_id"] = execution_id
+    factors["runner"] = runner
+    return factors
+
+
 def make_terminal_result(
     *,
     allocation_factors: dict[str, Any],
@@ -513,26 +428,26 @@ def make_terminal_result(
     return_code: int,
     source: str,
     status: str,
+    version: int,
     expected_case_id: str | None = None,
 ) -> dict[str, Any]:
     """Build and self-validate one attributable non-success attempt."""
-    case_id = identity.digest("case", case_factors)
+    case_id = identity.case_id_from_factors(case_factors)
     if expected_case_id is not None and expected_case_id != case_id:
         raise ContractError(
             f"scheduled case ID differs from terminal factors: {expected_case_id} != {case_id}"
         )
-    allocation_id = identity.allocation_id(allocation_factors)
-    attempt_id = identity.attempt_id(
-        allocation=allocation_id, case=case_id, ordinal=attempt_ordinal
-    )
+    if type(version) is not int or version < 1:
+        raise ContractError("terminal benchmark version must be a positive integer")
+    attempt_id = identity.attempt_id(case=case_id, ordinal=attempt_ordinal)
     document = {
         "format": TERMINAL_FORMAT,
         "schema_version": 1,
+        "version": version,
         "record_type": "terminal-outcome",
         "generated_at": generated_at,
         "identity": {
             "allocation_factors": allocation_factors,
-            "allocation_id": allocation_id,
             "attempt_id": attempt_id,
             "attempt_ordinal": attempt_ordinal,
             "case_factors": case_factors,
@@ -573,15 +488,10 @@ def validate_terminal_document(document: Any) -> dict[str, Any]:
         raise ContractError("terminal case factors differ from the scheduled case/profile")
     allocation = ids["allocation_factors"]
     ordinal = ids["attempt_ordinal"]
-    expected_case = identity.digest("case", factors)
-    expected_allocation = identity.allocation_id(allocation)
-    expected_attempt = identity.attempt_id(
-        allocation=expected_allocation, case=expected_case, ordinal=ordinal
-    )
-    if (ids["case_id"], ids["allocation_id"], ids["attempt_id"]) != (
-        expected_case, expected_allocation, expected_attempt
-    ):
-        raise ContractError("terminal typed identities do not match their factors")
+    expected_case = identity.case_id_from_factors(factors)
+    expected_attempt = identity.attempt_id(case=expected_case, ordinal=ordinal)
+    if (ids["case_id"], ids["attempt_id"]) != (expected_case, expected_attempt):
+        raise ContractError("terminal case identity does not match its factors")
     provenance = document["provenance"]
     git_run = provenance["git_run"]
     outcome = document["outcome"]
@@ -610,16 +520,9 @@ def validate_terminal_document(document: Any) -> dict[str, Any]:
         raise ContractError("terminal provenance source is not registered")
     if not valid_outcome:
         raise ContractError("terminal source and outcome are not registered")
-    expected_allocation_factors = {
-        "artifact": git_run["artifact"] if git_run is not None else None,
-        "execution_id": allocation["execution_id"],
-        "job": git_run["job"] if git_run is not None else None,
-        "repo": git_run["repo"] if git_run is not None else None,
-        "run_attempt": git_run["run_attempt"] if git_run is not None else None,
-        "run_id": git_run["run_id"] if git_run is not None else None,
-        "runner": expected_runner,
-        "source_sha": git_run["source_sha"] if git_run is not None else None,
-    }
+    expected_allocation_factors = _allocation_factors(
+        git_run, expected_runner, allocation["execution_id"]
+    )
     if allocation != expected_allocation_factors:
         raise ContractError("terminal allocation factors differ from provenance or source")
     assert_publication_safe([document])
@@ -723,21 +626,6 @@ def _git_run_from_environment() -> dict[str, Any] | None:
     return git_run
 
 
-def _allocation_factors_from_environment(
-    runner: str, git_run: dict[str, Any] | None
-) -> dict[str, Any]:
-    return {
-        "artifact": git_run["artifact"] if git_run is not None else None,
-        "execution_id": os.environ.get("COLLECTIVEX_EXECUTION_ID") or None,
-        "job": git_run["job"] if git_run is not None else None,
-        "repo": git_run["repo"] if git_run is not None else None,
-        "run_attempt": git_run["run_attempt"] if git_run is not None else None,
-        "run_id": git_run["run_id"] if git_run is not None else None,
-        "runner": runner,
-        "source_sha": git_run["source_sha"] if git_run is not None else None,
-    }
-
-
 def make_terminal_from_environment(
     *, backend: str, phase: str, return_code: int, failure_mode: str | None = None
 ) -> dict[str, Any]:
@@ -756,7 +644,9 @@ def make_terminal_from_environment(
     git_run = _git_run_from_environment()
     control = os.environ.get("COLLECTIVEX_CONTROL_SHA256") or None
     return make_terminal_result(
-        allocation_factors=_allocation_factors_from_environment(runner, git_run),
+        allocation_factors=_allocation_factors(
+            git_run, runner, os.environ.get("COLLECTIVEX_EXECUTION_ID") or None
+        ),
         attempt_ordinal=_env_integer("CX_ATTEMPT_ID", 1),
         case=case,
         case_factors=case_factors,
@@ -768,6 +658,7 @@ def make_terminal_from_environment(
         return_code=return_code,
         source="runtime-emitter",
         status="failed",
+        version=_env_integer("CX_VERSION", 1),
         expected_case_id=os.environ.get("CX_CASE_ID") or None,
     )
 
@@ -788,12 +679,15 @@ def demote_raw_attempt(path: str | os.PathLike[str], return_code: int) -> dict[s
         raise ContractError("only a raw attempt can be demoted")
     ids = _obj(raw.get("identity"), "raw.identity")
     required = {
-        "allocation_factors", "allocation_id", "attempt_id", "attempt_ordinal",
+        "allocation_factors", "attempt_id", "attempt_ordinal",
         "case_factors", "case_id",
     }
     if not required.issubset(ids):
         raise ContractError("raw identity lacks terminal factors")
     mode = RETURN_CODE_FAILURE_MODES.get(return_code, "execution")
+    version = raw.get("version")
+    if type(version) is not int or version < 1:
+        raise ContractError("raw attempt lacks a valid benchmark version to demote")
     git_run = _obj(raw.get("provenance"), "raw.provenance").get("git_run")
     if git_run is not None:
         git_run = _keys(git_run, GIT_RUN_FIELDS, "raw.provenance.git_run")
@@ -810,6 +704,7 @@ def demote_raw_attempt(path: str | os.PathLike[str], return_code: int) -> dict[s
         return_code=return_code,
         source="post-emit-command",
         status="failed",
+        version=version,
         expected_case_id=ids["case_id"],
     )
     artifact = raw.get("sample_artifact") or {}
@@ -823,33 +718,33 @@ def demote_raw_attempt(path: str | os.PathLike[str], return_code: int) -> dict[s
 # ---------------------------------------------------------------------------
 # Shard / matrix delivery reconciliation.
 # ---------------------------------------------------------------------------
-def _validate_attempt_paths(paths: list[str]) -> int:
-    """Fully validate a result directory's attempts and paired sample artifacts."""
+def _load_delivery_attempts(paths: list[str]) -> list[dict[str, Any]]:
+    """Fully validate every result path once and return its raw/terminal attempts."""
     if not paths or len(paths) != len(set(paths)):
         raise ContractError("delivery requires unique result paths")
+    attempts: list[dict[str, Any]] = []
     sample_paths: set[Path] = set()
     referenced_samples: set[Path] = set()
-    attempt_count = 0
     for raw_path in paths:
         path = Path(raw_path).resolve()
         document = strict_json_load(path)
-        if isinstance(document, dict) and document.get("format") == RAW_FORMAT:
+        kind = document.get("format") if isinstance(document, dict) else None
+        if kind == RAW_FORMAT:
             document = load_raw_attempt(path)
             referenced_samples.add(path.with_name(document["sample_artifact"]["path"]))
-            attempt_count += 1
-        elif isinstance(document, dict) and document.get("format") == TERMINAL_FORMAT:
-            validate_terminal_document(document)
-            attempt_count += 1
-        elif isinstance(document, dict) and document.get("format") == SAMPLES_FORMAT:
+            attempts.append(document)
+        elif kind == TERMINAL_FORMAT:
+            attempts.append(validate_terminal_document(document))
+        elif kind == SAMPLES_FORMAT:
             validate_samples_document(document)
             sample_paths.add(path)
         else:
             raise ContractError(f"unknown result artifact {path.name}")
     if sample_paths != referenced_samples:
         raise ContractError("sample artifacts are missing, orphaned, or outside the validated set")
-    if attempt_count == 0:
+    if not attempts:
         raise ContractError("result set contains no attempts")
-    return attempt_count
+    return attempts
 
 
 def validate_delivery(
@@ -882,25 +777,27 @@ def validate_delivery(
         raise ContractError("delivery source is not a matrix or shard control")
     if not expected or len(expected) != expected_count:
         raise ContractError("delivery source has empty or duplicate case coverage")
+    source_version = source.get("version")
+    if type(source_version) is not int or source_version < 1:
+        raise ContractError("delivery source lacks a valid benchmark version")
 
-    _validate_attempt_paths(paths)
-    attempts = []
-    for raw_path in paths:
-        document = strict_json_load(raw_path)
-        if isinstance(document, dict) and document.get("format") in {RAW_FORMAT, TERMINAL_FORMAT}:
-            attempts.append(load_attempt(raw_path))
+    attempts = _load_delivery_attempts(paths)
     assert_publication_safe(attempts)
     by_case: dict[str, list[dict[str, Any]]] = {}
     attempt_ids = set()
-    allocation_ids = set()
+    allocation_keys = set()
     source_sha256 = hashlib.sha256(source_file.read_bytes()).hexdigest()
     for document in attempts:
         ids = document["identity"]
         case_id = ids["case_id"]
         if case_id not in expected or ids["attempt_id"] in attempt_ids:
             raise ContractError("delivery contains an extra case or duplicate attempt")
+        if document.get("version") != source_version:
+            raise ContractError("delivery attempt benchmark version differs from its source")
         attempt_ids.add(ids["attempt_id"])
-        allocation_ids.add(ids["allocation_id"])
+        allocation_keys.add(
+            json.dumps(ids["allocation_factors"], sort_keys=True, separators=(",", ":"))
+        )
         sku, scheduled = expected[case_id]
         scheduled_case = {key: value for key, value in scheduled.items() if key != "case_id"}
         if ids["case_factors"] != {
@@ -941,8 +838,8 @@ def validate_delivery(
         ordinals = sorted(document["identity"]["attempt_ordinal"] for document in documents)
         if ordinals != list(range(1, len(ordinals) + 1)):
             raise ContractError(f"delivery attempt ordinals are not contiguous for {case_id}")
-    if require_one_allocation and len(allocation_ids) != 1:
-        raise ContractError("one shard must use exactly one allocation identity")
+    if require_one_allocation and len(allocation_keys) != 1:
+        raise ContractError("one shard must use exactly one allocation")
     return len(attempts)
 
 

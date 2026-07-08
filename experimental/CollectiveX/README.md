@@ -12,10 +12,8 @@ measurement and validation contract is in [docs/methodology.md](docs/methodology
 ## Execution Profile
 
 The workload uses packed placement and one pinned `fixed-profile` resource configuration per
-backend/topology; there is no tuning sweep. The default sweep runs the portable BF16 dispatch / BF16
-combine control. The native FP8 codec paths stay in the code (`bench/ep_precision.py` and each
-adapter's FP8 dispatch/combine) and remain callable but are not a swept dimension. The explicit mode
-selects one of two contracts:
+backend/topology; there is no tuning sweep. Dispatch and combine are fixed BF16 on every backend;
+precision is not a swept dimension. The explicit mode selects one of two contracts:
 
 - Normal mode uses `layout-and-dispatch-v1`, rank-deduplicated token payloads, and activation-only
   combine. Uniform core coverage and one Zipf sensitivity remain; EPLB is measured only as the Zipf
@@ -29,11 +27,8 @@ warmups before each measured component at every trial/point. Roundtrip is measur
 iteration takes the cross-rank maximum before nearest-rank p50/p90/p95/p99, and roundtrip p99 is the
 headline latency. A stdlib integer counter produces byte-identical routing and gate weights.
 
-Correctness is checked against the semantic value after the declared communication codec. The combine
-gates are `rtol=0.05, atol=0.02` for BF16 (the default sweep), `rtol=0.06, atol=0.03` for native
-logfmt10, and `rtol=0.08, atol=0.04` for native FP8 direct-cast combine when those codec paths are
-exercised. FP8 direct-cast evidence also counts saturation on the exact transformed native combine
-input; any saturated value fails the point. Any failed rank or point makes the case ineligible and is
+Correctness is checked against the reference activation. The combine gate is `rtol=0.05, atol=0.02`
+for the BF16 communication path. Any failed rank or point makes the case ineligible and is
 recorded as a terminal outcome.
 
 The matrix covers H100, H200, B200, B300, GB200, GB300, and MI355X. `sweep_matrix.py` materializes
@@ -79,7 +74,7 @@ whether it succeeded is decided only by the emitted artifact.
 
 `.github/workflows/collectivex-sweep.yml` has two jobs. `setup` generates a public-SKU matrix
 (`backend`, `suites`, `only_sku`, `exclude_skus`, `ep_sizes` inputs), fetches the pinned backend
-source archive, emits a neutral `collectivex.frontend-catalog.v1` projection, and uploads the matrix.
+source archive, and uploads the matrix.
 `sweep` extracts a strict ignored `.shards/<id>.json` control per matrix entry, executes one
 allocation per shard, runs `contracts.py validate-delivery`, and uploads the result artifacts with
 `always()` so a red or partial run still uploads.

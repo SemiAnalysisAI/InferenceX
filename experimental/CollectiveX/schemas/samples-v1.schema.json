@@ -4,9 +4,8 @@
   "title": "CollectiveX exact private samples v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["allocation_id","attempt_id","case_id","format","points","sampling","schema_version","series_id"],
+  "required": ["attempt_id","case_id","format","points","sampling","schema_version"],
   "properties": {
-      "allocation_id": {"$ref": "#/$defs/allocationId"},
       "attempt_id": {"$ref": "#/$defs/attemptId"},
       "case_id": {"$ref": "#/$defs/caseId"},
       "format": {"const": "collectivex.samples.v1"},
@@ -16,7 +15,7 @@
             "items": {
                     "type": "object",
                     "additionalProperties": false,
-                    "required": ["components","evidence_id","point_id","sample_sha256","tokens_per_rank"],
+                    "required": ["components","point_id","sample_sha256","tokens_per_rank"],
                     "properties": {
                               "components": {
                                           "type": "object",
@@ -29,7 +28,6 @@
                                                         "stage": {"$ref":"#/$defs/component"}
                                                       }
                                         },
-                              "evidence_id": {"$ref": "#/$defs/evidenceId"},
                               "point_id": {"$ref": "#/$defs/pointId"},
                               "sample_sha256": {"$ref": "#/$defs/sha256"},
                               "tokens_per_rank": {"type": "integer","minimum": 1}
@@ -46,17 +44,13 @@
                     "trials": {"const": 64}
                   }
           },
-      "schema_version": {"const": 1},
-      "series_id": {"$ref": "#/$defs/seriesId"}
+      "schema_version": {"const": 1}
     },
   "$defs": {
       "sha256": {"type": "string","pattern": "^[0-9a-f]{64}$"},
-      "caseId": {"type": "string","pattern": "^cxcase-v1-[0-9a-f]{64}$"},
-      "seriesId": {"type": "string","pattern": "^cxseries-v1-[0-9a-f]{64}$"},
-      "pointId": {"type": "string","pattern": "^cxpoint-v1-[0-9a-f]{64}$"},
-      "evidenceId": {"type": "string","pattern": "^cxevidence-v1-[0-9a-f]{64}$"},
-      "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
-      "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
+      "caseId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 180},
+      "pointId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 180},
+      "attemptId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 180},
       "trials": {
             "type":"array",
             "minItems":64,

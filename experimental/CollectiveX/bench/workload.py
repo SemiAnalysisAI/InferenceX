@@ -318,7 +318,7 @@ def verify_workload(manifest, idx_np, weights_np):
             or manifest["routing_profile"] != "uniform"):
         return False, "manifest version or generator is unsupported"
     if (isinstance(manifest["seed"], bool) or not isinstance(manifest["seed"], int)
-            or not identity.is_typed_id(manifest["workload_id"], "workload")):
+            or not identity.is_workload_id(manifest["workload_id"])):
         return False, "manifest seed or workload ID is invalid"
     dims = manifest["dims"]
     dim_fields = {"hidden", "topk", "experts", "ep_size", "tokens_per_rank",

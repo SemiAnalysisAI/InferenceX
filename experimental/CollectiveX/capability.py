@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Public runner and backend capability registry for CollectiveX v1."""
+"""Public runner and backend capability registry for CollectiveX."""
 
 from __future__ import annotations
 
 import re
 from typing import Any
-
-import identity
 
 
 DEEPEP_V2_COMMIT = "fa8a9b16898204afd347c663b89e65ef87dc6ce6"
@@ -272,7 +270,7 @@ def _resolve_base(
     if topology is None or (nodes is not None and nodes != topology["nodes"]):
         return False, f"{sku} does not register EP{ep} on {nodes} nodes"
     if routing != "uniform" or eplb:
-        return False, "v1 routing is uniform; EPLB is unavailable"
+        return False, "core routing is uniform; EPLB is unavailable"
     if platform["vendor"] not in implementation["vendors"]:
         return False, f"{backend} does not support {platform['vendor']}"
     sku_capability = implementation.get("sku_capabilities", {}).get(sku)
@@ -326,7 +324,7 @@ def resolve(
     eplb: bool = False,
     mode: str = "normal",
 ) -> tuple[bool, str]:
-    """Return whether one fixed-v1 case can run on a public GHA runner label."""
+    """Return whether one fixed-profile case can run on a public GHA runner label."""
     disposition, detail = resolve_disposition(
         sku,
         backend,

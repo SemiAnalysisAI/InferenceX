@@ -2,15 +2,18 @@
 """Shared DeepEP-API dispatch/combine surface for the DeepEP and UCCL adapters.
 
 UCCL's ``uccl_deepep.Buffer`` is a drop-in clone of DeepEP's ``deep_ep.Buffer`` low-latency and
-normal API, so both adapters run byte-identical mode handling, dispatch/combine, expert-packed
-inspection, and fp8 dequantization. That shared operation lives here; each concrete backend keeps
-only what is genuinely vendor-specific: its native buffer import, ``create_buffer`` provenance, and
-process teardown.
+normal API, so both adapters run byte-identical mode handling, dispatch/combine, and expert-packed
+inspection. That shared operation lives here; each concrete backend keeps only what is genuinely
+vendor-specific: its native buffer import, ``create_buffer`` provenance, and process teardown.
 
 This base is deliberately free of any ``deep_ep``/``uccl`` import. The UCCL benchmark image installs
 uccl WITHOUT deep_ep, so importing ``ep_uccl`` must never transitively require ``deep_ep`` — an
 inherited method resolves module globals from where it is *defined*, so keeping this file
 vendor-agnostic is what makes the shared base safe for both images.
+
+Communication is fixed BF16: dispatch and combine move BF16 activations, so the native
+``use_fp8``/``use_logfmt`` controls are always driven off and the received buffer is the
+semantic payload directly.
 """
 from __future__ import annotations
 
@@ -18,7 +21,6 @@ import types
 
 import torch
 import torch.distributed as dist
-import ep_precision
 from ep_backend import EPBackend
 
 
@@ -41,31 +43,6 @@ class DeepEPFamilyBackend(EPBackend):
     def __init__(self, args, rank, world_size, local_rank, device):
         # Base validates mode against SUPPORTED_MODES (normal / low-latency).
         super().__init__(args, rank, world_size, local_rank, device)
-        supported_profiles = {
-            "normal": {
-                "d-bf16.c-bf16",
-                "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-            },
-            "low-latency": {
-                "d-bf16.c-bf16",
-                "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
-            },
-        }
-        self.precision_profile_id, self.communication_precision = (
-            ep_precision.resolve_precision(
-                args,
-                backend=self.name,
-                mode=self.mode,
-                supported_profiles=supported_profiles[self.mode],
-            )
-        )
-        self._fp8_dispatch = ep_precision.is_low_precision_dispatch(
-            self.communication_precision
-        )
-        self._use_logfmt = ep_precision.uses_logfmt_combine(
-            self.communication_precision
-        )
-        self.stage_device_work = self._fp8_dispatch
         self.group = dist.group.WORLD
         # Low-latency flips the contract flags and fixes the per-rank cap so
         # buffer_cap can report it to make_inputs before create_buffer runs.
@@ -94,7 +71,7 @@ class DeepEPFamilyBackend(EPBackend):
                 p.topk_idx,
                 self.max_tokens_per_rank,
                 self.args.experts,
-                use_fp8=self._fp8_dispatch,  # BF16 control realizes use_fp8=False.
+                use_fp8=False,  # BF16 communication path.
                 async_finish=False,
                 return_recv_hook=False,
             )
@@ -129,7 +106,8 @@ class DeepEPFamilyBackend(EPBackend):
         )
 
     def stage(self, p, h):
-        h.combine_input = self._semantic_recv(h, p)
+        # BF16: the received buffer is already the semantic payload to combine.
+        h.combine_input = h.recv_x
 
     def combine(self, p, h):
         if self.mode == "low-latency":
@@ -138,7 +116,7 @@ class DeepEPFamilyBackend(EPBackend):
                 p.topk_idx,
                 p.topk_weights,
                 h.handle,
-                use_logfmt=self._use_logfmt,
+                use_logfmt=False,  # BF16 communication path.
                 async_finish=False,
                 return_recv_hook=False,
             )
@@ -156,9 +134,7 @@ class DeepEPFamilyBackend(EPBackend):
             h.recv_topk_idx,
         )
         return types.SimpleNamespace(
-            payload=self._semantic_recv(h, p),
-            encoded_payload=self._encoded_recv(h),
-            scales=self._recv_scales(h),
+            payload=h.recv_x,
             expert_ids=expert_ids,
             weights=h.recv_topk_weights.masked_fill(~valid, 0),
             local_expert_counts=torch.tensor(h.recv_counts, device=self.device, dtype=torch.int64),
@@ -170,9 +146,7 @@ class DeepEPFamilyBackend(EPBackend):
             raise RuntimeError("expert-packed inspection requires low-latency mode")
         p.recv_counts = tuple(int(value) for value in h.recv_counts.tolist())
         return types.SimpleNamespace(
-            payload=self._semantic_recv(h, p),
-            encoded_payload=self._encoded_recv(h),
-            scales=self._recv_scales(h),
+            payload=h.recv_x,
             local_expert_counts=h.recv_counts,
             source_info=h.handle[0],
             layout_range=h.handle[1],
@@ -181,9 +155,9 @@ class DeepEPFamilyBackend(EPBackend):
     def combine_transformed(self, p, h, transformed):
         if self.mode == "low-latency":
             packed = torch.zeros(
-                self._encoded_recv(h).shape,
+                h.recv_x.shape,
                 dtype=torch.bfloat16,
-                device=self._encoded_recv(h).device,
+                device=h.recv_x.device,
             )
             packed[h.oracle_local_expert_slots, h.oracle_packed_positions] = transformed.to(
                 packed.dtype
@@ -193,58 +167,17 @@ class DeepEPFamilyBackend(EPBackend):
                 p.topk_idx,
                 p.topk_weights,
                 h.handle,
-                use_logfmt=self._use_logfmt,
+                use_logfmt=False,  # BF16 communication path.
                 async_finish=False,
                 return_recv_hook=False,
             )
             return combined
-        semantic = self._semantic_recv(h, p)
         combined, _, _ = self.buffer.combine(
-            transformed.to(semantic.dtype), h.handle, async_finish=False
+            transformed.to(h.recv_x.dtype), h.handle, async_finish=False
         )
         return combined
 
     def recv_tokens(self, h):
         if self.mode == "low-latency":
             return int(h.recv_counts.to(torch.int64).sum().item())
-        return int(self._encoded_recv(h).shape[0])
-
-    def _encoded_recv(self, h):
-        return h.recv_x[0] if isinstance(h.recv_x, tuple) else h.recv_x
-
-    def _recv_scales(self, h):
-        return h.recv_x[1] if isinstance(h.recv_x, tuple) else None
-
-    def _semantic_recv(self, h, problem=None):
-        if not self._fp8_dispatch:
-            return h.recv_x
-        if not hasattr(h, "recv_semantic"):
-            if self.mode == "low-latency":
-                counts = getattr(problem, "recv_counts", None)
-                if counts is None:
-                    counts = tuple(int(value) for value in h.recv_counts.tolist())
-                    if problem is not None:
-                        problem.recv_counts = counts
-                workspace = getattr(self, "_ll_semantic_workspace", None)
-                if workspace is None:
-                    encoded = self._encoded_recv(h)
-                    workspace = torch.empty(
-                        encoded.shape, dtype=torch.bfloat16, device=encoded.device
-                    )
-                    self._ll_semantic_workspace = workspace
-                h.recv_semantic = ep_precision.dequantize_expert_prefixes(
-                    torch,
-                    self._encoded_recv(h),
-                    self._recv_scales(h),
-                    self.communication_precision["dispatch"],
-                    counts,
-                    workspace,
-                )
-            else:
-                h.recv_semantic = ep_precision.dequantize_dispatch(
-                    torch,
-                    self._encoded_recv(h),
-                    self._recv_scales(h),
-                    self.communication_precision["dispatch"],
-                )
-        return h.recv_semantic
+        return int(h.recv_x.shape[0])

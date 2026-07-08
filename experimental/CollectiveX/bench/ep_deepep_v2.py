@@ -16,9 +16,8 @@ from pathlib import Path
 
 import torch
 import torch.distributed as dist
-import contracts
 import ep_harness
-import ep_precision
+import ep_provenance
 from ep_backend import EPBackend
 
 try:
@@ -42,7 +41,7 @@ DEEPEP_V2_JIT_RANDOM_SEED = "collectivex-deepep-v2-fa8a9b1"
 TORCH_VERSION = "2.10.0+cu130"
 NCCL_VERSION = "2.30.4"
 NVSHMEM_VERSION = "3.3.9"
-DEEPEP_V2_JIT_KERNELS = contracts.DEEPEP_V2_JIT_KERNELS
+DEEPEP_V2_JIT_KERNELS = ep_provenance.DEEPEP_V2_JIT_KERNELS
 
 
 def _sha256(path: str) -> str:
@@ -164,18 +163,8 @@ def _jit_cache_key(
     max_tokens: int,
     allow_hybrid_mode: bool,
     realized: dict[str, int | bool],
-    precision_profile_id: str = "d-bf16.c-bf16",
-    communication_precision: dict[str, object] | None = None,
 ) -> str:
     """Key generated kernels by codegen inputs, not routing data or case identity."""
-    if communication_precision is None:
-        communication_precision = {
-            "dispatch": {
-                "communication_format": "bf16",
-                "api_input_dtype": "bf16",
-            },
-            "combine": {"communication_format": "bf16"},
-        }
     payload = {
         "contract": "deepep-v2-jit-config-v3",
         "runner": args.runner,
@@ -185,10 +174,9 @@ def _jit_cache_key(
         "physical_experts": args.experts,
         "tuning_experts": getattr(args, "num_logical_experts", args.experts),
         "max_tokens": max_tokens,
-        "precision_profile": precision_profile_id,
-        "dispatch_dtype": communication_precision["dispatch"]["communication_format"],
-        "combine_dtype": communication_precision["combine"]["communication_format"],
-        "input_layout": communication_precision["dispatch"]["api_input_dtype"],
+        "dispatch_dtype": "bf16",
+        "combine_dtype": "bf16",
+        "input_layout": "bf16",
         "expert_alignment": 1,
         "do_cpu_sync": True,
         "cached_mode": False,
@@ -338,22 +326,7 @@ class DeepEPV2Backend(EPBackend):
     def __init__(self, args, rank, world_size, local_rank, device):
         # deepep-v2 is normal-mode only; base SUPPORTED_MODES=("normal",) enforces it.
         super().__init__(args, rank, world_size, local_rank, device)
-        self.precision_profile_id, self.communication_precision = (
-            ep_precision.resolve_precision(
-                args,
-                backend=self.name,
-                mode=self.mode,
-                supported_profiles={
-                    "d-bf16.c-bf16",
-                    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-                },
-            )
-        )
-        self._fp8_dispatch = ep_precision.is_low_precision_dispatch(
-            self.communication_precision
-        )
-        self.stage_device_work = self._fp8_dispatch
-        ep_precision.require_keyword(
+        ep_provenance.require_keyword(
             ElasticBuffer.__init__,
             "use_fp8_dispatch",
             api="deep_ep.ElasticBuffer.__init__",
@@ -382,7 +355,7 @@ class DeepEPV2Backend(EPBackend):
             num_max_tokens_per_rank=self.max_tokens,
             hidden=args.hidden,
             num_topk=args.topk,
-            use_fp8_dispatch=self._fp8_dispatch,
+            use_fp8_dispatch=False,  # BF16 communication path.
             deterministic=False,
             allow_hybrid_mode=allow_hybrid_mode,
             allow_multiple_reduction=True,
@@ -428,8 +401,6 @@ class DeepEPV2Backend(EPBackend):
             self.max_tokens,
             allow_hybrid_mode,
             jit_config,
-            self.precision_profile_id,
-            self.communication_precision,
         )
         os.environ["EP_JIT_CACHE_DIR"] = str(jit_root / self.jit_cache_key)
         realized_config = {
@@ -472,12 +443,8 @@ class DeepEPV2Backend(EPBackend):
             "jit_random_seed": DEEPEP_V2_JIT_RANDOM_SEED,
             "num_experts": int(args.experts),
             "mode": "normal",
-            "dispatch_dtype": ep_precision.communication_format(
-                self.communication_precision, "dispatch"
-            ),
-            "combine_dtype": ep_precision.communication_format(
-                self.communication_precision, "combine"
-            ),
+            "dispatch_dtype": "bf16",
+            "combine_dtype": "bf16",
             "deterministic": False,
             "resource_mode": "fixed-profile",
             "requested_num_sms": self.num_sms,
@@ -527,7 +494,8 @@ class DeepEPV2Backend(EPBackend):
         )
 
     def stage(self, p, h):
-        h.combine_input = self._semantic_recv(h, p.recv_tokens)
+        # BF16: the received buffer is already the semantic payload to combine.
+        h.combine_input = h.recv_x
 
     def combine(self, p, h):
         combined_x, _, _ = self.buffer.combine(
@@ -565,13 +533,7 @@ class DeepEPV2Backend(EPBackend):
         )
         local = local_idx[valid].to(torch.int64)
         return types.SimpleNamespace(
-            payload=self._semantic_recv(h, count)[:count],
-            encoded_payload=self._encoded_recv(h)[:count],
-            scales=(
-                self._recv_scales(h)[:count]
-                if self._recv_scales(h) is not None
-                else None
-            ),
+            payload=h.recv_x[:count],
             expert_ids=expert_ids,
             weights=h.recv_topk_weights[:count].masked_fill(~valid, 0),
             local_expert_counts=torch.bincount(
@@ -581,8 +543,7 @@ class DeepEPV2Backend(EPBackend):
         )
 
     def combine_transformed(self, p, h, transformed):
-        semantic = self._semantic_recv(h, self.recv_tokens(h))
-        combine_input = torch.zeros_like(semantic)
+        combine_input = torch.zeros_like(h.recv_x)
         combine_input[: transformed.shape[0]].copy_(transformed.to(combine_input.dtype))
         combined, _, _ = self.buffer.combine(
             combine_input,
@@ -595,32 +556,6 @@ class DeepEPV2Backend(EPBackend):
 
     def recv_tokens(self, h):
         return int(h.handle.psum_num_recv_tokens_per_scaleup_rank[-1].item())
-
-    def _encoded_recv(self, h):
-        return h.recv_x[0] if isinstance(h.recv_x, tuple) else h.recv_x
-
-    def _recv_scales(self, h):
-        return h.recv_x[1] if isinstance(h.recv_x, tuple) else None
-
-    def _semantic_recv(self, h, rows):
-        if not self._fp8_dispatch:
-            return h.recv_x
-        if not hasattr(h, "recv_semantic"):
-            encoded = self._encoded_recv(h)
-            semantic = torch.empty(
-                encoded.shape, dtype=torch.bfloat16, device=encoded.device
-            )
-            semantic[:rows].copy_(ep_precision.dequantize_dispatch(
-                torch,
-                encoded[:rows],
-                self._recv_scales(h)[:rows],
-                self.communication_precision["dispatch"],
-            ))
-            h.recv_semantic = semantic
-            h.recv_semantic_rows = rows
-        elif h.recv_semantic_rows != rows:
-            raise RuntimeError("DeepEP V2 receive count changed for one dispatch handle")
-        return h.recv_semantic
 
     def finalize(self, rc):
         try:

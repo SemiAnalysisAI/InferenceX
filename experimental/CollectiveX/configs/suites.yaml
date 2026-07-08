@@ -1,20 +1,25 @@
-# CollectiveX v1 comparison suites.
+# CollectiveX EP comparison suites.
 schema_version: 1
+# Iterable benchmark version. Bump when a methodology change makes new results
+# incomparable with prior ones; it is copied verbatim into the matrix, every
+# emitted case result, every extracted shard control, and the run summary so the
+# frontend can group and pick runs by it. This is the only place it is set.
+version: 1
 
 suites:
-  ep-core-v1:
+  ep-core:
     mode: normal
-    workloads: [deepseek-v3-v1]
+    workloads: [deepseek-v3]
     platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]
     phases: [decode, prefill]
     token_points_prefill: [256, 512]
 
-  ep-low-latency-v1:
+  ep-low-latency:
     mode: low-latency
     backends: [deepep, uccl]
-    workloads: [deepseek-v3-v1]
+    workloads: [deepseek-v3]
     platforms: [h100-dgxc, h200-dgxc, b300, b200-dgxc, gb300, gb200, mi300x, mi355x]
     ep_degrees: [8, 16]
     routings: [uniform]

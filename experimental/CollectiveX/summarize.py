@@ -55,20 +55,20 @@ def render(documents: list[dict], markdown: bool) -> str:
     if markdown:
         lines = [
             "## CollectiveX EP results", "",
-            "| sku | backend | suite | phase | routing | ep | outcome | T* | p50 us | p99 us |",
-            "|---|---|---|---|---|--:|---|--:|--:|--:|",
+            "| ver | sku | backend | suite | phase | routing | ep | outcome | T* | p50 us | p99 us |",
+            "|--:|---|---|---|---|---|--:|---|--:|--:|--:|",
         ]
         for document in documents:
             sku, suite, routing, phase, eplb, ep = _identity(document)
             backend = document["case"]["backend"]
             token, p50, p99 = _headline(document)
             lines.append(
-                f"| {sku} | `{backend}` | {suite} | {phase} | "
+                f"| {document['version']} | {sku} | `{backend}` | {suite} | {phase} | "
                 f"{routing}{'+eplb' if eplb else ''} | {ep} | "
                 f"{document['outcome']['status']} | {token} | {p50} | {p99} |"
             )
         if not documents:
-            lines.append("\n> No valid native v1 outcome documents found.")
+            lines.append("\n> No valid native outcome documents found.")
         return "\n".join(lines)
     lines = ["CollectiveX EP results", "======================"]
     for document in documents:
@@ -76,7 +76,7 @@ def render(documents: list[dict], markdown: bool) -> str:
         backend = document["case"]["backend"]
         token, _, p99 = _headline(document)
         lines.append(
-            f"  {sku:<10} {backend:<16} {suite:<13} {phase:<7} "
+            f"  v{document['version']} {sku:<10} {backend:<16} {suite:<13} {phase:<7} "
             f"{routing}{'+eplb' if eplb else ''} ep{ep} "
             f"{document['outcome']['status']} T={token} roundtrip_p99_us={p99}"
         )
