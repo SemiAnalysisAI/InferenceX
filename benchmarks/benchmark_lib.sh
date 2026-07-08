@@ -1261,30 +1261,53 @@ _run_swebench_agentic_generation() {
         return 1
     fi
 
-    # Overrides layered on mini's shipped swebench.yaml (which carries the
-    # load-bearing prompt templates). cost_limit is inert for a self-hosted
-    # model (litellm has no pricing for it) -- step_limit is the real cap.
+    # Build ONE merged config: mini's shipped swebench.yaml (load-bearing prompt
+    # templates) + our serving/env settings + trajectory-forensics guidance
+    # appended to the instance template (verify-before-submit, build-failure
+    # escape hatch, submit discipline -- each tied to an observed failure mode).
+    # cost_limit is inert for a self-hosted model; step_limit is the real cap.
     local cfg="$gen_dir/mini_swebench_overrides.yaml"
-    cat > "$cfg" <<MINICFG
-agent:
-  step_limit: ${SWEBENCH_AGENT_STEP_LIMIT:-30}
-  cost_limit: 0.
-environment:
-  environment_class: swerex_modal
-  # Cold-start Modal sandbox creation includes pulling the GB-scale swebench
-  # instance image; mini's 60s default startup_timeout exhausts before the
-  # runtime aliveness check ("Runtime did not start within 0s").
-  startup_timeout: ${SWEBENCH_AGENT_STARTUP_TIMEOUT:-900}
-  timeout: ${SWEBENCH_AGENT_CMD_TIMEOUT:-300}
-model:
-  model_name: "openai/${MODEL_NAME:-$MODEL}"
-  cost_tracking: "ignore_errors"
-  model_kwargs:
-    api_base: "http://0.0.0.0:${port}/v1"
-    api_key: "dummy"
-    custom_llm_provider: "openai"
-    temperature: 0.0
-MINICFG
+    SWEBENCH_AGENT_PORT="$port" python3 - "$default_cfg" "$cfg" <<'PYGEN'
+import os, sys, yaml
+default_path, out_path = sys.argv[1], sys.argv[2]
+d = yaml.safe_load(open(default_path)) or {}
+d.setdefault("agent", {})
+step_limit = int(os.environ.get("SWEBENCH_AGENT_STEP_LIMIT", "75"))
+guidance = f"""
+
+<additional_critical_guidance>
+- You have a hard budget of {step_limit} commands total. Plan: reproduce -> fix -> verify -> submit, finishing the submission well before the budget runs out. A correct fix that is never submitted scores ZERO.
+- BEFORE submitting you MUST run the test(s) that cover the issue and confirm your fix makes them pass. Identify the failing test from the issue/PR, run it (e.g. `python -m pytest <path>::<test>` or `python tests/runtests.py <label>`), and check the result. Do not submit a patch you have not verified unless running tests is impossible.
+- The scoring harness re-runs tests in its own clean environment. If the package fails to BUILD or IMPORT after 2-3 attempts, do NOT keep fixing the environment -- apply your source-code fix and submit it. A local build is not required for your patch to score.
+- `git diff` alone is NOT a submission. Submitting requires the exact final command sequence described above.
+- When unsure how code behaves, write and RUN a short script instead of reasoning about it at length in prose.
+</additional_critical_guidance>"""
+it = d["agent"].get("instance_template", "")
+d["agent"]["instance_template"] = it.rstrip() + guidance + "\n"
+d["agent"]["step_limit"] = step_limit
+d["agent"]["cost_limit"] = 0.0
+env = d.get("environment") or {}
+env.update({
+    "environment_class": "swerex_modal",
+    # Cold-start sandbox creation includes pulling the GB-scale swebench image;
+    # mini's 60s default startup_timeout exhausts before the aliveness check.
+    "startup_timeout": float(os.environ.get("SWEBENCH_AGENT_STARTUP_TIMEOUT", "900")),
+    "timeout": int(os.environ.get("SWEBENCH_AGENT_CMD_TIMEOUT", "300")),
+})
+d["environment"] = env
+model_name = os.environ.get("MODEL_NAME") or os.environ.get("MODEL", "")
+d["model"] = {
+    "model_name": f"openai/{model_name}",
+    "cost_tracking": "ignore_errors",
+    "model_kwargs": {
+        "api_base": f"http://0.0.0.0:{os.environ['SWEBENCH_AGENT_PORT']}/v1",
+        "api_key": "dummy",
+        "custom_llm_provider": "openai",
+        "temperature": 0.0,
+    },
+}
+yaml.safe_dump(d, open(out_path, "w"), default_flow_style=False, sort_keys=False)
+PYGEN
 
     local slice_args=()
     if [ -n "${EVAL_LIMIT:-}" ]; then
@@ -1296,7 +1319,7 @@ MINICFG
     local agen_rc=0
     timeout "${SWEBENCH_AGENT_TIMEOUT:-14400}" \
     mini-extra swebench \
-        -c "$default_cfg" -c "$cfg" \
+        -c "$cfg" \
         --subset lite --split test \
         --environment-class swerex_modal \
         "${slice_args[@]}" \

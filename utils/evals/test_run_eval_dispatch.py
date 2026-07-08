@@ -488,8 +488,10 @@ _ensure_modal_credentials() { :; }
 export EVAL_LIMIT=10 MODEL_NAME=test-model
 _run_swebench_agentic_generation "$GEN_DIR" --port 8899 || exit 1
 [ -s "$GEN_DIR/agent_out/preds.json" ] || { echo NO_PREDS; exit 1; }
-grep -q 'api_base: "http://0.0.0.0:8899/v1"' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
+grep -q 'api_base: http://0.0.0.0:8899/v1' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_PORT; exit 1; }
 grep -q 'openai/test-model' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo BAD_MODEL; exit 1; }
+grep -q 'additional_critical_guidance' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_GUIDANCE; exit 1; }
+grep -q 'BEFORE submitting you MUST run the test' "$GEN_DIR/mini_swebench_overrides.yaml" || { echo NO_VERIFY_RULE; exit 1; }
 echo AGENTIC_GEN_OK
 """
     env = {**os.environ,
