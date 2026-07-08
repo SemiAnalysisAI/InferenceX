@@ -4625,4 +4625,4 @@
     - minimaxm3-fp4-b300-vllm
   description:
     - "update vllm image"
-  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2119
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2120
