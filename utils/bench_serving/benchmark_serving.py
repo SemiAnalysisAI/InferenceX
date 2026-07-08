@@ -964,13 +964,7 @@ def main(args: argparse.Namespace):
             json.dump(result_json, outfile)
         save_to_pytorch_benchmark_format(args, result_json, file_name)
 
-    # Allow MAX_FAILURE_RATE env override so a high-concurrency sweep can
-    # tolerate transient 5xx spikes and still record per-level numbers.
-    # Default 0.05 keeps prior behavior for callers that do not set it.
-    try:
-        max_failure_rate = float(os.environ.get("MAX_FAILURE_RATE", "0.05"))
-    except ValueError:
-        max_failure_rate = 0.05
+    max_failure_rate = 0.05
     completed = benchmark_result["completed"]
     failure_rate = 1 - completed / args.num_prompts
     if failure_rate > max_failure_rate:

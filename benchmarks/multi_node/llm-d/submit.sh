@@ -76,16 +76,8 @@ export BENCH_OUTPUT_LEN=$OSL
 export BENCH_MAX_CONCURRENCY=$CONCURRENCIES
 export BENCH_REQUEST_RATE=$REQUEST_RATE
 export BENCH_RANDOM_RANGE_RATIO=$RANDOM_RANGE_RATIO
-# Allow per-recipe override (matrix entry additional-settings). Default 10
-# matches the AMD path; high-conc llm-d sweeps drop this to 3 so the bench
-# wall-clock at conc=2048/4096 is tractable.
+# Match the AMD multinode default.
 export BENCH_NUM_PROMPTS_MULTIPLIER="${BENCH_NUM_PROMPTS_MULTIPLIER:-10}"
-# Bench-side abort threshold when a request fails (default in
-# benchmark_serving.py is 0.05). High-conc llm-d sweeps need to tolerate
-# more, since at 2k+ in-flight we sometimes see transient 5xx spikes
-# but still want partial throughput numbers per conc level. Override
-# via additional-settings.
-export MAX_FAILURE_RATE="${MAX_FAILURE_RATE:-0.05}"
 
 export RUN_EVAL="${RUN_EVAL:-false}"
 export EVAL_ONLY="${EVAL_ONLY:-false}"
