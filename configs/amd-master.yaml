@@ -3044,7 +3044,7 @@ minimaxm3-fp4-mi355x-vllm-agentic:
   image: vllm/vllm-openai-rocm:nightly-69715823df89b11ee684b84066390cbb9092d5c1
   model: MiniMaxAI/MiniMax-M3-MXFP8
   model-prefix: minimaxm3
-  runner: mi355x
+  runner: cluster:mi355x-amds
   precision: fp4
   framework: vllm
   multinode: false
