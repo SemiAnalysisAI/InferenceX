@@ -797,7 +797,7 @@ cx_export_gid_index_for_link_layer() {
 cx_apply_network_profile() {
   local nodes="$1" transport="$2"
   local selector rdma_name rdma_names="" ep_nic=""
-  local scaleout=0 single_node_rdma=0
+  local scaleout=0
   local -a selectors
   [[ "$nodes" =~ ^[1-9][0-9]*$ ]] || cx_die "invalid network placement"
   unset NCCL_NET NCCL_SOCKET_IFNAME GLOO_SOCKET_IFNAME NCCL_IB_HCA
@@ -811,15 +811,14 @@ cx_apply_network_profile() {
   unset MORI_RDMA_TC MORI_IO_TC MORI_RDMA_SL MORI_IO_SL
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
-  elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ] \
-      && [ "${CX_BENCH:-}" = deepep ] && [ "${CX_MODE:-}" = low-latency ]; then
-    # DeepEP V1 low-latency kernels use pure RDMA even for EP8 within one
-    # NVLink domain. Keep NCCL on NVLink, but bind NVSHMEM to the private HCA.
-    single_node_rdma=1
   elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ]; then
+    # All 8 b300 GPUs share one NVLink domain, so NVSHMEM stays on NVLink
+    # (intranode P2P) and off the cross-node RoCE HCAs. Forcing IBGDA loopback
+    # over those HCAs fails connection setup (nvshmem init status 7); DeepEP
+    # low-latency runs intranode over NVLink here, matching deepep-v2.
     export NVSHMEM_DISABLE_IB=1
   fi
-  [ "$scaleout" = 1 ] || [ "$single_node_rdma" = 1 ] || return 0
+  [ "$scaleout" = 1 ] || return 0
   [ -n "${CX_RDMA_DEVICES:-}" ] \
     || cx_die "RDMA execution requires a private device selector"
   if [ "$scaleout" = 1 ] && [ -n "${CX_SOCKET_IFNAME:-}" ]; then
@@ -914,14 +913,10 @@ PY
 cx_validate_network_profile_on_job() {
   local job_id="$1" nodes="$2" transport="$3" report_failure="${4:-1}"
   local log_label=network-profile log rc=0 scaleout=0 marker_count link_layer
-  local single_node_rdma=0
   if [ "$nodes" -gt 1 ] && [ "$transport" != mnnvl ]; then
     scaleout=1
-  elif [ "${CX_SHARD_SKU:-}" = b300 ] && [ "$nodes" = 1 ] \
-      && [ "${CX_BENCH:-}" = deepep ] && [ "${CX_MODE:-}" = low-latency ]; then
-    single_node_rdma=1
   fi
-  [ "$scaleout" = 1 ] || [ "$single_node_rdma" = 1 ] || return 0
+  [ "$scaleout" = 1 ] || return 0
   [[ "$job_id" =~ ^[1-9][0-9]*$ && "$nodes" =~ ^[1-9][0-9]*$ ]] \
     || return 1
   [ -n "${CX_RDMA_DEVICES:-}" ] || return 1
