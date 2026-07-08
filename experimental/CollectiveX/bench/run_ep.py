@@ -16,7 +16,7 @@ import socket
 import subprocess
 import sys
 
-# Make the sibling tests/ modules importable when run as `tests/run_ep.py` under
+# Make the sibling bench/ modules importable when run as `bench/run_ep.py` under
 # torchrun (it executes the file as __main__, not as a package).
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path[:0] = [HERE, os.path.dirname(HERE)]
@@ -424,7 +424,7 @@ def main() -> int:
     else:
         args.distributed_launcher = "rank-environment"
         prefix = f"RANK={rank} WORLD_SIZE={world_size} LOCAL_RANK={local_rank} python3"
-    args.reproduction_command = f"{prefix} tests/run_ep.py {shlex.join(sys.argv[1:])}"
+    args.reproduction_command = f"{prefix} bench/run_ep.py {shlex.join(sys.argv[1:])}"
     args.image = os.environ.get("COLLECTIVEX_IMAGE", "")
     args.image_digest = os.environ.get("COLLECTIVEX_IMAGE_DIGEST", "")
     args.image_digest_verified = (

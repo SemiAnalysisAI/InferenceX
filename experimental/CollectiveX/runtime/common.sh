@@ -1181,7 +1181,7 @@ export RANK="$SLURM_PROCID" WORLD_SIZE="$SLURM_NTASKS"
 export LOCAL_RANK="$SLURM_LOCALID" LOCAL_WORLD_SIZE="$CX_GPUS_PER_NODE"
 case "${CX_PRECISION_PROBE:-0}" in
   1) exec python3 tests/probe_precision.py "$@" ;;
-  0|'') exec python3 tests/run_ep.py "$@" ;;
+  0|'') exec python3 bench/run_ep.py "$@" ;;
   *) exit 67 ;;
 esac
 BASH
@@ -3261,7 +3261,7 @@ PY
       workload_ladder="$ladder"
       [ -n "$workload_ladder" ] \
         || workload_ladder="1 2 4 8 16 32 64 128 256 512 1024 2048 4096"
-      workload_args=(python3 tests/make_workloads.py --out-dir "$workload_dir"
+      workload_args=(python3 bench/make_workloads.py --out-dir "$workload_dir"
         --routing "$routing" --ep "$ep" --hidden "$hidden" --topk "$topk"
         --experts "$experts" --seed "${CX_SEED:-67}" --tokens-ladder "$workload_ladder")
       workload_log="$(cx_private_log_path "workload-c$(printf '%03d' "$ci")")"

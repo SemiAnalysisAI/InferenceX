@@ -20,7 +20,7 @@ from typing import Any
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-sys.path.insert(0, str(HERE / "tests"))
+sys.path.insert(0, str(HERE / "bench"))
 
 try:  # Shard extraction on GPU runners is intentionally stdlib-only.
     import yaml  # type: ignore

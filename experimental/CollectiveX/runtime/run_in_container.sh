@@ -7,7 +7,7 @@
 #
 # Required env (exported by the adapter): CX_RUNNER CX_NGPUS CX_TS CX_TOPO
 # Selector: CX_BENCH = deepep | deepep-v2 | mori | uccl | nccl-ep | deepep-hybrid
-# EP knobs passed to tests/run_ep.py:
+# EP knobs passed to bench/run_ep.py:
 #   CX_PHASE = decode | prefill | both (default decode)   <- picks the token sweep
 #   CX_TOKENS_LADDER (space/comma sep; blank = phase default)
 #   CX_HIDDEN CX_TOPK CX_EXPERTS CX_ROUTING CX_SEED CX_ITERS
@@ -30,7 +30,7 @@ cx_apply_timing_profile
 
 cx_log "in-container: runner=$CX_RUNNER ngpus=$CX_NGPUS bench=$CX_BENCH topo=$CX_TOPO"
 
-# Blank ladders use the phase default in tests/run_ep.py.
+# Blank ladders use the phase default in bench/run_ep.py.
 cx_ep_ladder() {
   printf '%s' "${CX_TOKENS_LADDER:-}"
 }
@@ -48,7 +48,7 @@ cx_stage_canonical() {
   # cover both phase ladders when none is given, so either phase finds its files.
   [ -z "$ladder" ] && ladder="1 2 4 8 16 32 64 128 256 512 1024 2048 4096"
   cx_log "staging canonical workloads (routing=${CX_ROUTING:-uniform} ep=$CX_NGPUS ladder='$ladder')"
-  python3 tests/make_workloads.py --out-dir "$dir" --routing "${CX_ROUTING:-uniform}" \
+  python3 bench/make_workloads.py --out-dir "$dir" --routing "${CX_ROUTING:-uniform}" \
     --ep "$CX_NGPUS" --hidden "${CX_HIDDEN:-7168}" --topk "${CX_TOPK:-8}" \
     --experts "${CX_EXPERTS:-256}" --seed "${CX_SEED:-67}" --tokens-ladder "$ladder" \
     || { cx_log "ERROR: canonical workload staging failed"; return 1; }
@@ -57,7 +57,7 @@ cx_stage_canonical() {
 }
 
 # run_ep_suite <backend>
-# One tests/run_ep.py invocation per phase (decode/prefill/both); dispatch and
+# One bench/run_ep.py invocation per phase (decode/prefill/both); dispatch and
 # combine are timed separately inside it. One JSON per (backend, phase).
 # Preserve a failed case with its full scheduled identity instead of letting it vanish.
 emit_failed_case() {  # backend phase rc
@@ -96,7 +96,7 @@ run_ep_suite() {
     [ -n "${CX_WORKLOAD_DIR:-}" ] && EPARGS+=(--workload-dir "$CX_WORKLOAD_DIR")
     cx_write_runtime_stage execution || cx_die "cannot record runtime stage"
     if timeout -k 30 "${CX_RUN_TIMEOUT:-900}" \
-      torchrun --nproc_per_node="$CX_NGPUS" tests/run_ep.py "${EPARGS[@]}"; then
+      torchrun --nproc_per_node="$CX_NGPUS" bench/run_ep.py "${EPARGS[@]}"; then
       rc_run=0
     else
       rc_run=$?

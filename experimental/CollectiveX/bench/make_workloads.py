@@ -4,17 +4,17 @@ each (routing, global_tokens) in a ladder and writes <workload_id>.npz + .manife
 dir that runs then consume via `run_ep.py --workload-dir`. One trace is emitted per global-token
 count because global token count is part of workload identity.
 
-  python3 tests/make_workloads.py --out-dir /path/to/cx_workloads \\
+  python3 bench/make_workloads.py --out-dir /path/to/cx_workloads \\
       --routing uniform --ep 8 --hidden 7168 --topk 8 --experts 256 --seed 67 \\
       --tokens-ladder "1 2 4 8 16 32 64 128 256 512"
 
 Or by the named v1 workload in configs/workloads.yaml. Explicit dimension flags still override it:
 
-  python3 tests/make_workloads.py --out-dir /path/to/cx_workloads --workload deepseek-v3-v1 --routing uniform --ep 8
+  python3 bench/make_workloads.py --out-dir /path/to/cx_workloads --workload deepseek-v3-v1 --routing uniform --ep 8
 
 --id-only prints the content-bound workload_id per ladder point without torch/numpy:
 
-  python3 tests/make_workloads.py --workload deepseek-v3-v1 --ep 8 --id-only
+  python3 bench/make_workloads.py --workload deepseek-v3-v1 --ep 8 --id-only
 
 Generate every routing the suites need by running once per --routing. Idempotent (same id => same
 file). The dir is the cross-hardware artifact: copy it to each cluster so all consume identical bytes.

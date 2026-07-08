@@ -21,9 +21,9 @@ from pathlib import Path
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
-TESTS = ROOT / "tests"
+BENCH = ROOT / "bench"
 sys.path.insert(0, str(ROOT))
-sys.path.insert(0, str(TESTS))
+sys.path.insert(0, str(BENCH))
 
 import ep_backend  # noqa: E402
 from ep_backend import EPBackend, RankInputs  # noqa: E402
