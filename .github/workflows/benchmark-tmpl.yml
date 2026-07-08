@@ -140,13 +140,20 @@ jobs:
     steps:
       - name: Resource cleanup (pre-run)
         run: &resource-cleanup |
-          # Cleanup Docker resources
+          # Cleanup Docker resources.
+          # On shared nodes (e.g. the standalone gbt350docker runner) we must
+          # NOT nuke every container — other users share the host. Scope the
+          # sweep to this launcher's own containers (gbt350_*). On dedicated
+          # cluster nodes there are no such containers, so full isolation still
+          # holds. DOCKER_CLEANUP_NAME_FILTER can override the name prefix.
           if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
             echo "[Docker] Cleaning up resources ..."
-            docker ps -aq | xargs -r docker rm -f
+            _cleanup_filter="${DOCKER_CLEANUP_NAME_FILTER:-gbt350_}"
+            _ours() { docker ps -aq --filter "name=${_cleanup_filter}"; }
+            _ours | xargs -r docker rm -f
             docker network prune -f
-            while [ -n "$(docker ps -aq)" ]; do
-              docker ps -a
+            while [ -n "$(_ours)" ]; do
+              docker ps -a --filter "name=${_cleanup_filter}"
               sleep 5
             done
           fi
