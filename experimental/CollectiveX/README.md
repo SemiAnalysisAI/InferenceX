@@ -73,11 +73,10 @@ whether it succeeded is decided by the benchmark's return code.
 ## Workflow And Artifacts
 
 `.github/workflows/collectivex-sweep.yml` has two jobs. `setup` generates a public-SKU matrix
-(`backend`, `suites`, `only_sku`, `exclude_skus`, `ep_sizes` inputs), fetches the pinned backend
-source archive, and uploads the matrix.
+(`backend`, `suites`, `only_sku`, `exclude_skus`, `ep_sizes` inputs) and uploads the matrix.
 `sweep` extracts a strict ignored `.shards/<id>.json` control per matrix entry, executes one
-allocation per shard, and uploads the result artifacts with `always()` so a red or partial run still
-uploads.
+allocation per shard, fetches pinned DeepEP source before allocation when required, and uploads the
+result artifacts with `always()` so a red or partial run still uploads.
 
 Each shard emits per-case result JSON, detached sample JSON, and a small mechanical summary. A case
 counts as successful on the benchmark's own return code; there is no schema, completeness, or privacy

@@ -1824,7 +1824,6 @@ PY
 _cx_prepare_backend_source() {
   local mount_src="$1" backend="$2" root source temporary revision tree fmt nccl pin
   local root_mode stage_mode root_owner stage_owner
-  local seed_root="${CX_BACKEND_SOURCE_SEED_ROOT:-}" seed seed_mode
   root="$mount_src/experimental/CollectiveX/.cx_sources"
   CX_BACKEND_SOURCE_STEP="source mount creation"
   if [ ! -e "$root" ] && [ ! -L "$root" ]; then
@@ -1859,28 +1858,6 @@ _cx_prepare_backend_source() {
     CX_BACKEND_SOURCE_STEP="existing source validation"
     cx_backend_source_is_valid "$backend" "$source"
     return
-  fi
-  if [ -n "$seed_root" ]; then
-    CX_BACKEND_SOURCE_STEP="source seed validation"
-    [[ "$seed_root" = /* ]] && [ -d "$seed_root" ] && [ ! -L "$seed_root" ] \
-      || return 1
-    seed_mode="$(stat -c '%a' "$seed_root" 2>/dev/null)" || return 1
-    case "$seed_mode" in 700|[1-7]700) ;; *) return 1 ;; esac
-    seed="$(cx_backend_source_path "$seed_root" "$backend")" || return 1
-    cx_backend_source_is_valid "$backend" "$seed" || return 1
-    CX_BACKEND_SOURCE_STEP="source seed copy"
-    temporary="$(mktemp -d "$root/.${backend}.XXXXXX")" || return 1
-    if ! cp -R -- "$seed/." "$temporary/" \
-        || ! cx_backend_source_is_valid "$backend" "$temporary" \
-        || ! mv -- "$temporary" "$source"; then
-      rm -rf -- "$temporary"
-      return 1
-    fi
-    return
-  fi
-  if [ "${COLLECTIVEX_CANONICAL_GHA:-0}" = 1 ]; then
-    CX_BACKEND_SOURCE_STEP="source seed validation"
-    return 1
   fi
   CX_BACKEND_SOURCE_STEP="source checkout creation"
   temporary="$(mktemp -d "$root/.${backend}.XXXXXX")" || return 1

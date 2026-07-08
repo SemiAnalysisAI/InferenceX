@@ -74,56 +74,9 @@ jobs:
           {
             echo "matrix=$SLIM"
             echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")"
-            echo "source_backends=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(' '.join(sorted({x['backend'] for x in m['include']} & {'deepep-v2','deepep-hybrid'})))")"
             echo "max_parallel=$(python3 -c "import json;m=json.load(open('matrix_full.json'));w=max(x['execution_weight'] for x in m['include']);print(max(1,min(10,4096//w)))")"
           } >> "$GITHUB_OUTPUT"
           python3 -c "import json;m=json.load(open('matrix_full.json'));print('execution-cells:',len(m['include']))"
-      - name: Prepare pinned backend source archive
-        if: ${{ steps.gen.outputs.source_backends != '' }}
-        working-directory: experimental/CollectiveX
-        env:
-          SOURCE_BACKENDS: ${{ steps.gen.outputs.source_backends }}
-          COLLECTIVEX_EXECUTION_ID: ${{ github.run_id }}_${{ github.run_attempt }}_sources
-        run: |
-          set -euo pipefail
-          source runtime/common.sh
-          work="$RUNNER_TEMP/collectivex-backend-sources"
-          archive="$RUNNER_TEMP/collectivex-backend-sources.tar"
-          rm -rf -- "$work" "$archive"
-          umask 077
-          mkdir -m 700 "$work"
-          mkdir -p "$work/experimental/CollectiveX"
-          read -r -a backends <<< "$SOURCE_BACKENDS"
-          [ "${#backends[@]}" -gt 0 ]
-          source_root="$work/experimental/CollectiveX/.cx_sources"
-          members=()
-          for backend in "${backends[@]}"; do
-            cx_prepare_backend_source "$work" "$backend"
-            source_path="$(cx_backend_source_path "$source_root" "$backend")"
-            source_basename="${source_path#"$source_root/"}"
-            [ -n "$source_basename" ] \
-              && [ "$source_path" = "$source_root/$source_basename" ] \
-              && [[ "$source_basename" != */* ]]
-            members+=(".cx_sources/$source_basename")
-          done
-          cx_cleanup_private_logs 0
-          tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
-            --no-recursion -C "$work/experimental/CollectiveX" \
-            -cf "$archive" .cx_sources
-          for member in "${members[@]}"; do
-            tar --sort=name --mtime='@1' --owner=0 --group=0 --numeric-owner \
-              -C "$work/experimental/CollectiveX" -rf "$archive" "$member"
-          done
-          sha256sum "$archive"
-          rm -rf -- "$work"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        if: ${{ steps.gen.outputs.source_backends != '' }}
-        with:
-          name: cxbackend-sources-${{ github.run_id }}
-          path: ${{ runner.temp }}/collectivex-backend-sources.tar
-          if-no-files-found: error
-          overwrite: true
-          retention-days: 14
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxsweep-matrix-${{ github.run_id }}
@@ -183,136 +136,47 @@ jobs:
           COLLECTIVEX_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          python3 - <<'PY'
-          import os
-          import re
-          import shutil
-          import stat
-          import time
-
-          pattern = re.compile(r"inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+")
-          link_pattern = re.compile(
-              r"/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+"
-          )
-          parent = os.environ["CX_JOB_PARENT"]
-          scan_parent = parent
-          if parent != "/tmp":
-              if not link_pattern.fullmatch(parent):
-                  raise SystemExit("CollectiveX isolated parent is invalid")
-              shared_parent = os.path.join(os.getcwd(), ".collectivex-jobs")
-              try:
-                  shared_metadata = os.lstat(shared_parent)
-              except FileNotFoundError:
-                  os.mkdir(shared_parent, mode=0o700)
-                  shared_metadata = os.lstat(shared_parent)
-              if (
-                  not stat.S_ISDIR(shared_metadata.st_mode)
-                  or shared_metadata.st_uid != os.getuid()
-                  or stat.S_IMODE(shared_metadata.st_mode) != 0o700
-              ):
-                  raise SystemExit("CollectiveX shared parent is unsafe")
-              if os.path.lexists(parent):
-                  raise SystemExit("CollectiveX isolated parent already exists")
-              os.symlink(shared_parent, parent)
-              scan_parent = shared_parent
-          cutoff = time.time() - 86400
-          for entry in os.scandir(scan_parent):
-              if not pattern.fullmatch(entry.name):
-                  continue
-              try:
-                  metadata = entry.stat(follow_symlinks=False)
-              except FileNotFoundError:
-                  continue
-              if (
-                  not stat.S_ISDIR(metadata.st_mode)
-                  or metadata.st_uid != os.getuid()
-                  or stat.S_IMODE(metadata.st_mode) != 0o700
-                  or metadata.st_mtime >= cutoff
-              ):
-                  continue
-              marked = False
-              for marker_name in ("cleanup-safe", "cleanup-unsafe"):
-                  try:
-                      marker = os.stat(
-                          os.path.join(entry.path, marker_name), follow_symlinks=False
-                      )
-                  except FileNotFoundError:
-                      continue
-                  marked = (
-                      stat.S_ISREG(marker.st_mode)
-                      and marker.st_uid == os.getuid()
-                      and stat.S_IMODE(marker.st_mode) == 0o600
-                  )
-                  if marked:
-                      break
-              if marked:
-                  shutil.rmtree(entry.path)
-          PY
           [ "${CX_JOB_ROOT%/*}" = "$CX_JOB_PARENT" ] \
             && [[ "${CX_JOB_ROOT##*/}" =~ ^inferencex-collectivex-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
             || { echo "CollectiveX isolated root is invalid" >&2; exit 1; }
           [ "$CX_SOURCE_ROOT" = "$CX_JOB_ROOT/source" ] \
             || { echo "CollectiveX source root is invalid" >&2; exit 1; }
-          if [ -e "$CX_JOB_ROOT" ] || [ -L "$CX_JOB_ROOT" ]; then
-            echo "CollectiveX isolated root already exists" >&2
-            exit 1
+          if [ "$CX_JOB_PARENT" != /tmp ]; then
+            [[ "$CX_JOB_PARENT" =~ ^/tmp/inferencex-collectivex-parent-[0-9]+-[0-9]+-[A-Za-z0-9._-]+$ ]] \
+              || { echo "CollectiveX isolated parent is invalid" >&2; exit 1; }
+            shared_parent="$GITHUB_WORKSPACE/.collectivex-jobs"
+            install -d -m 700 "$shared_parent"
+            [ "$(stat -c '%u:%a' "$shared_parent")" = "$(id -u):700" ] \
+              || { echo "CollectiveX shared parent is unsafe" >&2; exit 1; }
+            [ ! -e "$CX_JOB_PARENT" ] && [ ! -L "$CX_JOB_PARENT" ] \
+              || { echo "CollectiveX isolated parent already exists" >&2; exit 1; }
+            ln -s "$shared_parent" "$CX_JOB_PARENT"
           fi
           umask 077
-          mkdir -m 700 -- "$CX_JOB_ROOT"
+          [ ! -e "$CX_JOB_ROOT" ] && [ ! -L "$CX_JOB_ROOT" ] \
+            || { echo "CollectiveX isolated root already exists" >&2; exit 1; }
+          mkdir -m 700 "$CX_JOB_ROOT"
           trap 'rc=$?; if [ "$rc" != 0 ]; then rm -rf -- "$CX_JOB_ROOT"; [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"; fi; exit "$rc"' EXIT
-          mkdir -m 700 -- "$HOME" "$CX_JOB_ROOT/control" "$CX_JOB_ROOT/artifact" "$CX_SOURCE_ROOT"
+          mkdir -m 700 "$HOME" "$CX_JOB_ROOT/control" "$CX_JOB_ROOT/artifact" "$CX_SOURCE_ROOT"
           : > "$CX_JOB_ROOT/cleanup-safe"
-          if ! {
-            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null git init -q "$CX_SOURCE_ROOT"
-            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-              git -C "$CX_SOURCE_ROOT" remote add origin \
-                "https://github.com/${COLLECTIVEX_REPOSITORY}.git"
-            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-              git -C "$CX_SOURCE_ROOT" -c credential.helper= -c protocol.version=2 \
-                fetch -q --no-tags --depth=1 origin "$COLLECTIVEX_SOURCE_SHA"
-            GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
-              git -C "$CX_SOURCE_ROOT" -c advice.detachedHead=false \
-                checkout -q --detach FETCH_HEAD
-            [ "$(git -C "$CX_SOURCE_ROOT" rev-parse HEAD)" = "$COLLECTIVEX_SOURCE_SHA" ]
-          } </dev/null >/dev/null 2>&1; then
+          export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+          if ! git init -q "$CX_SOURCE_ROOT" \
+              || ! git -C "$CX_SOURCE_ROOT" remote add origin \
+                "https://github.com/${COLLECTIVEX_REPOSITORY}.git" \
+              || ! git -C "$CX_SOURCE_ROOT" -c credential.helper= -c protocol.version=2 \
+                fetch -q --no-tags --depth=1 origin "$COLLECTIVEX_SOURCE_SHA" \
+              || ! git -C "$CX_SOURCE_ROOT" -c advice.detachedHead=false \
+                checkout -q --detach FETCH_HEAD \
+              || [ "$(git -C "$CX_SOURCE_ROOT" rev-parse HEAD)" != "$COLLECTIVEX_SOURCE_SHA" ]; then
             echo "CollectiveX source preparation failed" >&2
             exit 1
           fi
-          [ "$(stat -c '%a' "$CX_JOB_ROOT")" = 700 ] \
-            || { echo "CollectiveX isolated root has unsafe permissions" >&2; exit 1; }
           echo 'prepared=true' >> "$GITHUB_OUTPUT"
           trap - EXIT
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: cxsweep-matrix-${{ github.run_id }}
           path: ${{ env.CX_JOB_ROOT }}/control
-      - name: Download pinned backend source archive
-        if: ${{ matrix.backend == 'deepep-v2' || matrix.backend == 'deepep-hybrid' }}
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: cxbackend-sources-${{ github.run_id }}
-          path: ${{ env.CX_JOB_ROOT }}/control
-      - name: Install pinned backend source seed
-        if: ${{ matrix.backend == 'deepep-v2' || matrix.backend == 'deepep-hybrid' }}
-        env:
-          EXPECTED_BACKEND: ${{ matrix.backend }}
-        run: |
-          set -euo pipefail
-          archive="$CX_JOB_ROOT/control/collectivex-backend-sources.tar"
-          destination="$CX_SOURCE_ROOT/experimental/CollectiveX"
-          seed_root="$destination/.cx_sources"
-          [ -f "$archive" ] && [ ! -e "$seed_root" ] && [ ! -L "$seed_root" ]
-          chmod 600 -- "$archive"
-          source "$destination/runtime/common.sh"
-          source_path="$(cx_backend_source_path "$seed_root" "$EXPECTED_BACKEND")"
-          source_basename="${source_path#"$seed_root/"}"
-          [ -n "$source_basename" ] \
-            && [ "$source_path" = "$seed_root/$source_basename" ] \
-            && [[ "$source_basename" != */* ]]
-          python3 "$destination/source_archive.py" \
-            "$archive" "$destination" "$source_basename"
-          cx_backend_source_is_valid "$EXPECTED_BACKEND" "$source_path"
-          printf 'CX_BACKEND_SOURCE_SEED_ROOT=%s\n' "$seed_root" >> "$GITHUB_ENV"
       - name: Extract and validate this execution control
         run: |
           set -euo pipefail
@@ -344,7 +208,6 @@ jobs:
           python3 - "$operator_config" <<'PY'
           import json
           import os
-          from pathlib import Path
           import sys
 
           def pairs(items):
@@ -362,6 +225,10 @@ jobs:
               )
 
           base = load("COLLECTIVEX_OPERATOR_CONFIG_CONTENT")
+          if set(base) != {"schema_version", "runners"} or base["schema_version"] != 1:
+              raise ValueError("invalid operator configuration")
+          if not isinstance(base["runners"], dict):
+              raise ValueError("invalid operator runners")
           for overlay_name in (
               "COLLECTIVEX_NETWORK_CONFIG_CONTENT", "COLLECTIVEX_H100_CONFIG_CONTENT",
               "COLLECTIVEX_B300_CONFIG_CONTENT",
@@ -372,51 +239,18 @@ jobs:
               if not overlay_raw:
                   continue
               overlay = load(overlay_name)
-              private_fields = {
-                  "socket_ifname", "rdma_devices", "ib_gid_index", "rdma_service_level",
-                  "rdma_traffic_class",
-              }
               if set(overlay) != {"schema_version", "runners"} or overlay["schema_version"] != 1:
-                  raise ValueError("invalid network overlay envelope")
-              if not isinstance(overlay["runners"], dict) or not overlay["runners"]:
-                  raise ValueError("invalid network overlay runners")
-              if overlay_name == "COLLECTIVEX_B200_CONFIG_CONTENT":
-                  if set(overlay["runners"]) != {"b200-dgxc"}:
-                      raise ValueError("invalid B200 overlay runner")
-                  private_fields.update({"nodelist", "qos"})
-              elif overlay_name == "COLLECTIVEX_H100_CONFIG_CONTENT":
-                  if set(overlay["runners"]) != {"h100-dgxc"}:
-                      raise ValueError("invalid H100 overlay runner")
-                  private_fields.add("exclude_nodes")
-              elif overlay_name == "COLLECTIVEX_B300_CONFIG_CONTENT":
-                  if set(overlay["runners"]) != {"b300"}:
-                      raise ValueError("invalid B300 overlay runner")
-                  private_fields.add("exclude_nodes")
-              elif overlay_name == "COLLECTIVEX_MI355_CONFIG_CONTENT":
-                  if set(overlay["runners"]) != {"mi355x"}:
-                      raise ValueError("invalid MI355 overlay runner")
-              elif overlay_name == "COLLECTIVEX_MI300_CONFIG_CONTENT":
-                  if set(overlay["runners"]) != {"mi300x"}:
-                      raise ValueError("invalid MI300 overlay runner")
-                  private_fields.update({
-                      "partition", "squash_dir", "stage_dir", "exclude_nodes",
-                      "nodelist", "lock_dir",
-                  })
+                  raise ValueError("invalid operator overlay")
+              if not isinstance(overlay["runners"], dict):
+                  raise ValueError("invalid overlay runners")
               for runner, fields in overlay["runners"].items():
                   if not isinstance(fields, dict) or not fields:
-                      raise ValueError("invalid network overlay runner")
-                  if runner not in base.get("runners", {}):
-                      if overlay_name != "COLLECTIVEX_MI300_CONFIG_CONTENT":
-                          raise ValueError("invalid network overlay runner")
-                      base.setdefault("runners", {})[runner] = {}
-                  if set(fields) - private_fields:
-                      raise ValueError("private overlay contains a disallowed field")
-                  base["runners"][runner].update(fields)
+                      raise ValueError("invalid overlay runner")
+                  base["runners"].setdefault(runner, {}).update(fields)
           payload = json.dumps(base, sort_keys=True, separators=(",", ":")) + "\n"
           if len(payload.encode()) > 65536:
               raise ValueError("merged operator configuration is too large")
-          path = Path(sys.argv[1])
-          descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+          descriptor = os.open(sys.argv[1], os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
           with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
               stream.write(payload)
           PY
@@ -520,4 +354,3 @@ jobs:
           fi
           rm -rf -- "$CX_JOB_ROOT"
           [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"
-

@@ -194,10 +194,8 @@ Repository staging uses a pre-existing, runner-owned, group/world non-writable s
 the checkout and workflow workspace. The parent process resolves the exact execution child before
 copying, claims it with a runner-owned marker, and verifies that all allocated nodes can read and
 write the same bytes. Cleanup waits for confirmed allocation teardown and removes only that child,
-including a safely identified partial claim. The same-run V2/Hybrid source archive is fully validated
-under fixed member and expanded-size bounds, and only the selected pinned root is extracted; a
-symlink is accepted only when it is a relative leaf pointing to a regular member inside the same
-backend root, followed by exact Git tree/submodule validation.
+including a safely identified partial claim. V2 and Hybrid source is fetched before allocation at an
+exact pinned revision, followed by exact Git tree, submodule, and local-patch validation.
 
 H200, B200, and B300 may derive that private base beneath the validated operating-system account home
 when it is compute-visible. H100 instead derives a sibling of its shared container directory, never a
