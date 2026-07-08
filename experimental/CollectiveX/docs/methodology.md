@@ -1,15 +1,11 @@
-# CollectiveX EP V1 Methodology
+# CollectiveX EP Benchmark Methodology
 
-<div align="center">
-
-**English** | [中文](./methodology_zh.md)
-
-</div>
-
-This document is the frozen V1 qualification contract. No V1 dataset is approved until one
-complete first-attempt execution passes publication and frontend audit. Chinese documentation
-synchronization is explicitly deferred for the V1 implementation phase. MI325X is deferred to a
-later version because its intended two-node runner pool is unavailable.
+CollectiveX schedules expert-parallel (EP) communication benchmarks, executes them on real
+accelerator allocations, validates the results each run emits, and uploads neutral artifacts. It
+does **not** promote, rank, recommend, select, hide, or decide what any consumer displays. The
+frontend reads the neutral matrix, result, summary, and catalog artifacts and makes its own coverage
+and display decisions. This document describes how a case is scheduled, measured, checked, and
+recorded — not a publication or qualification contract.
 
 ## Product Boundary
 
@@ -17,36 +13,27 @@ CollectiveX is a communication microbenchmark for:
 
 - comparing EP libraries on one chip/topology;
 - comparing EP latency and logical payload bandwidth across systems under the same workload; and
-- exposing unsupported, failed, invalid, and unstable evidence without contaminating decisions.
+- recording unsupported, failed, invalid, and unstable cases as explicit terminal evidence.
 
 It does not predict serving throughput without a separate correlation study.
 
-## Implemented Matrix
+## Matrix
 
 The implemented workload is `deepseek-v3-v1`: hidden 7168, top-k 8, 256 routed experts, packed
-placement, and one pinned fixed resource profile per backend/topology/precision. The BF16/BF16
-control is portable; endpoint precision suites schedule only allowlisted native communication-format
-profiles after real-hardware probes resolve their capability cells. Each case explicitly selects
-normal `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v1` semantics.
+placement, and one pinned fixed resource profile per backend/topology. The default sweep runs the
+portable BF16 dispatch / BF16 combine control; the native FP8 codec paths remain in the code
+(`bench/ep_precision.py` and each adapter's FP8 dispatch/combine) and stay callable but are not a
+swept dimension. Each case explicitly selects normal `layout-and-dispatch-v1` or low-latency
+`expert-packed-weighted-combine-v1` semantics.
 
 - `ep-core-v1`: uniform routing; decode T=1..128 powers of two; prefill T=256/512.
-- `ep-routing-v1`: Zipf with EPLB off/on; decode T=128; prefill T=512.
-- `ep-low-latency-v1`: DeepEP V1/UCCL native low-latency APIs; uniform decode T=1..128 powers of
-  two; the capability contract rejects every other backend instead of fabricating a low-latency path.
-- `ep-precision-normal-v1`: nonbaseline native dispatch/combine profiles at decode T=128 and prefill
-  T=512; BF16/BF16 endpoint controls are referenced rather than duplicated.
-- `ep-precision-low-latency-v1`: nonbaseline native low-latency profiles at decode T=128.
-- Frozen V1 matrix: 664 requested cases / 1,532 token points; 393 runnable cases / 898 points in 50
-  executable workflow shards/allocation cells; 271 unsupported cases / 634 points.
-- Canonical matrix SHA-256: `c6988c5e81239ace699541322a88a37bfd80819d8bc1a2446f928665cd3ebba0`.
-- Case/disposition catalog SHA-256: `98b0c5e85c223a2edcbf9ea580a48bea115294c83691650bb25cb85904ed8be4`.
-- Qualification execution-plan SHA-256 values for repeats 1/2/3 are respectively
-  `dd35bee6909a85761e069ebe83444a6f982eb571a4e61ad604a845ea7e4d10dc`,
-  `fbc7262b3399225493f6c025c3bd2ceca52e90762bda1b6f6002683037094caf`, and
-  `5edc837858df2d7498229db30ec0d364f5b6cd7ca703790a8c83aabb09e6aff4`.
-- The backend-produced frontend catalog is 601,970 bytes with SHA-256
-  `86ac7bb3f9f6310385db52f6f77554d705985bd99e387ecb5fedd627c11994d7`, below the 1 MiB fixture
-  budget and the 32 MiB publication limit.
+- `ep-low-latency-v1`: DeepEP V1 / UCCL native low-latency APIs; uniform decode T=1..128 powers of
+  two; other backends are recorded as unsupported rather than fabricating a low-latency path.
+
+`sweep_matrix.py` materializes the requested SKUs, backends, EP sizes, and token ladders into a
+matrix document, then extracts strict per-shard controls. `--only-sku`, `--exclude-skus`, and
+`--ep-sizes` select a subset; a subset produces a smaller matrix, not a different contract. The
+matrix is generated per dispatch; there is no frozen matrix digest or locked case count.
 
 | Systems | EP8 | EP16 |
 |---|---|---|
@@ -55,32 +42,20 @@ normal `layout-and-dispatch-v1` or low-latency `expert-packed-weighted-combine-v
 | GB200/GB300 | 2x4 MNNVL, scale-up | 4x4 MNNVL, scale-up |
 
 Physical host count does not define scope. Both GB cells remain inside one 72-GPU MNNVL scale-up
-domain.
+domain. The MI325X launcher/configuration path is retained for future versions but is not referenced
+by any current suite or shard.
 
 Unsupported combinations are terminal outcomes, not silently skipped coverage. DeepEP V2 is the
 `ElasticBuffer` introduced by PR #605, pinned with upstream PR #630's minimal pure-scale-up fix and
-the exact upstream PR #640 library matcher that excludes NCCL shared-memory mappings.
-Scale-up cases request NCCL Device API LSA and fail closed unless the realized LSA team covers the
-full EP world. x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out
-domains represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16
-remains MNNVL scale-up and uses LSA. NVIDIA capabilities declared in source remain unvalidated until
-GPU outcomes pass the native oracle and publisher gates. H100 V2 on the current runner pool is a
-declared unsupported combination in v1 because NCCL 2.30.4 reports no Device API symmetric-memory
-support for its EP8 communicator; that pool can return only after all-rank CUDA P2P/LSA support is
-restored. This baseline omits `[cl]`, `[rv]`, quantization, alternate activation/routing profiles,
-uneven allocation, placement permutations, model envelopes, and scaling.
-H100 EP16 is supported on the healthy runner subset. The private runner overlay excludes pods that
-do not expose the host RDMA devices in their network namespace, and allocation validation requires
-the complete operator-pinned RoCE profile on every selected node before image import. H100 EP8
-remains in scope with a private stage beside its configured shared container directory; unlike the
-B300 runner account home, the H100 account home is not compute-visible. B300 EP16 is terminal
-unsupported for V1 publication because its currently functional fallback HCAs are not the
-GPU-adjacent product fabric; this is an operational topology decision, not a library limitation.
-FlashInfer is excluded from v1 after repeatable intermittent execution failures; those failures are
-not converted into planned-unsupported coverage.
-MoRI EP8 uses MI355X IntraNode in normal mode. EP16 uses pinned InterNodeV1 over
-2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external input. MoRI's
-AsyncLL transport is not the genuine low-latency suite contract and is never labeled as such.
+the exact upstream PR #640 library matcher that excludes NCCL shared-memory mappings. Scale-up cases
+request NCCL Device API LSA and fail closed unless the realized LSA team covers the full EP world.
+x86 EP16 scale-out uses the hybrid path with GIN and requires two logical scale-out domains
+represented by two physical RDMA ranks, with eight scale-up ranks per domain. GB EP16 remains MNNVL
+scale-up and uses LSA. MoRI EP8 uses MI355X IntraNode in normal mode; EP16 uses pinned InterNodeV1
+over 2x8 XGMI + RDMA with 96 blocks, 64 RDMA blocks, 8 warps, one QP per PE, and external input.
+MoRI's AsyncLL transport is not the low-latency suite contract and is never labeled as such. Whether
+a given SKU/backend/EP cell is attempted is a capability fact; whether it succeeded is decided only
+by the emitted artifact.
 
 ## Workload Identity
 
@@ -101,12 +76,12 @@ Adapters may not generate routing or reinterpret one quantity as the other.
 
 Normal mode uses `layout-and-dispatch-v1`: dispatch timing includes layout plus communication, and
 combine returns activation payload through an unweighted rank-sum path. Low-latency mode uses
-`expert-packed-weighted-combine-v1`: native DeepEP V1/UCCL APIs dispatch token-expert assignments and
-perform gate-weighted combine. Expert-output staging is outside isolated combine timing and inside
-measured paired roundtrip. Each component declares availability, origin, start/end states, stage
-scope, and sample count. A paired-only API reports null isolated components. `isolated_sum` is
-derived and never used for throughput or recommendations. Mode is series identity, and normal and
-low-latency evidence cannot share a ranking cohort.
+`expert-packed-weighted-combine-v1`: native DeepEP V1 / UCCL APIs dispatch token-expert assignments
+and perform gate-weighted combine. Expert-output staging is outside isolated combine timing and
+inside the measured paired roundtrip. Each component declares availability, origin, start/end states,
+stage scope, and sample count. A paired-only API reports null isolated components. `isolated_sum` is
+derived. Normal and low-latency evidence describe different measurement contracts and are not
+directly comparable; the artifact records the mode so a reader can keep them separate.
 
 Every measured component uses `fixed-512-v1`:
 
@@ -122,8 +97,8 @@ MoE-layer collective; they do not change the timed primitive at an otherwise ide
 
 The NCCL/RCCL reference is an end-to-end Python adapter, not a bare fabric primitive. Its dispatch
 boundary includes layout, count exchange, a device-to-host split synchronization, fresh receive
-allocation, and four payload/metadata all-to-all calls; activation-only combine adds one all-to-all plus
-scatter/reduction. Its p99 therefore measures the complete reference-adapter boundary and can be
+allocation, and four payload/metadata all-to-all calls; activation-only combine adds one all-to-all
+plus scatter/reduction. Its p99 therefore measures the complete reference-adapter boundary and can be
 host/scheduler-sensitive. It is useful for portable system controls but must not be labeled fabric,
 link, bus, or single-collective latency.
 
@@ -136,17 +111,17 @@ Logical payload bandwidth is:
 
 Normal-mode payload bytes use rank-deduplicated token-rank activations; low-latency bytes use
 token-expert assignments. Both add required scale bytes at the named boundary and exclude expert
-metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire utilization,
-and physical-link utilization are not published without a defined primitive model or transport
-counters. Logical bandwidth must never be labeled physical bandwidth. Published payload and token
+metadata, padding, and backend buffer capacity. Algorithm bandwidth, bus bandwidth, wire
+utilization, and physical-link utilization are not emitted without a defined primitive model or
+transport counters. Logical bandwidth must never be labeled physical bandwidth. Payload and token
 rates are named `rate_at_latency_percentile`: bytes or tokens divided by the matching latency
-percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted rate
-distribution.
+percentile. They are lower-tail service rates at p99 latency, not p99 percentiles of an inverted
+rate distribution.
 
 ## Correctness
 
-An implementation-independent oracle uses an expert-specific deterministic transform so wrong
-expert routing cannot pass an identity roundtrip. For every rank and point it verifies:
+An implementation-independent oracle uses an expert-specific deterministic transform so wrong expert
+routing cannot pass an identity roundtrip. For every rank and point it verifies:
 
 1. destination rank/expert, source token, multiplicity, gate weight, and receive counts;
 2. dispatched payload and metadata before timing;
@@ -155,37 +130,40 @@ expert routing cannot pass an identity roundtrip. For every rank and point it ve
 5. dispatched payload/metadata and combined output again after timing.
 
 Normal-mode adapters use activation-only, unweighted rank-sum combine. The oracle builds each rank's
-gate-weighted expert aggregate before combine, independently derives `sum(gate * expert(token))`,
-and checks the dispatch metadata and transformed output. Low-latency adapters separately verify the
+gate-weighted expert aggregate before combine, independently derives `sum(gate * expert(token))`, and
+checks the dispatch metadata and transformed output. Low-latency adapters separately verify the
 expert-packed source/expert assignment, native gate weights, and gate-weighted combined output. Both
-contracts compare against the semantic value after the declared communication codec. The frozen
-combine gates are `rtol=0.05, atol=0.02` for BF16, `rtol=0.06, atol=0.03` for native logfmt10, and
-`rtol=0.08, atol=0.04` for native FP8 direct-cast combine. These thresholds are correctness gates,
-not estimates of codec error. Direct-cast saturation is measured on the exact transformed native
-combine input, and the required saturation count is zero. Any failed rank or point makes the case
-ineligible.
+contracts compare against the semantic value after the declared communication codec. The combine
+gates are `rtol=0.05, atol=0.02` for BF16 (the default sweep), `rtol=0.06, atol=0.03` for native
+logfmt10, and `rtol=0.08, atol=0.04` for native FP8 direct-cast combine when those codec paths are
+exercised. These thresholds are correctness gates, not estimates of codec error. Direct-cast
+saturation is measured on the exact transformed native combine input, and the required saturation
+count is zero. Any failed rank or point makes the case ineligible and is recorded as such.
 Pre/post dispatch evidence is hashed in canonical source-token order. Native receive slots may be
 assigned nondeterministically, so physical receive order is not treated as a correctness property.
 
-## Native Result
+## Result Artifact
 
-One raw case document uses `format: "collectivex.ep.v1"`, rejects unknown fields, and contains:
+One raw case document uses `format: "collectivex.ep.v1"`, carries `schema_version: 1`, rejects
+unknown fields, and contains:
 
-- `case`: stable case ID, suite, required tier, and coordinate;
+- `case`: stable case ID, suite, and coordinate;
 - `workload`: canonical identity and logical MoE shape;
 - `measurement`: sampling, component states, timing, and byte accounting;
 - `implementation`: instantiated class/API, pinned source, loaded libraries, and resources;
 - `topology`: requested and realized SKU, devices, placement, scale-up domain, and transport;
 - `provenance`: source SHA, image/squash hashes, allocation, run, and attempt;
-- `rows`: point latency, byte accounting, token rate, correctness, load, fanout, and anomaly evidence; and
-- `outcome`: `success`, `failed`, `invalid`, `diagnostic`, or `unsupported`, with reasons.
+- `rows`: point latency, byte accounting, token rate, correctness, load, fanout, and anomaly
+  evidence; and
+- `outcome`: `success`, `failed`, `invalid`, `unsupported`, with `diagnostic` and reasons.
 
-Raw result documents and exact samples pass through transient GitHub delivery artifacts before the
-publisher archives them in the private bundle; they never enter the public tree. Private environment
-details remain in local mode-0600 logs and ignored operator notes; they are never archived or
-published. Every expected case has one terminal selected outcome while every attempt remains retained.
+Exact per-point samples are emitted as detached `collectivex.samples.v1` documents referenced by path
+and SHA-256, so the raw document stays compact. Every scheduled case produces exactly one terminal
+record; every attempt is retained (a superseded retry does not overwrite an earlier failure). Private
+environment details (hosts, addresses, device selectors, credentials, workspace paths) remain in
+local mode-0600 logs and ignored operator notes and never enter an emitted artifact.
 
-## Identity And Comparisons
+## Identity
 
 Canonical JSON produces three full SHA-256 IDs:
 
@@ -194,57 +172,17 @@ Canonical JSON produces three full SHA-256 IDs:
 - `evidence_id`: `point_id` plus allocation/run/attempt/sample checksum.
 
 Locked factors include workload bytes, measurement and sampling contract, resources, realized
-topology, implementation/build, loaded libraries, image/squash, runtime, and source SHA.
-Deferred code generation is captured before measurement and recaptured afterward. DeepEP V2 uses a
-fixed NVCC random seed and binds final cache keys plus generated-source and executable-SASS hashes;
-raw CUBIN bytes remain private diagnostics. Hybrid binds its realized auto-tuned config and complete
-kernel-key set while retaining rank-local shared-object hashes as private diagnostics. Locally built
-extension hashes are diagnostic; their pinned source trees, build recipe, runtime, and dependencies
-remain series-bound.
-The series identity includes the case ID, which binds the complete scheduled token ladder and the
-frozen percentile, rank-reduction, conditioning, warmup, and correctness semantics.
+topology, implementation/build, loaded libraries, image/squash, runtime, and source SHA. Deferred
+code generation is captured before measurement and recaptured afterward. DeepEP V2 uses a fixed NVCC
+random seed and binds final cache keys plus generated-source and executable-SASS hashes; raw CUBIN
+bytes remain private diagnostics and are stripped before they enter an artifact. Hybrid binds its
+realized auto-tuned config and complete kernel-key set while retaining rank-local shared-object
+hashes as private diagnostics. Locally built extension hashes are diagnostic; their pinned source
+trees, build recipe, runtime, and dependencies remain series-bound.
 
-A controlled comparison declares one contrast:
-
-- `library`: backend implementation and its pinned fixed resource profile may differ; the realized system,
-  workload, EP, resource policy, source, and measurement remain matched;
-- `chip`: a controlled platform contrast. The full realized system/topology and pinned resource
-  profile may differ while workload, EP, placement class, resource policy, backend lineage, source,
-  and measurement remain matched. It is not a silicon-only comparison;
-- `system`: all hardware/backend differences stay visible while workload, EP, and measurement match;
-- `routing`: routing distribution/EPLB differs while the static implementation build/generator,
-  system, model shape, resource profile, and measurement remain matched. Uniform and Zipf without
-  EPLB reuse the same generated implementation; EPLB's physical-expert/JIT configuration remains an
-  explicit treatment difference.
-
-Any undeclared mismatch rejects the overlay. Chip/system results describe measured systems, not
-silicon alone.
-
-## Evidence Policy
-
-Capability declarations say what may be attempted; artifacts determine evidence status. Promotion
-requires exact expected coverage with no missing, extra, duplicate, malformed, or heterogeneous
-case. Public coverage preserves each matrix disposition; promotion requires every runnable case to
-succeed and every planned-unsupported case to remain unsupported in every selected run. Only the
-pinned canonical full-v1 matrix, with a decision-grade library, chip, system, and routing cohort,
-may advance `dev-latest`; partial matrices remain diagnostic. The full-matrix digest intentionally
-pins the exact workflow shard grouping as well as the requested cases, so changing `--max-cases`
-or the SKU round-robin scheduling order produces diagnostic-only runs even when case coverage is
-unchanged. Superseded retries,
-planned-unsupported outcomes, and non-decision-grade (diagnostic) series and cohorts may render
-diagnostically but cannot rank or recommend; a promoted dataset ships them labelled with their
-verdict (`status` / `eligibility.reasons`) rather than dropping them, and need only hold at least
-one decision-grade series. The publisher computes and attaches each series' and cohort's verdict;
-the consumer decides which to surface and may reveal a diagnostic series.
-Any failed, invalid, or diagnostic retry of a runnable case still blocks promotion even if a later
-retry succeeds — the honesty floor that every runnable case physically produced clean data is
-never relaxed. Routing cohorts are comparable-experimental sensitivities and never produce configuration
-recommendations; official library/platform/system cohorts own actionable recommendations.
-
-A point becomes decision-grade only after a single workflow run and allocation ID passes
-correctness, identity, provenance, tail gates, within-run trial drift/outlier diagnostics, and stable
-ordering. The publisher, not the frontend, computes eligibility, controlled cohorts, sensitivity pairs,
-and recommendations.
+These IDs let a consumer group matched configurations and separate distinct ones. The backend does
+not itself compute cohorts, controlled comparisons, sensitivity pairs, eligibility, or
+recommendations — a reader decides which series to surface and how to compare them.
 
 ## Execution Isolation
 
@@ -263,10 +201,10 @@ including a safely identified partial claim. The same-run V2/Hybrid source archi
 under fixed member and expanded-size bounds, and only the selected pinned root is extracted; a
 symlink is accepted only when it is a relative leaf pointing to a regular member inside the same
 backend root, followed by exact Git tree/submodule validation.
-H200, B200, and B300 may derive that private base beneath the validated operating-system account
-home when it is compute-visible. H100 instead derives a sibling of its shared container directory,
-never a child of image storage. The launcher still proves cross-node visibility before any benchmark
-starts.
+
+H200, B200, and B300 may derive that private base beneath the validated operating-system account home
+when it is compute-visible. H100 instead derives a sibling of its shared container directory, never a
+child of image storage. The launcher still proves cross-node visibility before any benchmark starts.
 Canonical B300 execution ignores the legacy operator `stage_dir` field and always derives the base
 from the validated shared account home. Its UID-mapped Actions shell may accept that exact base when
 its owner matches the private parent owner; explicit stages and all other runners retain the strict
@@ -276,78 +214,39 @@ UID 0; only that creation path is accepted, while a pre-existing root-owned base
 Canonical GB300 execution likewise ignores its legacy group-writable `stage_dir` and derives an
 execution-hashed private base beneath the validated compute-visible account home.
 
-## Artifact Validation And JIT Delivery
-
-There is no self-hosted service, Vercel storage, GCP, Neon, managed database, or managed object
-store. The publication workflow uses runner-local temporary storage only as a disposable validation
-and promotion workspace:
-
-```text
-$COLLECTIVEX_STORE_ROOT/
-  private/incoming/          # write-once downloaded GHA attempts
-  private/bundles/<sha256>/  # immutable source archives, native results/samples, matrix, checksums
-  private/quarantine/        # rejected attempts plus machine-readable reasons
-  public/datasets/<sha256>/  # immutable sanitized frontend datasets
-  public/channels/           # promoted dev-latest pointer; never served from persistent storage
-  locks/
-```
-
-Private and public trees use separate permissions. JSON manifests and checksums are authoritative;
-a rebuildable catalog is only an index. Raw sweep artifacts are transient publisher input; only the
-sanitized promoted NDJSON is retained as a frontend publication artifact.
+## Image Pinning And Build Isolation
 
 Container tags are checked against pinned registry digests. Enroot imports use a fixed
-`SOURCE_DATE_EPOCH` and versioned cache generation; every mounted squash is freshly hashed into
-series identity. Image-provided DeepEP is also checked against exact per-architecture wheel and
-installed-file fingerprints, so a stale cache cannot inherit the pinned source identity.
-Source-built DeepEP V2 uses a separate mode-0700 cluster-local cache mounted only as `/cx-cache`.
-Its content key binds a versioned build recipe, verified image digest, CPU/GPU architecture,
-upstream source trees, and pinned build dependencies. The cache is never an artifact or publisher
-input; per-execution source/results stages remain isolated and disposable, and marker plus runtime
-probes fail closed before reuse. The runner UID is inside the trusted cluster boundary: this cache
-guards against stale or accidental mutation, not hostile same-UID jobs. Only an unpublished partial
-build may be reset automatically; a published cache that fails integrity or runtime checks is left
-intact and rejected so a concurrent allocation cannot lose files it is using.
+`SOURCE_DATE_EPOCH` and versioned cache generation; every mounted squash is freshly hashed into series
+identity. Image-provided DeepEP is also checked against exact per-architecture wheel and installed-file
+fingerprints, so a stale cache cannot inherit the pinned source identity. Source-built DeepEP V2 uses
+a separate mode-0700 cluster-local cache mounted only as `/cx-cache`. Its content key binds a
+versioned build recipe, verified image digest, CPU/GPU architecture, upstream source trees, and pinned
+build dependencies. The cache is never an artifact; per-execution source/results stages remain
+isolated and disposable, and marker plus runtime probes fail closed before reuse. The runner UID is
+inside the trusted cluster boundary: this cache guards against stale or accidental mutation, not
+hostile same-UID jobs. Only an unpublished partial build may be reset automatically; a cache that
+fails integrity or runtime checks is left intact and rejected so a concurrent allocation cannot lose
+files it is using.
 
-Publication is fail-closed:
+## Neutral Artifact Delivery
 
-1. acquire an exclusive filesystem lock and stage on the destination filesystem;
-2. archive source bytes before parsing;
-3. require the exact matrix-declared artifact set and reject every unconsumed archive member;
-4. validate strict schemas, privacy, checksums, identities, timing, and exact matrix outcomes;
-5. write checksums and `COMPLETE`, fsync, then atomically rename the private bundle;
-6. build and validate the sanitized content-addressed dataset, fsync, then atomically rename it;
-7. atomically replace `dev-latest.json` only when every promotion gate passes.
+There is no results server, attached store, or managed object store. Each shard runs one allocation,
+emits per-case result and terminal JSON plus detached sample JSON and a small mechanical summary, and
+uploads them as GitHub artifacts with `always()` so a red or partial run still uploads. Before upload,
+`contracts.py validate-delivery` checks, for the scheduled shard:
 
-Rejected attempts remain only in the disposable private workspace and short-lived source artifacts;
-they never advance `dev-latest` or enter a production channel. The workspace is destroyed with the
-publication runner and is never attached to the frontend. No publication artifact is emitted unless
-the single selected bundle advances `dev-latest`.
+- strict schema validity of every result, terminal, and samples document;
+- exactly one terminal record per scheduled case, with no missing, extra, or duplicate case;
+- detached-sample path and SHA-256 consistency (`point_id` / `evidence_id`); and
+- privacy — no private host, address, selector, credential, or path leaks into any artifact.
 
-`publisher.py ingest` accepts the exact matrix plus one `--artifact` directory or ZIP per GitHub
-artifact. `promote` accepts explicit immutable bundle IDs. Default `verify` requires
-the private workspace; it also verifies `dev-latest` when present, while an explicit
-`--channel dev-latest` requires it. The workflow copies only the verified sanitized dataset to a
-one-record `collectivex_public_v1_<sha256>.ndjson` artifact. Raw artifacts and private workspace
-content are never bundled into the application.
-
-Sweeps default to `release_tag=unversioned`. The main-registered `collectivex-sweep.yml` owns
-`sweep`, `publish-v1`, and `refresh-v1`, so its branch revision remains dispatchable. V1 emits a
-marker bound to the run ID, first attempt, qualification index, source SHA, and locked matrix digest.
-Publication accepts one successful first-attempt run ID at qualification index 1, downloads its
-immutable artifacts, and passes the same provenance assertions to `publisher.py ingest`. Refresh
-requires an exact source run and dataset digest and reuploads the same validated sanitized bytes.
-Partial, filtered, untagged, cross-source, rerun, failed, expired, or digest-mismatched inputs fail
-closed.
-
-Using a server-side GitHub read token, the frontend discovers the latest successful version-scoped
-publication run and downloads the publication artifact just in time. It requires exactly one root
-NDJSON entry, validates UTF-8, schema, promotion status, and filename/body SHA-256, then exposes a
-short-lived versioned channel pointer and immutable versioned dataset URL. The benchmark-version
-selector currently exposes V1; later versions require separate release and publication identities.
-The frontend never invents missing values, selects retries, or recomputes decision eligibility.
+The `setup` job also emits a neutral `collectivex.frontend-catalog.v1` projection of the matrix so a
+consumer can enumerate scheduled coverage without parsing shard internals. No step promotes a run,
+builds a dataset, or advances a channel; the artifacts are the output. Any downstream display or
+comparison is the consumer's responsibility.
 
 ## Legacy Data
 
-Numeric schemas 3-5 are outside the v1 publisher and frontend reader. They remain historical
-diagnostic evidence and cannot seed `dev-latest` or drive v1 decisions.
+Historical numeric schemas 3-5 are outside this benchmark's artifacts. They remain historical
+diagnostic evidence and are not produced or consumed by the current sweep.
