@@ -10061,7 +10061,7 @@ dsv4-fp4-gb300-dynamo-trt-mtp:
           dp-attn: true
 
 dsv4-fp4-gb300-dynamo-sglang:
-  image: lmsysorg/sglang:nightly-dev-cu13-20260520-425dffbd
+  image: lmsysorg/sglang:nightly-dev-cu13-20260707-b4155233
   model: deepseek-ai/DeepSeek-V4-Pro
   model-prefix: dsv4
   runner: gb300
