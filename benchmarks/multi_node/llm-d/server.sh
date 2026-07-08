@@ -329,14 +329,8 @@ fi
 # ================================================================
 if [[ "$ROLE" == "decode" && "$LWS_WORKER_INDEX" -eq 0 ]]; then
 
-    # ---- Always release the allocation on coordinator exit ----
-    # job.slurm's watcher scancels the whole job when this marker appears; the
-    # workers otherwise `wait` on their vLLM until TIME_LIMIT. Writing it from an
-    # EXIT trap (not just at the end of a clean run) guarantees release on ANY
-    # coordinator exit - a failed/aborted benchmark, an EPP/Envoy bring-up error,
-    # or a `set -e` abort. Without this a failed bench once wedged a run for 8h
-    # until GitHub killed it at the max-execution limit (losing the log tarball).
-    BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.${SLURM_JOB_ID:-0}"
+    # Release the allocation whenever the coordinator exits.
+    BENCH_DONE_MARKER="$BENCHMARK_LOGS_DIR/.bench_done.$SLURM_JOB_ID"
     trap 'touch "$BENCH_DONE_MARKER" 2>/dev/null || true' EXIT
 
     # ---- Write endpoints.yaml (file-discovery) ----

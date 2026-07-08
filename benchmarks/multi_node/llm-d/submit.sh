@@ -32,6 +32,7 @@ check_env MODEL_PATH
 check_env MODEL_NAME
 check_env CONTAINER_IMAGE
 check_env RUNNER_NAME
+check_env BENCHMARK_LOGS_DIR
 
 PREFILL_NODES=$1
 DECODE_NODES=$2
@@ -46,10 +47,6 @@ GPUS_PER_NODE="${GPUS_PER_NODE:-8}"
 
 export DOCKER_IMAGE_NAME=$CONTAINER_IMAGE
 export MODEL_DIR=$MODEL_PATH
-# Optional space-separated candidate model dirs; job.slurm probes them per-node
-# and overrides MODEL_DIR with the first present on all nodes (MODEL_PATH is the
-# default/fallback). Empty -> job.slurm keeps MODEL_DIR as-is.
-export MODEL_PATH_CANDIDATES="${MODEL_PATH_CANDIDATES:-}"
 export MODEL_NAME=$MODEL_NAME
 export NUM_NODES=$NUM_NODES
 export PREFILL_NODES=$PREFILL_NODES
@@ -105,7 +102,6 @@ print(t)
     fi
 fi
 
-export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
 mkdir -p "$BENCHMARK_LOGS_DIR"
 
 JOB_ID=$(sbatch \

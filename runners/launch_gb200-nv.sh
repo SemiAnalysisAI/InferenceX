@@ -4,64 +4,22 @@
 
 set -x
 
-# ----------------------------------------------------------------------
-# llmd-vllm: InferenceX-owned multi-node path (no srt-slurm).
-# Mirrors the H200 launcher branch in launch_h200-dgxc-slurm.sh - wrapper
-# script -> benchmarks/multi_node/llm-d/submit.sh -> sbatch -> JOB_ID,
-# then tail the slurm log and bundle server logs on exit.
-# Kept as the first FRAMEWORK gate so it doesn't fall through into the
-# srt-slurm path used by dynamo-{sglang,trt,vllm} below.
-# ----------------------------------------------------------------------
+export SLURM_PARTITION="batch"
+export SLURM_ACCOUNT="benchmark"
+SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
+
 if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     if [[ "$MODEL_PREFIX" == "dsv4" && "$PRECISION" == "fp4" ]]; then
-        export MODEL_PATH="/mnt/lustre01/models/DeepSeek-V4-Pro"
-        # Candidate model dirs, probed per-node in job.slurm (AMD-style
-        # SEARCH_PATHS): per-node NVMe FIRST (local, fast - the path the dynamo
-        # block below uses), then shared Lustre as fallback. Self-heals when one
-        # is unmounted/missing on the GB200 nodes
-        export MODEL_PATH_CANDIDATES="/mnt/numa1/models/deepseek-v4-pro /mnt/lustre01/models/DeepSeek-V4-Pro"
+        export MODEL_PATH="/mnt/numa1/models/deepseek-v4-pro"
         export MODEL_NAME="deepseek-ai/DeepSeek-V4-Pro"
     else
         echo "Unsupported MODEL_PREFIX/PRECISION for llmd-vllm on GB200: $MODEL_PREFIX/$PRECISION" >&2
         exit 1
     fi
 
-    # SLURM partition + account: same values the rest of this launcher
-    # uses for the dynamo-* paths below. Setting them here because our
-    # llmd-vllm branch exits before reaching the file-level export
-    # block, and submit.sh requires both to be present.
-    export SLURM_PARTITION="${SLURM_PARTITION:-batch}"
-    export SLURM_ACCOUNT="${SLURM_ACCOUNT:-benchmark}"
-
-    # Container engine: GB200 SLURM users do not have access to the
-    # docker daemon socket, so the `docker run` path fails with
-    # "permission denied while trying to connect to the docker API at
-    # unix:///var/run/docker.sock". Use pyxis srun --container-image=
-    # against an enroot-imported squash file
-    SQUASH_DIR=""
-    for cand in \
-        /mnt/lustre01/users-public/sa-shared \
-        /mnt/lustre01/users/slurm-shared/squash \
-        /home/slurm-shared/gharunners/squash \
-        ; do
-        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
-            rm -f "$cand/.write-probe.$$" 2>/dev/null
-            SQUASH_DIR="$cand"
-            break
-        fi
-    done
-    if [[ -z "$SQUASH_DIR" ]]; then
-        echo "Error: no writable squash dir candidate found on this cluster" >&2
-        exit 1
-    fi
     SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
-    # enroot's docker:// URL uses '#' to separate registry from repo, not
-    # '/' (e.g., 'docker://ghcr.io#ezrasilvera/llm-d-nokube-vllm:v0.7.0').
-    # Without the '#', enroot treats the whole string as a Docker Hub
-    # repo name and the auth handshake hits registry-1.docker.io -> 401.
-    # nvidia-master.yaml stores image: in plain Docker form (works
-    # natively for docker run on the H200 path); we translate here.
+    # Enroot uses '#' between the registry and repository.
     case "$IMAGE" in
         */*)
             _registry="${IMAGE%%/*}"
@@ -76,9 +34,6 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     esac
     echo "ENROOT_URL=$ENROOT_URL"
 
-    # enroot import is idempotent against an existing squash file - it
-    # writes a fresh sqsh, but skips when -o file is non-empty (we gate
-    # on -s so we re-import a 0-byte sqsh from a cancelled run).
     if [[ ! -s "$SQUASH_FILE" ]]; then
         echo "enroot import -> $SQUASH_FILE"
         enroot import -o "$SQUASH_FILE" "$ENROOT_URL" || {
@@ -92,8 +47,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     export LLMD_CONTAINER_ENGINE=pyxis
     export LLMD_SQUASH_FILE="$SQUASH_FILE"
 
-    # Logs go to BENCHMARK_LOGS_DIR (NFS-accessible);
-    export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$GITHUB_WORKSPACE/benchmark_logs}"
+    export BENCHMARK_LOGS_DIR="$GITHUB_WORKSPACE/benchmark_logs"
     mkdir -p "$BENCHMARK_LOGS_DIR"
 
     SCRIPT_NAME="${EXP_NAME%%_*}_${PRECISION}_gb200_llmd-vllm-disagg.sh"
@@ -110,11 +64,7 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     fi
     echo "Submitted llm-d job: $JOB_ID"
 
-    # Make sure the server-log tarball ships even when this step is
-    # killed mid-flight (workflow cancel): without the trap the body of
-    # this branch is interrupted before tar+cp below run, the
-    # `Upload server logs` step finds no file, and the user sees nothing
-    # about what happened inside the container.
+    # Preserve server logs when the workflow is cancelled.
     bundle_server_logs() {
         if [[ -d "$BENCHMARK_LOGS_DIR" ]] && compgen -G "$BENCHMARK_LOGS_DIR/*" >/dev/null 2>&1; then
             tar czf "$GITHUB_WORKSPACE/multinode_server_logs.tar.gz" \
@@ -126,7 +76,6 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
 
     LOG_FILE="${BENCHMARK_LOGS_DIR}/slurm_job-${JOB_ID}.out"
 
-    # Wait for log file (also catch early failures).
     while ! ls "$LOG_FILE" &>/dev/null; do
         if ! squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; then
             echo "ERROR: job $JOB_ID failed before creating log file"
@@ -136,7 +85,6 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
         sleep 5
     done
 
-    # Background poll, foreground tail.
     (
         while squeue -j "$JOB_ID" --noheader 2>/dev/null | grep -q "$JOB_ID"; do
             sleep 10
@@ -147,9 +95,6 @@ if [[ "$FRAMEWORK" == "llmd-vllm" ]]; then
     tail -F -s 2 -n+1 "$LOG_FILE" --pid=$POLL_PID 2>/dev/null
     wait $POLL_PID
 
-    # Result collection: The server-log tarball
-    # is produced by the EXIT trap above (so it ships even when this
-    # step is cancelled mid-flight).
     for result_file in $(find "${BENCHMARK_LOGS_DIR}" -name "${RESULT_FILENAME}*.json" 2>/dev/null); do
         file_name=$(basename "$result_file")
         cp "$result_file" "$GITHUB_WORKSPACE/${file_name}"
@@ -256,10 +201,6 @@ else
     export MODEL_PATH=$MODEL
 fi
 
-# Set up environment variables for SLURM
-export SLURM_PARTITION="batch"
-export SLURM_ACCOUNT="benchmark"
-
 NGINX_IMAGE="nginx:1.27.4"
 
 uses_watchtower_shared_fs() {
@@ -269,57 +210,6 @@ uses_watchtower_shared_fs() {
     esac
 }
 
-# === Cluster diagnostic probe for watchtower-hosted sweeps ===
-# The gb200-nv_* runners may be hosted on different physical clusters
-# (e.g., the legacy NVIDIA Lustre cluster vs Oracle Cloud "watchtower").
-# Print enough info to identify the layout, then pick a writable
-# squash dir on a path that's also visible to compute nodes. Falls
-# back to the legacy sa-shared path so other configs are untouched.
-SQUASH_DIR="/mnt/lustre01/users-public/sa-shared"
-if uses_watchtower_shared_fs; then
-    echo "=== cluster diagnostic (watchtower sweep) ==="
-    echo "USER=$(id -un) UID=$(id -u) GID=$(id -g) GROUPS=$(id -Gn)"
-    echo "HOME=$HOME"
-    echo "HOSTNAME=$(hostname -f 2>/dev/null || hostname)"
-    echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE"
-    echo "--- mount summary ---"
-    mount | grep -E 'lustre|nfs|home|shared|/mnt' || true
-    echo "--- /mnt contents ---"
-    ls -ld /mnt/* 2>/dev/null || true
-    echo "--- /mnt/lustre01 user dirs ---"
-    ls -ld /mnt/lustre01/users/* 2>/dev/null || true
-    ls -ld /mnt/lustre01/users-public/* 2>/dev/null || true
-    ls -ld /mnt/lustre01/groups/* 2>/dev/null || true
-    echo "--- /nfs contents (if present) ---"
-    ls -ld /nfs/* 2>/dev/null || true
-    echo "--- /home contents ---"
-    ls -ld /home/* 2>/dev/null || true
-    echo "=== end diagnostic ==="
-
-    # Probe candidate squash dirs in order, pick first writable one.
-    SQUASH_DIR=""
-    for cand in \
-        /mnt/lustre01/users/slurm-shared/squash \
-        /mnt/lustre01/users-public/slurm-shared/squash \
-        /mnt/lustre01/groups/slurm-shared/squash \
-        /mnt/lustre01/users-public/sa-shared \
-        /nfs/slurm-shared/squash \
-        /home/slurm-shared/gharunners/squash
-    do
-        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
-            rm -f "$cand/.write-probe.$$" 2>/dev/null
-            SQUASH_DIR="$cand"
-            echo "Selected SQUASH_DIR=$SQUASH_DIR (first writable candidate)"
-            break
-        else
-            echo "  not writable: $cand"
-        fi
-    done
-    if [ -z "$SQUASH_DIR" ]; then
-        echo "Error: no writable squash dir candidate found on this cluster" >&2
-        exit 1
-    fi
-fi
 SQUASH_FILE="${SQUASH_DIR}/$(echo "$IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 NGINX_SQUASH_FILE="${SQUASH_DIR}/$(echo "$NGINX_IMAGE" | sed 's/[\/:@#]/_/g').sqsh"
 
@@ -413,36 +303,10 @@ fi
 echo "Cloning srt-slurm repository..."
 SRT_REPO_DIR="srt-slurm"
 SRTCTL_SETUP_SCRIPT=""
-# On the watchtower (Oracle) gb200 cluster, /home/slurm-shared is not
-# cross-mounted to compute nodes. Put the srt-slurm workspace and staged
-# InferenceX checkout on a writable shared-FS path that compute can see.
-# Per-run-unique paths avoid races between parallel sweep jobs.
 if uses_watchtower_shared_fs; then
-    SHARED_BASE=""
-    for cand in \
-        /mnt/lustre01/users-public/sa-shared/gha-runs \
-        /mnt/lustre01/users/slurm-shared/gha-runs \
-        /mnt/lustre01/users-public/slurm-shared/gha-runs \
-        /mnt/lustre01/groups/slurm-shared/gha-runs \
-        /nfs/slurm-shared/gha-runs \
-        /home/slurm-shared/gharunners/gha-runs
-    do
-        if mkdir -p "$cand" 2>/dev/null && touch "$cand/.write-probe.$$" 2>/dev/null; then
-            rm -f "$cand/.write-probe.$$" 2>/dev/null
-            SHARED_BASE="$cand"
-            echo "Selected SHARED_BASE=$SHARED_BASE (first writable candidate)"
-            break
-        else
-            echo "  not writable: $cand"
-        fi
-    done
-    if [ -z "$SHARED_BASE" ]; then
-        echo "Error: no writable shared run directory candidate found on this cluster" >&2
-        exit 1
-    fi
-    RUN_KEY="${GITHUB_RUN_ID:-manual}-${GITHUB_RUN_ATTEMPT:-0}-${RUNNER_NAME:-gb200-nv}-$$"
+    SHARED_BASE="/mnt/lustre01/users-public/sa-shared/gha-runs"
+    RUN_KEY="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${RUNNER_NAME}-$$"
     SRT_REPO_DIR="${SHARED_BASE}/srt-slurm-${RUN_KEY}"
-    echo "Using shared-FS SRT_REPO_DIR=$SRT_REPO_DIR (compute-visible)"
 fi
 if [ -d "$SRT_REPO_DIR" ]; then
     echo "Removing existing $SRT_REPO_DIR..."

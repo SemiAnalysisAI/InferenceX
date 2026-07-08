@@ -38,27 +38,9 @@ for NODE in $ALL_NODES; do
 done
 echo "Node IPs: ${IPS[*]}"
 
-# Resolve the model dir across candidate paths on the ACTUAL compute nodes
-# (mirrors amd_utils/job.slurm SEARCH_PATHS). Lustre can be unmounted and the
-# per-node NVMe stage is the preferred/fallback path the dynamo block uses;
-# probe each candidate via srun and pick the first present on ALL nodes. This
-# self-heals the enroot mount failure that killed runs 28287278282/28287379549.
-if [[ -n "${MODEL_PATH_CANDIDATES:-}" ]]; then
-    _resolved=""
-    for cand in $MODEL_PATH_CANDIDATES; do
-        if srun --nodes="$NUM_NODES" --ntasks-per-node=1 \
-                bash -c "[[ -d '$cand' ]]" >/dev/null 2>&1; then
-            _resolved="$cand"
-            echo "MODEL_DIR resolved to '$cand' (present on all $NUM_NODES nodes)"
-            break
-        fi
-        echo "model candidate not present on all $NUM_NODES nodes, skipping: $cand"
-    done
-    if [[ -z "$_resolved" ]]; then
-        echo "FATAL: model not found on all $NUM_NODES nodes. Tried: $MODEL_PATH_CANDIDATES" >&2
-        exit 1
-    fi
-    export MODEL_DIR="$_resolved"
+if ! srun --nodes="$NUM_NODES" --ntasks-per-node=1 test -d "$MODEL_DIR"; then
+    echo "FATAL: model not found on all $NUM_NODES nodes: $MODEL_DIR" >&2
+    exit 1
 fi
 
 # Rank slicing:
@@ -75,10 +57,10 @@ DECODE_DP_ADDR="$DECODE_LEADER_IP"
 
 ALL_IP_LIST=$(IFS=,; echo "${IPS[*]}")
 
-SANITIZED_USER=$(echo "${USER:-runner}" | tr -c 'a-zA-Z0-9_.-' '_')
+SANITIZED_USER=$(echo "$USER" | tr -c 'a-zA-Z0-9_.-' '_')
 DOCKER_CONT_NAME="llmd_bench_${SANITIZED_USER}_${SLURM_JOB_ID}"
 export DOCKER_CONT_NAME
-export BENCHMARK_LOGS_DIR="${BENCHMARK_LOGS_DIR:-$(pwd)/benchmark_logs}"
+: "${BENCHMARK_LOGS_DIR:?BENCHMARK_LOGS_DIR not set}"
 DOCKER_MOUNT_PATH="/workspace"
 
 cleanup() {
