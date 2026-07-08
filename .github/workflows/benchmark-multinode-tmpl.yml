@@ -209,6 +209,18 @@ jobs:
             done
           fi
 
+      - name: Workspace cleanup (pre-checkout)
+        run: |
+          sudo rm -rf "$GITHUB_WORKSPACE/benchmark_logs" || true
+          sudo rm -rf "$GITHUB_WORKSPACE/benchmark_artifacts" || true
+          sudo rm -rf "$GITHUB_WORKSPACE/LOGS" || true
+          sudo rm -rf "$GITHUB_WORKSPACE/agentic_checkpoints" || true
+          sudo rm -f "$GITHUB_WORKSPACE"/samples*.jsonl || true
+          sudo rm -f "$GITHUB_WORKSPACE"/sample*.jsonl || true
+          sudo rm -f "$GITHUB_WORKSPACE"/results*.json || true
+          sudo rm -f "$GITHUB_WORKSPACE"/meta_env.json || true
+          sudo chown -R "$USER":"$USER" "$GITHUB_WORKSPACE" || true
+
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           token: ${{ secrets.REPO_PAT }}
@@ -241,10 +253,18 @@ jobs:
           elif [ "${{ inputs.scenario-type }}" = "agentic-coding" ]; then
             expected_count=$(wc -w <<< "$CONC_LIST" | tr -d ' ')
             shopt -s nullglob
-            agentic_results=("${RESULT_FILENAME}"_conc*.json)
+            if [ -f "${RESULT_FILENAME}.json" ]; then
+              agentic_results=("${RESULT_FILENAME}.json")
+            else
+              agentic_results=("${RESULT_FILENAME}"_conc*.json)
+              if [ "${#agentic_results[@]}" -ne "$expected_count" ]; then
+                echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
+                exit 1
+              fi
+            fi
             shopt -u nullglob
-            if [ "${#agentic_results[@]}" -ne "$expected_count" ]; then
-              echo "Run failed: expected $expected_count agentic results, found ${#agentic_results[@]}." >&2
+            if [ "${#agentic_results[@]}" -eq 0 ]; then
+              echo "Run failed: no agentic result files found." >&2
               exit 1
             fi
             # Existence is not enough: the agentic aggregation step writes the
@@ -316,7 +336,44 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bmk_agentic_${{ env.RESULT_FILENAME }}
-          path: ${{ env.RESULT_FILENAME }}_conc*.json
+          path: |
+            ${{ env.RESULT_FILENAME }}.json
+            ${{ env.RESULT_FILENAME }}_conc*.json
+
+      - name: Print agentic cache summary
+        if: ${{ !inputs.eval-only && inputs.scenario-type == 'agentic-coding' }}
+        run: |
+          shopt -s nullglob
+          result_files=("${RESULT_FILENAME}.json" "${RESULT_FILENAME}"_conc*.json)
+          for result_file in "${result_files[@]}"; do
+            [ -f "$result_file" ] || continue
+            echo "=== Agentic cache summary: $result_file ==="
+            python3 - "$result_file" <<'PY'
+            import json
+            import sys
+
+            path = sys.argv[1]
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+
+            keys = [
+                "conc",
+                "num_requests_successful",
+                "num_requests_total",
+                "input_tput_tps",
+                "output_tput_tps",
+                "total_tput_tps",
+                "server_gpu_cache_hit_rate",
+                "server_external_cache_hit_rate",
+                "gpu_kv_cache_usage_pct",
+                "cpu_kv_cache_usage_pct",
+                "theoretical_cache_hit_rate",
+            ]
+            for key in keys:
+                print(f"{key}: {data.get(key)}")
+            PY
+          done
+          shopt -u nullglob
 
       - name: Upload agentic raw results
         if: ${{ always() && inputs.scenario-type == 'agentic-coding' }}

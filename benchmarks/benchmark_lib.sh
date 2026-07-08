@@ -877,7 +877,7 @@ run_lm_eval() {
     local openai_server_base="http://0.0.0.0:${port}"
     local openai_chat_base="${openai_server_base}/v1/chat/completions"
     export OPENAI_API_KEY=${OPENAI_API_KEY:-EMPTY}
-    MODEL_NAME=${MODEL_NAME:-$MODEL} # Prefer MODEL_NAME, else MODEL
+    local model_name="${SERVED_MODEL_NAME:-${MODEL_NAME:-$MODEL}}"
 
     # Cap output tokens: must fit within context window (leave room for input),
     # and avoid excessive KV cache reservation per request on TRT.
@@ -894,7 +894,7 @@ run_lm_eval() {
       --tasks "${tasks_dir}" \
       --output_path "${results_dir}" \
       --log_samples \
-      --model_args "model=${MODEL_NAME},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
+      --model_args "model=${model_name},base_url=${openai_chat_base},api_key=${OPENAI_API_KEY},eos_string=</s>,max_retries=5,num_concurrent=${concurrent_requests},timeout=1800,tokenized_requests=False,max_length=${eval_context_len}" \
       --gen_kwargs "max_tokens=${max_output_tokens},temperature=${temperature},top_p=${top_p}"
     local eval_exit=$?
     set +x
@@ -1418,7 +1418,7 @@ build_replay_cmd() {
     REPLAY_CMD+=" --endpoint /v1/chat/completions"
     REPLAY_CMD+=" --endpoint-type chat"
     REPLAY_CMD+=" --streaming"
-    REPLAY_CMD+=" --model $MODEL"
+    REPLAY_CMD+=" --model ${AIPERF_MODEL:-$MODEL}"
     REPLAY_CMD+=" --concurrency $CONC"
     REPLAY_CMD+=" --benchmark-duration $duration"
     REPLAY_CMD+=" --random-seed 42"
