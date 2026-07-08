@@ -214,19 +214,21 @@ else
     export AITER_LOG_LEVEL=ERROR
 
     export SGLANG_MORI_DISPATCH_DTYPE=auto
-    export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
-    export MORI_COMBINE_DTYPE_DECODE=fp8
+    # export MORI_COMBINE_DTYPE_PREFILL=fp8_direct_cast
+    # export MORI_COMBINE_DTYPE_DECODE=fp8
+    export MORI_COMBINE_DTYPE_PREFILL=""
+    export MORI_COMBINE_DTYPE_DECODE=""
     export SGLANG_MORI_QP_PER_TRANSFER=4
     export SGLANG_MORI_NUM_WORKERS=4
     # Keep these as overridable defaults (not hard assignments), otherwise
     # later tuning blocks cannot raise them for high-concurrency runs.
-    export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
+    # export MORI_IO_SQ_BACKOFF_TIMEOUT_US="${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-500000}"
 
-    export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
-    export MORI_IO_QP_MAX_CQE=32768
-    export MORI_IO_QP_MAX_SGE=1
+    # export MORI_IO_QP_MAX_SEND_WR="${MORI_IO_QP_MAX_SEND_WR:-16384}"
+    # export MORI_IO_QP_MAX_CQE=32768
+    # export MORI_IO_QP_MAX_SGE=1
 
-    export MORI_IO_TC_DISABLE=0
+    # export MORI_IO_TC_DISABLE=0
 
     export SGLANG_DISAGGREGATION_BOOTSTRAP_TIMEOUT=3600
     export SGLANG_DISAGGREGATION_WAITING_TIMEOUT=3600
@@ -287,6 +289,16 @@ else
     if [[ "$MODEL_NAME" == "DeepSeek-V4-Pro" ]]; then
         # MoRI RDMA send-queue depth for DSv4 (overrides the global default above).
         export MORI_IO_QP_MAX_SEND_WR=32767
+        # Unified radix tree: cache impl with per-component (full-attn / SWA)
+        # management for hybrid-attention models. Set unconditionally (not gated on
+        # hicache) so all SGLang runs use it.
+        export SGLANG_ENABLE_UNIFIED_RADIX_TREE=1
+        # Proactively free out-of-window SWA KV slots during chunked prefill.
+        # Without it, in-flight requests pin SWA KV for their whole context, keeping
+        # the SWA pool under constant eviction pressure; under LRU the trailing
+        # window of cached sessions gets flushed, making prefix-cache hits bimodal
+        # and collapsing the effective hit rate on multi-turn agentic workloads.
+        export SGLANG_OPT_UNIFIED_CACHE_FREE_OUT_OF_WINDOW_SLOTS=1
 
         # MoRI dispatch/combine dtypes: auto for both roles (not the fp8 split default)
         export SGLANG_MORI_DISPATCH_DTYPE=auto
