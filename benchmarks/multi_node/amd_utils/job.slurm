@@ -408,7 +408,19 @@ DOCKER_ENV_COMMON=(
     -e RUNNER_TYPE=\$RUNNER_TYPE
     -e RESULT_FILENAME=\$RESULT_FILENAME
     -e SPEC_DECODING=\$SPEC_DECODING
+    # DISAGG was never forwarded into the container at all (not even under a
+    # different name), so process_agentic_result.py's env_bool("DISAGG") always
+    # defaulted to false in the result JSON regardless of the actual topology.
+    -e DISAGG=\${DISAGG:-false}
     -e PREFILL_TP_SIZE=\$PREFILL_TP_SIZE
+    # PREFILL_TP/DECODE_TP/*_NUM_WORKERS (below, undecorated -- distinct from the
+    # *_SIZE vars server_sglang.sh uses for launch args) are what
+    # process_agentic_result.py's _gpu_shape() reads for multinode runs. Without
+    # these the container never sees them (only *_SIZE was passed), so agentic
+    # result JSONs silently recorded tp=0 / prefill_tp=0 / prefill_num_workers=0
+    # for every multinode run.
+    -e PREFILL_TP=\$PREFILL_TP
+    -e PREFILL_NUM_WORKERS=\$PREFILL_NUM_WORKERS
     -e PREFILL_ENABLE_EP=\$PREFILL_ENABLE_EP
     -e PREFILL_ENABLE_DP=\$PREFILL_ENABLE_DP
     -e PREFILL_CONTEXT_LENGTH=\${PREFILL_CONTEXT_LENGTH:-}
@@ -427,6 +439,8 @@ DOCKER_ENV_COMMON=(
     -e MORI_IO_SQ_BACKOFF_TIMEOUT_US=\${MORI_IO_SQ_BACKOFF_TIMEOUT_US:-}
     -e MORI_IO_QP_MAX_SEND_WR=\${MORI_IO_QP_MAX_SEND_WR:-}
     -e DECODE_TP_SIZE=\$DECODE_TP_SIZE
+    -e DECODE_TP=\$DECODE_TP
+    -e DECODE_NUM_WORKERS=\$DECODE_NUM_WORKERS
     -e DECODE_ENABLE_EP=\$DECODE_ENABLE_EP
     -e DECODE_ENABLE_DP=\$DECODE_ENABLE_DP
     -e DECODE_MTP_SIZE=\$DECODE_MTP_SIZE

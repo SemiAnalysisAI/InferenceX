@@ -60,7 +60,13 @@ class SglangBackend(ServerMetricsBackend):
         total_cached = sum(cached_by_source.values()) if cached_by_source else None
 
         flat["server_gpu_cache_hit_rate"] = rate(device_hits, prompt_total)
+        # "host" cache_source == the HiCache/offload-tier hit rate. Mirror the
+        # vLLM adapter, which reports its analogous external-transfer rate
+        # under both server_cpu_cache_hit_rate and server_external_cache_hit_rate
+        # -- previously only server_cpu_cache_hit_rate was set here, so
+        # external_cache_hit_rate stayed permanently null for every sglang run.
         flat["server_cpu_cache_hit_rate"] = rate(host_hits, prompt_total)
+        flat["server_external_cache_hit_rate"] = flat["server_cpu_cache_hit_rate"]
         flat["server_overall_cache_hit_rate"] = rate(total_cached, prompt_total)
 
         if flat["server_overall_cache_hit_rate"] is None:
@@ -100,6 +106,19 @@ class SglangBackend(ServerMetricsBackend):
             combine="max",
         )
         flat["cpu_kv_cache_usage_pct"] = rate(host_used, host_total)
+
+        # kv_offload_bytes_*/time_*/bandwidth_* (flat + nested["kv_offload"])
+        # are intentionally left at their None defaults for sglang: unlike
+        # vLLM's KV connector, which exports true byte-level counters
+        # (vllm:kv_offload_bytes_gpu_to_cpu, ...time_gpu_to_cpu), SGLang's
+        # HiCache only exposes token counts/durations (load_back_tokens,
+        # eviction_duration_seconds, ...), and eviction_duration_seconds isn't
+        # HiCache-exclusive (it also fires for plain GPU-cache eviction with
+        # no host tier at all). There's no reliable tokens->bytes conversion
+        # available here, so fabricating these fields would risk misleading
+        # data; see sglang:kv_transfer_total_mb/kv_transfer_speed_gb_s for a
+        # superficially similar but unrelated metric (prefill<->decode
+        # disaggregation transfer, not GPU<->CPU offload).
 
         prefill_compute = sum_stat(
             metrics,
