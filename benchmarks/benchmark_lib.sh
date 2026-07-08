@@ -1164,21 +1164,30 @@ META
 _install_swebench_agent_deps() {
     python3 -m pip install -q --no-cache-dir --break-system-packages \
         'mini-swe-agent==2.4.5' 'swe-rex[modal]==1.4.0' || true
-    _patch_swebench_agent_cleanup || \
-        echo "WARN: sandbox-cleanup patch failed; leaked sandboxes will bill until runtime_timeout" >&2
+    _patch_swebench_agent || \
+        echo "WARN: mini-swe-agent/swe-rex patches failed; sandboxes will leak until runtime_timeout and budget-exhausted instances will submit nothing" >&2
 }
 
-# Both pinned deps leak Modal sandboxes (observed: batches dying at 59m59s =
-# the 1h runtime_timeout, billing the full hour for ~7-min instances):
+# Patch the installed pinned deps (idempotent, anchor-checked; pinned
+# versions keep the anchors stable):
+#
+# Sandbox lifecycle (observed: batches dying at 59m59s = the 1h
+# runtime_timeout, billing the full hour for ~7-min instances):
 #   - mini-swe-agent 2.4.5: process_instance() never calls env.stop() -- not
 #     even on success -- so EVERY sandbox lives until runtime_timeout.
 #   - swe-rex 1.4.0: ModalDeployment.stop() has its poll check inverted
 #     (terminates only already-exited sandboxes), and start() leaks the
 #     sandbox when the runtime never comes alive (startup timeout).
-# Patch the installed files (idempotent, anchor-checked; pinned versions keep
-# the anchors stable). Best-effort: the post-generation sweep still bounds the
-# damage if an anchor ever drifts.
-_patch_swebench_agent_cleanup() {
+#   Best-effort: the post-generation sweep still bounds the damage if an
+#   anchor ever drifts.
+#
+# Budget-exhaustion fallback (6/50 instances in the first 50-run burned all
+# steps and submitted NOTHING -- forensics showed at least one had a correct
+# fix sitting in the tree): when an instance ends abnormally with a live
+# sandbox, submit `git diff` of the tree as the patch. Empty scores zero
+# anyway, so this is strictly >=; guarded to require rc 0 and a real diff so
+# an error message can never be submitted as a patch.
+_patch_swebench_agent() {
     python3 - <<'PYPATCH'
 import sys
 
@@ -1210,6 +1219,21 @@ mini_ok = patch(mini_sb.__file__, [
     (
         "    agent = None\n    exit_status = None",
         "    agent = None\n    env = None  # inferencex sandbox cleanup\n    exit_status = None",
+    ),
+    (
+        '        exit_status, result = type(e).__name__, ""\n'
+        '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}',
+        '        exit_status, result = type(e).__name__, ""\n'
+        '        extra_info = {"traceback": traceback.format_exc(), "exception_str": str(e)}\n'
+        "        if env is not None:  # budget-exhaustion fallback: submit the tree's diff\n"
+        "            try:\n"
+        '                _fb = env.execute("git diff")\n'
+        '                _fb_out = (_fb.get("output") or "").strip()\n'
+        '                if _fb.get("returncode") == 0 and _fb_out.startswith("diff --git"):\n'
+        "                    result = _fb_out + \"\\n\"\n"
+        '                    extra_info["submission_source"] = f"fallback_after_{exit_status}"\n'
+        "            except Exception:\n"
+        "                pass",
     ),
     (
         "    finally:\n        if agent is not None:",

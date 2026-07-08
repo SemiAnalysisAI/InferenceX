@@ -246,8 +246,12 @@ def find_report(work_dir: Path, model_name: str, run_id: str) -> Path:
 def parse_resolved(report: dict) -> tuple[int, int]:
     """Return (resolved, total) from a harness report, tolerant to key variants.
 
-    Denominator is the full instance count (leaderboard convention:
-    resolved / total), not just completed instances.
+    Denominator is the SUBMITTED instance count, not the full dataset size:
+    with EVAL_LIMIT the harness reports total_instances = len(dataset) (e.g.
+    300) even when only N predictions were submitted, which deflated a 32/50
+    run to 0.107 and nearly tripped the 0.10 threshold gate. Submitted counts
+    empty/errored attempts against the score; instances never attempted don't.
+    (For full-split runs submitted == total, matching leaderboard convention.)
     """
     resolved: Optional[int] = None
     for key in ("resolved_instances", "resolved", "num_resolved"):
@@ -258,13 +262,13 @@ def parse_resolved(report: dict) -> tuple[int, int]:
         resolved = len(report["resolved_ids"])
 
     total: Optional[int] = None
-    for key in ("total_instances", "completed_instances", "submitted_instances"):
+    for key in ("submitted_instances", "completed_instances", "total_instances"):
         val = report.get(key)
         if isinstance(val, int) and val > 0:
             total = val
             break
     if total is None:
-        for key in ("completed_ids", "submitted_ids"):
+        for key in ("submitted_ids", "completed_ids"):
             if isinstance(report.get(key), list) and report[key]:
                 total = len(report[key])
                 break
@@ -401,7 +405,13 @@ def main(argv: Optional[list[str]] = None) -> int:
             predictions_path, args.dataset_name, run_id,
             out_dir, args.max_workers, args.namespace, modal=args.modal,
         )
-        report = json.loads(find_report(out_dir, args.model_name, run_id).read_text())
+        report_path = find_report(out_dir, args.model_name, run_id)
+        report = json.loads(report_path.read_text())
+        # Stage under a stable name the workflow's upload globs match; the
+        # native name embeds the model string and is easy to miss.
+        staged = out_dir / f"swebench_report_{args.task_name}.json"
+        if report_path.resolve() != staged.resolve():
+            staged.write_text(json.dumps(report, indent=2))
 
     resolved, total = parse_resolved(report)
 

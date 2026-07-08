@@ -113,6 +113,16 @@ def test_parse_resolved_classic_counts():
     ) == (80, 196)
 
 
+def test_parse_resolved_prefers_submitted_over_dataset_total():
+    # With EVAL_LIMIT the harness reports total_instances = len(dataset) even
+    # when only N predictions were submitted; the denominator must be the
+    # submitted count or a 32/50 run deflates to 32/300 and trips the
+    # threshold gate.
+    assert sbs.parse_resolved(
+        {"resolved_instances": 32, "submitted_instances": 50, "total_instances": 300}
+    ) == (32, 50)
+
+
 def test_parse_resolved_from_id_lists():
     report = {"resolved_ids": ["a", "b", "c"], "completed_ids": ["a", "b", "c", "d"]}
     # no total_instances -> falls back to completed_ids length
