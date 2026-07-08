@@ -46,6 +46,7 @@ import os
 import types
 
 import contracts
+import ep_provenance
 import ep_precision
 import identity
 import workload as workload_contract
@@ -1313,7 +1314,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # Setup may materialize deferred provenance such as DeepEP V2 JIT CUBINs.
     # Resolve it after conditioning but before correctness or timed measurements.
     backend.capture_deferred_provenance()
-    provenance_issues = contracts.backend_provenance_issues(
+    provenance_issues = ep_provenance.backend_provenance_issues(
         backend.name, backend.backend_provenance
     )
     if provenance_issues:
@@ -1658,7 +1659,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     # Adapters never self-label official; status is derived from these gates.
     prov = backend.backend_provenance
     allocation_stratum_sha256 = getattr(args, "allocation_stratum_sha256", None)
-    provenance_complete = contracts.provenance_complete(
+    provenance_complete = ep_provenance.provenance_complete(
         prov,
         backend.name,
         getattr(args, "git_run", None),
@@ -1667,7 +1668,7 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
         image_verified=getattr(args, "image_digest_verified", False),
         squash_sha256=getattr(args, "squash_sha256", None),
     )
-    resource_profile = contracts.project_resource_profile(prov)
+    resource_profile = ep_provenance.project_resource_profile(prov)
     resource_conformance = resource_profile["conformance_class"]
     # record the canonical workload identity consumed (one trace per T -> set of ids/checksums).
     if canonical and loaded_workload_ids:

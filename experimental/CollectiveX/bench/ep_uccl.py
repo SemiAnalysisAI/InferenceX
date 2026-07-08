@@ -12,6 +12,7 @@ import sys
 import torch
 import torch.distributed as dist
 import contracts
+import ep_provenance
 import ep_precision
 from ep_deepep_family import DeepEPFamilyBackend
 
@@ -67,7 +68,7 @@ def _python_dependency_evidence(package: str, version: str) -> dict[str, str]:
             and path.is_file()
         ):
             runtime_files.append((entry.as_posix(), path))
-    return contracts.content_manifest_evidence(
+    return ep_provenance.content_manifest_evidence(
         role=f"{package}-distribution",
         name=f"{package}-{version}",
         files=runtime_files,
@@ -118,7 +119,7 @@ def _loaded_libcudart_evidence(
         raise RuntimeError(
             "expected exactly one mapped libcudart from the pinned CUDA runtime"
         )
-    return contracts.content_manifest_evidence(
+    return ep_provenance.content_manifest_evidence(
         role="cuda-runtime",
         name=f"nvidia-cuda-runtime-cu12-{version}",
         files=[("libcudart.so", loaded.pop())],
@@ -142,12 +143,12 @@ def _uccl_build_evidence(
         if path.is_file()
     ]
     return [
-        contracts.content_manifest_evidence(
+        ep_provenance.content_manifest_evidence(
             role="uccl-distribution",
             name=f"uccl-{version}",
             files=distribution_files,
         ),
-        contracts.content_manifest_evidence(
+        ep_provenance.content_manifest_evidence(
             role="uccl-wrapper",
             name="uccl-deepep-wrapper",
             files=wrapper_files,

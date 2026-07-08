@@ -39,6 +39,7 @@ import types
 import torch
 import torch.distributed as dist
 import contracts
+import ep_provenance
 import ep_precision
 from ep_backend import EPBackend
 
@@ -66,7 +67,7 @@ def _hybrid_build_evidence() -> list[dict[str, str]]:
         path = getattr(module, "__file__", None)
         if not path:
             raise RuntimeError(f"{module_name} has no loaded extension path")
-        records.append(contracts.content_manifest_evidence(
+        records.append(ep_provenance.content_manifest_evidence(
             role=role,
             name=module_name,
             files=[(os.path.basename(path), path)],

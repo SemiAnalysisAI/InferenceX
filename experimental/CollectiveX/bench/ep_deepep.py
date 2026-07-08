@@ -9,6 +9,7 @@ import sys
 import torch
 import torch.distributed as dist
 import contracts
+import ep_provenance
 import ep_precision
 from ep_deepep_family import DeepEPFamilyBackend
 
@@ -36,7 +37,7 @@ def _mnnvl_buffer_configuration() -> tuple[dict[str, bool], str]:
         raise RuntimeError("CX_ALLOW_MNNVL must be unset, 0, or 1")
     requested = requested_value == "1"
     if not requested:
-        return contracts.resolve_deepep_mnnvl(
+        return ep_provenance.resolve_deepep_mnnvl(
             requested=False, signature_parameters=(),
             deepep_commit=os.environ.get("DEEPEP_COMMIT"),
         )
@@ -45,7 +46,7 @@ def _mnnvl_buffer_configuration() -> tuple[dict[str, bool], str]:
     except (TypeError, ValueError) as exc:
         raise RuntimeError("cannot inspect DeepEP Buffer MNNVL API") from exc
     try:
-        return contracts.resolve_deepep_mnnvl(
+        return ep_provenance.resolve_deepep_mnnvl(
             requested=True, signature_parameters=parameters,
             deepep_commit=os.environ.get("DEEPEP_COMMIT"),
         )

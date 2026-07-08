@@ -20,6 +20,7 @@ import types
 import torch
 import torch.distributed as dist
 import contracts
+import ep_provenance
 import ep_precision
 from ep_backend import EPBackend
 
@@ -86,7 +87,7 @@ class NCCLBackend(EPBackend):
                     f"(present={bool(hcas)}, exact={hcas.startswith('=')}, "
                     f"entries={len(entries)}, shaped={shaped})"
                 )
-        self.kernel_generation = contracts.collective_kernel_generation(_library)
+        self.kernel_generation = ep_provenance.collective_kernel_generation(_library)
         self.backend_provenance = {
             "backend": f"{_library}-all2all",
             "backend_lineage": _library,
