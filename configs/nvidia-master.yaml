@@ -7480,7 +7480,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[0]"
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_lowlat_0.yaml"
         decode:
           num-worker: 5
           tp: 8
@@ -7494,7 +7494,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_lowlat[1]"
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_lowlat_1.yaml"
         decode:
           num-worker: 6
           tp: 8
@@ -7508,7 +7508,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_maxtpt[0]"
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_maxtpt_0.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -7522,7 +7522,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 4
           dp-attn: true
           additional-settings:
-          - "CONFIG_FILE=recipes/b200-fp4/1k1k.yaml:zip_override_mtp_maxtpt[1]"
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/1k1k/disagg/mtp/1k1k_mtp_maxtpt_1.yaml"
         decode:
           num-worker: 2
           tp: 8
@@ -7533,7 +7533,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
       search-space:
       # 1p5d low-latency (decode-heavy).
       - spec-decoding: "mtp"
-        conc-list: [4, 8, 16, 32, 64]
+        conc-list: [4, 8, 16, 32]
         prefill:
           num-worker: 1
           tp: 4
@@ -7548,7 +7548,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: false
       # 1p3d low-latency.
       - spec-decoding: "mtp"
-        conc-list: [32, 64, 128, 256, 512]
+        conc-list: [32, 64]
         prefill:
           num-worker: 1
           tp: 4
@@ -7563,7 +7563,7 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: false
       # 1p1d low-latency.
       - spec-decoding: "mtp"
-        conc-list: [32, 64, 128, 256, 512]
+        conc-list: [32]
         prefill:
           num-worker: 1
           tp: 4
@@ -7577,6 +7577,21 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           ep: 1
           dp-attn: false
       # MTP2 high-throughput (DEP4 prefill / DEP8 decode), one Pareto point each.
+      # 1p1d throughput.
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp2_throughput_1p1d.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
       # 2p1d throughput.
       - spec-decoding: "mtp"
         conc-list: [768]
@@ -7607,6 +7622,21 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           tp: 8
           ep: 8
           dp-attn: true
+      # 4p1d throughput.
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp2_throughput_4p1d.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
       # 5p1d throughput.
       - spec-decoding: "mtp"
         conc-list: [2048]
@@ -7617,6 +7647,21 @@ dsr1-fp4-b200-dynamo-sglang-mtp:
           dp-attn: true
           additional-settings:
           - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp2_throughput_5p1d.yaml"
+        decode:
+          num-worker: 1
+          tp: 8
+          ep: 8
+          dp-attn: true
+      # 4p1d high-throughput (dedicated c2048 tune).
+      - spec-decoding: "mtp"
+        conc-list: [2048]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/dsr1/b200-fp4/8k1k/disagg/mtp/8k1k_mtp_4p1d_c2048.yaml"
         decode:
           num-worker: 1
           tp: 8
@@ -9092,6 +9137,290 @@ dsv4-fp4-gb200-dynamo-sglang-mtp:
           tp: 16
           ep: 16
           dp-attn: true
+
+glm5-fp4-gb200-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.13.post1-cu130
+  model: nvidia/GLM-5.1-NVFP4
+  model-prefix: glm5.1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=16 decode, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p1d dep16. 5 nodes (1P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [109]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 2p1d dep16. 6 nodes (2P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [398]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 4p1d dep16. 8 nodes (4P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [853]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[2]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 8p1d dep16. 12 nodes (8P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [2132]
+        prefill:
+          num-worker: 8
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[3]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p4d tp4. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [104]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[0]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p4d tp4, conc16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [82]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[1]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [87]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[2]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [47]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[3]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [74]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[4]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4, conc1. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [26]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[5]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP decode, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1742]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep16, conc1024. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1150]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep16, conc256. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [302]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[2]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep32. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1263]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[3]"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p16d tp4, conc1. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [26]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[0]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4, conc16. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [343]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[1]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d tp4, conc4. 17 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [94]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[2]"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 dsv4-fp4-b300-dynamo-vllm:
   image: vllm/vllm-openai:v0.23.0
   model: deepseek-ai/DeepSeek-V4-Pro
@@ -10683,6 +11012,272 @@ qwen3.5-fp8-h100-sglang-mtp:
       search-space:
       - { tp: 8, ep: 8, conc-start: 4, conc-end: 32, spec-decoding: mtp }
 
+glm5-fp4-gb200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.11-cu130
+  model: nvidia/GLM-5.1-NVFP4
+  model-prefix: glm5.1
+  runner: gb200
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 4p1d wide-EP. 12 nodes.
+      - conc-list: [989]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 4p1d wide-EP, mrr512. 12 nodes.
+      - conc-list: [686]
+        prefill:
+          num-worker: 4
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 6p1d wide-EP. 14 nodes.
+      - conc-list: [1497]
+        prefill:
+          num-worker: 6
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 10p1d wide-EP. 18 nodes.
+      - conc-list: [2674]
+        prefill:
+          num-worker: 10
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_maxtpt_3.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p4d. 5 nodes.
+      - conc-list: [133]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p6d. 7 nodes.
+      - conc-list: [146]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p6d, mrr16. 7 nodes.
+      - conc-list: [103]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 6
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d. 9 nodes.
+      - conc-list: [130]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d. 17 nodes.
+      - conc-list: [113]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d, mrr1 (single-stream). 17 nodes.
+      - conc-list: [23]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/8k1k/disagg/stp/8k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP TP=32 decode) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 2p1d wide-EP. 10 nodes.
+      - conc-list: [3160]
+        prefill:
+          num-worker: 2
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_maxtpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d wide-EP dep16. 5 nodes.
+      - conc-list: [2115]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d wide-EP dep32, mrr1024. 9 nodes.
+      - conc-list: [1156]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 1p1d wide-EP dep32, mrr512. 9 nodes.
+      - conc-list: [556]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 1p16d, mrr1 (single-stream). 17 nodes.
+      - conc-list: [23]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d, mrr16. 17 nodes.
+      - conc-list: [290]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p16d, mrr4. 17 nodes.
+      - conc-list: [73]
+        prefill:
+          num-worker: 1
+          tp: 4
+          ep: 4
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp4/1k1k/disagg/stp/1k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 16
+          tp: 4
+          ep: 1
+          dp-attn: false
+
 qwen3.5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:nightly-dev-cu13-20260624-b2c8f7a2
   model: nvidia/Qwen3.5-397B-A17B-NVFP4
@@ -10765,7 +11360,7 @@ qwen3.5-fp4-gb300-dynamo-sglang:
 
 glm5-fp4-gb300-dynamo-sglang:
   image: lmsysorg/sglang:v0.5.11-cu130
-  model: nvidia/GLM-5-NVFP4
+  model: nvidia/GLM-5.1-NVFP4
   model-prefix: glm5
   runner: gb300-nv
   precision: fp4
@@ -10969,6 +11564,498 @@ glm5-fp4-gb300-dynamo-sglang:
           - "CONFIG_FILE=recipes/gb300-fp4/glm5.yaml:zip_override_1k1k_lowlat[1]"
         decode:
           num-worker: 17
+          tp: 4
+          ep: 1
+          dp-attn: false
+
+glm5-fp8-gb200-dynamo-sglang:
+  image: lmsysorg/sglang:v0.5.12
+  model: zai-org/GLM-5.1-FP8
+  model-prefix: glm5.1
+  runner: gb200
+  precision: fp8
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP decode) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 3p1d wide-EP (dep32, mrr256). 14 nodes.
+      - conc-list: [519]
+        prefill:
+          num-worker: 3
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 4p1d wide-EP (dep16). 12 nodes.
+      - conc-list: [1484]
+        prefill:
+          num-worker: 4
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 5p1d wide-EP (dep32). 18 nodes.
+      - conc-list: [1688]
+        prefill:
+          num-worker: 5
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 7p1d wide-EP (dep16). 18 nodes.
+      - conc-list: [2699]
+        prefill:
+          num-worker: 7
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_hightpt_3.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=8 decode workers) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p8d, mrr1 (single-stream). 18 nodes.
+      - conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p8d, mrr16. 18 nodes.
+      - conc-list: [90]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p8d, mrr4. 18 nodes.
+      - conc-list: [9]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/8k1k/disagg/stp/8k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 8
+          tp: 8
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP decode) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 2p1d wide-EP (dep32, mrr1024). 12 nodes.
+      - conc-list: [2161]
+        prefill:
+          num-worker: 2
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_hightpt_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+    # ---------- 1k1k low-latency ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d wide-EP (dep16). 6 nodes.
+      - conc-list: [1955]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_0.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d wide-EP (dep16, mrr1024). 6 nodes.
+      - conc-list: [1170]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_1.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d wide-EP (dep16, mrr256). 6 nodes.
+      - conc-list: [298]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_2.yaml"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p6d per-node TP=8, mrr1 (single-stream). 14 nodes.
+      - conc-list: [8]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_3.yaml"
+        decode:
+          num-worker: 6
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p6d per-node TP=8, mrr16. 14 nodes.
+      - conc-list: [72]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_4.yaml"
+        decode:
+          num-worker: 6
+          tp: 8
+          ep: 1
+          dp-attn: false
+      # 1p6d per-node TP=8, mrr4. 14 nodes.
+      - conc-list: [20]
+        prefill:
+          num-worker: 1
+          tp: 8
+          ep: 1
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/sglang/glm5/gb200-fp8/1k1k/disagg/stp/1k1k_stp_lowlat_5.yaml"
+        decode:
+          num-worker: 6
+          tp: 8
+          ep: 1
+          dp-attn: false
+
+glm5-fp4-gb300-dynamo-sglang-mtp:
+  image: lmsysorg/sglang:v0.5.13.post1-cu130
+  model: nvidia/GLM-5.1-NVFP4
+  model-prefix: glm5.1
+  runner: gb300-nv
+  precision: fp4
+  framework: dynamo-sglang
+  multinode: true
+  disagg: true
+  scenarios:
+    fixed-seq-len:
+    # ---------- 8k1k high-throughput (wide-EP TP=16 decode, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 4p1d dep16. 6 nodes (2P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [364]
+        prefill:
+          num-worker: 4
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 8p1d dep16. 8 nodes (4P + 4D).
+      - spec-decoding: "mtp"
+        conc-list: [512]
+        prefill:
+          num-worker: 8
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 8k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 8192
+      osl: 1024
+      search-space:
+      # 1p2d tp4. 3 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [66]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[0]"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p2d tp4, conc16. 3 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [41]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[1]"
+        decode:
+          num-worker: 2
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p4d tp4. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [55]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[2]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p4d tp4, conc4. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [23]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[3]"
+        decode:
+          num-worker: 4
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [44]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[4]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc1. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [12]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_8k1k_lowlat[5]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+    # ---------- 1k1k high-throughput (wide-EP decode, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p1d dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [773]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[0]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep16, conc512. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [578]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[1]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 1p1d dep32. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [677]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[2]"
+        decode:
+          num-worker: 1
+          tp: 32
+          ep: 32
+          dp-attn: true
+      # 2p1d dep16. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [2048]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[3]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+      # 2p1d dep16, conc1024. 5 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [1362]
+        prefill:
+          num-worker: 2
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_hightpt[4]"
+        decode:
+          num-worker: 1
+          tp: 16
+          ep: 16
+          dp-attn: true
+    # ---------- 1k1k low-latency (per-node TP=4 decode workers, MTP) ----------
+    - isl: 1024
+      osl: 1024
+      search-space:
+      # 1p8d tp4, conc1. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [13]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[0]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc16. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [162]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[1]"
+        decode:
+          num-worker: 8
+          tp: 4
+          ep: 1
+          dp-attn: false
+      # 1p8d tp4, conc4. 9 nodes.
+      - spec-decoding: "mtp"
+        conc-list: [44]
+        prefill:
+          num-worker: 1
+          tp: 2
+          ep: 2
+          dp-attn: true
+          additional-settings:
+          - "CONFIG_FILE=recipes/gb300-fp4/glm5-mtp.yaml:zip_override_mtp_1k1k_lowlat[2]"
+        decode:
+          num-worker: 8
           tp: 4
           ep: 1
           dp-attn: false
