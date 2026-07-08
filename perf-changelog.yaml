@@ -4627,3 +4627,10 @@
     - "Add GLM-5.1 NVFP4 GB200 disaggregated dynamo-sglang MTP config covering 8k1k and 1k1k, high-throughput and low-latency topologies"
     - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
   pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2115
+
+- config-keys:
+    - glm5-fp4-gb300-dynamo-sglang-mtp
+  description:
+    - "Add GLM-5.1 NVFP4 GB300 disaggregated dynamo-sglang MTP config covering 8k1k and 1k1k, high-throughput and low-latency topologies"
+    - "Image: lmsysorg/sglang:v0.5.13.post1-cu130"
+  pr-link: https://github.com/SemiAnalysisAI/InferenceX/pull/2114
