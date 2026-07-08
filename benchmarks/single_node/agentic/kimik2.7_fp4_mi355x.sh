@@ -61,6 +61,14 @@ export VLLM_ROCM_QUICK_REDUCE_QUANTIZATION=INT4
 SERVER_LOG="$RESULT_DIR/server.log"
 mkdir -p "$RESULT_DIR"
 
+# The container runs with --container-remap-root, so MIOpen's default
+# $HOME/.config/miopen lockfile dir (/root/...) is not reliably writable and
+# lockfile creation fails, crashing the vision-tower conv during profile_run
+# with miopenStatusUnknownError. Point MIOpen's user DB + cache at RESULT_DIR.
+export MIOPEN_USER_DB_PATH="$RESULT_DIR/.miopen"
+export MIOPEN_CUSTOM_CACHE_DIR="$RESULT_DIR/.miopen"
+mkdir -p "$MIOPEN_USER_DB_PATH"
+
 OFFLOAD_ARGS=()
 PREFIX_CACHE_ARGS=()
 
