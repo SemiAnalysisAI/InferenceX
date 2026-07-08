@@ -246,6 +246,16 @@ jobs:
           with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
               stream.write(payload)
           PY
+          # The merged config has been written to $operator_config; hand the
+          # launcher the path only. The raw secret *_CONTENT vars must be cleared
+          # here, otherwise cx_load_operator_config sees them still set and tries
+          # to re-create operator-config.json (O_EXCL) that this step already
+          # wrote, failing with "cannot create ephemeral runner configuration".
+          unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
+          unset COLLECTIVEX_H100_CONFIG_CONTENT COLLECTIVEX_B300_CONFIG_CONTENT
+          unset COLLECTIVEX_B200_CONFIG_CONTENT
+          unset COLLECTIVEX_MI300_CONFIG_CONTENT COLLECTIVEX_MI355_CONFIG_CONTENT
+          unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
           export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
           export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
           : > "$CX_JOB_ROOT/cleanup-unsafe"
