@@ -7,7 +7,9 @@
 #
 # At runtime the recipe swaps the image's FlashInfer for the pinned nightly
 # release and applies the CuTeDSL split-K gemm patch on top, mirroring vLLM
-# commits 82a00090a (nightly install) and 0a16bea6b (patch).
+# commits 82a00090a (nightly install) and 0a16bea6b (patch). It also patches
+# the installed vLLM with the VLLM_MINIMAX_M3_BF16_ROUTER_GEMM knob (bf16
+# router gate weights, cuBLAS bf16 x bf16 -> fp32 logits) and enables it.
 
 source "$(dirname "$0")/../../benchmark_lib.sh"
 
@@ -55,6 +57,17 @@ SITE_PACKAGES=$(dirname "$(python3 -c "import importlib.util; print(importlib.ut
     || { echo "Could not locate the installed flashinfer package" >&2; exit 1; }
 patch -p1 -d "${SITE_PACKAGES}" < "$FLASHINFER_PATCH" \
     || { echo "FlashInfer CuTeDSL split-K gemm patch failed" >&2; exit 1; }
+
+# Patch the installed vLLM with the VLLM_MINIMAX_M3_BF16_ROUTER_GEMM knob
+# (bf16 router gate weights + cuBLAS bf16 x bf16 -> fp32 router logits).
+# vLLM is not reinstalled above, so guard against re-applying on reruns.
+VLLM_ROUTER_PATCH="$(dirname "$0")/patches/minimax-m3-bf16-router-gemm.patch"
+if patch -R -p1 -s -f --dry-run -d "${SITE_PACKAGES}" < "$VLLM_ROUTER_PATCH" >/dev/null 2>&1; then
+    echo "[minimax-m3-bf16-router-gemm] already applied"
+else
+    patch -p1 -d "${SITE_PACKAGES}" < "$VLLM_ROUTER_PATCH" \
+        || { echo "MiniMax M3 bf16 router gemm patch failed" >&2; exit 1; }
+fi
 # -----------------------------------------------------------------------------
 
 if [[ -n "${MODEL_PATH:-}" ]]; then
@@ -76,6 +89,7 @@ SERVER_LOG=/workspace/server.log
 
 export VLLM_ENGINE_READY_TIMEOUT_S=3600
 export VLLM_FLOAT32_MATMUL_PRECISION=high
+export VLLM_MINIMAX_M3_BF16_ROUTER_GEMM=1
 export VLLM_FLASHINFER_ALLREDUCE_BACKEND=trtllm
 
 if [ "${DP_ATTENTION}" = "true" ]; then
