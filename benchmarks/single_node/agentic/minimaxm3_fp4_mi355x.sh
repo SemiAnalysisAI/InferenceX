@@ -2,7 +2,7 @@
 set -euo pipefail
 set -x
 
-# Agentic trace replay benchmark for Kimi-K2.5 FP4 on MI355X using vLLM.
+# Agentic trace replay benchmark for Minimax-M3 FP4 on MI355X using vLLM.
 #
 # Required env vars:
 #   MODEL, TP, CONC, OFFLOADING, TOTAL_CPU_DRAM_GB, RESULT_DIR
