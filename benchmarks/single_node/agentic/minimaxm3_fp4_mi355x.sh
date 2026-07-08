@@ -119,6 +119,7 @@ wait_for_lmcache_ready() {
 }
 
 case "$KV_OFFLOAD_BACKEND" in
+    none);;
     native)
         unset VLLM_USE_SIMPLE_KV_OFFLOAD
         # MI355X nodes have ~2.7 TiB of host DRAM available for offload;
