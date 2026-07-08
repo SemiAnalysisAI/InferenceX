@@ -23,10 +23,6 @@ DEEPEP_V2_SKU_CAPABILITIES = {
     "mi355x": {"schedulable": False, "basis": "nvidia-only"},
 }
 
-# B200's publication pods cannot map NIC doorbells into GPU address space.
-# DeepEP V1 scale-out therefore uses NVSHMEM's CPU-proxied IBGDA handler.
-DEEPEP_V1_IBGDA_NIC_HANDLERS = {"b200-dgxc": "cpu"}
-
 
 def _topologies(
     product: str, *, gpus_per_node: int, scale_up_domain: int, scale_up_transport: str

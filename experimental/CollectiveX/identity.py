@@ -55,7 +55,6 @@ V1_NORMAL_CASE_PROFILE = {
 
 V1_LOW_LATENCY_CASE_PROFILE = {
     **V1_NORMAL_CASE_PROFILE,
-    "component_order_contract": "qualification-hash-rotated-components-v1",
     "combine_semantics": "gate-weighted",
     "contract": "expert-packed-weighted-combine-v1",
     "correctness_scope": "expert-assignment-and-weighted-combine",

@@ -760,10 +760,6 @@ cx_require_record_safe() {
   done
 }
 
-cx_require_single_node() {
-  [ "${CX_NODES:-1}" = "1" ] || cx_die "$1 supports one-node EP only"
-}
-
 cx_nccl_hca_device_name() {
   local selector="${1#=}"
   printf '%s' "${selector%%:*}"
@@ -1484,35 +1480,6 @@ cx_default_image_digest() {
     "$CX_IMAGE_AMD_MORI") printf '%s' "$CX_IMAGE_AMD_MORI_DIGEST" ;;
     "$CX_IMAGE_AMD_MORI_MI325") printf '%s' "$CX_IMAGE_AMD_MORI_MI325_DIGEST" ;;
   esac
-}
-
-# Canonical workflow runs must not inherit benchmark controls from a persistent
-# self-hosted runner service. Manual/SSH diagnostics retain their explicit
-# overrides by leaving COLLECTIVEX_CANONICAL_GHA unset.
-cx_gha_workspace_stage_root() {
-  local workspace="${GITHUB_WORKSPACE:-}"
-  python3 - "$workspace" <<'PY'
-import os
-import stat
-import sys
-
-workspace = sys.argv[1]
-try:
-    if (
-        not os.path.isabs(workspace)
-        or os.path.realpath(workspace) != workspace
-        or not os.path.isdir(workspace)
-    ):
-        raise OSError
-    metadata = os.stat(workspace, follow_symlinks=False)
-    # GitHub runner workspaces are runner-owned but commonly writable by the
-    # trusted runner-service group. Keep the child mode 0700 and reject world write.
-    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) & stat.S_IWOTH:
-        raise OSError
-except OSError:
-    raise SystemExit(1)
-print(workspace, end="")
-PY
 }
 
 # Create a per-UID cache under validated cluster-local storage. Only the fixed
