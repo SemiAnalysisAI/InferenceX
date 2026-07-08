@@ -73,9 +73,6 @@ cx_fail_stage() {
       diagnostic="missing-runtime"
     elif grep -aEqi 'too many requests|rate.?limit' "$log_path"; then
       diagnostic="registry-rate-limit"
-    elif [ -n "$probe_stage" ] \
-        && grep -aEqi 'timed out|operation timeout|wait timeout after|watchdog.*timeout|timeout: sending signal' "$log_path"; then
-      diagnostic="${probe_stage}-timeout"
     elif grep -aEqi 'ncclRemoteError|remote process exited|connection closed by peer' "$log_path"; then
       diagnostic="collective-remote"
     elif grep -aEqi 'ncclSystemError|unhandled system error' "$log_path"; then
@@ -153,8 +150,6 @@ cx_fail_stage() {
       diagnostic="python-subprocess"
     elif grep -aEqi 'Traceback \(most recent call last\)' "$log_path"; then
       diagnostic="python-exception"
-    elif [ -n "$probe_stage" ]; then
-      diagnostic="${probe_stage}-failed"
     elif grep -aEqi 'SHARD done: [0-9]+/[0-9]+ case\(s\) failed|WARN: .* run failed rc=|completed with invalid semantic evidence' "$log_path"; then
       diagnostic="benchmark-case-failure"
     elif [ -s "$log_path" ]; then

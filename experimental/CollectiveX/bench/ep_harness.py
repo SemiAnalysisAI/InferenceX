@@ -1493,12 +1493,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "rank": rank,
             },
         )
-        precision_rank_evidence = [None] * world_size
-        dist.all_gather_object(
-            precision_rank_evidence,
-            {"pre": g["precision_pre"], "post": g["precision_post"]},
-        )
-        precision_evidence = aggregate_precision_evidence(precision_rank_evidence)
         # Canonical LOGICAL payload byte contracts (from the routing trace, NOT backend recv
         # tensors): token-rank = one copy per unique (token,dest-rank); token-expert = one copy
         # per routed (token,expert). routed_copies = token-rank copies; gt*topk = token-expert.
@@ -1564,7 +1558,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
                 "contract": case_profile["oracle_contract"],
                 "max_relative_error": max_rel,
                 "passed": point_ok,
-                "precision": precision_evidence,
                 "rank_evidence": rank_evidence,
                 "scope": case_profile["correctness_scope"],
             },
@@ -1635,12 +1628,10 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
 
     # Adapters never self-label official; status is derived from these gates.
     prov = backend.backend_provenance
-    allocation_stratum_sha256 = getattr(args, "allocation_stratum_sha256", None)
     provenance_complete = ep_provenance.provenance_complete(
         prov,
         backend.name,
         getattr(args, "git_run", None),
-        allocation_stratum_sha256=allocation_stratum_sha256,
         image_digest=getattr(args, "image_digest", None),
         image_verified=getattr(args, "image_digest_verified", False),
         squash_sha256=getattr(args, "squash_sha256", None),
