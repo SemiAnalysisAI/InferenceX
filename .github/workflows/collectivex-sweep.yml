@@ -1,10 +1,4 @@
-# CollectiveX Sweep — one structured run instead of thousands of dispatches.
-#
-# Shape: setup resolves the suites into a shard matrix, then one GPU cell runs per
-# shard, executes the benchmark, and uploads the emitted neutral artifacts as-is.
-# This repo only schedules, executes, and uploads — it does not validate, promote,
-# rank, recommend, or decide what a frontend displays. This file is registered
-# on the default branch, so its collectivex branch revision can be dispatched with --ref.
+# Generate a shard matrix, run each shard on its GPU pool, and upload raw results.
 name: CollectiveX Sweep
 permissions:
   actions: read
@@ -49,7 +43,6 @@ jobs:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v5.0.0
         with: { clean: true, persist-credentials: false }
       - name: Install matrix dependencies
-        # PyYAML is used by sweep_matrix.py to read the suites config.
         run: python3 -m pip install --quiet PyYAML==6.0.2
       - id: gen
         working-directory: experimental/CollectiveX
@@ -70,13 +63,27 @@ jobs:
           [ -n "$INPUT_EXCLUDE_SKUS" ] && args+=(--exclude-skus "$INPUT_EXCLUDE_SKUS")
           [ -n "$INPUT_EP_SIZES" ] && args+=(--ep-sizes "$INPUT_EP_SIZES")
           python3 sweep_matrix.py "${args[@]}" --out matrix_full.json >/dev/null
-          SLIM=$(python3 -c "import json;m=json.load(open('matrix_full.json'));print(json.dumps({'include':[{k:v for k,v in x.items() if k!='case_ids'} for x in m['include']]}))")
-          {
-            echo "matrix=$SLIM"
-            echo "n=$(python3 -c "import json;print(len(json.load(open('matrix_full.json'))['include']))")"
-            echo "max_parallel=$(python3 -c "import json;m=json.load(open('matrix_full.json'));w=max(x['execution_weight'] for x in m['include']);print(max(1,min(10,4096//w)))")"
-          } >> "$GITHUB_OUTPUT"
-          python3 -c "import json;m=json.load(open('matrix_full.json'));print('execution-cells:',len(m['include']))"
+          python3 - "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          matrix = json.loads(pathlib.Path("matrix_full.json").read_text())
+          cells = matrix["include"]
+          slim = {"include": [
+              {key: value for key, value in cell.items() if key != "case_ids"}
+              for cell in cells
+          ]}
+          max_parallel = (
+              max(1, min(10, 4096 // max(cell["execution_weight"] for cell in cells)))
+              if cells else 1
+          )
+          with open(sys.argv[1], "a", encoding="utf-8") as output:
+              output.write(f"matrix={json.dumps(slim, separators=(',', ':'))}\n")
+              output.write(f"n={len(cells)}\n")
+              output.write(f"max_parallel={max_parallel}\n")
+          print(f"execution-cells: {len(cells)}")
+          PY
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: cxsweep-matrix-${{ github.run_id }}
@@ -115,21 +122,6 @@ jobs:
       CX_SOURCE_ROOT: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/source', github.run_id, github.run_attempt, matrix.id) }}
       HOME: ${{ matrix.launcher == 'mi-amds' && format('/tmp/inferencex-collectivex-parent-{0}-{1}-{2}/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) || format('/tmp/inferencex-collectivex-{0}-{1}-{2}/home', github.run_id, github.run_attempt, matrix.id) }}
     steps:
-      - name: Provision host Python
-        # The self-hosted runners ship a bare python3 with no system pip. The host
-        # launcher and summarize.py invoke bare `python3` and need PyYAML/numpy, so
-        # build a venv and put it on PATH for every later step. venv + ensurepip are
-        # available even where system pip is not.
-        env:
-          HOME: ${{ runner.temp }}
-        run: |
-          set -euo pipefail
-          venv="$RUNNER_TEMP/cx-hostpy"
-          python3 -m venv --clear "$venv"
-          "$venv/bin/python3" -m pip install --quiet --no-cache-dir --upgrade pip
-          "$venv/bin/python3" -m pip install --quiet --no-cache-dir \
-            PyYAML==6.0.2 "numpy>=1.26,<3"
-          echo "$venv/bin" >> "$GITHUB_PATH"
       - name: Prepare isolated source
         id: source
         env:
@@ -254,11 +246,6 @@ jobs:
           with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
               stream.write(payload)
           PY
-          unset COLLECTIVEX_OPERATOR_CONFIG_CONTENT COLLECTIVEX_NETWORK_CONFIG_CONTENT
-          unset COLLECTIVEX_H100_CONFIG_CONTENT COLLECTIVEX_B300_CONFIG_CONTENT
-          unset COLLECTIVEX_B200_CONFIG_CONTENT
-          unset COLLECTIVEX_MI300_CONFIG_CONTENT COLLECTIVEX_MI355_CONFIG_CONTENT
-          unset COLLECTIVEX_OPERATOR_CONFIG_REQUIRED
           export COLLECTIVEX_OPERATOR_CONFIG="$operator_config"
           export COLLECTIVEX_OPERATOR_CONFIG_EPHEMERAL=1
           : > "$CX_JOB_ROOT/cleanup-unsafe"
@@ -266,43 +253,18 @@ jobs:
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           bash "experimental/CollectiveX/launchers/launch_${{ matrix.launcher }}.sh"
-      - name: Reconcile allocation cleanup
+      - name: Summarize and stage shard results
+        id: stage_artifact
         if: ${{ always() && steps.source.outputs.prepared == 'true' }}
         run: |
           set -euo pipefail
           cd "$CX_SOURCE_ROOT" 2>/dev/null \
             || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           source experimental/CollectiveX/runtime/common.sh
-          cx_reconcile_recorded_allocation "$CX_JOB_ROOT"
-      - name: Classify private scheduler failure
-        if: ${{ always() && steps.source.outputs.prepared == 'true' && steps.sweep_shard.outcome == 'failure' }}
-        run: |
-          set -euo pipefail
-          cd "$CX_SOURCE_ROOT" 2>/dev/null \
-            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
-          source experimental/CollectiveX/runtime/common.sh
-          cx_report_private_scheduler_failure
-      - name: Confirm allocation cleanup
-        id: allocation_cleanup
-        if: ${{ always() && steps.source.outputs.prepared == 'true' }}
-        run: |
-          set -euo pipefail
-          [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
-            || { echo "CollectiveX allocation cleanup was not confirmed" >&2; exit 1; }
-      - name: Shard summary
-        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
-        run: |
-          cd "$CX_SOURCE_ROOT" 2>/dev/null \
-            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          cx_reconcile_recorded_allocation "$CX_JOB_ROOT" \
+            || { echo "CollectiveX allocation cleanup could not be reconciled; results may still be changing" >&2; exit 1; }
           python3 experimental/CollectiveX/summarize.py \
             --results-dir experimental/CollectiveX/results --markdown >> "$GITHUB_STEP_SUMMARY" || true
-      - name: Stage shard artifact
-        id: stage_artifact
-        if: ${{ always() && steps.allocation_cleanup.outcome == 'success' }}
-        run: |
-          set -euo pipefail
-          cd "$CX_SOURCE_ROOT" 2>/dev/null \
-            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
           shopt -s nullglob
           results=(experimental/CollectiveX/results/*.json)
           if [ "${#results[@]}" -eq 0 ]; then
@@ -334,23 +296,12 @@ jobs:
             || { echo "CollectiveX cleanup root is invalid" >&2; exit 1; }
           [ "$CX_SOURCE_ROOT" = "$CX_JOB_ROOT/source" ] \
             || { echo "CollectiveX cleanup source is invalid" >&2; exit 1; }
+          cd "$CX_SOURCE_ROOT" 2>/dev/null \
+            || { echo "CollectiveX source is unavailable" >&2; exit 1; }
+          source experimental/CollectiveX/runtime/common.sh
+          cx_reconcile_recorded_allocation "$CX_JOB_ROOT" \
+            || { echo "CollectiveX allocation cleanup could not be reconciled; retaining isolated files" >&2; exit 1; }
           [ -f "$CX_JOB_ROOT/cleanup-safe" ] && [ ! -e "$CX_JOB_ROOT/cleanup-unsafe" ] \
             || { echo "CollectiveX allocation cleanup was not confirmed; retaining isolated files" >&2; exit 1; }
-          if [ '${{ steps.sweep_shard.outcome }}' = success ] \
-              && [ '${{ steps.allocation_cleanup.outcome }}' = success ] \
-              && [ '${{ steps.stage_artifact.outcome }}' = success ] \
-              && [ '${{ steps.upload_artifact.outcome }}' = success ] \
-              && [ -f "$CX_SOURCE_ROOT/experimental/CollectiveX/runtime/common.sh" ]; then
-            # shellcheck source=/dev/null
-            if source "$CX_SOURCE_ROOT/experimental/CollectiveX/runtime/common.sh" \
-                >/dev/null 2>&1; then
-              cx_cleanup_private_logs 0
-            fi
-          fi
-          if [ '${{ steps.sweep_shard.outcome }}' != success ] \
-              && [ "$CX_JOB_PARENT" != /tmp ]; then
-            rm -f -- "$CX_JOB_PARENT"
-            exit 0
-          fi
           rm -rf -- "$CX_JOB_ROOT"
           [ "$CX_JOB_PARENT" = /tmp ] || rm -f -- "$CX_JOB_PARENT"
