@@ -110,14 +110,7 @@ def _load_tokenizer(tokenizer_id, tokenizer_mode, trust_remote_code):
     client tokenization stays aligned with the sglang server (#1381, #1428).
     """
     if tokenizer_mode == "deepseek_v4":
-        # backend_request_func.get_tokenizer falls through to stock HF
-        # AutoTokenizer for non-mistral modes, which crashes on transformers
-        # wheels that don't register deepseek_v4 (e.g. the one bundled in
-        # vllm/vllm-openai:v0.20.0-ubuntu2404). Use vLLM's tokenizer wrapper
-        # directly - it ships DSV4-aware code, same path the engine uses
-        # when serving with --tokenizer-mode deepseek_v4.
-        # New path (vllm.tokenizers) since v0.21/v0.23; old path
-        # (vllm.transformers_utils.tokenizer) for v0.20.
+        # HF AutoTokenizer may not recognize deepseek_v4; use vLLM's loader.
         try:
             from vllm.tokenizers import get_tokenizer as _vllm_get_tokenizer
         except ImportError:
