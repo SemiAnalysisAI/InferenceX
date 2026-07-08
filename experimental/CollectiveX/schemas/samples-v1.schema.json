@@ -4,7 +4,7 @@
   "title": "CollectiveX exact private samples v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["allocation_id","attempt_id","case_id","format","points","qualification_index","sampling","schema_version","series_id"],
+  "required": ["allocation_id","attempt_id","case_id","format","points","sampling","schema_version","series_id"],
   "properties": {
       "allocation_id": {"$ref": "#/$defs/allocationId"},
       "attempt_id": {"$ref": "#/$defs/attemptId"},
@@ -36,7 +36,6 @@
                             }
                   }
           },
-      "qualification_index": {"type":"integer","minimum":1,"maximum":3},
       "sampling": {
             "type": "object",
             "additionalProperties": false,

@@ -204,211 +204,7 @@ BACKEND_TOPOLOGY_CELL_OVERRIDES: dict[tuple[str, str, int], str] = {
     ),
 }
 
-PRECISION_DISPOSITIONS = {
-    "supported", "unsupported", "not-applicable", "provisional",
-}
-_NVIDIA_SKUS = (
-    "h100-dgxc", "h200-dgxc", "b200-dgxc", "b300", "gb200", "gb300",
-)
-_DEEPEP_V2_PRECISION_SKUS = (
-    "h200-dgxc", "b200-dgxc", "b300", "gb200", "gb300",
-)
-_HOPPER_UCCL_SKUS = ("h100-dgxc", "h200-dgxc")
 
-
-def _precision_rule(
-    *,
-    backend: str,
-    skus: tuple[str, ...],
-    ep_degrees: tuple[int, ...],
-    mode: str,
-    basis: str,
-    disposition: str = "provisional",
-) -> dict[str, Any]:
-    return {
-        "backend": backend,
-        "skus": skus,
-        "ep_degrees": ep_degrees,
-        "mode": mode,
-        "disposition": disposition,
-        "basis": basis,
-    }
-
-
-_NORMAL_E4M3FN_PROFILE = "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16"
-_NORMAL_E4M3FNUZ_PROFILE = "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16"
-_LL_FP8_PROFILE = "d-fp8-e4m3fn-b128-f32-fused.c-bf16"
-_MORI_E4M3FN_DIRECT_PROFILE = "d-bf16.c-fp8-e4m3fn-direct-cast-noscale"
-_MORI_E4M3FN_BOTH_PROFILE = (
-    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale"
-)
-_MORI_E4M3FNUZ_DIRECT_PROFILE = "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale"
-_MORI_E4M3FNUZ_BOTH_PROFILE = (
-    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
-)
-
-# These are native-path candidates, not executable claims. A cell must be changed
-# from provisional to supported or unsupported after its pinned runtime probe.
-PRECISION_CAPABILITIES: dict[str, tuple[dict[str, Any], ...]] = {
-    _NORMAL_E4M3FN_PROFILE: (
-        _precision_rule(
-            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16), mode="normal",
-            basis="deepep-v1-normal-prequantized-e4m3fn-block128-f32-scale",
-        ),
-        _precision_rule(
-            backend="deepep-v2", skus=_DEEPEP_V2_PRECISION_SKUS,
-            ep_degrees=(8, 16), mode="normal",
-            basis="deepep-v2-normal-prequantized-e4m3fn-block128-f32-scale",
-        ),
-        _precision_rule(
-            backend="deepep-hybrid", skus=_NVIDIA_SKUS,
-            ep_degrees=(8, 16), mode="normal",
-            basis="deepep-hybrid-normal-uint8-e4m3fn-block128-f32-scale",
-        ),
-        _precision_rule(
-            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16), mode="normal",
-            basis="uccl-deepep-api-normal-prequantized-e4m3fn-block128-f32-scale",
-        ),
-        _precision_rule(
-            backend="mori", skus=("mi355x",), ep_degrees=(8, 16), mode="normal",
-            basis="mori-gfx950-normal-prequantized-ocp-e4m3fn-block128-f32-scale",
-        ),
-    ),
-    _LL_FP8_PROFILE: (
-        _precision_rule(
-            backend="deepep", skus=_NVIDIA_SKUS, ep_degrees=(8, 16),
-            mode="low-latency",
-            basis="deepep-v1-low-latency-fused-e4m3fn-block128-f32-scale",
-        ),
-        _precision_rule(
-            backend="uccl", skus=_HOPPER_UCCL_SKUS, ep_degrees=(8, 16),
-            mode="low-latency",
-            basis="uccl-deepep-api-low-latency-fused-e4m3fn-block128-f32-scale",
-        ),
-    ),
-    _MORI_E4M3FN_DIRECT_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
-            basis="mori-gfx950-ep8-intranode-e4m3fn-direct-cast-combine",
-        ),
-    ),
-    _MORI_E4M3FN_BOTH_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi355x",), ep_degrees=(8,), mode="normal",
-            basis="mori-gfx950-ep8-intranode-e4m3fn-dispatch-and-direct-cast-combine",
-        ),
-    ),
-    _NORMAL_E4M3FNUZ_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi300x",), ep_degrees=(8, 16), mode="normal",
-            basis="mori-gfx942-normal-prequantized-ocp-e4m3fnuz-block128-f32-scale",
-        ),
-    ),
-    _MORI_E4M3FNUZ_DIRECT_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi300x",), ep_degrees=(8,), mode="normal",
-            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-direct-cast-combine",
-        ),
-    ),
-    _MORI_E4M3FNUZ_BOTH_PROFILE: (
-        _precision_rule(
-            backend="mori", skus=("mi300x",), ep_degrees=(8,), mode="normal",
-            basis="mori-gfx942-ep8-asyncll-e4m3fnuz-dispatch-and-direct-cast-combine",
-        ),
-    ),
-}
-
-PRECISION_CELL_OVERRIDES: dict[tuple[str, str, str, int, str], dict[str, str]] = {}
-
-# B300 EP16 runs over the RoCE GPU-fabric: nccl-ep and the DeepEP Hybrid control
-# path (native DOCA transport) execute there. DeepEP V1/V2 cannot -- their internode
-# path is NVSHMEM-IBGDA, which needs GDRCopy /dev/gdrdrv, and that char device is
-# unprovisioned on B300 hosts (module loaded, no device node; gdr_open returns NULL).
-# V1/V2 are additionally walled at the topology layer above; these precision-cell
-# overrides keep their declared native targets consistent (base_ok gates them anyway).
-for _profile, _backend, _mode in (
-    (_NORMAL_E4M3FN_PROFILE, "deepep", "normal"),
-    (_NORMAL_E4M3FN_PROFILE, "deepep-v2", "normal"),
-    (_LL_FP8_PROFILE, "deepep", "low-latency"),
-):
-    PRECISION_CELL_OVERRIDES[(_profile, _backend, "b300", 16, _mode)] = {
-        "disposition": "unsupported",
-        "basis": "deepep-ibgda-gdrcopy-unavailable-b300",
-    }
-# DeepEP Hybrid's control path passes on B300 EP16, but its native FP8 precision
-# path is not yet validated on this fabric; keep the precision cell unsupported.
-PRECISION_CELL_OVERRIDES[(_NORMAL_E4M3FN_PROFILE, "deepep-hybrid", "b300", 16, "normal")] = {
-    "disposition": "unsupported",
-    "basis": "hybrid-native-precision-unvalidated-b300-ep16",
-}
-
-_VALIDATED_NATIVE_PROBE_CELLS = (
-    # run, SKU, EP, backend, mode, profile, disposition, result
-    ("28737315879", "b200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28737315879", "b200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28737315879", "b200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
-    ("28737315879", "b200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28745114766", "b200-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-timeout"),
-    ("28747290376", "b200-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "unsupported", "native-operation-timeout"),
-    ("28746910633", "b200-dgxc", 16, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "construction-consensus-accelerator-memory"),
-    ("28748550531", "b200-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28737422303", "h200-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28737422303", "h200-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28737422303", "h200-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
-    ("28737422303", "h200-dgxc", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
-    *(("28737422303", "h200-dgxc", 8, "uccl", mode, profile, "supported", "native-probe-passed")
-      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"))),
-    *(("28737422902", "gb200", ep, "deepep", mode, profile, "supported", "native-probe-passed")
-      for ep in (8, 16)
-      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"))),
-    *(("28737422902", "gb200", ep, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed")
-      for ep in (8, 16)),
-    *(("28737422902", "gb200", ep, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed")
-      for ep in (8, 16)),
-    ("28738113606", "h100-dgxc", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28738113606", "h100-dgxc", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28738113606", "h100-dgxc", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
-    ("28738113606", "h100-dgxc", 8, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28738113606", "h100-dgxc", 8, "uccl", "low-latency", _LL_FP8_PROFILE, "unsupported", "native-operation-timeout"),
-    ("28745208954", "h100-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
-    ("28745423523", "h100-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28745423523", "h100-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    *(("28738445591", "gb300", ep, "deepep", mode, profile, "supported", "native-probe-passed")
-      for ep in (8, 16)
-      for profile, mode in ((_NORMAL_E4M3FN_PROFILE, "normal"), (_LL_FP8_PROFILE, "low-latency"))),
-    *(("28738445591", "gb300", ep, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed")
-      for ep in (8, 16)),
-    *(("28738445591", "gb300", ep, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed")
-      for ep in (8, 16)),
-    ("28738738793", "b300", 8, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28738738793", "b300", 8, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
-    ("28739555164", "h200-dgxc", 16, "deepep", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28739555164", "h200-dgxc", 16, "deepep-hybrid", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "native-operation-failed"),
-    ("28740154697", "h200-dgxc", 16, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28740074613", "b300", 8, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28740154697", "h200-dgxc", 16, "uccl", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-    ("28740154697", "h200-dgxc", 16, "uccl", "normal", _NORMAL_E4M3FN_PROFILE, "supported", "native-probe-passed"),
-    ("28750823474", "mi355x", 8, "mori", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28750825814", "mi355x", 16, "mori", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28740154697", "h200-dgxc", 16, "deepep-v2", "normal", _NORMAL_E4M3FN_PROFILE, "unsupported", "backend-setup-timeout"),
-    ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28740533382", "mi355x", 8, "mori", "normal", _MORI_E4M3FN_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28782309414", "mi300x", 8, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "supported", "native-probe-passed"),
-    ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_DIRECT_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28782309414", "mi300x", 8, "mori", "normal", _MORI_E4M3FNUZ_BOTH_PROFILE, "unsupported", "backend-construction-failed"),
-    ("28788599713", "mi300x", 16, "mori", "normal", _NORMAL_E4M3FNUZ_PROFILE, "unsupported", "distributed-init-timeout"),
-    ("28743235213", "b300", 8, "deepep", "low-latency", _LL_FP8_PROFILE, "supported", "native-probe-passed"),
-)
-PRECISION_CELL_OVERRIDES.update({
-    (profile, backend, sku, ep, mode): {
-        "basis": f"native-probe-v1-run-{run_id}-{result}",
-        "disposition": disposition,
-    }
-    for run_id, sku, ep, backend, mode, profile, disposition, result
-    in _VALIDATED_NATIVE_PROBE_CELLS
-})
 def runtime_identity_issues(
     sku: str, *, vendor: str, arch: str, machine: str, device_name: str,
     device_count: int, world_size: int,
@@ -451,7 +247,7 @@ def _resolve_base(
     eplb: bool = False,
     mode: str = "normal",
 ) -> tuple[bool, str]:
-    """Resolve the existing BF16 capability without a precision candidate."""
+    """Resolve the base BF16 capability for one SKU/backend/EP cell."""
     platform, implementation = PLATFORMS.get(sku), BACKENDS.get(backend)
     if platform is None:
         return False, f"unknown GHA runner label {sku!r}"
@@ -497,66 +293,6 @@ def _resolve_base(
     return True, "ok"
 
 
-def precision_targets(
-    profile_names: tuple[str, ...] | list[str] | None = None,
-) -> list[dict[str, Any]]:
-    """Expand exact native precision candidates into deterministic target cells."""
-    names = list(PRECISION_CAPABILITIES) if profile_names is None else list(profile_names)
-    unknown = sorted(set(names) - set(PRECISION_CAPABILITIES))
-    if unknown:
-        raise ValueError(f"unknown precision capability profiles {unknown}")
-    targets: list[dict[str, Any]] = []
-    seen: set[tuple[str, str, str, int, str]] = set()
-    for profile_name in names:
-        for rule in PRECISION_CAPABILITIES[profile_name]:
-            for sku in rule["skus"]:
-                for ep in rule["ep_degrees"]:
-                    key = (profile_name, rule["backend"], sku, ep, rule["mode"])
-                    if key in seen:
-                        raise RuntimeError(f"duplicate precision capability target {key}")
-                    seen.add(key)
-                    override = PRECISION_CELL_OVERRIDES.get(key, rule)
-                    targets.append({
-                        "precision_profile": profile_name,
-                        "backend": rule["backend"],
-                        "sku": sku,
-                        "ep": ep,
-                        "mode": rule["mode"],
-                        "disposition": override["disposition"],
-                        "basis": override["basis"],
-                    })
-    return targets
-
-
-def provisional_precision_targets(
-    profile_names: tuple[str, ...] | list[str] | None = None,
-) -> list[dict[str, Any]]:
-    """Return probe-gated targets that must be eliminated before scheduling."""
-    return [
-        target for target in precision_targets(profile_names)
-        if target["disposition"] == "provisional"
-    ]
-
-
-def precision_target_declared(
-    precision_profile: str,
-    *,
-    sku: str,
-    backend: str,
-    ep: int,
-    mode: str,
-) -> bool:
-    """Return whether a profile has an exact native candidate for this cell."""
-    return any(
-        target["precision_profile"] == precision_profile
-        and target["sku"] == sku
-        and target["backend"] == backend
-        and target["ep"] == ep
-        and target["mode"] == mode
-        for target in precision_targets([precision_profile])
-    )
-
-
 def resolve_disposition(
     sku: str,
     backend: str,
@@ -566,9 +302,8 @@ def resolve_disposition(
     routing: str = "uniform",
     eplb: bool = False,
     mode: str = "normal",
-    precision_profile: str | None = None,
 ) -> tuple[str, str]:
-    """Resolve a baseline or exact precision cell to its capability disposition."""
+    """Resolve a BF16 cell to its capability disposition."""
     base_ok, base_detail = _resolve_base(
         sku,
         backend,
@@ -578,46 +313,7 @@ def resolve_disposition(
         eplb=eplb,
         mode=mode,
     )
-    if precision_profile is None or precision_profile == identity.V1_CONTROL_PRECISION_PROFILE:
-        return ("supported", "ok") if base_ok else ("unsupported", base_detail)
-    if precision_profile not in identity.V1_PRECISION_PROFILES:
-        return "unsupported", f"unknown precision profile {precision_profile!r}"
-    profile = identity.V1_PRECISION_PROFILES[precision_profile]
-    if mode not in profile["modes"]:
-        return (
-            "not-applicable",
-            f"precision profile {precision_profile} is not defined for {mode} mode",
-        )
-    if ep is None:
-        platform = PLATFORMS.get(sku)
-        if platform is None:
-            return "unsupported", base_detail
-        if nodes is None:
-            ep = platform["ep_degrees"][0]
-        else:
-            matches = [
-                degree for degree, topology in platform["topologies"].items()
-                if topology["nodes"] == nodes
-            ]
-            if len(matches) != 1:
-                return "unsupported", base_detail
-            ep = matches[0]
-    matches = [
-        target for target in precision_targets([precision_profile])
-        if target["sku"] == sku
-        and target["backend"] == backend
-        and target["ep"] == ep
-        and target["mode"] == mode
-    ]
-    if not matches:
-        return (
-            "not-applicable",
-            f"{precision_profile} has no native {backend} target on {sku} EP{ep}",
-        )
-    if not base_ok:
-        return "unsupported", base_detail
-    target = matches[0]
-    return target["disposition"], target["basis"]
+    return ("supported", "ok") if base_ok else ("unsupported", base_detail)
 
 
 def resolve(
@@ -629,7 +325,6 @@ def resolve(
     routing: str = "uniform",
     eplb: bool = False,
     mode: str = "normal",
-    precision_profile: str | None = None,
 ) -> tuple[bool, str]:
     """Return whether one fixed-v1 case can run on a public GHA runner label."""
     disposition, detail = resolve_disposition(
@@ -640,54 +335,5 @@ def resolve(
         routing=routing,
         eplb=eplb,
         mode=mode,
-        precision_profile=precision_profile,
     )
     return disposition == "supported", detail
-
-
-def _validate_precision_capabilities() -> None:
-    expected = set(identity.V1_PRECISION_PROFILES) - {
-        identity.V1_CONTROL_PRECISION_PROFILE
-    }
-    if set(PRECISION_CAPABILITIES) != expected:
-        raise RuntimeError("precision capability profiles differ from the identity registry")
-    empty = sorted(
-        profile for profile, rules in PRECISION_CAPABILITIES.items() if not rules
-    )
-    if empty:
-        raise RuntimeError(f"precision profiles have no native targets: {empty}")
-    declared_keys = {
-        (
-            target["precision_profile"], target["backend"], target["sku"],
-            target["ep"], target["mode"],
-        )
-        for target in precision_targets()
-    }
-    if not set(PRECISION_CELL_OVERRIDES) <= declared_keys:
-        raise RuntimeError("precision cell override has no declared native target")
-    for target in precision_targets():
-        if target["backend"] not in BACKENDS or target["sku"] not in PLATFORMS:
-            raise RuntimeError(f"unknown precision target: {target}")
-        if target["ep"] not in PLATFORMS[target["sku"]]["ep_degrees"]:
-            raise RuntimeError(f"invalid precision target EP degree: {target}")
-        if target["disposition"] not in PRECISION_DISPOSITIONS - {"not-applicable"}:
-            raise RuntimeError(f"invalid declared precision disposition: {target}")
-        if target["mode"] not in identity.V1_PRECISION_PROFILES[
-            target["precision_profile"]
-        ]["modes"]:
-            raise RuntimeError(f"precision target mode differs from its profile: {target}")
-        topology = topology_for(target["sku"], target["ep"])
-        base_ok, base_detail = _resolve_base(
-            target["sku"],
-            target["backend"],
-            ep=target["ep"],
-            nodes=topology["nodes"] if topology is not None else None,
-            mode=target["mode"],
-        )
-        if target["disposition"] in {"supported", "provisional"} and not base_ok:
-            raise RuntimeError(
-                f"precision target exceeds its backend capability: {target}: {base_detail}"
-            )
-
-
-_validate_precision_capabilities()

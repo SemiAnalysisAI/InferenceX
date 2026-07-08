@@ -46,6 +46,7 @@ import os
 import types
 
 import contracts
+import ep_precision
 import identity
 import workload as workload_contract
 
@@ -91,7 +92,7 @@ ORACLE_ATOL = 2e-2
 
 
 def _oracle_tolerances(backend) -> tuple[float, float]:
-    tolerance = identity.combine_oracle_tolerances(backend.communication_precision)
+    tolerance = ep_precision.combine_oracle_tolerances(backend.communication_precision)
     return tolerance["atol"], tolerance["rtol"]
 
 EPLB_REDUNDANT_EXPERTS = 32
@@ -165,7 +166,7 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument(
         "--precision-profile",
         default="",
-        choices=("", *identity.V1_PRECISION_PROFILES),
+        choices=("", *ep_precision.V1_PRECISION_PROFILES),
         help="exact native dispatch/combine communication profile; blank selects BF16 control",
     )
     ap.add_argument("--phase", default="decode", choices=["decode", "prefill"],
@@ -184,7 +185,6 @@ def add_common_args(ap: argparse.ArgumentParser) -> None:
     ap.add_argument("--case-id", default="")
     ap.add_argument("--suite", default="")
     ap.add_argument("--workload-name", default="")
-    ap.add_argument("--required-publication", default="")
     ap.add_argument("--seed", type=int, default=ROUTING_SEED)
     ap.add_argument(
         "--qualification-index",
@@ -687,7 +687,7 @@ def _precision_evidence(backend, problem, view, combined, expected_combined) -> 
             )
         return evidence
     profile_id = getattr(backend, "precision_profile_id", None)
-    if profile_id != identity.V1_CONTROL_PRECISION_PROFILE:
+    if profile_id != ep_precision.V1_CONTROL_PRECISION_PROFILE:
         failed = _baseline_precision_axis()
         failed.update({"encoded_payload_valid": False, "dequantized_semantics": False,
                        "passed": False})
@@ -1213,14 +1213,11 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
     """Drive the source-tokens-per-rank sweep for one fully-specified line."""
     mode = getattr(args, "mode", "normal")
     requested_precision = getattr(args, "precision_profile", "") or None
-    resolved_precision_id = requested_precision or identity.V1_CONTROL_PRECISION_PROFILE
+    resolved_precision_id = requested_precision or ep_precision.V1_CONTROL_PRECISION_PROFILE
     try:
-        profile_case = {"mode": mode}
-        if requested_precision is not None:
-            profile_case["precision_profile"] = requested_precision
-        case_profile = identity.profile_for_case(profile_case)
-        communication_precision = identity.precision_profile(resolved_precision_id)
-    except identity.IdentityError as exc:
+        case_profile = identity.profile_for_case({"mode": mode})
+        communication_precision = ep_precision.precision_profile(resolved_precision_id)
+    except (identity.IdentityError, ep_precision.PrecisionError) as exc:
         if rank == 0:
             print(f"ERROR: {exc}")
         return 2
@@ -1737,7 +1734,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "mode": mode,
             "nodes": nodes,
             "phase": args.phase,
-            "required_publication": args.required_publication or "diagnostic",
             "routing": args.routing,
             "samples_per_point": TIMED_SAMPLES_PER_POINT,
             "scale_up_domain": args.scale_up_domain or (args.gpus_per_node or ep_size),
@@ -1939,7 +1935,6 @@ def run_sweep(args, backend, torch, dist, device, rank: int, world_size: int) ->
             "ep_size": ep_size,
             "mode": mode,
             "phase": args.phase,
-            "required_publication": args.required_publication or "diagnostic",
             "resource_mode": "fixed-profile",
             "runner": args.runner,
             "shape": shape,

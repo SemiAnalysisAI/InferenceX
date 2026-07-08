@@ -16,7 +16,7 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
         if timestamp and timestamp not in path.name:
             continue
         try:
-            document = contracts.strict_load(path)
+            document = contracts.strict_json_load(path)
             if document.get("format") == contracts.RAW_FORMAT:
                 documents.append(contracts.load_raw_attempt(path))
             elif document.get("format") == contracts.TERMINAL_FORMAT:
@@ -26,7 +26,7 @@ def load_results(directory: str, runner: str | None, timestamp: str | None) -> l
     return documents
 
 
-def _identity(document: dict) -> tuple[str, str, str, str, bool, str, int]:
+def _identity(document: dict) -> tuple[str, str, str, str, bool, int]:
     case = document["case"]
     if document["format"] == contracts.RAW_FORMAT:
         routing = case["shape"]["routing"]
@@ -37,7 +37,7 @@ def _identity(document: dict) -> tuple[str, str, str, str, bool, str, int]:
     sku = document["identity"]["case_factors"]["sku"]
     return (
         sku, case["suite"], routing, case["phase"], eplb,
-        case["required_publication"], case.get("ep_size", case.get("ep", 0)),
+        case.get("ep_size", case.get("ep", 0)),
     )
 
 
@@ -55,16 +55,16 @@ def render(documents: list[dict], markdown: bool) -> str:
     if markdown:
         lines = [
             "## CollectiveX EP results", "",
-            "| sku | backend | suite | phase | routing | tier | ep | outcome | T* | p50 us | p99 us |",
-            "|---|---|---|---|---|---|--:|---|--:|--:|--:|",
+            "| sku | backend | suite | phase | routing | ep | outcome | T* | p50 us | p99 us |",
+            "|---|---|---|---|---|--:|---|--:|--:|--:|",
         ]
         for document in documents:
-            sku, suite, routing, phase, eplb, tier, ep = _identity(document)
+            sku, suite, routing, phase, eplb, ep = _identity(document)
             backend = document["case"]["backend"]
             token, p50, p99 = _headline(document)
             lines.append(
                 f"| {sku} | `{backend}` | {suite} | {phase} | "
-                f"{routing}{'+eplb' if eplb else ''} | {tier} | {ep} | "
+                f"{routing}{'+eplb' if eplb else ''} | {ep} | "
                 f"{document['outcome']['status']} | {token} | {p50} | {p99} |"
             )
         if not documents:
@@ -72,12 +72,12 @@ def render(documents: list[dict], markdown: bool) -> str:
         return "\n".join(lines)
     lines = ["CollectiveX EP results", "======================"]
     for document in documents:
-        sku, suite, routing, phase, eplb, tier, ep = _identity(document)
+        sku, suite, routing, phase, eplb, ep = _identity(document)
         backend = document["case"]["backend"]
         token, _, p99 = _headline(document)
         lines.append(
             f"  {sku:<10} {backend:<16} {suite:<13} {phase:<7} "
-            f"{routing}{'+eplb' if eplb else ''} {tier} ep{ep} "
+            f"{routing}{'+eplb' if eplb else ''} ep{ep} "
             f"{document['outcome']['status']} T={token} roundtrip_p99_us={p99}"
         )
     return "\n".join(lines)

@@ -7,11 +7,203 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Iterable
 
-import identity
-
 
 class PrecisionError(RuntimeError):
     """A requested precision profile cannot be realized by the pinned API."""
+
+
+# ---------------------------------------------------------------------------
+# Native communication-precision catalog.
+#
+# Dispatch and combine are fixed BF16 benchmark facts for the default sweep, so
+# no scheduled case selects an FP8 profile. The FP8 axes below stay callable so
+# an adapter can still exercise its native codec directly; they are dormant, not
+# removed. This catalog lives with the codec (not in ``identity``) because it is
+# a property of the communication kernels, not of the neutral artifact identity.
+# ---------------------------------------------------------------------------
+
+
+def _communication_axis(
+    *,
+    api_input_dtype: str,
+    api_output_dtype: str,
+    communication_format: str,
+    scale_dtype: str | None,
+    scale_layout: str,
+    scale_group_size: int | None,
+    padding_contract: str,
+    alignment_contract: str,
+    quantization_origin: str,
+    conversion_boundary: str,
+) -> dict[str, Any]:
+    return {
+        "api_input_dtype": api_input_dtype,
+        "api_output_dtype": api_output_dtype,
+        "communication_format": communication_format,
+        "scale_dtype": scale_dtype,
+        "scale_layout": scale_layout,
+        "scale_group_size": scale_group_size,
+        "padding_contract": padding_contract,
+        "alignment_contract": alignment_contract,
+        "quantization_origin": quantization_origin,
+        "conversion_boundary": conversion_boundary,
+    }
+
+
+_BF16_AXIS = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="bf16",
+    scale_dtype=None,
+    scale_layout="none",
+    scale_group_size=None,
+    padding_contract="none",
+    alignment_contract="native-bf16-vector-alignment",
+    quantization_origin="none",
+    conversion_boundary="none",
+)
+_FP8_E4M3FN_PREQUANTIZED_DISPATCH = _communication_axis(
+    api_input_dtype="fp8-e4m3fn-with-f32-scale",
+    api_output_dtype="fp8-e4m3fn-with-f32-scale",
+    communication_format="fp8-e4m3fn",
+    scale_dtype="f32",
+    scale_layout="per-token-hidden-block",
+    scale_group_size=128,
+    padding_contract="right-zero-pad-hidden-to-128",
+    alignment_contract="hidden-block-128",
+    quantization_origin="caller-prequantized",
+    conversion_boundary="before-dispatch-timing",
+)
+_FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH = _communication_axis(
+    api_input_dtype="fp8-e4m3fnuz-with-f32-scale",
+    api_output_dtype="fp8-e4m3fnuz-with-f32-scale",
+    communication_format="fp8-e4m3fnuz",
+    scale_dtype="f32",
+    scale_layout="per-token-hidden-block",
+    scale_group_size=128,
+    padding_contract="right-zero-pad-hidden-to-128",
+    alignment_contract="hidden-block-128",
+    quantization_origin="caller-prequantized",
+    conversion_boundary="before-dispatch-timing",
+)
+_FP8_E4M3FN_FUSED_DISPATCH = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="fp8-e4m3fn-with-f32-scale",
+    communication_format="fp8-e4m3fn",
+    scale_dtype="f32",
+    scale_layout="per-token-hidden-block",
+    scale_group_size=128,
+    padding_contract="right-zero-pad-hidden-to-128",
+    alignment_contract="hidden-block-128",
+    quantization_origin="backend-fused",
+    conversion_boundary="inside-dispatch-timing",
+)
+_FP8_E4M3FN_DIRECT_CAST_COMBINE = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="fp8-e4m3fn",
+    scale_dtype=None,
+    scale_layout="none",
+    scale_group_size=None,
+    padding_contract="none",
+    alignment_contract="native-fp8-vector-alignment",
+    quantization_origin="backend-internal-direct-cast",
+    conversion_boundary="inside-combine-timing",
+)
+_FP8_E4M3FNUZ_DIRECT_CAST_COMBINE = _communication_axis(
+    api_input_dtype="bf16",
+    api_output_dtype="bf16",
+    communication_format="fp8-e4m3fnuz",
+    scale_dtype=None,
+    scale_layout="none",
+    scale_group_size=None,
+    padding_contract="none",
+    alignment_contract="native-fp8-vector-alignment",
+    quantization_origin="backend-internal-direct-cast",
+    conversion_boundary="inside-combine-timing",
+)
+
+V1_CONTROL_PRECISION_PROFILE = "d-bf16.c-bf16"
+V1_NORMAL_PRECISION_PROFILE_IDS = (
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale",
+)
+V1_LOW_LATENCY_PRECISION_PROFILE_IDS = (
+    "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
+)
+
+V1_PRECISION_PROFILES: dict[str, dict[str, Any]] = {
+    V1_CONTROL_PRECISION_PROFILE: {
+        "modes": ["normal", "low-latency"],
+        "dispatch": _BF16_AXIS,
+        "combine": _BF16_AXIS,
+    },
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FN_PREQUANTIZED_DISPATCH,
+        "combine": _BF16_AXIS,
+    },
+    "d-fp8-e4m3fn-b128-f32-fused.c-bf16": {
+        "modes": ["low-latency"],
+        "dispatch": _FP8_E4M3FN_FUSED_DISPATCH,
+        "combine": _BF16_AXIS,
+    },
+    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _BF16_AXIS,
+        "combine": _FP8_E4M3FN_DIRECT_CAST_COMBINE,
+    },
+    "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FN_PREQUANTIZED_DISPATCH,
+        "combine": _FP8_E4M3FN_DIRECT_CAST_COMBINE,
+    },
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH,
+        "combine": _BF16_AXIS,
+    },
+    "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _BF16_AXIS,
+        "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
+    },
+    "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale": {
+        "modes": ["normal"],
+        "dispatch": _FP8_E4M3FNUZ_PREQUANTIZED_DISPATCH,
+        "combine": _FP8_E4M3FNUZ_DIRECT_CAST_COMBINE,
+    },
+}
+
+V1_COMBINE_ORACLE_TOLERANCES = {
+    "bf16": {"atol": 2e-2, "rtol": 5e-2},
+    "fp8-direct-cast": {"atol": 4e-2, "rtol": 8e-2},
+}
+
+
+def precision_profile(name: str) -> dict[str, Any]:
+    """Return one exact dispatch/combine communication-format profile."""
+    try:
+        profile = V1_PRECISION_PROFILES[name]
+    except KeyError as exc:
+        raise PrecisionError(f"unknown CollectiveX precision profile {name!r}") from exc
+    return {"profile_id": name, **deepcopy(profile)}
+
+
+def combine_oracle_tolerances(communication_precision: dict[str, Any]) -> dict[str, float]:
+    """Return the frozen combine-oracle gate for one exact native codec."""
+    combine = communication_precision["combine"]
+    fmt = combine["communication_format"]
+    if fmt == "bf16":
+        key = "bf16"
+    elif (
+        fmt in {"fp8-e4m3fn", "fp8-e4m3fnuz"}
+        and combine["quantization_origin"] == "backend-internal-direct-cast"
+    ):
+        key = "fp8-direct-cast"
+    else:
+        raise PrecisionError("precision profile has no frozen combine-oracle tolerance")
+    return dict(V1_COMBINE_ORACLE_TOLERANCES[key])
 
 
 @dataclass(frozen=True)
@@ -35,12 +227,9 @@ def resolve_precision(
     """Resolve and validate the exact profile requested for one adapter."""
     profile_id = (
         getattr(args, "precision_profile", "")
-        or identity.V1_CONTROL_PRECISION_PROFILE
+        or V1_CONTROL_PRECISION_PROFILE
     )
-    try:
-        profile = identity.precision_profile(profile_id)
-    except identity.IdentityError as exc:
-        raise PrecisionError(str(exc)) from exc
+    profile = precision_profile(profile_id)  # raises PrecisionError on unknown
     if mode not in profile["modes"]:
         raise PrecisionError(
             f"precision profile {profile_id!r} is not valid in mode {mode!r}"

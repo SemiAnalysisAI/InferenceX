@@ -132,58 +132,17 @@
                     "reason": {
                               "enum": [
                                           "backend-platform-unsupported",
-                                          "backend-token-capacity",
-                                          "precision-profile-unsupported"
+                                          "backend-token-capacity"
                                         ]
                             }
                   }
           },
       "sha256": {"type": "string","pattern": "^[0-9a-f]{64}$"},
       "safeId": {"type": "string","pattern": "^[a-z0-9][a-z0-9_.-]*$","maxLength": 128},
-      "precisionProfile": {
-            "enum":[
-                    "d-bf16.c-bf16",
-                    "d-fp8-e4m3fn-b128-f32-prequantized.c-bf16",
-                    "d-fp8-e4m3fn-b128-f32-fused.c-bf16",
-                    "d-bf16.c-fp8-e4m3fn-direct-cast-noscale",
-        "d-fp8-e4m3fn-b128-f32-prequantized.c-fp8-e4m3fn-direct-cast-noscale",
-        "d-fp8-e4m3fnuz-b128-f32-prequantized.c-bf16",
-        "d-bf16.c-fp8-e4m3fnuz-direct-cast-noscale",
-        "d-fp8-e4m3fnuz-b128-f32-prequantized.c-fp8-e4m3fnuz-direct-cast-noscale"
-                  ]
-          },
       "caseId": {"type": "string","pattern": "^cxcase-v1-[0-9a-f]{64}$"},
       "allocationId": {"type": "string","pattern": "^cxallocation-v1-[0-9a-f]{64}$"},
       "attemptId": {"type": "string","pattern": "^cxattempt-v1-[0-9a-f]{64}$"},
       "nullableText": {"oneOf": [{"type": "null"},{"type": "string","minLength": 1}]},
-      "communicationAxis": {
-            "type":"object",
-            "additionalProperties":false,
-            "required":["alignment_contract","api_input_dtype","api_output_dtype","communication_format","conversion_boundary","padding_contract","quantization_origin","scale_dtype","scale_group_size","scale_layout"],
-            "properties": {
-                    "alignment_contract":{"enum":["native-bf16-vector-alignment","hidden-block-128","native-fp8-vector-alignment","value-block-64"]},
-                    "api_input_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
-                    "api_output_dtype":{"enum":["bf16","fp8-e4m3fn-with-f32-scale","fp8-e4m3fnuz-with-f32-scale"]},
-                    "communication_format":{"enum":["bf16","fp8-e4m3fn","fp8-e4m3fnuz"]},
-                    "conversion_boundary":{"enum":["none","before-dispatch-timing","inside-dispatch-timing","inside-combine-timing"]},
-                    "padding_contract":{"enum":["none","right-zero-pad-hidden-to-128","right-zero-pad-values-to-64"]},
-                    "quantization_origin":{"enum":["none","caller-prequantized","backend-fused","backend-internal","backend-internal-direct-cast"]},
-                    "scale_dtype":{"oneOf":[{"type":"null"},{"enum":["f32"]}]},
-                    "scale_group_size":{"oneOf":[{"type":"null"},{"enum":[64,128]}]},
-                    "scale_layout":{"enum":["none","per-token-hidden-block","dynamic-per-64-values"]}
-                  }
-          },
-      "communicationPrecision": {
-            "type":"object",
-            "additionalProperties":false,
-            "required":["combine","dispatch","modes","profile_id"],
-            "properties": {
-                    "combine":{"$ref":"#/$defs/communicationAxis"},
-                    "dispatch":{"$ref":"#/$defs/communicationAxis"},
-                    "modes":{"type":"array","minItems":1,"uniqueItems":true,"items":{"enum":["normal","low-latency"]}},
-                    "profile_id":{"$ref":"#/$defs/precisionProfile"}
-                  }
-          },
       "caseProfile": {
             "type":"object",
             "additionalProperties":false,
@@ -218,7 +177,6 @@
                     "combine_dtype":{"const":"bf16"},
                     "combine_quant_mode":{"const":"none"},
                     "combine_semantics":{"enum":["activation-only","gate-weighted"]},
-                    "communication_precision":{"$ref":"#/$defs/communicationPrecision"},
                     "component_order_contract":{"const":"qualification-hash-rotated-components-v1"},
                     "conditioning_contract":{"const":"fixed-phase-ramp-8-roundtrips-v1"},
                     "contract":{"enum":["layout-and-dispatch-v1","expert-packed-weighted-combine-v1"]},
@@ -244,12 +202,11 @@
       "allocationFactors": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["artifact","execution_id","job","qualification_index","repo","run_attempt","run_id","runner","source_sha"],
+            "required": ["artifact","execution_id","job","repo","run_attempt","run_id","runner","source_sha"],
             "properties": {
                     "artifact": {"$ref": "#/$defs/nullableText"},
                     "execution_id": {"$ref": "#/$defs/nullableText"},
                     "job": {"$ref": "#/$defs/nullableText"},
-                    "qualification_index": {"type":"integer","minimum":1,"maximum":3},
                     "repo": {"$ref": "#/$defs/nullableText"},
                     "run_attempt": {"$ref": "#/$defs/nullableText"},
                     "run_id": {"$ref": "#/$defs/nullableText"},
@@ -260,11 +217,10 @@
       "gitRun": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["artifact","job","qualification_index","ref","repo","run_attempt","run_id","source_sha"],
+            "required": ["artifact","job","ref","repo","run_attempt","run_id","source_sha"],
             "properties": {
                     "artifact": {"type": "string","minLength": 1},
                     "job": {"type": "string","minLength": 1},
-                    "qualification_index": {"type":"integer","minimum":1,"maximum":3},
                     "ref": {"type": "string","minLength": 1},
                     "repo": {"type": "string","pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
                     "run_attempt": {"type": "string","pattern": "^[1-9][0-9]*$"},
@@ -287,7 +243,6 @@
                     "mode",
                     "nodes",
                     "phase",
-                    "required_publication",
                     "routing",
                     "samples_per_point",
                     "scale_out_transport",
@@ -314,8 +269,6 @@
                     "mode": {"enum": ["normal","low-latency"]},
                     "nodes": {"type": "integer","minimum": 1},
                     "phase": {"enum": ["decode","prefill"]},
-                    "precision_profile": {"$ref":"#/$defs/precisionProfile"},
-                    "required_publication": {"enum": ["official","comparable-experimental","diagnostic"]},
                     "routing": {"enum": ["uniform"]},
                     "samples_per_point": {"const": 512},
                     "scale_out_transport": {"oneOf": [{"type": "null"},{"$ref": "#/$defs/safeId"}]},

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Resolve CollectiveX v1 suites and extract validated execution shards.
+"""Resolve CollectiveX suites and extract validated execution shards.
 
 Mode changes measurement semantics and therefore participates in case identity.
-Precision sensitivity uses allowlisted communication profiles; provisional native
-paths remain outside the executable matrix until their probes are resolved.
+Dispatch and combine are fixed BF16 benchmark facts, so a case's coordinates are
+suite/workload/backend/topology only; the matrix schedules, it never ranks.
 """
 from __future__ import annotations
 
@@ -41,7 +41,6 @@ V1_WORKLOAD = ("deepseek-v3-v1", 7168, 8, 256)
 V1_SUITE_CONTRACTS = {
     "ep-core-v1": {
         "mode": "normal",
-        "publication": "official",
         "coordinates": {
             ("normal", "decode", "uniform", False),
             ("normal", "prefill", "uniform", False),
@@ -53,51 +52,24 @@ V1_SUITE_CONTRACTS = {
     },
     "ep-low-latency-v1": {
         "mode": "low-latency",
-        "publication": "official",
         "backends": {"deepep", "uccl"},
         "coordinates": {("low-latency", "decode", "uniform", False)},
         "ladders": {"decode": tuple(ep_harness.DECODE_LADDER)},
-    },
-    "ep-precision-normal-v1": {
-        "mode": "normal",
-        "publication": "comparable-experimental",
-        "backends": {"deepep", "deepep-v2", "uccl", "deepep-hybrid", "mori"},
-        "precision_profiles": identity.V1_NORMAL_PRECISION_PROFILE_IDS,
-        "coordinates": {
-            ("normal", "decode", "uniform", False),
-            ("normal", "prefill", "uniform", False),
-        },
-        "ladders": {"decode": (128,), "prefill": (512,)},
-    },
-    "ep-precision-low-latency-v1": {
-        "mode": "low-latency",
-        "publication": "comparable-experimental",
-        "backends": {"deepep", "uccl"},
-        "precision_profiles": identity.V1_LOW_LATENCY_PRECISION_PROFILE_IDS,
-        "coordinates": {("low-latency", "decode", "uniform", False)},
-        "ladders": {"decode": (128,)},
     },
 }
 IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9.-]*")
 SUITE_FIELDS = {
     "backends", "ep_degrees", "eplb", "mode", "phases", "platforms",
-    "precision_profiles", "provisional", "required_publication", "routings",
-    "token_points", "token_points_decode", "token_points_prefill", "workloads",
+    "routings", "token_points", "token_points_decode", "token_points_prefill",
+    "workloads",
 }
 SUITE_REQUIRED = {
-    "ep_degrees", "mode", "phases", "platforms", "required_publication", "routings",
-    "workloads",
+    "ep_degrees", "mode", "phases", "platforms", "routings", "workloads",
 }
 TOPOLOGY_FIELDS = (
     "nodes", "gpus_per_node", "scale_up_domain", "scope", "scale_up_transport",
     "scale_out_transport", "transport", "topology_class",
 )
-QUALIFICATION_INDICES = range(1, 4)
-CANONICAL_V1_EXECUTION_PLAN_SHA256 = {
-    1: "1636f01be0434f5e7e7a633f20b8ee52088d4eaa0528b333544a87f7a6e86950",
-    2: "8d98af40cb054f7b686c0b3ecfaa0f340fbab7e3bf34b9696f7256c647307992",
-    3: "fd6fafb06e2ba29374946e173876e7c27684391fb0f4a2c6590779ea804e62ee",
-}
 
 
 class MatrixError(ValueError):
@@ -229,52 +201,6 @@ def validate_config_documents(
             raise SystemExit(f"suite {name}.backends differs from the frozen v1 catalog")
         if expected_backends is None and "backends" in suite:
             raise SystemExit(f"suite {name}.backends must be omitted")
-        expected_profiles = contract.get("precision_profiles")
-        if expected_profiles is None:
-            if "precision_profiles" in suite or "provisional" in suite:
-                raise SystemExit(
-                    f"suite {name} cannot add precision fields to a baseline suite"
-                )
-            precision_profiles: list[str] = []
-        else:
-            precision_profiles = _list(
-                suite.get("precision_profiles"),
-                f"suite {name}.precision_profiles",
-                str,
-                set(identity.V1_PRECISION_PROFILES),
-            )
-            if tuple(precision_profiles) != expected_profiles:
-                raise SystemExit(
-                    f"suite {name}.precision_profiles differs from the frozen v1 catalog"
-                )
-            if identity.V1_CONTROL_PRECISION_PROFILE in precision_profiles:
-                raise SystemExit(
-                    f"suite {name} must reference existing BF16 evidence, not duplicate it"
-                )
-            if any(
-                mode not in identity.V1_PRECISION_PROFILES[profile]["modes"]
-                for profile in precision_profiles
-            ):
-                raise SystemExit(f"suite {name} contains a precision profile for another mode")
-            if type(suite.get("provisional")) is not bool:
-                raise SystemExit(f"suite {name}.provisional must be a boolean")
-            unresolved = cap.provisional_precision_targets(precision_profiles)
-            if suite["provisional"] != bool(unresolved):
-                raise SystemExit(
-                    f"suite {name}.provisional must track unresolved capability targets"
-                )
-            candidates = cap.precision_targets(precision_profiles)
-            covered_candidates = [
-                target for target in candidates
-                if target["backend"] in suite_backends
-                and target["sku"] in suite["platforms"]
-                and target["ep"] in suite["ep_degrees"]
-                and target["mode"] == mode
-            ]
-            if covered_candidates != candidates:
-                raise SystemExit(
-                    f"suite {name} does not cover every declared precision target"
-                )
         suite_workloads = _list(suite["workloads"], f"suite {name}.workloads", str)
         unknown = sorted(set(suite_workloads) - set(registry))
         if unknown:
@@ -288,16 +214,6 @@ def validate_config_documents(
         eplb = _list(suite.get("eplb", [False]), f"suite {name}.eplb", bool)
         if True in eplb:
             raise SystemExit(f"suite {name}: EPLB is unavailable for v1 uniform routing")
-        if suite["required_publication"] not in {"official", "comparable-experimental"}:
-            raise SystemExit(f"suite {name}.required_publication is invalid")
-        if suite["required_publication"] != contract["publication"]:
-            raise SystemExit(
-                f"suite {name}.required_publication differs from the frozen v1 catalog"
-            )
-        if suite["required_publication"] == "official":
-            unverified = [item for item in suite_workloads if not registry[item].get("verified_against")]
-            if unverified:
-                raise SystemExit(f"suite {name}: official workloads need verified_against: {unverified}")
         degrees = _list(suite["ep_degrees"], f"suite {name}.ep_degrees", int)
         if degrees != [8, 16]:
             raise SystemExit(f"suite {name}.ep_degrees must be exactly [8, 16]")
@@ -352,20 +268,15 @@ def _ladder(suite: dict[str, Any], phase: str) -> str:
 def _v1_requested_ladder(case: dict[str, Any]) -> str:
     """Bind extracted controls to the frozen v1 suite and workload catalog."""
     suite = V1_SUITE_CONTRACTS.get(case.get("suite"))
-    expected_profiles = None if suite is None else suite.get("precision_profiles")
-    precision_profile = case.get("precision_profile")
     coordinate = (
         case.get("mode"), case.get("phase"), case.get("routing"), case.get("eplb")
     )
     if (
         suite is None
         or coordinate not in suite["coordinates"]
-        or case.get("required_publication") != suite["publication"]
         or (
             case.get("workload"), case.get("hidden"), case.get("topk"), case.get("experts")
         ) != V1_WORKLOAD
-        or (expected_profiles is None and precision_profile is not None)
-        or (expected_profiles is not None and precision_profile not in expected_profiles)
     ):
         raise MatrixError("case differs from the frozen v1 suite/workload catalog")
     return " ".join(map(str, suite["ladders"][case["phase"]]))
@@ -375,19 +286,9 @@ def _expected_disposition(
     sku: str, case: dict[str, Any]
 ) -> tuple[str, str | None, str | None]:
     requested_ladder = _v1_requested_ladder(case)
-    precision_profile = case.get("precision_profile")
-    if precision_profile is not None and not cap.precision_target_declared(
-        precision_profile,
-        sku=sku,
-        backend=case["backend"],
-        ep=case["ep"],
-        mode=case["mode"],
-    ):
-        raise MatrixError("precision case is not an exact native capability target")
     disposition, detail = cap.resolve_disposition(
         sku, case["backend"], ep=case["ep"], nodes=case["nodes"],
         routing=case["routing"], eplb=case["eplb"], mode=case["mode"],
-        precision_profile=precision_profile,
     )
     if disposition == "supported":
         if case["ladder"] != requested_ladder:
@@ -396,15 +297,8 @@ def _expected_disposition(
     if case["ladder"] != requested_ladder:
         raise MatrixError("unsupported case ladder differs from the frozen v1 suite catalog")
     if disposition == "unsupported":
-        reason = (
-            "precision-profile-unsupported"
-            if precision_profile is not None
-            else "backend-platform-unsupported"
-        )
-        return "unsupported", reason, detail
-    if disposition == "provisional":
-        raise MatrixError("provisional precision target entered the executable matrix")
-    raise MatrixError("not-applicable precision tuple entered the requested matrix")
+        return "unsupported", "backend-platform-unsupported", detail
+    raise MatrixError(f"invalid capability disposition {disposition!r}")
 
 
 def _case_id(sku: str, case: dict[str, Any]) -> str:
@@ -416,7 +310,7 @@ def _case_id(sku: str, case: dict[str, Any]) -> str:
 def _semantic_points(sku: str, case: dict[str, Any]) -> list[str]:
     execution = {
         key: value for key, value in case.items()
-        if key not in {"canonical", "case_id", "ladder", "required_publication", "suite", "workload"}
+        if key not in {"canonical", "case_id", "ladder", "suite", "workload"}
     }
     return [
         json.dumps(
@@ -452,22 +346,17 @@ def resolve_matrix(
     backends: str = "",
     only_sku: str = "",
     exclude_skus: str = "",
-    min_nodes: int = 0,
-    max_nodes: int = 0,
     ep_sizes: str = "",
     max_cases: int = 128,
 ) -> dict[str, Any]:
     """Resolve suite configuration into allocation-sized workflow shards."""
     if max_cases <= 0:
         raise SystemExit("--max-cases must be positive")
-    if min_nodes < 0 or max_nodes < 0 or (min_nodes and max_nodes and min_nodes > max_nodes):
-        raise SystemExit("invalid node bounds")
-    # --ep-sizes narrows the matrix to specific expert-parallel degrees, dispatch-time
-    # like --max-nodes: "8" keeps every EP8 shard and drops EP16, so a comprehensive run
-    # can co-schedule the 8-GPU SKUs' single-node EP8 with the GB SKUs' two-node EP8
-    # without dispatching any EP16 leg. Blank keeps every degree. The resulting matrix is
-    # a partial (still publishable) subset; the publisher binds every promoted case to the
-    # canonical catalog, so a filtered matrix cannot invent or reclassify cases.
+    # --ep-sizes narrows the matrix to specific expert-parallel degrees at dispatch
+    # time: "8" keeps every EP8 shard and drops EP16, so a comprehensive run can
+    # co-schedule the 8-GPU SKUs' single-node EP8 with the GB SKUs' two-node EP8
+    # without dispatching any EP16 leg. Blank keeps every degree. The resulting
+    # matrix is a partial subset that only omits cases; it never reclassifies them.
     selected_eps: set[int] = set()
     for value in (part.strip() for part in ep_sizes.split(",")):
         if not value:
@@ -477,11 +366,8 @@ def resolve_matrix(
         selected_eps.add(int(value))
     if only_sku and only_sku not in cap.PLATFORMS:
         raise SystemExit(f"unknown --only-sku {only_sku!r}; have {sorted(cap.PLATFORMS)}")
-    # --exclude-skus narrows the matrix to a partial (still publishable) subset by
-    # dropping whole runner pools — e.g. exclude a SKU whose cluster is unavailable
-    # so a versioned "tagged + success" run covers only the SKUs it can actually
-    # exercise. The publisher binds every promoted case to the canonical catalog,
-    # so a narrowed matrix cannot invent or reclassify cases; it only omits them.
+    # --exclude-skus narrows the matrix to a subset by dropping whole runner pools
+    # — e.g. exclude a SKU whose cluster is unavailable. It only omits cases.
     excluded = {value.strip() for value in exclude_skus.split(",") if value.strip()}
     unknown_excluded = sorted(excluded - set(cap.PLATFORMS))
     if unknown_excluded:
@@ -497,7 +383,7 @@ def resolve_matrix(
     registry = suites_document["suites"]
     select_all = suites == "all"
     names = (
-        [name for name, suite in registry.items() if not suite.get("provisional", False)]
+        list(registry)
         if select_all
         else [value.strip() for value in suites.split(",") if value.strip()]
     )
@@ -506,16 +392,6 @@ def resolve_matrix(
     unknown = sorted(set(names) - set(registry))
     if unknown:
         raise SystemExit(f"unknown suites {unknown}; have {sorted(registry)}")
-    blocked = [name for name in names if registry[name].get("provisional", False)]
-    if blocked:
-        unresolved = sum(
-            len(cap.provisional_precision_targets(registry[name]["precision_profiles"]))
-            for name in blocked
-        )
-        raise SystemExit(
-            f"provisional precision suites cannot be scheduled: {blocked}; "
-            f"resolve {unresolved} capability targets first"
-        )
     targets = _select_backends(backend, backends)
 
     shards: dict[tuple[str, str, int], list[dict[str, Any]]] = {}
@@ -527,7 +403,6 @@ def resolve_matrix(
         phases = suite["phases"]
         routings = suite["routings"]
         eplb_values = suite.get("eplb", [False])
-        precision_profiles = suite.get("precision_profiles", [None])
         suite_backends = set(suite.get("backends", cap.SWEEP_BACKENDS))
         suite_targets = [target for target in targets if target in suite_backends]
         if not suite_targets:
@@ -538,19 +413,11 @@ def resolve_matrix(
             if platform_name in excluded:
                 continue
             ep_degrees = suite["ep_degrees"]
-            for workload, ep, phase, routing, eplb, target, precision_profile in itertools.product(
+            for workload, ep, phase, routing, eplb, target in itertools.product(
                 suite["workloads"], ep_degrees, phases, routings, eplb_values,
-                suite_targets, precision_profiles,
+                suite_targets,
             ):
                 if selected_eps and ep not in selected_eps:
-                    continue
-                if precision_profile is not None and not cap.precision_target_declared(
-                    precision_profile,
-                    sku=platform_name,
-                    backend=target,
-                    ep=ep,
-                    mode=mode,
-                ):
                     continue
                 topology = cap.topology_for(platform_name, ep)
                 if topology is None:
@@ -558,10 +425,6 @@ def resolve_matrix(
                         f"suite {suite_name}: {platform_name} EP{ep} is not registered"
                     )
                 nodes = int(topology["nodes"])
-                if min_nodes and nodes < min_nodes:
-                    continue
-                if max_nodes and nodes > max_nodes:
-                    continue
                 capability_disposition, capability_detail = cap.resolve_disposition(
                     platform_name,
                     target,
@@ -570,7 +433,6 @@ def resolve_matrix(
                     routing=routing,
                     eplb=bool(eplb),
                     mode=mode,
-                    precision_profile=precision_profile,
                 )
                 hidden, topk, experts = _dims(workloads, workload)
 
@@ -583,7 +445,6 @@ def resolve_matrix(
                     case: dict[str, Any] = {
                         "suite": suite_name,
                         "workload": workload,
-                        "required_publication": suite["required_publication"],
                         "backend": target,
                         "routing": routing,
                         "phase": phase,
@@ -600,8 +461,6 @@ def resolve_matrix(
                         "canonical": True,
                         **{field: topology[field] for field in TOPOLOGY_FIELDS},
                     }
-                    if precision_profile is not None:
-                        case["precision_profile"] = precision_profile
                     for signature in _semantic_points(platform_name, case):
                         if signature in scheduled:
                             raise SystemExit(
@@ -622,22 +481,11 @@ def resolve_matrix(
                         shards.setdefault((platform_name, target, nodes), []).append(case)
 
                 requested_ladder = _ladder(suite, phase)
-                if capability_disposition == "not-applicable":
-                    continue
-                if capability_disposition == "provisional":
-                    raise SystemExit(
-                        f"suite {suite_name}: provisional target escaped its suite gate: "
-                        f"{precision_profile} {target} {platform_name} EP{ep}"
-                    )
                 if capability_disposition == "unsupported":
                     add_case(
                         requested_ladder,
                         "unsupported",
-                        (
-                            "precision-profile-unsupported"
-                            if precision_profile is not None
-                            else "backend-platform-unsupported"
-                        ),
+                        "backend-platform-unsupported",
                         capability_detail,
                     )
                     continue
@@ -714,118 +562,6 @@ def _positive_int(value: Any, field: str) -> int:
     return value
 
 
-def _qualification_index(value: Any, field: str = "qualification_index") -> int:
-    if type(value) is not int or value not in QUALIFICATION_INDICES:
-        raise MatrixError(f"{field} must be an integer in 1..3")
-    return value
-
-
-def _requested_qualification_index(value: int | None = None) -> int:
-    if value is not None:
-        return _qualification_index(value)
-    raw = os.environ.get("CX_QUALIFICATION_INDEX", "1")
-    if raw not in {"1", "2", "3"}:
-        raise MatrixError("CX_QUALIFICATION_INDEX must be an integer in 1..3")
-    return int(raw)
-
-
-def _case_precision_profile(case: dict[str, Any]) -> str:
-    profile = case.get("precision_profile", identity.V1_CONTROL_PRECISION_PROFILE)
-    if not isinstance(profile, str) or profile not in identity.V1_PRECISION_PROFILES:
-        raise MatrixError("qualification case has an invalid precision profile")
-    return profile
-
-
-def _qualification_digest(
-    shard_id: str,
-    case_id: str,
-    profile_id: str,
-    qualification_index: int,
-) -> bytes:
-    return hashlib.sha256(
-        "\0".join((shard_id, case_id, profile_id, str(qualification_index))).encode()
-    ).digest()
-
-
-def _rotate(values: list[Any], offset: int) -> list[Any]:
-    if not values:
-        return []
-    position = offset % len(values)
-    return values[position:] + values[:position]
-
-
-def _seeded_qualification_order(
-    shard_id: str,
-    cases: list[dict[str, Any]],
-    qualification_index: int,
-) -> list[dict[str, Any]]:
-    by_profile: dict[str, list[dict[str, Any]]] = {}
-    for case in cases:
-        by_profile.setdefault(_case_precision_profile(case), []).append(case)
-    profiles = sorted(
-        by_profile,
-        key=lambda profile: _qualification_digest(
-            shard_id, "profile-order", profile, 1
-        ),
-    )
-    profiles = _rotate(profiles, qualification_index - 1)
-    groups: dict[str, list[dict[str, Any]]] = {}
-    for profile in profiles:
-        group = sorted(
-            by_profile[profile],
-            key=lambda case: _qualification_digest(
-                shard_id, case["case_id"], profile, qualification_index
-            ),
-        )
-        groups[profile] = _rotate(group, qualification_index - 1)
-    interleaved = [
-        groups[profile][position]
-        for position in range(max(map(len, groups.values())))
-        for profile in profiles
-        if position < len(groups[profile])
-    ]
-    return interleaved
-
-
-def qualification_execution_order(
-    shard_id: str,
-    cases: list[dict[str, Any]],
-    qualification_index: int,
-) -> list[dict[str, Any]]:
-    """Return one deterministic, repeat-specific permutation of a shard's cases."""
-    index = _qualification_index(qualification_index)
-    if not isinstance(shard_id, str) or not IDENTIFIER.fullmatch(shard_id):
-        raise MatrixError("qualification shard ID is invalid")
-    if not isinstance(cases, list) or not cases:
-        raise MatrixError("qualification planning requires at least one case")
-    selected: list[dict[str, Any]] = []
-    seen: set[tuple[str, ...]] = set()
-    for current in range(1, index + 1):
-        candidate = _seeded_qualification_order(shard_id, cases, current)
-        signature = tuple(case["case_id"] for case in candidate)
-        if len(cases) >= current and signature in seen:
-            for offset in range(1, len(candidate)):
-                rotated = _rotate(candidate, offset)
-                rotated_signature = tuple(case["case_id"] for case in rotated)
-                if rotated_signature not in seen:
-                    candidate = rotated
-                    signature = rotated_signature
-                    break
-        seen.add(signature)
-        selected = candidate
-    return selected
-
-
-def execution_plan_sha256(cases: list[dict[str, Any]]) -> str:
-    """Bind an execution plan to only its ordered case and precision-profile IDs."""
-    plan = [
-        [case["case_id"], _case_precision_profile(case)]
-        for case in cases
-    ]
-    payload = json.dumps(plan, ensure_ascii=True, separators=(",", ":")).encode()
-    return hashlib.sha256(payload).hexdigest()
-
-
 def execution_weight(cases: list[dict[str, Any]]) -> int:
     """Return deterministic GPU-point work used to bound workflow parallelism."""
     if not isinstance(cases, list) or not cases:
@@ -840,35 +576,6 @@ def execution_weight(cases: list[dict[str, Any]]) -> int:
     return weight
 
 
-def qualification_execution_plan_sha256(
-    matrix: dict[str, Any], qualification_index: int
-) -> str:
-    """Bind one qualification repeat to every shard's ordered case plan."""
-    index = _qualification_index(qualification_index)
-    document = validate_matrix_document(matrix)
-    requested = {
-        item["case"]["case_id"]: item["case"]
-        for item in document["requested_cases"]
-    }
-    plan = []
-    for shard in sorted(document["include"], key=lambda item: item["id"]):
-        ordered = qualification_execution_order(
-            shard["id"],
-            [requested[case_id] for case_id in shard["case_ids"]],
-            index,
-        )
-        plan.append([
-            shard["id"], shard["execution_weight"], execution_plan_sha256(ordered),
-        ])
-    payload = json.dumps(
-        {"qualification_index": index, "shards": plan},
-        ensure_ascii=True,
-        sort_keys=True,
-        separators=(",", ":"),
-    ).encode()
-    return hashlib.sha256(payload).hexdigest()
-
-
 def validate_shard_control(
     shard: dict[str, Any],
     *,
@@ -876,7 +583,6 @@ def validate_shard_control(
     backend: str,
     nodes: int,
     require_runnable: bool = True,
-    qualification_index: int | None = None,
 ) -> None:
     """Validate one shard against the workflow cell that requested it."""
     if not isinstance(shard, dict):
@@ -885,7 +591,7 @@ def validate_shard_control(
         raise MatrixError("shard platform/backend is not registered")
     top_fields = {
         "schema_version", "id", "sku", "backend", "nodes", "n", "cases",
-        "qualification_index", "execution_plan_sha256", "execution_weight",
+        "execution_weight",
     }
     if (
         set(shard) != top_fields
@@ -895,19 +601,6 @@ def validate_shard_control(
         raise MatrixError("shard fields or schema version differ from v1 contract")
     if not isinstance(shard.get("id"), str) or not IDENTIFIER.fullmatch(shard["id"]):
         raise MatrixError("shard has invalid id")
-    observed_qualification = _qualification_index(
-        shard.get("qualification_index"), "shard.qualification_index"
-    )
-    if (
-        qualification_index is not None
-        and observed_qualification != _qualification_index(qualification_index)
-    ):
-        raise MatrixError("shard qualification_index differs from the requested repeat")
-    if (
-        not isinstance(shard.get("execution_plan_sha256"), str)
-        or re.fullmatch(r"[0-9a-f]{64}", shard["execution_plan_sha256"]) is None
-    ):
-        raise MatrixError("shard execution_plan_sha256 is invalid")
     for field, expected in (("sku", sku), ("backend", backend)):
         if shard.get(field) != expected:
             raise MatrixError(
@@ -923,21 +616,14 @@ def validate_shard_control(
     if _positive_int(shard.get("n"), "shard.n") != len(cases):
         raise MatrixError("shard.n does not match the number of cases")
     seen: set[str] = set()
-    base_required = {
-        "case_id", "suite", "workload", "required_publication", "backend", "routing",
-        "mode", "phase", "ep", "eplb", "hidden", "topk", "experts",
-        "samples_per_point",
-        "warmup_semantics", "ladder", "timing", "canonical",
+    required = {
+        "case_id", "suite", "workload", "backend", "routing", "mode", "phase", "ep",
+        "eplb", "hidden", "topk", "experts", "samples_per_point", "warmup_semantics",
+        "ladder", "timing", "canonical",
     } | set(TOPOLOGY_FIELDS)
     for index, case in enumerate(cases):
         if not isinstance(case, dict):
             raise MatrixError(f"case {index} must be a JSON object")
-        suite_contract = V1_SUITE_CONTRACTS.get(case.get("suite"))
-        required = base_required | (
-            {"precision_profile"}
-            if suite_contract is not None and "precision_profiles" in suite_contract
-            else set()
-        )
         fields = set(case)
         if fields != required:
             raise MatrixError(
@@ -951,24 +637,16 @@ def validate_shard_control(
             raise MatrixError(f"duplicate case_id {case_id}")
         seen.add(case_id)
         string_fields = [
-            "suite", "workload", "required_publication", "backend", "mode", "routing",
-            "phase", "warmup_semantics", "ladder", "timing",
+            "suite", "workload", "backend", "mode", "routing", "phase",
+            "warmup_semantics", "ladder", "timing",
         ]
-        if "precision_profile" in required:
-            string_fields.append("precision_profile")
         for field in string_fields:
             if not isinstance(case[field], str) or not case[field]:
                 raise MatrixError(f"case {index}.{field} must be a non-empty string")
-        identifier_fields = [
-            "suite", "workload", "required_publication", "backend", "routing", "phase",
-        ]
-        if "precision_profile" in required:
-            identifier_fields.append("precision_profile")
+        identifier_fields = ["suite", "workload", "backend", "routing", "phase"]
         for field in identifier_fields:
             if not IDENTIFIER.fullmatch(case[field]):
                 raise MatrixError(f"case {index}.{field} is not a safe identifier")
-        if case["required_publication"] not in {"official", "comparable-experimental"}:
-            raise MatrixError(f"case {index} has invalid publication requirement")
         case_identity = {key: value for key, value in case.items() if key != "case_id"}
         if case_id != _case_id(sku, case_identity):
             raise MatrixError(f"case {index} case_id does not match its contents")
@@ -1032,15 +710,6 @@ def validate_shard_control(
         shard.get("execution_weight"), "shard.execution_weight"
     ) != execution_weight(cases):
         raise MatrixError("shard execution_weight differs from its cases")
-    expected_order = qualification_execution_order(
-        shard["id"], cases, observed_qualification
-    )
-    if [case["case_id"] for case in cases] != [
-        case["case_id"] for case in expected_order
-    ]:
-        raise MatrixError("shard cases differ from the qualification execution order")
-    if shard["execution_plan_sha256"] != execution_plan_sha256(cases):
-        raise MatrixError("shard execution_plan_sha256 differs from its ordered cases")
 
 
 def validate_matrix_document(document: Any) -> dict[str, Any]:
@@ -1105,10 +774,6 @@ def validate_matrix_document(document: Any) -> dict[str, Any]:
                 "nodes": nodes,
                 "n": 1,
                 "execution_weight": execution_weight(requested_case_plan),
-                "qualification_index": 1,
-                "execution_plan_sha256": execution_plan_sha256(
-                    requested_case_plan
-                ),
                 "cases": requested_case_plan,
             },
             sku=sku,
@@ -1189,10 +854,8 @@ def extract_shard(
     sku: str,
     backend: str,
     nodes: int,
-    qualification_index: int | None = None,
 ) -> dict[str, Any]:
     """Extract one strictly matched shard control file, writing it atomically."""
-    qualification = _requested_qualification_index(qualification_index)
     document = validate_matrix_document(_strict_json_load(Path(matrix_path)))
     include = document["include"]
     matches = [item for item in include if isinstance(item, dict) and item.get("id") == shard_id]
@@ -1203,11 +866,7 @@ def extract_shard(
         item["case"]["case_id"]: item
         for item in document["requested_cases"]
     }
-    cases = qualification_execution_order(
-        source["id"],
-        [requested[case_id]["case"] for case_id in source["case_ids"]],
-        qualification,
-    )
+    cases = [requested[case_id]["case"] for case_id in source["case_ids"]]
     control = {
         "schema_version": 1,
         "id": source.get("id"),
@@ -1216,17 +875,9 @@ def extract_shard(
         "nodes": source.get("nodes"),
         "n": source.get("n"),
         "execution_weight": source.get("execution_weight"),
-        "qualification_index": qualification,
-        "execution_plan_sha256": execution_plan_sha256(cases),
         "cases": cases,
     }
-    validate_shard_control(
-        control,
-        sku=sku,
-        backend=backend,
-        nodes=nodes,
-        qualification_index=qualification,
-    )
+    validate_shard_control(control, sku=sku, backend=backend, nodes=nodes)
     output = Path(output_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_name(f".{output.name}.tmp-{os.getpid()}")
@@ -1248,32 +899,26 @@ def emit_unsupported(
     document = validate_matrix_document(_strict_json_load(source))
     control_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
     generated_at = dt.datetime.now(dt.timezone.utc).isoformat()
-    try:
-        qualification_index = int(os.environ.get("CX_QUALIFICATION_INDEX", "1"))
-    except ValueError as exc:
-        raise MatrixError("CX_QUALIFICATION_INDEX must be an integer in 1..3") from exc
-    if qualification_index not in range(1, 4):
-        raise MatrixError("CX_QUALIFICATION_INDEX must be in 1..3")
     git_run = {
         "run_id": os.environ.get("GITHUB_RUN_ID"),
         "run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
-        "qualification_index": qualification_index,
         "ref": os.environ.get("GITHUB_REF_NAME") or os.environ.get("GITHUB_REF"),
         "source_sha": os.environ.get("COLLECTIVEX_SOURCE_SHA") or os.environ.get("GITHUB_SHA"),
         "repo": os.environ.get("GITHUB_REPOSITORY"),
         "job": os.environ.get("GITHUB_JOB"),
         "artifact": os.environ.get("COLLECTIVEX_ARTIFACT_NAME"),
     }
+    if not any(value is not None for value in git_run.values()):
+        git_run = None
     allocation_factors = {
-        "artifact": git_run["artifact"],
+        "artifact": git_run["artifact"] if git_run is not None else None,
         "execution_id": os.environ.get("COLLECTIVEX_EXECUTION_ID"),
-        "job": git_run["job"],
-        "qualification_index": qualification_index,
-        "repo": git_run["repo"],
-        "run_attempt": git_run["run_attempt"],
-        "run_id": git_run["run_id"],
+        "job": git_run["job"] if git_run is not None else None,
+        "repo": git_run["repo"] if git_run is not None else None,
+        "run_attempt": git_run["run_attempt"] if git_run is not None else None,
+        "run_id": git_run["run_id"] if git_run is not None else None,
         "runner": "capability-resolver",
-        "source_sha": git_run["source_sha"],
+        "source_sha": git_run["source_sha"] if git_run is not None else None,
     }
     destination = Path(output_dir)
     destination.mkdir(parents=True, exist_ok=True)
@@ -1291,10 +936,9 @@ def emit_unsupported(
         case_id = identity.digest("case", case_factors)
         if case_id != scheduled["case_id"]:
             raise MatrixError(f"unsupported case identity differs for {scheduled['case_id']}")
-        attempt_ordinal = 1
         record = contracts.make_terminal_document(
             allocation_factors=allocation_factors,
-            attempt_ordinal=attempt_ordinal,
+            attempt_ordinal=1,
             case=case,
             case_factors=case_factors,
             control_sha256=control_sha256,
@@ -1327,17 +971,8 @@ def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
     document = validate_matrix_document(matrix)
     matrix_bytes = contracts.canonical_json_bytes(document) + b"\n"
     cases = []
-    precision_profiles: dict[str, dict[str, Any]] = {}
     for wrapper in document["requested_cases"]:
         case = wrapper["case"]
-        precision_profile = case.get(
-            "precision_profile", identity.V1_CONTROL_PRECISION_PROFILE
-        )
-        precision = identity.precision_profile(precision_profile)
-        precision_profiles[precision_profile] = {
-            "dispatch": precision["dispatch"],
-            "combine": precision["combine"],
-        }
         cases.append({
             "backend": case["backend"],
             "backend_generation": None,
@@ -1350,8 +985,6 @@ def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
             ),
             "mode": case["mode"],
             "phase": case["phase"],
-            "precision_profile": precision_profile,
-            "publication_tier": case["required_publication"],
             "reason": wrapper["reason"],
             "required": True,
             "resource": {
@@ -1381,14 +1014,13 @@ def frontend_catalog(matrix: dict[str, Any]) -> dict[str, Any]:
         "format": "collectivex.frontend-catalog.v1",
         "matrix_sha256": hashlib.sha256(matrix_bytes).hexdigest(),
         "point_count": sum(len(case["points"]) for case in cases),
-        "precision_profiles": dict(sorted(precision_profiles.items())),
         "schema_version": 1,
         "cases": cases,
     }
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="CollectiveX v1 matrix resolver")
+    parser = argparse.ArgumentParser(description="CollectiveX matrix resolver")
     parser.add_argument("--suites", default="all", help="'all' or comma-list of suites")
     parser.add_argument("--backend", default="", help="select one EP backend")
     parser.add_argument("--backends", default="", help="'all' or comma-list of EP backends")
@@ -1398,8 +1030,6 @@ def main() -> int:
         default="",
         help="comma-list of runner pools to drop (partial matrix); disjoint from --only-sku",
     )
-    parser.add_argument("--min-nodes", type=int, default=0)
-    parser.add_argument("--max-nodes", type=int, default=0)
     parser.add_argument(
         "--ep-sizes",
         default="",
@@ -1415,7 +1045,6 @@ def main() -> int:
     parser.add_argument("--expect-sku", default="")
     parser.add_argument("--expect-backend", default="")
     parser.add_argument("--expect-nodes", type=int, default=0)
-    parser.add_argument("--qualification-index", type=int, default=None)
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
@@ -1436,15 +1065,11 @@ def main() -> int:
             )
         try:
             control = _strict_json_load(Path(args.validate_control))
-            qualification = _requested_qualification_index(
-                args.qualification_index
-            )
             validate_shard_control(
                 control,
                 sku=args.expect_sku,
                 backend=args.expect_backend,
                 nodes=args.expect_nodes,
-                qualification_index=qualification,
             )
         except MatrixError as exc:
             parser.error(str(exc))
@@ -1465,7 +1090,6 @@ def main() -> int:
                 sku=args.expect_sku,
                 backend=args.expect_backend,
                 nodes=args.expect_nodes,
-                qualification_index=args.qualification_index,
             )
         except MatrixError as exc:
             parser.error(str(exc))
@@ -1479,8 +1103,6 @@ def main() -> int:
         backends=args.backends,
         only_sku=args.only_sku,
         exclude_skus=args.exclude_skus,
-        min_nodes=args.min_nodes,
-        max_nodes=args.max_nodes,
         ep_sizes=args.ep_sizes,
         max_cases=args.max_cases,
     )
