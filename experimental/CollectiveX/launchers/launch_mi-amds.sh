@@ -114,18 +114,31 @@ for allocation_attempt in 1 2 3; do
   cx_salloc_jobid "${attempt_allocation[@]}"
   [ -n "$JOB_ID" ] || cx_die "could not resolve allocated JOB_ID from salloc"
   cx_set_failure_stage setup
-  cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT"
-  cx_set_failure_stage container-import
-  if SQUASH_FILE="$(cx_ensure_squash_on_job \
-      "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${CX_LOCK_DIR:-}")"; then
-    break
+  reject_reason=""
+  if ! cx_validate_network_profile_on_job "$JOB_ID" "$NODES" "$CX_TRANSPORT" 0; then
+    # A node whose RoCE devices do not match the pinned selector (e.g. an
+    # outlier still using default rocepXXXs0 names instead of the rdmaN udev
+    # names the rest of the fleet exposes) must be rejected and retried
+    # elsewhere, not treated as a hard failure.
+    reject_reason=network
+  else
+    cx_set_failure_stage container-import
+    if SQUASH_FILE="$(cx_ensure_squash_on_job \
+        "$JOB_ID" "$SQUASH_DIR" "$IMAGE" "${CX_LOCK_DIR:-}")"; then
+      break
+    fi
+    reject_reason=container-import
   fi
   if [ -n "$NODELIST" ] || [ "$allocation_attempt" = 3 ]; then
+    if [ "$reject_reason" = network ]; then
+      cx_fail_stage setup "$CX_NETWORK_PROFILE_LOG" || true
+      cx_die "allocated nodes failed the network profile"
+    fi
     cx_die "allocated nodes failed container import"
   fi
   rejected_nodes="$(cx_allocation_nodes_csv "$JOB_ID")" \
     || cx_die "cannot identify nodes from a rejected allocation"
-  cx_log "allocated nodes failed container import; retrying elsewhere"
+  cx_log "allocated nodes failed $reject_reason validation; retrying elsewhere"
   cx_cancel_job "$JOB_ID" || cx_die "cannot release a rejected allocation"
   cx_clear_allocation_jobid || cx_die "cannot reset rejected allocation state"
   JOB_ID=""
