@@ -24,9 +24,9 @@ if [[ $FRAMEWORK == "dynamo-sglang" ]]; then
     elif [[ $MODEL_PREFIX == "qwen3.5" && $PRECISION == "fp8" ]]; then
         export MODEL_PATH="/mnt/lustre01/models/Qwen3.5-397B-A17B-FP8"
         export SRT_SLURM_MODEL_PREFIX="qwen3.5-fp8"
-    elif [[ $MODEL_PREFIX == "glm5" && $PRECISION == "fp4" ]]; then
-        # SRT_SLURM_MODEL_PREFIX matches the model.path alias in our
-        # GLM-5.1 sglang recipe (glm-5-fp4).
+    elif [[ $MODEL_PREFIX == "glm5.1" && $PRECISION == "fp4" ]]; then
+        # SRT_SLURM_MODEL_PREFIX matches the model.path alias ("glm-5-fp4")
+        # in our GLM-5.1 sglang recipes.
         export MODEL_PATH="/mnt/lustre01/models/GLM-5.1-NVFP4"
         export SRT_SLURM_MODEL_PREFIX="glm-5-fp4"
     else
@@ -312,13 +312,12 @@ elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "qwen3.5" ]]; then
     cd "$SRT_REPO_DIR"
     mkdir -p recipes/sglang/qwen3.5
     cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/qwen3.5" recipes/sglang/qwen3.5
-elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5" ]]; then
-    # Stay on NVIDIA/srt-slurm:main (default) and overlay our version-controlled
-    # GLM-5 gb200 sglang recipe onto it.
+elif [[ $FRAMEWORK == "dynamo-sglang" && $MODEL_PREFIX == "glm5.1" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR"
     cd "$SRT_REPO_DIR"
-    mkdir -p recipes/sglang/glm5/gb200-fp4
-    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5/gb200-fp4" recipes/sglang/glm5/gb200-fp4
+    git checkout sa-submission-q2-2026
+    mkdir -p recipes/sglang/glm5
+    cp -rT "$GITHUB_WORKSPACE/benchmarks/multi_node/srt-slurm-recipes/sglang/glm5" recipes/sglang/glm5
 elif [[ $FRAMEWORK == "dynamo-vllm" && $MODEL_PREFIX == "minimaxm3" && $PRECISION == "fp8" ]]; then
     git clone https://github.com/NVIDIA/srt-slurm.git "$SRT_REPO_DIR" || exit 1
     cd "$SRT_REPO_DIR" || exit 1
